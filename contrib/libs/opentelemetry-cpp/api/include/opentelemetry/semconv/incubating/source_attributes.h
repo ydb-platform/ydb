@@ -21,7 +21,7 @@ namespace source
 
 /**
   Source address - domain name if available without reverse DNS lookup; otherwise, IP address or
-  Unix domain socket name. <p> When observed from the destination side, and when communicating
+  UNIX domain socket name. <p> When observed from the destination side, and when communicating
   through an intermediary, @code source.address @endcode SHOULD represent the source address behind
   any intermediaries, for example proxies, if it's available.
  */

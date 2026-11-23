@@ -23,7 +23,7 @@ AWS_PUSH_SANE_WARNING_LEVEL
  * Use the aws_string_bytes function to access the data bytes. A null byte is
  * always included immediately after the data but not counted in the length, so
  * that the output of aws_string_bytes can be treated as a C-string in cases
- * where none of the the data bytes are null.
+ * where none of the data bytes are null.
  *
  * Note that the fields of this structure are const; this ensures not only that
  * they cannot be modified, but also that you can't assign the structure using
@@ -69,7 +69,7 @@ AWS_EXTERN_C_BEGIN
 
 #ifdef AWS_OS_WINDOWS
 /**
- * For windows only. Converts `to_convert` to a windows whcar format (UTF-16) for use with windows OS interop.
+ * For windows only. Converts `to_convert` to a windows wchar format (UTF-16) for use with windows OS interop.
  *
  * Note: `to_convert` is assumed to be UTF-8 or ASCII.
  *
@@ -80,7 +80,7 @@ AWS_COMMON_API struct aws_wstring *aws_string_convert_to_wstring(
     const struct aws_string *to_convert);
 
 /**
- * For windows only. Converts `to_convert` to a windows whcar format (UTF-16) for use with windows OS interop.
+ * For windows only. Converts `to_convert` to a windows wchar format (UTF-16) for use with windows OS interop.
  *
  * Note: `to_convert` is assumed to be UTF-8 or ASCII.
  *
@@ -97,7 +97,7 @@ AWS_COMMON_API
 void aws_wstring_destroy(struct aws_wstring *str);
 
 /**
- * For windows only. Converts `to_convert` from a windows whcar format (UTF-16) to UTF-8.
+ * For windows only. Converts `to_convert` from a windows wchar format (UTF-16) to UTF-8.
  *
  * Note: `to_convert` is assumed to be wchar already.
  *
@@ -108,7 +108,7 @@ AWS_COMMON_API struct aws_string *aws_string_convert_from_wchar_str(
     const struct aws_wstring *to_convert);
 
 /**
- * For windows only. Converts `to_convert` from a windows whcar format (UTF-16) to UTF-8.
+ * For windows only. Converts `to_convert` from a windows wchar format (UTF-16) to UTF-8.
  *
  * Note: `to_convert` is assumed to be wchar already.
  *
@@ -119,7 +119,7 @@ AWS_COMMON_API struct aws_string *aws_string_convert_from_wchar_byte_cursor(
     const struct aws_byte_cursor *to_convert);
 
 /**
- * For windows only. Converts `to_convert` from a windows whcar format (UTF-16) to UTF-8.
+ * For windows only. Converts `to_convert` from a windows wchar format (UTF-16) to UTF-8.
  *
  * Note: `to_convert` is assumed to be wchar already.
  *
@@ -285,7 +285,7 @@ int aws_array_list_comparator_string(const void *a, const void *b);
  * argument that points to constant memory and has data bytes containing the
  * string literal in the second argument.
  *
- * GCC allows direct initilization of structs with variable length final fields
+ * GCC allows direct initialization of structs with variable length final fields
  * However, this might not be portable, so we can do this instead
  * This will have to be updated whenever the aws_string structure changes
  */

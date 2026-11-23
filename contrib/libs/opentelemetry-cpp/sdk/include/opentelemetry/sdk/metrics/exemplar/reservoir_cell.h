@@ -5,8 +5,8 @@
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
 
-#  include <stdint.h>
 #  include <chrono>
+#  include <cstdint>
 #  include <map>
 #  include <memory>
 #  include <utility>
@@ -18,7 +18,6 @@
 #  include "opentelemetry/sdk/metrics/data/metric_data.h"
 #  include "opentelemetry/sdk/metrics/exemplar/filter_type.h"
 #  include "opentelemetry/trace/context.h"
-#  include "opentelemetry/trace/span.h"
 #  include "opentelemetry/trace/span_context.h"
 #  include "opentelemetry/version.h"
 
@@ -64,7 +63,7 @@ public:
    */
   std::shared_ptr<ExemplarData> GetAndResetLong(const MetricAttributes &point_attributes)
   {
-    if (!context_)
+    if (!populated_)
     {
       return nullptr;
     }
@@ -89,7 +88,7 @@ public:
    */
   std::shared_ptr<ExemplarData> GetAndResetDouble(const MetricAttributes &point_attributes)
   {
-    if (!context_)
+    if (!populated_)
     {
       return nullptr;
     }
@@ -110,6 +109,7 @@ public:
   {
     value_       = 0.0;
     record_time_ = opentelemetry::common::SystemTimestamp{};
+    populated_   = false;
   }
 
 private:
@@ -135,19 +135,13 @@ private:
   {
     attributes_  = attributes;
     record_time_ = opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now());
-    auto span    = opentelemetry::trace::GetSpan(context);
-    if (span)
-    {
-      auto current_ctx = span->GetContext();
-      if (current_ctx.IsValid())
-      {
-        context_.reset(new opentelemetry::trace::SpanContext{current_ctx});
-      }
-    }
+    context_     = opentelemetry::trace::GetSpanContext(context);
+    populated_   = true;
   }
 
   // Cell stores either long or double values, but must not store both
-  std::shared_ptr<opentelemetry::trace::SpanContext> context_;
+  bool populated_                            = false;
+  opentelemetry::trace::SpanContext context_ = opentelemetry::trace::SpanContext::GetInvalid();
   nostd::variant<int64_t, double> value_;
   opentelemetry::common::SystemTimestamp record_time_;
   MetricAttributes attributes_;
@@ -155,8 +149,8 @@ private:
   friend class ReservoirCellTestPeer;
 };
 
-typedef std::shared_ptr<ExemplarData> (ReservoirCell::*MapAndResetCellType)(
-    const MetricAttributes &);
+using MapAndResetCellType =
+    std::shared_ptr<ExemplarData> (ReservoirCell::*)(const MetricAttributes &);
 
 }  // namespace metrics
 }  // namespace sdk

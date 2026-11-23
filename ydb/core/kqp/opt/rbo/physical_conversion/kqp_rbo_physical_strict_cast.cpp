@@ -59,16 +59,27 @@ TExprNode::TPtr ExpandOptionalDataCast(const TExprNode::TPtr& input, TExprContex
     }
 
     if (options & NUdf::ECastOptions::MayLoseData) {
+        // Optional Filter itself needs peephole expansion. Emit its executable
+        // form here so checked casts also work with physical peephole disabled.
+        const auto nothing = ctx.NewCallable(input->Pos(), "Nothing",
+            {ExpandType(input->Pos(), *input->GetTypeAnn(), ctx)});
         casted = ctx.Builder(input->Pos())
-            .Callable("Filter")
+            .Callable("IfPresent")
                 .Add(0, std::move(casted))
                 .Lambda(1)
                     .Param("casted")
-                    .Callable("==")
-                        .Add(0, input->HeadPtr())
-                        .Arg(1, "casted")
+                    .Callable("If")
+                        .Callable(0, "==")
+                            .Add(0, input->HeadPtr())
+                            .Arg(1, "casted")
+                        .Seal()
+                        .Callable(1, "Just")
+                            .Arg(0, "casted")
+                        .Seal()
+                        .Add(2, nothing)
                     .Seal()
                 .Seal()
+                .Add(2, nothing)
             .Seal().Build();
     }
 

@@ -7,6 +7,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     schema_ops_ut.cpp
+    reset_offset_actor_ut.cpp
 )
 
 PEERDIR(
@@ -15,9 +16,11 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/testlib/actors
     ydb/core/testlib/grpc_request
+    ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/services/persqueue_v1/actors
     library/cpp/testing/unittest
     library/cpp/threading/future
 )

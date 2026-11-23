@@ -172,7 +172,7 @@ public:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Spinlock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Spinlock_);
     THashMap<std::string, NTracing::TTraceContextPtr> TracesBySpanName_;
 };
 

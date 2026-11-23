@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -8,6 +9,7 @@
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 
 #define DEFAULT_NAME_1 "MyCollection1"
@@ -427,6 +429,40 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
                 R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
                 {NKikimrScheme::EStatus::StatusPathDoesNotExist});
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        Y_UNIT_TEST(BackupOmittedTableRejected) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+            ui64 txId = 100;
+
+            SetupLogging(runtime);
+
+            PrepareDirs(runtime, env, txId);
+
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            TestUserAttrs(runtime, ++txId, "/MyRoot", "Table1", AlterUserAttrs({{"__omit_backup", "true"}}));
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+                {NKikimrScheme::EStatus::StatusPreconditionFailed});
+
+            TestUserAttrs(runtime, ++txId, "/MyRoot", "Table1", AlterUserAttrs({}, {"__omit_backup"}));
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
             env.TestWaitNotification(runtime, txId);
         }
 
@@ -1152,6 +1188,44 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     }
 
+    Y_UNIT_TEST(DropCollectionDuringUnrelatedCopyTable) {
+        // A copy outside the collection must not hang drop: the ancestor walk used to loop on the root.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Unrelated"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep the copy in flight
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> block(runtime);
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "UnrelatedCopy", "/MyRoot/Unrelated");
+        const ui64 copyTxId = txId;
+        TestModificationResult(runtime, copyTxId);
+        runtime.WaitFor("copy table propose", [&]{ return !block.empty(); });
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            "Name: \"" DEFAULT_NAME_1 "\"");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
+            {NLs::PathNotExist});
+
+        block.Stop().Unblock();
+        env.TestWaitNotification(runtime, copyTxId);
+    }
+
     Y_UNIT_TEST(VerifyCdcStreamCleanupInIncrementalBackup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1427,6 +1501,30 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                           {NLs::PathNotExist});
     }
 
+    Y_UNIT_TEST(RestoreMissingBackupCollectionHasReason) {
+        std::vector<std::string> auditLines;
+        TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        const ui64 txId = 100;
+
+        const TString reason = "Backup collection not found: /MyRoot/.backups/collections/Collection";
+        TestCreateLongIncrementalRestoreOp(runtime, txId, "/MyRoot", R"(
+            Name: ".backups/collections/Collection"
+        )", {{NKikimrScheme::StatusPathDoesNotExist, reason}});
+
+        const std::string marker = "tx_id=" + std::to_string(txId);
+        runtime.WaitFor("scheme audit record", [&] {
+            return AnyOf(auditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = Tests::FindAuditLine(auditLines, marker);
+        UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+        UNIT_ASSERT_STRING_CONTAINS(line, "operation=RESTORE INCREMENTAL");
+        UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=StatusPathDoesNotExist");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
+    }
+
     Y_UNIT_TEST(RestorePathStatePersistenceAcrossRestart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1527,6 +1625,29 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
     }
 
     // TODO: DropCollectionWithIncrementalRestoreStateCleanup
+
+    Y_UNIT_TEST(IncrementalBackupOmittedTableRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table1", AlterUserAttrs({{"__omit_backup", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+            {NKikimrScheme::StatusPreconditionFailed});
+    }
 
     Y_UNIT_TEST(IncrementalBackupOperation) {
         TTestBasicRuntime runtime;
@@ -4214,7 +4335,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     // FORGET on a full-only Completed restore must succeed and clear the persisted row;
     // the LongIncrementalRestoreOps guard must not block FORGET after finalize completes.
-    Y_UNIT_TEST(FullOnlyRestoreForgetCleansState) {
+    Y_UNIT_TEST_FLAG(FullOnlyRestoreForgetCleansState, Restart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
@@ -4257,6 +4378,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after full-only restore");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
+        if (Restart) {
+            // Completed metadata is retained on disk and reloaded until FORGET.
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            UNIT_ASSERT_C(response.GetBackupCollectionRestore().GetProgress()
+                == Ydb::Backup::RestoreProgress::PROGRESS_DONE, response.ShortDebugString());
+        }
+
         env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
         TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
         env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
@@ -4269,6 +4398,163 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
         UNIT_ASSERT_VALUES_EQUAL_C(persistedState, -1,
             "IncrementalRestoreState row not deleted after FORGET");
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            R"(Name: "MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"),
+            {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST_FLAG(RestoreForgetWaitsForFinalization, Reboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> finalize(runtime, [](const auto& event) {
+            const auto& record = event->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize;
+        });
+        const ui64 originalId = ++txId;
+        TestRestoreBackupCollection(runtime, originalId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, originalId);
+        runtime.WaitFor("restore finalization proposal", [&] { return !finalize.empty(); });
+        if (Reboot) {
+            const auto heldBeforeReboot = finalize.size();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("recovered restore finalization proposal", [&] { return finalize.size() > heldBeforeReboot; });
+        }
+        const auto pending = TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending.GetBackupCollectionRestore().GetProgress()),
+            static_cast<ui32>(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA));
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetBackupCollectionRestore().GetProgressPercent(), 99);
+
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        finalize.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    static TVector<TString> PrepareRestoreWithOneIncremental(
+            TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, bool nestedTable = false) {
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        env.TestWaitNotification(runtime, txId);
+        const TString tableParent = nestedTable ? "/MyRoot/SubDir" : "/MyRoot";
+        const TString relativeTablePath = nestedTable ? "SubDir/Table1" : "Table1";
+        const TString tablePath = tableParent + "/Table1";
+        if (nestedTable) {
+            TestMkDir(runtime, ++txId, "/MyRoot", "SubDir");
+            env.TestWaitNotification(runtime, txId);
+        }
+        TestCreateTable(runtime, ++txId, tableParent, R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", Sprintf(R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "%s" } }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )", tablePath.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        UploadRow(runtime, tablePath, 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, tablePath, 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<TString> backupTablePaths;
+        const TString collection = "/MyRoot/.backups/collections/MyCollection1";
+        const auto description = DescribePath(runtime, collection);
+        for (const auto& child : description.GetPathDescription().GetChildren()) {
+            if (child.GetName().EndsWith("_full") || child.GetName().EndsWith("_incremental")) {
+                backupTablePaths.push_back(collection + "/" + child.GetName() + "/" + relativeTablePath);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(backupTablePaths.size(), 2);
+        TestDropTable(runtime, ++txId, tableParent, "Table1");
+        env.TestWaitNotification(runtime, txId);
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+        return backupTablePaths;
+    }
+
+    Y_UNIT_TEST_FLAG(IncrementalRestoreUnlocksSuffixedBackupTables, NestedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        const auto backupTablePaths = PrepareRestoreWithOneIncremental(runtime, env, txId, NestedTable);
+        for (const auto& path : backupTablePaths) {
+            const auto table = DescribePath(runtime, path);
+            TestDescribeResult(table, {NLs::PathExist});
+            UNIT_ASSERT_VALUES_EQUAL_C(table.GetPathDescription().GetSelf().GetPathState(),
+                NKikimrSchemeOp::EPathStateNoChanges, path);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(IncrementalRestoreForgetThenDrop, Restart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareRestoreWithOneIncremental(runtime, env, txId);
+        const ui64 restoreId = txId;
+        if (Restart) {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            UNIT_ASSERT_C(response.GetBackupCollectionRestore().GetProgress()
+                == Ydb::Backup::RestoreProgress::PROGRESS_DONE, response.ShortDebugString());
+        }
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadPersistedRestoreState(runtime, restoreId), -1,
+            "IncrementalRestoreState row not deleted after FORGET");
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            R"(Name: "MyCollection1")");
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto subscriber = CreateNotificationSubscriber(runtime, TTestTxConfig::SchemeShard);
+        runtime.Send(new IEventHandle(subscriber, sender,
+            new TEvSchemeShard::TEvNotifyTxCompletion(txId)));
+        const auto completion = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(completion, "DROP BACKUP COLLECTION did not complete after incremental RESTORE and FORGET");
+        UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Record.GetTxId(), txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"),
+            {NLs::PathNotExist});
     }
 
 } // TBackupCollectionTests

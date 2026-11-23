@@ -42,7 +42,6 @@ namespace NKikimr {
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
         TString StartupConfigYaml;
         std::optional<TString> StartupStorageYaml;
-        TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
         NKikimrBlobStorage::TPDiskConfig PDiskConfigOverlay;
@@ -58,6 +57,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout = false;
         TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
         TDuration LongRequestThreshold = TDuration::Seconds(50);
+        TDuration SelfHealStateRequestTimeout;
 
         // debugging options
         bool VDiskReplPausedAtStart = false;
@@ -72,7 +72,7 @@ namespace NKikimr {
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
-        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory);
+        TNodeWardenConfig();
         ~TNodeWardenConfig();
 
         bool IsCacheEnabled() const {
@@ -92,6 +92,9 @@ namespace NKikimr {
         return TActorId(0, TStringBuf("DistConfCCkr", 12));
     }
 
-    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId);
+    // selfBridgePileId is the pile id resolved against local bridge config (it is used until the storage config is
+    // received), selfBridgePileName is the pile name from node's location
+    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId,
+        std::optional<TString> selfBridgePileName);
 
 } // NKikimr

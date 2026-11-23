@@ -10,6 +10,7 @@
 #include <util/random/random.h>
 
 #include <functional>
+#include <memory>
 
 namespace NLWTrace {
 #ifndef LWTRACE_DISABLE
@@ -365,8 +366,8 @@ namespace NLWTrace {
         TFunc Func;
         TReceiver<TP> Receiver;
 
-        TAutoPtr<IOperandGetter<TP>> FirstParam;
-        TAutoPtr<IOperandGetter<TP>> SecondParam;
+        std::unique_ptr<IOperandGetter<TP>> FirstParam;
+        std::unique_ptr<IOperandGetter<TP>> SecondParam;
 
         bool DoExecute(TOrbit&, const TParams& params) override {
             Receiver.Set(Func(FirstParam->Get(params), SecondParam->Get(params)));
@@ -375,11 +376,11 @@ namespace NLWTrace {
 
     public:
         TTernaryStatementExecutor(const TReceiver<TP>& receiver,
-                                  TAutoPtr<IOperandGetter<TP>> firstParam,
-                                  TAutoPtr<IOperandGetter<TP>> secondParam)
+                                  std::unique_ptr<IOperandGetter<TP>> firstParam,
+                                  std::unique_ptr<IOperandGetter<TP>> secondParam)
             : Receiver(receiver)
-            , FirstParam(firstParam)
-            , SecondParam(secondParam)
+            , FirstParam(std::move(firstParam))
+            , SecondParam(std::move(secondParam))
         {
         }
     };
@@ -752,21 +753,21 @@ namespace NLWTrace {
         FOREACH_RIGHT_TYPE(PARSE_BINARY_STATEMENT_MACRO2, n, t, v, fn); \
     }
 
-#define CREATE_OPERAND_GETTER_N(N, type, arg_type)                                                                                       \
-    if (arg##N.Type == arg_type) {                                                                                                       \
-        operand##N.Reset(new TOperandGetter<type, arg_type>(TOperand<type, arg_type>(traceVariables, var##N, val##N, arg##N.ParamIdx))); \
+#define CREATE_OPERAND_GETTER_N(N, type, arg_type)                                                                                        \
+    if (arg##N.Type == arg_type) {                                                                                                        \
+        operand##N.reset(new TOperandGetter<type, arg_type>(TOperand<type, arg_type>(traceVariables, var##N, val##N, arg##N.ParamIdx))); \
     }
 
 #define TERNARY_ON_TYPE(n, t, v, fn)                                                                                          \
     if ((arg1.ParamIdx == size_t(-1) || strcmp(tName1, n) == 0) && (arg2.ParamIdx == size_t(-1) || strcmp(tName2, n) == 0)) { \
-        TAutoPtr<IOperandGetter<t>> operand1, operand2;                                                                       \
+        std::unique_ptr<IOperandGetter<t>> operand1, operand2;                                                                \
         FOREACH_LEFT_TYPE(CREATE_OPERAND_GETTER_N, 1, t);                                                                     \
         FOREACH_RIGHT_TYPE(CREATE_OPERAND_GETTER_N, 2, t);                                                                    \
         if (operand1 && operand2) {                                                                                           \
             actExec.Reset(new TTernaryStatementExecutor<t, fn<t>>(                                                            \
                 TReceiver<t>(traceVariables, var0),                                                                           \
-                operand1,                                                                                                     \
-                operand2));                                                                                                   \
+                std::move(operand1),                                                                                          \
+                std::move(operand2)));                                                                                        \
         }                                                                                                                     \
         break;                                                                                                                \
     }

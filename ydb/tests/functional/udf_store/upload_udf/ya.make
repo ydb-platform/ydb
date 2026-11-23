@@ -1,5 +1,7 @@
 PY3_PROGRAM(upload_udf)
 
+STYLE_PYTHON()
+
 PY_SRCS(
     __main__.py
 )

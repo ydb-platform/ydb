@@ -284,7 +284,8 @@ std::optional<NKikimr::NScheme::TTypeId> TYDBType::ConvertYDBToYQL(const Ydb::Ty
     }
 }
 
-std::optional<TVector<std::pair<TString, NScheme::TTypeInfo>>> TYDBType::ConvertYDBToYQL(const std::vector<std::pair<TString, Ydb::Type>>& input) {
+std::optional<TVector<std::pair<TString, NScheme::TTypeInfo>>> TYDBType::ConvertYDBToYQL(
+    const std::vector<std::pair<TString, Ydb::Type>>& input) {
     TVector<std::pair<TString, NScheme::TTypeInfo>> resultLocal;
     resultLocal.reserve(input.size());
     for (auto&& i : input) {
@@ -300,4 +301,4 @@ std::optional<TVector<std::pair<TString, NScheme::TTypeInfo>>> TYDBType::Convert
     return resultLocal;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInternal

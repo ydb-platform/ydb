@@ -8,18 +8,18 @@ SELECT
     i_item_desc,
     i_current_price
 FROM
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/inventory`
+    `inventory`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/store_sales`
+    `store_sales`
 WHERE
     i_current_price BETWEEN 30 AND (30 + 30)
     AND inv_item_sk == i_item_sk
     AND d_date_sk == inv_date_sk
-    AND d_date BETWEEN CAST('2002-05-30' AS Date) AND (
+    AND CAST(d_date AS Date) BETWEEN CAST('2002-05-30' AS Date) AND (
         CAST('2002-05-30' AS Date) + DateTime::IntervalFromDays(60)
     )
     AND i_manufact_id IN (437, 129, 727, 663)

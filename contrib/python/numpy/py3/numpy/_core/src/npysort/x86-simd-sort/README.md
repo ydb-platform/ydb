@@ -11,25 +11,26 @@ under `src/` directory. The following routines are currently supported:
 
 ## Sort an array of custom defined class objects (uses `O(N)` space)
 ``` cpp
-template <typename T, typename Func>
-void x86simdsort::object_qsort(T *arr, uint32_t arrsize, Func key_func)
+template <typename T, typename U, typename Func>
+void x86simdsort::object_qsort(T *arr, U arrsize, Func key_func)
 ```
 `T` is any user defined struct or class and `arr` is a pointer to the first
-element in the array of objects of type `T`. `Func` is a lambda function that
-computes the `key` value for each object which is the metric used to sort the
-objects. `Func` needs to have the following signature:
+element in the array of objects of type `T`. The `arrsize` parameter can be any
+32-bit or 64-bit integer type. `Func` is a lambda function that computes the
+`key` value for each object which is the metric used to sort the objects.
+`Func` needs to have the following signature:
 
 ```cpp
 [] (T obj) -> key_t { key_t key; /* compute key for obj */ return key; }
 ```
 
-Note that the return type of the key `key_t` needs to be one of the following
-: `[float, uint32_t, int32_t, double, uint64_t, int64_t]`. `object_qsort` has a
-space complexity of `O(N)`. Specifically, it requires `arrsize *
-sizeof(key_t)` bytes to store a vector with all the keys and an additional
-`arrsize * sizeof(uint32_t)` bytes to store the indexes of the object array.
-For performance reasons, we support `object_qsort` only when the array size is
-less than or equal to `UINT32_MAX`.  An example usage of `object_qsort` is
+Note that the return type of the key `key_t` needs to be one of the following :
+`[float, uint32_t, int32_t, double, uint64_t, int64_t]`. `object_qsort` has a
+space complexity of `O(N)`. Specifically, it requires `arrsize * sizeof(key_t)`
+bytes to store a vector with all the keys and an additional `arrsize *
+sizeof(uint32_t)` bytes to store the indexes of the object array.  For
+performance reasons, we recommend using `object_qsort` when the array size
+is less than or equal to `UINT32_MAX`. An example usage of `object_qsort` is
 provided in the [examples](#Sort-an-array-of-Points-using-object_qsort)
 section.  Refer to [section](#Performance-of-object_qsort) to get a sense of
 how fast this is relative to `std::sort`.
@@ -58,8 +59,9 @@ data types.
 std::vector<size_t> arg = x86simdsort::argsort(T* arr, size_t size, bool hasnan, bool descending);
 std::vector<size_t> arg = x86simdsort::argselect(T* arr, size_t k, size_t size, bool hasnan);
 ```
-Supported datatypes: `T` $\in$ `[_Float16, uint16_t, int16_t, float, uint32_t,
-int32_t, double, uint64_t, int64_t]`
+Supported datatypes: `T` $\in$ `[_Float16, uint16_t, int16_t, float, uint32_t, int32_t, double,
+uint64_t, int64_t]` Note that argsort and argselect are not accelerated with SIMD when using 16-bit
+data types.
 
 ## Build/Install
 
@@ -76,19 +78,36 @@ Once installed, you can use `pkg-config --cflags --libs x86simdsortcpp` to
 populate the right cflags and ldflags to compile and link your C++ program.
 This repository also contains a test suite and benchmarking suite which are
 written using [googletest](https://github.com/google/googletest) and [google
-benchmark](https://github.com/google/benchmark) frameworks respectively. You
-can configure meson to build them both by using `-Dbuild_tests=true` and
-`-Dbuild_benchmarks=true`.
+benchmark](https://github.com/google/benchmark) (>= v1.9.2) frameworks
+respectively. You can configure meson to build them both by using
+`-Dbuild_tests=true` and `-Dbuild_benchmarks=true`.
 
-### Note about building with avx512 by g++ v9 and v10
+## Build using OpenMP
 
-There is a risk when compile with avx512 by g++ v9 and v10,
-as some `MMX Technology` instructions is used by g++ v9/v10 
-without clearing fpu state. 
-Check [issue 154](https://github.com/intel/x86-simd-sort/issues/154) 
-for more details.
+`qsort`, `argsort`, and `keyvalue_qsort` can achieve even greater performance
+(up-to 3x speedup) through parallelization with
+[OpenMP](https://www.openmp.org/). By default, OpenMP support is disabled; to
+enable it, set the `-Duse_openmp=true` flag when configuring Meson. If you are
+using only the static SIMD implementations, compile with `-fopenmp
+-DXSS_USE_OPENMP`.
 
-Adding `g++` option `-mno-mmx`, which disables `MMX Technology` instructions, is a possible workaround.
+OpenMP-based parallel sorting routines are used for arrays larger than a
+specific threshold where threading makes sense. The number of threads is
+limited to a maximum of 16.  You can control the number of threads by setting
+the `OMP_NUM_THREADS` environment variable.
+
+## Using x86-simd-sort as a Meson subproject
+
+If you would like to use this as a Meson subproject, then create `subprojects`
+directory and copy `x86-simd-sort` into it. Add these two lines
+in your meson.build.
+```
+xss = subproject('x86-simd-sort')
+xss_dep = xss.get_variable('x86simdsortcpp_dep')
+```
+
+For more detailed instructions please refer to Meson
+[documentation](https://mesonbuild.com/Subprojects.html#using-a-subproject).
 
 ## Example usage
 
@@ -182,6 +201,7 @@ gets more complicated. Sorting by Euclidean distance can be up-to 10x faster.
 ## Downstream projects using x86-simd-sort
 
 - NumPy uses this as a [submodule](https://github.com/numpy/numpy/pull/22315) to accelerate `np.sort, np.argsort, np.partition and np.argpartition`.
+- PyTorch uses this as a [submodule](https://github.com/pytorch/pytorch/pull/127936) to accelerate `torch.sort, torch.argsort`.
 - A slightly modifed version this library has been integrated into [openJDK](https://github.com/openjdk/jdk/pull/14227).
 - [GRAPE](https://github.com/alibaba/libgrape-lite.git): C++ library for parallel graph processing.
 - AVX-512 version of the key-value sort has been submitted to [Oceanbase](https://github.com/oceanbase/oceanbase/pull/1325).

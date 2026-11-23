@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <contrib/proto/opentelemetry/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/flags.h>
@@ -50,8 +49,7 @@ namespace NWilson {
 
     class TSpan {
         struct TData {
-            const TInstant StartTime;
-            const ui64 StartCycles;
+            const ui64 StartTimeUnixNano;
             const TTraceId TraceId;
             NTraceProto::Span Span;
             TFlags Flags;
@@ -60,10 +58,8 @@ namespace NWilson {
             bool Ignored = false;
             bool EndAsIs = false; // don't update any data on End()
             NActors::TActorSystem* ActorSystem;
-            const NActors::TActorId UploaderId;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags,
-                NActors::TActorSystem* actorSystem, NActors::TActorId uploaderId);
+            TData(ui64 startTimeUnixNano, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);
 
             ~TData() {
                 Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
@@ -78,8 +74,7 @@ namespace NWilson {
         TSpan(TSpan&&) = default;
 
         TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
-            TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr,
-            NActors::TActorId uploaderId = {});
+            TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr);
         ~TSpan();
 
         TSpan& operator =(const TSpan&) = delete;
@@ -87,7 +82,14 @@ namespace NWilson {
 
         static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
                 TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode,
-                const TString& name, NActors::TActorId uploaderId = {});
+                const TString& name);
+        // Takes timestamps sampled with NowUnixNano().
+        static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
+                ui64 startUnixNano, ui64 endUnixNano, NTraceProto::Status::StatusCode statusCode,
+                const TString& name, NActors::TActorSystem* actorSystem = nullptr);
+
+        // Wall-clock nanoseconds for starts, events and ends.
+        static ui64 NowUnixNano();
 
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;
@@ -135,7 +137,7 @@ namespace NWilson {
         TSpan& Event(T&& name, T1&& attributes) {
             if (Y_UNLIKELY(*this)) {
                 auto *event = Data->Span.add_events();
-                event->set_time_unix_nano(TimeUnixNano());
+                event->set_time_unix_nano(NowUnixNano());
                 event->set_name(std::forward<T>(name));
                 for (auto&& [key, value] : attributes) {
                     SerializeKeyValue(std::move(key), std::move(value), event->add_attributes());
@@ -201,8 +203,7 @@ namespace NWilson {
         }
 
         TSpan CreateChild(ui8 verbosity, std::variant<std::optional<TString>, const char*> name, TFlags flags = EFlags::NONE) const {
-            return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem(),
-                Data ? Data->UploaderId : NActors::TActorId{});
+            return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
         }
 
         TString GetName() const {
@@ -213,11 +214,6 @@ namespace NWilson {
 
     private:
         void Send();
-
-        ui64 TimeUnixNano() const {
-            const TInstant now = Data->StartTime + CyclesToDuration(GetCycleCount() - Data->StartCycles);
-            return now.NanoSeconds();
-        }
 
         void VerifyNotSent() {
             Y_DEBUG_ABORT_UNLESS(!Data || !Data->Sent, "span has been ended");

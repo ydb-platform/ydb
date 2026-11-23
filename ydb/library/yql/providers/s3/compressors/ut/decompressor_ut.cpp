@@ -4,15 +4,17 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 
 namespace NYql::NCompressors {
 
 namespace {
-    TString GetResourcePath(const TString& path) {
-        return ArcadiaFromCurrentLocation(__SOURCE_FILE__, "test_compression_data/" + path);
-    }
+TString GetResourcePath(const TString& path) {
+    return ArcadiaFromCurrentLocation(__SOURCE_FILE__, "test_compression_data/" + path);
 }
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TCompressorTests) {
     Y_UNIT_TEST(SuccessLz4) {
@@ -43,4 +45,4 @@ Y_UNIT_TEST_SUITE(TCompressorTests) {
     }
 }
 
-}
+}   // namespace NYql::NCompressors

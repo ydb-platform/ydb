@@ -53,16 +53,34 @@ namespace {
             , Sticky(std::move(sticky))
             { }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            if (Touch(groupId, ResolvePageId(part, location, part->DataSlot(groupId)))) {
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
+            }
+            return nullptr;
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            // index pages are tracked as pages of their page collection
+            const ui32 slot = part->IndexSlot(groupId);
+            if (Touch(TGroupId(slot), ResolvePageId(part, location, slot))) {
+                return NTest::TTestEnv::TryGetIndexPage(part, location, groupId);
+            }
+            return nullptr;
+        }
+
+        bool Touch(TGroupId groupId, TPageId pageId)
         {
             Touched[groupId].insert(pageId);
 
             if (!Fail || Sticky.contains({groupId, pageId})) {
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return true;
             }
 
             ToLoad[groupId].insert(pageId);
-            return nullptr;
+            return false;
         }
 
         const bool Fail = false;
@@ -121,7 +139,7 @@ namespace {
                 conf.Group(2).PageRows = 1;
             }
             // TODO: rewrite tests when we deprecate flat index
-            conf.WriteBTreeIndex = false;
+            conf.WriteBTreeIndexV1 = false;
             conf.WriteFlatIndex = true;
 
             NTest::TPartCook cook(Mass.Model->Scheme, conf);
@@ -426,10 +444,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.GetPageId()});
+                result.insert({mainGroupId, x.RootV1PageId()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.GetPageId()});
+                result.insert({mainGroupId, x.RootV1PageId()});
             }
 
             return result;
@@ -451,7 +469,10 @@ namespace {
                         Y_ENSURE(ready != EReady::Page);
                         break;
                     }
-                    absoluteId[absoluteId.size()] = groupIndex->GetPageId();
+                    auto location = groupIndex->GetLocation();
+                    absoluteId[absoluteId.size()] = location.Offset.IsByteOffset()
+                        ? Eggs.Lone()->Store->ResolveByteOffset(groupId.Index, location.Offset.AsByteOffset())
+                        : location.Offset.AsPageIndex();
                 }
 
                 TSet<TPageId> actualValue;

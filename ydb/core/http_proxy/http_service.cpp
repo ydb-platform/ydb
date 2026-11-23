@@ -2,8 +2,8 @@
 
 #include "http_req.h"
 
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -14,21 +14,19 @@
 #include <util/string/ascii.h>
 #include <util/system/error.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
-
 namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
 
     TString BuildError(MimeTypes mimeType, HttpCodes httpCode, const TString& errorName, const TString& errorText);
 
-    class THttpProxyActor : public NActors::TActorBootstrapped<THttpProxyActor> {
-        using TBase = NActors::TActorBootstrapped<THttpProxyActor>;
+    class THttpProxyActor : public NPQ::TBaseActor<THttpProxyActor>
+                           , public NPQ::TConstantLogPrefix {
+        using TBase = NPQ::TBaseActor<THttpProxyActor>;
     public:
         explicit THttpProxyActor(const THttpProxyConfig& cfg);
 
         void Bootstrap(const TActorContext& ctx);
-        TStringBuilder LogPrefix() const;
 
     private:
         STFUNC(StateWork) {
@@ -42,13 +40,17 @@ namespace NKikimr::NHttpProxy {
         NKikimrConfig::TServerlessProxyConfig Config;
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
+        // Keeps the IAM response facility alive for ServiceAccountCredentialsProvider.
+        std::shared_ptr<NYdb::ICoreFacility> CoreFacility;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
         TIntrusivePtr<NHttp::TSocketDescriptor> PreboundSocket;
     };
 
     THttpProxyActor::THttpProxyActor(const THttpProxyConfig& cfg)
-        : Config(cfg.Config)
+        : TBase(NKikimrServices::HTTP_PROXY)
+        , Config(cfg.Config)
     {
+        CoreFacility = cfg.CoreFacility;
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
         Processors = MakeHolder<THttpRequestProcessors>(Config);
         if (cfg.UseSDK) {
@@ -70,10 +72,6 @@ namespace NKikimr::NHttpProxy {
                  << " (LastSystemError=" << LastSystemError() << "); acceptor will retry asynchronously"
                  << Endl;
         }
-    }
-
-    TStringBuilder THttpProxyActor::LogPrefix() const {
-        return TStringBuilder() << "proxy service:";
     }
 
     void THttpProxyActor::Bootstrap(const TActorContext& ctx) {
@@ -107,8 +105,7 @@ namespace NKikimr::NHttpProxy {
                                     Driver.Get(),
                                     ServiceAccountCredentialsProvider);
 
-        YDB_LOG_INFO_CTX(ctx, "Incoming request from request url database",
-            {"logPrefix", LogPrefix()},
+        LOG_I("Incoming request from request url database",
             {"sourceAddress", context.SourceAddress},
             {"methodName", context.MethodName},
             {"url", context.Request->URL},

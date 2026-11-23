@@ -45,6 +45,7 @@ RECURSE(
     memory_controller
     nbs
     node_whiteboard
+    path_aliasing
     persqueue
     public_http
     quoter
@@ -54,6 +55,7 @@ RECURSE(
     scheme_types
     security
     statistics
+    subsystems
     sys_view
     tablet
     tablet_flat

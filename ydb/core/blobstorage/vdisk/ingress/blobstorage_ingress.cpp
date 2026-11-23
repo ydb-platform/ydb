@@ -71,9 +71,7 @@ namespace NKikimr {
     TShiftedMainBitVec local(dataPtr, start, (start + totalParts)); \
     start += totalParts;    \
     ui32 handoffNum = (gtype).Handoff(); \
-    Y_DEBUG_ABORT_UNLESS(handoffNum <= MaxHandoffNodes); \
     const ui32 handoffVectorBits = totalParts * 2; \
-    Y_DEBUG_ABORT_UNLESS(start + handoffNum * handoffVectorBits <= sizeof(data) * NMatrix::BitsInByte); \
     TShiftedHandoffBitVec handoff[MaxHandoffNodes]; \
     { \
         for (unsigned i = 0; i < handoffNum; i++) { \
@@ -204,9 +202,9 @@ namespace NKikimr {
                 const auto& v = NMatrix::TVectorType::MakeOneHot(partIdx, gtype.TotalPartCount());
                 ui64 raw = 0;
                 if (setUpLocalBits) {
-                    raw |= static_cast<ui64>(v.Raw()) << (62 - 8);
+                    raw |= static_cast<ui64>(v.Raw8()) << (62 - 8);
                 }
-                raw |= static_cast<ui64>(v.Raw()) << (62 - 8 - gtype.TotalPartCount() * (1 + nodeId));
+                raw |= static_cast<ui64>(v.Raw8()) << (62 - 8 - gtype.TotalPartCount() * (1 + nodeId));
                 return TIngress(raw | (issueKeepFlag ? static_cast<ui64>(CollectModeKeep) << 62 : 0));
             }
         }
@@ -374,7 +372,7 @@ namespace NKikimr {
             }
             case EMode::MIRROR3OF4: {
                 const ui64 mask = ((static_cast<ui64>(1) << gtype.TotalPartCount()) - 1) << (62 - gtype.TotalPartCount());
-                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw()) << (62 - 8));
+                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw8()) << (62 - 8));
             }
         }
     }

@@ -32,7 +32,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -65,6 +66,17 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TKiDataSource"},
                 {"Index": 2, "Name": "TableKey", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKiChecksumTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiChecksumTable!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TKiDataSource"},
+                {"Index": 2, "Name": "TableKey", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -306,6 +318,16 @@
             ]
         },
         {
+            "Name": "TKiKillSession",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiKillSession!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "SessionId", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKiDropObject",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiDropObject!"},
@@ -525,7 +547,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Replication", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Cascade", "Type":  "TCoAtom"}
+                {"Index": 3, "Name": "Cascade", "Type":  "TCoAtom"},
+                {"Index": 4, "Name": "SourceCleanup", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
@@ -575,7 +598,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList"}
+                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "SampleRate", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

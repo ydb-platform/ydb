@@ -15,7 +15,7 @@ A fulltext index isn't automatically selected by the [optimizer](../../../../con
 
 Fulltext search functions (`FulltextMatch`, `FulltextScore`) require `VIEW`. If `VIEW` isn't used, the query fails.
 
-Only one fulltext predicate is supported per read through `VIEW`. `FulltextMatch` / `FulltextScore` can't be used under `OR` or `NOT`.
+Multiple `FulltextMatch` predicates with default keyword settings can be combined with `AND`. A single read cannot mix `FulltextMatch` and `FulltextScore` or use multiple distinct `FulltextScore` predicates. `FulltextMatch` / `FulltextScore` can't be used under `OR` or `NOT`.
 For relevance access, you must include `FulltextScore(...) > 0` in `WHERE`.
 
 For function details, see [{#T}](../../builtins/fulltext.md), including
@@ -39,7 +39,6 @@ Only the first two arguments can be positional. Additional parameters must be pa
 
 * `Mode` (String): query mode:
   * `Keywords` (default) — the query is split into individual terms; how they are combined is determined by `DefaultOperator`
-  * `Query` — extended syntax with logical operators: required terms via `+`, excluded terms via `-`, exact phrases in double quotes
   * `Wildcard` — wildcard search: `%` matches any substring, `_` matches a single character (similar to `LIKE`); requires an n-gram index
 * `DefaultOperator` (String): term combination operator in `Keywords` mode:
   * `And` (default) — all query terms must be present in the text
@@ -58,9 +57,9 @@ WHERE FulltextMatch(body, "mach% learn%", "Wildcard" AS Mode)
 LIMIT 20;
 ```
 
-### LIKE / ILIKE (use the fulltext index)
+## LIKE / ILIKE {#like-ilike}
 
-For fulltext indexes with n-grams, `LIKE`/`ILIKE` predicates over the indexed text column use the same logic as `FulltextMatch(..., "Wildcard" AS Mode)`:
+Use an n-gram index to search with patterns. `LIKE` is case-sensitive; `ILIKE` is not:
 
 ```yql
 SELECT id, title
@@ -68,6 +67,48 @@ FROM articles VIEW ft_idx
 WHERE body ILIKE "%learn%ing%"
 LIMIT 20;
 ```
+
+Using `ILIKE` to search through a fulltext index requires `use_filter_lowercase=true`.
+
+For a [filtered fulltext index](../../../../dev/fulltext-indexes.md#filtered), `WHERE` must include an equality predicate for every filter column.
+
+A pattern can be a parameter or an expression built from parameters. It must not depend on table rows or change during query execution. [`ESCAPE`](../expressions.md#check-match) lets you search for literal `%` and `_` characters.
+
+Example substring search with escaping:
+
+```yql
+DECLARE $pattern AS String;
+
+SELECT id, title
+FROM articles VIEW ft_idx
+WHERE body LIKE "%" || $pattern || "%" ESCAPE "!"
+LIMIT 20;
+```
+
+With `$pattern = "abc!%def"`, the query searches for the literal substring `abc%def`.
+
+## Equality, StartsWith, and EndsWith {#string-predicates}
+
+An n-gram index also supports equality on the text column and [StartsWith / EndsWith](../../builtins/basic.md#starts_ends_with). These conditions are case-sensitive; `%` and `_` are ordinary characters.
+
+Examples matching the whole text, the beginning, and the end of a string:
+
+```yql
+DECLARE $text AS String;
+
+SELECT id FROM articles VIEW ft_idx WHERE body = $text;
+SELECT id FROM articles VIEW ft_idx WHERE StartsWith(body, $text);
+SELECT id FROM articles VIEW ft_idx WHERE EndsWith(body, $text);
+```
+
+## Searching with short patterns {#scan-fallback}
+
+An index with `filter_ngram_min_length=3` cannot help with the pattern `%at%`: the fragment `at` has only two characters. In this case, {{ ydb-short-name }} searches the main table for matches, which can be slower.
+
+This approach is consistent with [partial indexes](https://en.wikipedia.org/wiki/Partial_index), which store only some rows: if the index cannot answer a query, the query reads the table.
+
+Scan fallback is available for string conditions (`LIKE`, `ILIKE`, equality, `StartsWith`, `EndsWith`) and `FulltextMatch` in `Wildcard` mode.
+It does not apply if the query uses keyword matching (`Keywords`) or relevance scoring (`FulltextScore`).
 
 ## FulltextScore ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25) relevance)
 
@@ -88,8 +129,8 @@ Additional parameters must be passed as **named arguments**:
 
 * `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (terms split into **required** with `+` prefix and **optional** without; at least `MinimumShouldMatch` optional terms must match, and every required term must be present)
 * `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of **optional** terms that must match — specified as an absolute number (for example, `"2"`) or a percentage of the optional terms (for example, `"50%"`). Required (`+`) terms are not counted
-* `K1` (Double): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; typical range: 1.2–2.0
-* `B` (Double): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; typical value: 0.75
+* `K1` (Double or Float): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; default: `1.2`
+* `B` (Double or Float): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; default: `0.75`
 
 Example:
 

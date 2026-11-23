@@ -3,6 +3,7 @@
 #include "batch_builder/builder.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -41,6 +42,9 @@ void TWriteOperation::Start(TColumnShard& owner, const NEvWrite::IDataContainer:
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);
     writingAction->SetBulk(IsBulk());
+    writingAction->SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(context.GetActualSchema()->GetIndexInfo().GetCacheBlobsAfterWrite(),
+        NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR, (ui64)owner.Settings.CacheDataAfterIndexing != 0,
+        (ui64)owner.Settings.CacheDataAfterCompaction != 0));
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), std::move(writingAction));
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
@@ -69,11 +73,15 @@ void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapsh
     }
 }
 
-void TWriteOperation::OnWriteFinish(
-    NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag) {
+void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds,
+    const std::vector<ui64>& portionIds, const bool ephemeralFlag) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Started);
+    YDB_LOG_VERIFY(insertWriteIds.size() == portionIds.size(),
+        {"insertWriteIds", insertWriteIds.size()},
+        {"portionIds", portionIds.size()});
     Status = EOperationStatus::Prepared;
     InsertWriteIds = insertWriteIds;
+    PortionIds = portionIds;
 
     if (ephemeralFlag) {
         return;
@@ -96,6 +104,9 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     for (auto&& writeId : InsertWriteIds) {
         proto.AddInternalWriteIds((ui64)writeId);
     }
+    for (auto&& portionId : PortionIds) {
+        proto.AddPortionIds(portionId);
+    }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(true);
     proto.SetIsBulk(IsBulk());
@@ -107,8 +118,13 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
     for (auto&& writeId : proto.GetInternalWriteIds()) {
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
+    PortionIds.assign(proto.GetPortionIds().begin(), proto.GetPortionIds().end());
+    // TODO: drop empty() once the normalizer (C10) fills the portion ids of older operations
+    YDB_LOG_VERIFY(PortionIds.empty() || PortionIds.size() == InsertWriteIds.size(),
+        {"insertWriteIds", InsertWriteIds.size()},
+        {"portionIds", PortionIds.size()});
     PathId.InternalPathId = TInternalPathId::FromProto(proto);
-    AFL_VERIFY(PathId.InternalPathId);
+    YDB_LOG_VERIFY(PathId.InternalPathId);
     if (proto.HasSchemeShardLocalPathId()) {   //TODO remove this check in 25.3
         PathId.SchemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(proto);
     }

@@ -3,19 +3,21 @@
 #include "ctx.h"
 #include "events.h"
 #include "rdma.h"
+#include "rdma_qp_cache_impl.h"
 #include "mem_pool.h"
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/util/intrusive_funnel_queue.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
 
 
-
 #include <util/thread/lfqueue.h>
 #include <util/system/guard.h>
+#include <util/system/rwlock.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 #include <util/system/yield.h>
@@ -27,17 +29,15 @@
 
 namespace NInterconnect::NRdma {
 
-void Y_FORCE_INLINE MemoryOrderAcquire(void* addr) {
-    atomic_thread_fence(std::memory_order_acquire);
+void Y_FORCE_INLINE TsanAcquire(const void* addr) {
 #if defined(_tsan_enabled_)
-    __tsan_acquire(addr);
+    __tsan_acquire(const_cast<void*>(addr));
 #else
     Y_UNUSED(addr);
 #endif
 }
 
-void Y_FORCE_INLINE MemoryOrderRlease(void* addr) {
-    atomic_thread_fence(std::memory_order_release);
+void Y_FORCE_INLINE TsanRelease(void* addr) {
 #if defined(_tsan_enabled_)
     __tsan_release(addr);
 #else
@@ -45,11 +45,18 @@ void Y_FORCE_INLINE MemoryOrderRlease(void* addr) {
 #endif
 }
 
+void Y_FORCE_INLINE MemoryOrderAcquire(const void* addr) {
+    atomic_thread_fence(std::memory_order_acquire);
+    TsanAcquire(addr);
+}
+
 NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* counters);
 
 class TWr;
 
-class TIbVerbsBuilderImpl final : public IIbVerbsBuilder {
+class TIbVerbsBuilderImpl final
+    : public IIbVerbsBuilder
+    , public TIntrusiveFunnelQueueItem<TIbVerbsBuilderImpl> {
 public:
     TIbVerbsBuilderImpl(size_t hint) noexcept {
         WorkBuf.reserve(hint);
@@ -62,7 +69,15 @@ public:
     void AddSendVerb(std::span<const TSendSge> sgList,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
     size_t GetVerbsNum() const noexcept;
-    ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr, size_t deviceIndex) noexcept;
+    ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept;
+
+    void AttachQp(std::shared_ptr<TQueuePair> qp) noexcept {
+        HoldedQp = std::move(qp);
+    }
+
+    int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept {
+        return HoldedQp->PostSend(wr, bad_wr);
+    }
 
 private:
     struct TWrVerbData {
@@ -72,6 +87,8 @@ private:
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
     };
     std::vector<TWrVerbData> WorkBuf;
+
+    std::shared_ptr<TQueuePair> HoldedQp;
 };
 
 void SetSigHandler() noexcept;
@@ -382,32 +399,78 @@ private:
     absl::flat_hash_map<ui32, NActors::TActorId> QpActors;
 };
 
+// Native verbs resources must outlive every QP created against them, but they
+// do not need to keep the ICq wrapper, its poller thread or pending builders
+// alive. TQueuePair holds this object directly to express that dependency.
+class TCqVerbsResources {
+public:
+    ~TCqVerbsResources() {
+        Y_UNUSED(Destroy());
+    }
+
+    int Destroy() noexcept {
+        int result = Srq.Destroy();
+
+        if (Cq) {
+            if (const int err = ibv_destroy_cq(Cq)) {
+                Cerr << "Unable to destroy CQ, err: " << err << ", errno: " << errno << Endl;
+                Y_DEBUG_ABORT_UNLESS(false);
+                if (!result) {
+                    result = err;
+                }
+            } else {
+                Cq = nullptr;
+            }
+        }
+
+        // The completion channel must be destroyed after its CQ.
+        if (!Cq && CompChannel) {
+            if (ibv_destroy_comp_channel(CompChannel)) {
+                Cerr << "Unable to destroy completion event channel, errno: " << errno << Endl;
+                Y_DEBUG_ABORT_UNLESS(false);
+                if (!result) {
+                    result = errno;
+                }
+            } else {
+                CompChannel = nullptr;
+            }
+        }
+
+        return result;
+    }
+
+    ibv_cq* Cq = nullptr;
+    TSrq Srq;
+    ibv_comp_channel* CompChannel = nullptr;
+};
+
 class TCqCommon : public ICq {
 public:
     TCqCommon(NActors::TActorSystem* as)
         : As(as)
-        , Cq(nullptr)
+        , VerbsResources(std::make_shared<TCqVerbsResources>())
     {}
 
     virtual ~TCqCommon() = default;
 
     virtual void ReturnWr(IWr*) noexcept = 0;
 
-    ibv_cq* GetCq() noexcept {
-        return Cq;
+    ibv_cq* GetCq() noexcept override {
+        return VerbsResources->Cq;
     }
 
-    ibv_srq* GetSrq() noexcept {
-        return Srq.Get();
+    ibv_srq* GetSrq() noexcept override {
+        return VerbsResources->Srq.Get();
     }
 
-    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, struct ibv_comp_channel* ch) noexcept {
-        Cq = ibv_create_cq(ctx->GetContext(), params.MaxCqe, nullptr, ch, 0);
-        if (!Cq) {
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, struct ibv_comp_channel* ch, IQpCache::TPtr qpCache) noexcept {
+        QpCache = std::move(qpCache);
+        VerbsResources->Cq = ibv_create_cq(ctx->GetContext(), params.MaxCqe, nullptr, ch, 0);
+        if (!VerbsResources->Cq) {
             return errno;
         }
         if (params.MaxSrqWr > 0) {
-            if (const int err = Srq.Init(ctx, params, std::move(memPool))) {
+            if (const int err = VerbsResources->Srq.Init(ctx, params, std::move(memPool))) {
                 if (const int destroyErr = DestroyCq()) {
                     return destroyErr;
                 }
@@ -418,7 +481,7 @@ public:
     }
 
     int Do(std::span<ibv_wc> wc) noexcept {
-        return ibv_poll_cq(Cq, wc.size(), &wc.front());
+        return ibv_poll_cq(VerbsResources->Cq, wc.size(), &wc.front());
     }
 
     virtual void Idle() noexcept {
@@ -426,24 +489,44 @@ public:
     }
 
     int DestroyCq() noexcept {
-        if (const int err = Srq.Destroy()) {
-            return err;
+        DrainQpCache();
+        return VerbsResources->Destroy();
+    }
+
+    TGetQpResult GetQp(const NActors::TActorContext& actorCtx) noexcept override {
+        TReadGuard guard(QpCacheLock);
+        if (!QpCache) {
+            return TQpNoResources();
         }
-        if (Cq) {
-            if (const int err = ibv_destroy_cq(Cq)) {
-                Cerr << "Unable to destroy CQ, err: " << err << ", errno: " << errno << Endl;
-                Y_DEBUG_ABORT_UNLESS(false);
-                return err;
-            }
-            Cq = nullptr;
-        }
-        return 0;
+        return QpCache->GetQp(actorCtx, shared_from_this());
+    }
+
+    void StopQpCache() noexcept override {
+        DrainQpCache();
     }
 
 protected:
+    std::shared_ptr<TCqVerbsResources> GetVerbsResources() noexcept override {
+        return VerbsResources;
+    }
+
+    void DrainQpCache() {
+        IQpCache::TPtr cache;
+        {
+            TWriteGuard guard(QpCacheLock);
+            cache.swap(QpCache);
+        }
+        if (cache) {
+            cache->Stop();
+        }
+    }
+
     NActors::TActorSystem* const As;
-    ibv_cq* Cq;
-    TSrq Srq;
+    std::shared_ptr<TCqVerbsResources> VerbsResources;
+private:
+    TRWMutex QpCacheLock;
+    IQpCache::TPtr QpCache;
+
 };
 
 class TWr : public ICq::IWr {
@@ -467,7 +550,6 @@ public:
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
-        MemoryOrderAcquire(&Cb);
         if (Cb) {
             if (wc) {
                 if (wc->status == IBV_WC_SUCCESS) {
@@ -501,7 +583,16 @@ public:
 
     void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
         Cb = std::move(cb);
-        MemoryOrderRlease(&Cb);
+    }
+
+    void TsanReleaseForCompletion() noexcept {
+        // The release fence is shared by the batch in BuildListOfVerbs.
+        TsanRelease(&Cb);
+    }
+
+    void TsanAcquireForCompletion() const noexcept {
+        // The acquire fence is shared by the completion batch in HandleWc.
+        TsanAcquire(&Cb);
     }
 
     void ResetTimer() noexcept {
@@ -521,7 +612,7 @@ private:
 };
 
 template<class TCq>
-static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, IQpCache::TPtr qpCache, TCqDestroyer cqDestroyer) noexcept {
     const ibv_device_attr& attr = ctx->GetDevAttr();
     if (runtimeParams.MaxCqe <= 0) {
         runtimeParams.MaxCqe = attr.max_cqe;
@@ -541,8 +632,8 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaR
         runtimeParams.MaxSrqWr = Min(runtimeParams.MaxSrqWr, attr.max_srq_wr);
     }
 
-    auto p = std::make_shared<TCq>(as, runtimeParams.MaxWr, counter);
-    int err = p->Init(ctx, runtimeParams, std::move(memPool));
+    auto p = std::make_unique<TCq>(as, runtimeParams.MaxWr, counter);
+    int err = p->Init(ctx, runtimeParams, std::move(memPool), std::move(qpCache));
     if (err) {
         return nullptr;
     }
@@ -551,28 +642,14 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaR
        return nullptr;
     }
 
-    return p;
+    TCq* raw = p.release();
+    if (cqDestroyer) {
+        return ICq::TPtr(raw, std::move(cqDestroyer));
+    }
+    return ICq::TPtr(raw);
 }
 
 class TSimpleCqBase : public TCqCommon {
-protected:
-    struct TWaiterCtx {
-        TWaiterCtx(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> verbsBuilder) noexcept
-            : Qp(std::move(qp))
-            , VerbsBuilder(std::move(verbsBuilder))
-        {}
-        size_t GetVerbsNum() const noexcept {
-            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->GetVerbsNum();
-        }
-
-        ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept {
-            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->BuildListOfVerbs(preparedWr, Qp->GetDeviceIndex());
-        }
-
-        std::shared_ptr<TQueuePair> Qp;
-        std::unique_ptr<IIbVerbsBuilder> VerbsBuilder;
-    };
-
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c, bool nonBlockingPolling) noexcept
         : TCqCommon(as)
@@ -615,6 +692,7 @@ public:
 
     void SetTerminalError(int error) noexcept {
         TerminalError.store(error ? error : TSrq::CqTerminalError, std::memory_order_relaxed);
+        DrainQpCache();
     }
 
     TWrStats GetWrStats() const noexcept override {
@@ -630,7 +708,9 @@ public:
         if (TerminalError.load(std::memory_order_relaxed)) {
             return TErr();
         }
-        Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
+        TIbVerbsBuilderImpl* b = static_cast<TIbVerbsBuilderImpl*>(builder.release());
+        b->AttachQp(std::move(qp));
+        Waiters.Push(b);
         // If the thread may sleep we need to start Wr processing from caller thread. It is not a problem due to thread safe ibverbs api.
         // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
         // from cq thread.
@@ -653,7 +733,7 @@ public:
             return false;
         }
         auto cmd = new TSrq::TCmd{qpNum, TSrq::TCmd::RegQp, actorId};
-        return Srq.EnqueueCmd(cmd);
+        return VerbsResources->Srq.EnqueueCmd(cmd);
     }
 
     bool DeregisterQpAsync(ui32 qpNum) noexcept override {
@@ -661,12 +741,12 @@ public:
             return false;
         }
         auto cmd = new TSrq::TCmd{qpNum, TSrq::TCmd::DeregQp, NActors::TActorId()};
-        return Srq.EnqueueCmd(cmd);
+        return VerbsResources->Srq.EnqueueCmd(cmd);
     }
 
     // Builds and posts pending RDMA send WRs.
     // Returns false when there is no pending send work and the CQ thread may idle.
-    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
+    bool ProcessWr(std::unique_ptr<TIbVerbsBuilderImpl>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
         while (true) {
             if (ctx) {
                 TWr* wr = nullptr;
@@ -690,7 +770,7 @@ public:
                     } else {
                         Allocated.fetch_add(preparedWr.size());
                         ibv_send_wr* wrErr = nullptr;
-                        int err = ctx->Qp->PostSend(wrList, &wrErr);
+                        int err = ctx->PostSend(wrList, &wrErr);
                         if (err) {
                             while (wrErr) {
                                 TWr* x = &WrBuf[wrErr->wr_id];
@@ -707,8 +787,7 @@ public:
                     return false;
                 }
             } else {
-                TWaiterCtx* p = nullptr;
-                Waiters.Dequeue(&p);
+                TIbVerbsBuilderImpl* p = Waiters.Pop();
                 if (p == nullptr) {
                     // No wr to build
                     return false;
@@ -723,7 +802,7 @@ public:
         TThread::SetCurrentThreadName("RdmaCqThread");
         SetSigHandler();
         TSimpleCqBase* cq = reinterpret_cast<TSimpleCqBase*>(p);
-        cq->CqThreadId = pthread_self();
+        cq->CqThreadId.store(pthread_self(), std::memory_order_relaxed);
         cq->Loop();
         return nullptr;
     }
@@ -750,16 +829,16 @@ public:
                         }
                         VerbsBuildingState.Lock.Release();
                     }
-                    if (Srq.HasPendingRefillSlots()) {
+                    if (VerbsResources->Srq.HasPendingRefillSlots()) {
                         static constexpr ui64 SrqRefillRetryPeriod = 1024;
                         if ((++SrqRefillRetryCounter & (SrqRefillRetryPeriod - 1)) == 0) {
-                            if (auto error = Srq.RetryPendingRefillSlots(1)) {
+                            if (auto error = VerbsResources->Srq.RetryPendingRefillSlots(1)) {
                                 SetTerminalError(error);
                                 idleAllowed = false;
                                 MaybeIdle.store(false);
                             }
                         }
-                        if (Srq.HasPendingRefillSlots()) {
+                        if (VerbsResources->Srq.HasPendingRefillSlots()) {
                             idleAllowed = false;
                             MaybeIdle.store(false);
                             SpinLockPause();
@@ -783,10 +862,10 @@ public:
     }
 
     void HandleErr() noexcept {
-        Srq.CloseCommands();
-        Srq.ProcessCommands();
+        VerbsResources->Srq.CloseCommands();
+        VerbsResources->Srq.ProcessCommands();
         const int terminalError = TerminalError.load(std::memory_order_relaxed);
-        Srq.NotifyTerminalError(As, terminalError);
+        VerbsResources->Srq.NotifyTerminalError(As, terminalError);
         for (size_t i = 0; i < WrBuf.size(); i++) {
             TWr* wr = &WrBuf[i];
             wr->ReplyCqErr(As);
@@ -795,17 +874,17 @@ public:
         }
     }
 
-
-
     void HandleWc(ibv_wc* wc, size_t sz) noexcept {
+        atomic_thread_fence(std::memory_order_acquire);
         for (size_t i = 0; i < sz; i++, wc++) {
             if (wc->wr_id & TSrq::SRQ_WR_MASK) {
-                Srq.ProcessCommands();
-                if (auto error = Srq.HandleWc(As, wc)) {
+                VerbsResources->Srq.ProcessCommands();
+                if (auto error = VerbsResources->Srq.HandleWc(As, wc)) {
                     SetTerminalError(error);
                 }
             } else {
                 TWr* wr = &WrBuf[wc->wr_id];
+                wr->TsanAcquireForCompletion();
                 double passed = wr->GetTimePassed();
                 RdmaDeviceVerbTimeUs->Collect(passed * 1000000.0);
                 wr->Reply(As, wc);
@@ -826,14 +905,16 @@ public:
     }
 
     void Awake() noexcept {
-        if (CqThreadId) {
-            pthread_kill(CqThreadId, SIGUSR1);
+        const pthread_t cqThreadId = CqThreadId.load(std::memory_order_relaxed);
+        if (cqThreadId) {
+            pthread_kill(cqThreadId, SIGUSR1);
         }
     }
 
 protected:
     bool IsCqThread() const noexcept {
-        return CqThreadId && pthread_equal(pthread_self(), CqThreadId);
+        const pthread_t cqThreadId = CqThreadId.load(std::memory_order_relaxed);
+        return cqThreadId && pthread_equal(pthread_self(), cqThreadId);
     }
 
     // External terminal notifications may arrive through async_fd while the poller
@@ -852,6 +933,18 @@ protected:
             ThreadYield();
         }
     }
+
+    // The intrusive queue does not own its items. This must be called only
+    // after the poller has stopped and submissions have been externally
+    // serialized with CQ destruction.
+    void DrainWaiters() noexcept {
+        VerbsBuildingState.CurCtx.reset();
+        VerbsBuildingState.PreparedWr.clear();
+        while (TIbVerbsBuilderImpl* waiter = Waiters.Pop()) {
+            delete waiter;
+        }
+    }
+
     TThread Thread;
     std::atomic<bool> Finished;
     std::atomic<bool> Cont;
@@ -863,10 +956,10 @@ protected:
     // imlementation of Release() methos on IWr* will be musch more difficult
     TLockFreeQueue<TWr*> Queue;
 
-    TLockFreeQueue<TWaiterCtx*> Waiters;
+    TIntrusiveFunnelQueue<TIbVerbsBuilderImpl> Waiters;
 
     struct {
-        std::unique_ptr<TWaiterCtx> CurCtx;
+        std::unique_ptr<TIbVerbsBuilderImpl> CurCtx;
         std::vector<TWr*> PreparedWr;
         TSpinLock Lock; // Is used to protect VerbsBulding due to cuncurrent access from one poller thred and multiple actor system threads
     } VerbsBuildingState;
@@ -879,7 +972,7 @@ protected:
     ui64 SrqRefillRetryCounter = 0;
     NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
 private:
-    pthread_t CqThreadId = {};
+    std::atomic<pthread_t> CqThreadId = {};
 };
 
 }

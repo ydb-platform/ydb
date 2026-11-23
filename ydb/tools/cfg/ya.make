@@ -2,6 +2,10 @@ RECURSE(
     bin
 )
 
+RECURSE_FOR_TESTS(
+    ut
+)
+
 PY3_LIBRARY()
 
 PY_SRCS(

@@ -1,7 +1,7 @@
 #include "overload_manager_service.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
@@ -16,8 +16,17 @@ std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{ 0 };
 
 using NFlowControl::TFlowControlManagerServiceOperator;
 
+// TActivationContext::ActorSystem() dereferences TlsActivationContext. Mailbox cleanup during
+// TActorSystem::Stop runs on the stop thread, which has no activation context (YDBCORES-20).
+NActors::TActorSystem* ActorSystemIfActivated() {
+    if (!NActors::TlsActivationContext) {
+        return nullptr;
+    }
+    return NActors::TActivationContext::ActorSystem();
+}
+
 void SendToOverloadManager(NActors::IEventBase* event) {
-    auto* actorSystem = NActors::TActivationContext::ActorSystem();
+    auto* actorSystem = ActorSystemIfActivated();
     if (!actorSystem) {
         delete event;
         return;
@@ -26,7 +35,7 @@ void SendToOverloadManager(NActors::IEventBase* event) {
 }
 
 bool TrySendToOverloadManager(NActors::IEventBase* event) {
-    auto* actorSystem = NActors::TActivationContext::ActorSystem();
+    auto* actorSystem = ActorSystemIfActivated();
     if (!actorSystem) {
         delete event;
         return false;

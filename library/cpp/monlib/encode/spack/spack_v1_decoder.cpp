@@ -66,10 +66,14 @@ namespace NMonitoring {
                 TVector<char> namesBuf;
                 TVector<char> valuesBuf;
 
-                if (Header_.Version == SV1_03) {
-                    auto namesResult = ReadLengthDelimitedStringPool(Header_.LabelNamesSize);
+                if (Header_.Version == SV1_03 || Header_.Version == SV1_04) {
+                    ui64 labelSizeTotal = (ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize)
+                        * (sizeof(std::pair<ui32, ui32>) + sizeof(TStringBuf));
+                    DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "label pool limit exceeded by segment metadata");
+
+                    auto namesResult = ReadLengthDelimitedStringPool(Header_.LabelNamesSize, labelSizeTotal);
                     namesBuf = std::move(namesResult.first);
-                    auto valuesResult = ReadLengthDelimitedStringPool(Header_.LabelValuesSize);
+                    auto valuesResult = ReadLengthDelimitedStringPool(Header_.LabelValuesSize, labelSizeTotal);
                     valuesBuf = std::move(valuesResult.first);
 
                     TStringPool labelNames(namesBuf.data(), namesResult.second);
@@ -107,6 +111,10 @@ namespace NMonitoring {
                 // (3) read common time
                 c->OnCommonTime(ReadTime());
 
+                if (Header_.Version == SV1_04) {
+                    c->OnCommonStartTimeSeconds(ReadFixed<ui32>());
+                }
+
                 // (4) read common labels
                 if (ui32 commonLabelsCount = ReadVarint()) {
                     c->OnLabelsBegin();
@@ -133,7 +141,11 @@ namespace NMonitoring {
                     c->OnMetricBegin(metricType);
 
                     // (5.2) flags byte
-                    c->OnMemOnly(ReadFixed<ui8>() & 0x01);
+                    const ui8 flagsByte = ReadFixed<ui8>();
+                    c->OnMemOnly(flagsByte & 0x01);
+                    if (Header_.Version == SV1_04 && flagsByte & 0x02) {
+                        c->OnStartTimeSeconds(ReadFixed<ui32>());
+                    }
 
                     auto metricNameValueIndex = std::numeric_limits<ui32>::max();
                     if (Header_.Version == SV1_02) {
@@ -298,13 +310,15 @@ namespace NMonitoring {
                 return ReadVarUInt32(In_);
             }
 
-            std::pair<TVector<char>, TVector<std::pair<ui32, ui32>>> ReadLengthDelimitedStringPool(ui32 count) {
+            std::pair<TVector<char>, TVector<std::pair<ui32, ui32>>> ReadLengthDelimitedStringPool(ui32 count, ui64& labelSizeTotal) {
                 TVector<char> storage;
                 TVector<std::pair<ui32, ui32>> segments;
                 segments.reserve(count);
 
                 for (ui32 i = 0; i < count; i++) {
                     ui32 len = ReadVarint();
+                    DECODE_ENSURE(len <= LABEL_SIZE_LIMIT - labelSizeTotal, "label pool limit exceeded by string #" << i);
+                    labelSizeTotal += len;
                     ui32 offset = static_cast<ui32>(storage.size());
                     storage.resize(offset + len);
                     if (len > 0) {

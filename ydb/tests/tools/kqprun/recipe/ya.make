@@ -1,5 +1,7 @@
 PY3_PROGRAM(kqprun_recipe)
 
+STYLE_PYTHON()
+
 PY_SRCS(__main__.py)
 
 PEERDIR(

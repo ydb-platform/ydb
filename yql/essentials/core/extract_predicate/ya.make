@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     extract_predicate_dbg.cpp
@@ -6,14 +6,13 @@ SRCS(
     extract_predicate_impl.cpp
     extract_predicate_impl.h
     extract_predicate.h
+    extract_predicate.cpp
 )
 
 PEERDIR(
     yql/essentials/core/services
     yql/essentials/core/type_ann
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

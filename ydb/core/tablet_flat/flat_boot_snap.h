@@ -11,7 +11,7 @@
 #include "flat_executor_txloglogic.h"
 #include "util_fmt_abort.h"
 
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/util/pb.h>
 #include <util/string/builder.h>
 #include <util/generic/xrange.h>

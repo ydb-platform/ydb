@@ -7,8 +7,19 @@
 namespace NKikimr::NColumnShard {
 
 void TLockFeatures::SetTxId(const ui64 txId) {
-    AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
+    YDB_LOG_VERIFY(!TxId || TxId == txId,
+        {"txId", txId},
+        {"lockId", GetLockId()},
+        {"txIdAssigned", TxId});
     TxId = txId;
+}
+
+bool TLockFeatures::TryProposeTransaction(const ui64 txId) {
+    if (NeedsAborting()) {
+        return false;
+    }
+    SetTxId(txId);
+    return true;
 }
 
 bool TLockFeatures::IsTxIdAssigned() const {
@@ -16,7 +27,8 @@ bool TLockFeatures::IsTxIdAssigned() const {
 }
 
 ui64 TLockFeatures::GetTxId() const {
-    AFL_VERIFY(IsTxIdAssigned())("lock_id", GetLockId());
+    YDB_LOG_VERIFY(IsTxIdAssigned(),
+        {"lockId", GetLockId()});
     return TxId;
 }
 
@@ -50,8 +62,8 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                 {"event", "register_operation_on_load"},
                 {"operationId", operation->GetWriteId()});
-            AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
-            AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
+            YDB_LOG_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
+            YDB_LOG_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
             LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
 
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
@@ -77,11 +89,13 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             auto& lock = it->second;
 
-            lock.SetTxId(txId);
+            YDB_LOG_VERIFY(lock.TryProposeTransaction(txId),
+                {"lockId", lockId},
+                {"txId", txId});
             // we cannot persist the lock state reliably and cheaply enough,
             // so if the shard restarted/crashed/whatever, we assume the lock is broken
             lock.SetBroken();
-            AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
+            YDB_LOG_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;
             }
@@ -89,6 +103,36 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     }
 
     return true;
+}
+
+std::vector<NOlap::TPortionAddress> TOperationsManager::GetUncommittedPortionAddresses() const {
+    std::vector<NOlap::TPortionAddress> result;
+    for (const auto& [_, operation] : Operations) {
+        // TODO: verify the ids are there once the normalizer (C10) fills them for older operations
+        for (const ui64 portionId : operation->GetPortionIds()) {
+            result.emplace_back(operation->GetPathId().InternalPathId, portionId);
+        }
+    }
+    return result;
+}
+
+std::vector<ui64> TOperationsManager::GetLockIdsOfNotProposedTransactions() const {
+    std::vector<ui64> result;
+    for (const auto& [lockId, lock] : LockFeatures) {
+        if (!lock.IsTxIdAssigned()) {
+            result.push_back(lockId);
+        }
+    }
+    return result;
+}
+
+bool TOperationsManager::HasWriteOperations(const TInternalPathId pathId) const {
+    for (const auto& [_, operation] : Operations) {
+        if (operation->GetPathId().InternalPathId == pathId) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
@@ -169,7 +213,9 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
         {"lockId", lockId});
 
     auto& lock = GetLockVerified(lockId);
-    AFL_VERIFY(lock.IsAborted())("lock_id", lockId)("tx_id", txId);
+    YDB_LOG_VERIFY(lock.IsAborted(),
+        {"lockId", lockId},
+        {"txId", txId});
 
     TVector<TWriteOperation::TPtr> aborted;
     for (auto&& opPtr : lock.GetWriteOperations()) {
@@ -216,7 +262,7 @@ void TOperationsManager::RemoveOperationOnComplete(const TWriteOperation::TPtr& 
             {"event", "remove_write_id_to_operation_id"},
             {"writeId", i},
             {"operationId", op->GetWriteId()});
-        AFL_VERIFY(InsertWriteIdToOpWriteId.erase(i));
+        YDB_LOG_VERIFY(InsertWriteIdToOpWriteId.erase(i));
     }
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
         {"event", "remove_operation"},
@@ -254,7 +300,7 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
         {"event", "register_operation"},
         {"operationId", operation->GetWriteId()},
         {"last", LastWriteId});
-    AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
+    YDB_LOG_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
     GetLockVerified(operation->GetLockId()).AddWriteOperation(operation);
     return operation;
 }
@@ -268,12 +314,14 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
 
     if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
         //FIXME #23784
-        // AFL_VERIFY_DEBUG(!evWrite.Record.HasTxId())("TxId", evWrite.Record.GetTxId());
+        // YDB_LOG_VERIFY_DEBUG(!evWrite.Record.HasTxId(),
+        //     {"txId", evWrite.Record.GetTxId()});
         // if (evWrite.Record.HasTxId()) {
         //     return TConclusionStatus::Fail("Rollback TEvWrite shouldn't have TxId");
         // }
 
-        AFL_VERIFY_DEBUG(evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)("TxMode", evWrite.Record.GetTxMode());
+        YDB_LOG_VERIFY_DEBUG(evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            {"txMode", evWrite.Record.GetTxMode()});
         if (evWrite.Record.GetTxMode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
             return TConclusionStatus::Fail("Rollback TEvWrite should be Immediate");
         }
@@ -346,7 +394,7 @@ void TOperationsManager::AddEventForTx(
 
 void TOperationsManager::AddEventForLock(
     TColumnShard& /*owner*/, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
-    AFL_VERIFY(writer);
+    YDB_LOG_VERIFY(writer);
     NOlap::NTxInteractions::TTxConflicts txNotifications;
     NOlap::NTxInteractions::TTxConflicts txConflicts;
     auto& txLock = GetLockVerified(lockId);

@@ -50,16 +50,14 @@ int TSimpleMpscSpinLockQueue<TItem>::GetSize()
 template <typename TItem>
 void TMpscShardedQueue<TItem>::Enqueue(TItem item)
 {
-    auto tscp = NProfiling::TTscp::Get();
-    auto& shardQueue = Shards_[tscp.ProcessorId].Queue;
+    auto& shardQueue = Shards_[GetCurrentAccessStripe(ShardCount)].Queue;
     shardQueue.Enqueue(std::move(item));
 }
 
 template <typename TItem>
 void TMpscShardedQueue<TItem>::EnqueueMany(std::vector<TItem>&& items)
 {
-    auto tscp = NProfiling::TTscp::Get();
-    auto& shardQueue = Shards_[tscp.ProcessorId].Queue;
+    auto& shardQueue = Shards_[GetCurrentAccessStripe(ShardCount)].Queue;
     shardQueue.EnqueueMany(std::move(items));
 }
 
@@ -82,8 +80,7 @@ i64 TMpscShardedQueue<TItem>::ConsumeAll(TConsumer consumer)
 template <typename TItem>
 int TMpscShardedQueue<TItem>::GetShardSize()
 {
-    auto tscp = NProfiling::TTscp::Get();
-    auto& shardQueue = Shards_[tscp.ProcessorId].Queue;
+    auto& shardQueue = Shards_[GetCurrentAccessStripe(ShardCount)].Queue;
     return shardQueue.GetSize();
 }
 

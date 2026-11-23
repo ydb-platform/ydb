@@ -24,7 +24,7 @@ LONG_WAIT_TIME = plain_or_under_sanitizer(60, 300)
 
 @pytest.fixture
 def kikimr(request):
-    (initial, total, step) = request.param
+    initial, total, step = request.param
     kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True)
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['resource_manager']['mkql_initial_memory_limit'] = initial

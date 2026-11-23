@@ -5,7 +5,6 @@
 namespace NYql {
 
 std::shared_ptr<NYdb::ICredentialsProviderFactory> WrapCredentialsProviderFactoryWithBearer(
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee
-);
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee);
 
 }

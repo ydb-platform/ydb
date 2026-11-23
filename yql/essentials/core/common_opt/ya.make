@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -21,6 +21,9 @@ SRCS(
     yql_co_transformer.cpp
     yql_co_yqlselect.cpp
     yql_co_transformer.h
+    yql_co.cpp
+    yql_co_sqlin.cpp
+    yql_co_sqlin.h
 )
 
 PEERDIR(
@@ -30,7 +33,5 @@ PEERDIR(
     yql/essentials/parser/pg_catalog
     library/cpp/disjoint_sets
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

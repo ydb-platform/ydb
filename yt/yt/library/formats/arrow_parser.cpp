@@ -652,6 +652,18 @@ bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
     return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueYson;
 }
 
+void ValidateYsonValue(TStringBuf value)
+{
+    try {
+        ValidateAnyValue(value);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Value of a column with metadata %Qv=%Qv is not a valid YSON",
+            YTTypeMetadataKey,
+            YTTypeMetadataValueYson)
+            .With(ex);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TArraySimpleVisitor
@@ -1028,6 +1040,7 @@ private:
         // it directly to ParseStringLikeArray.
         return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
             if (HasYsonTypeInMetadata(SchemaField_)) {
+                ValidateYsonValue(value);
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
                 return MakeUnversionedStringValue(value, columnId);
@@ -2083,7 +2096,7 @@ class TLimitingArrowMemoryPool
     : public arrow20::MemoryPool
 {
 public:
-    explicit TLimitingArrowMemoryPool(int64_t maxSingleAllocationBytes)
+    explicit TLimitingArrowMemoryPool(i64 maxSingleAllocationBytes)
         : MaxSingleAllocationBytes_(maxSingleAllocationBytes)
     { }
 
@@ -2133,7 +2146,7 @@ public:
     }
 
 private:
-    const int64_t MaxSingleAllocationBytes_;
+    const i64 MaxSingleAllocationBytes_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2142,7 +2155,7 @@ class TArrowParser
     : public IParser
 {
 public:
-    explicit TArrowParser(IValueConsumer* valueConsumer, TArrowParserOptions options = {})
+    TArrowParser(IValueConsumer* valueConsumer, TArrowParserOptions options = {})
         : Listener_(std::make_shared<TListener>(valueConsumer, options))
         , Options_(std::move(options))
         , MemoryPool_(Options_.MaxAllocationBytes.value_or(std::numeric_limits<int64_t>::max()))
@@ -2199,6 +2212,13 @@ public:
     }
 
 private:
+    const std::shared_ptr<TListener> Listener_;
+    const TArrowParserOptions Options_;
+
+    TLimitingArrowMemoryPool MemoryPool_;
+    std::shared_ptr<arrow20::ipc::StreamDecoder> Decoder_;
+    EListenerState LastState_ = EListenerState::Empty;
+
     std::shared_ptr<arrow20::ipc::StreamDecoder> MakeDecoder()
     {
         arrow20::ipc::IpcReadOptions ipcOptions;
@@ -2207,18 +2227,12 @@ private:
             // Limit the number of variadic buffers per BinaryView column.
             // A crafted IPC stream can declare a huge variadic_buffer_count, causing
             // std::vector<shared_ptr<Buffer>>::resize() to allocate via operator new
-            // (not the memory pool). Cap at MaxAllocationBytes / sizeof(shared_ptr<Buffer>).
+            // (not the memory pool).
             ipcOptions.max_variadic_buffer_count =
                 *Options_.MaxAllocationBytes / static_cast<int64_t>(sizeof(std::shared_ptr<arrow20::Buffer>));
         }
         return std::make_shared<arrow20::ipc::StreamDecoder>(Listener_, ipcOptions);
     }
-
-    const std::shared_ptr<TListener> Listener_;
-    const TArrowParserOptions Options_;
-    TLimitingArrowMemoryPool MemoryPool_;
-    std::shared_ptr<arrow20::ipc::StreamDecoder> Decoder_;
-    EListenerState LastState_ = EListenerState::Empty;
 };
 
 } // namespace
@@ -2227,7 +2241,7 @@ private:
 
 std::unique_ptr<IParser> CreateParserForArrow(IValueConsumer* consumer, const TArrowParserOptions& options)
 {
-    return std::make_unique<TArrowParser>(consumer, std::move(options));
+    return std::make_unique<TArrowParser>(consumer, options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

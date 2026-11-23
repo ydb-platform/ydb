@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     assets_servlet.cpp
@@ -90,7 +90,5 @@ RESOURCE(
     yql/essentials/data/language/types.json types.json
     yql/essentials/data/language/sql_functions.json sql_functions.json
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -1,13 +1,14 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/common/cache.h>
+#include <ydb/core/fq/libs/common/util.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NFq {
 namespace NPrivate {
 
-struct TRequestScopeCounters : public virtual TThrRefBase {
+struct TRequestScopeCounters: public virtual TThrRefBase {
     const TString Name;
 
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -18,17 +19,18 @@ struct TRequestScopeCounters : public virtual TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
 
     explicit TRequestScopeCounters(const TString& name)
-        : Name(name) { }
+        : Name(name)
+    {
+    }
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
         Counters = counters;
-        ::NMonitoring::TDynamicCounterPtr subgroup =
-            counters->GetSubgroup("request_scope", Name);
-        InFly   = subgroup->GetCounter("InFly", false);
-        Ok      = subgroup->GetCounter("Ok", true);
-        Error   = subgroup->GetCounter("Error", true);
+        ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request_scope", Name);
+        InFly = subgroup->GetCounter("InFly", false);
+        Ok = subgroup->GetCounter("Ok", true);
+        Error = subgroup->GetCounter("Error", true);
         Timeout = subgroup->GetCounter("Timeout", true);
-        Retry   = subgroup->GetCounter("Retry", true);
+        Retry = subgroup->GetCounter("Retry", true);
     }
 
     virtual ~TRequestScopeCounters() override {
@@ -37,12 +39,11 @@ struct TRequestScopeCounters : public virtual TThrRefBase {
 
 private:
     static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-        return ::NMonitoring::ExplicitHistogram(
-            {0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+        return ::NMonitoring::ExplicitHistogram({ 0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000 });
     }
 };
 
-struct TRequestCommonCounters : public virtual TThrRefBase {
+struct TRequestCommonCounters: public virtual TThrRefBase {
     const TString Name;
 
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -54,17 +55,18 @@ struct TRequestCommonCounters : public virtual TThrRefBase {
     ::NMonitoring::THistogramPtr LatencyMs;
 
     explicit TRequestCommonCounters(const TString& name)
-        : Name(name) { }
+        : Name(name)
+    {
+    }
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
         Counters = counters;
-        ::NMonitoring::TDynamicCounterPtr subgroup =
-            counters->GetSubgroup("request_common", Name);
-        InFly     = subgroup->GetCounter("InFly", false);
-        Ok        = subgroup->GetCounter("Ok", true);
-        Error     = subgroup->GetCounter("Error", true);
-        Timeout   = subgroup->GetCounter("Timeout", true);
-        Retry     = subgroup->GetCounter("Retry", true);
+        ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request_common", Name);
+        InFly = subgroup->GetCounter("InFly", false);
+        Ok = subgroup->GetCounter("Ok", true);
+        Error = subgroup->GetCounter("Error", true);
+        Timeout = subgroup->GetCounter("Timeout", true);
+        Retry = subgroup->GetCounter("Retry", true);
         LatencyMs = subgroup->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
     }
 
@@ -74,12 +76,11 @@ struct TRequestCommonCounters : public virtual TThrRefBase {
 
 private:
     static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-        return ::NMonitoring::ExplicitHistogram(
-            {0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+        return ::NMonitoring::ExplicitHistogram({ 0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000 });
     }
 };
 
-using TRequestScopeCountersPtr  = TIntrusivePtr<TRequestScopeCounters>;
+using TRequestScopeCountersPtr = TIntrusivePtr<TRequestScopeCounters>;
 using TRequestCommonCountersPtr = TIntrusivePtr<TRequestCommonCounters>;
 
 struct TRequestCounters {
@@ -178,7 +179,7 @@ enum ERequestTypeCommon {
     RTC_MAX,
 };
 
-class TCounters : public virtual TThrRefBase {
+class TCounters: public virtual TThrRefBase {
     struct TMetricsScope {
         TString CloudId;
         TString Scope;
@@ -190,60 +191,57 @@ class TCounters : public virtual TThrRefBase {
             : CloudId(cloudId)
             , Scope(scope)
             , RequestType(requestType)
-        { }
+        {
+        }
 
         bool operator<(const TMetricsScope& right) const {
             return std::tie(CloudId, Scope, RequestType) < std::tie(right.CloudId, right.Scope, right.RequestType);
         }
     };
 
-    using TScopeCounters    = std::array<TRequestScopeCountersPtr, RTS_MAX>;
+    using TScopeCounters = std::array<TRequestScopeCountersPtr, RTS_MAX>;
     using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
 
     std::array<TRequestCommonCountersPtr, RTC_MAX> CommonRequests = CreateArray<RTC_MAX, TRequestCommonCountersPtr>({
-        {MakeIntrusive<TRequestCommonCounters>("ResolveFolder")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateQuery")},
-        {MakeIntrusive<TRequestCommonCounters>("ListQueries")},
-        {MakeIntrusive<TRequestCommonCounters>("DescribeQuery")},
-        {MakeIntrusive<TRequestCommonCounters>("GetQueryStatus")},
-        {MakeIntrusive<TRequestCommonCounters>("ModifyQuery")},
-        {MakeIntrusive<TRequestCommonCounters>("DeleteQuery")},
-        {MakeIntrusive<TRequestCommonCounters>("ControlQuery")},
-        {MakeIntrusive<TRequestCommonCounters>("GetResultData")},
-        {MakeIntrusive<TRequestCommonCounters>("ListJobs")},
-        {MakeIntrusive<TRequestCommonCounters>("DescribeJob")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateConnection")},
-        {MakeIntrusive<TRequestCommonCounters>("ListConnections")},
-        {MakeIntrusive<TRequestCommonCounters>("DescribeConnection")},
-        {MakeIntrusive<TRequestCommonCounters>("ModifyConnection")},
-        {MakeIntrusive<TRequestCommonCounters>("DeleteConnection")},
-        {MakeIntrusive<TRequestCommonCounters>("TestConnection")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateBinding")},
-        {MakeIntrusive<TRequestCommonCounters>("ListBindings")},
-        {MakeIntrusive<TRequestCommonCounters>("DescribeBinding")},
-        {MakeIntrusive<TRequestCommonCounters>("ModifyBinding")},
-        {MakeIntrusive<TRequestCommonCounters>("DeleteBinding")},
-        {MakeIntrusive<TRequestCommonCounters>("ResolveSubjectType")},
-        {MakeIntrusive<TRequestCommonCounters>("DescribeCPSEntity")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateYDBSession")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateConnectionInYDB")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateBindingInYDB")},
-        {MakeIntrusive<TRequestCommonCounters>("ModifyConnectionInYDB")},
-        {MakeIntrusive<TRequestCommonCounters>("ModifyBindingInYDB")},
-        {MakeIntrusive<TRequestCommonCounters>("DeleteConnectionInYDB")},
-        {MakeIntrusive<TRequestCommonCounters>("DeleteBindingInYDB")},
-        {MakeIntrusive<TRequestCommonCounters>("CreateComputeDatabase")},
-        {MakeIntrusive<TRequestCommonCounters>("ListCPSEntities")},
-        {MakeIntrusive<TRequestCommonCounters>("RateLimiter")},
-        {MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources")},
-        {MakeIntrusive<TRequestCommonCounters>("ResolveQuotas")},
+        { MakeIntrusive<TRequestCommonCounters>("ResolveFolder") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateQuery") },
+        { MakeIntrusive<TRequestCommonCounters>("ListQueries") },
+        { MakeIntrusive<TRequestCommonCounters>("DescribeQuery") },
+        { MakeIntrusive<TRequestCommonCounters>("GetQueryStatus") },
+        { MakeIntrusive<TRequestCommonCounters>("ModifyQuery") },
+        { MakeIntrusive<TRequestCommonCounters>("DeleteQuery") },
+        { MakeIntrusive<TRequestCommonCounters>("ControlQuery") },
+        { MakeIntrusive<TRequestCommonCounters>("GetResultData") },
+        { MakeIntrusive<TRequestCommonCounters>("ListJobs") },
+        { MakeIntrusive<TRequestCommonCounters>("DescribeJob") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateConnection") },
+        { MakeIntrusive<TRequestCommonCounters>("ListConnections") },
+        { MakeIntrusive<TRequestCommonCounters>("DescribeConnection") },
+        { MakeIntrusive<TRequestCommonCounters>("ModifyConnection") },
+        { MakeIntrusive<TRequestCommonCounters>("DeleteConnection") },
+        { MakeIntrusive<TRequestCommonCounters>("TestConnection") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateBinding") },
+        { MakeIntrusive<TRequestCommonCounters>("ListBindings") },
+        { MakeIntrusive<TRequestCommonCounters>("DescribeBinding") },
+        { MakeIntrusive<TRequestCommonCounters>("ModifyBinding") },
+        { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
+        { MakeIntrusive<TRequestCommonCounters>("ResolveSubjectType") },
+        { MakeIntrusive<TRequestCommonCounters>("DescribeCPSEntity") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateYDBSession") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateConnectionInYDB") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateBindingInYDB") },
+        { MakeIntrusive<TRequestCommonCounters>("ModifyConnectionInYDB") },
+        { MakeIntrusive<TRequestCommonCounters>("ModifyBindingInYDB") },
+        { MakeIntrusive<TRequestCommonCounters>("DeleteConnectionInYDB") },
+        { MakeIntrusive<TRequestCommonCounters>("DeleteBindingInYDB") },
+        { MakeIntrusive<TRequestCommonCounters>("CreateComputeDatabase") },
+        { MakeIntrusive<TRequestCommonCounters>("ListCPSEntities") },
+        { MakeIntrusive<TRequestCommonCounters>("RateLimiter") },
+        { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
+        { MakeIntrusive<TRequestCommonCounters>("ResolveQuotas") },
     });
 
-    TTtlCache<TMetricsScope, TRequestScopeCountersPtr, TMap> ScopeCounters{
-        TTtlCacheSettings{}
-            .SetTtl(TDuration::Days(1))
-            .SetTouchOnGet(true)
-    };
+    TTtlCache<TMetricsScope, TRequestScopeCountersPtr, TMap> ScopeCounters{ TTtlCacheSettings{}.SetTtl(TDuration::Days(1)).SetTouchOnGet(true) };
     ::NMonitoring::TDynamicCounterPtr Counters;
 
 public:
@@ -256,7 +254,7 @@ public:
     }
 
     TRequestCounters GetCounters(const TString& cloudId, const TString& scope, ERequestTypeScope scopeType, ERequestTypeCommon commonType) {
-        return {GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType)};
+        return { GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType) };
     }
 
     TRequestCommonCountersPtr GetCommonCounters(ERequestTypeCommon type) {
@@ -264,14 +262,14 @@ public:
     }
 
     TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
-        TMetricsScope key{cloudId, scope, type};
+        TMetricsScope key{ cloudId, scope, type };
         TMaybe<TRequestScopeCountersPtr> cacheVal;
         ScopeCounters.Get(key, &cacheVal);
         if (cacheVal) {
             return (*cacheVal);
         }
 
-        static std::array<TString, RTS_MAX> requestTypeNames {
+        static std::array<TString, RTS_MAX> requestTypeNames{
             "CreateQuery",
             "ListQueries",
             "DescribeQuery",
@@ -296,9 +294,7 @@ public:
             "DeleteFolderResources",
         };
 
-        auto scopeCounters = Counters
-                                 ->GetSubgroup("cloud_id", cloudId)
-                                 ->GetSubgroup("scope", scope);
+        auto scopeCounters = Counters->GetSubgroup("cloud_id", cloudId)->GetSubgroup("scope", scope);
         auto scopeRequests = MakeIntrusive<TRequestScopeCounters>(requestTypeNames[type]);
         scopeRequests->Register(scopeCounters);
         cacheVal = scopeRequests;
@@ -308,5 +304,5 @@ public:
     }
 };
 
-} // namespace NPrivate
-} // namespace NFq
+}   // namespace NPrivate
+}   // namespace NFq

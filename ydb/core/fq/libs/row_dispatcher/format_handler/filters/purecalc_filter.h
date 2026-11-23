@@ -4,21 +4,23 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
+#include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
 
 namespace NFq::NRowDispatcher {
 
-class IProgramCompileHandler : public TThrRefBase {
+class IProgramCompileHandler: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IProgramCompileHandler>;
 
 public:
-    inline IProgramCompileHandler( IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie)
+    inline IProgramCompileHandler(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie)
         : Consumer_(std::move(consumer))
         , ProgramHolder_(std::move(programHolder))
         , Cookie_(cookie)
-    {}
+    {
+    }
 
     [[nodiscard]] inline IProcessedDataConsumer::TPtr GetConsumer() const {
         return Consumer_;
@@ -44,7 +46,7 @@ protected:
     ui64 Cookie_;
 };
 
-class IProgramRunHandler : public TThrRefBase {
+class IProgramRunHandler: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IProgramRunHandler>;
 
@@ -52,7 +54,8 @@ public:
     inline IProgramRunHandler(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder)
         : Consumer_(std::move(consumer))
         , ProgramHolder_(std::move(programHolder))
-    {}
+    {
+    }
 
     [[nodiscard]] inline IProcessedDataConsumer::TPtr GetConsumer() const {
         return Consumer_;
@@ -69,21 +72,13 @@ protected:
     IProgramHolder::TPtr ProgramHolder_;
 };
 
-IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer);
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {},
+    NMonitoring::TDynamicCounterPtr memoryQuotaCounters = {});
 
-IProgramCompileHandler::TPtr CreateProgramCompileHandler(
-    IProcessedDataConsumer::TPtr consumer,
-    IProgramHolder::TPtr programHolder,
-    ui64 cookie,
-    NActors::TActorId compileServiceId,
-    NActors::TActorId owner,
-    NMonitoring::TDynamicCounterPtr counters
-);
+IProgramCompileHandler::TPtr CreateProgramCompileHandler(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie,
+    NActors::TActorId compileServiceId, NActors::TActorId owner, NMonitoring::TDynamicCounterPtr counters);
 
 IProgramRunHandler::TPtr CreateProgramRunHandler(
-    IProcessedDataConsumer::TPtr consumer,
-    IProgramHolder::TPtr programHolder,
-    NMonitoring::TDynamicCounterPtr counters
-);
+    IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, NMonitoring::TDynamicCounterPtr counters);
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

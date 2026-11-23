@@ -1,6 +1,10 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
+#include <util/generic/string.h>
 #include <util/generic/typetraits.h>
+#include <util/system/yassert.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
@@ -118,7 +122,7 @@ namespace NProtoBuf {
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_FLOAT, float, Float);
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_BOOL, bool, Bool);
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_ENUM, const EnumValueDescriptor*, Enum);
-    DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_STRING, TString, String);
+    DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_STRING, TProtoStringType, String);
     //DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_MESSAGE, const Message&, Message);
 
 #undef DECLARE_CPPTYPE_TRAITS

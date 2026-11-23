@@ -26,6 +26,7 @@ SRCS(
     mkql_type_builder_ut.cpp
     mkql_type_ops_ut.cpp
     mkql_unboxed_value_stream_ut.cpp
+    mkql_core_win_frames_collector_test_helper.cpp
     mkql_core_win_frames_collector_ut_part1.cpp
     mkql_core_win_frames_collector_ut_part2.cpp
     mkql_core_win_frames_collector_ut_part3.cpp
@@ -41,6 +42,7 @@ ADDINCL(
 PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/datetime
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
 )

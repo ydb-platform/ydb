@@ -9,6 +9,7 @@ SRCS(
     attributes_ut.cpp
     complex_key_map.cpp
     composite_map_ut.cpp
+    customized_config_ut.cpp
     lazy_ypath_service_ut.cpp
     options_ut.cpp
     precise_time_ut.cpp

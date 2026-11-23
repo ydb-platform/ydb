@@ -61,8 +61,8 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 
 {{ ydb-short-name }} provides users with a well-known abstraction — tables. In {{ ydb-short-name }}, there are two main types of tables:
 
-* [Row-oriented tables](../datamodel/table.md#row-tables) are designed for OLTP workloads.
-* [Column-oriented tables](../datamodel/table.md#column-tables) are designed for OLAP workloads.
+* [Row-oriented tables](../datamodel/table.md#row-oriented-tables) are designed for OLTP workloads.
+* [Column-oriented tables](../datamodel/table.md#column-oriented-tables) are designed for OLAP workloads.
 
 Logically, from the user's perspective, both types of tables look the same. The main difference between row-oriented and column-oriented tables lies in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning that cells from different rows are stored next to each other within the same column.
 
@@ -73,7 +73,7 @@ Partitioning works differently in row-oriented and column-oriented tables:
 * Row-oriented tables are automatically partitioned by primary key ranges, depending on the data volume.
 * Column-oriented tables are partitioned by the hash of the partitioning columns.
 
-Each partition of a table is processed by a specific [tablet](../glossary.md#tablets), called a [data shard](../glossary.md#datashard) for row-oriented tables and a [column shard](../glossary.md#columnshard) for column-oriented tables.
+Each partition of a table is processed by a specific [tablet](../glossary.md#tablet), called a [data shard](../glossary.md#data-shard) for row-oriented tables and a [column shard](../glossary.md#column-shard) for column-oriented tables.
 
 #### Split by Load {#split-by-load}
 

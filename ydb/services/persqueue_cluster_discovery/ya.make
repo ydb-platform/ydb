@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/mind/address_classification
     ydb/core/mon
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos
     ydb/core/util
     ydb/public/api/grpc

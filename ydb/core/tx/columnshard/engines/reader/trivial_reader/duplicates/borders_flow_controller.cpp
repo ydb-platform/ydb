@@ -12,8 +12,8 @@ TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeConte
     , ReadMetadata(readMetadata)
 {
     for (const auto& portion : portions) {
-        Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, *ReadMetadata)].Start.push_back(portion->GetPortionId());
-        Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata)].Finish.push_back(portion->GetPortionId());
+        Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, ReadMetadata->GetRequestSorting())].Start.push_back(portion->GetPortionId());
+        Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, ReadMetadata->GetRequestSorting())].Finish.push_back(portion->GetPortionId());
     }
     BuildExclusivePortions();
     Counters->OnLeftBorders(Borders.size());
@@ -35,7 +35,7 @@ void TBordersFlowController::BuildExclusivePortions() {
         }
 
         openIntervals += currentIt->second.Start.size();
-        AFL_VERIFY(openIntervals >= currentIt->second.Finish.size());
+        YDB_LOG_VERIFY(openIntervals >= currentIt->second.Finish.size());
         openIntervals -= currentIt->second.Finish.size();
     }
 
@@ -65,7 +65,7 @@ bool TBordersFlowController::ExtractExclusiveInterval(const ui64 portionId) {
 }
 
 TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPortionInfo>& portion) {
-    auto border = NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata);
+    auto border = NCommon::TReplaceKeyAdapter::BuildFinish(*portion, ReadMetadata->GetRequestSorting());
     TBordersIteratorBuilder builder;
     ui32 oldWaitingBordersSize = WaitingBorders.size();
     for (auto it = Borders.begin(); it != Borders.end() && it->first <= border; it = Borders.erase(it)) {
@@ -93,8 +93,8 @@ TString TBordersFlowController::DebugString() const {
 void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
     for (const auto& border : batch.GetBorders()) {
         auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{ border.GetKey()->MakeRecordBatch(), 0 }, IsReversed());
-        AFL_VERIFY(WaitingBorders.erase(borderKey) == 1);
-        AFL_VERIFY(ReadyBorders.insert(borderKey).second);
+        YDB_LOG_VERIFY(WaitingBorders.erase(borderKey) == 1);
+        YDB_LOG_VERIFY(ReadyBorders.insert(borderKey).second);
     }
     Counters->OnWaitingBorders(-1 * static_cast<i64>(batch.GetBorders().size()));
     Counters->OnReadyBorders(static_cast<i64>(batch.GetBorders().size()));

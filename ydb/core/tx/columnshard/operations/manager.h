@@ -2,6 +2,7 @@
 #include "write.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/columnshard/transactions/locks/abstract.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 
@@ -55,6 +56,10 @@ public:
         return Broken;
     }
 
+    void SetBroken() {
+        Broken = true;
+    }
+
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
@@ -77,6 +82,8 @@ private:
     bool Aborting = false;
     bool Aborted = false;
     ui64 TxId = 0;
+
+    void SetTxId(const ui64 txId);
 
 public:
     ui64 GetLockId() const {
@@ -102,7 +109,8 @@ public:
     }
 
     void OnWriteOperationFinished() {
-        AFL_VERIFY(OperationsInProgress > 0)("operations_in_progress", OperationsInProgress);
+        YDB_LOG_VERIFY(OperationsInProgress > 0,
+            {"operationsInProgress", OperationsInProgress});
         --OperationsInProgress;
     }
 
@@ -111,7 +119,7 @@ public:
     }
 
     void SetBroken() {
-        SharingInfo->Broken = true;
+        SharingInfo->SetBroken();
     }
 
     bool IsBroken() const {
@@ -139,8 +147,11 @@ public:
     }
 
     void SetAborting() {
-        AFL_VERIFY(ReadyForAborting())("lock_id", GetLockId())("needs_aborting", NeedsAborting())(
-            "operations_in_progress", OperationsInProgress)("aborting", Aborting);
+        YDB_LOG_VERIFY(ReadyForAborting(),
+            {"lockId", GetLockId()},
+            {"needsAborting", NeedsAborting()},
+            {"operationsInProgress", OperationsInProgress},
+            {"aborting", Aborting});
         Aborting = true;
     }
 
@@ -149,8 +160,12 @@ public:
     }
 
     void SetAborted(const ui64 txId) {
-        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId)("arg_tx_id", txId)("assigned_tx_id", TxId)("lock_id", GetLockId())("aborting",
-                                               IsAborting())("aborted", Aborted);
+        YDB_LOG_VERIFY(IsAborting() && !Aborted && TxId == txId,
+            {"argTxId", txId},
+            {"assignedTxId", TxId},
+            {"lockId", GetLockId()},
+            {"aborting", IsAborting()},
+            {"aborted", Aborted});
         Aborted = true;
     }
 
@@ -158,7 +173,7 @@ public:
         return Aborted;
     }
 
-    void SetTxId(const ui64 txId);
+    bool TryProposeTransaction(const ui64 txId);
     bool IsTxIdAssigned() const;
     ui64 GetTxId() const;
 
@@ -210,7 +225,8 @@ public:
 
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
-        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
+        YDB_LOG_VERIFY(it != InsertWriteIdToOpWriteId.end(),
+            {"writeId", insertWriteId});
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
             {"event", "ask_by_insert_id"},
             {"writeId", insertWriteId},
@@ -220,8 +236,9 @@ public:
 
     void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
         const auto op = GetOperationVerified(operationId);
-        AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
-            "expected", JoinSeq(", ", insertions));
+        YDB_LOG_VERIFY(op->GetInsertWriteIds() == insertions,
+            {"operationData", JoinSeq(", ", op->GetInsertWriteIds())},
+            {"expected", JoinSeq(", ", insertions)});
         for (auto&& i : insertions) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
                 {"event", "add_write_id_to_operation_id"},
@@ -232,13 +249,19 @@ public:
     }
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
+    std::vector<NOlap::TPortionAddress> GetUncommittedPortionAddresses() const;
+
+    std::vector<ui64> GetLockIdsOfNotProposedTransactions() const;
+    bool HasWriteOperations(const TInternalPathId pathId) const;
+
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void SetOperationFinished(const TOperationWriteId writeId);
 
     TWriteOperation::TPtr GetOperationVerified(const TOperationWriteId writeId) const {
         auto result = GetOperationOptional(writeId);
-        AFL_VERIFY(!!result)("op_id", writeId);
+        YDB_LOG_VERIFY(!!result,
+            {"opId", writeId});
         return result;
     }
 
@@ -277,13 +300,15 @@ public:
 
     TLockFeatures& GetLockFeaturesForTxVerified(const ui64 txId) {
         auto lockId = GetLockForTxOptional(txId);
-        AFL_VERIFY(lockId)("tx_id", txId);
+        YDB_LOG_VERIFY(lockId,
+            {"txId", txId});
         return GetLockVerified(*lockId);
     }
 
     ui64 GetLockForTxVerified(const ui64 txId) const {
         auto result = GetLockForTxOptional(txId);
-        AFL_VERIFY(result)("tx_id", txId);
+        YDB_LOG_VERIFY(result,
+            {"txId", txId});
         return *result;
     }
 
@@ -303,17 +328,17 @@ public:
 
     TLockFeatures& GetLockVerified(const ui64 lockId) {
         auto result = GetLockOptional(lockId);
-        AFL_VERIFY(result)("lock_id", lockId);
+        YDB_LOG_VERIFY(result,
+            {"lockId", lockId});
         return *result;
     }
 
     TLockFeatures* GetLockOptional(const ui64 lockId) {
-        auto it = LockFeatures.find(lockId);
-        if (it != LockFeatures.end()) {
-            return &it->second;
-        } else {
-            return nullptr;
-        }
+        return LockFeatures.FindPtr(lockId);
+    }
+
+    const TLockFeatures* GetLockOptional(const ui64 lockId) const {
+        return LockFeatures.FindPtr(lockId);
     }
 
     bool HasReadLocks(const TInternalPathId pathId) const {

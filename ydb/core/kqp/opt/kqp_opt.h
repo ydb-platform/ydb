@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compile_cache/types.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
@@ -10,6 +11,7 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <optional>
@@ -27,8 +29,12 @@ namespace NKikimr::NKqp {
 
 struct TUserRequestContext;
 struct TOptimizerHints;
+class TCompileTrace;
 
 namespace NOpt {
+
+// Filters and projections preserve row order unless a projection replaces a sort key.
+bool OlapProcessPreservesSorting(const NYql::TExprNode::TPtr& lambda, const THashSet<TString>& sortColumns);
 
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     TKqpOptimizeContext(const TString& cluster, const TIntrusivePtr<NYql::TKikimrConfiguration>& config,
@@ -49,6 +55,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
+    NKikimr::NKqp::TOptimizerInput OptimizerInput;
+    NKikimr::NKqp::TOptimizerCacheOutput CacheOutput;
     NYql::TExprNode::TPtr RboTraceAstBeforeRewriteSelect;
     NYql::TExprNode::TPtr RboTraceAstAfterRewriteSelect;
     
@@ -56,11 +64,18 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
 
     NKikimr::NKqp::TOptimizerHints GetOptimizerHints();
 
+    // Trace of the query compilation, if it is traced.
+    NKikimr::NKqp::TCompileTrace* GetCompileTrace() const;
+
     bool IsDataQuery() const;
 
     bool IsScanQuery() const;
 
     bool IsGenericQuery() const;
+
+    // Pessimistic locks (EvLock) are taken only under ReadCommittedRW isolation and
+    // can be disabled for the current query with PRAGMA kikimr.KqpDisablePessimisticLocks="true".
+    bool NeedPessimisticLocks() const;
 };
 
 struct TKqpBuildQueryContext : TThrRefBase {

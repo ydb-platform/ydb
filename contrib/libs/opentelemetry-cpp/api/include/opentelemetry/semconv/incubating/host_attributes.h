@@ -100,7 +100,7 @@ static constexpr const char *kHostIp = "host.ip";
 static constexpr const char *kHostMac = "host.mac";
 
 /**
-  Name of the host. On Unix systems, it may contain what the hostname command returns, or the fully
+  Name of the host. On UNIX systems, it may contain what the hostname command returns, or the fully
   qualified hostname, or another name specified by the user.
  */
 static constexpr const char *kHostName = "host.name";

@@ -109,7 +109,7 @@ private:
             NYql::TIssues()});
     }
 
-    void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
+    void Handle(TEvHttpRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 
@@ -137,9 +137,12 @@ private:
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
+        IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitializePathNormalization(PathNormalizer);
+        requestBaseCtx->CountRequestPaths();
+
         LogRequest(event);
 
-        IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);
@@ -191,7 +194,7 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+                if (!std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>) { // TEvHttpRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();
                     if (!AllowYdbRequestsWithoutDatabase &&
                         (DynamicNode || (forbidRequestsToStaticNodesWithoutDatabase
@@ -321,6 +324,8 @@ private:
     }
 
     virtual void PassAway() override {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest);
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -348,15 +353,18 @@ private:
     bool DynamicNode = false;
     TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
+    PathNormalizer = AppData(ctx)->GetPathNormalizer();
     AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase();
 
     // Subscribe for TableService config changes
     ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+             tableServiceConfigKind, NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}),
          IEventHandle::FlagTrackDelivery);
 
     Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
@@ -408,6 +416,9 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetC
 
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     auto &event = ev->Get()->Record;
+    if (ev->Get()->PathNormalizer.has_value()) {
+        PathNormalizer = *ev->Get()->PathNormalizer;
+    }
 
     ChannelBufferSize.store(
         event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
@@ -507,10 +518,9 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         return;
     }
 
-    const TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
-    NWilson::TTraceId traceId(event->TraceId);
-    const bool internalSubrequest = static_cast<bool>(traceId);
-    if (!internalSubrequest) {
+    NWilson::TTraceId traceId = NWilson::TTraceId(event->TraceId); // Can be not empty in case of internal subrequests // In this case it is part of the big request
+    if (!traceId) {
+        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
         traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
     }
 
@@ -521,15 +531,6 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         }
         grpcRequestProxySpan.Attribute("request_type", ctx.GetRequestName());
         ctx.StartTracing(std::move(grpcRequestProxySpan));
-    }
-
-    // Internal subrequests must not start an independently sampled user trace.
-    if (!internalSubrequest) {
-        NWilson::TTraceId userTraceId = NJaegerTracing::HandleUserFacingTracing(
-            ctx.GetRequestDiscriminator(), traceparentHeader);
-        if (userTraceId) {
-            ctx.SetUserFacingTraceId(std::move(userTraceId));
-        }
     }
 }
 
@@ -660,6 +661,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
+        cFunc(TEvents::TSystem::Poison, PassAway);
         HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
 
@@ -685,7 +687,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvStreamTopicDirectReadRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
-        HFunc(TEvRequestAuthAndCheck, PreHandle);
+        HFunc(TEvHttpRequestAuthAndCheck, PreHandle);
 
         default:
             Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());

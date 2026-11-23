@@ -35,7 +35,8 @@ class TDqProgramBuilder : public TProgramBuilder {
                                   const TArrayRef<const ui32>& leftKeyColumns,
                                   const TArrayRef<const ui32>& rightKeyColumns,
                                   const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames,
-                                  TType* returnType, const TJoinFilterLambda& leftFilter = {},
+                                  TType* returnType, TBlockHashJoinSettings settings = {},
+                                  const TJoinFilterLambda& leftFilter = {},
                                   const TJoinFilterLambda& rightFilter = {},
                                   const TJoinCommonFilterLambda& commonFilter = {});
 

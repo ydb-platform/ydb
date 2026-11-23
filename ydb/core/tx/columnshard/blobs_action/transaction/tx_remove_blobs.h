@@ -14,14 +14,6 @@ private:
     NOlap::TTabletsByBlob SharingBlobIds;
     const std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> Manager;
 
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";
-    }
-
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
-
 public:
     TTxRemoveSharedBlobs(
         TColumnShard* self, const NOlap::TTabletsByBlob& sharingBlobIds, const NActors::TActorId initiatorActorId, const TString& storageId)
@@ -44,9 +36,10 @@ public:
                 {"blobId", it.GetBlobId()},
                 {"tabletId", it.GetTabletId()});
         }
-        AFL_VERIFY(categories.GetBorrowed().IsEmpty());
-        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())("sharing_category", categories.GetSharing().GetSize())(
-                                                          "sharing", SharingBlobIds.GetSize());
+        YDB_LOG_VERIFY(categories.GetBorrowed().IsEmpty());
+        YDB_LOG_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize(),
+            {"sharingCategory", categories.GetSharing().GetSize()},
+            {"sharing", SharingBlobIds.GetSize()});
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

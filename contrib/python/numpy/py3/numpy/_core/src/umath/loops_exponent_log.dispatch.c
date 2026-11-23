@@ -8,11 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline
- ** (avx2 fma3) avx512f avx512_skx
- **/
-
 #define _UMATHMODULE
 #define _MULTIARRAYMODULE
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
@@ -360,7 +355,7 @@ avx512_permute_x8var_pd(__m512d t0, __m512d t1, __m512d t2, __m512d t3,
 /********************************************************************************
  ** Defining the SIMD kernels
  ********************************************************************************/
-#line 372
+#line 367
 #ifdef SIMD_AVX2_FMA3
 /*
  * Vectorized Cody-Waite range reduction technique
@@ -659,7 +654,7 @@ simd_log_FLOAT(npy_float * op,
 }
 #endif // SIMD_AVX2_FMA3
 
-#line 372
+#line 367
 #ifdef SIMD_AVX512F
 /*
  * Vectorized Cody-Waite range reduction technique
@@ -960,7 +955,7 @@ simd_log_FLOAT(npy_float * op,
 
 
 #if NPY_SIMD && defined(NPY_HAVE_AVX512_SKX) && defined(NPY_CAN_LINK_SVML)
-#line 676
+#line 671
 static void
 simd_exp_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                       npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -991,7 +986,7 @@ simd_exp_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
     npyv_cleanup();
 }
 
-#line 676
+#line 671
 static void
 simd_log_f64(const npyv_lanetype_f64 *src, npy_intp ssrc,
                       npyv_lanetype_f64 *dst, npy_intp sdst, npy_intp len)
@@ -1274,49 +1269,49 @@ AVX512F_log_DOUBLE(npy_double * op,
     __m256i vindex = _mm256_loadu_si256((__m256i*)&indexarr[0]);
 
     /* Load lookup table data */
-    #line 961
+    #line 956
 
     __m512d mLUT_TOP_0 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*0]));
     __m512d mLUT_TAIL_0 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*0]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_1 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*1]));
     __m512d mLUT_TAIL_1 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*1]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_2 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*2]));
     __m512d mLUT_TAIL_2 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*2]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_3 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*3]));
     __m512d mLUT_TAIL_3 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*3]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_4 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*4]));
     __m512d mLUT_TAIL_4 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*4]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_5 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*5]));
     __m512d mLUT_TAIL_5 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*5]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_6 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*6]));
     __m512d mLUT_TAIL_6 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*6]));
 
     
-#line 961
+#line 956
 
     __m512d mLUT_TOP_7 = _mm512_loadu_pd(&(LOG_TABLE_TOP[8*7]));
     __m512d mLUT_TAIL_7 = _mm512_loadu_pd(&(LOG_TABLE_TAIL[8*7]));
@@ -1467,7 +1462,7 @@ AVX512F_log_DOUBLE(npy_double * op,
 #endif // NPY_CAN_LINK_SVML
 
 #ifdef SIMD_AVX512_SKX
-#line 1129
+#line 1124
 static inline void
 AVX512_SKX_ldexp_FLOAT(char **args, npy_intp const *dimensions, npy_intp const *steps)
 {
@@ -1614,7 +1609,7 @@ AVX512_SKX_frexp_FLOAT(char **args, npy_intp const *dimensions, npy_intp const *
     }
 }
 
-#line 1129
+#line 1124
 static inline void
 AVX512_SKX_ldexp_DOUBLE(char **args, npy_intp const *dimensions, npy_intp const *steps)
 {
@@ -1767,7 +1762,7 @@ AVX512_SKX_frexp_DOUBLE(char **args, npy_intp const *dimensions, npy_intp const 
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 1285
+#line 1280
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1796,7 +1791,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp)
 #endif
 }
 
-#line 1285
+#line 1280
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1826,7 +1821,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log)
 }
 
 
-#line 1318
+#line 1313
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1859,7 +1854,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp)
 }
 
 
-#line 1318
+#line 1313
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1893,7 +1888,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log)
 
 
 
-#line 1359
+#line 1354
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_frexp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1933,7 +1928,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_ldexp)
     }
 }
 
-#line 1359
+#line 1354
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_frexp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

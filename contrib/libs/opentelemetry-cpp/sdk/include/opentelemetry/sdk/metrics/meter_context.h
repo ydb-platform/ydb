@@ -6,9 +6,8 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <vector>
-
-#include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/span.h"
@@ -47,6 +46,20 @@ class Meter;
 class MetricReader;
 class MeterSelector;
 
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+namespace exemplar_filter_env
+{
+
+/**
+ * Returns the exemplar filter configured by OTEL_METRICS_EXEMPLAR_FILTER.
+ *
+ * Unset, empty, and invalid values return the specification default, trace_based.
+ */
+OPENTELEMETRY_EXPORT ExemplarFilterType GetExemplarFilterFromEnv();
+
+}  // namespace exemplar_filter_env
+#endif
+
 /**
  * A class which stores the MeterProvider context.
 
@@ -68,7 +81,12 @@ public:
       std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>> meter_configurator =
           std::make_unique<instrumentationscope::ScopeConfigurator<MeterConfig>>(
               instrumentationscope::ScopeConfigurator<MeterConfig>::Builder(MeterConfig::Default())
-                  .Build())) noexcept;
+                  .Build())
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+          ,
+      ExemplarFilterType exemplar_filter_type = exemplar_filter_env::GetExemplarFilterFromEnv()
+#endif
+  );
 
   /**
    * Obtain the resource associated with this meter context.
@@ -87,6 +105,15 @@ public:
    * @return The ScopeConfigurator for this meter context.
    */
   const instrumentationscope::ScopeConfigurator<MeterConfig> &GetMeterConfigurator() const noexcept;
+
+  /**
+   * Replace the ScopeConfigurator for this meter context.
+   *
+   * Note: Not thread safe. Called via MeterProvider::UpdateMeterConfigurator, which holds lock_.
+   * @param meter_configurator The new configurator.
+   */
+  void SetMeterConfigurator(std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>>
+                                meter_configurator) noexcept;
 
   /**
    * NOTE - INTERNAL method, can change in the future.
@@ -185,7 +212,7 @@ private:
   std::vector<std::shared_ptr<Meter>> meters_;
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
-  metrics::ExemplarFilterType exemplar_filter_type_ = metrics::ExemplarFilterType::kAlwaysOff;
+  metrics::ExemplarFilterType exemplar_filter_type_;
 #endif
 
 #if defined(__cpp_lib_atomic_value_initialization) && \
@@ -194,8 +221,8 @@ private:
 #else
   std::atomic_flag shutdown_latch_ = ATOMIC_FLAG_INIT;
 #endif
-  opentelemetry::common::SpinLockMutex forceflush_lock_;
-  opentelemetry::common::SpinLockMutex meter_lock_;
+  std::mutex forceflush_lock_;
+  std::mutex meter_lock_;
 };
 
 }  // namespace metrics

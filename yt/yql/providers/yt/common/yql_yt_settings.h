@@ -35,6 +35,11 @@ enum class EReleaseTempDataMode {
     Finish      /* "finish" */,
 };
 
+enum class EReleaseSnapshotLocksMode {
+    Immediate   /* "immediate" */,
+    Finish      /* "finish" */,
+};
+
 enum class ETableContentDeliveryMode {
     Native      /* "native" */,
     File        /* "file" */,
@@ -134,6 +139,7 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
+    NCommon::TConfSetting<ui32, StaticPerCluster> QLFilterDepthLimit;
     NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
     NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 
@@ -143,6 +149,7 @@ public:
     NCommon::TConfSetting<bool, Static> KeepTempTables;
     NCommon::TConfSetting<ui32, Static> InflightTempTablesLimit;
     NCommon::TConfSetting<EReleaseTempDataMode, Static> ReleaseTempData;
+    NCommon::TConfSetting<EReleaseSnapshotLocksMode, Static> ReleaseSnapshotLocks;
     NCommon::TConfSetting<bool, Static> IgnoreYamrDsv;
     NCommon::TConfSetting<bool, Static> IgnoreWeakSchema;
     NCommon::TConfSetting<ui32, Static> InferSchema;
@@ -157,14 +164,14 @@ public:
     NCommon::TConfSetting<TDuration, Static> QueryCacheTtl;
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
-    NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
     NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
+    NCommon::TConfSetting<bool, Static> EnableProgressDataStatistics;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
     NCommon::TConfSetting<bool, Static> IgnoreTypeV3;
-    NCommon::TConfSetting<bool, Static> _UseMultisetAttributes;
     NCommon::TConfSetting<TDuration, Static> FileCacheTtl;
+    NCommon::TConfSetting<bool, Static> _EnableFileCacheLock;
     NCommon::TConfSetting<TString, Static> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, Static> InferSchemaMode;
     NCommon::TConfSetting<ui32, Static> BatchListFolderConcurrency;
@@ -194,6 +201,7 @@ public:
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
     NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
     NCommon::TConfSetting<bool, Static> _ReplaceEmptyOpWithTouch;
+    NCommon::TConfSetting<bool, Static> _PruneSync;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -287,6 +295,7 @@ public:
     NCommon::TConfSetting<bool, Dynamic> EnforceJobUtc;
     NCommon::TConfSetting<ui64, Static> _EnforceRegexpProbabilityFail;
     NCommon::TConfSetting<bool, Dynamic> UseRPCReaderInDQ;
+    NCommon::TConfSetting<bool, Dynamic> PassOptLLVMToDqCodecs;
     NCommon::TConfSetting<size_t, Dynamic> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, Dynamic> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, Dynamic> BlockReaderSupportedTypes;
@@ -307,6 +316,7 @@ public:
     NCommon::TConfSetting<double, Static> JoinMergeUnsortedFactor; // (>=0.0)
     NCommon::TConfSetting<bool, Static> JoinMergeForce;
     NCommon::TConfSetting<NSize::TSize, Static> MapJoinLimit;
+    NCommon::TConfSetting<NSize::TSize, Static> BlockMapJoinLimit;
     NCommon::TConfSetting<ui64, Static> MapJoinShardMinRows;
     NCommon::TConfSetting<ui64, Static> MapJoinShardCount; // [1-10]
     NCommon::TConfSetting<bool, Static> MapJoinUseFlow;
@@ -315,12 +325,15 @@ public:
     NCommon::TConfSetting<ui64, Static> LookupJoinMaxRows;
     NCommon::TConfSetting<EConvertDynamicTablesToStatic, Static> ConvertDynamicTablesToStatic;
     NCommon::TConfSetting<bool, Static> KeepMergeWithDynamicInput;
+    NCommon::TConfSetting<bool, Static> BypassMergeWithInputSettings;
+    NCommon::TConfSetting<bool, Static> BypassIdentityMapWithSysColumns;
     NCommon::TConfSetting<NSize::TSize, Static> EvaluationTableSizeLimit;
     NCommon::TConfSetting<TSet<TString>, Static> DisableOptimizers;
     NCommon::TConfSetting<ui32, Static> MaxInputTables;
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
+    NCommon::TConfSetting<bool, Static> LateFuseOperations;
     NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
     NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;
@@ -347,6 +360,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseTypeV2;
     NCommon::TConfSetting<bool, Static> UseNativeYtTypes;
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
+    NCommon::TConfSetting<bool, Static> _AllowNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
     NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;
@@ -395,6 +409,7 @@ public:
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
+EReleaseSnapshotLocksMode GetReleaseSnapshotLocksMode(const TYtSettings& settings);
 EJoinCollectColumnarStatisticsMode GetJoinCollectColumnarStatisticsMode(const TYtSettings& settings);
 
 using TSecureTmpStatePtr = std::shared_ptr<const std::atomic<bool>>;
@@ -402,7 +417,7 @@ using TSecureTmpStatePtr = std::shared_ptr<const std::atomic<bool>>;
 TString GetUserTablesTmpFolder(const TYtSettings& settings, const TString& cluster);
 TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster, const TSecureTmpStatePtr& useSecureTmp, const TYqlOperationOptions& operationOptions);
 
-struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
+struct TYtConfiguration : public NCommon::TDispatcherAndSettings<TYtSettings> {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
     TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});
@@ -428,6 +443,7 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
         for (auto& cluster: config.GetClusterMapping()) {
             this->DispatchWithActivationPolicy(cluster.GetName(), cluster.GetSettings(), activationPolicy);
         }
+        this->ApplyProjectSettings(typeCtx.ProjectSettings);
         this->FreezeDefaults();
     }
 

@@ -6,7 +6,6 @@ pragma Ytflow.Cluster = "plato";
 pragma Ytflow.PipelinePath = "pipelines/test";
 
 pragma Ytflow.YtConsumerPath = "yql_ytflow/consumers/main_consumer";
-pragma Ytflow.YtProducerPath = "yql_ytflow/producers/main_producer";
 
 insert into Output
 select 

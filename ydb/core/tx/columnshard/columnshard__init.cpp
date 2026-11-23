@@ -27,13 +27,11 @@ namespace NKikimr::NColumnShard {
 using namespace NTabletFlatExecutor;
 
 class TTxInit: public TTransactionBase<TColumnShard> {
-private:
-    const TMonotonic StartInstant = TMonotonic::Now();
-
 public:
     TTxInit(TColumnShard* self)
         : TBase(self)
     {
+        Self->StartupTimeline.OnTxInitCreated();
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -62,16 +60,18 @@ void TTxInit::SetDefaults() {
 
 std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     auto result = std::make_shared<TTxCompositeReader>("composite_init");
+    result->AddNamePrefix("startup/tx_init/");
     result->AddChildren(std::make_shared<NLoading::TSpecialValuesInitializer>("special_values", Self));
+    result->AddChildren(std::make_shared<NLoading::TOperationsManagerInitializer>("operations_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TTablesManagerInitializer>("tables_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TTxControllerInitializer>("tx_controller", Self));
-    result->AddChildren(std::make_shared<NLoading::TOperationsManagerInitializer>("operations_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TStoragesManagerInitializer>("storages_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TDBLocksInitializer>("db_locks", Self));
     result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TInFlightReadsInitializer>("in_flight_reads", Self));
     result->AddChildren(std::make_shared<NLoading::TTiersManagerInitializer>("tiers_manager", Self));
+    result->SetOrbit(Self->StartupTimeline.MutableOrbit());
     return result;
 }
 
@@ -79,7 +79,8 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"event", "initialize_shard"});
-    LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxInit.Execute at tablet",
+        {"tabletId", Self->TabletID()});
 
     try {
         if (!StartReader) {
@@ -107,8 +108,11 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
-    Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
-    AFL_VERIFY(!Self->IsTxInitFinished);
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxInit::Complete"});
+    Self->StartupTimeline.OnTxInitFinished();
+    YDB_LOG_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
     Self->TrySwitchToWork(ctx);
     if (Self->SpaceWatcher->SubDomainPathId) {
@@ -120,7 +124,6 @@ void TTxInit::Complete(const TActorContext& ctx) {
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {
     std::vector<NOlap::INormalizerTask::TPtr> NormalizerTasks;
-    const TMonotonic StartInstant = TMonotonic::Now();
 
 public:
     TTxUpdateSchema(TColumnShard* self)
@@ -177,9 +180,9 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
         {"process", "TTxUpdateSchema::Complete"});
     YDB_LOG_INFO("",
         {"step", "TTxUpdateSchema.Complete"});
-    Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
-        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+        YDB_LOG_VERIFY(Self->NormalizerController.IsNormalizationFinished(),
+            {"details", Self->NormalizerController.DebugString()});
         Self->Execute(new TTxInit(Self), ctx);
         return;
     }
@@ -242,7 +245,8 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"event", "TTxApplyNormalizer::Complete"});
-    AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+    YDB_LOG_VERIFY(!Self->NormalizerController.IsNormalizationFinished(),
+        {"details", Self->NormalizerController.DebugString()});
     YDB_LOG_WARN("",
         {"event", "apply_normalizer_changes"},
         {"details", Self->NormalizerController.DebugString()},
@@ -263,16 +267,14 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     if (Self->NormalizerController.SwitchNormalizer()) {
         Self->Execute(new TTxUpdateSchema(Self), ctx);
     } else {
-        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+        YDB_LOG_VERIFY(Self->NormalizerController.IsNormalizationFinished(),
+            {"details", Self->NormalizerController.DebugString()});
         Self->Execute(new TTxInit(Self), ctx);
     }
 }
 
 /// Create local database on tablet start if none
 class TTxInitSchema: public TTransactionBase<TColumnShard> {
-private:
-    const TMonotonic StartInstant = TMonotonic::Now();
-
 public:
     TTxInitSchema(TColumnShard* self)
         : TBase(self)
@@ -291,7 +293,8 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"process", "TTxInitSchema::Execute"});
-    LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TxInitSchema.Execute at tablet",
+        {"tabletId", Self->TabletID()});
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
@@ -340,8 +343,9 @@ void TTxInitSchema::Complete(const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"process", "TTxInitSchema::Complete"});
-    Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
-    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
+    Self->StartupTimeline.OnTxInitSchemaFinished();
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TxInitSchema.Complete at tablet",
+        {"tabletId", Self->TabletID()});
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }
 

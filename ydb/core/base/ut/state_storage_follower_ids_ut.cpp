@@ -106,11 +106,7 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
         THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> allNodeWardenConfigs;
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig(
-                !runtime.IsRealThreads()
-                    ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
-                    : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())
-            );
+            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig();
 
             auto serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             serviceSet->AddAvailabilityDomains(0);
@@ -231,6 +227,7 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
             SetupNodeWhiteboard(runtime, nodeIndex);
         }
 
+        SetupPDiskSubsystem(&runtime);
         runtime.Initialize(app.Unwrap());
     }
 
@@ -1043,8 +1040,10 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             [](TEvStateStorage::TEvReplicaInfo::TPtr& ev) {
                 const auto msg = ev->Get();
 
-                if (msg->Record.FollowerSize() != 0) {
-                    UNIT_ASSERT(msg->Record.FollowerInfoSize() == msg->Record.FollowerSize());
+                // A guardian can forward a snapshot already converted by this observer.
+                if (msg->Record.FollowerInfoSize() != 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg->Record.FollowerInfoSize(),
+                        msg->Record.FollowerSize() + msg->Record.FollowerCandidatesSize());
 
                     Cerr << "---- TEST ---- Received TEvInfo\n"
                         << msg->Record.DebugString()
@@ -1088,8 +1087,10 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             [](TEvStateStorage::TEvReplicaInfo::TPtr& ev) {
                 const auto msg = ev->Get();
 
-                if (msg->Record.FollowerSize() != 0) {
-                    UNIT_ASSERT(msg->Record.FollowerInfoSize() == msg->Record.FollowerSize());
+                // A guardian can forward a snapshot already converted by this observer.
+                if (msg->Record.FollowerInfoSize() != 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg->Record.FollowerInfoSize(),
+                        msg->Record.FollowerSize() + msg->Record.FollowerCandidatesSize());
 
                     Cerr << "---- TEST ---- Received TEvInfo\n"
                         << msg->Record.DebugString()

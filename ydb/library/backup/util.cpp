@@ -1,6 +1,6 @@
 #include "util.h"
 
-#include <google/protobuf/text_format.h>
+#include <ydb/library/backup/proto/proto.h>
 
 #include <util/generic/map.h>
 #include <util/generic/singleton.h>
@@ -31,11 +31,8 @@ const std::shared_ptr<::TLog>& GetLog() {
 }
 
 TString ProtoToString(const google::protobuf::Message& message) {
-    google::protobuf::TextFormat::Printer printer;
-    printer.SetHideUnknownFields(true);
-
     TString result;
-    Y_ENSURE(printer.PrintToString(message, &result));
+    Y_ENSURE(PrintProto(message, result));
 
     return result;
 }

@@ -1,19 +1,18 @@
 #include "result_formatter.h"
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
-#include <yql/essentials/providers/common/codec/yql_codec.h>
-#include <yql/essentials/providers/common/codec/yql_json_codec.h>
-#include <yql/essentials/public/udf/udf_data_type.h>
-#include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/ast/yql_type_string.h>
-#include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/yson/json2yson.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_json_codec.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NFq {
 
@@ -37,7 +36,8 @@ NKikimr::NMiniKQL::TType* MakePrimitiveType(NYdb::TTypeParser& parser, NKikimr::
 const NYql::TTypeAnnotationNode* MakeDecimalType(NYdb::TTypeParser& parser, NYql::TExprContext& ctx)
 {
     auto decimal = parser.GetDecimal();
-    return ctx.MakeType<NYql::TDataExprParamsType>(NYql::EDataSlot::Decimal, ctx.AppendString(ToString(decimal.Precision)), ctx.AppendString(ToString(decimal.Scale)));
+    return ctx.MakeType<NYql::TDataExprParamsType>(
+        NYql::EDataSlot::Decimal, ctx.AppendString(ToString(decimal.Precision)), ctx.AppendString(ToString(decimal.Scale)));
 }
 
 NKikimr::NMiniKQL::TType* MakeDecimalType(NYdb::TTypeParser& parser, NKikimr::NMiniKQL::TTypeEnvironment& env)
@@ -78,33 +78,24 @@ NKikimr::NMiniKQL::TType* MakeListType(NKikimr::NMiniKQL::TType* underlying, NKi
     return TListType::Create(underlying, env);
 }
 
-
-const NYql::TTypeAnnotationNode* MakeTupleType(
-    const TVector<const NYql::TTypeAnnotationNode*>& items,
-    NYql::TExprContext& ctx)
+const NYql::TTypeAnnotationNode* MakeTupleType(const TVector<const NYql::TTypeAnnotationNode*>& items, NYql::TExprContext& ctx)
 {
     return ctx.MakeType<NYql::TTupleExprType>(items);
 }
 
-NKikimr::NMiniKQL::TType* MakeTupleType(
-    const TVector<NKikimr::NMiniKQL::TType*>& items,
-    NKikimr::NMiniKQL::TTypeEnvironment& env)
+NKikimr::NMiniKQL::TType* MakeTupleType(const TVector<NKikimr::NMiniKQL::TType*>& items, NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
     return TTupleType::Create(items.size(), items.data(), env);
 }
 
 const NYql::TTypeAnnotationNode* MakeDictType(
-    const NYql::TTypeAnnotationNode* key,
-    const NYql::TTypeAnnotationNode* payload,
-    NYql::TExprContext& ctx)
+    const NYql::TTypeAnnotationNode* key, const NYql::TTypeAnnotationNode* payload, NYql::TExprContext& ctx)
 {
     return ctx.MakeType<NYql::TDictExprType>(key, payload);
 }
 
 NKikimr::NMiniKQL::TType* MakeDictType(
-    NKikimr::NMiniKQL::TType* key,
-    NKikimr::NMiniKQL::TType* payload,
-    NKikimr::NMiniKQL::TTypeEnvironment& env)
+    NKikimr::NMiniKQL::TType* key, NKikimr::NMiniKQL::TType* payload, NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
     return TDictType::Create(key, payload, env);
 }
@@ -169,106 +160,106 @@ NKikimr::NMiniKQL::TType* MakeTaggedType(const TString& tag, NKikimr::NMiniKQL::
     return TTaggedType::Create(underlyingType, tag, env);
 }
 
-template<typename TType, typename TContext>
+template <typename TType, typename TContext>
 TType MakeType(NYdb::TTypeParser& parser, TContext& env)
 {
     switch (parser.GetKind()) {
-    case NYdb::TTypeParser::ETypeKind::Primitive: {
-        return MakePrimitiveType(parser, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Decimal: {
-        return MakeDecimalType(parser, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Pg: {
-        return MakePgType(parser, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Optional: {
-        parser.OpenOptional();
-        auto underlying = MakeType<TType>(parser, env);
-        if (!underlying) {
-            return nullptr;
+        case NYdb::TTypeParser::ETypeKind::Primitive: {
+            return MakePrimitiveType(parser, env);
         }
-        parser.CloseOptional();
-        return MakeOptionalType(underlying, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::List: {
-        parser.OpenList();
-        auto underlying = MakeType<TType>(parser, env);
-        auto node = MakeListType(underlying, env);
-        parser.CloseList();
-        return node;
-    }
-    case NYdb::TTypeParser::ETypeKind::Struct: {
-        TVector<std::pair<TString, TType>> items;
-        parser.OpenStruct();
-        TType node = nullptr;
-        while (parser.TryNextMember()) {
-            auto colName = parser.GetMemberName();
-            node = MakeType<TType>(parser, env);
-            if (!node) {
+        case NYdb::TTypeParser::ETypeKind::Decimal: {
+            return MakeDecimalType(parser, env);
+        }
+        case NYdb::TTypeParser::ETypeKind::Pg: {
+            return MakePgType(parser, env);
+        }
+        case NYdb::TTypeParser::ETypeKind::Optional: {
+            parser.OpenOptional();
+            auto underlying = MakeType<TType>(parser, env);
+            if (!underlying) {
                 return nullptr;
             }
-            items.push_back({TString{colName}, node});
+            parser.CloseOptional();
+            return MakeOptionalType(underlying, env);
         }
-        parser.CloseStruct();
-        return MakeStructType(items, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Tuple: {
-        TVector<TType> items;
-        TType node = nullptr;
-        parser.OpenTuple();
-        while (parser.TryNextElement()) {
-            node = MakeType<TType>(parser, env);
-            if (!node) {
+        case NYdb::TTypeParser::ETypeKind::List: {
+            parser.OpenList();
+            auto underlying = MakeType<TType>(parser, env);
+            auto node = MakeListType(underlying, env);
+            parser.CloseList();
+            return node;
+        }
+        case NYdb::TTypeParser::ETypeKind::Struct: {
+            TVector<std::pair<TString, TType>> items;
+            parser.OpenStruct();
+            TType node = nullptr;
+            while (parser.TryNextMember()) {
+                auto colName = parser.GetMemberName();
+                node = MakeType<TType>(parser, env);
+                if (!node) {
+                    return nullptr;
+                }
+                items.push_back({ TString{ colName }, node });
+            }
+            parser.CloseStruct();
+            return MakeStructType(items, env);
+        }
+        case NYdb::TTypeParser::ETypeKind::Tuple: {
+            TVector<TType> items;
+            TType node = nullptr;
+            parser.OpenTuple();
+            while (parser.TryNextElement()) {
+                node = MakeType<TType>(parser, env);
+                if (!node) {
+                    return nullptr;
+                }
+                items.push_back(node);
+            }
+            parser.CloseTuple();
+            return MakeTupleType(items, env);
+        }
+        case NYdb::TTypeParser::ETypeKind::Dict: {
+            parser.OpenDict();
+            parser.DictKey();
+            auto* key = MakeType<TType>(parser, env);
+            if (!key) {
                 return nullptr;
             }
-            items.push_back(node);
+            parser.DictPayload();
+            auto* payload = MakeType<TType>(parser, env);
+            if (!payload) {
+                return nullptr;
+            }
+            parser.CloseDict();
+            return MakeDictType(key, payload, env);
         }
-        parser.CloseTuple();
-        return MakeTupleType(items, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Dict: {
-        parser.OpenDict();
-        parser.DictKey();
-        auto* key = MakeType<TType>(parser, env);
-        if (!key) {
+        case NYdb::TTypeParser::ETypeKind::Variant: {
+            parser.OpenVariant();
+            auto node = MakeVariantType(MakeType<TType>(parser, env), env);
+            parser.CloseVariant();
+            return node;
+        }
+        case NYdb::TTypeParser::ETypeKind::Tagged: {
+            parser.OpenTagged();
+            auto tag = parser.GetTag();
+            auto node = MakeTaggedType(TString{ tag }, MakeType<TType>(parser, env), env);
+            parser.CloseTagged();
+            return node;
+        }
+        case NYdb::TTypeParser::ETypeKind::Void: {
+            return MakeVoidType(env);
+        }
+        case NYdb::TTypeParser::ETypeKind::Null: {
+            return MakeNullType(env);
+        }
+        case NYdb::TTypeParser::ETypeKind::EmptyList: {
+            return MakeEmptyListType(env);
+        }
+        case NYdb::TTypeParser::ETypeKind::EmptyDict: {
+            return MakeEmptyDictType(env);
+        }
+        default:
             return nullptr;
-        }
-        parser.DictPayload();
-        auto* payload = MakeType<TType>(parser, env);
-        if (!payload) {
-            return nullptr;
-        }
-        parser.CloseDict();
-        return MakeDictType(key, payload, env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Variant: {
-        parser.OpenVariant();
-        auto node = MakeVariantType(MakeType<TType>(parser, env), env);
-        parser.CloseVariant();
-        return node;
-    }
-    case NYdb::TTypeParser::ETypeKind::Tagged: {
-        parser.OpenTagged();
-        auto tag = parser.GetTag();
-        auto node = MakeTaggedType(TString{tag}, MakeType<TType>(parser, env), env);
-        parser.CloseTagged();
-        return node;
-    }
-    case NYdb::TTypeParser::ETypeKind::Void: {
-        return MakeVoidType(env);
-    }
-    case NYdb::TTypeParser::ETypeKind::Null: {
-        return MakeNullType(env);
-    }
-    case NYdb::TTypeParser::ETypeKind::EmptyList: {
-        return MakeEmptyListType(env);
-    }
-    case NYdb::TTypeParser::ETypeKind::EmptyDict: {
-        return MakeEmptyDictType(env);
-    }
-    default:
-        return nullptr;
     }
 }
 
@@ -277,12 +268,8 @@ struct TTypePair {
     const NYql::TTypeAnnotationNode* TypeAnnotation = nullptr;
 };
 
-TTypePair FormatColumnType(
-    NJson::TJsonValue& root,
-    const NYdb::TType& type,
-    NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    NYql::TExprContext& ctx,
-    bool typeNameAsString)
+TTypePair FormatColumnType(NJson::TJsonValue& root, const NYdb::TType& type, NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    NYql::TExprContext& ctx, bool typeNameAsString)
 {
     TTypePair result;
     NYdb::TTypeParser parser(type);
@@ -301,20 +288,14 @@ TTypePair FormatColumnType(
         return result;
     }
 
-    NJson::ReadJsonTree(
-        NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteTypeToYson(result.TypeAnnotation)),
-        &root);
+    NJson::ReadJsonTree(NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteTypeToYson(result.TypeAnnotation)), &root);
 
     return result;
 }
 
 template <typename F>
 NJson::TJsonValue GenericFormatColumnValue(
-    const NYdb::TValue& value,
-    NKikimr::NMiniKQL::TType* type,
-    const TTypeEnvironment& typeEnv,
-    const THolderFactory& holderFactory,
-    F f)
+    const NYdb::TValue& value, NKikimr::NMiniKQL::TType* type, const TTypeEnvironment& typeEnv, const THolderFactory& holderFactory, F f)
 {
     if (type->GetKind() == TType::EKind::Pg) {
         NYdb::TValueParser parser(value);
@@ -332,37 +313,24 @@ NJson::TJsonValue GenericFormatColumnValue(
 
     const Ydb::Value& rawProtoValue = NYdb::TProtoAccessor::GetProto(value);
 
-    auto unboxed = ImportValueFromProto(
-        type,
-        rawProtoValue,
-        typeEnv,
-        holderFactory);
+    auto unboxed = ImportValueFromProto(type, rawProtoValue, typeEnv, holderFactory);
 
     return f(unboxed);
 }
 
 NJson::TJsonValue FormatColumnValue(
-    const NYdb::TValue& value,
-    NKikimr::NMiniKQL::TType* type,
-    const TTypeEnvironment& typeEnv,
-    const THolderFactory& holderFactory)
+    const NYdb::TValue& value, NKikimr::NMiniKQL::TType* type, const TTypeEnvironment& typeEnv, const THolderFactory& holderFactory)
 {
     return GenericFormatColumnValue(value, type, typeEnv, holderFactory, [type](auto unboxed) {
         NJson::TJsonValue v;
-        NJson::ReadJsonTree(
-            NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteYsonValue(unboxed, type)),
-            &v);
+        NJson::ReadJsonTree(NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteYsonValue(unboxed, type)), &v);
         return v;
     });
 }
 
 NJson::TJsonValue FormatColumnPrettyValue(
-    const NYdb::TValue& value,
-    NKikimr::NMiniKQL::TType* type,
-    const TTypeEnvironment& typeEnv,
-    const THolderFactory& holderFactory)
+    const NYdb::TValue& value, NKikimr::NMiniKQL::TType* type, const TTypeEnvironment& typeEnv, const THolderFactory& holderFactory)
 {
-
     using namespace NYql::NCommon::NJsonCodec;
 
     static const TValueConvertPolicy convertPolicy{ UNSAFE_NUMBER_AS_STRING };
@@ -378,7 +346,7 @@ NJson::TJsonValue FormatColumnPrettyValue(
     });
 }
 
-} // namespace
+}   // namespace
 
 TString FormatSchema(const FederatedQuery::Schema& schema)
 {
@@ -425,9 +393,10 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
         NJson::TJsonValue& row = data.AppendValue(NJson::TJsonValue());
         for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
             const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-            NJson::TJsonValue v = prettyValueFormat
-                ? FormatColumnPrettyValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, typeEnv, holderFactory)
-                : FormatColumnValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, typeEnv, holderFactory);
+            NJson::TJsonValue v =
+                prettyValueFormat
+                    ? FormatColumnPrettyValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, typeEnv, holderFactory)
+                    : FormatColumnValue(rsParser.GetValue(columnNum), columnTypes[columnNum].MiniKQLType, typeEnv, holderFactory);
             if (prettyValueFormat) {
                 row.AppendValue(std::move(v));
             } else {
@@ -437,9 +406,7 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
     }
 }
 
-const NYql::TTypeAnnotationNode* MakeStructType(
-    const TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>>& i,
-    NYql::TExprContext& ctx)
+const NYql::TTypeAnnotationNode* MakeStructType(const TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>>& i, NYql::TExprContext& ctx)
 {
     TVector<const NYql::TItemExprType*> items;
     items.reserve(i.size());
@@ -450,8 +417,7 @@ const NYql::TTypeAnnotationNode* MakeStructType(
 }
 
 NKikimr::NMiniKQL::TType* MakeStructType(
-    const TVector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& items,
-    NKikimr::NMiniKQL::TTypeEnvironment& env)
+    const TVector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& items, NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
     return TStructType::Create(items.data(), items.size(), env);
 }
@@ -460,4 +426,4 @@ const NYql::TTypeAnnotationNode* MakeType(NYdb::TTypeParser& parser, NYql::TExpr
     return MakeType<const NYql::TTypeAnnotationNode*, NYql::TExprContext>(parser, ctx);
 }
 
-} // namespace NFq
+}   // namespace NFq

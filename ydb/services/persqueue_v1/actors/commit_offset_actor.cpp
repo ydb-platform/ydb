@@ -4,12 +4,9 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
-
-#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -18,11 +15,11 @@ using namespace PersQueue::V1;
 
 TCommitOffsetActor::TCommitOffsetActor(
         TEvCommitOffsetRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
-        const TActorId& schemeCache, const TActorId& newSchemeCache,
+        const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
-    , SchemeCache(schemeCache)
+    , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
     , Counters(counters)
@@ -33,7 +30,7 @@ TCommitOffsetActor::TCommitOffsetActor(
 
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
     , Counters(nullptr)
@@ -48,7 +45,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
-    AFL_ENSURE(request);
+    YDB_LOG_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
     PartitionId = request->partition_id();
 
@@ -77,10 +74,13 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         AnswerError("empty topic in commit offset request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    topicsToResolve.insert(request->path());
+    topicsToResolve.insert(TopicsHandler->GetConverterFactory()->GetNoDCMode()
+        ? Request_->NormalizePath(request->path())
+        : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
-            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString()),
+            AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!topicsList.IsValid) {
         return AnswerError(
@@ -91,12 +91,12 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
+            Request().GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
     ));
 }
 
 bool TCommitOffsetActor::OnUnhandledException(const std::exception& exc) {
-    NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, "[CommitOffsetActor]", exc);
+    NPQ::DoLogUnhandledException(Service, *this, exc);
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::INTERNAL_ERROR);
@@ -116,15 +116,24 @@ void TCommitOffsetActor::Die(const TActorContext& ctx) {
 }
 
 void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "CommitOffset auth ok, got topics",
+    LOG_D("CommitOffset auth ok, got topics",
         {"topicAndTabletsSize", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
-    AFL_ENSURE(TopicAndTablets.size() == 1);
+    YDB_LOG_ENSURE(TopicAndTablets.size() == 1);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
+
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !topicInitInfo.IsAsyncReplication
+        && !topicInitInfo.IsReplicationConsumer)
+    {
+        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
+        return;
+    }
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
@@ -191,7 +200,7 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_DEBUG_CTX(ctx, "Strict CommitOffset failed. Kqp",
+        LOG_D("Strict CommitOffset failed. Kqp",
             {"error", ev->Get()->Record});
 
         Ydb::Topic::CommitOffsetResult result;
@@ -219,9 +228,9 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     // Convert to correct response.
 
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
-    AFL_ENSURE(!partitionResult.HasCmdReadResult());
+    YDB_LOG_ENSURE(!partitionResult.HasCmdReadResult());
 
-    YDB_LOG_DEBUG_CTX(ctx, "CommitOffset, commit done");
+    LOG_D("CommitOffset, commit done");
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::SUCCESS);
@@ -246,7 +255,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
 
-    AFL_ENSURE(PipeClient);
+    YDB_LOG_ENSURE(PipeClient);
 
     auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
     commit->SetClientId(ClientId);
@@ -256,7 +265,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
         commit->SetSessionId(commitRequest->read_session_id());
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "Strict CommitOffset, partition committing to position prev end by cookie",
+    LOG_D("Strict CommitOffset, partition committing to position prev end by cookie",
         {"partitionId", commitRequest->partition_id()},
         {"offset", commitRequest->offset()});
 

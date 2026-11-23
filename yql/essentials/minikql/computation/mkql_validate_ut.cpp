@@ -1,6 +1,6 @@
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include "mkql_computation_list_adapter.h"
 #include "mkql_computation_node_impl.h"
 #include "mkql_computation_node.h"
@@ -724,6 +724,8 @@ void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = Buil
     }
 }
 
+// YQL-21619: Fix use after destructor.
+#if !defined(_msan_enabled_)
 Y_UNIT_TEST(TestUdfException) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
         valueBuilder->NewStringNotFilled(0xBAD).AsStringValue().Ref();                 // Leak string.
@@ -732,6 +734,7 @@ Y_UNIT_TEST(TestUdfException) {
     UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.Exception", {}, validateFunc), yexception);
     UNIT_ASSERT_VALUES_EQUAL(TThrowerValue::Count, 0L);
 }
+#endif
 
 Y_UNIT_TEST(TestUdfResultCheckVoid) {
     ProcessSimpleUdfFunc("UtUDF.Void");

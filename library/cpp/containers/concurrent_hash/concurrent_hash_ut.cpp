@@ -105,11 +105,11 @@ TEST(TConcurrentHashTest, TEmplaceIfAbsentTest) {
 
     EXPECT_FALSE(h.Has("key"));
 
-    EXPECT_EQ(h.EmplaceIfAbsent("key", 123).Value, 123);
+    EXPECT_EQ(h.EmplaceIfAbsent(TStringBuf("key"), 123).Value, 123);
     EXPECT_TRUE(h.Has("key"));
 
     // If the key already exists, the value must not be constructed
-    EXPECT_EQ(h.EmplaceIfAbsent("key", TBadConstructor{}).Value, 123);
+    EXPECT_EQ(h.EmplaceIfAbsent(TStringBuf("key"), TBadConstructor{}).Value, 123);
 }
 
 TEST(TConcurrentHashTest, TRemoveTest) {

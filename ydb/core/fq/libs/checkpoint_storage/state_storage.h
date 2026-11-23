@@ -5,17 +5,15 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <library/cpp/threading/future/core/future.h>
-
 #include <util/generic/ptr.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class IStateStorage : public virtual TThrRefBase {
+class IStateStorage: public virtual TThrRefBase {
 public:
     using TGetStateResult = std::pair<std::vector<NYql::NDq::TComputeActorState>, NYql::TIssues>;
     using TSaveStateResult = std::pair<size_t, NYql::TIssues>;
@@ -24,30 +22,20 @@ public:
     virtual NThreading::TFuture<NYql::TIssues> Init(const NACLib::TDiffACL& acl) = 0;
 
     virtual NThreading::TFuture<TSaveStateResult> SaveState(
-        ui64 taskId,
-        const TString& graphId,
-        const TCheckpointId& checkpointId,
-        const NYql::NDq::TComputeActorState& state) = 0;
+        ui64 taskId, const TString& graphId, const TCheckpointId& checkpointId, const NYql::NDq::TComputeActorState& state) = 0;
 
     virtual NThreading::TFuture<TGetStateResult> GetState(
-        const std::vector<ui64>& taskIds,
-        const TString& graphId,
-        const TCheckpointId& checkpointId) = 0;
+        const std::vector<ui64>& taskIds, const TString& graphId, const TCheckpointId& checkpointId) = 0;
 
-    virtual NThreading::TFuture<TCountStatesResult> CountStates(
-        const TString& graphId,
-        const TCheckpointId& checkpointId) = 0;
+    virtual NThreading::TFuture<TCountStatesResult> CountStates(const TString& graphId, const TCheckpointId& checkpointId) = 0;
 
     // GC interface
 
-    virtual NThreading::TFuture<NYql::TIssues> DeleteGraph(
-        const TString& graphId) = 0;
+    virtual NThreading::TFuture<NYql::TIssues> DeleteGraph(const TString& graphId) = 0;
 
-    virtual NThreading::TFuture<NYql::TIssues> DeleteCheckpoints(
-        const TString& graphId,
-        const TCheckpointId& checkpointId) = 0;
+    virtual NThreading::TFuture<NYql::TIssues> DeleteCheckpoints(const TString& graphId, const TCheckpointId& checkpointId) = 0;
 };
 
 using TStateStoragePtr = TIntrusivePtr<IStateStorage>;
 
-} // namespace NFq
+}   // namespace NFq

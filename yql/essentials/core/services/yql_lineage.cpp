@@ -844,6 +844,8 @@ private:
                              "YtTableContent",
                              "Skip",
                              "Take",
+                             "PruneKeys",
+                             "PruneAdjacentKeys",
                              "Sort",
                              "TopSort",
                              "Top",

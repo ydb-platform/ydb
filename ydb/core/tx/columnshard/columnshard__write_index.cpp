@@ -10,6 +10,8 @@
 #include <ydb/library/slide_limiter/usage/abstract.h>
 #include <ydb/library/slide_limiter/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 class TDiskResourcesRequest: public NLimiter::IResourceRequest {
@@ -55,11 +57,12 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
                 {"event", "TEvWriteIndex"},
                 {"count", change->GetWritePortionsCount()});
-            AFL_VERIFY(change->GetWritePortionsCount());
+            YDB_LOG_VERIFY(change->GetWritePortionsCount());
             const bool needDiskLimiter = change->NeedDiskWriteLimiter();
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release());
             const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
-            AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
+            YDB_LOG_VERIFY(needDraftTransaction.IsSuccess(),
+                {"error", needDraftTransaction.GetErrorMessage()});
             if (*needDraftTransaction) {
                 YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
                     {"event", "TTxWriteDraft"});
@@ -79,9 +82,11 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
         }
     } else {
         if (putStatus == NKikimrProto::OK) {
-            LOG_S_DEBUG("WriteIndex at tablet " << TabletID());
+            YDB_LOG_DEBUG("WriteIndex at tablet",
+                {"tabletID", TabletID()});
         } else {
-            LOG_S_INFO("WriteIndex error at tablet " << TabletID());
+            YDB_LOG_INFO("WriteIndex error at tablet",
+                {"tabletID", TabletID()});
         }
 
         OnYellowChannels(*ev->Get()->PutResult);

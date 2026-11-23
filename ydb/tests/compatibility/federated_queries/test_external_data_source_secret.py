@@ -1,7 +1,11 @@
 import pytest
 
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+)
 from test_external_data_source import ExternalDataTableTestBase
 
 
@@ -72,7 +76,9 @@ class ExternalDataSourceSecretCompatibilityBase(ExternalDataTableTestBase):
             session_pool.execute_with_retries(query)
 
 
-class TestExternalDataSourceSecretCompatibilityMixedCluster(ExternalDataSourceSecretCompatibilityBase, MixedClusterFixture):
+class TestExternalDataSourceSecretCompatibilityMixedCluster(
+    ExternalDataSourceSecretCompatibilityBase, MixedClusterFixture
+):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):

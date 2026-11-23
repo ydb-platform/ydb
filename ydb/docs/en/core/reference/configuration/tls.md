@@ -108,7 +108,7 @@ auth_config:
 ```
 
 
-For more details, this mechanism is described in [{#T}](../../devops/configuration-management/configuration-v1/#ldap-auth-config).
+For more details, this mechanism is described in [{#T}](auth_config.md#ldap-auth-config).
 
 ### Federated queries
 

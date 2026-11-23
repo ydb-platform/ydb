@@ -3,7 +3,6 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
-
 namespace NYql::NTypeAnnImpl {
 
 namespace {
@@ -31,7 +30,7 @@ const TMultiExprType* GetWideLambdaOutputType(const TExprNode& lambda, TExprCont
     return ctx.MakeType<TMultiExprType>(types);
 }
 
-}
+} // namespace
 
 IGraphTransformer::TStatus ExpandMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
@@ -191,8 +190,10 @@ IGraphTransformer::TStatus WideChain1MapWrapper(const TExprNode::TPtr& input, TE
     }
 
     if (const auto outputType = GetWideLambdaOutputType(*updateLambda, ctx.Expr); !IsSameAnnotation(*initType, *outputType)) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch init and update handlers output types: "
-            << *static_cast<const TTypeAnnotationNode*>(initType) << " and " << *static_cast<const TTypeAnnotationNode*>(outputType)));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Mismatch init and update handlers output types: "
+                             << *static_cast<const TTypeAnnotationNode*>(initType) << " and " << *static_cast<const TTypeAnnotationNode*>(outputType)));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -213,7 +214,8 @@ IGraphTransformer::TStatus WideFilterWrapper(const TExprNode::TPtr& input, TExpr
         const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
         const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, ctx.Types);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()),
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Tail().Pos()),
                 TStringBuilder() << "Mismatch 'limit' type. Expected Uint64, got: " << *input->Tail().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
@@ -378,8 +380,10 @@ IGraphTransformer::TStatus WideCondense1Wrapper(const TExprNode::TPtr& input, TE
     }
 
     if (const auto outputType = GetWideLambdaOutputType(*updateLambda, ctx.Expr); !IsSameAnnotation(*initType, *outputType)) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch init and update handlers output types: "
-            << *static_cast<const TTypeAnnotationNode*>(initType) << " and " << *static_cast<const TTypeAnnotationNode*>(outputType)));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Mismatch init and update handlers output types: "
+                             << *static_cast<const TTypeAnnotationNode*>(initType) << " and " << *static_cast<const TTypeAnnotationNode*>(outputType)));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -405,8 +409,9 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
     if (const auto& limit = input->Child(1U)->Content(); !limit.empty()) {
         i64 memLimit = 0LL;
         if (!TryFromString(limit, memLimit)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1U)->Pos()), TStringBuilder() <<
-                "Bad memLimit value: " << limit));
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Child(1U)->Pos()),
+                TStringBuilder() << "Bad memLimit value: " << limit));
             return IGraphTransformer::TStatus::Error;
         }
     }
@@ -499,8 +504,9 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
     for (auto i = updateHandler->ChildrenSize() - 1U; i;) {
         const auto child = updateHandler->Child(i);
         if (!IsSameAnnotation(*stateTypes[--i], *child->GetTypeAnn())) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "State type changed in update from "
-                << *stateTypes[i] << " on " << *child->GetTypeAnn()));
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(child->Pos()),
+                TStringBuilder() << "State type changed in update from " << *stateTypes[i] << " on " << *child->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
     }
@@ -730,8 +736,9 @@ IGraphTransformer::TStatus NarrowMultiMapWrapper(const TExprNode::TPtr& input, T
 
     for (ui32 i = lambda->ChildrenSize() - 2U; i > 0U; --i) {
         if (!IsSameAnnotation(*outputItemType, *lambda->Child(i)->GetTypeAnn())) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() << "Mismatch of multi map lambda return types: "
-                << *outputItemType << " and " << *lambda->Child(i)->GetTypeAnn()));
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(lambda->Pos()),
+                TStringBuilder() << "Mismatch of multi map lambda return types: " << *outputItemType << " and " << *lambda->Child(i)->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
     }
@@ -865,11 +872,13 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
 
         if (ui32 index; TryFromString(item->Head().Content(), index)) {
             if (index >= types.size()) {
-                ctx.AddError(TIssue(ctx.GetPosition(item->Head().Pos()),
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(item->Head().Pos()),
                     TStringBuilder() << "Index too large: " << index));
                 return false;
             } else if (!indexes.emplace(index).second) {
-                ctx.AddError(TIssue(ctx.GetPosition(item->Head().Pos()),
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(item->Head().Pos()),
                     TStringBuilder() << "Duplicate index: " << index));
                 return false;
             }
@@ -878,7 +887,8 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
                 return false;
             }
         } else {
-            ctx.AddError(TIssue(ctx.GetPosition(item->Head().Pos()),
+            ctx.AddError(TIssue(
+                ctx.GetPosition(item->Head().Pos()),
                 TStringBuilder() << "Invalid index value: " << item->Head().Content()));
             return false;
         }
@@ -892,4 +902,3 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
 }
 
 } // namespace NYql::NTypeAnnImpl
-

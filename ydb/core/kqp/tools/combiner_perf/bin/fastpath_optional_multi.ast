@@ -1,0 +1,26 @@
+'(
+    (lambda '($1)
+      (WideToBlocks
+        (FromFlow
+          (WideMap (ToFlow (WideFromBlocks $1)) (lambda '($2)
+            (Convert $2 (DataType 'Uint64))
+            (If
+              (Equal (Unwrap (Mod (Convert $2 (DataType 'Int64)) (Int64 '7))) (Int64 '0))
+              (Nothing (OptionalType (DataType 'Int64)))
+              (Just (Convert $2 (DataType 'Int64))))
+            (If
+              (Equal (Unwrap (Mod (Convert $2 (DataType 'Uint64)) (Uint64 '11))) (Uint64 '0))
+              (Nothing (OptionalType (DataType 'Uint64)))
+              (Just (Convert $2 (DataType 'Uint64))))
+          ))
+        )
+      ))
+    (lambda '($10 $11 $12) $10)
+    (lambda '($20 $21 $22 $23) $22 $23 (Uint64 '1))
+    (lambda '($30 $31 $32 $33 $34 $35 $36)
+      (AggrAdd $32 $34)
+      (AggrAdd $33 $35)
+      (AggrAdd (Uint64 '1) $36))
+    (lambda '($40 $41 $42 $43) $40 $41 $42 $43)
+    (Uint64 '1)
+)

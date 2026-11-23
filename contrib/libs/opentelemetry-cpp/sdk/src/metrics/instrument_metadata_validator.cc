@@ -1,78 +1,70 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "opentelemetry/sdk/metrics/instrument_metadata_validator.h"
-#include "opentelemetry/nostd/string_view.h"
-#include "opentelemetry/version.h"
+#include <cstddef>
 
-#if OPENTELEMETRY_HAVE_WORKING_REGEX
-#  include <regex>
-#else
-#  include <algorithm>
-#endif
+#include "opentelemetry/common/detail/ascii.h"
+#include "opentelemetry/nostd/string_view.h"
+#include "opentelemetry/sdk/metrics/instrument_metadata_validator.h"
+#include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
 namespace metrics
 {
-#if OPENTELEMETRY_HAVE_WORKING_REGEX
+namespace
+{
 // instrument-name = ALPHA 0*254 ("_" / "." / "-" / "/" / ALPHA / DIGIT)
-constexpr const char *kInstrumentNamePattern = "[a-zA-Z][-_./a-zA-Z0-9]{0,254}";
-//
-constexpr const char *kInstrumentUnitPattern = "[\x01-\x7F]{0,63}";
-// instrument-unit = It can have a maximum length of 63 ASCII chars
-#endif
+constexpr std::size_t kMaxNameSize = 255;
+// instrument-unit = 0*63 ASCII characters, excluding NUL
+constexpr std::size_t kMaxUnitSize = 63;
 
-InstrumentMetaDataValidator::InstrumentMetaDataValidator()
-#if OPENTELEMETRY_HAVE_WORKING_REGEX
-    // clang-format off
-    : name_reg_key_{kInstrumentNamePattern},
-      unit_reg_key_{kInstrumentUnitPattern}
-// clang-format on
-#endif
-{}
+bool IsNameChar(char c) noexcept
+{
+  return opentelemetry::common::detail::IsAsciiAlnum(c) || c == '_' || c == '.' || c == '-' ||
+         c == '/';
+}
+
+bool IsUnitChar(unsigned char c) noexcept
+{
+  return c >= 0x01 && c <= 0x7F;
+}
+}  // namespace
+
+InstrumentMetaDataValidator::InstrumentMetaDataValidator() = default;
 
 bool InstrumentMetaDataValidator::ValidateName(nostd::string_view name) const
 {
-
-#if OPENTELEMETRY_HAVE_WORKING_REGEX
-  return std::regex_match(name.data(), name_reg_key_);
-#else
-  const size_t kMaxSize = 255;
-  // size atmost 255 chars
-  if (name.size() > kMaxSize)
+  if (name.empty() || name.size() > kMaxNameSize ||
+      !opentelemetry::common::detail::IsAsciiAlpha(name[0]))
   {
     return false;
   }
-  // first char should be alpha
-  if (!isalpha(name[0]))
+  for (std::size_t i = 1; i < name.size(); ++i)
   {
-    return false;
+    if (!IsNameChar(name[i]))
+    {
+      return false;
+    }
   }
-  // subsequent chars should be either of alphabets, digits, underscore,
-  // minus, dot, slash
-  return !std::any_of(std::next(name.begin()), name.end(), [](char c) {
-    return !isalnum(c) && (c != '-') && (c != '_') && (c != '.') && (c != '/');
-  });
-#endif
+  return true;
 }
 
 bool InstrumentMetaDataValidator::ValidateUnit(nostd::string_view unit) const
 {
-#if OPENTELEMETRY_HAVE_WORKING_REGEX
-  return std::regex_match(unit.data(), unit_reg_key_);
-#else
-  const size_t kMaxSize = 63;
-  // length atmost 63 chars
-  if (unit.size() > kMaxSize)
+  if (unit.size() > kMaxUnitSize)
   {
     return false;
   }
-  // all should be ascii chars.
-  return !std::any_of(unit.begin(), unit.end(),
-                      [](char c) { return static_cast<unsigned char>(c) > 127; });
-#endif
+  for (const char c : unit)
+  {
+    if (!IsUnitChar(static_cast<unsigned char>(c)))
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool InstrumentMetaDataValidator::ValidateDescription(nostd::string_view /*description*/) const

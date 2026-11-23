@@ -91,85 +91,55 @@ namespace {
         return {};
     }
 
-    struct TEvMetricsLabelsResult
-        : public NActors::TEventLocal<TEvMetricsLabelsResult, NActors::TEvents::ES_PRIVATE + 7421> {
-        TVector<std::pair<TString, TString>> Labels;
-    };
-
-    class TMetricsLabelsTestActor : public NActors::TActorBootstrapped<TMetricsLabelsTestActor> {
-    public:
-        TMetricsLabelsTestActor(
-            NActors::TActorId edge,
-            TString consumer,
-            bool firstClassCitizen,
-            TString databaseId = {}
-        )
-            : Edge_(edge)
-            , Consumer_(std::move(consumer))
-            , FirstClassCitizen_(firstClassCitizen)
-            , DatabaseId_(std::move(databaseId))
-        {
-        }
-
-        void Bootstrap(const NActors::TActorContext& ctx) {
-            NKikimr::AppData(ctx)->PQConfig.SetTopicsAreFirstClassCitizen(FirstClassCitizen_);
-
-            auto* ev = new TEvMetricsLabelsResult;
-            if (DatabaseId_) {
-                ev->Labels = GetMetricsLabels(
-                    "/Root/db",
-                    "/Root/db/topic",
-                    Consumer_,
-                    "SendMessage",
-                    {{"name", "api.sqs.request.count"}},
-                    DatabaseId_
-                );
-            } else {
-                ev->Labels = GetRequestMessageCountMetricsLabels(
-                    "/Root/db",
-                    "/Root/db/topic",
-                    Consumer_,
-                    "SendMessage"
-                );
-            }
-            ctx.Send(Edge_, ev);
-            Die(ctx);
-        }
-
-    private:
-        NActors::TActorId Edge_;
-        TString Consumer_;
-        bool FirstClassCitizen_;
-        TString DatabaseId_;
-    };
-
-    TVector<std::pair<TString, TString>> CollectRequestMessageCountMetricsLabels(
-        NKikimr::TTestActorRuntime& runtime,
-        const TString& consumer,
-        bool firstClassCitizen
-    ) {
-        const auto edge = runtime.AllocateEdgeActor();
-        runtime.Register(
-            new TMetricsLabelsTestActor(edge, consumer, firstClassCitizen),
-            0,
-            runtime.GetAppData().SystemPoolId
-        );
-        auto ev = runtime.GrabEdgeEvent<TEvMetricsLabelsResult>(edge);
-        return ev->Get()->Labels;
+    NKikimrPQ::TPQConfig PqConfig(bool firstClassCitizen) {
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetTopicsAreFirstClassCitizen(firstClassCitizen);
+        return pqConfig;
     }
 
-    TVector<std::pair<TString, TString>> CollectMetricsLabelsWithDatabaseId(
-        NKikimr::TTestActorRuntime& runtime,
-        const TString& databaseId
+    TVector<std::pair<TString, TString>> RequestMessageCountLabels(const TString& consumer, bool firstClassCitizen) {
+        const auto pqConfig = PqConfig(firstClassCitizen);
+        return GetRequestMessageCountMetricsLabels("/Root/db", "/Root/db/topic", consumer, "SendMessage", &pqConfig);
+    }
+
+    TVector<std::pair<TString, TString>> MetricsLabelsWithIdentity(
+        const TString& databaseId,
+        const TString& cloudId = {},
+        const TString& folderId = {}
     ) {
-        const auto edge = runtime.AllocateEdgeActor();
-        runtime.Register(
-            new TMetricsLabelsTestActor(edge, "ydb_sqs_consumer", true, databaseId),
-            0,
-            runtime.GetAppData().SystemPoolId
-        );
-        auto ev = runtime.GrabEdgeEvent<TEvMetricsLabelsResult>(edge);
-        return ev->Get()->Labels;
+        const auto pqConfig = PqConfig(true);
+        return GetMetricsLabels(
+            "/Root/db",
+            "/Root/db/topic",
+            "ydb_sqs_consumer",
+            "SendMessage",
+            {{"name", "api.sqs.request.count"}},
+            databaseId,
+            cloudId,
+            folderId,
+            &pqConfig);
+    }
+
+    TVector<TVector<std::pair<TString, TString>>> AllSqsMetricsLabels(const TString& consumer, bool firstClassCitizen) {
+        const auto pqConfig = PqConfig(firstClassCitizen);
+        const TString database = "/Root/db";
+        const TString topic = "/Root/db/topic";
+        return {
+            GetRequestMessageCountMetricsLabels(database, topic, consumer, "SendMessage", &pqConfig),
+            GetResponseMessageCountMetricsLabels(database, topic, consumer, "ReceiveMessage", "OK", &pqConfig),
+            GetResponseEmptyCountMetricsLabels(database, topic, consumer, "ReceiveMessage", &pqConfig),
+            GetRequestSizeMetricsLabels(database, topic, consumer, "SendMessage", &pqConfig),
+            GetMetricsLabels(database, topic, consumer, "SendMessage", {{"name", "api.sqs.request.count"}}, {}, {}, {}, &pqConfig),
+            GetMetricsLabels(
+                database, topic, consumer, "SendMessage",
+                {{"name", "api.sqs.response.count"}, {"code", "200"}}, {}, {}, {}, &pqConfig),
+            GetMetricsLabels(
+                database, topic, consumer, "SendMessage",
+                {{"name", "api.sqs.response.bytes"}, {"code", "200"}}, {}, {}, {}, &pqConfig),
+            GetMetricsLabels(
+                database, topic, consumer, "SendMessage",
+                {{"name", "api.sqs.response.duration_milliseconds"}}, {}, {}, {}, &pqConfig),
+        };
     }
 
     bool HasLabel(
@@ -188,57 +158,113 @@ namespace {
 
 Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
     Y_UNIT_TEST(ConvertOldConsumerNameForFirstClassCitizen) {
-        NKikimr::TTestActorRuntime runtime(1, false);
-        InitRuntime(runtime);
-
-        const auto labels = CollectRequestMessageCountMetricsLabels(
-            runtime,
-            "ydb_sqs_consumer",
-            true
-        );
+        const auto labels = RequestMessageCountLabels("ydb_sqs_consumer", true);
 
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "ydb_sqs_consumer");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.message_count");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "method"), "SendMessage");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "topic"), "topic");
         UNIT_ASSERT(HasLabel(labels, "database_id"));
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
     }
 
     Y_UNIT_TEST(IncludesDatabaseIdLabel) {
-        NKikimr::TTestActorRuntime runtime(1, false);
-        InitRuntime(runtime);
-
-        const auto labels = CollectMetricsLabelsWithDatabaseId(runtime, "database4");
+        const auto labels = MetricsLabelsWithIdentity("database4");
 
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
+    }
+
+    Y_UNIT_TEST(OmitsCloudIdAndFolderIdWhenEmpty) {
+        const auto labels = MetricsLabelsWithIdentity("database4", "", "");
+
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
+    }
+
+    Y_UNIT_TEST(IncludesCloudIdAndFolderIdLabels) {
+        const auto labels = MetricsLabelsWithIdentity("database4", "cloud4", "folder4");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "cloud_id"), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "folder_id"), "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
+    }
+
+    Y_UNIT_TEST(IncludesBothCloudAndFolderWhenOnlyOneIsSet) {
+        const auto cloudOnly = MetricsLabelsWithIdentity("database4", "cloud4", "");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(cloudOnly, "cloud_id"), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(cloudOnly, "folder_id"), "");
+
+        const auto folderOnly = MetricsLabelsWithIdentity("database4", "", "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "cloud_id"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "folder_id"), "folder4");
     }
 
     Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {
-        NKikimr::TTestActorRuntime runtime(1, false);
-        InitRuntime(runtime);
-
-        const auto labels = CollectRequestMessageCountMetricsLabels(
-            runtime,
-            "ydb_sqs_consumer",
-            false
-        );
+        const auto labels = RequestMessageCountLabels("ydb_sqs_consumer", false);
 
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
     }
 
     Y_UNIT_TEST(ConvertOldConsumerNameForNonSharedConsumerInFederation) {
-        NKikimr::TTestActorRuntime runtime(1, false);
-        InitRuntime(runtime);
+        const auto labels = RequestMessageCountLabels("account@dir--topic", false);
 
-        const auto labels = CollectRequestMessageCountMetricsLabels(
-            runtime,
-            "account@dir--topic",
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
+    }
+
+    Y_UNIT_TEST(DoesNotPrefixSharedForAlreadyConvertedConsumerInFederation) {
+        const TString pathForm = "crowdplatform/ycs-tasks/sqs/push2yt/push2yt_consumer";
+        const auto fromPath = RequestMessageCountLabels(pathForm, false);
+        const auto fromConfigName = RequestMessageCountLabels(
+            "crowdplatform@ycs-tasks@sqs@push2yt@push2yt_consumer",
             false
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromPath, "consumer"), pathForm);
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromConfigName, "consumer"), pathForm);
+
+        const auto shared = RequestMessageCountLabels("shared/ydb_sqs_consumer", false);
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(shared, "consumer"), "shared/ydb_sqs_consumer");
+    }
+
+    Y_UNIT_TEST(ConsumerLabelIsSameForAllSqsMetrics) {
+        const TVector<TString> metricNames = {
+            "api.sqs.request.message_count",
+            "api.sqs.response.message_count",
+            "api.sqs.response.empty_count",
+            "api.sqs.request.bytes",
+            "api.sqs.request.count",
+            "api.sqs.response.count",
+            "api.sqs.response.bytes",
+            "api.sqs.response.duration_milliseconds",
+        };
+        const TString pathForm = "crowdplatform/ycs-tasks/sqs/push2yt/push2yt_consumer";
+        const TString configName = "crowdplatform@ycs-tasks@sqs@push2yt@push2yt_consumer";
+
+        auto assertConsumer = [&](bool firstClassCitizen, const TString& consumer, const TString& expectedConsumer) {
+            const auto labels = AllSqsMetricsLabels(consumer, firstClassCitizen);
+            UNIT_ASSERT_VALUES_EQUAL(labels.size(), metricNames.size());
+            for (size_t i = 0; i < labels.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[i], "name"), metricNames[i]);
+                UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[i], "consumer"), expectedConsumer);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[1], "status"), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[5], "code"), "200");
+            UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[6], "code"), "200");
+        };
+
+        assertConsumer(false, pathForm, pathForm);
+        assertConsumer(false, configName, pathForm);
+        assertConsumer(false, "shared/ydb_sqs_consumer", "shared/ydb_sqs_consumer");
+        assertConsumer(true, pathForm, pathForm);
+        assertConsumer(true, configName, configName);
     }
 }
 

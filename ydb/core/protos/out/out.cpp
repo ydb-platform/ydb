@@ -27,6 +27,7 @@
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/stream/output.h>
 
@@ -218,12 +219,20 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamState, stream, value) {
     stream << NKikimrSchemeOp::ECdcStreamState_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamHeartbeatMode, stream, value) {
+    stream << NKikimrSchemeOp::ECdcStreamHeartbeatMode_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode, stream, value) {
     stream << NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel, stream, value) {
     stream << NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EImportState, stream, value) {
+    stream << NKikimrSchemeOp::TTableReplicationConfig::EImportState_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrSubDomains::EServerlessComputeResourcesMode, stream, value) {
@@ -248,4 +257,8 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::EKMeansState, stream, value) {
 
 Y_DECLARE_OUT_SPEC(, NKikimrSetColumnConstraint::EValidateStatus, stream, value) {
     stream << NKikimrSetColumnConstraint::EValidateStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrReplication::TEvAlterReplicationResult::EStatus, stream, value) {
+    stream << NKikimrReplication::TEvAlterReplicationResult::EStatus_Name(value);
 }

@@ -27,9 +27,9 @@ private:
         TConclusionStatus InitCurrentData();
 
     public:
-        TIterator(const TStringBuf values, const std::shared_ptr<arrow::Schema>& schema)
+        TIterator(const TStringBuf values, const arrow::Schema& schema)
             : Values(values)
-            , Schema(schema->fields()) {
+            , Schema(schema.fields()) {
         }
 
         [[nodiscard]] TConclusionStatus Start() {
@@ -64,7 +64,7 @@ private:
         }
 
         [[nodiscard]] TConclusionStatus Next() {
-            AFL_VERIFY(!IsFinishedFlag);
+            YDB_LOG_VERIFY(!IsFinishedFlag);
             if (!!CurrentValue) {
                 Values.Skip(CurrentValue->size());
             }
@@ -77,7 +77,7 @@ private:
     };
 
     template <class TActor>
-    [[nodiscard]] TConclusionStatus Scan(const std::shared_ptr<arrow::Schema>& schema, TActor& actor) const {
+    [[nodiscard]] TConclusionStatus Scan(const arrow::Schema& schema, TActor& actor) const {
         TIterator it(Values, schema);
         auto startConclusion = it.Start();
         if (startConclusion.IsFail()) {
@@ -96,9 +96,33 @@ private:
         return TConclusionStatus::Success();
     }
 
+    template <class TOnValue>
+    class TForEachValueActor {
+    private:
+        TOnValue& OnValueCallback;
+
+    public:
+        TForEachValueActor(TOnValue& onValue)
+            : OnValueCallback(onValue) {
+        }
+
+        template <class TWrap>
+        bool OnValue(const ui32 /*fieldIndex*/, const char* data, const ui32 size) {
+            OnValueCallback(data ? std::optional<std::string_view>(std::string_view(data, size)) : std::nullopt);
+            return false;
+        }
+    };
+
 public:
     TSimpleRowViewV0(const TStringBuf sb)
         : Values(sb) {
+    }
+
+    // Calls onValue for each column in order, with the column's bytes, or with nullopt if it is null
+    template <class TOnValue>
+    [[nodiscard]] TConclusionStatus ForEachValue(const arrow::Schema& schema, TOnValue&& onValue) const {
+        TForEachValueActor<TOnValue> actor(onValue);
+        return Scan(schema, actor);
     }
 
     class TActorValidator {
@@ -110,14 +134,16 @@ public:
     };
     [[nodiscard]] TConclusionStatus Validate(const std::shared_ptr<arrow::Schema>& schema) const {
         TActorValidator actorValidation;
-        return Scan(schema, actorValidation);
+        return Scan(*schema, actorValidation);
     }
 
     [[nodiscard]] bool DoValidate(const std::shared_ptr<arrow::Schema>& schema) const {
         TActorValidator actorValidation;
-        auto conclusion = Scan(schema, actorValidation);
+        auto conclusion = Scan(*schema, actorValidation);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "simple_row_validation")("reason", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR_COMP(NKikimrServices::ARROW_HELPER, "",
+                {"event", "simple_row_validation"},
+                {"reason", conclusion.GetErrorMessage()});
         }
         return !conclusion.IsFail();
     }
@@ -160,7 +186,7 @@ public:
     [[nodiscard]] TConclusionStatus AddToBuilders(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const;
     [[nodiscard]] TConclusion<std::partial_ordering> Compare(
-        const TSimpleRowViewV0& item, const std::shared_ptr<arrow::Schema>& schema, const std::optional<ui32> columnsCount = {}) const;
+        const TSimpleRowViewV0& item, const arrow::Schema& schema, const std::optional<ui32> columnsCount = {}) const;
     [[nodiscard]] TConclusion<TString> DebugString(const std::shared_ptr<arrow::Schema>& schema) const;
 
     template <class T>
@@ -175,7 +201,7 @@ public:
             if (fieldIndex != ColumnIndex) {
                 return false;
             }
-            AFL_VERIFY(fieldIndex == ColumnIndex);
+            YDB_LOG_VERIFY(fieldIndex == ColumnIndex);
             if (!data) {
                 return true;
             }
@@ -184,7 +210,7 @@ public:
                     Result = std::string_view(data, size);
                     return true;
                 }
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
             if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
                 using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
@@ -192,7 +218,7 @@ public:
                     Result = *(CType*)(data);
                     return true;
                 }
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
             return true;
         }
@@ -204,7 +230,7 @@ public:
     template <class T>
     TConclusion<std::optional<T>> GetValue(const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const {
         TGetValueActor<T> resultActor(columnIndex);
-        auto conclusion = Scan(schema, resultActor);
+        auto conclusion = Scan(*schema, resultActor);
         if (conclusion.IsFail()) {
             return conclusion;
         }

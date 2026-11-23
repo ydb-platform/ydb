@@ -1,15 +1,15 @@
 UNITTEST_FOR(ydb/core/mon)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE == "thread")
     SUPPRESSIONS(tsan.supp)
 ENDIF()
 
 PEERDIR(
+    library/cpp/monlib/consumers
+    ydb/core/client/server
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/testlib/default

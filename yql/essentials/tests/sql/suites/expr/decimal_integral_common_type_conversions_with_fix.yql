@@ -1,5 +1,3 @@
-PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
-
 $integral = Int32("1");
 $decimal = Decimal("2.5", 3, 1);
 

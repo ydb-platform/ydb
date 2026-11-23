@@ -2,12 +2,16 @@
 #ifndef _linux_
 namespace NYql {
 
-void BecomeUser(const TString& username, const TString& groupname) {
+void BecomeUser(const TString& username, const TString& groupname, bool dumpable) {
     Y_UNUSED(username);
     Y_UNUSED(groupname);
+    Y_UNUSED(dumpable);
 }
 
 void TurnOnBecomeUserAmbientCaps() {
+}
+
+void EnsureNonRootUserAndGroup() {
 }
 
 void TurnOffBecomeUserAbility() {

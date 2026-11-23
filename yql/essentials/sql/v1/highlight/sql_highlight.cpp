@@ -11,6 +11,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -18,6 +19,16 @@ namespace NSQLHighlight {
 
 using NSQLTranslationV1::Merged;
 using NSQLTranslationV1::TRegexPattern;
+
+constexpr TStringBuf StringLiteralSuffixRegex = R"re(([sSuUyYjJ]|[pP]([tTbBvV])?)?)re";
+
+TString TRangePattern::EndRegex() const {
+    TString regex = RE2::QuoteMeta(EndPlain);
+    if (EndSuffixRegex) {
+        regex += *EndSuffixRegex;
+    }
+    return regex;
+}
 
 struct TSyntax {
     const NSQLReflect::TLexerGrammar* Grammar;
@@ -188,7 +199,7 @@ TUnit MakeUnit<EUnitKind::Literal>(TSyntax& s) {
 
 template <>
 TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
-    return {
+    TUnit unit = {
         .Kind = EUnitKind::StringLiteral,
         .RangePatterns = {
             {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re('')re"},
@@ -203,6 +214,11 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
         },
         .IsPlain = false,
     };
+
+    for (TRangePattern& range : unit.RangePatterns) {
+        range.EndSuffixRegex = StringLiteralSuffixRegex;
+    }
+    return unit;
 }
 
 template <>
@@ -269,8 +285,8 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
 
 } // namespace NSQLHighlight
 
-template <>
-void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind value) {
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLHighlight::EUnitKind, out, value) {
     switch (value) {
         case NSQLHighlight::EUnitKind::Keyword:
             out << "keyword";

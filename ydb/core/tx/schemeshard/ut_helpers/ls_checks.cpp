@@ -156,6 +156,18 @@ TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId) {
     };
 }
 
+TCheckFunc ExtractTenantWasmCompileController(ui64* tenantWCCId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT(pathDescr.HasDomainDescription());
+        const auto& domainDesc = pathDescr.GetDomainDescription();
+        UNIT_ASSERT(domainDesc.HasProcessingParams());
+        const auto& procParams = domainDesc.GetProcessingParams();
+        *tenantWCCId = procParams.GetWasmCompileController();
+    };
+}
+
 TCheckFunc ExtractDomainHive(ui64* domainHiveId) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
@@ -951,8 +963,12 @@ TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
 TCheckFunc SpecializedIndexDescription(const TString& proto) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
-            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription: {
-                auto actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+            case NKikimrSchemeOp::TIndexDescription::kHnswIndexDescription: {
+                const auto& index = record.GetPathDescription().GetTableIndex();
+                auto actual = index.HasHnswIndexDescription()
+                    ? index.GetHnswIndexDescription().GetSettings()
+                    : index.GetVectorIndexKmeansTreeDescription().GetSettings();
                 Ydb::Table::KMeansTreeSettings expected;
                 UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
                 UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
@@ -1091,6 +1107,18 @@ TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed) {
     };
 }
 
+TCheckFunc StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatMode mode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(), mode);
+    };
+}
+
+TCheckFunc StreamHasAggregatorTabletId(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().HasAggregatorTabletId(), value);
+    };
+}
+
 TCheckFunc RetentionPeriod(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value.Seconds(), record.GetPathDescription().GetPersQueueGroup()
@@ -1142,6 +1170,14 @@ TCheckFunc CreatedAt(ui64 txId) {
 TCheckFunc PartitionCount(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().TablePartitionsSize(), count);
+    };
+}
+
+TCheckFunc TablePartitionCount(ui64 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& table = record.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL_C(table.GetPartitionCount(), count,
+            "unexpected PartitionCount in table description");
     };
 }
 

@@ -1,0 +1,163 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(reqwest)
+
+CRATE_VERSION(0.13.4)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/async_impl/body.rs
+    src/async_impl/client.rs
+    src/async_impl/h3_client/connect.rs
+    src/async_impl/h3_client/dns.rs
+    src/async_impl/h3_client/mod.rs
+    src/async_impl/h3_client/pool.rs
+    src/async_impl/mod.rs
+    src/async_impl/multipart.rs
+    src/async_impl/request.rs
+    src/async_impl/response.rs
+    src/async_impl/upgrade.rs
+    src/blocking/body.rs
+    src/blocking/client.rs
+    src/blocking/mod.rs
+    src/blocking/multipart.rs
+    src/blocking/request.rs
+    src/blocking/response.rs
+    src/blocking/wait.rs
+    src/config.rs
+    src/connect.rs
+    src/cookie.rs
+    src/dns/gai.rs
+    src/dns/hickory.rs
+    src/dns/mod.rs
+    src/dns/resolve.rs
+    src/error.rs
+    src/into_url.rs
+    src/proxy.rs
+    src/redirect.rs
+    src/response.rs
+    src/retry.rs
+    src/tls.rs
+    src/util.rs
+    src/wasm/body.rs
+    src/wasm/client.rs
+    src/wasm/mod.rs
+    src/wasm/multipart.rs
+    src/wasm/request.rs
+    src/wasm/response.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    __rustls
+    __tls
+    blocking
+    json
+    query
+    rustls-no-provider
+    stream
+)
+
+PEERDIR(
+    contrib/crates/base64-0.22.1
+    contrib/crates/bytes-1.12.1
+    contrib/crates/futures-channel-0.3.34
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/http-1.5.0
+    contrib/crates/http-body-1.1.0
+    contrib/crates/http-body-util-0.1.5
+    contrib/crates/hyper-1.12.0
+    contrib/crates/hyper-rustls-0.27.10
+    contrib/crates/hyper-util-0.1.21
+    contrib/crates/log-0.4.34
+    contrib/crates/percent-encoding-2.3.2
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/rustls-0.23.46
+    contrib/crates/rustls-pki-types-1.15.1
+    contrib/crates/rustls-platform-verifier-0.7.1
+    contrib/crates/serde-1.0.229
+    contrib/crates/serde_json-1.0.154
+    contrib/crates/serde_urlencoded-0.7.1
+    contrib/crates/sync_wrapper-1.0.2
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-rustls-0.26.6
+    contrib/crates/tokio-util-0.7.20
+    contrib/crates/tower-0.5.3
+    contrib/crates/tower-http-0.6.11
+    contrib/crates/tower-service-0.3.3
+    contrib/crates/url-2.5.8
+)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(0.13.4)
+ORIGINAL_SOURCE(https://static.crates.io/crates/reqwest/reqwest-0.13.4.crate)
+
+CRATE_SOURCES(
+    src/async_impl/body.rs
+    src/async_impl/client.rs
+    src/async_impl/h3_client/connect.rs
+    src/async_impl/h3_client/dns.rs
+    src/async_impl/h3_client/mod.rs
+    src/async_impl/h3_client/pool.rs
+    src/async_impl/mod.rs
+    src/async_impl/multipart.rs
+    src/async_impl/request.rs
+    src/async_impl/response.rs
+    src/async_impl/upgrade.rs
+    src/blocking/body.rs
+    src/blocking/client.rs
+    src/blocking/mod.rs
+    src/blocking/multipart.rs
+    src/blocking/request.rs
+    src/blocking/response.rs
+    src/blocking/wait.rs
+    src/config.rs
+    src/connect.rs
+    src/cookie.rs
+    src/dns/gai.rs
+    src/dns/hickory.rs
+    src/dns/mod.rs
+    src/dns/resolve.rs
+    src/error.rs
+    src/into_url.rs
+    src/lib.rs
+    src/proxy.rs
+    src/redirect.rs
+    src/response.rs
+    src/retry.rs
+    src/tls.rs
+    src/util.rs
+    src/wasm/body.rs
+    src/wasm/client.rs
+    src/wasm/mod.rs
+    src/wasm/multipart.rs
+    src/wasm/request.rs
+    src/wasm/response.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
+)
+
+END()

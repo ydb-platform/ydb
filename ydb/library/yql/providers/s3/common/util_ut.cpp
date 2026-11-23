@@ -44,22 +44,16 @@ Y_UNIT_TEST_SUITE(TestUrlBuilder) {
     }
 
     Y_UNIT_TEST(BasicWithEncoding) {
-        auto url = TUrlBuilder("https://localhost/abc")
-                        .AddUrlParam("param1", "=!@#$%^&*(){}[]\" ")
-                        .AddUrlParam("param2", "val2")
-                        .Build();
+        auto url = TUrlBuilder("https://localhost/abc").AddUrlParam("param1", "=!@#$%^&*(){}[]\" ").AddUrlParam("param2", "val2").Build();
 
         UNIT_ASSERT_VALUES_EQUAL(url, "https://localhost/abc?param1=%3D%21%40%23%24%25%5E%26%2A%28%29%7B%7D%5B%5D%22+&param2=val2");
     }
 
     Y_UNIT_TEST(BasicWithAdditionalEncoding) {
-        auto url = TUrlBuilder("https://localhost/abc")
-                        .AddUrlParam("param1", ":/?#[]@!$&\'()*+,;=")
-                        .AddUrlParam("param2", "val2")
-                        .Build();
+        auto url = TUrlBuilder("https://localhost/abc").AddUrlParam("param1", ":/?#[]@!$&\'()*+,;=").AddUrlParam("param2", "val2").Build();
 
         UNIT_ASSERT_VALUES_EQUAL(url, "https://localhost/abc?param1=%3A%2F%3F%23%5B%5D%40%21%24%26%27%28%29%2A%2B%2C%3B%3D&param2=val2");
     }
 }
 
-}  // namespace NYql::NS3Util
+}   // namespace NYql::NS3Util

@@ -1,13 +1,12 @@
 #include "service.h"
-#include <ydb/services/scheme_secret/resolver.h>
 
 #include <ydb/core/base/appdata.h>
-
 #include <ydb/core/tx/scheme_board/subscriber.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 #include <limits>
 
@@ -352,6 +351,7 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(
     VersionedSecrets[secretName] = TVersionedSecret{
         .SecretVersion = secretVersion,
         .PathId = rec.GetPathId(),
+        .PathOwnerId = rec.GetPathOwnerId(),
         .Name = secretName,
         .Value = secretValue,
     };
@@ -649,6 +649,7 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
 
     std::vector<TString> secretValues;
     secretValues.resize(responseCtx.Secrets.size());
+    std::vector<NKqp::TSecretRevision> revisions(responseCtx.Secrets.size());
     for (const auto& secret : responseCtx.Secrets) {
         const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
@@ -669,8 +670,9 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
 
         Y_ENSURE(secret.second < secretValues.size());
         secretValues[secret.second] = it->second.Value;
+        revisions[secret.second] = NKqp::TSecretRevision{it->second.PathOwnerId, it->second.PathId, it->second.SecretVersion};
     }
-    FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(secretValues));
+    FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(std::move(secretValues), std::move(revisions)));
 }
 
 void TDescribeSchemaSecretsService::HandleNotifyUpdate(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
@@ -700,7 +702,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
     TDescribeSecretSettings settings
 ) {
     auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
-    if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
+    if (UseSchemaSecrets(AppData(actorSystem)->FeatureFlags, secretNames)) {
         actorSystem->Send(
             MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
             new TDescribeSchemaSecretsService::TEvResolveSecret(
@@ -710,7 +712,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
         return promise.GetFuture();
     }
 
-    if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+    if (AppData(actorSystem)->FeatureFlags.GetDisableOldSecrets()) {
         // Just in case - when we disable old secrets, we'll make sure they are not needed any more
         promise.SetValue(
             NKqp::TEvDescribeSecretsResponse::TDescription(

@@ -1,6 +1,10 @@
 #pragma once
 #include "async.h"
 
+#include <util/random/random.h>
+
+#include <atomic>
+
 namespace NActors {
 
     namespace NDetail {
@@ -96,6 +100,40 @@ namespace NActors {
     template<class TEvent>
     inline auto ActorWaitForEvent(ui64 cookie) {
         return NDetail::TActorSpecificEventAwaiter<TEvent>{ cookie };
+    }
+
+    /**
+     * Allocates a cookie for ActorWaitForEvent that is unique among all live waits in the process
+     * and never zero. The high bit and a per-process random prefix make a clash with
+     * application-chosen cookies (tx ids, sequence numbers, cookies echoed by remote peers)
+     * unlikely, not impossible: a clash only matters for two live waits of the same actor and
+     * the same event type.
+     */
+    inline ui64 AllocateWaitCookie() noexcept {
+        static std::atomic<ui64> counter{ (ui64(1) << 63) | ((RandomNumber<ui64>() & 0xFFFFF) << 42) };
+        return counter.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    /**
+     * Request/reply in one step: allocates a unique cookie, sends the request to the recipient with
+     * that cookie and returns a wait for the reply (TEvent::TPtr). The request is sent right away,
+     * which is safe in an actor turn: the reply is a mailbox event and cannot be handled before
+     * this turn ends, so it is still intercepted by the wait.
+     *
+     * The result is an awaiter, not an async<T>, so to bound the wait wrap it in a coroutine:
+     *
+     *     auto reply = co_await WithTimeout(timeout, [&]() -> async<TEvReply::TPtr> {
+     *         co_return co_await ActorRequest<TEvReply>(recipient, new TEvRequest);
+     *     });
+     *
+     * A reply that arrives after the timeout is no longer intercepted and reaches the state function.
+     */
+    template<class TEvent>
+    inline auto ActorRequest(const TActorId& recipient, IEventBase* request, ui32 flags = 0) {
+        const TActorId selfId = TActivationContext::AsActorContext().SelfID;
+        const ui64 cookie = AllocateWaitCookie();
+        TActivationContext::Send(new IEventHandle(recipient, selfId, request, flags, cookie));
+        return ActorWaitForEvent<TEvent>(cookie);
     }
 
 } // namespace NActors

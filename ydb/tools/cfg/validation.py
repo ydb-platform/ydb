@@ -188,6 +188,23 @@ HOST_SCHEMA = {
         },
         "node_id": {"type": "integer", "minLength": 1},
         "host": {"type": "string", "minLength": 1},
+        "dynamic_slots": {"type": "integer", "minimum": 0},
+        "storage": {"type": "boolean"},
+        "storage_profile": {
+            "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "integer"},
+            ],
+        },
+        "dynamic_profiles": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {"type": "string", "minLength": 1},
+                    {"type": "integer"},
+                ],
+            },
+        },
     },
     "oneOf": [
         {
@@ -944,6 +961,8 @@ TEMPLATE_SCHEMA = {
         },
         "auth": {"type": "object"},
         "log": copy.deepcopy(LOG_SCHEMA),
+        "node_broker_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "node_broker_use_tls": {"type": "boolean"},
         "grpc": {"type": "object"},
         "kqp": copy.deepcopy(KQP_SCHEMA),
         "ic": {"type": "object"},
@@ -971,6 +990,22 @@ TEMPLATE_SCHEMA = {
         "metering": copy.deepcopy(METERING_SCHEMA),
         "yql_analytics": copy.deepcopy(YQL_SCHEMA),
         "yq": copy.deepcopy(YQ_SCHEMA),
+        "process_profiles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "oneOf": [
+                            {"type": "string", "minLength": 1},
+                            {"type": "integer"},
+                        ],
+                    },
+                },
+                "required": ["id"],
+                "additionalProperties": True,
+            },
+        },
     },
     "anyOf": [
         {"required": ["static_erasure", "hosts"]},

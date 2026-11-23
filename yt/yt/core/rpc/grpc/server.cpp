@@ -409,7 +409,7 @@ private:
         grpc_completion_queue* const CompletionQueue_;
         const NLogging::TLogger& Logger;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
         EServerCallStage Stage_ = EServerCallStage::Accept;
         bool CancelRequested_ = false;
         TSharedRefArray ResponseMessage_;
@@ -449,7 +449,7 @@ private:
 
         IBusPtr ReplyBus_;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, TraceContextSpinLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, TraceContextSpinLock_);
         NTracing::TTraceContextHandler TraceContextHandler_;
 
         template <class TOps>
@@ -662,7 +662,8 @@ private:
 
             i64 startTime;
             if (!TryFromString(*startTimeString, startTime)) {
-                YT_TLOG_WARNING("Failed to parse start time from request metadata")
+                YT_TLOG_WARNING("Malformed start time")
+                    .With("MalformedStartTime", *startTimeString)
                     .With("RequestId", RequestId_);
                 return;
             }
@@ -1111,7 +1112,7 @@ private:
             }
         }
 
-        void SendResponse(TGuard<NThreading::TSpinLock>& guard)
+        void SendResponse(TGuard<TSpinLock>& guard)
         {
             Stage_ = EServerCallStage::SendingResponse;
             guard.Release();
@@ -1221,7 +1222,7 @@ private:
             }
         }
 
-        void CheckCanceled(TGuard<NThreading::TSpinLock>& guard)
+        void CheckCanceled(TGuard<TSpinLock>& guard)
         {
             if (CancelRequested_ && Stage_ == EServerCallStage::WaitingForService) {
                 Stage_ = EServerCallStage::Done;

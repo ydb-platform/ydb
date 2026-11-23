@@ -4,6 +4,7 @@ SRCS(
     backtrace.cpp
     backtrace_lib.cpp
     symbolize.cpp
+    symbolizer.cpp
 )
 
 PEERDIR(

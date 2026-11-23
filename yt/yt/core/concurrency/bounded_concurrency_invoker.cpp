@@ -7,7 +7,8 @@
 #include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/misc/tls.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -90,7 +91,7 @@ public:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     // If set, it is the next value of MaxConcurrentInvocations_.
     // Used only when decrease of MaxConcurrentInvocations_ value is requested.
     std::optional<int> PendingMaxConcurrentInvocations_;

@@ -8,7 +8,7 @@
 
 #include <yt/yt/core/ytree/public.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NHiveClient {
 
@@ -115,7 +115,7 @@ protected:
     virtual NObjectClient::TCellTagList GetCellTags(const TCluster& cluster);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     THashMap<NApi::TClusterTag, TCluster> CellTagToCluster_;
     THashMap<std::string, TCluster> NameToCluster_;
     THashMultiSet<NAuth::TTvmId> ClusterTvmIds_;

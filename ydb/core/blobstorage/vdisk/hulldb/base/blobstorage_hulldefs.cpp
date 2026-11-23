@@ -110,11 +110,13 @@ namespace NKikimr {
     THullCtx::THullCtx(TVDiskContextPtr vctx, const TIntrusivePtr<TVDiskConfig> vcfg, ui32 chunkSize, ui32 compWorthReadSize,
             bool freshCompaction, bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
             ui32 hullSstSizeInChunksLevel, double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
-            TDuration hullCompStorageRatioMaxCalcDuration, ui32 hullCompLevel0MaxSstsAtOnce, ui32 hullCompSortedPartsNum)
+            TDuration hullCompStorageRatioMaxCalcDuration, ui32 hullCompLevel0MaxSstsAtOnce, ui32 hullCompSortedPartsNum,
+            bool freshChunkReservation, ui32 appendBlockSize, bool collectByCompleteDeletionBlock)
         : VCtx(std::move(vctx))
         , VCfg(vcfg)
         , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
         , ChunkSize(chunkSize)
+        , AppendBlockSize(appendBlockSize)
         , CompWorthReadSize(compWorthReadSize)
         , FreshCompaction(freshCompaction)
         , GCOnlySynced(gcOnlySynced)
@@ -125,10 +127,17 @@ namespace NKikimr {
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
+        , FreshChunkReservation(freshChunkReservation)
+        , CollectByCompleteDeletionBlock(collectByCompleteDeletionBlock)
         , HullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce)
         , HullCompSortedPartsNum(hullCompSortedPartsNum)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
+        , LsmCompactionRankGroups{{
+            {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::LogoBlobs)},
+            {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::Blocks)},
+            {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::Barriers)},
+        }}
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
     {}
 

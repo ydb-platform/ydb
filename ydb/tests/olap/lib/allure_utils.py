@@ -1,10 +1,15 @@
 from __future__ import annotations
 from collections import defaultdict
+from html import escape
+from html.parser import HTMLParser
+from functools import lru_cache
+from library.python.resource import resfs_read
+import re
 import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
-from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get_test_tools_version
+from ydb.tests.olap.lib.workload_result import WorkloadRunResult
+from ydb.tests.olap.lib.utils import external_param_is_true, get_allure_report_url, get_ci_version, get_test_tools_version
 import os
 from urllib.parse import urlencode
 from datetime import datetime
@@ -12,6 +17,99 @@ from copy import deepcopy
 from pytz import timezone
 from typing import Any, Optional
 import logging
+
+
+_DESCRIPTION_CSS_RESOURCE = 'ydb/tests/olap/lib/allure-html-plugin/static/styles.css'
+
+
+@lru_cache(maxsize=1)
+def _description_cell_colors() -> frozenset[str]:
+    css = resfs_read(_DESCRIPTION_CSS_RESOURCE)
+    if css is None:
+        raise RuntimeError(f'Missing embedded Allure stylesheet: {_DESCRIPTION_CSS_RESOURCE}')
+    css = re.sub(r'/\*.*?\*/', '', css.decode('utf-8'), flags=re.DOTALL)
+    selectors = re.findall(r'\b(td|th)\[abbr="bg-([0-9a-fA-F]{6})"\]', css)
+    by_tag = {
+        tag: {'#' + color.lower() for cell_tag, color in selectors if cell_tag == tag}
+        for tag in ('td', 'th')
+    }
+    colors = frozenset(by_tag['td'] & by_tag['th'])
+    if not colors:
+        raise ValueError(f'No cell background rules found in {_DESCRIPTION_CSS_RESOURCE}')
+    return colors
+
+
+class _CellColorMarkers(HTMLParser):
+    """Keep cell backgrounds through Allure sanitization using allowed abbr attributes."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.output = []
+        self.row_color = None
+        self.table_rows = []
+
+    @staticmethod
+    def _background(attrs):
+        attrs = dict(attrs)
+        backgrounds = re.findall(
+            r'(?:^|;)\s*background(?:-color)?\s*:\s*([^;]*)(?=;|$)',
+            attrs.get('style') or '',
+            flags=re.IGNORECASE,
+        )
+        color = backgrounds[-1] if backgrounds else attrs.get('bgcolor') or ''
+        color = color.strip().lower()
+        if not color:
+            return None
+        if not re.fullmatch(r'#[0-9a-f]{6}', color):
+            raise ValueError(f'Unsupported Allure cell background {color!r}; use #RRGGBB')
+        if color not in _description_cell_colors():
+            raise ValueError(
+                f'Allure cell background {color!r} has no td/th rules in '
+                f'{_DESCRIPTION_CSS_RESOURCE}; add matching abbr selectors to the stylesheet'
+            )
+        return color
+
+    def handle_starttag(self, tag, attrs):
+        text = self.get_starttag_text()
+        if tag == 'table':
+            self.table_rows.append(self.row_color)
+            self.row_color = None
+        elif tag == 'tr':
+            self.row_color = self._background(attrs)
+        elif tag in ('td', 'th'):
+            color = self._background(attrs) or self.row_color
+            if color and 'abbr' not in dict(attrs):
+                text = text[:-1] + f' abbr="bg-{color[1:]}">'
+        self.output.append(text)
+
+    def handle_endtag(self, tag):
+        self.output.append(f'</{tag}>')
+        if tag == 'tr':
+            self.row_color = None
+        elif tag == 'table':
+            self.row_color = self.table_rows.pop() if self.table_rows else None
+
+    def handle_startendtag(self, tag, attrs):
+        self.output.append(self.get_starttag_text())
+
+    def handle_data(self, data):
+        self.output.append(data)
+
+    def handle_entityref(self, name):
+        self.output.append(f'&{name};')
+
+    def handle_charref(self, name):
+        self.output.append(f'&#{name};')
+
+    def handle_comment(self, data):
+        self.output.append(f'<!--{data}-->')
+
+
+def _mark_cell_colors(html: str) -> str:
+    parser = _CellColorMarkers()
+    parser.feed(html)
+    parser.close()
+    return ''.join(parser.output)
 
 
 class NodeErrors:
@@ -25,35 +123,47 @@ class NodeErrors:
         self.message: str = message
 
 
-def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+def _monitoring_urls(start_time: float, end_time: float, database: str) -> dict[str, str]:
     monitoring_start = int((start_time) * 1000)
     monitoring_end = int((end_time) * 1000)
-    database = '/' + test_info.get('database', '*')
+    database = '/' + database
     # monitoring does not show intervals less 1 minute.
     monitoring_addition = 60000 - (monitoring_end - monitoring_start)
     if monitoring_addition > 0:
         monitoring_start -= monitoring_addition
         monitoring_end += monitoring_addition
 
-    if len(YdbCluster.get_monitoring_urls()) > 0:
+    return {
+        monitoring.caption: monitoring.url.format(
+            database=database,
+            start_time=monitoring_start,
+            end_time=monitoring_end
+        )
+        for monitoring in YdbCluster.get_monitoring_urls()
+    }
+
+
+def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+    urls = _monitoring_urls(start_time, end_time, test_info.get('database', '*'))
+    if len(urls) > 0:
         test_info['monitoring'] = ', '.join([
-            f"<a target='_blank' href='{monitoring.url.format(
-                database=database,
-                start_time=monitoring_start,
-                end_time=monitoring_end
-            )}'> {monitoring.caption} </a>"
-            for monitoring in YdbCluster.get_monitoring_urls()
+            f"<a target='_blank' href='{url}'> {caption} </a>"
+            for caption, url in urls.items()
         ])
 
 
-def _set_coredumps(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+def _coredumps_url(start_time: float, end_time: float, cluster_name: str) -> str:
     tz = timezone('Europe/Moscow')
     params = urlencode([
-        ('filter', f'program_type=kikimr; @cluster_name={test_info["name"]}'),
+        ('filter', f'program_type=kikimr; @cluster_name={cluster_name}'),
         ('since_ts', datetime.fromtimestamp(start_time, tz).isoformat()),
         ('till_ts', datetime.fromtimestamp(end_time, tz).isoformat()),
     ])
-    test_info['coredumps'] = f"<a target='_blank' href='https://coredumps.yandex-team.ru/v3/cores?{params}'>link</a>"
+    return f'https://coredumps.yandex-team.ru/v3/cores?{params}'
+
+
+def _set_coredumps(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+    test_info['coredumps'] = f"<a target='_blank' href='{_coredumps_url(start_time, end_time, test_info['name'])}'>link</a>"
 
 
 def _set_node_errors(node_errors: list[NodeErrors]) -> str:
@@ -112,7 +222,7 @@ def _produce_verify_report(verify_errors) -> str:
         html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">{verify}</summary>'
         html += '<table border="1" cellpadding="2px" style="margin-top: 5px"><tr><th>Node</th><th>VERIFY failed times</th></tr>'
         for host, triggered_times in verify_info['hosts_count'].items():
-            html += f'<tr bgcolor="{'  # 90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
+            html += f'<tr bgcolor="{'#90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
         html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', '<br/>')}</code></details>'
     return html
 
@@ -145,9 +255,9 @@ def _attach_sanitizer_outputs(node_errors: list[NodeErrors]):
             reported_hosts.add(host)
 
 
-def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refference_set: str) -> None:
+def _results_plot_url(suite: str, test: str, refference_set: str) -> Optional[str]:
     if not ResultsProcessor.send_results:
-        return
+        return None
     params = urlencode({
         'tab': 'o8',
         'suite_b2rp': suite,
@@ -155,7 +265,13 @@ def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refferen
         'db_fmdl': ResultsProcessor.get_cluster_id(),
         'cluster_dufr': refference_set
     })
-    test_info['results_plot'] = f"<a target='_blank' href='https://datalens.yandex-team.ru/iqnd4b1miaz27-testy-ydb?{params}'>link</a>"
+    return f'https://datalens.yandex-team.ru/iqnd4b1miaz27-testy-ydb?{params}'
+
+
+def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refference_set: str) -> None:
+    url = _results_plot_url(suite, test, refference_set)
+    if url is not None:
+        test_info['results_plot'] = f"<a target='_blank' href='{url}'>link</a>"
 
 
 def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: float):
@@ -181,7 +297,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False) -> str:
+def __create_iterations_table(result: WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -450,7 +566,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
     return table_html
 
 
-def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def __create_iterations_table_with_node_subcols(result: WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload с подколонками для каждой ноды
 
@@ -839,6 +955,48 @@ def time_interval_str(start, end):
     )
 
 
+def get_environment_info() -> dict[str, Any]:
+    """Информация о кластере и CI, не зависящая от конкретного теста.
+
+    Значения - без HTML-разметки, пригодны и для отчёта, и для сериализации.
+    """
+    result = deepcopy(YdbCluster.get_cluster_info())
+    result['ci_version'] = get_ci_version()
+    # Prefer resolved CI tools revision (test_version → main/pr/sha) over local VCS fallback.
+    result['test_tools_version'] = get_test_tools_version()
+    ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
+    if ci_launch_url:
+        result['ci_launch_url'] = ci_launch_url
+    report_url = get_allure_report_url()
+    if report_url is not None:
+        result['report_url'] = report_url
+    result['table_path'] = YdbCluster.get_tables_path()
+    db = result['database']
+    result['db_admin'] = (
+        f'{YdbCluster._get_service_url()}/monitoring/tenant?'
+        f'schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query'
+        f'&diagnosticsTab=nodes&name=/{db}'
+    )
+    return result
+
+
+def get_test_info(suite: str, test: str, start_time: float, end_time: float, refference_set: str = '') -> dict[str, Any]:
+    """Информация о конкретном прогоне теста: всё, что зависит от его времени.
+
+    Значения - без HTML-разметки, пригодны и для отчёта, и для сериализации.
+    """
+    cluster_info = YdbCluster.get_cluster_info()
+    result: dict[str, Any] = {'time': time_interval_str(start_time, end_time)}
+    monitoring = _monitoring_urls(start_time, end_time, cluster_info['database'])
+    if monitoring:
+        result['monitoring'] = monitoring
+    result['coredumps'] = _coredumps_url(start_time, end_time, cluster_info['name'])
+    results_plot = _results_plot_url(suite, test, refference_set)
+    if results_plot is not None:
+        result['results_plot'] = results_plot
+    return result
+
+
 def allure_test_description(
     suite: str,
     test: str,
@@ -868,41 +1026,32 @@ def allure_test_description(
     for body, name, type in attachments:
         allure.attach(body, name, type)
 
-    test_info = deepcopy(YdbCluster.get_cluster_info())
-    test_info['ci_version'] = get_ci_version()
-    test_info.update(addition_table_strings)
-    # Prefer resolved CI tools revision (test_version → main/pr/sha) over local VCS fallback.
-    test_info['test_tools_version'] = get_test_tools_version()
-    ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
-    if ci_launch_url:
+    test_info = get_environment_info()
+    if 'ci_launch_url' in test_info:
         test_info['ci_launch_url'] = (
-            f"<a target='_blank' href='{ci_launch_url}'>arcadia run</a>"
+            f"<a target='_blank' href='{test_info['ci_launch_url']}'>arcadia run</a>"
         )
+    if 'report_url' in test_info:
+        test_info['report_url'] = (
+            f"<a target='_blank' href='{test_info['report_url']}'>allure report</a>"
+        )
+    service_url = YdbCluster._get_service_url()
+    test_info['db_admin'] = f"<a target='_blank' href='{test_info['db_admin']}'>{service_url}</a>"
+    test_info.update(addition_table_strings)
 
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)
     _set_results_plot(test_info, suite, test, refference_set)
     _set_logs_command(test_info, start_time, end_time)
 
-    service_url = YdbCluster._get_service_url()
-    db = test_info['database']
-    test_info.update(
-        {
-            'table_path': YdbCluster.get_tables_path(),
-            'db_admin': (
-                f"<a target='_blank' href='{service_url}/monitoring/tenant?"
-                f"schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query"
-                f"&diagnosticsTab=nodes&name=/{db}'>{service_url}</a>"
-            ),
-            'time': time_interval_str(start_time, end_time),
-        }
-    )
+    test_info['time'] = time_interval_str(start_time, end_time)
     table_strings = '\n'.join([f'<tr><td>{_pretty_str(k)}</td><td>{v}</td></tr>' for k, v in test_info.items()])
     html = f'''<table border='1' cellpadding='4px'><tbody>
         {table_strings}
         </tbody></table>
     '''
 
+    description_body_start = len(html)
     html += _set_node_errors(node_errors)
     html += _produce_verify_report(verify_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
@@ -923,5 +1072,18 @@ def allure_test_description(
     else:
         logging.warning("iterations_table is empty, not adding to HTML")
 
-    allure.dynamic.description_html(html)
+    # Keep the original styled document as an attachment for comparison.
+    description_info = dict(test_info)
+    with allure.step('Артефакты'):
+        for key in ('kikimr_log', 'kernel_log'):
+            command_html = description_info.pop(key)
+            command = command_html.removeprefix('<details><code>').removesuffix('</code></details>')
+            with allure.step(f'{_pretty_str(key)}: {command}'):
+                pass
+    info_list = '<ul>' + ''.join(
+        f'<li><strong>{escape(_pretty_str(k))}:</strong> {v}</li>'
+        for k, v in description_info.items()
+    ) + '</ul>'
+    description = info_list + html[description_body_start:]
+    allure.dynamic.description_html(_mark_cell_colors(description))
     allure.attach(html, "description.html", allure.attachment_type.HTML)

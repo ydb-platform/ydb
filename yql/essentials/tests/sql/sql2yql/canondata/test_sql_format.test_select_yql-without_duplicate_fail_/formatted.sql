@@ -1,0 +1,15 @@
+/* custom error: Error: Member not found: b */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+WITHOUT
+    b,
+    b
+FROM (
+    VALUES
+        (1, 'one')
+) AS input (
+    a,
+    b
+);

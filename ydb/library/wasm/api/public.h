@@ -5,7 +5,7 @@
 #include <library/cpp/yt/misc/hash.h>
 
 using NYT::HashCombine;
-using NYT::TRef;
-using NYT::TSharedRef;
 using NYT::TMutableRange;
 using NYT::TRange;
+using NYT::TRef;
+using NYT::TSharedRef;

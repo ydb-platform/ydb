@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include <cctype>
-
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/common/kv_properties.h"
 #include "opentelemetry/common/macros.h"
 #include "opentelemetry/nostd/shared_ptr.h"
@@ -56,7 +55,7 @@ public:
   {
 
     nostd::shared_ptr<Baggage> baggage(new Baggage(kv_properties_->Size() + 1));
-    const bool valid_kv = IsValidKey(key) && IsValidValue(value);
+    const bool valid_kv = IsValidKey(key) && IsValidValue(value) && IsValidValueMetadata(value);
 
     if (valid_kv)
     {
@@ -126,9 +125,14 @@ public:
 
     while (kv_str_tokenizer.next(kv_valid, key, value) && baggage->kv_properties_->Size() < cnt)
     {
-      if (!kv_valid || (key.size() + value.size() > kMaxKeyValueSize))
+      if (!kv_valid || key.size() + value.size() > kMaxKeyValueSize)
       {
-        // if kv pair is not valid, skip it
+        continue;
+      }
+      // Preserve the tokenizer's edge-whitespace normalization, but reject
+      // unsafe bytes before decoding or separating metadata from the value.
+      if (!IsValidWireString(key) || !IsValidWireString(value))
+      {
         continue;
       }
 
@@ -138,15 +142,16 @@ public:
       auto metadata_separator = value.find(kMetadataSeparator);
       if (metadata_separator != std::string::npos)
       {
-        metadata = value.substr(metadata_separator);
-        value    = value.substr(0, metadata_separator);
+        metadata = common::StringUtil::Substr(value, metadata_separator);
+        value    = common::StringUtil::Substr(value, 0, metadata_separator);
       }
 
-      bool err       = 0;
+      bool err       = false;
       auto key_str   = UrlDecode(common::StringUtil::Trim(key), err);
       auto value_str = UrlDecode(common::StringUtil::Trim(value), err);
 
-      if (err == false && IsValidKey(key_str) && IsValidValue(value_str))
+      if (err == false && IsValidKey(key_str) && IsValidValue(value_str) &&
+          IsValidMetadata(metadata))
       {
         if (!metadata.empty())
         {
@@ -165,6 +170,12 @@ public:
     std::string header_s;
     bool first = true;
     kv_properties_->GetAllEntries([&](nostd::string_view key, nostd::string_view value) {
+      // Constructors can populate baggage without going through FromHeader or Set.
+      auto metadata_separator = value.find(kMetadataSeparator);
+      if (!IsValidValueMetadata(value))
+      {
+        return true;
+      }
       if (!first)
       {
         header_s.push_back(kMembersSeparator);
@@ -177,11 +188,10 @@ public:
       header_s.push_back(kKeyValueSeparator);
 
       // extracting metadata from value. We do not encode metadata
-      auto metadata_separator = value.find(kMetadataSeparator);
       if (metadata_separator != std::string::npos)
       {
-        header_s.append(UrlEncode(value.substr(0, metadata_separator)));
-        auto metadata = value.substr(metadata_separator);
+        header_s.append(UrlEncode(common::StringUtil::Substr(value, 0, metadata_separator)));
+        auto metadata = common::StringUtil::Substr(value, metadata_separator);
         header_s.append(std::string(metadata.data(), metadata.size()));
       }
       else
@@ -194,6 +204,93 @@ public:
   }
 
 private:
+  static bool IsValidValueMetadata(nostd::string_view value) noexcept
+  {
+    auto separator = value.find(kMetadataSeparator);
+    return separator == nostd::string_view::npos ||
+           IsValidMetadata(common::StringUtil::Substr(value, separator));
+  }
+
+  static nostd::string_view TrimOws(nostd::string_view value) noexcept
+  {
+    while (!value.empty() && (value[0] == ' ' || value[0] == '\t'))
+    {
+      value = common::StringUtil::Substr(value, 1);
+    }
+    while (!value.empty() && (value[value.size() - 1] == ' ' || value[value.size() - 1] == '\t'))
+    {
+      value = common::StringUtil::Substr(value, 0, value.size() - 1);
+    }
+    return value;
+  }
+
+  static bool IsValidWireString(nostd::string_view value) noexcept
+  {
+    for (unsigned char ch : value)
+    {
+      if ((ch < 0x20 && ch != '\t') || ch > 0x7e)
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool IsToken(nostd::string_view value) noexcept
+  {
+    if (value.empty())
+    {
+      return false;
+    }
+    for (char ch : value)
+    {
+      if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+            nostd::string_view("!#$%&'*+-.^_`|~").find(ch) != nostd::string_view::npos))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Metadata is stored in wire form. Validate properties without decoding or
+  // re-encoding them, so existing percent escapes retain their meaning.
+  static bool IsValidMetadata(nostd::string_view metadata) noexcept
+  {
+    while (!metadata.empty())
+    {
+      if (metadata[0] != kMetadataSeparator)
+      {
+        return false;
+      }
+      metadata      = common::StringUtil::Substr(metadata, 1);
+      auto end      = metadata.find(kMetadataSeparator);
+      auto property = TrimOws(common::StringUtil::Substr(metadata, 0, end));
+      auto equals   = property.find(kKeyValueSeparator);
+      if (!IsToken(TrimOws(common::StringUtil::Substr(property, 0, equals))))
+      {
+        return false;
+      }
+      if (equals != nostd::string_view::npos)
+      {
+        for (unsigned char ch : TrimOws(common::StringUtil::Substr(property, equals + 1)))
+        {
+          // W3C baggage-octet; SP and HTAB are only allowed around properties.
+          if (ch < 0x21 || ch > 0x7e || ch == '"' || ch == ',' || ch == '\\')
+          {
+            return false;
+          }
+        }
+      }
+      if (end == nostd::string_view::npos)
+      {
+        return true;
+      }
+      metadata = common::StringUtil::Substr(metadata, end);
+    }
+    return true;
+  }
+
   static bool IsPrintableString(nostd::string_view str)
   {
     for (const auto ch : str)
@@ -215,16 +312,11 @@ private:
   // Implementation inspired from : https://golang.org/src/net/url/url.go?s=7851:7884#L264
   static std::string UrlEncode(nostd::string_view str)
   {
-    auto to_hex = [](char c) -> char {
-      static const char *hex = "0123456789ABCDEF";
-      return hex[c & 15];
-    };
-
     std::string ret;
 
     for (auto c : str)
     {
-      if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+      if (common::detail::IsAsciiAlnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
       {
         ret.push_back(c);
       }
@@ -235,8 +327,8 @@ private:
       else
       {
         ret.push_back('%');
-        ret.push_back(to_hex(static_cast<char>(c >> 4)));
-        ret.push_back(to_hex(static_cast<char>(c & 15)));
+        ret.push_back(common::detail::UpperHexDigit(static_cast<unsigned char>(c) >> 4));
+        ret.push_back(common::detail::UpperHexDigit(c));
       }
     }
 
@@ -246,28 +338,21 @@ private:
   // Uri decode key value pairs after extracting from header
   static std::string UrlDecode(nostd::string_view str, bool &err)
   {
-    auto IsHex = [](char c) {
-      return std::isdigit(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-    };
-
-    auto from_hex = [](char c) -> char {
-      // c - '0' produces integer type which could trigger error/warning when casting to char,
-      // but the cast is safe here.
-      return static_cast<char>(std::isdigit(c) ? c - '0' : std::toupper(c) - 'A' + 10);
-    };
-
     std::string ret;
+    ret.reserve(str.size());
 
     for (size_t i = 0; i < str.size(); i++)
     {
       if (str[i] == '%')
       {
-        if (i + 2 >= str.size() || !IsHex(str[i + 1]) || !IsHex(str[i + 2]))
+        if (i + 2 >= str.size() || !common::detail::IsAsciiHexDigit(str[i + 1]) ||
+            !common::detail::IsAsciiHexDigit(str[i + 2]))
         {
-          err = 1;
+          err = true;
           return "";
         }
-        ret.push_back(static_cast<char>(from_hex(str[i + 1]) << 4 | from_hex(str[i + 2])));
+        ret.push_back(static_cast<char>(common::detail::HexDigitValue(str[i + 1]) << 4 |
+                                        common::detail::HexDigitValue(str[i + 2])));
         i += 2;
       }
       else if (str[i] == '+')
@@ -286,7 +371,7 @@ private:
       }
       else
       {
-        err = 1;
+        err = true;
         return "";
       }
     }

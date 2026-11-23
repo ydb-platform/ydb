@@ -11,6 +11,8 @@
 
 #include <library/cpp/monlib/metrics/metric_consumer.h>
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,21 +82,18 @@ bool IsZeroValue(const TSummarySnapshot<T>& value)
 
 template <class T>
 class TCube
+    : private TNonCopyable
 {
 public:
     TCube(int windowSize, i64 nextIteration);
 
-    void Add(TTagIdList tagIds);
-    void AddAll(const TTagIdSet& tagSet);
-    void Remove(TTagIdList tagIds);
-    void RemoveAll(const TTagIdSet& tagSet);
-
-    void Update(TTagIdList tagIds, T value);
-    void StartIteration();
-    void FinishIteration();
-
     struct TProjection
+        : public TRefCounted
     {
+        explicit TProjection(TTagIdList tagIds);
+
+        const TTagIdList TagIds;
+
         T Rollup{};
         std::vector<T> Values;
         std::vector<bool> HasValue;
@@ -106,7 +105,52 @@ public:
         int UsageCount = 0;
     };
 
-    const THashMap<TTagIdList, TCube::TProjection>& GetProjections() const;
+    using TProjectionPtr = TIntrusivePtr<TProjection>;
+
+    //! Opaque handle returned by #AddAll(), used by #UpdateAll() and consumed by #RemoveAll().
+    class TProjectionCookie
+        : private TMoveOnly
+    {
+    private:
+        friend class TCube;
+
+        ui64 OwnerCubeId_ = 0;
+        std::vector<TProjectionPtr> Projections_;
+    };
+
+    void Add(TTagIdList tagIds);
+    TProjectionCookie AddAll(const TTagIdSet& tagSet);
+    void Remove(TTagIdList tagIds);
+    void RemoveAll(TProjectionCookie cookie);
+
+    void Update(TTagIdList tagIds, T value);
+    void UpdateAll(const TProjectionCookie& cookie, const T& value);
+    void StartIteration();
+    void FinishIteration();
+
+    struct TProjectionTagIdsHash
+    {
+        using is_transparent = void;
+
+        size_t operator()(const auto& value) const
+        {
+            return THash<TTagIdList>()(GetTagIds(value));
+        }
+    };
+
+    struct TProjectionTagIdsEqual
+    {
+        using is_transparent = void;
+
+        bool operator()(const auto& lhs, const auto& rhs) const
+        {
+            return GetTagIds(lhs) == GetTagIds(rhs);
+        }
+    };
+
+    using TProjectionHashSet = absl::flat_hash_set<TProjectionPtr, TProjectionTagIdsHash, TProjectionTagIdsEqual>;
+
+    const TProjectionHashSet& GetProjections() const;
     int GetSize() const;
 
     int GetIndex(i64 iteration) const;
@@ -132,12 +176,26 @@ public:
 
 private:
     const int WindowSize_;
+    const ui64 CubeId_;
 
     i64 NextIteration_;
     i64 BaseIteration_;
     int Index_ = 0;
 
-    THashMap<TTagIdList, TProjection> Projections_;
+    TProjectionHashSet Projections_;
+
+    static const TTagIdList& GetTagIds(const TTagIdList& tagIds)
+    {
+        return tagIds;
+    }
+
+    static const TTagIdList& GetTagIds(const TProjectionPtr& projection)
+    {
+        return projection->TagIds;
+    }
+
+    TProjectionPtr DoAdd(TTagIdList tagIds);
+    void DoUpdate(TProjection& projection, const T& value);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

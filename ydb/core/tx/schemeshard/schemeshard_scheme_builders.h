@@ -8,6 +8,11 @@ namespace NKikimrScheme {
 
 namespace NKikimr::NSchemeShard {
 
+bool BuildCoordinationNodeScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    TString& error);
+
 bool BuildScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,

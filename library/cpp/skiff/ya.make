@@ -7,6 +7,11 @@ SRCS(
   zerocopy_output_writer.cpp
 )
 
+PEERDIR(
+  library/cpp/yt/coding
+  library/cpp/yt/exception
+)
+
 GENERATE_ENUM_SERIALIZATION(public.h)
 
 END()

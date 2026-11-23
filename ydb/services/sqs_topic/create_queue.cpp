@@ -143,7 +143,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 writeSpeed->mutable_stabilization_window()->set_seconds(30);
             }
 
-            SetDuration(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD), *topicRequest.mutable_retention_period());
+            SetDuration(TOPIC_RETENTION_PERIOD, *topicRequest.mutable_retention_period());
             topicRequest.set_partition_write_speed_bytes_per_second(1_MB);
             topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
@@ -184,9 +184,9 @@ namespace NKikimr::NSqsTopic::V1 {
             SetDuration(QueueAttributes.DefaultProcessingTimeout.GetOrElse(TDuration::Seconds(30)), *consumerType->mutable_default_processing_timeout());
             SetDuration(QueueAttributes.ReceiveMessageDelay.GetOrElse(TDuration::Seconds(0)), *consumerType->mutable_receive_message_delay());
             SetDuration(QueueAttributes.ReceiveMessageWaitTime.GetOrElse(TDuration::Seconds(0)), *consumerType->mutable_receive_message_wait_time());
-            if (QueueAttributes.MessageRetentionPeriod.Defined()) {
-                SetDuration(*QueueAttributes.MessageRetentionPeriod, *consumer->mutable_availability_period());
-            }
+            SetDuration(
+                QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD),
+                *consumer->mutable_availability_period());
 
             consumerType->mutable_dead_letter_policy()->set_enabled(QueueAttributes.DeadLetterQueue.Defined() || QueueAttributes.MaxReceiveCount.Defined());
             if (QueueAttributes.MaxReceiveCount.Defined()) {

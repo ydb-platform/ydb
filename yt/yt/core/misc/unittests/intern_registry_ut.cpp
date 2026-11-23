@@ -8,7 +8,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 #include <util/system/yield.h>
 
@@ -22,8 +22,8 @@ namespace {
 struct TInternRegistryTestControl
 {
     std::atomic<bool> BlockNextHash = true;
-    NThreading::TEvent HashStarted;
-    NThreading::TEvent ContinueHash;
+    TEvent HashStarted;
+    TEvent ContinueHash;
 };
 
 struct TInternRegistryTestValue
@@ -65,13 +65,13 @@ using TInternedString = TInternedObject<std::string>;
 using TRaceRegistry = TInternRegistry<TInternRegistryTestValue>;
 using TInternedRaceValue = TInternedObject<TInternRegistryTestValue>;
 
-TEST(TInternRegistryTest, TestEmptyRegistry)
+TEST(TInternRegistryTest, EmptyRegistry)
 {
     auto registry = New<TStringRegistry>();
     EXPECT_EQ(0, registry->GetSize());
 }
 
-TEST(TInternRegistryTest, TestEmptyInstance)
+TEST(TInternRegistryTest, EmptyInstance)
 {
     TInternedString s;
     EXPECT_EQ(0u, s->length());

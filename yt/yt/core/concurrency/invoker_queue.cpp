@@ -373,7 +373,7 @@ private:
 
 template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     const TTagSet& counterTagSet,
     NProfiling::IRegistryPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
@@ -383,7 +383,7 @@ TInvokerQueue<TQueueImpl>::TInvokerQueue(
 
 template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     const std::vector<TTagSet>& counterTagSets,
     const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
     NProfiling::IRegistryPtr registry)

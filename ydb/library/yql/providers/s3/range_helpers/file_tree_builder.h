@@ -9,7 +9,6 @@
 namespace NYql::NS3Details {
 
 class TFileTreeBuilder {
-
     struct TTreeKey {
         TString Name;
         bool IsDirectory = false;
@@ -37,4 +36,4 @@ private:
     TPath::TFileTreeMap Roots;
 };
 
-} // namespace NYql::NS3Details
+}   // namespace NYql::NS3Details

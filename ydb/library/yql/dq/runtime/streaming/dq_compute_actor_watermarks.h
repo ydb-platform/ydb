@@ -5,24 +5,23 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYql::NDq::NDqComputeActorWatermarksImpl {
-    struct TInputKey {
-        ui64 InputId;
-        bool IsChannel;
+struct TInputKey {
+    ui64 InputId;
+    bool IsChannel;
 
-        constexpr auto operator<=> (const TInputKey&) const = default;
-    };
-} // namespace NYql::NDq::NDqComputeActorWatermarksImpl
+    constexpr auto operator<=>(const TInputKey&) const = default;
+};
+}   // namespace NYql::NDq::NDqComputeActorWatermarksImpl
 
-template<>
+template <>
 struct THash<NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey> {
-    constexpr size_t operator() (const auto& x) const noexcept {
-        return (x.InputId << 1) ^ x.IsChannel; // better than CombineHashes for this particular purpose
+    constexpr size_t operator()(const auto& x) const noexcept {
+        return (x.InputId << 1) ^ x.IsChannel;   // better than CombineHashes for this particular purpose
     }
 };
 
 namespace NYql::NDq {
-class TDqComputeActorWatermarks
-{
+class TDqComputeActorWatermarks {
 public:
     explicit TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {});
     TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool);
@@ -33,7 +32,7 @@ public:
     void UnregisterAsyncInput(ui64 inputId, bool silent = false);
     void UnregisterInputChannel(ui64 inputId, bool silent = false);
 
-    void TransferInput(TDqComputeActorWatermarks &otherTracker, ui64 inputId, bool isChannel);
+    void TransferInput(TDqComputeActorWatermarks& otherTracker, ui64 inputId, bool isChannel);
 
     // Will return true, if local watermark inside this async input was moved forward.
     bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
@@ -82,4 +81,4 @@ private:
     TNotifyHandler NotifyHandler;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

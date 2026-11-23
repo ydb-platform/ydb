@@ -54,14 +54,16 @@ size_t HtEntDecodeToChar(ECharset cp, const char* str, size_t len, wchar16* buff
  * @param dst      output buffer
  * @param dstlen   output buffer length
  * @param cpsrc    input buffer encoding, ascii-compatible
- * @param cpdst    output buffer encoding, if different from cpsrc
- * @return         src if no entities and encodings are the same (dst remains untouched)
- *                 NULL if dst was not sufficiently long
+ * @param cpdst    output buffer encoding, if different from @p cpsrc
+ * @return         @p src if no entities and encodings are the same (@p dst remains untouched)
+ *                 NULL if @p dst was not sufficiently long
  *                 dst-based output buffer with decoded string
  * @note           entities must be pure, with the terminating ";"
  */
+/**@{*/
 TStringBuf HtTryEntDecodeAsciiCompat(const TStringBuf& src, char* dst, size_t dstlen, ECharset cpsrc = CODES_UTF8);
 TStringBuf HtTryEntDecodeAsciiCompat(const TStringBuf& src, char* dst, size_t dstlen, ECharset cpsrc, ECharset cpdst);
+/**@}*/
 
 //! decodes HTML entities and converts non-ASCII characters to unicode, then converts unicode to UTF8 and percent-encodes
 //! @param text     zero-terminated text of link
@@ -72,8 +74,10 @@ TStringBuf HtTryEntDecodeAsciiCompat(const TStringBuf& src, char* dst, size_t ds
 //!       converted into unicode using code page object if it is passed to the function,
 //!       then unicode characters converted to UTF8 and percent-encoded,
 //!       percent-encoded text in the link copied into output buffer as is
+/**@{*/
 bool HtLinkDecode(const char* text, char* buffer, size_t buflen, size_t& written, ECharset cp = CODES_UNKNOWN);
 bool HtLinkDecode(const TStringBuf& text, char* buffer, size_t buflen, size_t& written, ECharset cp = CODES_UNKNOWN);
+/**@}*/
 
 static inline bool HtLinkDecode(const char* text, char* buffer, size_t buflen, ECharset cp = CODES_UNKNOWN) {
     size_t written;

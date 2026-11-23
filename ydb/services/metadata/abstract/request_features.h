@@ -1,16 +1,15 @@
 #pragma once
 
-#include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/string.h>
 
 #include <optional>
-#include <unordered_set>
-
 #include <set>
+#include <unordered_set>
 
 namespace NYql {
 
-class TFeaturesExtractor : TMoveOnly {
+class TFeaturesExtractor: TMoveOnly {
 public:
     struct TFeature {
         TFeature(TString&& value);
@@ -71,4 +70,4 @@ private:
     static void GetRemainedFeatures(const TFeatures& features, const TString& prefix, std::set<TString>& result);
 };
 
-} // namespace NYql
+}   // namespace NYql

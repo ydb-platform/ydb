@@ -218,7 +218,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
                                 "Name": "Replace",
                                 "Path": "/local/base_join_group_by_lookup_script_script/Temp",
                                 "SinkType": "KqpTableSink",

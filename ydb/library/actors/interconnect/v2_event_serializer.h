@@ -7,16 +7,33 @@
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/actors/util/rc_buf.h>
 
+#include "xdc_limits.h"
+
 #define XXH_INLINE_ALL
 #include <contrib/libs/xxhash/xxhash.h>
 
 #include <deque>
+#include <exception>
 
 namespace NActorsInterconnect {
     class TSystemPayloadV2;
 }
 
 namespace NActors {
+
+    class IEventDestructor;
+
+    struct TExEventFormatError : std::exception {
+        const char* what() const noexcept override {
+            return "interconnect v2 event format error";
+        }
+    };
+
+    struct TExEventTooLarge : std::exception {
+        const char* what() const noexcept override {
+            return "interconnect v2 serialized event is too large";
+        }
+    };
 
     // Allocate a section buffer with the requested headroom/tailroom, aligning the payload pointer
     // (TRcBuf::GetData()) to `alignment` when alignment > 1. Used by the v2 XDC receive path so
@@ -235,18 +252,24 @@ namespace NActors {
         // Generates output for transmission. Returns total bytes added to main and (if provided) XDC spans.
         // Quota is charged for both media so logical channels stay fair regardless of which socket carries
         // the payload. xdcBuffer/xdcOut may be null when XDC is not in use.
+        // The 5-argument form shares one combined byte cap across both streams. The 6-argument form
+        // caps each stream independently (session serialize windows).
         size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             size_t maxBytesToProduce = Max<size_t>());
         size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
             size_t maxBytesToProduce = Max<size_t>());
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
+            size_t maxMainBytes, size_t maxXdcBytes);
 
         // Notification issued when produced bytes have been sent. Pass XDC bytes as the second argument
         // when that socket completed a write; existing single-stream callers can omit it (defaults to 0).
-        void CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
+        // Transfers completed events/buffers to the destructor, or destroys them if omitted.
+        // Returns their total serialized size for output queue accounting.
+        size_t CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
             std::vector<ui64> *eventToWireTime = nullptr,
-            std::vector<std::unique_ptr<IEventBase>> *events = nullptr,
-            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers = nullptr);
+            IEventDestructor* eventDestructor = nullptr);
 
         void ResetCounters() {
             SerializeEventTime = 0;
@@ -286,8 +309,11 @@ namespace NActors {
             bool Enabled = false;
         };
 
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
+            size_t maxMainBytes, size_t maxXdcBytes, size_t maxTotalBytes);
         size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
-            TStreamState& main, TStreamState *xdc);
+            size_t& maxMainBytes, size_t& maxXdcBytes, TStreamState& main, TStreamState *xdc);
 
         ui64 UpdateTimestamp();
         static bool HasExternalSections(const TEventSerializationInfo *info);

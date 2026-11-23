@@ -1,16 +1,15 @@
 #pragma once
 
+#include <ydb/core/protos/external_sources.pb.h>
+
 #include <library/cpp/threading/future/core/future.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
-
-#include <ydb/core/protos/external_sources.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NExternalSource {
 
-struct TExternalSourceException: public yexception {
-};
+struct TExternalSourceException: public yexception {};
 
 namespace NAuth {
 
@@ -22,10 +21,11 @@ struct TAws {
     static constexpr std::string_view Method = "AWS";
 
     TAws(const TString& accessKey, const TString& secretAccessKey, const TString& region)
-        : AccessKey{accessKey}
-        , SecretAccessKey{secretAccessKey}
-        , Region{region}
-    {}
+        : AccessKey{ accessKey }
+        , SecretAccessKey{ secretAccessKey }
+        , Region{ region }
+    {
+    }
 
     TString AccessKey;
     TString SecretAccessKey;
@@ -36,9 +36,10 @@ struct TServiceAccount {
     static constexpr std::string_view Method = "SERVICE_ACCOUNT";
 
     TServiceAccount(const TString& serviceAccountId, const TString& serviceAccountIdSignature)
-        : ServiceAccountId{serviceAccountId}
-        , ServiceAccountIdSignature{serviceAccountIdSignature}
-    {}
+        : ServiceAccountId{ serviceAccountId }
+        , ServiceAccountIdSignature{ serviceAccountIdSignature }
+    {
+    }
 
     TString ServiceAccountId;
     TString ServiceAccountIdSignature;
@@ -48,9 +49,10 @@ struct TIamImpersonate {
     static constexpr std::string_view Method = "IAM";
 
     TIamImpersonate(const TString& serviceAccountId, const TString& resourceId)
-        : ServiceAccountId{serviceAccountId}
-        , ResourceId{resourceId}
-    {}
+        : ServiceAccountId{ serviceAccountId }
+        , ResourceId{ resourceId }
+    {
+    }
 
     TString ServiceAccountId;
     TString ResourceId;
@@ -61,22 +63,22 @@ using TAuth = std::variant<TNone, TServiceAccount, TAws, TIamImpersonate>;
 std::string_view GetMethod(const TAuth& auth);
 
 inline TAuth MakeNone() {
-    return TAuth{std::in_place_type_t<TNone>{}};
+    return TAuth{ std::in_place_type_t<TNone>{} };
 }
 
 inline TAuth MakeServiceAccount(const TString& serviceAccountId, const TString& serviceAccountIdSignature) {
-    return TAuth{std::in_place_type_t<TServiceAccount>{}, serviceAccountId, serviceAccountIdSignature};
+    return TAuth{ std::in_place_type_t<TServiceAccount>{}, serviceAccountId, serviceAccountIdSignature };
 }
 
 inline TAuth MakeAws(const TString& accessKey, const TString& secretAccessKey, const TString& region) {
-    return TAuth{std::in_place_type_t<TAws>{}, accessKey, secretAccessKey, region};
+    return TAuth{ std::in_place_type_t<TAws>{}, accessKey, secretAccessKey, region };
 }
 
 inline TAuth MakeIamImpersonate(const TString& serviceAccountId, const TString& resourceId) {
-    return TAuth{std::in_place_type_t<TIamImpersonate>{}, serviceAccountId, resourceId};
+    return TAuth{ std::in_place_type_t<TIamImpersonate>{}, serviceAccountId, resourceId };
 }
 
-} // namespace NAuth
+}   // namespace NAuth
 
 using TAuth = NAuth::TAuth;
 
@@ -94,7 +96,7 @@ struct TMetadata {
     NKikimrExternalSources::TSchema Schema;
 };
 
-struct IExternalSource : public TThrRefBase {
+struct IExternalSource: public TThrRefBase {
     using TPtr = TIntrusivePtr<IExternalSource>;
 
     /*
@@ -104,8 +106,7 @@ struct IExternalSource : public TThrRefBase {
         After that, it is passed to the GetParameters method.
         Can throw an exception in case of an error.
     */
-    virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
-                         const NKikimrExternalSources::TGeneral& general) const = 0;
+    virtual TString Pack(const NKikimrExternalSources::TSchema& schema, const NKikimrExternalSources::TGeneral& general) const = 0;
 
     /*
         If this source supports external table than this method will return true
@@ -150,4 +151,4 @@ struct IExternalSource : public TThrRefBase {
     virtual bool CanLoadDynamicMetadata() const = 0;
 };
 
-}
+}   // namespace NKikimr::NExternalSource

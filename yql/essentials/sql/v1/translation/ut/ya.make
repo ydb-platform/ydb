@@ -4,6 +4,7 @@ SRCS(
     sql_aggregation_ut.cpp
     sql_ansi_ut.cpp
     sql_core_ut.cpp
+    sql_ddl_table_default_expr_ut.cpp
     sql_ddl_table_ut.cpp
     sql_ddl_ut.cpp
     sql_ddl_view_ut.cpp
@@ -12,6 +13,7 @@ SRCS(
     sql_match_recognize_ut.cpp
     sql_materialize_ut.cpp
     sql_parsing_only_ut.cpp
+    sql_pragma_ut.cpp
     sql_select_ut.cpp
     sql_ut.cpp
     sql_utility_ut.cpp

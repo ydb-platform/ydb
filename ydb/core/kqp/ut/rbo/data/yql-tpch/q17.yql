@@ -1,12 +1,14 @@
+$to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
+$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 SELECT
     Sum(l_extendedprice) / $to_decimal_max_precision("7.0") AS avg_yearly
 FROM
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 ,
-    `/Root/part` as part
+    `part` as part
 WHERE
     p_partkey == l_partkey
     AND p_brand == 'Brand#23'
@@ -15,7 +17,7 @@ WHERE
         SELECT
             $to_decimal("0.2") * Avg(l_quantity)
         FROM
-            `/Root/lineitem` as lineitem
+            `lineitem` as lineitem
         WHERE
             l_partkey == p_partkey
     )

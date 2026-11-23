@@ -1,6 +1,6 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
@@ -31,6 +31,18 @@ TExprBase BuildValueResult(const TDqCnValue& cn, TExprContext& ctx) {
             .Body("list")
             .Build()
         .Done();
+}
+
+bool KqpResultContainsReturning(TExprBase node) {
+    auto filter = [](const TExprNode::TPtr& node) {
+        return !TMaybeNode<TCoLambda>(node).IsValid();
+    };
+
+    auto predicate = [](const TExprNode::TPtr& node) {
+        return TMaybeNode<TKqlReturningList>(node).IsValid();
+    };
+
+    return FindNode(node.Ptr(), filter, predicate) != nullptr;
 }
 
 TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
@@ -97,7 +109,7 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
             omitResultPrecomputes = false;
             break;
         }
-        // returning works by forcing materialization of modified rows via precompute
+        // Old (EnableIndexStreamWrite=false) returning works by forcing materialization of modified rows via precompute
         // so omitting precomputes here breaks returning logic
         if (hasReturning(effect)) {
             omitResultPrecomputes = false;
@@ -110,7 +122,10 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
         TExprBase node(queryResult.Value());
 
         // TODO: Missing support for DqCnValue results in scan queries
-        if (node.Maybe<TDqPhyPrecompute>() && omitResultPrecomputes && !kqpCtx.IsScanQuery()) {
+        if (kqpCtx.Config->GetEnableIndexStreamWrite() && KqpResultContainsReturning(node)) {
+            // This result is used for RETURNING, so it will be processed as effect.
+            // Do nothing here.
+        } else if (node.Maybe<TDqPhyPrecompute>() && omitResultPrecomputes && !kqpCtx.IsScanQuery()) {
             YQL_CLOG(DEBUG, ProviderKqp) << "Building precompute result #" << node.Raw()->UniqueId();
 
             auto connection = node.Cast<TDqPhyPrecompute>().Connection();

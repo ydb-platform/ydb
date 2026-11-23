@@ -26,7 +26,7 @@ private:
 
     [[nodiscard]] bool Initialize();
 
-    virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
+    virtual std::optional<ui64> DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const override;
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
         return op.GetOperation() == EOperation::Equals && op.GetCaseSensitive();
@@ -52,7 +52,7 @@ public:
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
         , Request(request)
     {
-        AFL_VERIFY(Initialize());
+        YDB_LOG_VERIFY(Initialize());
     }
 
     virtual TString GetClassName() const override {

@@ -1,15 +1,14 @@
 #include <ydb/core/base/path.h>
+
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 using namespace NWorkloadManager;
 using namespace NYdb;
-
 
 namespace {
 
@@ -19,11 +18,9 @@ TString GetPostPoolId(const IQueryClassifier::TPostCompileClassifyResult& result
     return std::get<IQueryClassifier::TResolvedPoolId>(result).PoolId;
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryClassifierHasFullScan) {
-
     Y_UNIT_TEST(ShouldTriggerPendingCompilation) {
         TClassifyTestCase tc;
         tc.ClassifierHasFullScan = "/Root/testdb/my_table";
@@ -68,7 +65,8 @@ namespace {
 // doesn't take an empty-table shortcut.
 void SetupOrdersWithIndex(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << userSID << R"(`;
         CREATE TABLE orders (
             Id Uint64 NOT NULL,
             Status Utf8,
@@ -83,18 +81,17 @@ void SetupOrdersWithIndex(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID) 
             (1u, "a"),
             (2u, "b");
     )", insertSettings);
-    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS,
-        insertResult.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS, insertResult.GetIssues().ToOneLineString());
 }
 
 // Creates a column-store (OLAP) table `olap_events(Id, Payload)` with a HAS_FULL_SCAN
 // classifier targeting it, and inserts a couple of rows. The classifier's target pool
 // has CONCURRENT_QUERY_LIMIT=0 so any match rejects with PRECONDITION_FAILED.
-void SetupOlapEventsAndClassifier(
-    TIntrusivePtr<IYdbSetup> ydb, const TString& userSID, const TString& poolId)
+void SetupOlapEventsAndClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& userSID, const TString& poolId)
 {
     ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
+        GRANT ALL ON `/)" << ydb->GetSettings().DomainName_
+                                             << R"(` TO `)" << userSID << R"(`;
         CREATE TABLE olap_events (
             Id Uint64 NOT NULL,
             Payload Utf8,
@@ -115,15 +112,12 @@ void SetupOlapEventsAndClassifier(
     auto insertResult = ydb->ExecuteQuery(R"(
         UPSERT INTO olap_events (Id, Payload) VALUES (1u, "a"), (2u, "b");
     )", insertSettings);
-    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS,
-        insertResult.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), NYdb::EStatus::SUCCESS, insertResult.GetIssues().ToOneLineString());
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(HasFullScanSecondaryIndexOltpDdl) {
-
     // Covering read on the secondary index: reads impl table only (Status is the indexed column),
     // main table is not accessed. A classifier targeting only `/Root/orders` (not the impl path)
     // must NOT fire — the impl full scan happens on a path outside the classifier's regex.
@@ -180,7 +174,6 @@ Y_UNIT_TEST_SUITE(HasFullScanSecondaryIndexOltpDdl) {
 }
 
 Y_UNIT_TEST_SUITE(HasFullScanIgnoresLimitDdl) {
-
     // LIMIT does not bypass full-scan detection. `SELECT * FROM orders LIMIT 1` still has an
     // unbounded ReadRange on /Root/orders — the classifier fires and rejects into the target pool.
     Y_UNIT_TEST(TestLimitDoesNotBypassClassifier) {
@@ -238,7 +231,6 @@ Y_UNIT_TEST_SUITE(HasFullScanIgnoresLimitDdl) {
 }
 
 Y_UNIT_TEST_SUITE(HasFullScanOlapDdl) {
-
     // Column-store (OLAP) tables emit `TKqpPhyOpReadOlapRanges` (TableOps branch) instead of
     // row-store's `ReadRange`/`ReadRangesSource`. This test proves the matcher's OLAP branch
     // is invoked end-to-end by the real planner, complementing the ReadOlapRange matcher UT.
@@ -269,4 +261,4 @@ Y_UNIT_TEST_SUITE(HasFullScanOlapDdl) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

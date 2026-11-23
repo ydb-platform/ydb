@@ -36,6 +36,7 @@
  */
 
 
+	.file   "svml_z0_exp_d_ha.s"
 	.text
 .L_2__routine_start___svml_exp8_ha_z0_0:
 

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
+#include <util/system/yassert.h>
+
 #include <google/protobuf/repeated_field.h>
 #include <util/generic/vector.h>
 

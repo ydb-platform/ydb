@@ -1,0 +1,178 @@
+# Native Rust build; versions and features follow temporalio 1.32.0 Cargo.lock.
+
+RUST_BUILD_SCRIPT(build_script_build)
+
+CRATE_VERSION(0.6.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(../build.rs)
+CRATE_MANIFEST(../Cargo.toml)
+CRATE_MANIFEST_DIR(..)
+
+CRATE_SOURCES(
+    ../src/lib.rs
+    ../src/protos/constants.rs
+    ../src/protos/mod.rs
+    ../src/protos/task_token.rs
+    ../src/protos/utilities.rs
+)
+
+CRATE_INPUTS(
+    ../LICENSE.txt
+    ../protos/api_cloud_upstream/.gitignore
+    ../protos/api_cloud_upstream/CODEOWNERS
+    ../protos/api_cloud_upstream/LICENSE
+    ../protos/api_cloud_upstream/Makefile
+    ../protos/api_cloud_upstream/README.md
+    ../protos/api_cloud_upstream/VERSION
+    ../protos/api_cloud_upstream/buf.gen.yaml
+    ../protos/api_cloud_upstream/buf.lock
+    ../protos/api_cloud_upstream/buf.yaml
+    ../protos/api_cloud_upstream/temporal/api/cloud/account/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/auditlog/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/billing/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/cloudservice/v1/request_response.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/cloudservice/v1/service.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/connectivityrule/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/identity/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/namespace/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/nexus/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/operation/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/region/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/resource/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/sink/v1/message.proto
+    ../protos/api_cloud_upstream/temporal/api/cloud/usage/v1/message.proto
+    ../protos/api_upstream/.gitignore
+    ../protos/api_upstream/LICENSE
+    ../protos/api_upstream/Makefile
+    ../protos/api_upstream/README.md
+    ../protos/api_upstream/api-linter.yaml
+    ../protos/api_upstream/buf.gen.yaml
+    ../protos/api_upstream/buf.lock
+    ../protos/api_upstream/buf.yaml
+    ../protos/api_upstream/cmd/check-path-conflicts/main.go
+    ../protos/api_upstream/cmd/protoc-gen-nexus-rpc-yaml/generator.go
+    ../protos/api_upstream/cmd/protoc-gen-nexus-rpc-yaml/go.mod
+    ../protos/api_upstream/cmd/protoc-gen-nexus-rpc-yaml/go.sum
+    ../protos/api_upstream/cmd/protoc-gen-nexus-rpc-yaml/main.go
+    ../protos/api_upstream/cmd/protoc-gen-system-nexus-wit/generator.go
+    ../protos/api_upstream/cmd/protoc-gen-system-nexus-wit/go.mod
+    ../protos/api_upstream/cmd/protoc-gen-system-nexus-wit/go.sum
+    ../protos/api_upstream/cmd/protoc-gen-system-nexus-wit/main.go
+    ../protos/api_upstream/google/api/annotations.proto
+    ../protos/api_upstream/google/api/http.proto
+    ../protos/api_upstream/google/protobuf/any.proto
+    ../protos/api_upstream/google/protobuf/descriptor.proto
+    ../protos/api_upstream/google/protobuf/duration.proto
+    ../protos/api_upstream/google/protobuf/empty.proto
+    ../protos/api_upstream/google/protobuf/struct.proto
+    ../protos/api_upstream/google/protobuf/timestamp.proto
+    ../protos/api_upstream/google/protobuf/wrappers.proto
+    ../protos/api_upstream/nexus-rpc/temporal-proto-models-nexusrpc.yaml
+    ../protos/api_upstream/nexus/deps/nexus-temporal-types/model.wit
+    ../protos/api_upstream/nexus/temporal-proto-models-nexusrpc.yaml
+    ../protos/api_upstream/nexus/workflow-service.wit
+    ../protos/api_upstream/nexusannotations/v1/options.proto
+    ../protos/api_upstream/openapi/openapiv2.json
+    ../protos/api_upstream/openapi/openapiv3.yaml
+    ../protos/api_upstream/openapi/payload_description.txt
+    ../protos/api_upstream/temporal/api/activity/v1/message.proto
+    ../protos/api_upstream/temporal/api/batch/v1/message.proto
+    ../protos/api_upstream/temporal/api/callback/v1/message.proto
+    ../protos/api_upstream/temporal/api/command/v1/message.proto
+    ../protos/api_upstream/temporal/api/common/v1/message.proto
+    ../protos/api_upstream/temporal/api/compute/v1/config.proto
+    ../protos/api_upstream/temporal/api/compute/v1/provider.proto
+    ../protos/api_upstream/temporal/api/compute/v1/scaler.proto
+    ../protos/api_upstream/temporal/api/deployment/v1/message.proto
+    ../protos/api_upstream/temporal/api/enums/v1/activity.proto
+    ../protos/api_upstream/temporal/api/enums/v1/batch_operation.proto
+    ../protos/api_upstream/temporal/api/enums/v1/command_type.proto
+    ../protos/api_upstream/temporal/api/enums/v1/common.proto
+    ../protos/api_upstream/temporal/api/enums/v1/deployment.proto
+    ../protos/api_upstream/temporal/api/enums/v1/event_type.proto
+    ../protos/api_upstream/temporal/api/enums/v1/failed_cause.proto
+    ../protos/api_upstream/temporal/api/enums/v1/namespace.proto
+    ../protos/api_upstream/temporal/api/enums/v1/nexus.proto
+    ../protos/api_upstream/temporal/api/enums/v1/query.proto
+    ../protos/api_upstream/temporal/api/enums/v1/reset.proto
+    ../protos/api_upstream/temporal/api/enums/v1/schedule.proto
+    ../protos/api_upstream/temporal/api/enums/v1/task_queue.proto
+    ../protos/api_upstream/temporal/api/enums/v1/time_skipping.proto
+    ../protos/api_upstream/temporal/api/enums/v1/update.proto
+    ../protos/api_upstream/temporal/api/enums/v1/workflow.proto
+    ../protos/api_upstream/temporal/api/errordetails/v1/message.proto
+    ../protos/api_upstream/temporal/api/export/v1/message.proto
+    ../protos/api_upstream/temporal/api/failure/v1/message.proto
+    ../protos/api_upstream/temporal/api/filter/v1/message.proto
+    ../protos/api_upstream/temporal/api/history/v1/message.proto
+    ../protos/api_upstream/temporal/api/namespace/v1/message.proto
+    ../protos/api_upstream/temporal/api/nexus/v1/message.proto
+    ../protos/api_upstream/temporal/api/nexusservices/workerservice/v1/request_response.proto
+    ../protos/api_upstream/temporal/api/operatorservice/v1/request_response.proto
+    ../protos/api_upstream/temporal/api/operatorservice/v1/service.proto
+    ../protos/api_upstream/temporal/api/protocol/v1/message.proto
+    ../protos/api_upstream/temporal/api/protometa/v1/annotations.proto
+    ../protos/api_upstream/temporal/api/query/v1/message.proto
+    ../protos/api_upstream/temporal/api/replication/v1/message.proto
+    ../protos/api_upstream/temporal/api/rules/v1/message.proto
+    ../protos/api_upstream/temporal/api/schedule/v1/message.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/enhanced_stack_trace.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/event_group_marker.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/external_storage.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/task_complete_metadata.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/user_metadata.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/worker_config.proto
+    ../protos/api_upstream/temporal/api/sdk/v1/workflow_metadata.proto
+    ../protos/api_upstream/temporal/api/taskqueue/v1/message.proto
+    ../protos/api_upstream/temporal/api/update/v1/message.proto
+    ../protos/api_upstream/temporal/api/version/v1/message.proto
+    ../protos/api_upstream/temporal/api/worker/v1/message.proto
+    ../protos/api_upstream/temporal/api/workflow/v1/message.proto
+    ../protos/api_upstream/temporal/api/workflowservice/v1/request_response.proto
+    ../protos/api_upstream/temporal/api/workflowservice/v1/service.proto
+    ../protos/google/rpc/status.proto
+    ../protos/grpc/health/v1/health.proto
+    ../protos/local/temporal/sdk/core/activity_result/activity_result.proto
+    ../protos/local/temporal/sdk/core/activity_task/activity_task.proto
+    ../protos/local/temporal/sdk/core/child_workflow/child_workflow.proto
+    ../protos/local/temporal/sdk/core/common/common.proto
+    ../protos/local/temporal/sdk/core/core_interface.proto
+    ../protos/local/temporal/sdk/core/external_data/external_data.proto
+    ../protos/local/temporal/sdk/core/nexus/nexus.proto
+    ../protos/local/temporal/sdk/core/workflow_activation/workflow_activation.proto
+    ../protos/local/temporal/sdk/core/workflow_commands/workflow_commands.proto
+    ../protos/local/temporal/sdk/core/workflow_completion/workflow_completion.proto
+    ../protos/protoc-gen-openapiv2/options/annotations.proto
+    ../protos/protoc-gen-openapiv2/options/openapiv2.proto
+    ../protos/testsrv_upstream/Makefile
+    ../protos/testsrv_upstream/api-linter.yaml
+    ../protos/testsrv_upstream/buf.yaml
+    ../protos/testsrv_upstream/temporal/api/testservice/v1/request_response.proto
+    ../protos/testsrv_upstream/temporal/api/testservice/v1/service.proto
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    default
+    grpc-clients
+    serde_serialize
+)
+
+PEERDIR(
+    contrib/crates/pbjson-build-0.9.0
+    contrib/crates/prost-0.14.4
+    contrib/crates/prost-types-0.14.4
+    contrib/crates/tonic-prost-build-0.14.6
+)
+
+LICENSE(MIT)
+VERSION(0.6.0)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/prost-derive-0.14.4
+    contrib/crates/serde_derive-1.0.229
+)
+
+END()

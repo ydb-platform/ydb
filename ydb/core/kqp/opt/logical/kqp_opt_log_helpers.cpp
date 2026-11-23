@@ -597,9 +597,11 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TExprBase read, TExprContext& ct
         return {};
     }
     if (auto readTable = read.Maybe<TKqlReadTableBase>()) {
+        YQL_ENSURE(!TKqpReadTableSettings::Parse(readTable.Cast()).Sampling, "Sampling is not supported for lookups");
         return RewriteReadToPrefixLookup(readTable.Cast(), ctx, kqpCtx);
     } else {
         auto readRanges = read.Maybe<TKqlReadTableRangesBase>();
+        YQL_ENSURE(!TKqpReadTableSettings::Parse(readRanges.Cast()).Sampling, "Sampling is not supported for lookups");
         return RewriteReadToPrefixLookup(readRanges.Cast(), ctx, kqpCtx, maxKeys);
     }
 }

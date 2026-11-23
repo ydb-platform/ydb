@@ -1,28 +1,16 @@
 import asyncio
 import logging
 import socket
-import zlib
 from abc import ABC, abstractmethod
-from collections.abc import Sized
-from http.cookies import BaseCookie, Morsel
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    Generator,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    TypedDict,
-    Union,
-)
+from collections.abc import Awaitable, Callable, Generator, Iterable, Sequence, Sized
+from http.cookies import BaseCookie, Morsel, SimpleCookie
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from multidict import CIMultiDict
 from yarl import URL
 
+from ._cookie_helpers import parse_set_cookie_headers
 from .typedefs import LooseCookies
 
 if TYPE_CHECKING:
@@ -31,8 +19,8 @@ if TYPE_CHECKING:
     from .web_request import BaseRequest, Request
     from .web_response import StreamResponse
 else:
-    BaseRequest = Request = Application = StreamResponse = None
-    HTTPException = None
+    BaseRequest = Request = Application = StreamResponse = Any
+    HTTPException = Any
 
 
 class AbstractRouter(ABC):
@@ -73,21 +61,21 @@ class AbstractMatchInfo(ABC):
     @abstractmethod
     def expect_handler(
         self,
-    ) -> Callable[[Request], Awaitable[Optional[StreamResponse]]]:
+    ) -> Callable[[Request], Awaitable[StreamResponse | None]]:
         """Expect handler for 100-continue processing"""
 
     @property  # pragma: no branch
     @abstractmethod
-    def http_exception(self) -> Optional[HTTPException]:
+    def http_exception(self) -> HTTPException | None:
         """HTTPException instance raised on router's resolving, or None"""
 
     @abstractmethod  # pragma: no branch
-    def get_info(self) -> Dict[str, Any]:
+    def get_info(self) -> dict[str, Any]:
         """Return a dict with additional info useful for introspection"""
 
     @property  # pragma: no branch
     @abstractmethod
-    def apps(self) -> Tuple[Application, ...]:
+    def apps(self) -> tuple[Application, ...]:
         """Stack of nested applications.
 
         Top level application is left-most element.
@@ -121,7 +109,7 @@ class AbstractView(ABC):
         return self._request
 
     @abstractmethod
-    def __await__(self) -> Generator[Any, None, StreamResponse]:
+    def __await__(self) -> Generator[None, None, StreamResponse]:
         """Execute the view handler."""
 
 
@@ -153,7 +141,7 @@ class AbstractResolver(ABC):
     @abstractmethod
     async def resolve(
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
-    ) -> List[ResolveResult]:
+    ) -> list[ResolveResult]:
         """Return IP address for given hostname"""
 
     @abstractmethod
@@ -173,16 +161,31 @@ ClearCookiePredicate = Callable[["Morsel[str]"], bool]
 class AbstractCookieJar(Sized, IterableBase):
     """Abstract Cookie Jar."""
 
-    def __init__(self, *, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+    def __init__(self, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         self._loop = loop or asyncio.get_event_loop()
+
+    @property
+    @abstractmethod
+    def unsafe(self) -> bool:
+        """Return True if cookies can be used with IP addresses."""
 
     @property
     @abstractmethod
     def quote_cookie(self) -> bool:
         """Return True if cookies should be quoted."""
 
+    @property
     @abstractmethod
-    def clear(self, predicate: Optional[ClearCookiePredicate] = None) -> None:
+    def cookies(self) -> MappingProxyType[tuple[str, str], SimpleCookie]:
+        """Return the cookies stored in this jar."""
+
+    @property
+    @abstractmethod
+    def host_only_cookies(self) -> frozenset[tuple[str, str]]:
+        """Return the host-only cookies stored in this jar."""
+
+    @abstractmethod
+    def clear(self, predicate: ClearCookiePredicate | None = None) -> None:
         """Clear all cookies if no predicate is passed."""
 
     @abstractmethod
@@ -192,6 +195,13 @@ class AbstractCookieJar(Sized, IterableBase):
     @abstractmethod
     def update_cookies(self, cookies: LooseCookies, response_url: URL = URL()) -> None:
         """Update cookies."""
+
+    def update_cookies_from_headers(
+        self, headers: Sequence[str], response_url: URL
+    ) -> None:
+        """Update cookies from raw Set-Cookie headers."""
+        if headers and (cookies_to_update := parse_set_cookie_headers(headers)):
+            self.update_cookies(cookies_to_update, response_url)
 
     @abstractmethod
     def filter_cookies(self, request_url: URL) -> "BaseCookie[str]":
@@ -203,10 +213,10 @@ class AbstractStreamWriter(ABC):
 
     buffer_size: int = 0
     output_size: int = 0
-    length: Optional[int] = 0
+    length: int | None = 0
 
     @abstractmethod
-    async def write(self, chunk: Union[bytes, bytearray, memoryview]) -> None:
+    async def write(self, chunk: bytes | bytearray | memoryview) -> None:
         """Write chunk into stream."""
 
     @abstractmethod
@@ -219,7 +229,7 @@ class AbstractStreamWriter(ABC):
 
     @abstractmethod
     def enable_compression(
-        self, encoding: str = "deflate", strategy: int = zlib.Z_DEFAULT_STRATEGY
+        self, encoding: str = "deflate", strategy: int | None = None
     ) -> None:
         """Enable HTTP body compression"""
 
@@ -232,6 +242,13 @@ class AbstractStreamWriter(ABC):
         self, status_line: str, headers: "CIMultiDict[str]"
     ) -> None:
         """Write HTTP headers"""
+
+    def send_headers(self) -> None:
+        """Force sending buffered headers if not already sent.
+
+        Required only if write_headers() buffers headers instead of sending immediately.
+        For backwards compatibility, this method does nothing by default.
+        """
 
 
 class AbstractAccessLogger(ABC):

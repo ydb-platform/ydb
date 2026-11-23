@@ -1,10 +1,12 @@
 #pragma once
+#include <ydb/core/scheme_types/scheme_type_info.h>
+
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/core/scheme_types/scheme_type_info.h>
-#include <util/generic/vector.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NMetadata::NInternal {
 
@@ -24,7 +26,8 @@ public:
     static std::optional<Ydb::Type::PrimitiveTypeId> ConvertYQLToYDB(const NScheme::TTypeId type);
     static std::optional<Ydb::Type::PrimitiveTypeId> ConvertArrowToYDB(const arrow::Type::type type);
 
-    static std::optional<TVector<std::pair<TString, NScheme::TTypeInfo>>> ConvertYDBToYQL(const std::vector<std::pair<TString, Ydb::Type>>& input);
+    static std::optional<TVector<std::pair<TString, NScheme::TTypeInfo>>> ConvertYDBToYQL(
+        const std::vector<std::pair<TString, Ydb::Type>>& input);
 };
 
 class TYDBValue {
@@ -46,4 +49,4 @@ public:
     static Ydb::Value Bool(const bool value);
 };
 
-}
+}   // namespace NKikimr::NMetadata::NInternal

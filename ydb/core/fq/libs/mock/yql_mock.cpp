@@ -1,19 +1,19 @@
 #include "yql_mock.h"
 
-#include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
+
 #include <library/cpp/json/json_writer.h>
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NFq {
 
@@ -26,7 +26,7 @@ struct TMockLocation {
 };
 
 // actor used in tests for databaseId -> endpoint resolution
-class TYqlMockActor : public NActors::TActor<TYqlMockActor> {
+class TYqlMockActor: public NActors::TActor<TYqlMockActor> {
 public:
     using TBase = NActors::TActor<TYqlMockActor>;
 
@@ -40,8 +40,7 @@ public:
     static constexpr char ActorName[] = "YQL_MOCK";
 
 private:
-    STRICT_STFUNC(Handler, {
-        hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+    STRICT_STFUNC(Handler, { hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
     });
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event)
@@ -62,9 +61,8 @@ private:
 
         TStringStream stream;
         NJson::WriteJson(&stream, &json);
-        NHttp::THttpOutgoingResponsePtr response = (ok)
-            ? request->CreateResponseOK(stream.Str(), "application/json; charset=utf-8")
-            : request->CreateResponseNotFound(stream.Str(), "application/json; charset=utf-8");
+        NHttp::THttpOutgoingResponsePtr response = (ok) ? request->CreateResponseOK(stream.Str(), "application/json; charset=utf-8")
+                                                        : request->CreateResponseNotFound(stream.Str(), "application/json; charset=utf-8");
         Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -79,18 +77,14 @@ void InitTest(NActors::TTestActorRuntime* runtime, int httpPort, int grpcPort, c
 
     TActorId mockActorId = runtime->Register(CreateYqlMockActor(grpcPort));
 
-    runtime->Send(new NActors::IEventHandle(
-                      httpProxyId, TActorId(),
-                      new NHttp::TEvHttpProxy::TEvAddListeningPort(httpPort)), 0, true);
+    runtime->Send(new NActors::IEventHandle(httpProxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(httpPort)), 0, true);
 
     runtime->Send(new NActors::IEventHandle(
-                      httpProxyId, TActorId(),
-                      new NHttp::TEvHttpProxy::TEvRegisterHandler("/yql-mock/abc/database", mockActorId)),
-                  0, true);
+                      httpProxyId, TActorId(), new NHttp::TEvHttpProxy::TEvRegisterHandler("/yql-mock/abc/database", mockActorId)), 0, true);
 }
 
 NActors::IActor* CreateYqlMockActor(int grpcPort) {
     return new TYqlMockActor(grpcPort);
 }
 
-} // namespace NFq
+}   // namespace NFq

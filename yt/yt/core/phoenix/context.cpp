@@ -1,4 +1,5 @@
 #include "context.h"
+#include "type_def.h"
 
 #include <yt/yt/core/misc/collection_helpers.h>
 
@@ -39,11 +40,24 @@ TObjectId TSaveContext::FindObjectId(void* basePtr, std::optional<std::type_inde
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TLoadContext::TLoadContext(IInputStream* input)
+    : TStreamLoadContext(input)
+{ }
+
+TLoadContext::TLoadContext(IZeroCopyInput* input)
+    : TStreamLoadContext(input)
+{ }
+
 TLoadContext::~TLoadContext()
 {
     for (const auto& deleter : Deleters_) {
         deleter();
     }
+}
+
+void TLoadContext::SetSchema(const TUniverseSchemaPtr& schema)
+{
+    LoadSchedule_ = NDetail::ComputeUniverseLoadSchedule(schema);
 }
 
 void TLoadContext::RegisterObject(TObjectId id, void* basePtr)

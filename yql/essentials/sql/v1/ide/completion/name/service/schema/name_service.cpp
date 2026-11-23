@@ -131,6 +131,8 @@ private:
                 return TFolderEntry::Folder;
             case EObjectKind::Table:
                 return TFolderEntry::Table;
+            case EObjectKind::View:
+                return TFolderEntry::View;
             case EObjectKind::Unknown:
                 ythrow yexception()
                     << "Unknown is a type class and "
@@ -157,6 +159,10 @@ private:
             name = std::move(local);
         } else if (entry.Type == TFolderEntry::Table) {
             TTableName local;
+            local.Identifier = std::move(entry.Name);
+            name = std::move(local);
+        } else if (entry.Type == TFolderEntry::View) {
+            TViewName local;
             local.Identifier = std::move(entry.Name);
             name = std::move(local);
         } else {

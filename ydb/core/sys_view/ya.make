@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scan.h
@@ -7,7 +7,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/kqp/runtime
+    ydb/core/kqp/common/events
+    ydb/core/kqp/runtime/common
     ydb/core/sys_view/auth
     ydb/core/sys_view/common
     ydb/core/sys_view/compile_cache
@@ -28,8 +29,6 @@ PEERDIR(
     ydb/core/wrappers
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
@@ -42,6 +41,7 @@ RECURSE(
     resource_pool_classifiers
     resource_pools
     service
+    show_create
     storage
     streaming_queries
     tablets

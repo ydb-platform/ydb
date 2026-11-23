@@ -1,11 +1,12 @@
 #include "s3_recipe_ut_helpers.h"
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <fmt/format.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 
@@ -30,8 +31,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         auto queryClient = kikimr->GetQueryClient();
 
         auto logSql = [](const TString& sql, bool expectSuccess) {
-            Cerr << "Execute sql in test (expect " << (expectSuccess ? "success" : "fail") << "):\n"
-                 << sql << Endl;
+            Cerr << "Execute sql in test (expect " << (expectSuccess ? "success" : "fail") << "):\n" << sql << Endl;
         };
 
         auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
@@ -52,15 +52,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                     LOCATION="obj",
                     FORMAT="json_each_row"
                 );
-                )sql",
-                "location"_a = GetBucketLocation("CreateExternalDataSourceBucket"),
-                "name_suffix"_a = nameSuffix,
-                "if_not_exists"_a = ifNotExistsStatement
-            );
+                )sql", "location"_a = GetBucketLocation("CreateExternalDataSourceBucket"), "name_suffix"_a = nameSuffix,
+                "if_not_exists"_a = ifNotExistsStatement);
             logSql(sql, expectSuccess);
-            auto result = queryClient.ExecuteQuery(
-                sql,
-                TTxControl::NoTx()).GetValueSync();
+            auto result = queryClient.ExecuteQuery(sql, TTxControl::NoTx()).GetValueSync();
 
             if (expectSuccess) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -73,13 +68,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
             // Check that we can use created external table
             const TString sql = fmt::format(R"sql(
                 SELECT * FROM test_table_{name_suffix};
-                )sql",
-                "name_suffix"_a = nameSuffix
-            );
+                )sql", "name_suffix"_a = nameSuffix);
             logSql(sql, expectSuccess);
-            auto result = queryClient.ExecuteQuery(
-                sql,
-                TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = queryClient.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).GetValueSync();
 
             if (expectSuccess) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -96,15 +87,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
             const TString sql = fmt::format(R"sql(
                 DROP EXTERNAL TABLE {if_exists} test_table_{name_suffix};
                 DROP EXTERNAL DATA SOURCE {if_exists} test_data_source_{name_suffix};
-                )sql",
-                "name_suffix"_a = nameSuffix,
-                "if_exists"_a = ifExistsStatement,
-                "name_suffix"_a = nameSuffix
-            );
+                )sql", "name_suffix"_a = nameSuffix, "if_exists"_a = ifExistsStatement, "name_suffix"_a = nameSuffix);
             logSql(sql, expectSuccess);
-            auto result = queryClient.ExecuteQuery(
-                sql,
-                TTxControl::NoTx()).GetValueSync();
+            auto result = queryClient.ExecuteQuery(sql, TTxControl::NoTx()).GetValueSync();
 
             if (expectSuccess) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -118,14 +103,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         checkTableExists(true, 0);
 
         // create already existing table
-        checkCreate(false, EEx::Empty, 0); // already
+        checkCreate(false, EEx::Empty, 0);   // already
         checkCreate(true, EEx::IfNotExists, 0);
         checkTableExists(true, 0);
 
         // usual drop
         checkDrop(true, EEx::Empty, 0);
         checkTableExists(false, 0);
-        checkDrop(false, EEx::Empty, 0); // no such table
+        checkDrop(false, EEx::Empty, 0);   // no such table
 
         // drop if exists
         checkDrop(true, EEx::IfExists, 0);
@@ -135,12 +120,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         checkDrop(false, EEx::Empty, 0);
 
         // create with if not exists
-        checkCreate(true, EEx::IfNotExists, 1); // real creation
+        checkCreate(true, EEx::IfNotExists, 1);   // real creation
         checkTableExists(true, 1);
         checkCreate(true, EEx::IfNotExists, 1);
 
         // drop if exists
-        checkDrop(true, EEx::IfExists, 1); // real drop
+        checkDrop(true, EEx::IfExists, 1);   // real drop
         checkTableExists(false, 1);
         checkDrop(true, EEx::IfExists, 1);
     }
@@ -153,17 +138,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         {
             const TString sql = TStringBuilder() << R"(
                 CREATE SECRET mysasignature WITH (value = "mysasignaturevalue");
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName
+                                                 << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_ID="mysa",
                     SERVICE_ACCOUNT_SECRET_PATH="mysasignature"
                 );
-                CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                CREATE EXTERNAL TABLE `)" << externalTableName
+                                                 << R"(` (
                     Key Uint64
                 ) WITH (
-                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    DATA_SOURCE=")" << externalDataSourceName
+                                                 << R"(",
                     LOCATION="/",
                     FORMAT="json_each_row"
                 );)";
@@ -239,4 +227,4 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

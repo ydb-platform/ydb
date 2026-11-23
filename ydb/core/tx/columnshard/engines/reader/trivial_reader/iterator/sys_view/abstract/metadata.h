@@ -25,10 +25,6 @@ public:
         return PathId;
     }
 
-    virtual bool OrderByLimitAllowed() const override {
-        return false;
-    }
-
     virtual bool NeedDuplicateFiltering() const override {
         return false;
     }
@@ -40,6 +36,8 @@ public:
     virtual TString GetOverridenScanType(const TString&) const override {
         return "SIMPLE";
     }
+
+    virtual bool ArePortionsLoaded(const IColumnEngine& engine, const TPKRangesFilter& ranges) const override;
 
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {

@@ -1,5 +1,3 @@
-PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
-
 /* custom error: Cannot infer common type for Int32 and Decimal(35,35): common precision is 45, that is greater than 35 */
 /* custom error: Cannot infer common type for Decimal(35,35) and Int32: common precision is 45, that is greater than 35 */
 $integral = Int32("1");

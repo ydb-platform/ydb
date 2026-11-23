@@ -1401,6 +1401,17 @@ will produce next output:
         status: 202
         url: https://httpstat.us/202
 
+Common headers such as ``Content-Type``, ``Date`` and ``Server`` are stripped
+from the recording to keep the file terse. If you need to keep one of them, for
+example a ``Date`` value that is part of a signed response you later verify,
+pass its name in ``keep_headers`` (matched case-insensitively):
+
+.. code-block:: python
+
+    @_recorder.record(file_path="out.yaml", keep_headers=["Date"])
+    def test_recorder():
+        ...
+
 If you are in the REPL, you can also activate the recorder for all following responses:
 
 .. code-block:: python

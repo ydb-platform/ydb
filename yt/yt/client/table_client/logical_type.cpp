@@ -155,7 +155,7 @@ TLogicalTypePtr InferAggregateStateElementType(EAggregateFunction function, TLog
             return StructLogicalType({
                 TStructField{.Name = "sum", .StableName = "sum", .Type = GetAggregateStateSumType(argumentSimpleType)},
                 TStructField{.Name = "count", .StableName = "count", .Type = SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            }, {});
+            }, /*removedFieldStableNames*/ {});
     }
     YT_ABORT();
 }
@@ -1202,9 +1202,8 @@ TLogicalTypePtr DetagLogicalType(const TLogicalTypePtr& type)
         }
         case ELogicalMetatype::Tagged:
             return DetagLogicalType(type->AsTaggedTypeRef().GetElement());
-        case ELogicalMetatype::AggregateState: {
+        case ELogicalMetatype::AggregateState:
             return DetagLogicalType(type->AsAggregateStateTypeRef().GetElement());
-        }
     }
     YT_ABORT();
 }
@@ -2321,18 +2320,7 @@ bool IsComparable(const TLogicalTypePtr& type)
 
 bool IsTzType(const TLogicalTypePtr& logicalType)
 {
-    auto simpleType = CastToV1Type(logicalType).first;
-    switch (simpleType) {
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-            return true;
-        default:
-            return false;
-    }
+    return IsTzType(CastToV1Type(logicalType).first);
 }
 
 bool HasAggregateStateType(const TLogicalTypePtr& logicalType)

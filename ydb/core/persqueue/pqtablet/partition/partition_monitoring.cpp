@@ -63,8 +63,9 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("Total message count", (GetEndOffset() - GetStartOffset()));
                         PROPERTY("StartOffset", GetStartOffset());
                         PROPERTY("EndOffset", GetEndOffset());
+                        PROPERTY("MirroredOffset", BlobEncoder.MirroredOffset);
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
-                        PROPERTY("HeadOffset", BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
+                        PROPERTY("HeadOffset", TStringBuilder() << BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
                     }
 
                     PROPERTIES("Transactions") {
@@ -142,7 +143,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         const TPartitionBlobEncoder& encoder = this->*encoderPtr;
                         PROPERTIES(TString::Join(encoderName, " DataKeysHead size")) {
                             for (ui32 i = 0; i < encoder.DataKeysHead.size(); ++i) {
-                                PROPERTY(TStringBuilder() << i, encoder.DataKeysHead[i].KeysCount() << " sum: " << encoder.DataKeysHead[i].Sum()
+                                PROPERTY(TStringBuilder() << i, TStringBuilder() << encoder.DataKeysHead[i].KeysCount() << " sum: " << encoder.DataKeysHead[i].Sum()
                                     << " border: " << encoder.DataKeysHead[i].Border() << " recs: " << encoder.DataKeysHead[i].RecsCount()
                                     << " intCount: " << encoder.DataKeysHead[i].InternalPartsCount());
                             }

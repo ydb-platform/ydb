@@ -227,7 +227,7 @@ void *PyArray_API[] = {
         NULL,
         NULL,
         NULL,
-        NULL,
+        (void *) NpyIter_GetTransferFlags,
         (void *) NpyIter_New,
         (void *) NpyIter_MultiNew,
         (void *) NpyIter_AdvancedNew,

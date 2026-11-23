@@ -559,6 +559,7 @@ void TMultiTxIdManager::DeleteMultiTxId(NIceDb::TNiceDb& db, TMultiTxId* entry) 
         auto tid = pr.second->LocalTid;
         if (db.GetDatabase().HasOpenTx(tid, multiTxId)) {
             db.GetDatabase().RemoveTx(tid, multiTxId);
+            Self.AbortHnswIndexChanges(tid, multiTxId, db.GetDatabase());
         }
     }
 }

@@ -20,12 +20,8 @@ struct TMessage {
 
 class TMessageInputSpec: public TInputSpecBase {
 public:
-    /**
-     * Build input spec and associate the given message descriptor.
-     */
-    explicit TMessageInputSpec() =  default;
+    TMessageInputSpec() = default;
 
-public:
     const TVector<NYT::TNode>& GetSchemas() const override;
     bool ProvidesBlocks() const override { return false; }
 };
@@ -44,7 +40,6 @@ public:
 public:
     const NYT::TNode& GetSchema() const override;
 
-    const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetTableColumns() const;
     const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetStructColumns() const;
     size_t GetTargetTableIndex() const;
 
@@ -71,27 +66,25 @@ struct TInputSpecTraits<NKikimr::NReplication::NTransfer::TMessageInputSpec> {
 
     static const constexpr bool IsPartial = false;
 
-    static const constexpr bool SupportPullStreamMode = true;
+    static const constexpr bool SupportPullStreamMode = false;
     static const constexpr bool SupportPullListMode = true;
-    static const constexpr bool SupportPushStreamMode = true;
+    static const constexpr bool SupportPushStreamMode = false;
 
     using TInput = NKikimr::NReplication::NTransfer::TMessage;
     using TInputSpecType = NKikimr::NReplication::NTransfer::TMessageInputSpec;
-    using TConsumerType = THolder<IConsumer<TInput*>>;
 
-    static void PreparePullStreamWorker(const TInputSpecType&, IPullStreamWorker*, THolder<IStream<TInput*>>);
     static void PreparePullListWorker(const TInputSpecType&, IPullListWorker*, THolder<IStream<TInput*>>);
-    static TConsumerType MakeConsumer(const TInputSpecType&, TWorkerHolder<IPushStreamWorker>);
 };
 
 template <>
 struct TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec> {
     static const constexpr bool IsPartial = false;
 
+    static const constexpr bool SupportPullStreamMode = false;
     static const constexpr bool SupportPullListMode = true;
+    static const constexpr bool SupportPushStreamMode = false;
 
     using TOutputItemType = NKikimr::NReplication::NTransfer::TOutputMessage*;
-    using TPullStreamReturnType = THolder<IStream<TOutputItemType>>;
     using TPullListReturnType = THolder<IStream<TOutputItemType>>;
 
     static TPullListReturnType ConvertPullListWorkerToOutputType(

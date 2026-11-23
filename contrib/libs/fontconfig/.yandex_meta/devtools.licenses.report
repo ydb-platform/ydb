@@ -1,0 +1,238 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     HPND-sell-variant    2274b121cd1e6251a177be3023c7ff0a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        config-fixups.h [5:21]
+        fc-lang/fclang.h [6:22]
+        fontconfig/fcfreetype.h [6:22]
+        fontconfig/fcprivate.h [6:22]
+        fontconfig/fontconfig.h [6:22]
+        src/fcarch.h [5:21]
+        src/fcatomic.c [6:22]
+        src/fccache.c [5:21]
+        src/fccfg.c [6:22]
+        src/fccharset.c [6:22]
+        src/fccompat.c [9:25]
+        src/fcdbg.c [6:22]
+        src/fcdefault.c [6:22]
+        src/fcdir.c [6:22]
+        src/fcformat.c [6:22]
+        src/fcfreetype.c [6:22]
+        src/fcfs.c [6:22]
+        src/fchash.c [4:20]
+        src/fcinit.c [6:22]
+        src/fcint.h [6:22]
+        src/fclang.c [6:22]
+        src/fclist.c [6:22]
+        src/fcmatch.c [6:22]
+        src/fcname.c [6:22]
+        src/fcobjs.c [6:22]
+        src/fcobjs.h [6:22]
+        src/fcpat.c [4:20]
+        src/fcptrlist.c [6:22]
+        src/fcrange.c [6:22]
+        src/fcstat.c [5:21]
+        src/fcstr.c [6:22]
+        src/fcweight.c [4:20]
+        src/fcwindows.h [6:22]
+        src/fcxml.c [6:22]
+
+KEEP     Unicode              281e1b0e093f407860b14188b2b882b3
+BELONGS ya.make
+    License text:
+         *   https://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        fc-case/fccase.h [4:4]
+
+KEEP     HPND-sell-variant    31d39fcce3e89204fb283dd2f410077c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 95.12
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        src/fcmatrix.c [6:22]
+
+KEEP     Public-Domain        3845d6ef049b415f8f54f4d7e362f22e
+BELONGS ya.make
+    License text:
+         * The algorithm is due to Ron Rivest.  This code was
+         * written by Colin Plumb in 1993, no copyright is claimed.
+         * This code is in the public domain; do with it what you wish.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        COPYING [105:107]
+
+KEEP     HPND-sell-variant    5ae5969a5fa76de7e98ad3ab5d4b8526
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        src/fcdeprecate.h [4:20]
+        src/fcftint.h [4:20]
+        src/fcserialize.c [4:20]
+
+KEEP     MIT                  615b5e4185e4b1293ba8bcc280b30b74
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 93, src/fcfoundry.h at line 17
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [80:96]
+        src/fcfoundry.h [4:20]
+
+KEEP     Unicode-3.0          7c110fceef022f88471dadb75d35e914
+BELONGS ya.make
+    # fccase.h has data generated from https://www.unicode.org/Public/UNIDATA/CaseFolding.txt
+    # According to https://www.unicode.org/copyright.html:
+    #   "Unicode Data Files" or "Data Files" include all computer data files under the following directories:
+    #     - https://www.unicode.org/Public/
+    #     ...
+    #
+    #   All Unicode Data Files and Unicode Software are subject to the terms and conditions of the free and open-source [Unicode License v3](https://www.unicode.org/license.txt),
+    #   unless otherwise indicated by specific restriction, permission, or license identified at the point of release or in such software, data file, or other documentation.
+    #
+    # https://www.unicode.org/license.txt corresponds to Unicode-3.0, see https://scancode-licensedb.aboutcode.org/unicode-v3.html
+    License text:
+         * All the data in array is a part of them and licensed under a terms of use:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        fc-case/fccase.h [3:3]
+
+KEEP     Public-Domain        886ba0c56c4a27e6be6ad14d88e1fa2f
+BELONGS ya.make
+    License text:
+         * PS: This "glue" code is explicitely put in the public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        COPYING [199:199]
+        src/ftglue.h [41:41]
+
+KEEP     Public-Domain        901c817cd4392f786f5aae2758d6d8be
+BELONGS ya.make
+    License text:
+         * The algorithm is due to Ron Rivest.	This code was
+         * written by Colin Plumb in 1993, no copyright is claimed.
+         * This code is in the public domain; do with it what you wish.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/fcmd5.h [3:5]
+
+KEEP     MIT-Modern-Variant   9f9cae778b69fdc859bc4e69e000361d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-Modern-Variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing/MIT, https://spdx.org/licenses/MIT-Modern-Variant
+    Files with this license:
+        COPYING [49:65]
+        COPYING [131:147]
+        src/fcatomic.h [8:24]
+        src/fcmutex.h [8:24]
+
+KEEP     Unicode              b86a7a1292de17e6c926cf22e42859b6
+BELONGS ya.make
+    License text:
+        Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
+        For terms of use, see http://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        COPYING [35:36]
+
+KEEP     Public-Domain        c103ca6515d210b3e717a4bd1f6b44fb
+BELONGS ya.make
+    License text:
+         * This code is explicitely put in the public domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        COPYING [164:164]
+        src/ftglue.c [6:6]
+        src/ftglue.h [6:6]
+
+KEEP     HPND-sell-variant    d9bb388dc271bd85ea378354d516aebd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        COPYING [12:28]

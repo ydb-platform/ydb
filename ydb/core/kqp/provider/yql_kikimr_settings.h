@@ -10,6 +10,7 @@
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
+#include <functional>
 #include <memory>
 
 namespace NYql {
@@ -22,6 +23,7 @@ enum EOptionalFlag {
 
 struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
+    std::function<TString(TStringBuf)> NormalizePath;
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;
@@ -50,11 +52,14 @@ public:
 
     NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
 
+    NCommon::TConfSetting<bool, Static> KqpDisablePessimisticLocks;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
     NCommon::TConfSetting<ui32, Static> _ResultRowsLimit;
     NCommon::TConfSetting<bool, Static> EnableSystemColumns;
+    NCommon::TConfSetting<bool, Static> EnableUnsafeTruncateTable;
     NCommon::TConfSetting<bool, Static> UseLlvm;
     NCommon::TConfSetting<bool, Static> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, Static> HashJoinMode;
@@ -65,6 +70,10 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoinForCross;
     NCommon::TConfSetting<bool, Static> EnableNewRBOPhysicalStagePeephole;
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
+    NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
+    NCommon::TConfSetting<bool, Static> UseScalarHashJoin;
+    NCommon::TConfSetting<bool, Static> UseScalarHashJoinForMap;
+    NCommon::TConfSetting<bool, Static> EnableLookupJoinPointPrefixes;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
@@ -73,6 +82,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
     NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
+    NCommon::TConfSetting<ui32, Static> DqHashAggregationDescriptorVersion;
     NCommon::TConfSetting<bool, Static> DqHashCombineExportTypeInfo;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
@@ -86,6 +96,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapSortedRead;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
     NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
     NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
@@ -125,9 +136,12 @@ public:
     NCommon::TConfSetting<ui64, Static> HybridSearchFactor;
     NCommon::TConfSetting<double, Static> HybridSearchK;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+    NCommon::TConfSetting<bool, Static> UseInMemoryStreamingAggregation;
+    NCommon::TConfSetting<TString, Static> StreamingAggregationStateTablePath;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
     NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
+    NCommon::TConfSetting<bool, Static> EnableCsWriteAffinity;
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
@@ -191,7 +205,7 @@ public:
     bool HasOptEnableInplaceUpdate() const;
 };
 
-struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher, public NKikimrConfig::TTableServiceConfig {
+struct TKikimrConfiguration : public NCommon::TDispatcherAndSettings<TKikimrSettings>, public NKikimrConfig::TTableServiceConfig {
     using TPtr = TIntrusivePtr<TKikimrConfiguration>;
 
     TKikimrConfiguration();
@@ -212,7 +226,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         this->SetValidClusters(clusters);
 
         if (defaultCluster) {
-            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
+            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::GetDefaultErrorCallback());
         }
 
         // Init settings from config
@@ -229,7 +243,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     {
         this->SetValidClusters(TVector<TString>{cluster});
 
-        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
+        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::GetDefaultErrorCallback());
         this->Dispatch(defaultSettings);
         this->Dispatch(NCommon::ALL_CLUSTERS, settings);
 
@@ -257,13 +271,20 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
+    ui32 GetDqHashAggregationDescriptorVersion() const;
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
     bool GetUseBlockHashJoinForCross() const;
+    bool GetEnableBlockHashJoinEqualNulls() const;
+    bool GetUseScalarHashJoin() const;
+    bool GetUseScalarHashJoinForMap() const;
+    bool GetEnableLookupJoinPointPrefixes() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
+    bool GetWindowFunctionsV2() const;
     bool IsAutoIndexSelectionDisabled() const;
     bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;
+    bool GetEnableCsWriteAffinity() const;
 };
 
 } // namespace NYql

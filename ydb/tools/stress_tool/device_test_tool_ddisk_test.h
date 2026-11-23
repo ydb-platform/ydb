@@ -78,10 +78,14 @@ struct TDDiskDeviceInfo {
 
 inline NDDisk::TDDiskConfig MakeDDiskConfig(
         bool enableChecksums,
-        bool forcePDiskFallback) {
+        bool forcePDiskFallback,
+        ui64 checksumsCacheBytes,
+        bool devNullMode) {
     NDDisk::TDDiskConfig config;
     config.EnableChecksums = enableChecksums;
     config.ForcePDiskFallback = forcePDiskFallback;
+    config.IntegrityChecksumCacheBytes = checksumsCacheBytes;
+    config.DevNullMode = devNullMode;
     return config;
 }
 
@@ -328,8 +332,10 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             const NDDisk::TDDiskConfig ddiskConfig =
                 MakeDDiskConfig(!TBase::Cfg.DisableDDiskChecksums,
-                    TBase::Cfg.ForcePDiskFallback);
+                    TBase::Cfg.ForcePDiskFallback, TBase::Cfg.DDiskChecksumsCacheBytes,
+                    TBase::Cfg.DDiskDevNullMode);
             TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
+            TBase::Printer->AddGlobalParam("DDiskDevNull", ddiskConfig.DevNullMode ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, DDiskSlotId);
@@ -346,7 +352,9 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
                     "ddisk_pool");
                 NDDisk::TPersistentBufferFormat pbFormat{
                     TBase::Cfg.PersistentBufferChunks,
-                    TBase::Cfg.PersistentBufferChunks,
+                    // Direct DDisk load does not use PB. Eager allocation can keep
+                    // zero-formatting PB chunks during the measured write workload.
+                    0,
                     128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
                 TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
                     NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),

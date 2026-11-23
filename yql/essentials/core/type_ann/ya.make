@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -12,11 +12,15 @@ SRCS(
     type_ann_join.cpp
     type_ann_list.cpp
     type_ann_pg.cpp
+    type_ann_partial.cpp
     type_ann_sql.cpp
     type_ann_types.cpp
     type_ann_wide.cpp
     type_ann_yql.cpp
+    type_ann_yql_aggregation.cpp
+    type_ann_yql_flatten.cpp
     type_ann_match_recognize.cpp
+    type_ann_impl.cpp
 )
 
 PEERDIR(
@@ -40,7 +44,4 @@ PEERDIR(
     library/cpp/yson/node
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
-

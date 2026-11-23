@@ -2,7 +2,7 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 
 #include <ydb/core/util/format.h>
 
@@ -185,7 +185,9 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             DIV() {
                 out << "PDiskRestartInFlight# [";
                 for (const auto& item : PDiskRestartInFlight) {
-                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second.RequiresAnotherRestart
+                        << " phase: " << (item.second.Phase == TPDiskRestart::EPhase::WaitingForDDisks ? "waiting for DDisks" : "restart sent")
+                        << " waitingFor: " << FormatList(item.second.WaitingFor) << ", ";
                 }
                 out << "]";
             }
@@ -254,6 +256,9 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                             out << "proxy: " << syncer.BridgeProxyGroupId << ':' << syncer.BridgeProxyGroupGeneration << "<br/>";
                             out << "from: " << syncer.SourceGroupId << "<br/>";
                             out << "to: " << syncer.TargetGroupId;
+                            if (syncer.Reconcile) {
+                                out << "<br/>" << (syncer.Thorough ? "thorough reconcile" : "reconcile");
+                            }
                         }
                         TABLED() { out << syncer.Finished; }
                         TABLED() { out << syncer.ErrorReason; }

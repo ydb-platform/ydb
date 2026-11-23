@@ -17,6 +17,7 @@ private:
 public:
     const NMonitoring::TDynamicCounters::TCounterPtr ValueHardLimit;
     const NMonitoring::TDynamicCounters::TCounterPtr ValueSoftLimit;
+    const NMonitoring::TDynamicCounters::TCounterPtr ValueUnrestrictedSoftLimit;
 
     TStageCounters(const TCommonCountersOwner& owner, const TString& name)
         : TBase(owner, "stage", name)
@@ -28,7 +29,8 @@ public:
         , WaitingChunks(TBase::GetValue("Waiting/Count"))
         , AllocationFailCount(TBase::GetValue("AllocationFails/Count"))
         , ValueHardLimit(TBase::GetValue("Limit/Hard/Bytes"))
-        , ValueSoftLimit(TBase::GetValue("Limit/Soft/Bytes")) {
+        , ValueSoftLimit(TBase::GetValue("Limit/Soft/Bytes"))
+        , ValueUnrestrictedSoftLimit(TBase::GetValue("Limit/UnrestrictedSoft/Bytes")) {
     }
 
     void OnCannotAllocate() {
@@ -65,10 +67,14 @@ private:
 public:
     NMonitoring::TDynamicCounters::TCounterPtr GroupsCount;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessesCount;
+    NMonitoring::TDynamicCounters::TCounterPtr UnrestrictedAdmittedGroupsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr AdmittedBytes;
     TCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name)
         : TBase(NColumnShard::TCommonCountersOwner("grouped_memory_limiter", counters), "limiter_name", name)
         , GroupsCount(TBase::GetValue("Groups/Count"))
-        , ProcessesCount(TBase::GetValue("Processes/Count")) {
+        , ProcessesCount(TBase::GetValue("Processes/Count"))
+        , UnrestrictedAdmittedGroupsCount(TBase::GetValue("Unrestricted/AdmittedGroups"))
+        , AdmittedBytes(TBase::GetValue("Unrestricted/AdmittedBytes")) {
     }
 
     std::shared_ptr<TStageCounters> BuildStageCounters(const TString& stageName) const {

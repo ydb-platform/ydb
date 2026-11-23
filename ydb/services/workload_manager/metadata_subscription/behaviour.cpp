@@ -3,7 +3,6 @@
 
 #include <ydb/services/metadata/abstract/initialization.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 TResourcePoolBehaviour::TFactory::TRegistrator<TResourcePoolBehaviour> TResourcePoolBehaviour::Registrator(TResourcePoolConfig::GetTypeId());
@@ -20,9 +19,8 @@ TString TResourcePoolBehaviour::GetInternalStorageTablePath() const {
     return TResourcePoolConfig::GetTypeId();
 }
 
-
 TString TResourcePoolBehaviour::GetTypeId() const {
     return TResourcePoolConfig::GetTypeId();
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

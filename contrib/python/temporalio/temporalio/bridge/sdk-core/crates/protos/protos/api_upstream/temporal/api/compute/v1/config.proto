@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package temporal.api.compute.v1;
+
+option go_package = "go.temporal.io/api/compute/v1;compute";
+option java_package = "io.temporal.api.compute.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ConfigProto";
+option ruby_package = "Temporalio::Api::Compute::V1";
+option csharp_namespace = "Temporalio.Api.Compute.V1";
+
+import "temporal/api/compute/v1/provider.proto";
+import "temporal/api/compute/v1/scaler.proto";
+import "temporal/api/enums/v1/task_queue.proto";
+import "google/protobuf/field_mask.proto";
+
+message ComputeConfigScalingGroup {
+    // Optional. The set of task queue types this scaling group serves.
+    // If not provided, this scaling group serves all not otherwise defined
+    // task types.
+    repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 1;
+
+    // Stores instructions for a worker control plane controller how to respond
+    // to worker lifeycle events.
+    temporal.api.compute.v1.ComputeProvider provider = 3;
+
+    // Informs a worker lifecycle controller *when* and *how often* to perform
+    // certain worker lifecycle actions like starting a serverless worker.
+    temporal.api.compute.v1.ComputeScaler scaler = 4;
+}
+
+// ComputeConfig stores configuration that helps a worker control plane
+// controller understand *when* and *how* to respond to worker lifecycle
+// events.
+message ComputeConfig {
+
+    // Each scaling group describes a compute config for a specific subset of the worker
+    // deployment version: covering a specific set of task types and/or regions.
+    // Having different configurations for different task types, allows independent
+    // tuning of activity and workflow task processing (for example).
+    //
+    // The key of the map is the ID of the scaling group used to reference it in subsequent
+    // update calls.
+    map<string, ComputeConfigScalingGroup> scaling_groups = 1;
+}
+
+message ComputeConfigScalingGroupUpdate {
+  ComputeConfigScalingGroup scaling_group = 1;
+
+  // Controls which fields from `scaling_group` will be applied. Semantics:
+  // - Mask is ignored for new scaling groups (only applicable when scaling group already exists).
+  // - Empty mask for an existing scaling group is no-op: no change.
+  // - Non-empty mask for an existing scaling group will update/unset only to the fields
+  //   mentioned in the mask.
+  // - Accepted paths: "task_queue_types", "provider", "provider.type", "provider.details",
+  //   "provider.nexus_endpoint", "scaler", "scaler.type", "scaler.details"
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// A subset of information in ComputeConfig optimized for list views.
+message ComputeConfigSummary {
+    map<string, ComputeConfigScalingGroupSummary> scaling_groups = 1;
+}
+
+message ComputeConfigScalingGroupSummary {
+    repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 1;
+    string provider_type = 2;
+}

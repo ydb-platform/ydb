@@ -9,7 +9,7 @@ namespace NFqRun {
 
 namespace {
 
-class TRunQueryActor : public NActors::TActorBootstrapped<TRunQueryActor> {
+class TRunQueryActor: public NActors::TActorBootstrapped<TRunQueryActor> {
 public:
     TRunQueryActor(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise)
         : Scope(request.Event->Scope)
@@ -18,7 +18,8 @@ public:
         , PingPeriod(request.PingPeriod)
         , Request(std::move(request.Event))
         , Promise(promise)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Send(NFq::ControlPlaneProxyActorId(), std::move(Request));
@@ -34,7 +35,7 @@ public:
 
     void Handle(NFq::TEvControlPlaneProxy::TEvCreateQueryResponse::TPtr& ev) {
         if (ev->Get()->Issues) {
-            Fail(FederatedQuery::QueryMeta::FAILED, {GroupIssues(NYql::TIssue("Failed to create request"), ev->Get()->Issues)});
+            Fail(FederatedQuery::QueryMeta::FAILED, { GroupIssues(NYql::TIssue("Failed to create request"), ev->Get()->Issues) });
             return;
         }
 
@@ -44,7 +45,7 @@ public:
 
     void Handle(NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse::TPtr& ev) {
         if (ev->Get()->Issues) {
-            Fail(FederatedQuery::QueryMeta::FAILED, {GroupIssues(NYql::TIssue("Failed to describe request"), ev->Get()->Issues)});
+            Fail(FederatedQuery::QueryMeta::FAILED, { GroupIssues(NYql::TIssue("Failed to describe request"), ev->Get()->Issues) });
             return;
         }
 
@@ -67,15 +68,13 @@ public:
         FederatedQuery::DescribeQueryRequest request;
         request.set_query_id(QueryId);
 
-        Send(NFq::ControlPlaneProxyActorId(), new NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest(Scope, request, UserSid, Token, TVector<TString>{}));
+        Send(NFq::ControlPlaneProxyActorId(),
+            new NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest(Scope, request, UserSid, Token, TVector<TString>{}));
     }
 
 private:
     void Fail(FederatedQuery::QueryMeta::ComputeStatus status, NYql::TIssues issues) {
-        Promise.SetValue({
-            .Status = status,
-            .Issues = std::move(issues)
-        });
+        Promise.SetValue({ .Status = status, .Issues = std::move(issues) });
         PassAway();
     }
 
@@ -90,13 +89,14 @@ private:
     TString QueryId;
 };
 
-class TAsyncQueryRunnerActor : public TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse> {
+class TAsyncQueryRunnerActor: public TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse> {
     using TBase = TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse>;
 
 public:
     TAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings)
         : TBase(settings)
-    {}
+    {
+    }
 
 protected:
     void RunQuery(TQueryRequest&& request, NThreading::TPromise<TQueryResponse> promise) override {
@@ -104,7 +104,7 @@ protected:
     }
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 bool TQueryResponse::IsSuccess() const {
     return Status == FederatedQuery::QueryMeta::COMPLETED;
@@ -126,4 +126,4 @@ NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settin
     return new TAsyncQueryRunnerActor(settings);
 }
 
-}  // namespace NFqRun
+}   // namespace NFqRun

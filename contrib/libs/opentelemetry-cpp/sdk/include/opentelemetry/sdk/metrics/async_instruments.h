@@ -37,9 +37,9 @@ public:
   void RemoveCallback(opentelemetry::metrics::ObservableCallbackPtr callback,
                       void *state) noexcept override;
 
-  const InstrumentDescriptor &GetInstrumentDescriptor();
+  const InstrumentDescriptor &GetInstrumentDescriptor() const;
 
-  AsyncWritableMetricStorage *GetMetricStorage();
+  AsyncWritableMetricStorage *GetMetricStorage() const;
 
 private:
   InstrumentDescriptor instrument_descriptor_;

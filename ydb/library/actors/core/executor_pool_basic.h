@@ -22,7 +22,6 @@
 namespace NActors {
 
     class TExecutorPoolJail;
-    class TBasicExecutorPoolSanitizer;
     class TSharedExecutorPool;
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
@@ -128,7 +127,6 @@ namespace NActors {
     };
 
     class TBasicExecutorPool: public TExecutorPoolBase {
-        friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
 
         NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
@@ -179,7 +177,6 @@ namespace NActors {
         TExecutorPoolJail *Jail = nullptr;
         TSharedExecutorPool *SharedPool = nullptr;
         class TWaker;
-        std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
         std::unique_ptr<TWaker> Waker;
 
         static constexpr i16 InvalidWakerWorkerId = -1;
@@ -192,6 +189,7 @@ namespace NActors {
 
     private:
         alignas(PLATFORM_CACHE_LINE) std::atomic<i64> ActivationCredits = 0;
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> DesiredSharedThreads = 0;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SleepingCount = 0;
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;

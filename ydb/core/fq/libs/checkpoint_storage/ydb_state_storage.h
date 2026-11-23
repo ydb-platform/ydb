@@ -9,8 +9,6 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStateStoragePtr NewYdbStateStorage(
-    const TCheckpointStorageSettings& config,
-    const IYdbConnection::TPtr& ydbConnection);
+TStateStoragePtr NewYdbStateStorage(const TCheckpointStorageSettings& config, const IYdbConnection::TPtr& ydbConnection);
 
-} // namespace NFq
+}   // namespace NFq

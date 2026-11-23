@@ -1,13 +1,15 @@
 #include "bearer_credentials_provider.h"
+
 #include <util/string/cast.h>
 
 namespace NYql {
 
 namespace {
-class TBearerCredentialsProvider : public NYdb::ICredentialsProvider {
+class TBearerCredentialsProvider: public NYdb::ICredentialsProvider {
 public:
     explicit TBearerCredentialsProvider(std::shared_ptr<NYdb::ICredentialsProvider> delegatee)
-        : Delegatee(delegatee) {
+        : Delegatee(delegatee)
+    {
     }
 
     std::string GetAuthInfo() const override {
@@ -27,10 +29,11 @@ private:
     const std::shared_ptr<NYdb::ICredentialsProvider> Delegatee;
 };
 
-class TBearerCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
+class TBearerCredentialsProviderFactory: public NYdb::ICredentialsProviderFactory {
 public:
     explicit TBearerCredentialsProviderFactory(std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee)
-        : Delegatee(delegatee) {
+        : Delegatee(delegatee)
+    {
     }
 
     std::string GetClientIdentity() const override {
@@ -45,10 +48,11 @@ private:
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> Delegatee;
 };
 
-}
+}   // namespace
 
-std::shared_ptr<NYdb::ICredentialsProviderFactory> WrapCredentialsProviderFactoryWithBearer(std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee) {
+std::shared_ptr<NYdb::ICredentialsProviderFactory> WrapCredentialsProviderFactoryWithBearer(
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee) {
     return std::make_shared<TBearerCredentialsProviderFactory>(delegatee);
 }
 
-}
+}   // namespace NYql

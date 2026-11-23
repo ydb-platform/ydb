@@ -42,7 +42,11 @@
                 ],
                 "Operators" : [
                     {
-                        "Inputs" : [ ],
+                        "Inputs" : [
+                            {
+                                "ExternalPlanNodeId" : 4
+                            }
+                        ],
                         "ExternalDataSource" : "solomon",
                         "Name" : "Write solomon",
                         "SinkType" : "solomon"
@@ -67,6 +71,30 @@
         "Plans" : [
             {
                 "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 3,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 5,
+                                "Operators" : [
+                                    {
+                                        "ExternalDataSource" : "pq",
+                                        "Name" : "Read pq",
+                                        "SourceType" : "pq"
+                                    }
+                                ],
+                                "Node Type" : "Read pq"
+                            }
+                        ],
+                        "HashFunc" : "HashV2",
+                        "Node Type" : "HashShuffle",
+                        "KeyColumns" : [
+                            "crc"
+                        ],
+                        "PlanNodeType" : "Connection"
+                    }
+                ],
                 "Operators" : [
                     {
                         "ExternalDataSource" : "solomon",

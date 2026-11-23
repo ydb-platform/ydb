@@ -101,10 +101,23 @@ void TDBGConnections::AddSlot(
                 std::nullopt,
                 DirectBlockGroupIndex)}});
 
-    NKikimrBlobStorage::NDDisk::TDDiskId id;
-    pbufferId.Serialize(&id);
-    const auto [_, inserted] = PBufferIdToHostIndex.insert({id, host});
+    const auto [_, inserted] = PBufferIdToHostIndex.insert({pbufferId, host});
     Y_ABORT_UNLESS(inserted);
+}
+
+void TDBGConnections::MarkSlotDead(
+    THostIndex host,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    Y_ABORT_UNLESS(host < GetSlotCount());
+
+    DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration;
+    DeadSlots.Set(host);
+
+    // PBufferIdToHostIndex resolves write responses to slots. The pbuffer is
+    // deleted in BSC and a host added later may get the same id, so the id
+    // must not resolve to this slot anymore.
+    PBufferIdToHostIndex.erase(PBuffers[host].HostConnection.DDiskId);
 }
 
 ui32 TDBGConnections::GetGeneration() const
@@ -116,6 +129,17 @@ size_t TDBGConnections::GetSlotCount() const
 {
     Y_ABORT_UNLESS(DDisks.size() == PBuffers.size());
     return DDisks.size();
+}
+
+size_t TDBGConnections::GetLiveSlotCount() const
+{
+    return GetSlotCount() - DeadSlots.Count();
+}
+
+bool TDBGConnections::IsSlotDead(THostIndex host) const
+{
+    Y_ABORT_UNLESS(host < GetSlotCount());
+    return DeadSlots.Get(host);
 }
 
 const TVector<TDDiskConnection>& TDBGConnections::GetDDisks() const
@@ -171,7 +195,8 @@ const TDDiskConnection& TDBGConnections::Get(
 std::optional<THostIndex> TDBGConnections::FindByPBufferId(
     const NKikimrBlobStorage::NDDisk::TDDiskId& pbufferId) const
 {
-    const THostIndex* const host = PBufferIdToHostIndex.FindPtr(pbufferId);
+    const THostIndex* const host =
+        PBufferIdToHostIndex.FindPtr(NBsController::TDDiskId(pbufferId));
     if (!host) {
         return std::nullopt;
     }

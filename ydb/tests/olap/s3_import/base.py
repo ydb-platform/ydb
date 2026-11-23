@@ -37,6 +37,8 @@ class S3ImportTestBase(object):
         config.yaml_config["query_service_config"] = {}
         config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage"]
         config.yaml_config["table_service_config"]["resource_manager"] = {"query_memory_limit": 64424509440}
+        # the memory of the queries is limited by the compute scheduler, its limit comes from the memory controller
+        config.yaml_config.setdefault("memory_controller_config", {})["query_execution_limit_bytes"] = 64424509440
         config.yaml_config["resource_broker_config"] = {}
         config.yaml_config["resource_broker_config"]["queues"] = [{"limit": {"memory": 64424509440}, "weight": 30, "name": "queue_kqp_resource_manager"}]
         config.yaml_config["resource_broker_config"]["resource_limit"] = {"memory": 64424509440}

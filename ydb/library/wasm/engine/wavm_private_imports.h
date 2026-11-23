@@ -8,16 +8,13 @@
 #pragma clang diagnostic ignored "-Wundefined-inline"
 #endif
 
+#include <WAVM/IR/Module.h>
+#include <WAVM/IR/Types.h>
 #include <WAVM/Runtime/Intrinsics.h>
 #include <WAVM/Runtime/Linker.h>
 #include <WAVM/Runtime/Runtime.h>
 #include <WAVM/RuntimeABI/RuntimeABI.h>
-
-#include <WAVM/IR/Module.h>
-#include <WAVM/IR/Types.h>
-
-#include <WAVM/WASTParse/WASTParse.h>
-
 #include <WAVM/WASM/WASM.h>
+#include <WAVM/WASTParse/WASTParse.h>
 
 #pragma clang diagnostic pop

@@ -4,11 +4,11 @@
 #pragma once
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <functional>
 #include <string>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/sdk/metrics/state/filtered_ordered_attribute_map.h"
 #include "opentelemetry/version.h"
 
@@ -64,8 +64,8 @@ struct InstrumentDescriptor
   std::string name_;
   std::string description_;
   std::string unit_;
-  InstrumentType type_;
-  InstrumentValueType value_type_;
+  InstrumentType type_{InstrumentType::kCounter};
+  InstrumentValueType value_type_{InstrumentValueType::kInt};
 };
 
 struct InstrumentDescriptorUtil
@@ -75,8 +75,8 @@ struct InstrumentDescriptorUtil
   {
     return lhs.size() == rhs.size() &&
            std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char a, char b) {
-             return std::tolower(static_cast<unsigned char>(a)) ==
-                    std::tolower(static_cast<unsigned char>(b));
+             return opentelemetry::common::detail::ToAsciiLower(a) ==
+                    opentelemetry::common::detail::ToAsciiLower(b);
            });
   }
 
@@ -157,6 +157,31 @@ struct InstrumentDescriptorUtil
   }
 };
 
+struct AggregationUtil
+{
+  static opentelemetry::nostd::string_view GetAggregationTypeString(
+      AggregationType aggregation_type) noexcept
+  {
+    switch (aggregation_type)
+    {
+      case AggregationType::kDrop:
+        return "Drop";
+      case AggregationType::kHistogram:
+        return "Histogram";
+      case AggregationType::kLastValue:
+        return "LastValue";
+      case AggregationType::kSum:
+        return "Sum";
+      case AggregationType::kDefault:
+        return "Default";
+      case AggregationType::kBase2ExponentialHistogram:
+        return "Base2ExponentialHistogram";
+      default:
+        return "Unknown";
+    }
+  }
+};
+
 struct InstrumentEqualNameCaseInsensitive
 {
   bool operator()(const InstrumentDescriptor &lhs, const InstrumentDescriptor &rhs) const noexcept
@@ -202,8 +227,7 @@ struct InstrumentDescriptorHash
 
     for (char c : instrument_descriptor.name_)
     {
-      sdk::common::GetHash(hashcode,
-                           static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+      sdk::common::GetHash(hashcode, opentelemetry::common::detail::ToAsciiLower(c));
     }
 
     sdk::common::GetHash(hashcode, instrument_descriptor.description_);

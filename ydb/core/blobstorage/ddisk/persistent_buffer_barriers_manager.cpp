@@ -60,6 +60,10 @@ namespace NKikimr::NDDisk {
         SlotId = slotId;
     }
 
+    bool TPersistentBufferBarriersManager::HasBarrier(ui64 tabletId, ui8 directBlockGroupIndex) const {
+        return PersistentBufferBarriersLocation.contains({tabletId, directBlockGroupIndex});
+    }
+
     TPersistentBufferBarrierRecord TPersistentBufferBarriersManager::GetBarrier(ui64 tabletId, ui8 directBlockGroupIndex) const {
         const TTabletKey key{tabletId, directBlockGroupIndex};
         auto it = PersistentBufferBarriersLocation.find(key);
@@ -139,8 +143,8 @@ namespace NKikimr::NDDisk {
         barrier.ChunkIdx = newSector.ChunkIdx;
         barrier.SectorIdx = newSector.SectorIdx;
 
-        if (barrier.Header.Barriers[pos].Generation > generation
-            || (barrier.Header.Barriers[pos].Generation == generation && barrier.Header.Barriers[pos].Lsn >= lsn)) {
+        if (barrier.Header.Barriers[pos].TabletId && (barrier.Header.Barriers[pos].Generation > generation
+            || (barrier.Header.Barriers[pos].Generation == generation && barrier.Header.Barriers[pos].Lsn >= lsn))) {
             YDB_LOG_ERROR("TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous",
                 {"marker", "BSDD29"},
                 {"tabletId", tabletId},
@@ -164,13 +168,38 @@ namespace NKikimr::NDDisk {
         return {oldChunkIdx, oldSectorIdx, barrier};
     }
 
+    std::tuple<ui32, ui32, TEraseBarrier&> TPersistentBufferBarriersManager::RemoveBarrier(
+            ui64 tabletId, const TPersistentBufferSectorInfo& newSector, ui8 directBlockGroupIndex) {
+        const auto it = PersistentBufferBarriersLocation.find({tabletId, directBlockGroupIndex});
+        Y_ABORT_UNLESS(it != PersistentBufferBarriersLocation.end());
+        const auto location = it->second;
+        auto& barrier = PersistentBufferBarriers[location.BarrierIdx];
+        const ui32 oldChunkIdx = barrier.ChunkIdx;
+        const ui32 oldSectorIdx = barrier.SectorIdx;
+        barrier.ChunkIdx = newSector.ChunkIdx;
+        barrier.SectorIdx = newSector.SectorIdx;
+        barrier.Header.Barriers[location.Position] = {};
+        ++barrier.Header.Header.RecordLsn;
+        PersistentBufferBarrierHoles.push_back(location);
+        PersistentBufferBarriersLocation.erase(it);
+        return {oldChunkIdx, oldSectorIdx, barrier};
+    }
+
     void TPersistentBufferBarriersManager::RestoreBarriers(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
         for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
             auto& b = PersistentBufferBarriers[pos];
             const TPersistentBufferSectorInfo barrierSector{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx};
             allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&barrierSector, 1));
-            for (FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferBarriers::MaxBarriersPerHeader && b.Header.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {
+            ui32 endPosition = TPersistentBufferBarriers::MaxBarriersPerHeader;
+            while (endPosition && !b.Header.Barriers[endPosition - 1].TabletId) {
+                --endPosition;
+            }
+            for (FreeBarrierPosition = 0; FreeBarrierPosition < endPosition; FreeBarrierPosition++) {
                 auto& barrier = b.Header.Barriers[FreeBarrierPosition];
+                if (!barrier.TabletId) {
+                    PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
+                    continue;
+                }
                 const TTabletKey key{barrier.TabletId, barrier.DirectBlockGroupIndex};
                 // Persistent buffers for this (tabletId, directBlockGroupIndex) can be scattered
                 // across the map (ordering is TabletId, then Generation, then
@@ -188,7 +217,8 @@ namespace NKikimr::NDDisk {
                     }
                     TPersistentBuffer& buffer = it->second;
                     auto recordIt = buffer.Records.begin();
-                    while (recordIt != buffer.Records.end() && recordIt->first <= barrier.Lsn) {
+                    while (it->first.Generation == barrier.Generation
+                            && recordIt != buffer.Records.end() && recordIt->first <= barrier.Lsn) {
                         auto eraseIt = recordIt++;
                         buffer.Records.erase(eraseIt);
                     }
@@ -419,14 +449,17 @@ namespace NKikimr::NDDisk {
             auto itErase = std::upper_bound(erase.Lsns.begin(), erase.Lsns.end(), barrier.Lsn);
             erase.Lsns = std::vector<ui64>(itErase, erase.Lsns.end());
 
-            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
-            if (pbIt == persistentBuffers.end()) {
-                it = Erases.erase(it);
-                continue;
-            }
-
+            // Preserve the version and its on-disk sector even without live records.
+            // Otherwise subsequent erases restart HeaderLsn, and an older header
+            // still present on disk can win during the next recovery.
             const TPersistentBufferSectorInfo eraseSector{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx};
             allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&eraseSector, 1));
+
+            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
+            if (pbIt == persistentBuffers.end()) {
+                ++it;
+                continue;
+            }
 
             TPersistentBuffer& buffer = pbIt->second;
             for (ui64 lsn : erase.Lsns) {

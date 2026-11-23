@@ -1,15 +1,14 @@
 #pragma once
-#include <ydb/library/db_pool/db_pool.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
+#include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NFq {
 
-struct TYqSharedResources : public IYqSharedResources {
+struct TYqSharedResources: public IYqSharedResources {
     using TPtr = TIntrusivePtr<TYqSharedResources>;
     static TPtr Cast(const IYqSharedResources::TPtr& ptr);
 
@@ -25,9 +24,7 @@ protected:
     explicit TYqSharedResources(NYdb::TDriver driver);
 };
 
-TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
-    const NFq::NConfig::TConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+TYqSharedResources::TPtr CreateYqSharedResourcesImpl(const NFq::NConfig::TConfig& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NFq
+}   // namespace NFq

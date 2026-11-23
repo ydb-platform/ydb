@@ -1,10 +1,18 @@
 #include <ydb/core/base/hive.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/kqp/common/compilation/events.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -52,7 +60,532 @@ void AssertNoCpuValues(const NJson::TJsonValue& node, const NJson::TJsonValue& p
     UNIT_ASSERT_C(FindPlanNodes(node, "A-Cpu").empty(), plan);
 }
 
+struct TReturningRun {
+    NYdb::NQuery::TExecuteQueryResult Result;
+    NJson::TJsonValue Plan;
+};
+
+TReturningRun RunReturningQuery(NYdb::NQuery::TQueryClient& client, const TString& query, ui64 expectedRows) {
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // RETURNING must actually return the written rows.
+    const auto& resultSets = result.GetResultSets();
+    UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+    NYdb::TResultSetParser parser(resultSets[0]);
+    UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), expectedRows);
+
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    return {std::move(result), std::move(plan)};
+}
+
+void AssertReturningSinkNode(const NJson::TJsonValue& plan, bool useStreamIndex) {
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "ReturningSink"), useStreamIndex ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "Sink"), useStreamIndex ? 0 : 1);
+}
+
+void AssertSingleOperatorName(const NJson::TJsonValue& plan, const TString& opName) {
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Name", opName), 1);
+}
+
 Y_UNIT_TEST_SUITE(KqpStats) {
+
+// A miss is reported once per query lookup, before the request is queued.
+// Recompile and SPLIT requests are not lookups.
+Y_UNIT_TEST(CompilationCacheHitMissCounters) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(true);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    config->SetEnableCreateTableAs(true);
+    config->SetEnableDataShardCreateTableAs(true);
+    TKikimrRunner kikimr(settings);
+    // The compile service is registered during the KQP proxy bootstrap; a session is the readiness barrier.
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto counters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
+    UNIT_ASSERT(counters);
+    const auto hits = counters->FindNamedCounter("name", "table.query.compilation.cache_hits");
+    const auto misses = counters->FindNamedCounter("name", "table.query.compilation.cache_misses");
+    UNIT_ASSERT(hits && misses);
+    ui64 expectedHits = hits->Val();
+    ui64 expectedMisses = misses->Val();
+    auto check = [&](ui64 newHits, ui64 newMisses) {
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), expectedHits += newHits);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses += newMisses);
+    };
+
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("cache-counters", "/Root", "cache-counters");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+    // The CTAS rewrite dereferences the temp tables state of the session.
+    auto tempTables = std::make_shared<TKqpTempTablesState>();
+    tempTables->Database = "/Root";
+    tempTables->TempDirName = "cache-counters-session";
+    auto send = [&](const TString& text, NKikimrKqp::EQueryType type = NKikimrKqp::QUERY_TYPE_SQL_DML,
+                    bool split = false, TInstant deadline = TInstant::Max()) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+            TKqpQuerySettings(type), nullptr, *gucSettings);
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), std::move(query), true, false, deadline, nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context, NLWTrace::TOrbit(), tempTables, false, split)));
+    };
+    auto receive = [&](TMaybe<Ydb::StatusIds::StatusCode> status = Ydb::StatusIds::SUCCESS) {
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        if (status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, *status, response->Get()->CompileResult->Issues.ToString());
+        }
+        return response;
+    };
+
+    // Text lookup: a miss, then a hit.
+    const TString text = Q1_("SELECT 42 AS cache_counter;");
+    send(text);
+    const TString uid = receive()->Get()->CompileResult->Uid;
+    check(0, 1);
+    send(text);
+    UNIT_ASSERT(receive()->Get()->Stats.FromCache);
+    check(1, 0);
+
+    // Different SQL text requires a separate compilation, even when its AST is identical.
+    send(Q1_("select 42 as cache_counter;"));
+    UNIT_ASSERT(!receive()->Get()->Stats.FromCache);
+    check(0, 1);
+
+    // Recompile bypasses the cache and is neither a hit nor a miss.
+    auto recompile = [&](const TMaybe<TKqpQueryId>& query, bool disablePgCompatibility) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, query, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context,
+            NLWTrace::TOrbit(), nullptr, false, nullptr, nullptr, false, false, disablePgCompatibility)));
+        auto response = receive();
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(result.Uid, uid);
+        UNIT_ASSERT(result.Query);
+        UNIT_ASSERT_VALUES_EQUAL(result.Query->DisablePgCompatibility, disablePgCompatibility);
+        check(0, 0);
+    };
+    recompile(Nothing(), true);
+    auto& appData = runtime.GetAppData();
+    NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const TString textUid = receive()->Get()->CompileResult->Uid;
+    UNIT_ASSERT_UNEQUAL(textUid, uid);
+    check(0, 1);
+
+    TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    query->DisablePgCompatibility = true;
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    auto sendByUid = [&](const TString& cachedUid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    {
+        const auto serviceActor = runtime.GetLocalServiceId(service);
+        const auto forceUncacheable = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+            [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+                const auto& result = ev->Get()->CompileResult;
+                if (ev->Recipient == serviceActor && result->Uid == uid) {
+                    std::const_pointer_cast<TKqpCompileResult>(result)->AllowCache = false;
+                }
+            });
+        recompile(query, false);
+    }
+    sendByUid(uid);
+    const auto oldModeHit = receive();
+    UNIT_ASSERT(oldModeHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(oldModeHit->Get()->CompileResult->Uid, uid);
+    check(1, 0);
+
+    recompile(query, false);
+
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
+    send(text);
+    const auto textHit = receive();
+    UNIT_ASSERT(textHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(textHit->Get()->CompileResult->Uid, textUid);
+    check(1, 0);
+
+    for (const auto& cachedUid : { uid, textUid }) {
+        sendByUid(cachedUid);
+        const auto uidHit = receive();
+        UNIT_ASSERT(uidHit->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(uidHit->Get()->CompileResult->Uid, cachedUid);
+        check(1, 0);
+    }
+
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    recompile(Nothing(), true);
+
+    // NeedToSplit is an ordinary miss; the follow-up SPLIT request is not a lookup.
+    // A NeedToSplit reply carries no success status, the session actor checks the flag first.
+    const TString ctas = "CREATE TABLE `/Root/CacheCounterCtas` (PRIMARY KEY (Key)) WITH (STORE = ROW) AS SELECT 1u AS Key;";
+    send(ctas, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    const auto ctasResult = receive(Nothing())->Get()->CompileResult;
+    UNIT_ASSERT(ctasResult->NeedToSplit);
+    check(0, 1);
+    send(ctas, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, true);
+    UNIT_ASSERT(runtime.GrabEdgeEvent<TEvKqp::TEvSplitResponse>(edge, TDuration::Seconds(30)));
+    check(0, 0);
+
+    // The miss is reported at lookup time, so a request that then times out in the queue still counts.
+    send(Q1_("SELECT 43 AS cache_counter;"), NKikimrKqp::QUERY_TYPE_SQL_DML, false, TInstant::MicroSeconds(1));
+    receive(Ydb::StatusIds::TIMEOUT);
+    check(0, 1);
+}
+
+namespace {
+
+class TPreparedCompileCacheTest {
+    static TKikimrSettings MakeSettings(ui32 cacheSize) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(false);
+        auto* config = settings.AppConfig.MutableTableServiceConfig();
+        config->SetCompileQueryCacheSize(cacheSize);
+        config->SetCompileMaxActiveRequests(2);
+        return settings;
+    }
+
+    TKikimrRunner Kikimr;
+
+public:
+    explicit TPreparedCompileCacheTest(ui32 cacheSize)
+        : Kikimr(MakeSettings(cacheSize))
+        , Runtime(*Kikimr.GetTestServer().GetRuntime())
+        , Service(MakeKqpCompileServiceID(Runtime.GetNodeId()))
+        , Edge(Runtime.AllocateEdgeActor())
+    {
+        UNIT_ASSERT(Kikimr.RunCall([&] { return Kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    }
+
+    void DisablePgCompatibility() {
+        auto& appData = Runtime.GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+    }
+
+    void Prepare(const TActorId& sender, const TString& text) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+            TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *GucSettings);
+        Send(sender, new TEvKqp::TEvCompileRequest(Token, "", Nothing(), std::move(query), true, true,
+            TInstant::Max(), nullptr, GucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), Context));
+    }
+
+    void CompileByUid(const TString& uid) {
+        Send(Edge, new TEvKqp::TEvCompileRequest(Token, "", uid, Nothing(), true, false,
+            TInstant::Max(), nullptr, GucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), Context));
+    }
+
+    void Recompile(const TActorId& sender, const TString& uid) {
+        Send(sender, new TEvKqp::TEvRecompileRequest(Token, "", uid, Nothing(), false,
+            TInstant::Max(), nullptr, GucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), Context));
+    }
+
+    void Invalidate(const TKqpCompileResult::TConstPtr& plan) {
+        Send(Edge, new TEvKqp::TEvCompileInvalidateRequest(plan, nullptr));
+    }
+
+    TEvKqp::TEvCompileResponse::TPtr Receive(const TActorId& recipient, Ydb::StatusIds::StatusCode expected = Ydb::StatusIds::SUCCESS) {
+        auto response = Runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(recipient, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, expected, result.Issues.ToString());
+        return response;
+    }
+
+    TTestActorRuntime& Runtime;
+    const TActorId Service;
+    const TActorId Edge;
+
+private:
+    void Send(const TActorId& sender, NActors::IEventBase* event) {
+        Runtime.Send(new IEventHandle(Service, sender, event));
+    }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> Token = new NACLib::TUserToken("root@builtin", {});
+    const TIntrusivePtr<TUserRequestContext> Context = MakeIntrusive<TUserRequestContext>("prepared-cache", "/Root", "prepared-cache");
+    const std::shared_ptr<TGUCSettings> GucSettings = std::make_shared<TGUCSettings>();
+};
+
+} // anonymous namespace
+
+Y_UNIT_TEST(QueuedPrepareAfterRevalidationTargetEvicted) {
+    TPreparedCompileCacheTest cache(1);
+    const TString text = "SELECT 42 AS prepared_cache;";
+    cache.Prepare(cache.Edge, text);
+    const TString oldUid = cache.Receive(cache.Edge)->Get()->CompileResult->Uid;
+
+    cache.DisablePgCompatibility();
+    const auto serviceActor = cache.Runtime.GetLocalServiceId(cache.Service);
+    NActors::TBlockEvents<TEvKqp::TEvCompileResponse> blocked(cache.Runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == serviceActor && ev->Get()->CompileResult->Uid == oldUid;
+    });
+    cache.CompileByUid(oldUid);
+    cache.Runtime.WaitFor("PG revalidation response", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+
+    const auto waiter = cache.Runtime.AllocateEdgeActor();
+    const auto unrelated = cache.Runtime.AllocateEdgeActor();
+    cache.Prepare(waiter, text);
+    cache.Prepare(unrelated, "SELECT 43 AS prepared_cache;");
+    cache.Receive(unrelated);
+    cache.CompileByUid(oldUid);
+    cache.Receive(cache.Edge, Ydb::StatusIds::NOT_FOUND);
+
+    blocked.Stop().Unblock();
+    UNIT_ASSERT_VALUES_EQUAL(cache.Receive(cache.Edge)->Get()->CompileResult->Uid, oldUid);
+    const TString preparedUid = cache.Receive(waiter)->Get()->CompileResult->Uid;
+    cache.CompileByUid(preparedUid);
+    UNIT_ASSERT(cache.Receive(cache.Edge)->Get()->Stats.FromCache);
+}
+
+Y_UNIT_TEST(ConcurrentRecompilesPreservePreparedUids) {
+    TPreparedCompileCacheTest cache(4);
+    const TString text = "SELECT 42 AS prepared_cache;";
+    cache.Prepare(cache.Edge, text);
+    const TString firstUid = cache.Receive(cache.Edge)->Get()->CompileResult->Uid;
+
+    cache.DisablePgCompatibility();
+    cache.Prepare(cache.Edge, text);
+    const auto second = cache.Receive(cache.Edge)->Get()->CompileResult;
+    UNIT_ASSERT_UNEQUAL(second->Uid, firstUid);
+    cache.CompileByUid(firstUid);
+    const auto first = cache.Receive(cache.Edge)->Get()->CompileResult;
+    UNIT_ASSERT_VALUES_EQUAL(first->Uid, firstUid);
+    UNIT_ASSERT(*first->Query == *second->Query);
+
+    const auto serviceActor = cache.Runtime.GetLocalServiceId(cache.Service);
+    NActors::TBlockEvents<TEvKqp::TEvCompileResponse> blocked(cache.Runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == serviceActor && ev->Get()->CompileResult->Uid == firstUid;
+    });
+    cache.Recompile(cache.Edge, firstUid);
+    cache.Runtime.WaitFor("first schema recompile response", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+
+    const auto waiter = cache.Runtime.AllocateEdgeActor();
+    const auto unrelated = cache.Runtime.AllocateEdgeActor();
+    cache.Recompile(waiter, second->Uid);
+    cache.Prepare(unrelated, "SELECT 43 AS prepared_cache;");
+    cache.Receive(unrelated); // The service has enqueued the second recompile while the first is still active.
+
+    blocked.Stop().Unblock();
+    const auto firstRecompile = cache.Receive(cache.Edge)->Get()->CompileResult;
+    const auto secondRecompile = cache.Receive(waiter)->Get()->CompileResult;
+    UNIT_ASSERT_VALUES_EQUAL(firstRecompile->Uid, firstUid);
+    UNIT_ASSERT_VALUES_EQUAL(secondRecompile->Uid, second->Uid);
+    for (const auto& plan : {firstRecompile, secondRecompile}) {
+        cache.CompileByUid(plan->Uid);
+        const auto hit = cache.Receive(cache.Edge);
+        UNIT_ASSERT(hit->Get()->Stats.FromCache);
+        UNIT_ASSERT(hit->Get()->CompileResult == plan);
+    }
+}
+
+Y_UNIT_TEST(LateInvalidationPreservesReplacementPreparedPlan) {
+    TPreparedCompileCacheTest cache(1);
+    cache.Prepare(cache.Edge, "SELECT 42 AS prepared_cache;");
+    const auto oldPlan = cache.Receive(cache.Edge)->Get()->CompileResult;
+
+    cache.DisablePgCompatibility();
+    cache.CompileByUid(oldPlan->Uid);
+    const auto replacement = cache.Receive(cache.Edge)->Get()->CompileResult;
+    UNIT_ASSERT_VALUES_EQUAL(replacement->Uid, oldPlan->Uid);
+    UNIT_ASSERT(replacement != oldPlan);
+
+    cache.Invalidate(oldPlan);
+    cache.CompileByUid(replacement->Uid);
+    const auto hit = cache.Receive(cache.Edge);
+    UNIT_ASSERT(hit->Get()->Stats.FromCache);
+    UNIT_ASSERT(hit->Get()->CompileResult == replacement);
+
+    cache.Invalidate(replacement);
+    cache.CompileByUid(replacement->Uid);
+    cache.Receive(cache.Edge, Ydb::StatusIds::NOT_FOUND);
+}
+
+Y_UNIT_TEST(PathAliasesInvalidateCompilationCache) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
+    rule->SetSrc("/Alias");
+    rule->SetDst("/Root");
+    TKikimrRunner kikimr(settings);
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("path-aliases", "/Root", "path-aliases");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+    auto compile = [&](const TString& expectedPath, bool fromCache) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
+            "SELECT Key FROM `/Alias/KeyValue`;", TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), std::move(query), true, false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, fromCache);
+        if (expectedPath.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SCHEME_ERROR, result.Issues.ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToString());
+            UNIT_ASSERT(result.PreparedQuery);
+            const auto& tables = result.PreparedQuery->GetQueryTables();
+            UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tables.front().Path, expectedPath);
+        }
+    };
+    auto update = [&](std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) {
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *notification->Record.MutableConfig()->MutableTableServiceConfig() = *config;
+        notification->PathNormalizer = std::move(normalizer);
+        runtime.Send(new IEventHandle(service, edge, notification.Release()));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+    };
+
+    compile("/Root/KeyValue", false);
+    compile("/Root/KeyValue", true);
+    rule->SetSrc("/Alias/KeyValue");
+    rule->SetDst("/Root/TwoShard");
+    const auto normalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(settings.AppConfig.GetResourcePathPrefixMapping());
+    update(normalizer);
+    compile("/Root/TwoShard", false);
+    compile("/Root/TwoShard", true);
+    update(normalizer);
+    compile("/Root/TwoShard", true);
+    update(nullptr);
+    compile("", false);
+}
+
+// A compilation that was in flight during a cache-invalidating config change
+// must not land in the cleared cache: its result is compiled with the old config.
+Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false);
+    TKikimrRunner kikimr(settings);
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId(0));
+    const auto serviceActor = runtime.GetLocalServiceId(service);
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("stale-generation", "/Root", "stale-generation");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+
+    auto makeQuery = [&](const TString& text) {
+        return TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
+            text, TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    };
+    auto send = [&](const TString& text) {
+        TMaybe<TKqpQueryId> query = makeQuery(text);
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), std::move(query), true, false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    auto recompile = [&](const TString& uid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(
+            token, "", uid, Nothing(), /*isQueryActionPrepare=*/false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    auto receive = [&](bool fromCache) {
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+            response->Get()->CompileResult->Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, fromCache);
+        return response;
+    };
+
+    ui64 configDelta = 0;
+    auto invalidateCache = [&] {
+        NKikimrConfig::TTableServiceConfig newConfig = settings.AppConfig.GetTableServiceConfig();
+        newConfig.MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(
+            newConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() + ++configDelta);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *notification->Record.MutableConfig()->MutableTableServiceConfig() = newConfig;
+        runtime.Send(new IEventHandle(service, edge, notification.Release()));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+    };
+
+    // Baseline: a fresh compile is cached, the follow-up request is a hit.
+    const TString q1 = "SELECT 41 AS stale_generation;";
+    send(q1);
+    receive(false);
+    send(q1);
+    receive(true);
+
+    // Hold the compile actor's response: the observer captures it (dropping it
+    // from delivery) so the config change is processed deterministically while
+    // the compilation is in flight, without relying on compilation speed.
+    bool holdNext = false;
+    TAutoPtr<IEventHandle> blockedCompile;
+    const auto holdObserver = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+        [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+            if (holdNext && ev->Recipient == serviceActor) {
+                holdNext = false;
+                blockedCompile = ev.Release();
+            }
+        });
+    auto holdCompile = [&] {
+        holdNext = true;
+        blockedCompile = nullptr;
+        TDispatchOptions opts;
+        // An observer drop never reaches FinalEvents (only PROCESSed events do),
+        // so wait on a condition checked outside the event path.
+        opts.CustomFinalCondition = [&] { return bool(blockedCompile); };
+        runtime.DispatchEvents(opts, TDuration::Seconds(30));
+        UNIT_ASSERT_C(blockedCompile, "Compile response should have been captured");
+    };
+
+    // The in-flight client still gets its (old-config) result ...
+    const TString q2 = "SELECT 42 AS stale_generation;";
+    send(q2);
+    holdCompile();
+    invalidateCache();
+    runtime.Send(blockedCompile.Release());
+    receive(false);
+
+    // ... but the result must not have been inserted into the cleared cache.
+    send(q2);
+    receive(false);
+
+    // Post-change compilations are cached as usual.
+    send(q2);
+    receive(true);
+
+    // A recompile in flight across the config change reuses the cached uid;
+    // its stale result must not be inserted under that uid either.
+    const TString q3 = "SELECT 43 AS stale_generation;";
+    send(q3);
+    const TString q3Uid = receive(false)->Get()->CompileResult->Uid;
+    recompile(q3Uid);
+    holdCompile();
+    invalidateCache();
+    runtime.Send(blockedCompile.Release());
+    receive(false);
+    send(q3);
+    receive(false);
+    send(q3);
+    receive(true);
+}
 
 auto GetYqlStreamIterator(
         TKikimrRunner& kikimr,
@@ -888,6 +1421,66 @@ Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
     UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Cpu").GetDoubleSafe() >= 0, simplifiedPlan);
 }
 
+// Per-stage per-node task distribution: Stats.Nodes = [{NodeId, Tasks, Finished}] in FULL mode.
+// Literal phases carry no node info, so only stages that have Nodes are checked against their totals.
+Y_UNIT_TEST(StageNodesFull) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT COUNT(*) FROM `/Root/EightShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true), *result.GetStats()->GetPlan());
+
+    auto* runtime = kikimr.GetTestServer().GetRuntime();
+    std::set<ui64> clusterNodeIds;
+    for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+        clusterNodeIds.insert(runtime->GetNodeId(i));
+    }
+
+    ui32 stagesWithNodes = 0;
+    std::function<void(const NJson::TJsonValue&)> checkStages = [&](const NJson::TJsonValue& node) {
+        if (node.IsMap()) {
+            if (auto* stats = node.GetMapSafe().FindPtr("Stats"); stats && stats->IsMap() && stats->Has("Nodes")) {
+                ++stagesWithNodes;
+                ui64 tasks = 0;
+                ui64 finished = 0;
+                ui64 lastNodeId = 0;
+                for (const auto& nodeStats : stats->GetMapSafe().at("Nodes").GetArraySafe()) {
+                    auto nodeId = nodeStats.GetMapSafe().at("NodeId").GetUIntegerSafe();
+                    auto nodeTasks = nodeStats.GetMapSafe().at("Tasks").GetUIntegerSafe();
+                    auto nodeFinished = nodeStats.GetMapSafe().at("Finished").GetUIntegerSafe();
+                    UNIT_ASSERT_C(clusterNodeIds.contains(nodeId), plan);
+                    UNIT_ASSERT_C(nodeId > lastNodeId, plan);
+                    UNIT_ASSERT_C(nodeTasks > 0, plan);
+                    UNIT_ASSERT_C(nodeFinished <= nodeTasks, plan);
+                    lastNodeId = nodeId;
+                    tasks += nodeTasks;
+                    finished += nodeFinished;
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(tasks, stats->GetMapSafe().at("Tasks").GetUIntegerSafe(), plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(finished, stats->GetMapSafe().at("FinishedTasks").GetUIntegerSafe(), plan);
+            }
+            for (const auto& [_, child] : node.GetMapSafe()) {
+                checkStages(child);
+            }
+        } else if (node.IsArray()) {
+            for (const auto& child : node.GetArraySafe()) {
+                checkStages(child);
+            }
+        }
+    };
+    checkStages(plan);
+    UNIT_ASSERT_C(stagesWithNodes > 0, plan);
+}
+
 Y_UNIT_TEST(StatsProfile) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
@@ -908,6 +1501,53 @@ Y_UNIT_TEST(StatsProfile) {
 
     auto node1 = FindPlanNodeByKv(plan, "Node Type", "ResultSet");
     UNIT_ASSERT_GE(node1.GetMap().at("Nodes").GetArraySafe().size(), 1);
+}
+
+// The per node memory history of a profiled query carries what the query holds on the node (Memory + ExternalMemory
+// via the compute scheduler or, without FeatureFlags.EnableComputeSchedulerMemory, the resource manager), reported by
+// the query quota manager of the node service: at least the start prepay of the tasks and the channels. A scan query
+// never runs its tasks locally in the executer, they go to the node service
+Y_UNIT_TEST_TWIN(NodeMemQueryAllocatedProfile, EnableComputeSchedulerMemory) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
+    app.MutableTableServiceConfig()->SetEnableChannelMemoryTracking(true);
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+
+    auto it = GetScanStreamIterator(kikimr, ECollectQueryStatsMode::Profile, R"(
+        SELECT COUNT(*) FROM `/Root/EightShard`;
+    )");
+    auto res = CollectStreamResult(it);
+    UNIT_ASSERT(res.PlanJson);
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+    ui32 histories = 0;
+    std::function<void(const NJson::TJsonValue&)> check = [&](const NJson::TJsonValue& value) {
+        if (value.IsMap()) {
+            for (const auto& [key, child] : value.GetMapSafe()) {
+                if (key == "GlobalMemoryUsageMB") {
+                    const auto& times = child.GetMapSafe().at("TimeMs").GetArraySafe();
+                    const auto& allocated = child.GetMapSafe().at("MemQueryAllocated").GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(allocated.size(), times.size());
+                    ui64 maxAllocated = 0;
+                    for (const auto& mb : allocated) {
+                        maxAllocated = std::max<ui64>(maxAllocated, mb.GetUIntegerSafe());
+                    }
+                    UNIT_ASSERT_GE_C(maxAllocated, 1, *res.PlanJson);
+                    ++histories;
+                } else {
+                    check(child);
+                }
+            }
+        } else if (value.IsArray()) {
+            for (const auto& child : value.GetArraySafe()) {
+                check(child);
+            }
+        }
+    };
+    check(plan);
+    UNIT_ASSERT_GT_C(histories, 0, *res.PlanJson);
 }
 
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
@@ -1202,7 +1842,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
         bool done = false;
         for (int i = 0; i < 5; i++) {
             std::unordered_set<ui32> nodeIds;
-            auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
+            auto res = session.DescribeTable("/Root/EightShard", describeTableSettings)
                 .ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
@@ -1361,8 +2001,6 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         .SetEnableTempTables(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
     TKikimrRunner kikimr(serverSettings);
     auto client = kikimr.GetQueryClient();
 
@@ -1446,6 +2084,217 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+}
+
+Y_UNIT_TEST_TWIN(UpsertWithReturningStats, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(run.Plan, "Node Type", "TableFullScan"), 1);
+
+        // Both the source read and the destination write stats must be collected.
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsModes, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            INSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Insert");
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            REPLACE INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Replace");
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPDATE `/Root/ReturningSrc` SET Value = "x" WHERE Key <= 3 RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Upsert");
+        // The read-before-write of the UPDATE is collected too.
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3, .ExpectedUpdates = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            DELETE FROM `/Root/ReturningSrc` WHERE Key <= 3 RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Delete");
+        // Delete reads each row (read-before-write plus the returned row).
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 6, .ExpectedDeletes = 3 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsWithIndex, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    CreateSampleTablesWithIndex(session);
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (10, 10, "A"), (11, 11, "B"), (12, 12, "C")
+                RETURNING *;
+        )", 3);
+
+        // The plan shape for indexed writes is serializer-dependent (stream-write
+        // uses the RBO serializer, legacy uses "Sink" nodes), so only the resulting
+        // write stats and the presence of an upsert write are asserted here.
+        UNIT_ASSERT(CountPlanNodesByKv(run.Plan, "Name", "Upsert") >= 1);
+
+        // Both the main table write and the secondary index write must be collected.
+        AssertTableStats(run.Result, "/Root/SecondaryKeys", { .ExpectedReads = 0, .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/SecondaryKeys/Index/indexImplTable", { .ExpectedReads = 0, .ExpectedUpdates = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (10, 10, "A"), (11, 11, "B"), (12, 20, "C")
+                RETURNING *;
+        )", 3);
+
+        // The plan shape for indexed writes is serializer-dependent (stream-write
+        // uses the RBO serializer, legacy uses "Sink" nodes), so only the resulting
+        // write stats and the presence of an upsert write are asserted here.
+        UNIT_ASSERT(CountPlanNodesByKv(run.Plan, "Name", "Upsert") >= 1);
+
+        // Both the main table write and the secondary index write must be collected.
+        AssertTableStats(run.Result, "/Root/SecondaryKeys", { .ExpectedReads = 3, .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/SecondaryKeys/Index/indexImplTable", { .ExpectedReads = 0, .ExpectedUpdates = 1, .ExpectedDeletes = 1 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsNeedsLookup, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningExtra` (
+                Key Uint64 NOT NULL,
+                Value String,
+                Extra String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningExtra` (Key, Value, Extra) VALUES (1, "a", "old_extra");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Extra is not written by the UPDATE, so RETURNING it requires reading the row.
+    auto run = RunReturningQuery(client, R"(
+        UPDATE `/Root/ReturningExtra` SET Value = "b" WHERE Key = 1 RETURNING Key, Value, Extra;
+    )", 1);
+
+    AssertReturningSinkNode(run.Plan, UseStreamIndex);
+    AssertSingleOperatorName(run.Plan, "Upsert");
+
+    NYdb::TResultSetParser parser(run.Result.GetResultSets()[0]);
+    UNIT_ASSERT(parser.TryNextRow());
+    auto optionalValue = parser.ColumnParser(1).GetOptionalString();
+    UNIT_ASSERT(optionalValue);
+    UNIT_ASSERT_VALUES_EQUAL(*optionalValue, "b");
+    auto optionalExtra = parser.ColumnParser(2).GetOptionalString();
+    UNIT_ASSERT(optionalExtra);
+    UNIT_ASSERT_VALUES_EQUAL(*optionalExtra, "old_extra");
+
+    // RETURNING a column that is not written ("Extra") requires reading the row.
+    // In both modes this adds a lookup read next to the single-row write.
+    AssertTableStats(run.Result, "/Root/ReturningExtra", { .ExpectedUpdates = 1 });
+    AssertTableStats(run.Result, "/Root/ReturningExtra", { .ExpectedReads = 2 });
 }
 
 } // suite

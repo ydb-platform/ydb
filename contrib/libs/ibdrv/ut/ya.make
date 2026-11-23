@@ -7,6 +7,10 @@ SUBSCRIBER(
     g:cpp-contrib
 )
 
+ADDINCL(
+    contrib/libs/ibdrv/include/ibdrv
+)
+
 IF (OS_LINUX)
     PEERDIR(
         contrib/libs/ibdrv

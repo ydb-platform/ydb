@@ -29,33 +29,35 @@ namespace {
             Offset.fetch_add(duration.MicroSeconds());
         }
 
-        std::atomic<i64> Offset = 0;
-    };
-
-    // Install before actor system start; restore the previous provider after actors
-    // are stopped (declare this before setup so dtor runs after setup). Avoids
-    // TSAN data race on TAppData::TimeProvider swap vs concurrent actor reads
-    // (#40339 / #47065).
-    class TScopedLeapTimeProvider: TNonCopyable {
-    public:
-        TScopedLeapTimeProvider()
-            : Leap_(MakeIntrusive<TLeapTimeProvider>())
-            , Previous_(Leap_)
-        {
-            DoSwap(TAppData::TimeProvider, Previous_);
-        }
-
-        ~TScopedLeapTimeProvider() {
-            DoSwap(TAppData::TimeProvider, Previous_);
-        }
-
-        TLeapTimeProvider* operator->() const {
-            return Leap_.Get();
+        void Reset() {
+            Offset.store(0);
         }
 
     private:
-        TIntrusivePtr<TLeapTimeProvider> Leap_;
-        TIntrusivePtr<ITimeProvider> Previous_;
+        std::atomic<i64> Offset = 0;
+    };
+
+    // TAppData::TimeProvider is process-global; actor threads read it unsynchronized.
+    // Install once before CreateSetup() and never reassign (YDBBUGS-508 / #40339).
+    class TScopedLeapTimeProvider: TNonCopyable {
+    public:
+        TScopedLeapTimeProvider() {
+            Leap()->Reset();
+        }
+
+        TLeapTimeProvider* operator->() const {
+            return Leap();
+        }
+
+    private:
+        static TLeapTimeProvider* Leap() {
+            static TIntrusivePtr<TLeapTimeProvider> leap = [] {
+                auto p = MakeIntrusive<TLeapTimeProvider>();
+                TAppData::TimeProvider = p;
+                return p;
+            }();
+            return leap.Get();
+        }
     };
 
     class TBufferedCerr: TNonCopyable {
@@ -1696,6 +1698,7 @@ static TMap<TString, TString> ReadAllDedupAndCommit(
     NActors::TTestActorRuntime& runtime,
     const TString& topicName,
     const TString& consumer,
+    size_t expectedCount = Max<size_t>(),
     int retries = 100
 ) {
     TMap<TString, TString> readMessages;
@@ -1740,6 +1743,9 @@ static TMap<TString, TString> ReadAllDedupAndCommit(
         auto commitResult = GetChangeResponse(runtime);
         UNIT_ASSERT_C(commitResult, "ReadAllDedupAndCommit: commit response timeout");
         UNIT_ASSERT_VALUES_EQUAL(commitResult->Status, Ydb::StatusIds::SUCCESS);
+        if (readMessages.size() >= expectedCount) {
+            retries = Min(retries, 1);
+        }
     }
 
     return readMessages;
@@ -1833,9 +1839,10 @@ static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>
     }
 
     ACerr << ">>>>> " << testName << ": reading all messages" << Endl;
-    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
+    const auto expectedMessages = ComputeExpectedMessages(stages);
+    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer",
+        writeDuration == TDuration::Zero() ? expectedMessages.size() : Max<size_t>());
     if (writeDuration == TDuration::Zero()) {
-        const auto expectedMessages = ComputeExpectedMessages(stages);
         VerifyDedupResult(readMessages, expectedMessages, testName);
     }
     ACerr << ">>>>> " << testName << ": done" << Endl;
@@ -2240,7 +2247,7 @@ static void RunRepeatedDedupWithSplits(TStringBuf testName, TDuration writePause
     }
 
     ACerr << ">>>>> " << testName << ": reading all messages" << Endl;
-    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
+    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer", numIterations);
     UNIT_ASSERT_C(!readMessages.empty(), testName << ": expected at least one message");
     for (const auto& [body, readDedupId] : readMessages) {
         UNIT_ASSERT_VALUES_EQUAL_C(readDedupId, dedupId, testName << ": dedupId mismatch for body=" << body);

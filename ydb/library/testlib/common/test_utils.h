@@ -7,20 +7,22 @@
 #include <util/datetime/base.h>
 
 #include <functional>
-#include <unordered_map>
 #include <optional>
+#include <unordered_map>
 
 namespace NActors {
 
 class TTestActorRuntimeBase;
 
-} // namespace NActors
+}   // namespace NActors
 
 namespace NTestUtils {
 
-// Wait until predicate is true or timeout is reached 
-void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString& info)> predicate, TDuration initialDelay = TDuration::MilliSeconds(1), bool throwException = false);
-void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate, TDuration initialDelay = TDuration::MilliSeconds(1), bool throwException = false);
+// Wait until predicate is true or timeout is reached
+void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString& info)> predicate,
+    TDuration initialDelay = TDuration::MilliSeconds(1), bool throwException = false);
+void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate, TDuration initialDelay = TDuration::MilliSeconds(1),
+    bool throwException = false);
 
 void SetupSignalHandlers();
 
@@ -37,9 +39,12 @@ struct TTestLogSettings {
 
     TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NActors::NLog::EPriority priority);
 };
-bool SetupLogLevelFromTestParam(NActors::TTestActorRuntimeBase& runtime, NKikimrServices::EServiceKikimr service, const TString& prefix = "TEST");
-void SetupLogLevel(NActors::TTestActorRuntimeBase& runtime, const std::optional<TTestLogSettings>& logSettings = std::nullopt, const TString& paramPrefix = "TEST");
+
+bool SetupLogLevelFromTestParam(
+    NActors::TTestActorRuntimeBase& runtime, NKikimrServices::EServiceKikimr service, const TString& prefix = "TEST");
+void SetupLogLevel(NActors::TTestActorRuntimeBase& runtime, const std::optional<TTestLogSettings>& logSettings = std::nullopt,
+    const TString& paramPrefix = "TEST");
 
 void RestartTablet(const NActors::TActorSystem& runtime, ui64 tabletId);
 
-}  // namespace NTestUtils
+}   // namespace NTestUtils

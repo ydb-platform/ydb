@@ -1,0 +1,13 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run ytexec",
+        "availability": "hidden",
+        "definition": {
+            "executable": [
+                "ytexec",
+                "ytexec"
+            ]
+        }
+    }
+}

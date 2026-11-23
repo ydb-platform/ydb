@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 
-from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, templates, term, tools, ydb_config
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, device, progress, templates, term, tools, ydb_config
 from ydb.tools.mnc.lib.exceptions import CliError
 
 
@@ -139,8 +139,17 @@ async def get_parts(
                     errors.append(f'    "{disk.get("error")}"')
                 raise CliError('\n'.join(errors))
 
-            parts = [part for disk in disks for part in disk.get("parts", [])[1:]]
-            part_paths = ['/dev/disk/by-partlabel/{0}'.format(part["label"]) for part in parts]
+            if len(disks) != len(devices):
+                raise CliError(f'Incomplete disk info from agent on {host}')
+
+            labels = [
+                label
+                for source, disk in zip(devices, disks)
+                for label in device.get_data_partlabels(
+                    source, ((part["id"], part["label"]) for part in disk.get("parts", []))
+                )
+            ]
+            part_paths = ['/dev/disk/by-partlabel/{0}'.format(label) for label in labels]
     else:
         part_paths = []
 

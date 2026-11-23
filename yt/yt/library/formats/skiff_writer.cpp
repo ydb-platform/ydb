@@ -104,125 +104,20 @@ struct TWriteContext
 
 using TUnversionedValueToSkiffConverter = std::function<void(const TUnversionedValue&, TCheckedInDebugSkiffWriter*, TWriteContext*)>;
 
-template <EWireType wireType>
-constexpr EValueType WireTypeToValueType()
-{
-    if constexpr (wireType == EWireType::Int8 ||
-        wireType == EWireType::Int16 ||
-        wireType == EWireType::Int32 ||
-        wireType == EWireType::Int64)
-    {
-        return EValueType::Int64;
-    } else if constexpr (
-        wireType == EWireType::Uint8 ||
-        wireType == EWireType::Uint16 ||
-        wireType == EWireType::Uint32 ||
-        wireType == EWireType::Uint64)
-    {
-        return EValueType::Uint64;
-    } else if constexpr (wireType == EWireType::Double) {
-        return EValueType::Double;
-    } else if constexpr (wireType == EWireType::Boolean) {
-        return EValueType::Boolean;
-    } else if constexpr (wireType == EWireType::String32) {
-        return EValueType::String;
-    } else if constexpr (wireType == EWireType::Nothing) {
-        return EValueType::Null;
-    } else {
-        // Not compilable.
-        static_assert(wireType == EWireType::Int64, "Bad wireType");
-    }
-}
+namespace {
 
-template <EWireType wireType, bool isOptional>
-void ConvertSimpleValueImpl(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
-{
-    if constexpr (isOptional) {
-        if (value.Type == EValueType::Null) {
-            writer->WriteVariant8Tag(0);
-            return;
-        } else {
-            writer->WriteVariant8Tag(1);
-        }
-    }
+////////////////////////////////////////////////////////////////////////////////
 
-    if constexpr (wireType != EWireType::Yson32) {
-        constexpr auto expectedValueType = WireTypeToValueType<wireType>();
-        if (value.Type != expectedValueType) {
-            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::FormatCannotRepresentRow,
-                "Unexpected type of %Qv column: Skiff format expected %Qlv, actual table type %Qlv",
-                context->NameTable->GetName(value.Id),
-                expectedValueType,
-                value.Type);
-        }
-    }
-
-    if constexpr (wireType == EWireType::Int8) {
-        CheckIntSize<wireType>(value.Data.Int64);
-        writer->WriteInt8(value.Data.Int64);
-    } else if constexpr (wireType == EWireType::Int16) {
-        CheckIntSize<wireType>(value.Data.Int64);
-        writer->WriteInt16(value.Data.Int64);
-    } else if constexpr (wireType == EWireType::Int32) {
-        CheckIntSize<wireType>(value.Data.Int64);
-        writer->WriteInt32(value.Data.Int64);
-    } else if constexpr (wireType == EWireType::Int64) {
-        writer->WriteInt64(value.Data.Int64);
-
-    } else if constexpr (wireType == EWireType::Uint8) {
-        CheckIntSize<wireType>(value.Data.Uint64);
-        writer->WriteUint8(value.Data.Uint64);
-    } else if constexpr (wireType == EWireType::Uint16) {
-        CheckIntSize<wireType>(value.Data.Uint64);
-        writer->WriteUint16(value.Data.Uint64);
-    } else if constexpr (wireType == EWireType::Uint32) {
-        CheckIntSize<wireType>(value.Data.Uint64);
-        writer->WriteUint32(value.Data.Uint64);
-    } else if constexpr (wireType == EWireType::Uint64) {
-        writer->WriteUint64(value.Data.Uint64);
-
-    } else if constexpr (wireType == EWireType::Boolean) {
-        writer->WriteBoolean(value.Data.Boolean);
-    } else if constexpr (wireType == EWireType::Double) {
-        writer->WriteDouble(value.Data.Double);
-    } else if constexpr (wireType == EWireType::String32) {
-        writer->WriteString32(value.AsStringBuf());
-    } else if constexpr (wireType == EWireType::Yson32) {
-        context->TmpBuffer->Clear();
-        {
-            TBufferOutput out(*context->TmpBuffer);
-            // Set enableRaw=true in YSON writer to avoid the costs of parsing YSON
-            // Asume it was validated by now.
-            NYson::TYsonWriter ysonWriter(&out, NYson::EYsonFormat::Binary, NYson::EYsonType::Node, true);
-            context->UnversionedValueYsonConverter->WriteValue(value, &ysonWriter);
-        }
-        writer->WriteYson32(TStringBuf(context->TmpBuffer->data(), context->TmpBuffer->size()));
-    } else if constexpr (wireType == EWireType::Nothing) {
-        // Do nothing.
-    } else {
-        // Not compilable.
-        static_assert(wireType == EWireType::Int64, "Bad wireType");
-    }
-}
-
-template <EValueType ExpectedValueType, bool isOptional, typename TFunc>
-class TPrimitiveConverterWrapper
+template <typename TPhysical, typename TWriteFunction>
+class TTypedValueToSkiffConverter
 {
 public:
-    explicit TPrimitiveConverterWrapper(TFunc function)
-        : Function_(function)
+    explicit TTypedValueToSkiffConverter(TWriteFunction writeFunction)
+        : WriteFunction_(std::move(writeFunction))
     { }
 
     void operator()(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
     {
-        if constexpr (isOptional) {
-            if (value.Type == EValueType::Null) {
-                writer->WriteVariant8Tag(0);
-                return;
-            } else {
-                writer->WriteVariant8Tag(1);
-            }
-        }
         if (value.Type != ExpectedValueType) {
             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::FormatCannotRepresentRow,
                 "Unexpected type of %Qv column: Skiff format expected %Qlv, actual table type %Qlv",
@@ -230,18 +125,97 @@ public:
                 ExpectedValueType,
                 value.Type);
         }
-        if constexpr (ExpectedValueType == EValueType::String) {
-            Function_(value.AsStringBuf(), writer);
+
+        if constexpr (ExpectedValueType == EValueType::Null) {
+            WriteFunction_(std::monostate(), writer);
+        } else if constexpr (ExpectedValueType == EValueType::Int64) {
+            WriteFunction_(value.Data.Int64, writer);
+        } else if constexpr (ExpectedValueType == EValueType::Uint64) {
+            WriteFunction_(value.Data.Uint64, writer);
+        } else if constexpr (ExpectedValueType == EValueType::Boolean) {
+            WriteFunction_(value.Data.Boolean, writer);
+        } else if constexpr (ExpectedValueType == EValueType::Double) {
+            WriteFunction_(value.Data.Double, writer);
+        } else if constexpr (ExpectedValueType == EValueType::String) {
+            WriteFunction_(value.AsStringBuf(), writer);
         } else {
-            // TODO(ermolovd) support other types and use this class instead of ConvertSimpleValueImpl
-            // poor man's static assert false
-            static_assert(ExpectedValueType == EValueType::String);
+            static_assert(false, "Unexpected value type");
         }
     }
 
 private:
-    TFunc Function_;
+    static constexpr EValueType ExpectedValueType = TCppTypeToValueType<TPhysical>::Value;
+
+    const TWriteFunction WriteFunction_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TValueToYson32Converter
+{
+public:
+    void operator()(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
+    {
+        context->TmpBuffer->Clear();
+        {
+            TBufferOutput out(*context->TmpBuffer);
+            // Set enableRaw=true in YSON writer to avoid the costs of parsing YSON
+            // Assume it was validated by now.
+            NYson::TYsonWriter ysonWriter(&out, NYson::EYsonFormat::Binary, NYson::EYsonType::Node, true);
+            context->UnversionedValueYsonConverter->WriteValue(value, &ysonWriter);
+        }
+        writer->WriteYson32(TStringBuf(context->TmpBuffer->data(), context->TmpBuffer->size()));
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <EOptionalKind OptionalKind, typename TInnerConverter>
+class TOptionalWriterConverter
+{
+public:
+    template <typename... TArgs>
+    explicit TOptionalWriterConverter(TArgs&&... args)
+        : Converter_(std::forward<TArgs>(args)...)
+    { }
+
+    void operator()(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
+    {
+        if constexpr (OptionalKind != EOptionalKind::None) {
+            i32 tag = value.Type == EValueType::Null ? 0 : 1;
+            if constexpr (OptionalKind == EOptionalKind::Variant8) {
+                writer->WriteVariant8Tag(tag);
+            } else if constexpr (OptionalKind == EOptionalKind::VariantVar) {
+                writer->WriteVariantVarTag(tag);
+            }
+
+            if (tag == 0) {
+                return;
+            }
+        }
+
+        Converter_(value, writer, context);
+    }
+
+private:
+    TInnerConverter Converter_;
+};
+
+template <EOptionalKind OptionalKind>
+struct TWriterConverters
+{
+    template <typename TPhysical, typename TWriteFunction>
+    using TPhysicalConverter = TOptionalWriterConverter<
+        OptionalKind,
+        TTypedValueToSkiffConverter<TPhysical, TWriteFunction>
+    >;
+
+    using TYson32Converter = TOptionalWriterConverter<OptionalKind, TValueToYson32Converter>;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 class TRowAndRangeIndexWriter
 {
@@ -326,189 +300,40 @@ private:
     i64 RowIndex_ = Undefined;
 };
 
-TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(std::string name) {
-    return [name = std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
-        if (value.Type != EValueType::Null) {
-            THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",
-                    name);
-        }
-        writer->WriteVariant8Tag(0);
+TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(
+    std::string name,
+    EOptionalKind optionalKind)
+{
+    auto throwNonnullValue = [name = std::move(name)] (
+        const TUnversionedValue& /*value*/,
+        TCheckedInDebugSkiffWriter* /*writer*/,
+        TWriteContext* /*context*/)
+    {
+        THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",
+            name);
     };
+    return DispatchOptionalKind(
+        optionalKind,
+        [
+            throwNonnullValue = std::move(throwNonnullValue)
+        ] <EOptionalKind OptionalKind> () mutable -> TUnversionedValueToSkiffConverter {
+            return TOptionalWriterConverter<OptionalKind, decltype(throwNonnullValue)>(std::move(throwNonnullValue));
+        });
 }
-
-template <EValueType ExpectedValueType, typename TFunction>
-TUnversionedValueToSkiffConverter CreatePrimitiveValueConverter(
-    bool required,
-    TFunction function)
-{
-    if (required) {
-        return TPrimitiveConverterWrapper<ExpectedValueType, false, TFunction>(std::move(function));
-    } else {
-        return TPrimitiveConverterWrapper<ExpectedValueType, true, TFunction>(std::move(function));
-    }
-}
-
-TUnversionedValueToSkiffConverter CreatePrimitiveValueConverter(EWireType wireType, bool required)
-{
-    switch (wireType) {
-#define CASE(t) \
-        case t: \
-            return required ? ConvertSimpleValueImpl<t, false> : ConvertSimpleValueImpl<t, true>;
-        CASE(EWireType::Int8)
-        CASE(EWireType::Int16)
-        CASE(EWireType::Int32)
-        CASE(EWireType::Int64)
-        CASE(EWireType::Uint8)
-        CASE(EWireType::Uint16)
-        CASE(EWireType::Uint32)
-        CASE(EWireType::Uint64)
-        CASE(EWireType::Double)
-        CASE(EWireType::Boolean)
-        CASE(EWireType::String32)
-        CASE(EWireType::Yson32)
-#undef CASE
-        case EWireType::Nothing:
-            // TODO(ermolovd): we should use `isOptional` instead of `required` (with corresponding condition inversion).
-            YT_VERIFY(required);
-            return ConvertSimpleValueImpl<EWireType::Nothing, false>;
-
-        default:
-            YT_ABORT();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TUnversionedValueToSkiffConverter CreateTzValueConverter(const std::shared_ptr<TSkiffSchema>& skiffSchema, bool required)
-{
-    // A valid skiff schema is expected.
-    auto wireType = skiffSchema->GetWireType();
-    switch (wireType) {
-        case EWireType::String32:
-            return required
-                ? ConvertSimpleValueImpl<EWireType::String32, false>
-                : ConvertSimpleValueImpl<EWireType::String32, true>;
-
-        case EWireType::Tuple: {
-            const auto& children = skiffSchema->GetChildren();
-            YT_VERIFY(children.size() == 2);
-            const auto innerWireType = children[0]->GetWireType();
-            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
-            switch (innerWireType) {
-        #define CASE(x) \
-                case ((x)): \
-                    return CreatePrimitiveValueConverter<EValueType::String>(required, TTzSkiffWriter<(x)>());
-                CASE(EWireType::Int32);
-                CASE(EWireType::Int64);
-                CASE(EWireType::Uint16);
-                CASE(EWireType::Uint32);
-                CASE(EWireType::Uint64);
-        #undef CASE
-                default:
-                    break;
-            }
-            YT_ABORT();
-        }
-        case EWireType::Yson32:
-            return CreatePrimitiveValueConverter(wireType, required);
-        default:
-            YT_ABORT();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
 
 TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
     const TFieldDescription& skiffField,
-    bool required,
     ESimpleLogicalValueType logicalType)
 {
-    const auto& skiffSchema = DeoptionalizeSchema(skiffField.Schema()).first;
-    auto wireType = skiffField.ValidatedGetDeoptionalizeType(/*simplify*/ false);
-
-    switch (logicalType) {
-        case ESimpleLogicalValueType::Int8:
-        case ESimpleLogicalValueType::Int16:
-        case ESimpleLogicalValueType::Int32:
-        case ESimpleLogicalValueType::Int64:
-
-        case ESimpleLogicalValueType::Interval:
-
-        case ESimpleLogicalValueType::Date32:
-        case ESimpleLogicalValueType::Datetime64:
-        case ESimpleLogicalValueType::Timestamp64:
-        case ESimpleLogicalValueType::Interval64:
-            CheckWireType(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Uint8:
-        case ESimpleLogicalValueType::Uint16:
-        case ESimpleLogicalValueType::Uint32:
-        case ESimpleLogicalValueType::Uint64:
-
-        case ESimpleLogicalValueType::Date:
-        case ESimpleLogicalValueType::Datetime:
-        case ESimpleLogicalValueType::Timestamp:
-            CheckWireType(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-            CheckTzType(skiffSchema, logicalType);
-            return CreateTzValueConverter(skiffSchema, required);
-
-        case ESimpleLogicalValueType::Float:
-        case ESimpleLogicalValueType::Double:
-            CheckWireType(wireType, {EWireType::Double, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Boolean:
-            CheckWireType(wireType, {EWireType::Boolean, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Utf8:
-        case ESimpleLogicalValueType::Json:
-        case ESimpleLogicalValueType::String:
-            CheckWireType(wireType, {EWireType::String32, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Any:
-            CheckWireType(wireType, {
-                EWireType::Int8,
-                EWireType::Int16,
-                EWireType::Int32,
-                EWireType::Int64,
-
-                EWireType::Uint8,
-                EWireType::Uint16,
-                EWireType::Uint32,
-                EWireType::Uint64,
-
-                EWireType::String32,
-                EWireType::Boolean,
-                EWireType::Double,
-                EWireType::Nothing,
-                EWireType::Yson32,
-            });
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Null:
-        case ESimpleLogicalValueType::Void:
-            CheckWireType(wireType, {EWireType::Nothing, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Uuid:
-            CheckWireType(wireType, {EWireType::Uint128, EWireType::String32, EWireType::Yson32});
-            if (wireType == EWireType::Uint128) {
-                return CreatePrimitiveValueConverter<EValueType::String>(required, TUuidWriter());
-            } else {
-                return CreatePrimitiveValueConverter(wireType, required);
-            }
-    }
+    ValidateDoesNotMatchOptionalSingular(skiffField.Schema());
+    auto [skiffSchema, optionalKind] = StripOptional(skiffField.Schema());
+    return DispatchOptionalKind(optionalKind, [&skiffSchema, logicalType] <EOptionalKind OptionalKind> () {
+        return CreateSimpleConverter<
+            TUnversionedValueToSkiffConverter,
+            TWriterConverters<OptionalKind>,
+            TWriteFunctions
+        >(skiffSchema, logicalType);
+    });
 }
 
 TUnversionedValueToSkiffConverter CreateComplexValueConverter(
@@ -543,32 +368,14 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
     const TFieldDescription& field,
     const TDecimalLogicalType& logicalType)
 {
-    bool isRequired = field.IsRequired();
-    int precision = logicalType.GetPrecision();
-    auto wireType = field.ValidatedGetDeoptionalizeType(/*simplify*/ true);
-    switch (wireType) {
-        case EWireType::Int32:
-            return CreatePrimitiveValueConverter<EValueType::String>(
-                isRequired,
-                TDecimalSkiffWriter<EWireType::Int32>(precision));
-        case EWireType::Int64:
-            return CreatePrimitiveValueConverter<EValueType::String>(
-                isRequired,
-                TDecimalSkiffWriter<EWireType::Int64>(precision));
-        case EWireType::Int128:
-            return CreatePrimitiveValueConverter<EValueType::String>(
-                isRequired,
-                TDecimalSkiffWriter<EWireType::Int128>(precision));
-        case EWireType::Int256:
-            return CreatePrimitiveValueConverter<EValueType::String>(
-                isRequired,
-                TDecimalSkiffWriter<EWireType::Int256>(precision));
-        case EWireType::Yson32:
-            return CreatePrimitiveValueConverter(wireType, isRequired);
-        default:
-            CheckSkiffWireTypeForDecimal(precision, wireType);
-            YT_ABORT();
-    }
+    auto [skiffSchema, optionalKind] = StripOptional(field.Schema());
+    return DispatchOptionalKind(optionalKind, [&skiffSchema, &logicalType] <EOptionalKind OptionalKind> () {
+        return CreateDecimalConverter<
+            TUnversionedValueToSkiffConverter,
+            TWriterConverters<OptionalKind>,
+            TWriteFunctions
+        >(skiffSchema, logicalType.GetPrecision());
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -742,11 +549,15 @@ public:
                 //      e.g we allow column to be optional in table schema and be required in Skiff schema
                 //      (runtime check is used in such cases).
                 if (!columnSchema) {
-                    if (!skiffField.GetDeoptionalizeType(/*simplify*/ true) && !skiffField.IsRequired()) {
+                    auto [strippedSchema, optionalKind] = StripOptional(skiffField.Schema());
+                    if ((GetSchemaKind(strippedSchema->GetWireType()) == ESchemaKind::Complex &&
+                            optionalKind != EOptionalKind::None) ||
+                        MatchesOptionalSingular(skiffField.Schema()))
+                    {
                         // NB. Special case, column is described in Skiff schema as non required complex field
                         // but is missing in schema.
                         // We expect it to be missing in whole table and return corresponding converter.
-                        return CreateMissingCompositeValueConverter(skiffField.Name());
+                        return CreateMissingCompositeValueConverter(skiffField.Name(), optionalKind);
                     }
                 }
 
@@ -760,7 +571,6 @@ public:
                         case ELogicalMetatype::Simple:
                             return CreateSimpleValueConverter(
                                 skiffField,
-                                skiffField.IsRequired(),
                                 denullifiedLogicalType->AsSimpleTypeRef().GetElement());
                         case ELogicalMetatype::Decimal:
                             return CreateDecimalValueConverter(skiffField, denullifiedLogicalType->AsDecimalTypeRef());

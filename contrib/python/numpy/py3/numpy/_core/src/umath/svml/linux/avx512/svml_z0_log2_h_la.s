@@ -15,6 +15,7 @@
  *
  */
 
+	.file   "svml_z0_log2_h_la.s"
         .text
 
         .align    16,0x90

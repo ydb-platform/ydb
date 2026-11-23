@@ -1,8 +1,10 @@
 #pragma once
 
 #include "schemeshard__operation_part.h"
+#include "schemeshard__pipe_messages.h"
 #include "schemeshard_tx_infly.h"
 
+#include <optional>
 #include <util/generic/set.h>
 
 namespace NKikimr::NSchemeShard {
@@ -19,8 +21,9 @@ struct TOperation: TSimpleRefCount<TOperation> {
     THashSet<TTxId> WaitOperations;
 
     struct TPreSerializedMessage {
-        ui32 Type;
-        TIntrusivePtr<TEventSerializedData> Data;
+        ui32 Type = 0;
+        TIntrusivePtr<TEventSerializedData> Data; // set once materialized
+        std::optional<TPipeMessageFragments> Deferred; // set until materialized
         TOperationId OpId;
 
         TPreSerializedMessage() = default;
@@ -30,6 +33,22 @@ struct TOperation: TSimpleRefCount<TOperation> {
             , Data(std::move(data))
             , OpId(opId)
         { }
+
+        TPreSerializedMessage(ui32 type, TPipeMessageFragments&& fragments, TOperationId opId)
+            : Type(type)
+            , Deferred(std::move(fragments))
+            , OpId(opId)
+        { }
+
+        bool IsMaterialized() const {
+            return static_cast<bool>(Data);
+        }
+
+        // implemented in schemeshard__pipe_messages.cpp: composes the wire form
+        // from the deferred fragments on first use and drops them afterwards;
+        // returns by value on purpose — a reference would be a reference into
+        // this message and could dangle if the message is moved afterwards
+        TIntrusivePtr<TEventSerializedData> Materialize();
     };
 
     THashMap<TTabletId, TMap<TPipeMessageId, TPreSerializedMessage>> PipeBindedMessages; // std::pair<ui64, ui64> it's a cookie
@@ -44,7 +63,8 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TDeque<TProposeShards> ShardsProposes;
 
     using TPublishPath = std::pair<TPathId, ui64>;
-    TSet<TPublishPath> Publications;
+    using TPublicationPaths = TMap<TPublishPath, TPathDbRef>;
+    TPublicationPaths Publications;
 
     TSet<TSubTxId> ReadyToProposeParts;
     THashSet<TSubTxId> ReadyToNotifyParts;
@@ -85,7 +105,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
     void AddPart(ISubOperation::TPtr part);
 
-    bool AddPublishingPath(TPathId pathId, ui64 version);
+    bool AddPublishingPath(TSchemeShard* ss, TPathId pathId, ui64 version);
     bool IsPublished() const;
 
     void ReadyToNotifyPart(TSubTxId partId);

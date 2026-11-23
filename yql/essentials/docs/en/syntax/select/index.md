@@ -141,7 +141,7 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * `ORDER BY/LIMIT/INTO RESULT` is only allowed after the last query
 * `DISCARD` is only allowed before the first query
 * the operators apply to the `UNION [ALL]` as a whole, instead of referring to one of the queries
-* to apply the operator to one of the queries, enclose the query in parantheses
+* to apply the operator to one of the queries, enclose the query in parentheses
 
 ## Clauses supported in SELECT
 

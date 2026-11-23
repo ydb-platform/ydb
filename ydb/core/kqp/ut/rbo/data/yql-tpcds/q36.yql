@@ -20,13 +20,13 @@ SELECT
             Sum(ss_net_profit) / Sum(ss_ext_sales_price) ASC
     ) AS rank_within_parent
 FROM
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/date_dim` AS d1
+    `date_dim` AS d1
 ,
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/store`
+    `store`
 WHERE
     d1.d_year == 2000
     AND d1.d_date_sk == ss_sold_date_sk
@@ -41,7 +41,7 @@ GROUP BY
 ORDER BY
     lochierarchy DESC,
     CASE
-        WHEN lochierarchy == 0 THEN i_category
+        WHEN CAST(lochierarchy AS Int32) == 0 THEN i_category
         ELSE NULL
     END,
     rank_within_parent

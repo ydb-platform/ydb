@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/core/kafka_proxy/kafka_log_impl.h>
 #include "kafka_consumer_protocol.h"
+#include <library/cpp/containers/cow_string/cow_string.h>
 
 namespace NKafka {
 
@@ -4109,7 +4110,7 @@ public:
         };
         MetadataMeta::Type Metadata;
 
-        TString MetaStr;
+        TCowString MetaStr;
 
         i32 Size(TKafkaVersion version) const override;
         void Read(TKafkaReadable& readable, TKafkaVersion version) override;
@@ -4704,7 +4705,7 @@ public:
         };
         AssignmentMeta::Type Assignment;
 
-        TString AssignmentStr;
+        TCowString AssignmentStr;
 
         i32 Size(TKafkaVersion version) const override;
         void Read(TKafkaReadable& readable, TKafkaVersion version) override;
@@ -4914,7 +4915,7 @@ public:
     };
     AssignmentMeta::Type Assignment;
 
-    TString AssignmentStr;
+    TCowString AssignmentStr;
 
     i16 ApiKey() const override { return SYNC_GROUP; };
     i32 Size(TKafkaVersion version) const override;
@@ -5097,9 +5098,9 @@ public:
             };
             MemberAssignmentMeta::Type MemberAssignment;
 
-            TString MemberAssignmentStr;
+            TCowString MemberAssignmentStr;
 
-            TString MemberMetadataStr;
+            TCowString MemberMetadataStr;
 
             i32 Size(TKafkaVersion version) const override;
             void Read(TKafkaReadable& readable, TKafkaVersion version) override;
@@ -8428,7 +8429,7 @@ public:
     };
     SessionLifetimeMsMeta::Type SessionLifetimeMs;
 
-    TString AuthBytesStr;
+    TCowString AuthBytesStr;
 
     i16 ApiKey() const override { return SASL_AUTHENTICATE; };
     i32 Size(TKafkaVersion version) const override;

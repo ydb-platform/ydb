@@ -21,6 +21,8 @@ bool IsLikelyObjectRefStack(const TParserCallStack& stack);
 
 bool IsLikelyExistingTableStack(const TParserCallStack& stack);
 
+bool IsLikelyExistingViewStack(const TParserCallStack& stack);
+
 bool IsLikelyTableArgStack(const TParserCallStack& stack);
 
 bool IsLikelyClusterStack(const TParserCallStack& stack);

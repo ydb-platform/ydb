@@ -31,7 +31,7 @@
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 #include <library/cpp/yt/string/stream.h>
 
@@ -147,7 +147,7 @@ private:
     DECLARE_THREAD_AFFINITY_SLOT(LoggingThread);
 
     //! Protects the fields below.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::string CurrentBuffer_;
     i64 CurrentRowCount_ = 0;
     //! This queue should typically contain no more than one element.

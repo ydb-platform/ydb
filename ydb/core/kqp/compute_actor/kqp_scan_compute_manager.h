@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/kqp/tracing/kqp_scan_rendering.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_common.h"
@@ -30,6 +31,7 @@ public:
     const ui64 ScanId;
     const ui64 TabletId;
     const ui64 Generation;
+    TShardScanTrace Trace;
     i64 DataChunksInFlightCount = 0;
     bool TracingStarted = false;
     const ui64 FreeSpace = (ui64)8 << 20;
@@ -50,10 +52,11 @@ public:
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
             {"event", "scan_ack"},
             {"actorId", ActorId});
-        AFL_ENSURE(NeedAck);
+        YDB_LOG_ENSURE(NeedAck);
         NeedAck = false;
-        AFL_ENSURE(ActorId);
-        AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flight_count", DataChunksInFlightCount);
+        YDB_LOG_ENSURE(ActorId);
+        YDB_LOG_ENSURE(!DataChunksInFlightCount,
+            {"dataChunksInFlightCount", DataChunksInFlightCount});
         ui32 flags = IEventHandle::FlagTrackDelivery;
         if (!TracingStarted) {
             flags |= IEventHandle::FlagSubscribeOnSession;
@@ -66,10 +69,12 @@ public:
     }
 
 public:
-    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
+    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider,
+        const NWilson::TTraceId& traceId)
         : ScanId(scanId)
         , TabletId(state.TabletId)
-        , Generation(state.Generation) {
+        , Generation(state.Generation)
+        , Trace(traceId, state.TabletId, state.TotalRetries) {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
@@ -94,7 +99,8 @@ public:
             {"cursor", state.CursorDebugString()});
 
         NActors::TActivationContext::AsActorContext().Send(
-            MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
+            MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed),
+            IEventHandle::FlagTrackDelivery, 0, Trace.GetTraceId());
     }
 
     ui64 GetTabletId() const {
@@ -114,6 +120,7 @@ public:
     }
 
     void Stop(const bool finalFlag, const TString& message) {
+        Trace.Finish(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
             {"event", "stop_scanner"},
             {"actorId", ActorId},
@@ -146,7 +153,7 @@ public:
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
             {"event", "start_scanner"},
             {"actorId", actorId});
-        AFL_ENSURE(!ActorId);
+        YDB_LOG_ENSURE(!ActorId);
         ActorId = actorId;
         AllowPings = allowPings;
         DoAck();
@@ -157,7 +164,8 @@ public:
 
     void FinishWaitSendData() {
         --DataChunksInFlightCount;
-        AFL_ENSURE(DataChunksInFlightCount >= 0)("data_chunks_in_flight_count", DataChunksInFlightCount);
+        YDB_LOG_ENSURE(DataChunksInFlightCount >= 0,
+            {"dataChunksInFlightCount", DataChunksInFlightCount});
         if (!DataChunksInFlightCount && !!ActorId) {
             DoAck();
         }
@@ -170,7 +178,7 @@ public:
     }
 
     void DecPending() {
-        AFL_ENSURE(PendingMessageCount > 0);
+        YDB_LOG_ENSURE(PendingMessageCount > 0);
         auto now = TInstant::Now();
         WaitOutputTime += (now - StartWaitOutputTime);
         StartWaitOutputTime = --PendingMessageCount ? now : TInstant::Zero();
@@ -212,7 +220,7 @@ private:
 
 public:
     ui32 GetRowsCount() const {
-        AFL_ENSURE(Event);
+        YDB_LOG_ENSURE(Event);
         return Event->GetRowsCount();
     }
 
@@ -235,7 +243,7 @@ public:
     void Finish() {
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
             {"event", "stop_scanner"});
-        AFL_ENSURE(!Finished);
+        YDB_LOG_ENSURE(!Finished);
         Finished = true;
         Info->FinishWaitSendData();
     }
@@ -284,8 +292,8 @@ public:
         }
 
         void OnAckReceived(const ui64 freeSpace) {
-            AFL_ENSURE(!FreeSpace);
-            AFL_ENSURE(freeSpace);
+            YDB_LOG_ENSURE(!FreeSpace);
+            YDB_LOG_ENSURE(freeSpace);
             FreeSpace = freeSpace;
             ++AcksReceived;
             SendData();
@@ -344,7 +352,8 @@ public:
             {"event", "ack"},
             {"computeActorId", computeActorId});
         auto it = ComputeActorsById.find(computeActorId);
-        AFL_ENSURE(it != ComputeActorsById.end())("compute_actor_id", computeActorId);
+        YDB_LOG_ENSURE(it != ComputeActorsById.end(),
+            {"computeActorId", computeActorId});
         it->second->IncTotalAcksFromCompute();
         if (it->second->IsFree()) {
             return false;
@@ -372,7 +381,8 @@ public:
             sendTask->Info->IncPending();
             UndefinedShardTaskData.emplace_back(std::move(sendTask));
         } else {
-            AFL_ENSURE(*computeShardId < ComputeActors.size())("compute_shard_id", *computeShardId);
+            YDB_LOG_ENSURE(*computeShardId < ComputeActors.size(),
+                {"computeShardId", *computeShardId});
             ComputeActors[*computeShardId].AddDataToSend(std::move(sendTask));
         }
     }
@@ -387,6 +397,7 @@ private:
     THashMap<ui64, std::shared_ptr<TShardScannerInfo>> ShardScanners;
     const ui64 ScanId;
     const IExternalObjectsProvider& ExternalObjectsProvider;
+    const NWilson::TTraceId TraceId;
 
 public:
     void AbortAllScanners(const TString& errorMessage) {
@@ -414,7 +425,8 @@ public:
 
     const std::shared_ptr<TShardState>& GetShardStateVerified(const ui64 tabletId) const {
         auto it = Shards.find(tabletId);
-        AFL_ENSURE(it != Shards.end())("tablet_id", tabletId);
+        YDB_LOG_ENSURE(it != Shards.end(),
+            {"tabletId", tabletId});
         return it->second;
     }
 
@@ -446,13 +458,16 @@ public:
             {"generation", state->Generation},
             {"shardActor", state->ActorId});
 
-        AFL_ENSURE(state->State == NComputeActor::EShardState::Starting)("state", state->State)("tablet_id", tabletId);
-        AFL_ENSURE(!state->ActorId)("actor_id", state->ActorId);
+        YDB_LOG_ENSURE(state->State == NComputeActor::EShardState::Starting,
+            {"state", state->State},
+            {"tabletId", tabletId});
+        YDB_LOG_ENSURE(!state->ActorId,
+            {"actorId", state->ActorId});
 
         state->State = NComputeActor::EShardState::Running;
         state->ActorId = scanActorId;
         state->ResetRetry();
-        AFL_ENSURE(ShardsByActorId.emplace(scanActorId, state).second);
+        YDB_LOG_ENSURE(ShardsByActorId.emplace(scanActorId, state).second);
 
         GetShardScannerVerified(tabletId)->Start(scanActorId, allowPings);
     }
@@ -465,12 +480,14 @@ public:
             {"tabletId", state.TabletId},
             {"generation", state.Generation});
 
-        AFL_ENSURE(state.State == NComputeActor::EShardState::Initial)("state", state.State);
-        AFL_ENSURE(state.TabletId);
-        AFL_ENSURE(!state.ActorId)("actor_id", state.ActorId);
+        YDB_LOG_ENSURE(state.State == NComputeActor::EShardState::Initial,
+            {"state", state.State});
+        YDB_LOG_ENSURE(state.TabletId);
+        YDB_LOG_ENSURE(!state.ActorId,
+            {"actorId", state.ActorId});
         state.State = NComputeActor::EShardState::Starting;
-        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider);
-        AFL_ENSURE(ShardScanners.emplace(state.TabletId, newScanner).second);
+        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider, TraceId);
+        YDB_LOG_ENSURE(ShardScanners.emplace(state.TabletId, newScanner).second);
     }
 
     void StopScanner(const ui64 tabletId, const bool stopShard = true) {
@@ -481,7 +498,7 @@ public:
         auto& state = GetShardStateVerified(tabletId);
         const auto actorId = state->ActorId;
         if (actorId) {
-            AFL_ENSURE(ShardsByActorId.erase(actorId));
+            YDB_LOG_ENSURE(ShardsByActorId.erase(actorId));
         }
         if (state->State != NComputeActor::EShardState::Initial) {
             state->RetryAttempt++;
@@ -492,21 +509,23 @@ public:
             state->Generation++;
 
             auto it = ShardScanners.find(tabletId);
-            AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);
+            YDB_LOG_ENSURE(it != ShardScanners.end(),
+                {"tabletId", tabletId});
             it->second->Stop(true, "");
             ShardScanners.erase(it);
         } else {
-            AFL_ENSURE(!state->ActorId);
+            YDB_LOG_ENSURE(!state->ActorId);
         }
 
         if (stopShard) {
-            AFL_ENSURE(Shards.erase(tabletId));
+            YDB_LOG_ENSURE(Shards.erase(tabletId));
         }
     }
 
     const std::shared_ptr<TShardScannerInfo>& GetShardScannerVerified(const ui64 tabletId) const {
         auto it = ShardScanners.find(tabletId);
-        AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);
+        YDB_LOG_ENSURE(it != ShardScanners.end(),
+            {"tabletId", tabletId});
         return it->second;
     }
 
@@ -518,9 +537,11 @@ public:
         return nullptr;
     }
 
-    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider)
+    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider,
+        NWilson::TTraceId traceId)
         : ScanId(scanId)
-        , ExternalObjectsProvider(externalObjectsProvider) {
+        , ExternalObjectsProvider(externalObjectsProvider)
+        , TraceId(std::move(traceId)) {
     }
     bool IsActive() const {
         return IsActiveFlag;

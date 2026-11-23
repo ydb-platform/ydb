@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_dq_exectransformer.cpp
@@ -35,7 +35,5 @@ PEERDIR(
     yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

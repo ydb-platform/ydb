@@ -114,10 +114,19 @@ namespace TEvSchemeShard {
         EvShredInfoResponse,
         EvShredManualStartupRequest,
 
+        EvDatabaseFreeze,
+        EvDatabaseFreezeResult,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD)");
+
+    struct TEvDatabaseFreeze : public TEventPB<TEvDatabaseFreeze,
+        NKikimrScheme::TEvDatabaseFreeze, EvDatabaseFreeze> {};
+
+    struct TEvDatabaseFreezeResult : public TEventPB<TEvDatabaseFreezeResult,
+        NKikimrScheme::TEvDatabaseFreezeResult, EvDatabaseFreezeResult> {};
 
     struct TEvProcessingResponse: public TEventPB<TEvProcessingResponse,
         NKikimrScheme::TEvProcessingResponse, EvProcessingResponse> {
@@ -548,6 +557,7 @@ namespace TEvSchemeShard {
             ui64 TenantSysViewProcessor;
             ui64 TenantStatisticsAggregator;
             ui64 TenantGraphShard;
+            ui64 TenantWasmCompileController;
             TString RootACL;
         };
 
@@ -567,6 +577,7 @@ namespace TEvSchemeShard {
             Record.SetTenantSysViewProcessor(_.TenantSysViewProcessor);
             Record.SetTenantStatisticsAggregator(_.TenantStatisticsAggregator);
             Record.SetTenantGraphShard(_.TenantGraphShard);
+            Record.SetTenantWasmCompileController(_.TenantWasmCompileController);
 
             Record.SetTenantRootACL(_.RootACL);
         }
@@ -624,6 +635,10 @@ namespace TEvSchemeShard {
 
         void SetTenantGraphShard(ui64 gs) {
             Record.SetTenantGraphShard(gs);
+        }
+
+        void SetTenantWasmCompileController(ui64 wcc) {
+            Record.SetTenantWasmCompileController(wcc);
         }
     };
 

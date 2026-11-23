@@ -9,13 +9,13 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
@@ -31,7 +31,7 @@ struct TTransaction;
 
 //USES MAIN chanel for big blobs, INLINE or EXTRA for ZK-like load, EXTRA2 for small blob for logging (VDISK of type LOG is ok with EXTRA2)
 
-class TPersQueue : public NKeyValue::TKeyValueFlat {
+class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     enum ECookie : ui64 {
         WRITE_CONFIG_COOKIE = 2, // reserved: former TEvUpdateConfig persist cookie
         READ_CONFIG_COOKIE  = 3,
@@ -42,6 +42,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
+
+    bool IsTopicMutateDisabled(const TActorContext& ctx) const;
+    bool IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 
@@ -101,6 +104,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
     void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
     void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr&);
+    void Handle(TEvPQ::TEvResetOffsetRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -158,13 +162,17 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
     DESCRIBE_HANDLE(HandleGetClientOffsetRequest)
-    DESCRIBE_HANDLE(HandleWriteRequest)
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
     DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleUpdateReadMetricsRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
+    DESCRIBE_HANDLE(HandleEmitHeartbeatRequest)
 #undef DESCRIBE_HANDLE
+
+    void HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+                            const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                            bool fromMirrorer = false);
 
 #define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
@@ -182,8 +190,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
-    void SendPlanStepAcks(const TActorContext& ctx,
-                          const TDistributedTransaction& tx);
     void SendPlanStepAcks(const TActorContext& ctx,
                           const TActorId& receiver,
                           const TEvTxProcessing::TEvPlanStep& ev);
@@ -203,7 +209,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
 
-    TString LogPrefix() const;
+    TStructuredMessage LogPrefix() const override;
 
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
@@ -309,8 +315,27 @@ private:
     TDeque<std::pair<ui64, ui64>> TxQueue; // упорядоченный список пар (step, txid)
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
+    // граница, до которой транзакции выполнены или брошены: последняя пара, снятая с TxQueue.
+    // всё строго ниже границы записано на диск нами или партициями
     ui64 ExecStep = 0;
     ui64 ExecTxId = 0;
+    bool PlanStepChanged = false; // значения выше изменились и их надо записать в _txinfo
+
+    // Очередь пришедших TEvPlanStep. Медиатор ждёт подтверждений в возрастающем порядке шагов,
+    // поэтому отправлять их можно только префиксом с головы очереди. Одна запись на одно сообщение:
+    // два поколения queue-актора, приславшие один шаг, получат по своему подтверждению
+    struct TPlanStepEntry {
+        TActorId Sender;                                   // queue-актор, доставивший шаг
+        std::unique_ptr<TEvTxProcessing::TEvPlanStep> Ev;  // из него берутся Step, txIds и AckTo
+        ui64 MaxPendingTxId = Max<ui64>();                 // Max<ui64>() - за шагом нет наших транзакций
+        ui64 CreatedAtWriteTxsCycle = 0;
+    };
+    TDeque<TPlanStepEntry> PlanSteps; // в порядке поступления
+
+    bool CanReleasePlanStep(const TPlanStepEntry& entry) const;
+    bool HasPlanStepWaitingForWriteTxsCycle() const;
+    void SendAcksForCompletedPlanSteps(const TActorContext& ctx);
+    void PopTxFromQueue();
 
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
@@ -335,6 +360,37 @@ private:
     bool CanExecute(const TDistributedTransaction& tx);
 
     bool WriteTxsInProgress = false;
+    // Доказательство лидерства для записи PlanSteps, за которой нет наших транзакций. Подтверждать её
+    // можно только после успешного цикла WRITE_TX_COOKIE, отправленного уже после её появления.
+    // Циклы последовательны, в полёте не больше одного.
+    //
+    // WriteTxsCycle растёт в BeginWriteTxs, в момент отправки запроса. CompletedWriteTxsCycle
+    // становится равен ему только в EndWriteTxs при успехе. В случае ошибки таблетка останавливается
+    // и счётчик не двигается. Каждая запись запоминает WriteTxsCycle в CreatedAtWriteTxsCycle и уходит,
+    // когда CompletedWriteTxsCycle > CreatedAtWriteTxsCycle.
+    //
+    // Снимок свой у каждой записи: два глобальных счётчика не знают, кто уже лежал в деке к моменту
+    // отправки, а кто пришёл позже. Оба счётчика равны 0, шаги без наших транзакций:
+    //
+    //   пришёл шаг 300, запись помнит 0. 0 > 0 ложно, стартует цикл, WriteTxsCycle = 1
+    //   пока запрос в полёте, пришёл шаг 400, запись помнит 1
+    //   цикл прошёл, CompletedWriteTxsCycle = 1. шаг 300 уходит (1 > 0), шаг 400 остаётся (1 > 1 ложно)
+    //   стартует цикл 2, он прошёл, CompletedWriteTxsCycle = 2, шаг 400 уходит (2 > 1)
+    //
+    // Тот же снимок, если цикл уже летел по другой причине (пропоуз, _txinfo) и WriteTxsCycle уже 1,
+    // а CompletedWriteTxsCycle ещё 0. Пришедший шаг помнит 1, успех этого цикла даёт 1 > 1 и его
+    // не отпускает: запрос ушёл до шага.
+    //
+    // Флаг «запись уже проходила» после первого успеха отпустил бы оба шага. Шаг 400 подтвердился бы
+    // запросом, отправленным до его прихода: запрос мог примениться, поколение после этого зафенсили,
+    // а шаг доехал по ещё живому пайпу.
+    //
+    // Одного числа не хватает по той же причине. Если растить его только на успехе, шаг 300 и шаг 400
+    // неразличимы: оба увидят увеличение 0 -> 1 и оба уйдут. Если растить только на отправке,
+    // неуспешный цикл выглядит как прогресс. Поэтому один счётчик растёт на отправке, второй копирует
+    // его на успехе, а снимок на записи отделяет «этого цикла ещё не было» от «этот цикл меня ждёт».
+    ui64 WriteTxsCycle = 0;
+    ui64 CompletedWriteTxsCycle = 0;
 
     struct TReplyToActor;
 
@@ -439,11 +495,6 @@ private:
                                  const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
-    void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
-                           const NKikimrPQ::TPQTabletConfig& cfg,
-                           const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                           const NKikimrPQ::TPartitions& partitionsData,
-                           const TActorContext& ctx);
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
@@ -481,7 +532,7 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void ScheduleDeleteExpiredKafkaTransactions();
     void TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();
     void SetTxCompleteLagCounter();

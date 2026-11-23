@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/base/appdata.h>
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
@@ -15,11 +15,11 @@ enum class EUdfType {
 
 class TUdfMeta: public NMetadata::NModifications::TObject<TUdfMeta> {
 public:
-    static inline const TString Md5ColName = "md5"; //Utf8 (PK)
-    static inline const TString SizeColName = "size"; // Uint64
-    static inline const TString NameColName = "name"; //Utf8 - informative
-    static inline const TString TypeColName = "type"; //Utf8 (allowed values from EUdfType)
-    static inline const TString ManifestColName = "manifest"; //Json
+    static inline const TString Md5ColName = "md5";   //Utf8 (PK)
+    static inline const TString SizeColName = "size";   // Uint64
+    static inline const TString NameColName = "name";   //Utf8 - informative
+    static inline const TString TypeColName = "type";   //Utf8 (allowed values from EUdfType)
+    static inline const TString ManifestColName = "manifest";   //Json
 
 private:
     YDB_ACCESSOR_DEF(TString, Md5);
@@ -27,6 +27,7 @@ private:
     YDB_ACCESSOR_DEF(TString, Name);
     YDB_ACCESSOR_DEF(EUdfType, Type);
     YDB_ACCESSOR_DEF(TString, Manifest);
+
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TVector<NKikimrSchemeOp::TColumnDescription> GetColumnDescription();
@@ -36,6 +37,7 @@ public:
     // Note: Body is NOT a table column; it is stored in a KV tablet.
     class TDecoder: public NMetadata::NInternal::TDecoderBase {
         using TBase = NMetadata::NInternal::TDecoderBase;
+
     private:
         YDB_ACCESSOR(i32, Md5Idx, -1);
         YDB_ACCESSOR(i32, SizeIdx, -1);
@@ -56,9 +58,10 @@ public:
     bool operator<(const TUdfMeta& other) const {
         return Md5 < other.Md5;
     }
+
     bool operator==(const TUdfMeta& other) const {
         return Md5 == other.Md5;
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

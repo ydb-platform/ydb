@@ -1,6 +1,7 @@
 #include "interconnect_channel.h"
 #include "interconnect_zc_processor.h"
 #include "rdma/mem_pool.h"
+#include "xdc_limits.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -139,7 +140,8 @@ namespace NActors {
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
         YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Dropping confirmed messages",
-            {"marker", "ICOCH98"});
+            {"marker", "ICOCH98"},
+            {"logPrefix", LogPrefix});
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             pool.Release(NotYetConfirmed, it++);
         }
@@ -188,6 +190,10 @@ namespace NActors {
                     if (!event.EventSerializedSize) {
                         State = EState::DESCRIPTOR;
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
+                        if (!IsXdcDeclareWithinLimit(*SerializationInfo, event.EventSerializedSize,
+                                MaxSerializedEventSize)) {
+                            throw TExSerializedEventTooLarge(event.Descr.Type);
+                        }
                         State = EState::SECTIONS;
                         SectionIndex = 0;
                         XXH3_64bits_reset(&RdmaCumulativeChecksumState);
@@ -200,6 +206,8 @@ namespace NActors {
                         if (hasRdmaSections && Params.UseXdcShuffle && Params.UseRdmaRead && RdmaMemPool && rdmaDeviceIndex >= 0) {
                             if (SerializeEventRdma(event)) {
                                 SerializationInfo = &event.Buffer->GetSerializationInfo();
+                                YDB_LOG_CREATE_CONTEXT(
+                                    {"logPrefix", LogPrefix});
                                 UseRdmaForCurrentEvent = IsRdmaSectionLayoutConsistentWithData(event, rdmaDeviceIndex);
                                 Chunker.DiscardEvent();
                             }
@@ -570,7 +578,7 @@ namespace NActors {
 
         // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
         //  \todo replace with checksumsDisabled
-        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ);
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -605,7 +613,7 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums
             && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
         const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
 
@@ -663,6 +671,7 @@ namespace NActors {
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notyfying about Undelivered messages!",
             {"marker", "ICOCH89"},
+            {"logPrefix", LogPrefix},
             {"notYetConfirmed", NotYetConfirmed.size()},
             {"queue", Queue.size()});
         if (State == EState::BODY && Queue.front().Event) {

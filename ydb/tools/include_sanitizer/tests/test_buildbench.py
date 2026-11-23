@@ -8,6 +8,7 @@ the graceful-degradation paths. Nothing here runs ya, clang or perf.
 from __future__ import annotations
 
 import contextlib
+import csv
 import io
 import json
 import os
@@ -15,6 +16,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -44,7 +46,7 @@ class ParseProcStatTest(TempDirTest):
                         encoding="utf-8")
         stat = bbparse.parse_procstat(path)
         self.assertIsNotNone(stat)
-        self.assertEqual(stat.wall_us, 297517)
+        self.assertEqual(stat.cpu_us, 297517)
         self.assertEqual(stat.user_us, 246423)
         self.assertEqual(stat.peak_rss_kb, 77764)
         self.assertEqual(stat.subprocesses, 1)
@@ -56,7 +58,7 @@ class ParseProcStatTest(TempDirTest):
             '"clang++","/build/a.o",200,150,3000\n',
             encoding="utf-8")
         stat = bbparse.parse_procstat(path)
-        self.assertEqual(stat.wall_us, 300)
+        self.assertEqual(stat.cpu_us, 300)
         self.assertEqual(stat.user_us, 230)
         self.assertEqual(stat.peak_rss_kb, 3000)
         self.assertEqual(stat.subprocesses, 2)
@@ -128,6 +130,28 @@ class ProbePerfTest(unittest.TestCase):
 
 
 class CollectTuCostsTest(TempDirTest):
+    def test_cpu_and_elapsed_time_remain_distinct_in_reports(self) -> None:
+        ps_dir = self.tmp / "pstat"
+        tt_dir = self.tmp / "trace"
+        ps_dir.mkdir()
+        tt_dir.mkdir()
+        (ps_dir / "abc.src").write_text(str(Path(REPO_ROOT) / "ydb/a.cpp"))
+        (ps_dir / "abc.pstat").write_text('"clang++","/build/a.o",500000,400000,2048\n')
+        (tt_dir / "abc.json").write_text(json.dumps({"traceEvents": [
+            {"ph": "X", "name": "ExecuteCompiler", "dur": 900000},
+        ]}))
+        costs = bbparse.collect_tu_costs(ps_dir, tt_dir=tt_dir)
+        point = bbrun.Point(per_tu=bbrun.merge_tu_costs([costs]))
+        payload = {"created": "now", "ya_argv": [], "repeat": 1, "points": []}
+        with mock.patch.object(bbrun, "_buildbench_dir", return_value=self.tmp):
+            bbrun.write_reports("measured", payload, [point])
+        with (self.tmp / "measured.per_tu.csv").open() as f:
+            row = next(csv.DictReader(f))
+        self.assertEqual(float(row["cpu_s"]), 0.5)
+        self.assertEqual(float(row["user_s"]), 0.4)
+        self.assertEqual(float(row["execute_s"]), 0.9)
+        self.assertNotIn("wall_s", row)
+
     def test_joins_procstat_and_perf_on_shared_digest(self) -> None:
         ps_dir = self.tmp / "pstat"
         perf_dir = self.tmp / "perf"
@@ -333,10 +357,10 @@ class DerivedDiagnosticsTest(unittest.TestCase):
     def test_fold_tu_costs(self) -> None:
         costs = {
             "a.cpp": bbparse.TuCost("a.cpp", compiles=1, user_us=1_000_000,
-                                    wall_us=2_000_000, peak_rss_kb=100,
+                                    cpu_us=2_000_000, peak_rss_kb=100,
                                     instructions=10.0),
             "b.cpp": bbparse.TuCost("b.cpp", compiles=2, user_us=500_000,
-                                    wall_us=500_000, peak_rss_kb=900,
+                                    cpu_us=500_000, peak_rss_kb=900,
                                     instructions=5.0),
         }
         sample = bbrun.RunSample()
@@ -344,6 +368,7 @@ class DerivedDiagnosticsTest(unittest.TestCase):
         self.assertEqual(sample.tu_count, 2)
         self.assertEqual(sample.compile_count, 3)
         self.assertAlmostEqual(sample.sum_tu_user_s, 1.5)
+        self.assertAlmostEqual(sample.sum_tu_cpu_s, 2.5)
         self.assertEqual(sample.sum_tu_instructions, 15.0)
         self.assertEqual(sample.max_tu_peak_rss_kb, 900)
 
@@ -515,6 +540,38 @@ class SummaryRenderTest(unittest.TestCase):
         self.assertIn("# Build cost report: x", text)
         self.assertIn("`perf` counters were unavailable", text)
         self.assertIn("wall clock", text)
+
+
+class RunStatusTest(TempDirTest):
+    def run_samples(self, samples, procstat=True):
+        with mock.patch.object(bbrun, "_cache_dirs", return_value=(self.tmp,) * 3), \
+                mock.patch.object(bbrun, "run_build", side_effect=samples), \
+                mock.patch("ydb.tools.include_sanitizer.compdb.generate.patched_wrapper",
+                           return_value=contextlib.nullcontext()), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return bbrun.main([
+                "--no-perf", "--no-warmup", "--no-recorder-bin",
+                *([] if procstat else ["--no-procstat"]),
+                "--repeat", str(len(samples)), "--", "./ya", "make", "ydb/core",
+            ])
+
+    def test_failed_build_is_not_hidden_by_a_successful_repetition(self) -> None:
+        with self.assertLogs("buildbench", level="WARNING") as logs:
+            rc = self.run_samples([bbrun.RunSample(rc=7), bbrun.RunSample(rc=0)])
+        self.assertEqual(rc, 7)
+        self.assertTrue(any("build exited 7" in line for line in logs.output))
+
+    def test_cached_build_warns_that_compilation_was_not_measured(self) -> None:
+        with self.assertLogs("buildbench", level="WARNING") as logs:
+            rc = self.run_samples([bbrun.RunSample(rc=0)])
+        self.assertEqual(rc, 0)
+        self.assertTrue(any("no compiler invocations recorded" in line for line in logs.output))
+
+    def test_disabled_recording_does_not_warn_about_cache_hits(self) -> None:
+        with self.assertLogs("buildbench", level="INFO") as logs:
+            rc = self.run_samples([bbrun.RunSample(rc=0)], procstat=False)
+        self.assertEqual(rc, 0)
+        self.assertFalse(any("no compiler invocations recorded" in line for line in logs.output))
 
 
 if __name__ == "__main__":

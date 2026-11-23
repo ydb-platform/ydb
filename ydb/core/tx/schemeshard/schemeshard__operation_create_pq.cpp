@@ -16,6 +16,8 @@
 
 #include <library/cpp/int128/int128.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -44,6 +46,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     }
 
     if (op.PartitionsToAddSize()) {
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("creating topic with providing of partitions count is forbidden");
         return nullptr;
     }
@@ -57,6 +60,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (op.HasPQTabletConfig() && op.GetPQTabletConfig().HasPartitionStrategy()) {
         const auto strategy = op.GetPQTabletConfig().GetPartitionStrategy();
         if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
             return nullptr;
         }
@@ -190,10 +194,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     Y_PROTOBUF_SUPPRESS_NODISCARD tabletConfig.SerializeToString(&pqGroupInfo->TabletConfig);
 
-    if (op.HasBootstrapConfig()) {
-        Y_PROTOBUF_SUPPRESS_NODISCARD op.GetBootstrapConfig().SerializeToString(&pqGroupInfo->BootstrapConfig);
-    }
-
     return pqGroupInfo;
 }
 
@@ -248,6 +248,7 @@ void ApplySharding(TTxId txId,
 }
 
 class TCreatePQ: public TSubOperation {
+    virtual const char* Name() const override final { return "TCreatePQ"; }
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -290,7 +291,7 @@ class TCreatePQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -299,11 +300,9 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = createDEscription.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreatePQ Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -507,9 +506,8 @@ public:
         TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
-        context.SS->Topics[pathId] = emptyGroup;
-        context.SS->Topics[pathId]->AlterData = pqGroup;
-        context.SS->IncrementPathDbRefCount(pathId);
+        emptyGroup->AlterData = pqGroup;
+        context.SS->Topics.Set(pathId, emptyGroup);
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);
@@ -585,7 +583,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(StreamReservedThroughputChange);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(StreamReservedStorageChange);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(StreamShardsCountChange);
@@ -595,11 +593,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreatePQ AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreatePQ AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -643,3 +641,5 @@ ISubOperation::TPtr CreateNewPQ(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

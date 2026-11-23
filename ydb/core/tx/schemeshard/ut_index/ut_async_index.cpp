@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NActors::NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::CHANGE_EXCHANGE, NActors::NLog::PRI_DEBUG);
 
                 init(runtime);
 

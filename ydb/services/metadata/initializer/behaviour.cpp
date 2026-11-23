@@ -1,8 +1,10 @@
 #include "behaviour.h"
-#include "object.h"
 #include "initializer.h"
 #include "manager.h"
+#include "object.h"
+
 #include <ydb/core/base/appdata.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NMetadata::NInitializer {
@@ -34,4 +36,4 @@ std::shared_ptr<NKikimr::NMetadata::NInitializer::TDBObjectBehaviour> TDBObjectB
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

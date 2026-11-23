@@ -50,7 +50,7 @@ Ydb::ResultSet MakeProtoResultSet() {
     return rsProto;
 }
 
-} //namespace
+}   //namespace
 
 Y_UNIT_TEST_SUITE(SplitterBasic) {
     Y_UNIT_TEST(EqualSplitByMaxBytesLimitPerChunk) {
@@ -112,4 +112,4 @@ Y_UNIT_TEST_SUITE(SplitterBasic) {
     }
 }
 
-} // NFq
+}   // namespace NFq

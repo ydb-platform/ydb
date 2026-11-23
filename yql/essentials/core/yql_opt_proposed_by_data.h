@@ -22,4 +22,4 @@ TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationConte
 TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types);
 
-}
+} // namespace NYql

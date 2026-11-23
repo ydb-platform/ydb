@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
                 {sender},
-                [cookie](const auto& ev) {
+                [cookie](const TEvQuota::TEvClearance::TPtr& ev) {
                     return ev->Cookie == cookie;
                 });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
                 {sender},
-                [cookie](const auto& ev) {
+                [cookie](const TEvQuota::TEvClearance::TPtr& ev) {
                     return ev->Cookie == cookie;
                 });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
             {sender},
-            [](const auto& ev) { return ev->Cookie == 1; });
+            [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
         UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
     }
 
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
             {sender},
-            [](const auto& ev) { return ev->Cookie == 1; });
+            [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
         UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::GenericError);
 
         // A late resolve answer after cleanup must be ignored, not crash.
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 TDuration::Max()), 0, 2));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 2; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 2; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
     }
@@ -757,7 +757,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 {TEvQuota::TResourceLeaf(database, quoter, "Res", 1)}, TDuration::Max()), 0, 1));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 1; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 2; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 2; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::GenericError);
         }
 
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 {TEvQuota::TResourceLeaf(database, quoter, "Res", 1)}, TDuration::Max()), 0, 3));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 3; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 3; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -812,7 +812,83 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                 {TEvQuota::TResourceLeaf(database, quoter, "Res2", 1)}, TDuration::Max()), 0, 4));
         {
             auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
-                {sender}, [](const auto& ev) { return ev->Cookie == 4; });
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 4; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+        }
+    }
+
+    // SchemeShard publishes the Kesus path before the Kesus tablet is configured,
+    // so the quoter path may resolve without a tablet id. Such a request must be
+    // declined instead of crashing the quoter proxy.
+    Y_UNIT_TEST(KesusBeingCreated) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        InitRootSchemeAsync(runtime);
+
+        // Holding the config keeps the CreateKesus operation in ConfigureParts.
+        TVector<THolder<IEventHandle>> heldSetConfig;
+        auto observer = runtime->AddObserver<NKesus::TEvKesus::TEvSetConfig>(
+            [&](NKesus::TEvKesus::TEvSetConfig::TPtr& ev) {
+                heldSetConfig.emplace_back(ev.Release());
+            });
+
+        CreateKesusAsync(runtime);
+        runtime->WaitFor("held kesus config", [&] { return !heldSetConfig.empty(); });
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        bool resolvedWithoutTablet = false;
+        auto navigateObserver = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                if (ev->Recipient != serviceActorId) {
+                    return;
+                }
+                const auto& entry = ev->Get()->Request->ResultSet.at(0);
+                resolvedWithoutTablet = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindKesus
+                    && entry.KesusInfo
+                    && !entry.KesusInfo->Description.GetKesusTabletId();
+            });
+
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf},
+                TDuration::Max()), 0, 1));
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::UnknownResource);
+        }
+        UNIT_ASSERT(resolvedWithoutTablet);
+        navigateObserver.Remove();
+
+        observer.Remove();
+        for (auto& ev : heldSetConfig) {
+            runtime->Send(ev.Release());
+        }
+        heldSetConfig.clear();
+        runtime->SimulateSleep(TDuration::MilliSeconds(500));
+
+        CreateKesusResourceAsync(runtime, 1000.0);
+
+        // The broken quoter was dropped, so a new request resolves it again.
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf},
+                TDuration::Max()), 0, 2));
+        {
+            auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+                {sender}, [](const TEvQuota::TEvClearance::TPtr& ev) { return ev->Cookie == 2; });
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
         }
     }

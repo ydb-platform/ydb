@@ -704,7 +704,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Length(TExprBase node, 
 
             auto scheme = section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
             ytLengthInput = CopyOrTrivialMap(section.Pos(),
-                TExprBase(ctx.NewWorld(section.Pos())),
+                read.World(),
                 TYtDSink(ctx.RenameNode(read.DataSource().Ref(), "DataSink")),
                 *scheme,
                 Build<TYtSection>(ctx, section.Pos())

@@ -8,8 +8,8 @@ class TSqlWindow final: public TSqlTranslation {
 public:
     explicit TSqlWindow(const TSqlTranslation& that);
 
-    bool Build(const TRule_window_clause& node, TWinSpecs& winSpecs);
-    bool Build(const TRule_window_definition& node, TWinSpecs& winSpecs);
+    TSQLStatus Build(const TRule_window_clause& node, TWinSpecs& winSpecs);
+    TSQLStatus Build(const TRule_window_definition& node, TWinSpecs& winSpecs);
 };
 
 } // namespace NSQLTranslationV1

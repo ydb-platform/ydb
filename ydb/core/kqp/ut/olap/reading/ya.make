@@ -11,7 +11,9 @@ ELSE()
 ENDIF()
 
 SRCS(
+    limit_ut.cpp
     simple_reader_ut.cpp
+    sorted_read_ut.cpp
     sparsed_ut.cpp
 )
 

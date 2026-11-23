@@ -1,7 +1,6 @@
 #include "parser_base.h"
 
 #include <util/generic/scope.h>
-
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
@@ -9,17 +8,20 @@ namespace NFq::NRowDispatcher {
 
 //// TTypeParser
 
-TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
-    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
+TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
+    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), false)
     , FunctionRegistry(functionRegistry)
-    , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
-    , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
     , MemInfo("SharedReadingParser")
-    , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry))
-{}
+{
+    LimitAllocator(Alloc, memoryQuotaManager, std::move(memoryName), counters.ReadGroupSubgroup);
+    TypeEnv = std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc);
+    ProgramBuilder = std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry);
+    HolderFactory = std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry);
+}
 
 TTypeParser::~TTypeParser() {
-    with_lock (Alloc) {
+    with_lock(Alloc) {
         HolderFactory.reset();
         TypeEnv.reset();
         ProgramBuilder.reset();
@@ -31,8 +33,8 @@ TValueStatus<NKikimr::NMiniKQL::TType*> TTypeParser::ParseTypeYson(const TString
     TStringOutput errorStream(parseTypeError);
     NKikimr::NMiniKQL::TType* typeMkql = nullptr;
 
-    with_lock (Alloc) {
-        typeMkql = NYql::NCommon::ParseTypeFromYson(TStringBuf(typeYson), *ProgramBuilder, errorStream); 
+    with_lock(Alloc) {
+        typeMkql = NYql::NCommon::ParseTypeFromYson(TStringBuf(typeYson), *ProgramBuilder, errorStream);
     }
 
     if (!typeMkql) {
@@ -58,10 +60,13 @@ void TTopicParserBase::TStats::Clear() {
 
 //// TTopicParserBase
 
-TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
-    : TTypeParser(location, functionRegistry, counters)
+TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters,
+    NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
+    : TTypeParser(location, functionRegistry, counters, std::move(memoryQuotaManager), std::move(memoryName))
     , Consumer(std::move(consumer))
-{}
+{
+}
 
 void TTopicParserBase::Refresh(bool force) {
     Y_UNUSED(force);
@@ -82,33 +87,40 @@ void TTopicParserBase::FillStatistics(TFormatHandlerStatistic& statistic) {
 void TTopicParserBase::ParseBuffer() {
     const TInstant startParseAndFilter = TInstant::Now();
     try {
-        Y_DEFER {
-            with_lock(Alloc) {
-                ClearBuffer();
-            }
-        };
-
-        TStatus status = TStatus::Success();
-        const TInstant startParse = TInstant::Now();
-        with_lock(Alloc) {
-            status = DoParsing();
-        }
-        Stats.AddParserLatency(TInstant::Now() - startParse);
-
-        if (status.IsSuccess()) {
-            Consumer->OnParsedData(GetOffsets().size());
-        } else {
-            Consumer->OnParsingError(status);
-        }
-    } catch (...) {
-        auto error = TStringBuilder() << "Failed to parse messages";
-        if (const auto& offsets = GetOffsets()) {
-            error << " from offset " << offsets.front();
-        }
-        error << ", got unexpected exception: " << CurrentExceptionMessage();
-        Consumer->OnParsingError(TStatus::Fail(EStatusId::INTERNAL_ERROR, error));
+        Y_DEFER{ with_lock(Alloc){ ClearBuffer();
     }
-    Stats.AddParseAndFilterLatency(TInstant::Now() - startParseAndFilter);
+};
+
+TStatus status = TStatus::Success();
+const TInstant startParse = TInstant::Now();
+
+with_lock(Alloc) {
+    status = DoParsing();
+}
+
+Stats.AddParserLatency(TInstant::Now() - startParse);
+
+if (status.IsSuccess()) {
+    Consumer->OnParsedData(GetOffsets().size());
+} else {
+    Consumer->OnParsingError(status);
+}
+}   // namespace NFq::NRowDispatcher
+
+catch (const NKikimr::TMemoryLimitExceededException& error) {
+    Consumer->OnParsingError(TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error, "while parsing or filtering messages")));
+}
+
+catch (...) {
+    auto error = TStringBuilder() << "Failed to parse messages";
+    if (const auto offsets = GetOffsets(); !offsets.empty()) {
+        error << " from offset " << offsets.front();
+    }
+    error << ", got unexpected exception: " << CurrentExceptionMessage();
+    Consumer->OnParsingError(TStatus::Fail(EStatusId::INTERNAL_ERROR, error));
+}
+
+Stats.AddParseAndFilterLatency(TInstant::Now() - startParseAndFilter);
 }
 
 //// Functions
@@ -151,4 +163,4 @@ TString TruncateString(std::string_view rawString, size_t maxSize) {
     return TStringBuilder() << rawString.substr(0, maxSize) << " truncated (full length was " << rawString.size() << ")...";
 }
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

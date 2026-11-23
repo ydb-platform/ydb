@@ -651,6 +651,10 @@ public:
         return Buffer.size() >= RowsLimit || BytesSent >= BytesLimit;
     }
 
+    ui64 GetMemoryBytes() const override {
+        return BytesSent;
+    }
+
     TString GetError() const override {
         return ErrorString;
     }

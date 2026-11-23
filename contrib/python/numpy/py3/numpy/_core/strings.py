@@ -3,49 +3,74 @@ This module contains a set of functions for vectorized string
 operations.
 """
 
+import functools
 import sys
+
 import numpy as np
 from numpy import (
-    equal, not_equal, less, less_equal, greater, greater_equal,
-    add, multiply as _multiply_ufunc,
+    add,
+    equal,
+    greater,
+    greater_equal,
+    less,
+    less_equal,
+    not_equal,
+)
+from numpy import (
+    multiply as _multiply_ufunc,
 )
 from numpy._core.multiarray import _vec_string
-from numpy._core.overrides import set_module
+from numpy._core.overrides import array_function_dispatch, set_module
 from numpy._core.umath import (
-    isalpha,
-    isdigit,
-    isspace,
-    isalnum,
-    islower,
-    isupper,
-    istitle,
-    isdecimal,
-    isnumeric,
-    str_len,
-    find as _find_ufunc,
-    rfind as _rfind_ufunc,
-    index as _index_ufunc,
-    rindex as _rindex_ufunc,
-    count as _count_ufunc,
-    startswith as _startswith_ufunc,
-    endswith as _endswith_ufunc,
-    _lstrip_whitespace,
-    _lstrip_chars,
-    _rstrip_whitespace,
-    _rstrip_chars,
-    _strip_whitespace,
-    _strip_chars,
-    _replace,
-    _expandtabs_length,
-    _expandtabs,
     _center,
+    _expandtabs,
+    _expandtabs_length,
     _ljust,
-    _rjust,
-    _zfill,
+    _lstrip_chars,
+    _lstrip_whitespace,
     _partition,
     _partition_index,
+    _replace,
+    _rjust,
     _rpartition,
     _rpartition_index,
+    _rstrip_chars,
+    _rstrip_whitespace,
+    _slice,
+    _strip_chars,
+    _strip_whitespace,
+    _zfill,
+    isalnum,
+    isalpha,
+    isdecimal,
+    isdigit,
+    islower,
+    isnumeric,
+    isspace,
+    istitle,
+    isupper,
+    str_len,
+)
+from numpy._core.umath import (
+    count as _count_ufunc,
+)
+from numpy._core.umath import (
+    endswith as _endswith_ufunc,
+)
+from numpy._core.umath import (
+    find as _find_ufunc,
+)
+from numpy._core.umath import (
+    index as _index_ufunc,
+)
+from numpy._core.umath import (
+    rfind as _rfind_ufunc,
+)
+from numpy._core.umath import (
+    rindex as _rindex_ufunc,
+)
+from numpy._core.umath import (
+    startswith as _startswith_ufunc,
 )
 
 
@@ -68,7 +93,7 @@ __all__ = [
     "isupper", "istitle", "isdecimal", "isnumeric", "str_len", "find",
     "rfind", "index", "rindex", "count", "startswith", "endswith", "lstrip",
     "rstrip", "strip", "replace", "expandtabs", "center", "ljust", "rjust",
-    "zfill", "partition", "rpartition",
+    "zfill", "partition", "rpartition", "slice",
 
     # _vec_string - Will gradually become ufuncs as well
     "upper", "lower", "swapcase", "capitalize", "title",
@@ -82,6 +107,9 @@ __all__ = [
 
 
 MAX = np.iinfo(np.int64).max
+
+array_function_dispatch = functools.partial(
+    array_function_dispatch, module='numpy.strings')
 
 
 def _get_num_chars(a):
@@ -129,7 +157,12 @@ def _clean_args(*args):
     return newargs
 
 
+def _multiply_dispatcher(a, i):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_multiply_dispatcher)
 def multiply(a, i):
     """
     Return (a * i), that is string multiple concatenation,
@@ -185,7 +218,7 @@ def multiply(a, i):
 
     # Ensure we can do a_len * i without overflow.
     if np.any(a_len > sys.maxsize / np.maximum(i, 1)):
-        raise MemoryError("repeated string is too long")
+        raise OverflowError("Overflow encountered in string multiply")
 
     buffersizes = a_len * i
     out_dtype = f"{a.dtype.char}{buffersizes.max()}"
@@ -193,7 +226,12 @@ def multiply(a, i):
     return _multiply_ufunc(a, i, out=out)
 
 
+def _mod_dispatcher(a, values):
+    return (a, values)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_mod_dispatcher)
 def mod(a, values):
     """
     Return (a % i), that is pre-Python 2.6 string formatting
@@ -506,7 +544,12 @@ def endswith(a, suffix, start=0, end=None):
     return _endswith_ufunc(a, suffix, start, end)
 
 
+def _code_dispatcher(a, encoding=None, errors=None):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_code_dispatcher)
 def decode(a, encoding=None, errors=None):
     r"""
     Calls :meth:`bytes.decode` element-wise.
@@ -555,6 +598,7 @@ def decode(a, encoding=None, errors=None):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_code_dispatcher)
 def encode(a, encoding=None, errors=None):
     """
     Calls :meth:`str.encode` element-wise.
@@ -599,7 +643,12 @@ def encode(a, encoding=None, errors=None):
         np.bytes_(b''))
 
 
+def _expandtabs_dispatcher(a, tabsize=None):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_expandtabs_dispatcher)
 def expandtabs(a, tabsize=8):
     """
     Return a copy of each string element where all tab characters are
@@ -651,7 +700,12 @@ def expandtabs(a, tabsize=8):
     return _expandtabs(a, tabsize, out=out)
 
 
+def _just_dispatcher(a, width, fillchar=None):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_just_dispatcher)
 def center(a, width, fillchar=' '):
     """
     Return a copy of `a` with its elements centered in a string of
@@ -720,6 +774,7 @@ def center(a, width, fillchar=' '):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_just_dispatcher)
 def ljust(a, width, fillchar=' '):
     """
     Return an array with the elements of `a` left-justified in a
@@ -784,6 +839,7 @@ def ljust(a, width, fillchar=' '):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_just_dispatcher)
 def rjust(a, width, fillchar=' '):
     """
     Return an array with the elements of `a` right-justified in a
@@ -847,7 +903,12 @@ def rjust(a, width, fillchar=' '):
     return _rjust(a, width, fillchar, out=out)
 
 
+def _zfill_dispatcher(a, width):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_zfill_dispatcher)
 def zfill(a, width):
     """
     Return the numeric string left-filled with zeros. A leading
@@ -1032,7 +1093,12 @@ def strip(a, chars=None):
     return _strip_chars(a, chars)
 
 
+def _unary_op_dispatcher(a):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_unary_op_dispatcher)
 def upper(a):
     """
     Return an array with the elements converted to uppercase.
@@ -1070,6 +1136,7 @@ def upper(a):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_unary_op_dispatcher)
 def lower(a):
     """
     Return an array with the elements converted to lowercase.
@@ -1107,6 +1174,7 @@ def lower(a):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_unary_op_dispatcher)
 def swapcase(a):
     """
     Return element-wise a copy of the string with
@@ -1147,6 +1215,7 @@ def swapcase(a):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_unary_op_dispatcher)
 def capitalize(a):
     """
     Return a copy of ``a`` with only the first character of each element
@@ -1187,6 +1256,7 @@ def capitalize(a):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_unary_op_dispatcher)
 def title(a):
     """
     Return element-wise title cased version of string or unicode.
@@ -1228,7 +1298,12 @@ def title(a):
     return _vec_string(a_arr, a_arr.dtype, 'title')
 
 
+def _replace_dispatcher(a, old, new, count=None):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_replace_dispatcher)
 def replace(a, old, new, count=-1):
     """
     For each element in ``a``, return a copy of the string with
@@ -1280,8 +1355,8 @@ def replace(a, old, new, count=-1):
         return _replace(arr, old, new, count)
 
     a_dt = arr.dtype
-    old = old.astype(old_dtype if old_dtype else a_dt, copy=False)
-    new = new.astype(new_dtype if new_dtype else a_dt, copy=False)
+    old = old.astype(old_dtype or a_dt, copy=False)
+    new = new.astype(new_dtype or a_dt, copy=False)
     max_int64 = np.iinfo(np.int64).max
     counts = _count_ufunc(arr, old, 0, max_int64)
     counts = np.where(count < 0, counts, np.minimum(counts, count))
@@ -1292,6 +1367,11 @@ def replace(a, old, new, count=-1):
     return _replace(arr, old, new, counts, out=out)
 
 
+def _join_dispatcher(sep, seq):
+    return (sep, seq)
+
+
+@array_function_dispatch(_join_dispatcher)
 def _join(sep, seq):
     """
     Return a string which is the concatenation of the strings in the
@@ -1328,6 +1408,11 @@ def _join(sep, seq):
         _vec_string(sep, np.object_, 'join', (seq,)), seq)
 
 
+def _split_dispatcher(a, sep=None, maxsplit=None):
+    return (a,)
+
+
+@array_function_dispatch(_split_dispatcher)
 def _split(a, sep=None, maxsplit=None):
     """
     For each element in `a`, return a list of the words in the
@@ -1372,6 +1457,7 @@ def _split(a, sep=None, maxsplit=None):
         a, np.object_, 'split', [sep] + _clean_args(maxsplit))
 
 
+@array_function_dispatch(_split_dispatcher)
 def _rsplit(a, sep=None, maxsplit=None):
     """
     For each element in `a`, return a list of the words in the
@@ -1417,6 +1503,11 @@ def _rsplit(a, sep=None, maxsplit=None):
         a, np.object_, 'rsplit', [sep] + _clean_args(maxsplit))
 
 
+def _splitlines_dispatcher(a, keepends=None):
+    return (a,)
+
+
+@array_function_dispatch(_splitlines_dispatcher)
 def _splitlines(a, keepends=None):
     """
     For each element in `a`, return a list of the lines in the
@@ -1454,7 +1545,12 @@ def _splitlines(a, keepends=None):
         a, np.object_, 'splitlines', _clean_args(keepends))
 
 
+def _partition_dispatcher(a, sep):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_partition_dispatcher)
 def partition(a, sep):
     """
     Partition each element in ``a`` around ``sep``.
@@ -1523,6 +1619,7 @@ def partition(a, sep):
 
 
 @set_module("numpy.strings")
+@array_function_dispatch(_partition_dispatcher)
 def rpartition(a, sep):
     """
     Partition (split) each element around the right-most separator.
@@ -1591,7 +1688,12 @@ def rpartition(a, sep):
         a, sep, pos, out=(out["f0"], out["f1"], out["f2"]))
 
 
+def _translate_dispatcher(a, table, deletechars=None):
+    return (a,)
+
+
 @set_module("numpy.strings")
+@array_function_dispatch(_translate_dispatcher)
 def translate(a, table, deletechars=None):
     """
     For each element in `a`, return a copy of the string where all
@@ -1639,3 +1741,89 @@ def translate(a, table, deletechars=None):
             'translate',
             [table] + _clean_args(deletechars)
         )
+
+@set_module("numpy.strings")
+def slice(a, start=None, stop=np._NoValue, step=None, /):
+    """
+    Slice the strings in `a` by slices specified by `start`, `stop`, `step`.
+    Like in the regular Python `slice` object, if only `start` is
+    specified then it is interpreted as the `stop`.
+
+    Parameters
+    ----------
+    a : array-like, with ``StringDType``, ``bytes_``, or ``str_`` dtype
+        Input array
+
+    start : None, an integer or an array of integers
+        The start of the slice, broadcasted to `a`'s shape
+
+    stop : None, an integer or an array of integers
+        The end of the slice, broadcasted to `a`'s shape
+
+    step : None, an integer or an array of integers
+        The step for the slice, broadcasted to `a`'s shape
+
+    Returns
+    -------
+    out : ndarray
+        Output array of ``StringDType``, ``bytes_`` or ``str_`` dtype,
+        depending on input type
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> a = np.array(['hello', 'world'])
+    >>> np.strings.slice(a, 2)
+    array(['he', 'wo'], dtype='<U5')
+
+    >>> np.strings.slice(a, 2, None)
+    array(['llo', 'rld'], dtype='<U5')
+
+    >>> np.strings.slice(a, 1, 5, 2)
+    array(['el', 'ol'], dtype='<U5')
+
+    One can specify different start/stop/step for different array entries:
+
+    >>> np.strings.slice(a, np.array([1, 2]), np.array([4, 5]))
+    array(['ell', 'rld'], dtype='<U5')
+
+    Negative slices have the same meaning as in regular Python:
+
+    >>> b = np.array(['hello world', 'γεια σου κόσμε', '你好世界', '👋 🌍'],
+    ...              dtype=np.dtypes.StringDType())
+    >>> np.strings.slice(b, -2)
+    array(['hello wor', 'γεια σου κόσ', '你好', '👋'], dtype=StringDType())
+
+    >>> np.strings.slice(b, -2, None)
+    array(['ld', 'με', '世界', ' 🌍'], dtype=StringDType())
+
+    >>> np.strings.slice(b, [3, -10, 2, -3], [-1, -2, -1, 3])
+    array(['lo worl', ' σου κόσ', '世', '👋 🌍'], dtype=StringDType())
+
+    >>> np.strings.slice(b, None, None, -1)
+    array(['dlrow olleh', 'εμσόκ υοσ αιεγ', '界世好你', '🌍 👋'],
+          dtype=StringDType())
+
+    """
+    # Just like in the construction of a regular slice object, if only start
+    # is specified then start will become stop, see logic in slice_new.
+    if stop is np._NoValue:
+        stop = start
+        start = None
+
+    # adjust start, stop, step to be integers, see logic in PySlice_Unpack
+    if step is None:
+        step = 1
+    step = np.asanyarray(step)
+    if not np.issubdtype(step.dtype, np.integer):
+        raise TypeError(f"unsupported type {step.dtype} for operand 'step'")
+    if np.any(step == 0):
+        raise ValueError("slice step cannot be zero")
+
+    if start is None:
+        start = np.where(step < 0, np.iinfo(np.intp).max, 0)
+
+    if stop is None:
+        stop = np.where(step < 0, np.iinfo(np.intp).min, np.iinfo(np.intp).max)
+
+    return _slice(a, start, stop, step)

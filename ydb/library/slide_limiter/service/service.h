@@ -84,8 +84,12 @@ public:
             hFunc(TEvExternal::TEvAskResource, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             default:
-                AFL_ERROR(NKikimrServices::TX_LIMITER)("limiter", LimiterName)("problem", "unexpected event")("type", ev->GetTypeRewrite());
-                AFL_VERIFY_DEBUG(false)("type", ev->GetTypeRewrite());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_LIMITER, "",
+                    {"limiter", LimiterName},
+                    {"problem", "unexpected event"},
+                    {"type", ev->GetTypeRewrite()});
+                YDB_LOG_VERIFY_DEBUG(false,
+                    {"type", ev->GetTypeRewrite()});
                 break;
         }
     }

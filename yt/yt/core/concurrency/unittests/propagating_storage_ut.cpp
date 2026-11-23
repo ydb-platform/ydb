@@ -149,8 +149,37 @@ TEST(TPropagatingStorageTest, PropagatingValue)
     ASSERT_FALSE(storage.Has<TSecond>());
 }
 
+TEST(TPropagatingStorageTest, RemoveWithoutCopy)
+{
+    testing::TProbeState state;
+    auto storage = TPropagatingStorage::Create();
+    storage.Exchange(testing::TProbe(&state));
+
+    auto result = storage.Remove<testing::TProbe>();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result->State, &state);
+    EXPECT_THAT(state, testing::NoCopies());
+    EXPECT_TRUE(storage.IsEmpty());
+}
+
+TEST(TPropagatingStorageTest, RemovePreservesSnapshot)
+{
+    testing::TProbeState state;
+    auto storage = TPropagatingStorage::Create();
+    storage.Exchange(testing::TProbe(&state));
+    auto snapshot = storage;
+
+    auto result = storage.Remove<testing::TProbe>();
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result->State, &state);
+    EXPECT_EQ(state.CopyConstructors, 1);
+    EXPECT_EQ(state.CopyAssignments, 0);
+    EXPECT_TRUE(storage.IsEmpty());
+    const auto& snapshotValue = snapshot.GetOrCrash<testing::TProbe>();
+    EXPECT_EQ(snapshotValue.State, &state);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NConcurrency
-

@@ -76,7 +76,7 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters,
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
@@ -88,7 +88,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         return CreateKqpDataExecuter(
             std::move(request), database, userToken, std::move(formatsSettings), counters,
             executerConfig, std::move(asyncIoFactory), creator,
-            userRequestContext, statementResultIndex,
+            userRequestContext,
             federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
             shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
             channelService, useKqpTasksGraphV2,
@@ -114,7 +114,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), creator,
-                userRequestContext, statementResultIndex,
+                userRequestContext,
                 federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
                 channelService, useKqpTasksGraphV2,
@@ -125,7 +125,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpScanExecuter(
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), userRequestContext,
-                statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService,
+                federatedQuerySetup, nullptr, llvmSettings, channelService,
                 txManager, useKqpTasksGraphV2
             );
 
@@ -133,7 +133,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), creator,
-                userRequestContext, statementResultIndex,
+                userRequestContext,
                 federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
                 channelService, useKqpTasksGraphV2,

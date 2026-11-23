@@ -1,0 +1,8 @@
+/* custom error: Symlink "Link" already exists */
+USE plato;
+
+CREATE SYMLINK Link TO Input;
+
+COMMIT;
+
+CREATE SYMLINK Link TO Input;

@@ -1,11 +1,15 @@
 #pragma once
 
+#include <ydb/core/kqp/common/simple/tx_request.h>
+#include <ydb/core/kqp/common/events/stream.h>
+
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/executer_actor/kqp_partition_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
@@ -21,8 +25,15 @@ namespace NKikimr {
 namespace NKqp {
 
 struct TEvKqpExecuter {
-    struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
-        TKqpExecuterEvents::EvTxRequest> {};
+    struct TEvCurrentExecutionStats : public TEventLocal<TEvCurrentExecutionStats, TKqpExecuterEvents::EvCurrentExecutionStats> {
+        TCurrentExecStatsReport Report;
+
+        explicit TEvCurrentExecutionStats(TCurrentExecStatsReport report)
+            : Report(report)
+        {}
+    };
+
+    using TEvTxRequest = TEvKqpExecuterTxRequest;
 
     struct TEvTxResponse : public TEventLocal<TEvTxResponse, TKqpExecuterEvents::EvTxResponse> {
         NKikimrKqp::TEvExecuterTxResponse Record;
@@ -38,6 +49,7 @@ struct TEvKqpExecuter {
         std::optional<ui64> BrokenLockShardId;
         std::optional<ui64> BrokenLockQuerySpanId;
 
+        std::optional<TCurrentExecStatsReport> CurrentExecutionStats;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
         ui64 LocksBrokenAsBreaker = 0;
@@ -87,34 +99,9 @@ struct TEvKqpExecuter {
         }
     };
 
-    struct TEvStreamData : public TEventPBWithArena<TEvStreamData, NKikimrKqp::TEvExecuterStreamData, TKqpExecuterEvents::EvStreamData> {
-        using TBaseEv = TEventPBWithArena<TEvStreamData, NKikimrKqp::TEvExecuterStreamData, TKqpExecuterEvents::EvStreamData>;
-        using TBaseEv::TEventPBBase;
-
-        TEvStreamData() = default;
-        explicit TEvStreamData(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-            : TEventPBBase(std::move(arena))
-        {}
-    };
-
-    struct TEvStreamDataAck : public TEventPB<TEvStreamDataAck, NKikimrKqp::TEvExecuterStreamDataAck,
-        TKqpExecuterEvents::EvStreamDataAck>
-    {
-        friend class TEventPBBase;
-        explicit TEvStreamDataAck(ui64 seqno, ui64 channelId)
-        {
-            Record.SetSeqNo(seqno);
-            Record.SetChannelId(channelId);
-        }
-
-    private:
-        // using a little hack to hide default empty constructor
-        TEvStreamDataAck() = default;
-    };
-
-    // deprecated event, remove in the future releases.
-    struct TEvExecuterProgress : public TEventPB<TEvExecuterProgress, NKikimrKqp::TEvExecuterProgress,
-            TKqpExecuterEvents::EvProgress> {};
+    using TEvStreamData = TEvKqpExecuterStreamData;
+    using TEvStreamDataAck = TEvKqpExecuterStreamDataAck;
+    using TEvExecuterProgress = TEvKqpExecuterProgress;
 
     struct TEvTableResolveStatus : public TEventLocal<TEvTableResolveStatus,
         TKqpExecuterEvents::EvTableResolveStatus>
@@ -122,13 +109,6 @@ struct TEvKqpExecuter {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         NYql::TIssues Issues;
         TDuration CpuTime;
-    };
-
-    struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
-        TKqpExecuterEvents::EvPqTopicResolveStatus>
-    {
-        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
-        NYql::TIssues Issues;
     };
 
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
@@ -183,7 +163,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
@@ -196,7 +176,13 @@ IActor* CreateKqpSchemeExecuter(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
-    const TActorId& kqpTempTablesAgentActor = TActorId());
+    const TActorId& kqpTempTablesAgentActor = TActorId(), NWilson::TTraceId traceId = {},
+    TInstant deadline = TInstant::Max());
+
+IActor* CreateKqpUnsafeTruncateExecuter(
+    TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
+    const TString& traceId, TTxAllocatorState::TPtr txAlloc);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

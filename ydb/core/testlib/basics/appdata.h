@@ -68,6 +68,9 @@ namespace NKikimr {
 
         using TFnReg = std::function<NMiniKQL::IFunctionRegistry*(const NScheme::TTypeRegistry&)>;
 
+        struct TLightweightTag {};
+        explicit TAppPrepare(TLightweightTag, std::shared_ptr<NDataShard::IExportFactory> ef = {});
+
         TAppPrepare(std::shared_ptr<NKikimr::NDataShard::IExportFactory> ef = {});
 
         NActors::TTestActorRuntime::TEgg Unwrap() noexcept;
@@ -108,6 +111,7 @@ namespace NKikimr {
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TColumnShardConfig ColumnShardConfig;
+        NKikimrConfig::TBlobCacheConfig BlobCacheConfig;
         NKikimrConfig::TSmallBlobsQuotaConfig SmallBlobsQuotaConfig;
         NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;

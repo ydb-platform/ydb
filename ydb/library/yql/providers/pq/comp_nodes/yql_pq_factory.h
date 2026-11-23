@@ -6,4 +6,4 @@ namespace NYql {
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetDqPqFactory();
 
-} // namespace NYql
+}   // namespace NYql

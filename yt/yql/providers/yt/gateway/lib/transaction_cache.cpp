@@ -1,4 +1,5 @@
 #include "transaction_cache.h"
+#include "client_config.h"
 #include "yt_helpers.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -413,13 +414,14 @@ TVector<std::pair<TString, ui64>> TTransactionCache::TEntry::GetLayersSnapshot(c
 }
 
 void TTransactionCache::TEntry::CreateDefaultTmpFolder() {
-    if (DefaultTmpFolder) {
+    if (DefaultTmpFolder && (!UseSecureTmp || !UseSecureTmp->load())) {
         Client->Create(DefaultTmpFolder, NYT::NT_MAP, NYT::TCreateOptions().Recursive(true).IgnoreExisting(true));
     }
 }
 
-TTransactionCache::TTransactionCache(const TString& userName)
+TTransactionCache::TTransactionCache(const TString& userName, const TSecureTmpStatePtr& useSecureTmp)
    : UserName_(userName)
+   , UseSecureTmp_(useSecureTmp)
 {}
 
 TTransactionCache::TEntry::TPtr TTransactionCache::GetEntry(const TString& server) {
@@ -454,7 +456,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         createdEntry = MakeIntrusive<TEntry>();
         createdEntry->Cluster = cluster;
         createdEntry->Server = server;
-        auto createClientOptions = TCreateClientOptions().Token(token);
+        auto createClientOptions = TCreateClientOptions().Token(token).Config(CreateYtClientConfig(*config));
         if (impersonationUser) {
             createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
         }
@@ -487,6 +489,9 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
             }
         } else {
             createdEntry->DefaultTmpFolder = NYT::AddPathPrefix("tmp/yql/" + UserName_, NYT::TConfig::Get()->Prefix);
+            if (config->_SecureTmpRoot.Get(cluster)) {
+                createdEntry->UseSecureTmp = UseSecureTmp_;
+            }
         }
         if (createDumpTx) {
             createdEntry->DumpTx = createdEntry->Client->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));

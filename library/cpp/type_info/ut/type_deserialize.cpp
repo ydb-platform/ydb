@@ -560,3 +560,13 @@ TEST(TypeDeserialize, MultipleTypes) {
 
     ASSERT_EQ(NTi::NIo::DeserializeYsonMultipleRaw(*factory, reader), nullptr);
 }
+
+TEST(TypeDeserialize, Timestamp64) {
+    ASSERT_DESERIALIZED_EQ(NTi::Timestamp64(), R"(timestamp64)");
+    ASSERT_DESERIALIZED_EQ(NTi::Timestamp64(), R"({type_name=timestamp64})");
+}
+
+TEST(TypeDeserialize, TzTimestamp64) {
+    ASSERT_DESERIALIZED_EQ(NTi::TzTimestamp64(), R"(tz_timestamp64)");
+    ASSERT_DESERIALIZED_EQ(NTi::TzTimestamp64(), R"({type_name=tz_timestamp64})");
+}

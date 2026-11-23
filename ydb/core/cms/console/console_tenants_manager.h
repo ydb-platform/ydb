@@ -28,6 +28,7 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 
 #include <util/generic/set.h>
 
@@ -543,6 +544,7 @@ public:
         bool IsExternalStatisticsAggregator;
         bool IsExternalBackupController;
         bool IsGraphShardEnabled = false;
+        bool IsWasmCompileControllerEnabled = false;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

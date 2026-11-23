@@ -1,5 +1,6 @@
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -32,8 +33,8 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
     YDB_LOG_CREATE_CONTEXT(
         {"taskId", GetTaskIdentifier()},
         {"taskClass", TypeString()});
-    AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started)(
-                                                                               "actual_stage", StateGuard.GetStage());
+    YDB_LOG_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started,
+        {"actualStage", StateGuard.GetStage()});
 
     context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());
     const TMonotonic start = TMonotonic::Now();
@@ -48,9 +49,9 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
 }
 
 void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
-    AFL_VERIFY(StateGuard.GetStage() <= NChanges::EStage::Written);
-    AFL_VERIFY(StateGuard.GetStage() >= NChanges::EStage::Compiled);
+    YDB_LOG_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
+    YDB_LOG_VERIFY(StateGuard.GetStage() <= NChanges::EStage::Written);
+    YDB_LOG_VERIFY(StateGuard.GetStage() >= NChanges::EStage::Compiled);
 
     DoWriteIndexOnExecute(self, context);
     SetStage(NChanges::EStage::Written);
@@ -71,7 +72,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
+    YDB_LOG_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
 
     DoCompile(context);
     DoOnAfterCompile(context);
@@ -80,25 +81,36 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    //    AFL_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
+    //    YDB_LOG_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted,
+    //        {"stage", Stage});
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     YDB_LOG_WARN("",
         {"event", "Abort"},
         {"reason", context.ErrorMessage});
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
-                                              "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
+    YDB_LOG_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted,
+        {"stage", StateGuard.GetStage()},
+        {"reason", context.ErrorMessage},
+        {"prevReason", AbortedReason});
     SetStage(NChanges::EStage::Aborted);
     AbortedReason = context.ErrorMessage;
     OnFinish(self, context);
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
-    AFL_VERIFY(!LockGuard);
+    YDB_LOG_VERIFY(!LockGuard);
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
+    if (self.HasIndex() && BlobsAction.GetConsumerId() == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
+        // Compaction writes its result with the newest schema, so the opt-in must be read from the last schema,
+        // not from the (possibly older) schema of the source portions. This makes ALTER TABLE ... CACHE_BLOBS_AFTER_WRITE
+        // take effect for the very next compaction of pre-existing data.
+        const bool schemaEnabled = self.GetIndexVerified().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetCacheBlobsAfterWrite();
+        BlobsAction.SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(schemaEnabled, NBlobOperations::EConsumer::GENERAL_COMPACTION,
+            (ui64)self.Settings.CacheDataAfterIndexing != 0, (ui64)self.Settings.CacheDataAfterCompaction != 0));
+    }
     DoStart(self);
     SetStage(NChanges::EStage::Started);
     //    if (!NeedConstruction()) {

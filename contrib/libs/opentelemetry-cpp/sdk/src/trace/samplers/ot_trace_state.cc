@@ -3,19 +3,27 @@
 
 #include "ot_trace_state.h"
 
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <ostream>
 #include <string>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/nostd/span.h"
+#include "opentelemetry/sdk/common/global_log_handler.h"
 #include "opentelemetry/trace/trace_id.h"
+#include "opentelemetry/trace/trace_state.h"
 #include "opentelemetry/version.h"
 
 namespace
 {
 
-constexpr char kHexDigits[] = "0123456789abcdef";
+// TraceState::Set drops the whole tracestate when a value is longer than this,
+// so the entire "ot" value has to fit within it.
+constexpr std::size_t kMaxOtValueSize =
+    static_cast<std::size_t>(opentelemetry::trace::TraceState::kValueMaxSize);
 
 // Number of contiguous zero bits at the least significant end of value.
 // value is guaranteed non-zero by the callers.
@@ -40,7 +48,8 @@ void AppendThresholdHex(std::string &out, uint64_t threshold)
   int trailing_zeros = CountTrailingZeroBits(marked);
   for (int shift = 52; shift >= trailing_zeros - 3; shift -= 4)
   {
-    out.push_back(kHexDigits[(threshold >> shift) & 0xFU]);
+    out.push_back(opentelemetry::common::detail::LowerHexDigit(
+        static_cast<int>((threshold >> shift) & 0xFU)));
   }
 }
 
@@ -49,7 +58,8 @@ void AppendRandomHex(std::string &out, uint64_t value)
 {
   for (int shift = 52; shift >= 0; shift -= 4)
   {
-    out.push_back(kHexDigits[(value >> shift) & 0xFU]);
+    out.push_back(
+        opentelemetry::common::detail::LowerHexDigit(static_cast<int>((value >> shift) & 0xFU)));
   }
 }
 
@@ -60,17 +70,9 @@ bool ParseHex(const std::string &s, std::size_t start, std::size_t len, uint64_t
   uint64_t r = 0;
   for (std::size_t i = 0; i < len; ++i)
   {
-    char c     = s[start + i];
-    int nibble = 0;
-    if (c >= '0' && c <= '9')
-    {
-      nibble = c - '0';
-    }
-    else if (c >= 'a' && c <= 'f')
-    {
-      nibble = c - 'a' + 10;
-    }
-    else
+    const char c     = s[start + i];
+    const int nibble = opentelemetry::common::detail::HexDigitValue(c);
+    if (nibble < 0 || opentelemetry::common::detail::IsAsciiUpper(c))
     {
       return false;
     }
@@ -99,10 +101,25 @@ uint64_t CalculateThreshold(double sampling_probability) noexcept
   {
     return 0;
   }
-  // 0x1p56 == 2^56. sampling_probability is in (0, 1) here, so the rounded
-  // product is in [0, kMaxThreshold] and the subtraction never underflows.
-  uint64_t kept = static_cast<uint64_t>(std::llround(sampling_probability * 0x1p56));
+  // kMaxThreshold == 2^56. sampling_probability is in (0, 1) here, so the
+  // rounded product is in [0, kMaxThreshold] and the subtraction never
+  // underflows.
+  uint64_t kept = static_cast<uint64_t>(
+      std::llround(sampling_probability * static_cast<double>(kMaxThreshold)));
   return kMaxThreshold - kept;
+}
+
+double ValidateRatio(double ratio, const char *sampler_name) noexcept
+{
+  // 2^-56; hex float literals would need C++17.
+  constexpr double kMinRatio = 1.0 / static_cast<double>(kMaxThreshold);
+  if (ratio == 0.0 || (ratio >= kMinRatio && ratio <= 1.0))
+  {
+    return ratio;
+  }
+  OTEL_INTERNAL_LOG_WARN("[" << sampler_name << "] ratio " << ratio
+                             << " is not 0 or within [2^-56, 1.0], using the default 1.0");
+  return 1.0;
 }
 
 uint64_t GetRandomnessFromTraceId(const opentelemetry::trace::TraceId &trace_id) noexcept
@@ -121,7 +138,7 @@ OtelTraceState OtelTraceState::Parse(const std::string &ot_value) noexcept
 {
   OtelTraceState state;
   const std::size_t len = ot_value.size();
-  if (len == 0 || len > 256)
+  if (len == 0 || len > kMaxOtValueSize)
   {
     return state;
   }
@@ -139,7 +156,7 @@ OtelTraceState OtelTraceState::Parse(const std::string &ot_value) noexcept
       std::size_t value_len   = end - value_start;
       if (ot_value.compare(pos, colon - pos, "th") == 0)
       {
-        uint64_t threshold_value;
+        uint64_t threshold_value{0};
         if (value_len <= 14 && ParseHex(ot_value, value_start, value_len, threshold_value))
         {
           state.has_threshold = true;
@@ -148,7 +165,7 @@ OtelTraceState OtelTraceState::Parse(const std::string &ot_value) noexcept
       }
       else if (ot_value.compare(pos, colon - pos, "rv") == 0)
       {
-        uint64_t random_value;
+        uint64_t random_value{0};
         if (value_len == 14 && ParseHex(ot_value, value_start, value_len, random_value))
         {
           state.has_random_value = true;
@@ -172,33 +189,49 @@ OtelTraceState OtelTraceState::Parse(const std::string &ot_value) noexcept
 
 std::string OtelTraceState::Serialize() const
 {
+  // Inherited sub-keys are never dropped (the tracestate spec requires
+  // preserving existing OpenTelemetry concerns); when adding "th" would push
+  // the value past kMaxOtValueSize, the new threshold is omitted instead.
+  std::string rest;
+  if (has_random_value)
+  {
+    rest.append("rv:");
+    AppendRandomHex(rest, random_value);
+  }
+  for (const auto &pair : other_subkeys)
+  {
+    if (!rest.empty())
+    {
+      rest.push_back(';');
+    }
+    rest.append(pair);
+  }
+
   std::string out;
   if (has_threshold && threshold < kMaxThreshold)
   {
     out.append("th:");
     AppendThresholdHex(out, threshold);
+    // A non-empty rest costs one more char for the ';' separator.
+    const std::size_t rest_size = rest.empty() ? 0 : rest.size() + 1;
+    if (out.size() + rest_size > kMaxOtValueSize)
+    {
+      static std::atomic<bool> warned{false};
+      if (!warned.exchange(true))
+      {
+        OTEL_INTERNAL_LOG_WARN("[OtelTraceState] omitting th: recording it would exceed the "
+                               << kMaxOtValueSize << " character tracestate value limit");
+      }
+      out.clear();
+    }
   }
-  if (has_random_value)
+  if (!rest.empty())
   {
     if (!out.empty())
     {
       out.push_back(';');
     }
-    out.append("rv:");
-    AppendRandomHex(out, random_value);
-  }
-  for (const auto &pair : other_subkeys)
-  {
-    std::size_t extra = out.empty() ? pair.size() : pair.size() + 1;
-    if (out.size() + extra > 256)
-    {
-      break;
-    }
-    if (!out.empty())
-    {
-      out.push_back(';');
-    }
-    out.append(pair);
+    out.append(rest);
   }
   return out;
 }

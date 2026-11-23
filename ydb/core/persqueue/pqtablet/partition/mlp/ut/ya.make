@@ -2,8 +2,8 @@ UNITTEST_FOR(ydb/core/persqueue/pqtablet/partition/mlp)
 
 YQL_LAST_ABI_VERSION()
 
-FORK_SUBTESTS()
-SPLIT_FACTOR(200)
+FORK_SUBTESTS(MODULO)
+SPLIT_FACTOR(70)
 
 SIZE(MEDIUM)
 
@@ -13,6 +13,7 @@ SRCS(
     mlp_child_sync_ut.cpp
     mlp_commit_ut.cpp
     mlp_consumer_order_ut.cpp
+    mlp_consumer_precharge_fifo_ut.cpp
     mlp_consumer_split_ut.cpp
     mlp_consumer_ut.cpp
     mlp_consumer_wakeup_ut.cpp

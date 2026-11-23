@@ -26,6 +26,8 @@
 
 #include "y_absl/cleanup/cleanup.h"
 #include "y_absl/status/status.h"
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_replace.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/log.h>
@@ -45,8 +47,6 @@
 #include <netinet/in.h>  // IWYU pragma: keep
 #include <sys/socket.h>  // IWYU pragma: keep
 #include <unistd.h>      // IWYU pragma: keep
-
-#include "y_absl/strings/str_cat.h"
 #endif
 
 namespace grpc_event_engine {
@@ -170,6 +170,7 @@ y_absl::Status PrepareSocket(const PosixTcpOptions& options,
       !ResolvedAddressIsVSock(socket.addr)) {
     GRPC_RETURN_IF_ERROR(socket.sock.SetSocketLowLatency(1));
     GRPC_RETURN_IF_ERROR(socket.sock.SetSocketReuseAddr(1));
+    GRPC_RETURN_IF_ERROR(socket.sock.SetSocketDscp(options.dscp));
     socket.sock.TrySetSocketTcpUserTimeout(options, false);
   }
   GRPC_RETURN_IF_ERROR(socket.sock.SetSocketNoSigpipeIfPossible());
@@ -177,8 +178,16 @@ y_absl::Status PrepareSocket(const PosixTcpOptions& options,
       GRPC_FD_SERVER_LISTENER_USAGE, options));
 
   if (bind(fd, socket.addr.address(), socket.addr.size()) < 0) {
+    auto sockaddr_str = ResolvedAddressToString(socket.addr);
+    if (!sockaddr_str.ok()) {
+      gpr_log(GPR_ERROR, "Could not convert sockaddr to string: %s",
+              sockaddr_str.status().ToString().c_str());
+      sockaddr_str = "<unparsable>";
+    }
+    sockaddr_str = y_absl::StrReplaceAll(*sockaddr_str, {{"\0", "@"}});
     return y_absl::FailedPreconditionError(
-        y_absl::StrCat("Error in bind: ", std::strerror(errno)));
+        y_absl::StrCat("Error in bind for address '", *sockaddr_str,
+                     "': ", std::strerror(errno)));
   }
 
   if (listen(fd, GetMaxAcceptQueueSize()) < 0) {
@@ -242,6 +251,13 @@ y_absl::StatusOr<int> ListenerContainerAddAllLocalAddresses(
     return y_absl::FailedPreconditionError(
         y_absl::StrCat("getifaddrs: ", std::strerror(errno)));
   }
+
+  static const bool is_ipv4_available = [] {
+    const int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd >= 0) close(fd);
+    return fd >= 0;
+  }();
+
   for (ifa_it = ifa; ifa_it != nullptr; ifa_it = ifa_it->ifa_next) {
     ResolvedAddress addr;
     socklen_t len;
@@ -249,6 +265,9 @@ y_absl::StatusOr<int> ListenerContainerAddAllLocalAddresses(
     if (ifa_it->ifa_addr == nullptr) {
       continue;
     } else if (ifa_it->ifa_addr->sa_family == AF_INET) {
+      if (!is_ipv4_available) {
+        continue;
+      }
       len = static_cast<socklen_t>(sizeof(sockaddr_in));
     } else if (ifa_it->ifa_addr->sa_family == AF_INET6) {
       len = static_cast<socklen_t>(sizeof(sockaddr_in6));

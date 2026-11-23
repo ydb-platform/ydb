@@ -371,6 +371,13 @@ class ParallelWorkloadTestBase:
                 violations_count = len(check.violations)
                 affected = ', '.join(sorted(check.affected_hosts)) if check.affected_hosts else '—'
                 summary = f"{name} [{check.status}] violations={violations_count} hosts={affected}"
+                if check.violations:
+                    summary = summary + ": " + "; ".join(str(v) for v in check.violations)
+                else:
+                    details = check.details if isinstance(check.details, dict) else {}
+                    error_message = details.get("error_message")
+                    if error_message:
+                        summary = summary + ": " + str(error_message)
                 if check.is_violation():
                     warden_violations.append(summary)
                 else:

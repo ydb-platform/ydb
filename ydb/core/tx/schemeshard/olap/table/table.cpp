@@ -7,7 +7,7 @@
 namespace NKikimr::NSchemeShard {
 
 TPathId TColumnTableInfo::GetOlapStorePathIdVerified() const {
-    AFL_VERIFY(!IsStandalone());
+    YDB_LOG_VERIFY(!IsStandalone());
     return TPathId::FromProto(Description.GetColumnStorePathId());
 }
 
@@ -28,8 +28,10 @@ const google::protobuf::RepeatedField<arc_ui64>& TColumnTableInfo::GetPartitions
 }
 
 void TColumnTableInfo::SetColumnShards(const std::vector<ui64>& columnShards) {
-    AFL_VERIFY(GetColumnShards().empty())("original", Description.DebugString());
-    AFL_VERIFY(columnShards.size());
+    YDB_LOG_VERIFY(GetColumnShards().empty(),
+        {"original", Description.DebugString()}
+    );
+    YDB_LOG_VERIFY(columnShards.size());
 
     Description.MutableSharding()->MutableColumnShards()->Clear();
     Description.MutableSharding()->MutableColumnShards()->Reserve(columnShards.size());
@@ -61,12 +63,12 @@ TColumnTableInfo::TColumnTableInfo(
 }
 
 const NKikimrSchemeOp::TColumnStoreSharding& TColumnTableInfo::GetStandaloneShardingVerified() const {
-    AFL_VERIFY(!!StandaloneSharding);
+    YDB_LOG_VERIFY(!!StandaloneSharding);
     return *StandaloneSharding;
 }
 
 const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TShardIdx>& TColumnTableInfo::GetOwnedColumnShardsVerified() const {
-    AFL_VERIFY(IsStandalone());
+    YDB_LOG_VERIFY(IsStandalone());
     return StandaloneSharding->GetColumnShards();
 }
 
@@ -88,6 +90,14 @@ TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(const TColumnTableI
     alterData->AlterBody.ConstructInPlace(alterBody);
     ++alterData->AlterVersion;
     return alterData;
+}
+
+TColumnTableInfo::TPtr TColumnTableInfo::Clone() const {
+    auto copy = std::make_shared<TColumnTableInfo>(*this);
+    if (AlterData) {
+        copy->AlterData = AlterData->Clone();
+    }
+    return copy;
 }
 
 void TColumnTableInfo::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPartitionStats& newStats, TInstant now) {

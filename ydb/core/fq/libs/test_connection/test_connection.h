@@ -2,79 +2,49 @@
 
 #include "counters.h"
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/core/fq/libs/config/protos/test_connection.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/signer/signer.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
-#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NMiniKQL {
-    class IFunctionRegistry;
-} // namespace NKikimr::NMiniKQL
+class IFunctionRegistry;
+}   // namespace NKikimr::NMiniKQL
 
 namespace NFq {
 
 NActors::TActorId TestConnectionActorId();
 
-NActors::IActor* CreateTestConnectionActor(
-        const NConfig::TTestConnectionConfig& config,
-        const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& commonConfig,
-        const ::NFq::TSigner::TPtr& signer,
-        const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
-        const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const NYql::IHTTPGateway::TPtr& httpGateway,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateTestConnectionActor(const NConfig::TTestConnectionConfig& config,
+    const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig, const NYql::TS3GatewayConfig& s3Config,
+    const NConfig::TCommonConfig& commonConfig, const ::NFq::TSigner::TPtr& signer, const NFq::TYqSharedResources::TPtr& sharedResources,
+    const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
+    const NPq::NConfigurationManager::IConnections::TPtr& cmConnections, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const NYql::IHTTPGateway::TPtr& httpGateway, const ::NMonitoring::TDynamicCounterPtr& counters);
 
-NActors::IActor* CreateTestDataStreamsConnectionActor(
-        const FederatedQuery::DataStreams& ds,
-        const NFq::NConfig::TCommonConfig& commonConfig,
-        const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
-        const NActors::TActorId& sender,
-        ui64 cookie,
-        const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
-        const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TString& scope,
-        const TString& user,
-        const TString& token,
-        const NFq::TSigner::TPtr& signer,
-        const TTestConnectionRequestCountersPtr& counters);
+NActors::IActor* CreateTestDataStreamsConnectionActor(const FederatedQuery::DataStreams& ds, const NFq::NConfig::TCommonConfig& commonConfig,
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver, const NActors::TActorId& sender, ui64 cookie,
+    const NFq::TYqSharedResources::TPtr& sharedResources, const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
+    const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const TString& scope, const TString& user, const TString& token, const NFq::TSigner::TPtr& signer,
+    const TTestConnectionRequestCountersPtr& counters);
 
-NActors::IActor* CreateTestObjectStorageConnectionActor(
-        const FederatedQuery::ObjectStorageConnection& os,
-        const NFq::NConfig::TCommonConfig& commonConfig,
-        const NActors::TActorId& sender,
-        ui64 cookie,
-        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
-        NYql::IHTTPGateway::TPtr gateway,
-        const TString& scope,
-        const TString& user,
-        const TString& token,
-        const NFq::TSigner::TPtr& signer,
-        const TTestConnectionRequestCountersPtr& counters);
+NActors::IActor* CreateTestObjectStorageConnectionActor(const FederatedQuery::ObjectStorageConnection& os,
+    const NFq::NConfig::TCommonConfig& commonConfig, const NActors::TActorId& sender, ui64 cookie,
+    const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory, NYql::IHTTPGateway::TPtr gateway, const TString& scope,
+    const TString& user, const TString& token, const NFq::TSigner::TPtr& signer, const TTestConnectionRequestCountersPtr& counters);
 
-NActors::IActor* CreateTestMonitoringConnectionActor(
-        const FederatedQuery::Monitoring& monitoring,
-        const NActors::TActorId& sender,
-        ui64 cookie,
-        const TString& endpoint,
-        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
-        const TString& scope,
-        const TString& user,
-        const TString& token,
-        const NFq::TSigner::TPtr& signer,
-        const TTestConnectionRequestCountersPtr& counters);
+NActors::IActor* CreateTestMonitoringConnectionActor(const FederatedQuery::Monitoring& monitoring, const NActors::TActorId& sender, ui64 cookie,
+    const TString& endpoint, const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory, const TString& scope, const TString& user,
+    const TString& token, const NFq::TSigner::TPtr& signer, const TTestConnectionRequestCountersPtr& counters);
 
-} // namespace NFq
+}   // namespace NFq

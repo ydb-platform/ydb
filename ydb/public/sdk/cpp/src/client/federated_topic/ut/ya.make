@@ -1,6 +1,8 @@
 UNITTEST()
 
-REQUIREMENTS(cpu:2)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/coverage.inc)
+
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -36,6 +38,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     basic_usage_ut.cpp
     federation_observer_deadlock_ut.cpp
+    read_session_membership_ut.cpp
     simple_blocking_write_session_ut.cpp
 )
 

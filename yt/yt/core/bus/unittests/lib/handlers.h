@@ -4,8 +4,8 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <library/cpp/yt/threading/event_count.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 #include <vector>
@@ -80,7 +80,7 @@ public:
 
 private:
     std::atomic<int> RemainingReplyCount_;
-    NThreading::TEvent Event_;
+    TEvent Event_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,7 +113,7 @@ public:
 
 private:
     std::atomic<bool> SawTransfer_ = false;
-    NThreading::TEvent Event_;
+    TEvent Event_;
     std::vector<TSharedRef> ReceivedParts_;
 
     void Finish(std::vector<TSharedRef> parts);
@@ -143,8 +143,8 @@ public:
         TPacketId packetId) noexcept override;
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    NThreading::TEvent Event_;
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
+    TEvent Event_;
     TFuture<void> RunFuture_;
 };
 

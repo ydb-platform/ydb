@@ -20,7 +20,6 @@ from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 from library.recipes import common as recipes_common
 
-
 MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
 S3_PID_FILE = "s3.pid"
 

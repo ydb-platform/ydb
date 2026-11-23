@@ -1,11 +1,13 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
 struct TBackup {
-    static constexpr TStringBuf Name() {
+    static constexpr const char* Name() {
         return "TBackup";
     }
 
@@ -36,6 +38,8 @@ struct TBackup {
         Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
         auto table = context.SS->ColumnTables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
+        // Derive this on every proposal, including after a SchemeShard restart.
+        backup.SetSourceDatabase(TPath::Init(pathId, context.SS).GetDomainPathString());
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
 
@@ -44,11 +48,11 @@ struct TBackup {
             auto idx = txState.Shards[i].Idx;
             auto columnShardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose backup"
-                            << " to columnshard " << columnShardId
-                            << " txid " <<  opId
-                            << " at schemeshard " << context.SS->SelfTabletId());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose backup to columnshard",
+                {"columnShard", columnShardId},
+                {"operationId", opId},
+                {"schemeshard", context.SS->SelfTabletId()},
+            );
 
             NKikimrTxColumnShard::TBackupTxBody txBodyBackup;
             *txBodyBackup.MutableBackupTask() = backup;
@@ -75,11 +79,11 @@ struct TBackup {
             auto idx = txState.Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose backup"
-                            << " to datashard " << datashardId
-                            << " txid " <<  opId
-                            << " at schemeshard " << context.SS->SelfTabletId());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose backup to datashard",
+                {"datashard", datashardId},
+                {"operationId", opId},
+                {"schemeshard", context.SS->SelfTabletId()},
+            );
 
             const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo);
             auto event = context.SS->MakeDataShardProposal(pathId, opId, txBody, context.Ctx);
@@ -140,7 +144,7 @@ struct TBackup {
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+        TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
         auto& backupInfo = table->BackupHistory[opId.GetTxId()];
 
@@ -218,3 +222,5 @@ ISubOperation::TPtr CreateBackup(TOperationId id, TTxState::ETxState state) {
 
 }
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

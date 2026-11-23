@@ -1499,7 +1499,8 @@ class Channel(grpc.Channel):
     def unary_unary(self,
                     method,
                     request_serializer=None,
-                    response_deserializer=None):
+                    response_deserializer=None,
+                    _registered_method=False):
         return _UnaryUnaryMultiCallable(
             self._channel, _channel_managed_call_management(self._call_state),
             _common.encode(method), request_serializer, response_deserializer)
@@ -1507,7 +1508,8 @@ class Channel(grpc.Channel):
     def unary_stream(self,
                      method,
                      request_serializer=None,
-                     response_deserializer=None):
+                     response_deserializer=None,
+                     _registered_method=False):
         # NOTE(rbellevi): Benchmarks have shown that running a unary-stream RPC
         # on a single Python thread results in an appreciable speed-up. However,
         # due to slight differences in capability, the multi-threaded variant
@@ -1526,7 +1528,8 @@ class Channel(grpc.Channel):
     def stream_unary(self,
                      method,
                      request_serializer=None,
-                     response_deserializer=None):
+                     response_deserializer=None,
+                     _registered_method=False):
         return _StreamUnaryMultiCallable(
             self._channel, _channel_managed_call_management(self._call_state),
             _common.encode(method), request_serializer, response_deserializer)
@@ -1534,7 +1537,8 @@ class Channel(grpc.Channel):
     def stream_stream(self,
                       method,
                       request_serializer=None,
-                      response_deserializer=None):
+                      response_deserializer=None,
+                      _registered_method=False):
         return _StreamStreamMultiCallable(
             self._channel, _channel_managed_call_management(self._call_state),
             _common.encode(method), request_serializer, response_deserializer)

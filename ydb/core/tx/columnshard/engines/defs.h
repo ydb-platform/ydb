@@ -2,11 +2,8 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/logoblob.h>
-#include <ydb/core/tx/ctor_logger.h>
 
 namespace NKikimr::NOlap {
-
-using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 enum class TOperationWriteId: ui64 {
 };

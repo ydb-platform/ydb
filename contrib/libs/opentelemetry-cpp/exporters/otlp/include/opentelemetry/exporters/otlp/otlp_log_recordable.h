@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"

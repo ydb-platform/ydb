@@ -17,7 +17,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsDeclareRemovingAction> TOperator::DoStartD
 }
 
 std::shared_ptr<NKikimr::NOlap::IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), Manager);
+    return std::make_shared<TWriteAction>(GetStorageId(), Manager, TabletActorId);
 }
 
 std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAction() {
@@ -26,7 +26,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAc
 
 void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
     auto gcTask = dynamic_pointer_cast<TGCTask>(action);
-    AFL_VERIFY(!!gcTask);
+    YDB_LOG_VERIFY(!!gcTask);
     YDB_LOG_DEBUG("",
         {"event", "StartGC"},
         {"requestsCount", gcTask->GetListsByGroupId().size()});
@@ -40,15 +40,15 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
             {"event", "StartGCSkipped"});
         return nullptr;
     } else {
-        AFL_VERIFY(!gcTask->IsEmpty());
+        YDB_LOG_VERIFY(!gcTask->IsEmpty());
     }
     return gcTask;
 }
 
 TOperator::TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
-    const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs)
+    const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, bool weightedDataChannelSelection)
     : TBase(storageId, sharedBlobs)
-    , Manager(std::make_shared<TBlobManager>(tabletInfo, generation, sharedBlobs->GetSelfTabletId()))
+    , Manager(std::make_shared<TBlobManager>(tabletInfo, generation, sharedBlobs->GetSelfTabletId(), weightedDataChannelSelection))
     , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     , TabletActorId(tabletActorId)
 {

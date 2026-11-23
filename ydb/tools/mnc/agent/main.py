@@ -62,7 +62,7 @@ def main():
 
     args = parse_args()
     if args.config:
-        config.load_config(args.config)
+        config.load_config(args.config, host=args.host)
     if args.mnc_home:
         config.mnc_home = args.mnc_home
     config.ensure_mnc_home()

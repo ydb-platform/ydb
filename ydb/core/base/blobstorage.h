@@ -100,6 +100,15 @@ inline bool SendToBSProxy(const TActorContext &ctx, TGroupId groupId, IEventBase
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
 }
 
+// A block with generation Max<ui32>() is the persistent tombstone of a complete tablet deletion:
+// Hive sets it (see THive::BlockStorageForDelete) right before collecting the tablet's data, and
+// afterwards nothing can ever be written for that tablet again. So whoever stores data for this
+// tablet may drop all of it, along with any barrier bookkeeping, without waiting for the hard
+// barrier that Hive sends next -- that barrier may legitimately never be observed.
+inline constexpr bool IsCompleteTabletDeletionBlock(ui32 blockedGeneration) {
+    return blockedGeneration == Max<ui32>();
+}
+
 struct TEvBlobStorage {
     enum EEv {
         // user <-> proxy interface
@@ -418,6 +427,10 @@ struct TEvBlobStorage {
         EvGetLogoBlobIndexStatResponseAck,
         EvHugeQueryStripeChunks,
         EvHugeStripeChunks,
+        EvGetVDiskSpaceReportRequest,
+        EvHugeSpaceStat,
+        EvSyncLogSpaceStat,
+        EvChunkKeeperSpaceStat,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -489,6 +502,12 @@ struct TEvBlobStorage {
         EvCompactionTokenRequest,
         EvCompactionTokenResult,
         EvReleaseCompactionToken,
+        EvGetVDiskSpaceReportResponse,
+        EvHugeSpaceStatResult,
+        EvSyncLogSpaceStatResult,
+        EvChunkKeeperSpaceStatResult,
+        EvCompactionBidder,
+        EvCompactionArbiter,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -560,6 +579,9 @@ struct TEvBlobStorage {
         EvControllerDDiskInfoGetTablet              = 0x10031634,
         EvControllerDDiskInfoGetTabletResult        = 0x10031635,
         EvControllerDDiskInfoTabletRevisionChanged  = 0x10031636,
+        EvControllerSubscribeDatabaseSpace          = 0x10031637,
+        EvControllerQueryBridgeStorage             = 0x10031638,
+        EvControllerQueryBridgeStorageResult       = 0x10031639,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -569,6 +591,7 @@ struct TEvBlobStorage {
         EvControllerNodeReport                      = 0x1003180d,
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
+        EvControllerDatabaseSpaceState              = 0x10031816,
 
         // BlobCheckerOrchestrator <-> BSC interface
         EvBlobCheckerUpdateSettings                 = 0x10031820,
@@ -625,6 +648,11 @@ struct TEvBlobStorage {
         EvNodeWardenListLocalDDisksResult,
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
+        EvNodeConfigGetSelfHealState,
+        EvNodeWardenStandbyDirty,
+        EvNodeWardenRegisterBridgeProxy,
+        EvNodeWardenStandbySeal,
+        EvNodeWardenStandbySealed,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -651,6 +679,12 @@ struct TEvBlobStorage {
 
         // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
         EvDeviceOverestimationSamples,
+
+        EvVRestorePart,
+        EvVRestorePartResult,
+        EvMirror3dcRepairScanResult,
+        EvRunMirror3dcRepair,
+        EvRunMirror3dcRepairResult,
 
         EvEnd
     };
@@ -1486,8 +1520,9 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
-        const ui32 Version;
+        const std::optional<ui32> Version;
         bool IsMonitored = true;
+        bool IsIdempotent = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -1498,10 +1533,11 @@ struct TEvBlobStorage {
             , WriteSource(origin.WriteSource)
             , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
+            , IsIdempotent(origin.IsIdempotent)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource(), ui32 version = 0)
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
@@ -1510,7 +1546,7 @@ struct TEvBlobStorage {
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid,
-                TWriteSource writeSource = UnknownWriteSource(), ui32 version = 0)
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
@@ -1523,10 +1559,13 @@ struct TEvBlobStorage {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
-                << " Generation# " << Generation
-                << " Version# " << Version
-                << " Deadline# " << Deadline.MilliSeconds()
+                << " Generation# " << Generation;
+            if (Version) {
+                str << " Version# " << *Version;
+            }
+            str << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
+                << " IsIdempotent# " << IsIdempotent
                 << "}";
             return str.Str();
         }
@@ -2440,6 +2479,8 @@ struct TEvBlobStorage {
         std::optional<TLogoBlobID> SkipBlobsUpTo;
         bool IgnoreDecommitState;
         bool Reverse;
+        std::optional<ui32> ExpectedGeneration;
+        bool IncludePartPlacement = false;
 
         TEvAssimilate(TCloneEventPolicy, const TEvAssimilate& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -2448,6 +2489,8 @@ struct TEvBlobStorage {
             , SkipBlobsUpTo(origin.SkipBlobsUpTo)
             , IgnoreDecommitState(origin.IgnoreDecommitState)
             , Reverse(origin.Reverse)
+            , ExpectedGeneration(origin.ExpectedGeneration)
+            , IncludePartPlacement(origin.IncludePartPlacement)
         {}
 
         TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
@@ -2557,6 +2600,12 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
+            // some disk has a part of the blob; a disk may have a record of the blob with flags only, e.g. a Keep flag
+            // that has come before the data
+            bool HasData = true;
+
+            // Masks of subgroup positions holding each part, populated for a placement scan.
+            TStackVec<ui16, TBlobStorageGroupType::MaxTotalParts> PartDisks{};
 
             TString ToString() const {
                 TStringStream str;
@@ -2572,6 +2621,9 @@ struct TEvBlobStorage {
                 if (DoNotKeep) {
                     s << "d";
                 }
+                if (!HasData) {
+                    s << "n";
+                }
             }
 
             auto GetKey() const {
@@ -2582,6 +2634,7 @@ struct TEvBlobStorage {
         std::deque<TBlock> Blocks;
         std::deque<TBarrier> Barriers;
         std::deque<TBlob> Blobs;
+        ui64 ReplyBytes = 0; // total size of the VDisk replies the proxy has got for this result
 
         TEvAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
             : TEvResultCommon(status)
@@ -2724,6 +2777,10 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+    struct TEvControllerSubscribeDatabaseSpace;
+    struct TEvControllerQueryBridgeStorage;
+    struct TEvControllerQueryBridgeStorageResult;
+    struct TEvControllerDatabaseSpaceState;
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;

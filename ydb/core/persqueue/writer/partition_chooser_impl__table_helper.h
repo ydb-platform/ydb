@@ -341,6 +341,4 @@ private:
     std::optional<ui64> SeqNo_;
 };
 
-#undef LOG_PREFIX
-
 } // namespace NKikimr::NPQ::NPartitionChooser

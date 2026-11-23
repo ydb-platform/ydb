@@ -8,10 +8,6 @@
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/protos/config.pb.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-}
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -130,16 +126,9 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
 
-    if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        if (!IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
-    } else {
-        if (!IsAllowedType(Type.GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
+    if (Type.GetTypeId() == NScheme::NTypeIds::Pg || !IsAllowedType(Type.GetTypeId())) {
+        errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported for column tables");
+        return false;
     }
 
     auto arrowTypeResult = NArrow::GetArrowType(Type);
@@ -194,14 +183,14 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     auto arrowType = NArrow::TStatusValidator::GetValid(NArrow::GetArrowType(Type));
     if (columnSchema.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue()).Validate();
-        AFL_VERIFY(DefaultValue.IsCompatibleType(arrowType));
+        YDB_LOG_VERIFY(DefaultValue.IsCompatibleType(arrowType));
     }
     if (columnSchema.HasColumnFamilyId()) {
         // TODO: do something?
     }
     if (columnSchema.HasSerializer()) {
         NArrow::NSerialization::TSerializerContainer serializer;
-        AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
+        YDB_LOG_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
         Serializer = serializer;
     } else if (columnSchema.HasCompression()) {
         NArrow::NSerialization::TSerializerContainer serializer;
@@ -210,7 +199,7 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     }
     if (columnSchema.HasDataAccessorConstructor()) {
         NArrow::NAccessor::TConstructorContainer container;
-        AFL_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
+        YDB_LOG_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
         AccessorConstructor = container;
     }
     if (columnSchema.HasNotNull()) {
@@ -311,20 +300,6 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
     }
 
     return true;
-}
-
-bool TOlapColumnBase::IsAllowedPgType(ui32 pgTypeId) {
-    switch (pgTypeId) {
-        case INT2OID:
-        case INT4OID:
-        case INT8OID:
-        case FLOAT4OID:
-        case FLOAT8OID:
-            return true;
-        default:
-            break;
-    }
-    return false;
 }
 
 bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {

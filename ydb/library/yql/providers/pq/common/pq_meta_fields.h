@@ -1,13 +1,11 @@
 #pragma once
 
-#include <optional>
-
+#include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_value.h>
 
-#include <util/generic/string.h>
-#include <util/string/builder.h>
-
+#include <optional>
 
 namespace NYql {
 
@@ -30,28 +28,20 @@ std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTran
 std::optional<TString> SkipYdbSystemPrefix(const TString& sysColumn);
 
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
-    const TString& key,
-    bool addTransparentPrefix,
-    bool includeUserAttributes,
-    bool forbidYqlSysColumnsAndSystemMetadata
-);
+    const TString& key, bool addTransparentPrefix, bool includeUserAttributes, bool forbidYqlSysColumnsAndSystemMetadata);
 
-std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
-    const TString& sysColumn,
-    bool includeUserAttributes);
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(const TString& sysColumn, bool includeUserAttributes);
 
 // Lookup a meta field descriptor by __ydb_-prefixed column name (e.g. "__ydb_write_time").
-std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByYdbSysColumn(
-    const TString& sysColumn,
-    bool includeUserAttributes);
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByYdbSysColumn(const TString& sysColumn, bool includeUserAttributes);
 
 std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserAttributes);
 
 // Returns the list of allowed __ydb_-prefixed system column names.
-std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes);
+std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes, bool allowYdbSysColumns = true);
 
 // Map a __ydb_-prefixed column name to the corresponding _yql_sys_-prefixed column name.
 // Returns std::nullopt if the input is not a recognized __ydb_ column.
 std::optional<TString> YdbSysColumnToOldSysColumn(const TString& ydbColumn, bool addTransparentPrefix);
 
-} // namespace NYql
+}   // namespace NYql

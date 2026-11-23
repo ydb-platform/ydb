@@ -19,11 +19,12 @@
 
 namespace NYql {
 
-class TCallableTransformerParsers : public TGraphTransformerBase {
+class TCallableTransformerParsers: public TGraphTransformerBase {
 public:
     explicit TCallableTransformerParsers(TTypeAnnotationContext& types)
         : Types_(types)
-    {}
+    {
+    }
 
 protected:
     IDataProvider* ParseCommit(const TExprNode& input, TExprContext& ctx, bool& isUniversal);
@@ -32,17 +33,17 @@ protected:
     IDataProvider* ParseMaterialize(const TExprNode& input, TExprContext& ctx);
     IDataProvider* ParseConfigure(const TExprNode& input, TExprContext& ctx, bool& isUniversal);
 
-
     TTypeAnnotationContext& Types_;
 };
 
 template <class TDerived>
-class TCallableTransformerBase : public TCallableTransformerParsers {
+class TCallableTransformerBase: public TCallableTransformerParsers {
 public:
     TCallableTransformerBase(TTypeAnnotationContext& types, bool instantOnly)
         : TCallableTransformerParsers(types)
         , InstantOnly_(instantOnly)
-    {}
+    {
+    }
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -56,7 +57,7 @@ public:
         auto name = input->Content();
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
             return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
-                TStringBuilder() << "At function: " << NormalizeCallableName(name));
+                                         TStringBuilder() << "At function: " << NormalizeCallableName(name));
         });
 
         TStatus status = TStatus::Ok;
@@ -174,12 +175,13 @@ public:
 
 protected:
     IGraphTransformer::TStatus ProcessDataProviderAnnotation(IDataProvider& dataProvider,
-        const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                             const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         auto status = static_cast<TDerived*>(this)->GetTransformer(dataProvider).Transform(input, output, ctx);
         if (status.Level == IGraphTransformer::TStatus::Async) {
             if (InstantOnly_) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() <<
-                    "Async status is not allowed for instant transform, provider name: " << dataProvider.GetName()));
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "Async status is not allowed for instant transform, provider name: " << dataProvider.GetName()));
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -189,9 +191,8 @@ protected:
         return status;
     }
 
-
     const bool InstantOnly_;
     TNodeMap<std::pair<TExprNode::TPtr, IDataProvider*>> PendingNodes_;
 };
 
-} // NYql
+} // namespace NYql

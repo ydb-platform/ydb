@@ -14,8 +14,8 @@ namespace NYql {
 // -- user files --
 
 enum class EUserDataType {
-    URL = 1, // indicates that provided user data represents URL which can be used to obtain table data
-    PATH = 2, // indicates that provided user data represents file path which can be used to obtain table data
+    URL = 1,             // indicates that provided user data represents URL which can be used to obtain table data
+    PATH = 2,            // indicates that provided user data represents file path which can be used to obtain table data
     RAW_INLINE_DATA = 3, // table data is inside the provided data block
 };
 
@@ -29,7 +29,7 @@ enum class EUserDataBlockUsage {
     End,
 };
 using TUserDataBlockUsage = TEnumBitSet<EUserDataBlockUsage, static_cast<int>(EUserDataBlockUsage::Begin),
-    static_cast<int>(EUserDataBlockUsage::End)>;
+                                        static_cast<int>(EUserDataBlockUsage::End)>;
 
 struct TUserDataBlock {
     EUserDataType Type = EUserDataType::PATH;
@@ -47,29 +47,38 @@ struct TUserDataBlock {
 class TUserDataKey {
 public:
     enum class EDataType {
-        FILE, UDF
+        FILE,
+        UDF
     };
 
     static TUserDataKey File(const TString& alias) {
-        return { EDataType::FILE, alias };
+        return {EDataType::FILE, alias};
     }
 
     static TUserDataKey File(const TStringBuf& alias) {
-        return { EDataType::FILE, TString(alias) };
+        return {EDataType::FILE, TString(alias)};
     }
 
     static TUserDataKey Udf(const TString& alias) {
-        return { EDataType::UDF, alias };
+        return {EDataType::UDF, alias};
     }
 
     static TUserDataKey Udf(const TStringBuf& alias) {
-        return { EDataType::UDF, TString(alias) };
+        return {EDataType::UDF, TString(alias)};
     }
 
-    inline bool IsFile() const { return Type_ == EDataType::FILE; }
-    inline bool IsUdf() const { return Type_ == EDataType::UDF; }
-    inline const TString& Alias() const { return Alias_; }
-    inline EDataType Type() const { return Type_; }
+    inline bool IsFile() const {
+        return Type_ == EDataType::FILE;
+    }
+    inline bool IsUdf() const {
+        return Type_ == EDataType::UDF;
+    }
+    inline const TString& Alias() const {
+        return Alias_;
+    }
+    inline EDataType Type() const {
+        return Type_;
+    }
 
     bool operator<(const TUserDataKey& other) const {
         return std::tie(Type_, Alias_) < std::tie(other.Type_, other.Alias_);
@@ -94,7 +103,6 @@ private:
         , Alias_(std::move(alias))
     {
     }
-
 
     const EDataType Type_;
     const TString Alias_;

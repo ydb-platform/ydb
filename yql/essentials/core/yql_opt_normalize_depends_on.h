@@ -9,4 +9,4 @@ namespace NYql {
 
 THolder<IGraphTransformer> CreateNormalizeDependsOnTransformer(const TTypeAnnotationContext& types);
 
-}
+} // namespace NYql

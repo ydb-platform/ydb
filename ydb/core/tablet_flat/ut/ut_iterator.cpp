@@ -182,17 +182,33 @@ Y_UNIT_TEST_SUITE(TIterator) {
             return NTest::TTestEnv::Locate(part, ref, lob);
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+            if (Touch(groupId, ResolvePageId(part, location, part->DataSlot(groupId)))) {
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
+            }
+            return nullptr;
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+            // index pages are tracked as pages of their page collection
+            const ui32 slot = part->IndexSlot(groupId);
+            if (Touch(TGroupId(slot), ResolvePageId(part, location, slot))) {
+                return NTest::TTestEnv::TryGetIndexPage(part, location, groupId);
+            }
+            return nullptr;
+        }
+
+        bool Touch(TGroupId groupId, TPageId pageId) {
             if (AutoLoad) {
                 if (Loaded[groupId].insert(pageId).second) {
-                    return nullptr;
+                    return false;
                 }
             } else if (!Loaded[groupId].contains(pageId)) {
                 Seen[groupId].insert(pageId);
-                return nullptr;
+                return false;
             }
 
-            return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+            return true;
         }
 
         void Load() {

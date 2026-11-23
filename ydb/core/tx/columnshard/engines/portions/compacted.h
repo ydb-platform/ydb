@@ -26,12 +26,16 @@ private:
         return true;
     }
 
+    virtual bool IsAborted() const override {
+        return false;
+    }
+
 public:
     using TBase::TBase;
 
     virtual void FillDefaultColumn(
         NAssembling::TColumnAssemblingInfo& /*column*/, const std::optional<TSnapshot>& /*defaultSnapshot*/) const override {
-        //        AFL_VERIFY(false);
+        //        YDB_LOG_VERIFY(false);
     }
 
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(

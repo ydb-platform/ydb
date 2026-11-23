@@ -26,6 +26,7 @@ bool TReadOnlyController::DoOnWriteIndexComplete(
     const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningFinishedCounter.Inc();
+        PortionsErasedCounter.Add(static_cast<const NOlap::TCleanupPortionsColumnEngineChanges&>(change).GetPortionsToDrop().size());
     }
     if (change.TypeString() == NOlap::TCleanupTablesColumnEngineChanges::StaticTypeName()) {
         CleaningFinishedCounter.Inc();
@@ -35,7 +36,7 @@ bool TReadOnlyController::DoOnWriteIndexComplete(
     }
     if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
         CompactionFinishedCounter.Inc();
-        AFL_VERIFY(CompactionsLimit.Dec() >= 0);
+        YDB_LOG_VERIFY(CompactionsLimit.Dec() >= 0);
     }
     return true;
 }

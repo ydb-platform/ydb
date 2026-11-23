@@ -35,14 +35,13 @@
 #include <util/stream/output.h>
 
 #include <map>
+#include <utility>
 
 namespace NYdb::inline Dev {
 namespace NTable {
 
 using namespace NThreading;
 using namespace NSessionPool;
-
-using TRetryContextAsync = NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -151,9 +150,18 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+            return EColumnFamilyCompression::ZSTD;
         default:
             return { };
     }
+}
+
+std::optional<std::int32_t> TColumnFamilyDescription::GetCompressionLevel() const {
+    if (GetProto().has_compression_level()) {
+        return GetProto().compression_level();
+    }
+    return { };
 }
 
 std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
@@ -382,16 +390,37 @@ class TTableDescription::TImpl {
             std::optional<TSequenceDescription> sequenceDescription;
             switch (col.default_value_case()) {
                 case Ydb::Table::ColumnMeta::kFromSequence: {
-                    if (col.from_sequence().name() == "_serial_column_" + col.name()) {
-                        TSequenceDescription currentSequenceDescription;
-                        if (col.from_sequence().has_set_val()) {
-                            TSequenceDescription::TSetVal setVal;
-                            setVal.NextUsed = col.from_sequence().set_val().next_used();
-                            setVal.NextValue = col.from_sequence().set_val().next_value();
-                            currentSequenceDescription.SetVal = std::move(setVal);
-                        }
-                        sequenceDescription = std::move(currentSequenceDescription);
+                    const auto& fromSequence = col.from_sequence();
+                    TSequenceDescription currentSequenceDescription;
+                    currentSequenceDescription.Name = fromSequence.name();
+                    if (fromSequence.has_set_val()) {
+                        TSequenceDescription::TSetVal setVal;
+                        setVal.NextUsed = fromSequence.set_val().next_used();
+                        setVal.NextValue = fromSequence.set_val().next_value();
+                        currentSequenceDescription.SetVal = std::move(setVal);
                     }
+                    if (fromSequence.has_min_value()) {
+                        currentSequenceDescription.MinValue = fromSequence.min_value();
+                    }
+                    if (fromSequence.has_max_value()) {
+                        currentSequenceDescription.MaxValue = fromSequence.max_value();
+                    }
+                    if (fromSequence.has_start_value()) {
+                        currentSequenceDescription.StartValue = fromSequence.start_value();
+                    }
+                    if (fromSequence.has_cache()) {
+                        currentSequenceDescription.Cache = fromSequence.cache();
+                    }
+                    if (fromSequence.has_increment()) {
+                        currentSequenceDescription.Increment = fromSequence.increment();
+                    }
+                    if (fromSequence.has_cycle()) {
+                        currentSequenceDescription.Cycle = fromSequence.cycle();
+                    }
+                    if (fromSequence.has_data_type()) {
+                        currentSequenceDescription.DataType = TType(fromSequence.data_type());
+                    }
+                    sequenceDescription = std::move(currentSequenceDescription);
                     break;
                 }
                 default: break;
@@ -916,6 +945,14 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
     Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
+void TTableDescription::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalHnsw, indexColumns, indexSettings);
+}
+
+void TTableDescription::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalHnsw, indexColumns, dataColumns, indexSettings);
+}
+
 void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexType indexType, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
     Impl_->AddFulltextIndex(indexName, indexType, indexColumns, indexSettings);
 }
@@ -1066,13 +1103,35 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
             protoColumn.set_not_null(column.NotNull.value());
         }
         if (column.SequenceDescription.has_value()) {
+            const auto& sequence = *column.SequenceDescription;
             auto* fromSequence = protoColumn.mutable_from_sequence();
-            if (column.SequenceDescription->SetVal.has_value()) {
-                auto* setVal = fromSequence->mutable_set_val();
-                setVal->set_next_value(column.SequenceDescription->SetVal->NextValue);
-                setVal->set_next_used(column.SequenceDescription->SetVal->NextUsed);
+            fromSequence->set_name(sequence.Name.empty() ? "_serial_column_" + column.Name : sequence.Name);
+            if (sequence.MinValue) {
+                fromSequence->set_min_value(*sequence.MinValue);
             }
-            fromSequence->set_name("_serial_column_" + column.Name);
+            if (sequence.MaxValue) {
+                fromSequence->set_max_value(*sequence.MaxValue);
+            }
+            if (sequence.StartValue) {
+                fromSequence->set_start_value(*sequence.StartValue);
+            }
+            if (sequence.Cache) {
+                fromSequence->set_cache(*sequence.Cache);
+            }
+            if (sequence.Increment) {
+                fromSequence->set_increment(*sequence.Increment);
+            }
+            if (sequence.Cycle) {
+                fromSequence->set_cycle(*sequence.Cycle);
+            }
+            if (sequence.DataType) {
+                fromSequence->mutable_data_type()->CopyFrom(sequence.DataType->GetProto());
+            }
+            if (sequence.SetVal.has_value()) {
+                auto* setVal = fromSequence->mutable_set_val();
+                setVal->set_next_value(sequence.SetVal->NextValue);
+                setVal->set_next_used(sequence.SetVal->NextUsed);
+            }
         }
     }
 
@@ -1259,7 +1318,15 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
             break;
+        case EColumnFamilyCompression::ZSTD:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            break;
     }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompressionLevel(std::int32_t level) {
+    Impl_->Proto.set_compression_level(level);
     return *this;
 }
 
@@ -1439,6 +1506,16 @@ TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexN
 
 TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
     TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddHnswIndex(indexName, indexColumns, dataColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddHnswIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 
@@ -1680,21 +1757,19 @@ TTypeBuilder TTableClient::GetTypeBuilder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) {
-    return TRetryContextAsync::TPtr(
-        new NRetry::Async::TRetryWithSession(*this, std::move(operation), settings))->Execute();
+    return NRetry::Async::Retry<true>(*this, std::move(operation), settings);
 }
 
 TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
-    return TRetryContextAsync::TPtr(
-        new NRetry::Async::TRetryWithoutSession(*this, std::move(operation), settings))->Execute();
+    return NRetry::Async::Retry<false>(*this, std::move(operation), settings);
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    return NRetry::Sync::TRetryWithoutSession(*this, operation, settings).Execute();
+    return NRetry::Sync::Retry<false>(*this, operation, settings);
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    return NRetry::Sync::TRetryWithSession(*this, operation, settings).Execute();
+    return NRetry::Sync::Retry<true>(*this, operation, settings);
 }
 
 NThreading::TFuture<void> TTableClient::Stop() {
@@ -1702,7 +1777,7 @@ NThreading::TFuture<void> TTableClient::Stop() {
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
-    const TBulkUpsertSettings& settings)
+                                                const TBulkUpsertSettings& settings)
 {
     const auto retrySettings = NRetry::ResolveRetrySettings(
         Impl_->Settings_.RetrySettings_,
@@ -1710,44 +1785,25 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
     if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
-        return Impl_->BulkUpsert(table, std::move(rows), settings);
+        return NRetry::RunUnaryWithRetry(*this, retrySettings, [&](TDuration) {
+            return Impl_->BulkUpsert(table, std::move(rows), settings);
+        });
     }
 
     auto state = std::make_shared<NRetry::TBulkUpsertRetryState>(retrySettings);
-    auto opSettings = settings;
-    opSettings.RetryRowsState_ = state;
-    const auto startedAt = TInstant::Now();
-
-    return Impl_->BulkUpsert(table, std::move(rows), opSettings).Apply(
-        [this, table, settings, retrySettings, state, startedAt](const TAsyncBulkUpsertResult& f) {
-            const auto result = f.GetValue();
-            if (result.IsSuccess()
-                || !NRetry::ShouldRetryStatus(result.GetStatus(), retrySettings)) {
-                return NThreading::MakeFuture(result);
-            }
-            Y_ABORT_UNLESS(state->HasBackup());
-
-            const auto elapsed = TInstant::Now() - startedAt;
-            if (retrySettings.MaxTimeout_ != TDuration::Max() && elapsed >= retrySettings.MaxTimeout_) {
-                return NThreading::MakeFuture(result);
-            }
-
-            auto remaining = retrySettings;
-            remaining.MaxRetries(retrySettings.MaxRetries_ - 1);
-            if (retrySettings.MaxTimeout_ != TDuration::Max()) {
-                remaining.MaxTimeout(retrySettings.MaxTimeout_ - elapsed);
-            }
-
-            return NRetry::RunUnaryWithRetry(*this, remaining,
-                [this, table, state, settings](TDuration timeout) {
-                    auto op = settings;
-                    op.RetryRowsState_.reset();
-                    if (timeout != TDuration::Max()) {
-                        op.ClientTimeout(timeout);
-                    }
-                    return Impl_->BulkUpsert(table, state->GetBackupCopy(), op);
-                });
-        });
+    return NRetry::RunUnaryWithRetry(*this, retrySettings,
+                                     [impl = Impl_, table, rows = std::move(rows), settings, state, firstAttempt = true](TDuration timeout) mutable {
+                                         auto opSettings = settings;
+                                         if (timeout != TDuration::Max()) {
+                                             opSettings.ClientTimeout(timeout);
+                                         }
+                                         if (std::exchange(firstAttempt, false)) {
+                                             opSettings.RetryRowsState_ = state;
+                                             return impl->BulkUpsert(table, std::move(rows), opSettings);
+                                         }
+                                         opSettings.RetryRowsState_.reset();
+                                         return impl->BulkUpsert(table, state->GetBackupCopy(), opSettings);
+                                     });
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataFormat format,
@@ -1759,17 +1815,19 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataF
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
     if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
-        return Impl_->BulkUpsert(table, format, data, schema, settings);
+        return NRetry::RunUnaryWithRetry(*this, retrySettings, [&](TDuration) {
+            return Impl_->BulkUpsert(table, format, data, schema, settings);
+        });
     }
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        [this, table, format, data, schema, settings](TDuration timeout) {
-            auto opSettings = settings;
-            if (timeout != TDuration::Max()) {
-                opSettings.ClientTimeout(timeout);
-            }
-            return Impl_->BulkUpsert(table, format, data, schema, opSettings);
-        });
+                                     [impl = Impl_, table, format, data, schema, settings](TDuration timeout) {
+                                         auto opSettings = settings;
+                                         if (timeout != TDuration::Max()) {
+                                             opSettings.ClientTimeout(timeout);
+                                         }
+                                         return impl->BulkUpsert(table, format, data, schema, opSettings);
+                                     });
 }
 
 TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& rows, const std::vector<std::string>& columns,
@@ -1781,18 +1839,20 @@ TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& r
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
     if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
-        return Impl_->ReadRows(table, std::move(rows), columns, settings);
+        return NRetry::RunUnaryWithRetry(*this, retrySettings, [&](TDuration) {
+            return Impl_->ReadRows(table, std::move(rows), columns, settings);
+        });
     }
     TValue keysCopy = std::move(rows);
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        [this, table, keysCopy = std::move(keysCopy), columns, settings](TDuration timeout) {
-            auto opSettings = settings;
-            if (timeout != TDuration::Max()) {
-                opSettings.ClientTimeout(timeout);
-            }
-            return Impl_->ReadRows(table, TValue{keysCopy}, columns, opSettings);
-        });
+                                     [impl = Impl_, table, keysCopy = std::move(keysCopy), columns, settings](TDuration timeout) {
+                                         auto opSettings = settings;
+                                         if (timeout != TDuration::Max()) {
+                                             opSettings.ClientTimeout(timeout);
+                                         }
+                                         return impl->ReadRows(table, TValue{keysCopy}, columns, opSettings);
+                                     });
 }
 
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const std::string& query, const TParams& params,
@@ -2735,6 +2795,28 @@ TIndexDescription TIndexDescription::CreatePrefixedVectorIndex(
     );
 }
 
+TIndexDescription TIndexDescription::CreateHnswIndex(
+    const std::string& name,
+    const std::string& vectorColumn,
+    const THnswIndexSettings& settings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalHnsw, {vectorColumn}, settings.DataColumns,
+        {settings.LevelTableSettings, settings.PostingTableSettings}, settings.VectorSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreatePrefixedHnswIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const THnswIndexSettings& settings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalHnsw, indexColumns, settings.DataColumns,
+        {settings.LevelTableSettings, settings.PostingTableSettings, settings.PrefixTableSettings}, settings.VectorSettings
+    );
+}
+
 TIndexDescription TIndexDescription::CreateFulltextPlainIndex(
     const std::string& name,
     const std::vector<std::string>& indexColumns,
@@ -2916,6 +2998,18 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         switch (proto.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+            return EVectorType::Float16;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+            return EVectorType::BFloat16;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return EVectorType::Float8E4M3;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return EVectorType::Float8E5M2;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+            return EVectorType::Uint4;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+            return EVectorType::Int4;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return EVectorType::Uint8;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -2931,6 +3025,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         .Metric = covertMetric(),
         .VectorType = convertVectorType(),
         .VectorDimension = proto.vector_dimension(),
+        .MinRows = proto.has_min_rows() ? proto.min_rows() : DefaultMinRows,
+        .M = proto.has_m() ? proto.m() : DefaultM,
+        .EfConstruction = proto.has_ef_construction() ? proto.ef_construction() : DefaultEfConstruction,
+        .DeltaRows = proto.has_delta_rows() ? proto.delta_rows() : DefaultDeltaRows,
     };
 }
 
@@ -2956,6 +3054,18 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
         switch (VectorType) {
         case EVectorType::Float:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        case EVectorType::Float16:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
+        case EVectorType::BFloat16:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
+        case EVectorType::Float8E4M3:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        case EVectorType::Float8E5M2:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
+        case EVectorType::Uint4:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4;
+        case EVectorType::Int4:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4;
         case EVectorType::Uint8:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         case EVectorType::Int8:
@@ -2970,6 +3080,26 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     settings.set_metric(convertMetric());
     settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
+    if (MinRows != DefaultMinRows) {
+        settings.set_min_rows(MinRows);
+    } else {
+        settings.clear_min_rows();
+    }
+    if (M != DefaultM) {
+        settings.set_m(M);
+    } else {
+        settings.clear_m();
+    }
+    if (EfConstruction != DefaultEfConstruction) {
+        settings.set_ef_construction(EfConstruction);
+    } else {
+        settings.clear_ef_construction();
+    }
+    if (DeltaRows != DefaultDeltaRows) {
+        settings.set_delta_rows(DeltaRows);
+    } else {
+        settings.clear_delta_rows();
+    }
 }
 
 void TVectorIndexSettings::Out(IOutputStream& o) const {
@@ -3023,6 +3153,7 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
         .Levels = proto.levels(),
         .OverlapClusters = proto.overlap_clusters(),
         .OverlapRatio = proto.overlap_ratio(),
+        .AutoUpdate = proto.has_autoupdate() ? std::make_optional(proto.autoupdate()) : std::nullopt,
     };
 }
 
@@ -3032,6 +3163,11 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     settings.set_levels(Levels);
     settings.set_overlap_clusters(OverlapClusters);
     settings.set_overlap_ratio(OverlapRatio);
+    if (AutoUpdate.has_value()) {
+        settings.set_autoupdate(*AutoUpdate);
+    } else {
+        settings.clear_autoupdate();
+    }
 }
 
 void TKMeansTreeSettings::Out(IOutputStream& o) const {
@@ -3271,6 +3407,22 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
+    case TProto::kGlobalHnswIndex: {
+        type = EIndexType::GlobalHnsw;
+        const auto& vectorProto = proto.global_hnsw_index();
+        const bool prefixVectorIndex = indexColumns.size() > 1;
+        globalIndexSettings.resize(prefixVectorIndex ? 3 : 2);
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.level_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePostingTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings());
+        if (prefixVectorIndex) {
+            globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition] =
+                TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings());
+        }
+        specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
+        break;
+    }
     case TProto::kGlobalFulltextPlainIndex: {
         type = EIndexType::GlobalFulltextPlain;
         const auto& fulltextProto = proto.global_fulltext_plain_index();
@@ -3355,8 +3507,11 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
             GlobalIndexSettings_.at(0).SerializeTo(settings);
         break;
     }
-    case EIndexType::GlobalVectorKMeansTree: {
-        auto* global_vector_kmeans_tree_index = proto.mutable_global_vector_kmeans_tree_index();
+    case EIndexType::GlobalVectorKMeansTree:
+    case EIndexType::GlobalHnsw: {
+        auto* global_vector_kmeans_tree_index = IndexType_ == EIndexType::GlobalHnsw
+            ? proto.mutable_global_hnsw_index()
+            : proto.mutable_global_vector_kmeans_tree_index();
         auto& level_settings = *global_vector_kmeans_tree_index->mutable_level_table_settings();
         auto& posting_settings = *global_vector_kmeans_tree_index->mutable_posting_table_settings();
         auto& vector_settings = *global_vector_kmeans_tree_index->mutable_vector_settings();
@@ -3371,6 +3526,24 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             settings->SerializeTo(vector_settings);
+            if (IndexType_ == EIndexType::GlobalHnsw) {
+                // A full HNSW definition must retain explicit defaults when
+                // merged over an existing index definition during rebuild.
+                auto* vector = vector_settings.mutable_settings();
+                vector->set_min_rows(settings->Settings.MinRows);
+                vector->set_m(settings->Settings.M);
+                vector->set_ef_construction(settings->Settings.EfConstruction);
+                vector->set_delta_rows(settings->Settings.DeltaRows);
+            }
+        }
+        if (IndexType_ == EIndexType::GlobalVectorKMeansTree && vector_settings.has_settings()) {
+            // Older servers reject unknown vector settings. These parameters
+            // apply only to HNSW and must not change existing k-means requests.
+            auto* settings = vector_settings.mutable_settings();
+            settings->clear_min_rows();
+            settings->clear_m();
+            settings->clear_ef_construction();
+            settings->clear_delta_rows();
         }
         break;
     }
@@ -3461,6 +3634,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:
+    case EIndexType::GlobalHnsw:
         if (auto settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             o << ", vector_settings: " << *settings;
         }
@@ -3972,7 +4146,9 @@ std::optional<TTtlTierSettings> TTtlTierSettings::FromProto(const Ydb::Table::Tt
         action = TTtlDeleteAction();
         break;
     case Ydb::Table::TtlTier::kEvictToExternalStorage:
-        action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage());
+        action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage(),
+            tier.evict_to_external_storage().has_object_key_prefix()
+                ? std::make_optional(tier.evict_to_external_storage().object_key_prefix()) : std::nullopt);
         break;
     case Ydb::Table::TtlTier::ACTION_NOT_SET:
         return std::nullopt;
@@ -4089,8 +4265,23 @@ TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(const std::st
     : Storage_(storageName)
 {}
 
+TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(
+    const std::string& storageName, const std::optional<std::string>& objectKeyPrefix)
+    : Storage_(storageName)
+    , ObjectKeyPrefix_(objectKeyPrefix)
+{}
+
 void TTtlEvictToExternalStorageAction::SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const {
     proto.set_storage(Storage_);
+    if (ObjectKeyPrefix_) {
+        proto.set_object_key_prefix(*ObjectKeyPrefix_);
+    } else {
+        proto.clear_object_key_prefix();
+    }
+}
+
+const std::optional<std::string>& TTtlEvictToExternalStorageAction::GetObjectKeyPrefix() const {
+    return ObjectKeyPrefix_;
 }
 
 std::string TTtlEvictToExternalStorageAction::GetStorage() const {

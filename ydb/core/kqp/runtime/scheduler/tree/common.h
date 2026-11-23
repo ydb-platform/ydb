@@ -35,6 +35,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         std::optional<ui64> CpuLimit;
         std::optional<ui64> CpuGuarantee;
+        std::optional<ui64> MemoryLimit;
         std::optional<TDuration> ReadLimit; // per second
 
         auto GetCpuLimit() const {
@@ -45,6 +46,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             return CpuGuarantee.value_or(0);
         }
 
+        auto GetMemoryLimit() const {
+            return MemoryLimit.value_or(Infinity());
+        }
+
         auto GetWeight() const {
             return Weight.value_or(1);
         }
@@ -53,26 +58,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             return ReadLimit.value_or(TDuration::Seconds(1));
         }
 
-        void Update(const TStaticAttributes& other) {
-            if (other.Weight) {
-                Weight = other.Weight;
-            }
-            if (other.CpuLimit) {
-                CpuLimit = other.CpuLimit;
-            }
-            if (other.CpuGuarantee) {
-                CpuGuarantee = other.CpuGuarantee;
-            }
-            if (other.ReadLimit) {
-                ReadLimit = other.ReadLimit;
-            }
-        }
-
         TString ToString() const {
             return TStringBuilder()
                 << "Weight: " << GetWeight()
                 << ", CpuLimit: " << GetCpuLimit()
                 << ", CpuGuarantee: " << GetCpuGuarantee()
+                << ", MemoryLimit: " << GetMemoryLimit()
                 << ", ReadLimit: " << GetReadLimit();
         }
     };
@@ -80,14 +71,21 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
     enum class ETreeType : ui8 {
         DYNAMIC,
         SNAPSHOT,
+        STATIC,
     };
 
-    template <ETreeType>
-    struct TTreeElementBase : public TStaticAttributes {
+    template <ETreeType TreeType>
+    struct TTreeElementBase {
         using TPtr = std::shared_ptr<TTreeElementBase>;
 
-        explicit TTreeElementBase(const TId& id, const TStaticAttributes& attrs = {}) : Id(id) { Update(attrs); }
+        explicit TTreeElementBase(const TId& id) : Id(id) {}
         virtual ~TTreeElementBase() = default;
+
+        // A shallow static copy would expose published children through a mutable builder.
+        TTreeElementBase(const TTreeElementBase&) requires (TreeType != ETreeType::STATIC) = default;
+        TTreeElementBase(const TTreeElementBase&) requires (TreeType == ETreeType::STATIC) = delete;
+        TTreeElementBase& operator=(const TTreeElementBase&) requires (TreeType != ETreeType::STATIC) = default;
+        TTreeElementBase& operator=(const TTreeElementBase&) requires (TreeType == ETreeType::STATIC) = delete;
 
         const TId& GetId() const {
             return Id;
@@ -111,6 +109,19 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         template <class T, class Fn>
         void ForEachChild(Fn fn) const {
+            // Preserve the runtime/snapshot contract; published static trees are deeply const.
+            using TChild = std::conditional_t<TreeType == ETreeType::STATIC, const T, T>;
+            ForEachChildImpl<TChild>(fn);
+        }
+
+        template <class T, class Fn>
+        void ForEachChild(Fn fn) requires (TreeType == ETreeType::STATIC) {
+            ForEachChildImpl<T>(fn);
+        }
+
+    private:
+        template <class T, class Fn>
+        void ForEachChildImpl(Fn fn) const {
             size_t i = 0;
 
             for (const auto& child : Children) {
@@ -131,6 +142,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             }
         }
 
+    public:
         // True for parentless and real root
         virtual bool IsRoot() const {
             return !Parent;
@@ -170,7 +182,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         using TBase = TTreeElementBase<T>;
         using TPtr = std::shared_ptr<TQuery>;
 
-        explicit TQuery(const TQueryId& id, const TStaticAttributes& attrs = {}) : TBase(id, attrs) {}
+        explicit TQuery(const TQueryId& id) : TBase(id) {}
 
         void AddChild(const typename TBase::TPtr& element) = delete;
         void RemoveChild(const typename TBase::TPtr& element) = delete;
@@ -187,7 +199,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
     struct TPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Limit;
         NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
+        NMonitoring::TDynamicCounters::TCounterPtr EffectiveGuarantee;
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
+        NMonitoring::TDynamicCounters::TCounterPtr ActualDemand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
         NMonitoring::TDynamicCounters::TCounterPtr Read;
@@ -196,9 +210,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
-        NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::THistogramPtr                 Delay;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryLimit;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryUsage;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryDemand;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryFairShare;
     };
 
     template <ETreeType T>
@@ -206,7 +223,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         using TBase = TTreeElementBase<T>;
         using TPtr = std::shared_ptr<TPool>;
 
-        explicit TPool(const TPoolId& id, const TStaticAttributes& attrs = {}) : TBase(id, attrs) {}
+        explicit TPool(const TPoolId& id) : TBase(id) {}
 
         void AddQuery(const TQuery<T>::TPtr& query) {
             Y_ENSURE(Pools.empty());

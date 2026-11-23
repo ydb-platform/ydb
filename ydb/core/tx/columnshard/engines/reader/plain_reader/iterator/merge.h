@@ -36,7 +36,7 @@ public:
     }
 
     ui64 GetIntervalChunkMemory() const {
-        AFL_VERIFY(IntervalChunkMemory);
+        YDB_LOG_VERIFY(IntervalChunkMemory);
         return *IntervalChunkMemory;
     }
 
@@ -97,7 +97,7 @@ class TStartMergeTask: public TBaseMergeTask {
 private:
     using TBase = TBaseMergeTask;
     bool OnlyEmptySources = true;
-    THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
+    THashMap<ui32, std::shared_ptr<const IDataSource>> Sources;
 
 protected:
     virtual TConclusion<bool> DoExecuteImpl() override;
@@ -108,7 +108,7 @@ public:
     }
 
     TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
-        THashMap<ui32, std::shared_ptr<IDataSource>>&& sources);
+        THashMap<ui32, std::shared_ptr<const IDataSource>>&& sources);
 };
 
 class TContinueMergeTask: public TBaseMergeTask {
@@ -127,7 +127,7 @@ public:
         std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger)
         : TBase(mergingContext, readContext)
     {
-        AFL_VERIFY(merger);
+        YDB_LOG_VERIFY(merger);
         Merger = std::move(merger);
     }
 };

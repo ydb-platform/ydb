@@ -1,0 +1,10 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run pseudo-python",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/platform/python/ymake_python2/resources.json"
+        }
+    }
+}

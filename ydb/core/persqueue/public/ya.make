@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     config.cpp
@@ -31,11 +31,14 @@ RECURSE(
     fetcher
     ru_quoter
     list_topics
+    metrics
     mlp
     nameresolver
     partition_index_generator
     partition_key_range
+    reset_offset
     schema
     write_meta
+    write_sessions_quoter
     cloud_events
 )

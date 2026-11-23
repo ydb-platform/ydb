@@ -5,18 +5,11 @@ import boto3
 
 import pytest
 
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
-
-
-class TestS3(TestYdsBase):
-    @yq_all
+class TestS3:
     @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     @pytest.mark.parametrize("kikimr_params", [{"raw": 20}, {"raw": 150}, {"raw": 1000}], indirect=True)
     @pytest.mark.parametrize("limit", [5, 100, 500])
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_size_limit(self, kikimr, s3, client, limit, kikimr_params, runtime_listing, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -37,9 +30,8 @@ class TestS3(TestYdsBase):
         """
 
         s3_client.put_object(Body=info, Bucket='fbucket', Key='info.txt', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "test-connection"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "test-connection")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
                 pragma s3.UseRuntimeListing="{runtime_listing}";
@@ -54,15 +46,15 @@ class TestS3(TestYdsBase):
                     ))
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query = client.execute(sql)
 
-        expected_status = fq.QueryMeta.COMPLETED
+        expected_success = True
         if kikimr_params.param['raw'] < min(len(info), limit):
-            expected_status = fq.QueryMeta.FAILED
-        client.wait_query_status(query_id, expected_status)
+            expected_success = False
+        query.check(expected_success)
 
-        if expected_status == fq.QueryMeta.COMPLETED:
-            data = client.get_result_data(query_id)
-            result_set = data.result.result_set
-            result = result_set.rows[0].items[0].bytes_value
+        if expected_success:
+            data = query.result_set()
+            result_set = data
+            result = result_set.rows[0][0]
             assert result == info.encode()[:limit]

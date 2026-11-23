@@ -1,7 +1,7 @@
 #pragma once
 #include "common.h"
 
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 
 #include <ydb/library/signals/object_counter.h>
 
@@ -33,8 +33,9 @@ public:
     }
 
     void IncInFlight() {
-        AFL_VERIFY(CountInFlight.Inc() <= std::ceil(ScopeLimits->GetCPUThreadsLimit()))("in_flight", CountInFlight.Inc())(
-                                            "limit", ScopeLimits->GetCPUThreadsLimit());
+        YDB_LOG_VERIFY(CountInFlight.Inc() <= std::ceil(ScopeLimits->GetCPUThreadsLimit()),
+            {"inFlight", CountInFlight.Inc()},
+            {"limit", ScopeLimits->GetCPUThreadsLimit()});
     }
 
     void DecInFlight() {

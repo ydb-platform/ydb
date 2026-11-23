@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_dq_task_transform.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yql/essentials/minikql
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

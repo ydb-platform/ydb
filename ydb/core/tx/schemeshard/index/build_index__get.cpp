@@ -4,6 +4,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -16,7 +18,9 @@ public:
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("DoExecute " << record.ShortDebugString());
+        YDB_LOG_DEBUG(LogPrefix << "DoExecute",
+            {"record", record.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvIndexBuilder::TEvGetResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -58,3 +62,5 @@ ITransaction* TSchemeShard::CreateTxGet(TEvIndexBuilder::TEvGetRequest::TPtr& ev
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

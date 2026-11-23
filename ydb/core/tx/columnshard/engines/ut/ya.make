@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/test/libs/table
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/predicate
     yql/essentials/sql/pg_dummy
@@ -45,6 +46,8 @@ SRCS(
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_scan_snapshot_guard.cpp
+    ut_scan_actor.cpp
+    ut_scan_cursor.cpp
     ut_script.cpp
     ut_minmax_index.cpp
     ut_sync_portion_index_reuse.cpp
@@ -52,6 +55,13 @@ SRCS(
     ut_index_blob_size_limit.cpp
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
+    ut_shared_schema_cache.cpp
+    ut_bloom_ngram_size.cpp
+    ut_loaded_key_ranges.cpp
+    ut_cleanup_tables.cpp
+    ut_index_key_order.cpp
+    ut_index_portions_by_last_key.cpp
+    ut_insert_write_id.cpp
     helper.cpp
 )
 

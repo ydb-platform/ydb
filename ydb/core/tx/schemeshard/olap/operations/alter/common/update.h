@@ -20,6 +20,9 @@ private:
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SCHEMA;
     }
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
+    virtual TConclusionStatus DoRestore(const TUpdateRestoreContext& context) override final;
+    virtual TConclusionStatus DoRestoreImpl(
+        const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) = 0;
 
     bool IsAlterCompression(const TUpdateInitializationContext& context) const {
         for (const auto& alterColumn : context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
@@ -47,22 +50,26 @@ protected:
         return DoInitializeImpl(context);
     }
 
+    bool IsAlterPersistent() const {
+        return !GetShardIds().empty();
+    }
+
     std::shared_ptr<TColumnTableInfo> GetTargetTableInfoVerified() const {
         auto result = GetTargetTableInfo();
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 
     template <class T>
     const T& GetTargetEntityAsVerified() const {
         auto resultPtr = dynamic_pointer_cast<T>(GetTargetEntityVerified());
-        AFL_VERIFY(!!resultPtr);
+        YDB_LOG_VERIFY(!!resultPtr);
         return *resultPtr;
     }
 
     std::shared_ptr<ISSEntity> GetTargetEntityVerified() const {
         auto result = GetTargetSSEntity();
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 

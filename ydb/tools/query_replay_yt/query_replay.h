@@ -100,6 +100,8 @@ struct TQueryReplayEvents {
         UncategorizedPlanMismatch,
         MissingTableMetadata,
         UncategorizedFailure,
+        // Abort of the replay tool itself (YQL_ENSURE / yexception), not a product error.
+        QrInternalError,
         Unspecified,
     };
 

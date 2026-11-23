@@ -12,11 +12,12 @@ class TDbPoolMap;
 class TDbPool;
 using TDbPoolPtr = std::shared_ptr<TDbPool>;
 
-class TDbPoolHolder final : public TThrRefBase {
+class TDbPoolHolder final: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolHolder>;
 
-    TDbPoolHolder(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory, NMonitoring::TDynamicCounterPtr counters);
+    TDbPoolHolder(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory,
+        NMonitoring::TDynamicCounterPtr counters);
 
     ~TDbPoolHolder();
 
@@ -29,4 +30,4 @@ private:
 
 NYdb::TAsyncStatus ExecDbRequest(TDbPoolPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler);
 
-} // namespace NDbPool
+}   // namespace NDbPool

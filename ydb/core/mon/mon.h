@@ -17,11 +17,19 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
+
 namespace NKikimr {
     struct TAppData;
 }
 
+namespace NKikimr::NPathAliasing {
+    class TPathNormalizer;
+}
+
 namespace NActors {
+
+TString GetRelativeRoot(TStringBuf path);
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYql::TIssues& issues, NYdb::EStatus status);
@@ -77,6 +85,7 @@ public:
 
     std::future<void> Start(TActorSystem* actorSystem); // signals when monitoring is ready
     void Stop();
+    void UpdatePathNormalizer(std::shared_ptr<const NKikimr::NPathAliasing::TPathNormalizer> normalizer);
 
     void Register(NMonitoring::IMonPage* page);
     NMonitoring::TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);
@@ -132,6 +141,7 @@ protected:
     TActorId CountersServiceActorId;
     TActorId PingServiceActorId;
     TIntrusivePtr<NMonitoring::TDynamicCountersPage> CountersMonPage;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
 
     struct TActorMonPageInfo {
         NMonitoring::TMonPagePtr Page;
@@ -140,6 +150,7 @@ protected:
     };
 
     TMutex Mutex;
+    std::optional<std::shared_ptr<const std::function<TString(TStringBuf)>>> PathNormalizer;
     std::vector<TActorMonPageInfo> ActorMonPages;
     THashMap<TString, TActorId> ActorServices;
     std::shared_ptr<NMonitoring::IMetricFactory> Metrics;

@@ -6,11 +6,10 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
+#include <util/generic/size_literals.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/utils/log/log.h>
-
-#include <util/generic/size_literals.h>
 
 namespace NYql {
 
@@ -62,24 +61,12 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 }
 
 TString GetExtension(const std::string_view& format, const std::string_view& compression) {
-    static const std::unordered_map<std::string_view, std::string_view> formatsMap = {
-        {"csv_with_names"sv, "csv"sv},
-        {"csv"sv, "csv"sv},
-        {"tsv_with_names"sv, "tsv"sv},
-        {"raw"sv, "bin"sv},
-        {"json_list"sv, "json"sv},
-        {"json_each_row"sv, "json"sv},
-        {"parquet"sv, "parquet"sv}
-    };
+    static const std::unordered_map<std::string_view, std::string_view> formatsMap = { { "csv_with_names"sv, "csv"sv }, { "csv"sv, "csv"sv },
+        { "tsv_with_names"sv, "tsv"sv }, { "raw"sv, "bin"sv }, { "json_list"sv, "json"sv }, { "json_each_row"sv, "json"sv },
+        { "parquet"sv, "parquet"sv } };
 
-    static const std::unordered_map<std::string_view, std::string_view> compressionsMap = {
-        {"gzip"sv, "gz"sv},
-        {"zstd"sv, "zst"sv},
-        {"lz4"sv, "lz4"sv},
-        {"bzip2"sv, "bz2"sv},
-        {"brotli"sv, "br"sv},
-        {"xz"sv, "xz"sv}
-    };
+    static const std::unordered_map<std::string_view, std::string_view> compressionsMap = { { "gzip"sv, "gz"sv }, { "zstd"sv, "zst"sv },
+        { "lz4"sv, "lz4"sv }, { "bzip2"sv, "bz2"sv }, { "brotli"sv, "br"sv }, { "xz"sv, "xz"sv } };
 
     TStringBuilder extension;
     if (const auto it = formatsMap.find(format); formatsMap.cend() != it) {
@@ -92,13 +79,13 @@ TString GetExtension(const std::string_view& format, const std::string_view& com
     return extension;
 }
 
-class TS3PhysicalOptProposalTransformer : public TOptimizeTransformerBase {
+class TS3PhysicalOptProposalTransformer: public TOptimizeTransformerBase {
 public:
     explicit TS3PhysicalOptProposalTransformer(TS3State::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderS3, {})
         , State_(std::move(state))
     {
-#define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TS3PhysicalOptProposalTransformer::name)
+#define HNDL(name) "PhysicalOptimizer-" #name, Hndl(&TS3PhysicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         if (!State_->Configuration->WriteThroughDqIntegration) {
             AddHandler(0, &TS3WriteObject::Match, HNDL(S3WriteObject));
@@ -106,7 +93,7 @@ public:
         AddHandler(0, &TS3Insert::Match, HNDL(S3Insert));
 #undef HNDL
 
-        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
+        SetGlobal(0);   // Stage 0 of this optimizer is global => we can remap nodes.
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
@@ -120,9 +107,8 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    TExprNode::TPtr BuildSinkStage(TPositionHandle writePos, TS3DataSink dataSink, TS3Target target, TExprBase input,
-        TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents, bool wrapWithNth) const
-    {
+    TExprNode::TPtr BuildSinkStage(TPositionHandle writePos, TS3DataSink dataSink, TS3Target target, TExprBase input, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents, bool wrapWithNth) const {
         const auto maybeUnionAll = input.Maybe<TDqCnUnionAll>();
         const bool pureDqExpr = IsDqPureExpr(input);
         if (!pureDqExpr && !maybeUnionAll) {
@@ -148,15 +134,11 @@ public:
         const auto& keys = GetPartitionKeys(GetPartitionBy(target.Settings().Ref()));
         if (!keys.empty()) {
             // Build external stage with one sink
-            stageArgs.emplace_back(Build<TCoArgument>(ctx, writePos)
-                .Name("in")
-                .Done());
+            stageArgs.emplace_back(Build<TCoArgument>(ctx, writePos).Name("in").Done());
             stageBody = sink.BuildSerializer(stageArgs.back().Ptr(), ctx);
         } else if (pureDqExpr) {
             // Build stage with one sink from scratch
-            stageBody = sink.BuildSerializer(Build<TCoToFlow>(ctx, writePos)
-                .Input(input)
-                .Done().Ptr(), ctx);
+            stageBody = sink.BuildSerializer(Build<TCoToFlow>(ctx, writePos).Input(input).Done().Ptr(), ctx);
         } else {
             // Push sink into existing stage and rebuild stage lambda
             const auto& stage = maybeUnionAll.Cast().Output().Stage();
@@ -166,9 +148,7 @@ public:
             stageArgs.reserve(args.Size());
             stageArgsReplaces.reserve(args.Size());
             for (size_t i = 0; i < args.Size(); ++i) {
-                auto newArg = Build<TCoArgument>(ctx, writePos)
-                    .Name(TStringBuilder() << "in_" << i)
-                    .Done();
+                auto newArg = Build<TCoArgument>(ctx, writePos).Name(TStringBuilder() << "in_" << i).Done();
 
                 stageArgs.emplace_back(newArg);
                 YQL_ENSURE(stageArgsReplaces.emplace(args.Arg(i).Raw(), newArg.Ptr()).second);
@@ -195,14 +175,14 @@ public:
 
                     TExprNode::TPtr newBranchProgram;
                     if (i == outputIndex) {
-                        const auto newArg = Build<TCoArgument>(ctx, writePos)
-                            .Name(TStringBuilder() << "in_dq_replicate_" << i)
-                            .Done();
+                        const auto newArg = Build<TCoArgument>(ctx, writePos).Name(TStringBuilder() << "in_dq_replicate_" << i).Done();
 
                         newBranchProgram = Build<TCoLambda>(ctx, writePos)
-                            .Args({newArg})
-                            .Body(ctx.ReplaceNode(sink.BuildSerializer(branchLambda.Body().Ptr(), ctx), branchLambda.Args().Arg(0).Ref(), newArg.Ptr()))
-                            .Done().Ptr();
+                                               .Args({ newArg })
+                                               .Body(ctx.ReplaceNode(sink.BuildSerializer(branchLambda.Body().Ptr(), ctx),
+                                                   branchLambda.Args().Arg(0).Ref(), newArg.Ptr()))
+                                               .Done()
+                                               .Ptr();
                     } else {
                         newBranchProgram = branchLambda.Ptr();
                     }
@@ -210,19 +190,12 @@ public:
                     newBranchLambdas.emplace_back(std::move(newBranchProgram));
                 }
 
-                stageBody = Build<TDqReplicate>(ctx, writePos)
-                    .Input(dqReplicate.Input())
-                    .FreeArgs()
-                        .Add(newBranchLambdas)
-                        .Build()
-                    .Done().Ptr();
+                stageBody = Build<TDqReplicate>(ctx, writePos).Input(dqReplicate.Input()).FreeArgs().Add(newBranchLambdas).Build() .Done().Ptr();
             }
         }
 
-        const auto stageProgram = Build<TCoLambda>(ctx, writePos)
-            .Args(stageArgs)
-            .Body(ctx.ReplaceNodes(std::move(stageBody), stageArgsReplaces))
-            .Done();
+        const auto stageProgram =
+            Build<TCoLambda>(ctx, writePos).Args(stageArgs).Body(ctx.ReplaceNodes(std::move(stageBody), stageArgsReplaces)).Done();
 
         // Build DQ stage with sink and corresponding connections
 
@@ -232,6 +205,7 @@ public:
 
             auto inputsBuilder = Build<TExprList>(ctx, writePos);
             if (!keys.empty()) {
+                // clang-format off
                 inputsBuilder.Add<TDqCnHashShuffle>()
                     .Output<TDqOutput>()
                         .Stage<TDqStage>()
@@ -250,8 +224,10 @@ public:
                         .Add(keys)
                         .Build()
                     .Build();
+                // clang-format on
             }
 
+            // clang-format off
             return Build<TDqStage>(ctx, writePos)
                 .Inputs(inputsBuilder.Done())
                 .Program(stageProgram)
@@ -260,26 +236,26 @@ public:
                     .Build()
                 .Settings().Build()
                 .Done().Ptr();
+            // clang-format on
         }
 
         const auto dqUnionOutput = maybeUnionAll.Cast().Output();
         if (keys.empty()) {
-            YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` and push sink into existing stage.";
+            YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue()
+                                       << "` and push sink into existing stage.";
 
             const auto inputStage = dqUnionOutput.Stage().Cast<TDqStage>();
 
             auto outputsBuilder = Build<TDqStageOutputsList>(ctx, writePos);
             if (const auto outputs = inputStage.Outputs()) {
                 outputsBuilder.InitFrom(outputs.Cast());
-                YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
+                YQL_ENSURE(
+                    inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
             }
             outputsBuilder.Add(sink.BuildSink(FromString<ui64>(dqUnionOutput.Index().Value()), ctx, writePos));
 
-            const auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
-                .InitFrom(inputStage)
-                .Program(stageProgram)
-                .Outputs(outputsBuilder.Done())
-                .Done();
+            const auto dqStageWithSink =
+                Build<TDqStage>(ctx, inputStage.Pos()).InitFrom(inputStage).Program(stageProgram).Outputs(outputsBuilder.Done()).Done();
 
             // Because stage type annotation was changed due to S3 serializer
             // we should replace stage parent nodes (they type annotation should not change)
@@ -308,17 +284,16 @@ public:
                 return dqStageWithSink.Ptr();
             }
 
-            const auto dqResult = Build<TCoNth>(ctx, dqStageWithSink.Pos())
-                .Tuple(dqStageWithSink)
-                .Index(dqUnionOutput.Index())
-                .Done();
+            const auto dqResult = Build<TCoNth>(ctx, dqStageWithSink.Pos()).Tuple(dqStageWithSink).Index(dqUnionOutput.Index()).Done();
 
-            return ctx.NewList(dqStageWithSink.Pos(), {dqResult.Ptr()});
+            return ctx.NewList(dqStageWithSink.Pos(), { dqResult.Ptr() });
         }
 
-        YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as sink in external stage.";
+        YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue()
+                                   << "` as sink in external stage.";
         YQL_ENSURE(!keys.empty());
 
+        // clang-format off
         return Build<TDqStage>(ctx, writePos)
             .Inputs()
                 .Add<TDqCnHashShuffle>()
@@ -334,19 +309,13 @@ public:
                 .Add(sink.BuildSink(0, ctx, writePos))
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> S3Insert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         auto insert = node.Cast<TS3Insert>();
-        const auto resultPtr = BuildSinkStage(node.Pos(),
-            insert.DataSink(),
-            insert.Target(),
-            insert.Input(),
-            ctx,
-            optCtx,
-            getParents,
-            /* wrapWithNth */ true
-        );
+        const auto resultPtr =
+            BuildSinkStage(node.Pos(), insert.DataSink(), insert.Target(), insert.Input(), ctx, optCtx, getParents, /* wrapWithNth */ true);
 
         if (resultPtr) {
             return resultPtr;
@@ -357,15 +326,8 @@ public:
 
     TMaybeNode<TExprBase> S3WriteObject(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         auto write = node.Cast<TS3WriteObject>();
-        const auto resultPtr = BuildSinkStage(node.Pos(),
-            write.DataSink(),
-            write.Target(),
-            write.Input(),
-            ctx,
-            optCtx,
-            getParents,
-            /* wrapWithNth */ false
-        );
+        const auto resultPtr =
+            BuildSinkStage(node.Pos(), write.DataSink(), write.Target(), write.Input(), ctx, optCtx, getParents, /* wrapWithNth */ false);
 
         if (!resultPtr) {
             return node;
@@ -374,22 +336,19 @@ public:
         const auto maybeStage = TMaybeNode<TDqStage>(resultPtr);
         YQL_ENSURE(maybeStage);
 
-        return Build<TDqQuery>(ctx, write.Pos())
-            .World(write.World())
-            .SinkStages()
-                .Add(maybeStage.Cast())
-                .Build()
-            .Done();
+        return Build<TDqQuery>(ctx, write.Pos()).World(write.World()).SinkStages().Add(maybeStage.Cast()).Build() .Done();
     }
 
 private:
     struct TS3SinkInfo {
-        TS3SinkInfo(const TS3SinkSettings& dqSinkSettings, TExprNode::TPtr serializer, const TCoArgument& serializerArgument, const TS3DataSink& dataSink)
+        TS3SinkInfo(const TS3SinkSettings& dqSinkSettings, TExprNode::TPtr serializer, const TCoArgument& serializerArgument,
+            const TS3DataSink& dataSink)
             : DqSinkSettings(dqSinkSettings)
             , Serializer(std::move(serializer))
             , SerializerArgument(serializerArgument)
             , DataSink(dataSink)
-        {}
+        {
+        }
 
         TExprNode::TPtr BuildSerializer(TExprNode::TPtr input, TExprContext& ctx) {
             YQL_ENSURE(Serializer, "Cannot build serializer twice");
@@ -399,11 +358,7 @@ private:
         }
 
         TDqSink BuildSink(ui64 index, TExprContext& ctx, TPositionHandle pos) const {
-            return Build<TDqSink>(ctx, pos)
-                .Index().Build(index)
-                .DataSink(DataSink)
-                .Settings(DqSinkSettings)
-                .Done();
+            return Build<TDqSink>(ctx, pos).Index().Build(index) .DataSink(DataSink).Settings(DqSinkSettings).Done();
         }
 
     private:
@@ -413,7 +368,8 @@ private:
         const TS3DataSink DataSink;
     };
 
-    TS3SinkInfo BuildS3Sink(TPositionHandle writePos, const TS3DataSink& dataSink, const TS3Target& target, const NYql::TStructExprType& rowType, TExprContext& ctx) const {
+    TS3SinkInfo BuildS3Sink(TPositionHandle writePos, const TS3DataSink& dataSink, const TS3Target& target, const NYql::TStructExprType& rowType,
+        TExprContext& ctx) const {
         const auto& settings = target.Settings().Ref();
         auto sinkSettingsBuilder = Build<TExprList>(ctx, target.Pos());
         if (auto partBy = GetPartitionBy(settings)) {
@@ -473,7 +429,7 @@ private:
         }
 
         const TStringBuf format = target.Format();
-        if (format != "raw" && format != "json_list") { // multipart
+        if (format != "raw" && format != "json_list") {   // multipart
             {
                 TExprNode::TListType pair;
                 pair.push_back(ctx.NewAtom(target.Pos(), "multipart"));
@@ -490,14 +446,13 @@ private:
         }
 
         TExprNode::TPtr serializer;
-        auto argument = Build<TCoArgument>(ctx, writePos)
-            .Name("serializer_input")
-            .Done();
+        auto argument = Build<TCoArgument>(ctx, writePos).Name("serializer_input").Done();
 
         const auto& keys = GetPartitionKeys(GetPartitionBy(target.Settings().Ref()));
-        if (TString error; !UseBlocksSink(format, keys, &rowType, State_->Configuration, error)){
+        if (TString error; !UseBlocksSink(format, keys, &rowType, State_->Configuration, error)) {
             // Build CH udf serializer
             YQL_ENSURE(!error, "Got block sink error: " << error);
+            // clang-format off
             serializer = Build<TS3SinkOutput>(ctx, writePos)
                 .Input(argument)
                 .Format().Build(format)
@@ -506,6 +461,7 @@ private:
                     .Build()
                 .Settings(sinkOutputSettingsBuilder.Done())
                 .Done().Ptr();
+            // clang-format on
         } else {
             // Build arrow block serializer
             YQL_ENSURE(format == "parquet");
@@ -516,9 +472,7 @@ private:
             pair.push_back(ctx.NewAtom(target.Pos(), "true"));
             sinkSettingsBuilder.Add(ctx.NewList(target.Pos(), std::move(pair)));
 
-            serializer = Build<TCoToFlow>(ctx, writePos)
-                .Input(argument)
-                .Done().Ptr();
+            serializer = Build<TCoToFlow>(ctx, writePos).Input(argument).Done().Ptr();
 
             TVector<TString> columns;
             columns.reserve(rowType.GetSize());
@@ -527,13 +481,10 @@ private:
             }
             serializer = MakeExpandMap(writePos, columns, serializer, ctx);
 
-            serializer = Build<TCoWideToBlocks>(ctx, writePos)
-                .Input<TCoFromFlow>()
-                    .Input(serializer)
-                    .Build()
-                .Done().Ptr();
+            serializer = Build<TCoWideToBlocks>(ctx, writePos).Input<TCoFromFlow>().Input(serializer).Build() .Done().Ptr();
         }
 
+        // clang-format off
         auto sinkSettings = Build<TS3SinkSettings>(ctx, writePos)
             .Path(target.Path())
             .Settings(sinkSettingsBuilder.Done())
@@ -543,6 +494,7 @@ private:
             .Extension().Build(GetExtension(format, compression ? compression->Tail().Content() : ""sv))
             .RowType(ExpandType(writePos, rowType, ctx))
             .Done();
+        // clang-format on
 
         return TS3SinkInfo(sinkSettings, serializer, argument, dataSink);
     }
@@ -550,10 +502,10 @@ private:
     const TS3State::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3PhysicalOptProposalTransformer>(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

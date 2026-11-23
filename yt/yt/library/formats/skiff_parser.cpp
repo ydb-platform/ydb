@@ -8,7 +8,6 @@
 #include <yt/yt/library/decimal/decimal.h>
 
 #include <yt/yt/library/skiff_ext/schema_match.h>
-#include <yt/yt/library/skiff_ext/parser.h>
 
 #include <yt/yt/library/tz_types/tz_types.h>
 
@@ -18,6 +17,8 @@
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/value_consumer.h>
+
+#include <yt/yt/core/misc/coro_pipe.h>
 
 #include <yt/yt/core/yson/parser.h>
 #include <yt/yt/core/yson/token_writer.h>
@@ -41,96 +42,57 @@ namespace {
 
 using TSkiffToUnversionedValueConverter = std::function<void(TCheckedInDebugSkiffParser*, IValueConsumer*)>;
 
-template <bool IsNullable, typename TFunction>
-class TPrimitiveTypeConverter
+template <typename TPhysical, typename TParseFunction>
+class TSkiffToTypedValueConverter
 {
 public:
-    explicit TPrimitiveTypeConverter(ui32 columnId, TFunction function = {})
+    TSkiffToTypedValueConverter(
+        int columnId,
+        TYsonToUnversionedValueConverter* /*ysonConverter*/,
+        TParseFunction parseFunction)
         : ColumnId_(columnId)
-        , Function_(function)
+        , ParseFunction_(std::move(parseFunction))
     { }
 
     void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
-        if constexpr (IsNullable) {
-            ui8 tag = parser->ParseVariant8Tag();
-            if (tag == 0) {
-                valueConsumer->OnValue(MakeUnversionedNullValue(ColumnId_));
-                return;
-            } else if (tag > 1) {
-                const auto name = valueConsumer->GetNameTable()->GetName(ColumnId_);
-                THROW_ERROR_EXCEPTION(
-                    "Found bad variant8 tag %Qv when parsing optional field %Qv",
-                    tag,
-                    name);
-            }
-        }
-
-        auto value = Function_(parser);
-        using TValueType = std::decay_t<decltype(value)>;
-
-        if constexpr (std::is_same_v<TValueType, TStringBuf>) {
-            valueConsumer->OnValue(MakeUnversionedStringValue(value, ColumnId_));
-        } else if constexpr (
-            std::is_same_v<TValueType, i8> ||
-            std::is_same_v<TValueType, i16> ||
-            std::is_same_v<TValueType, i32> ||
-            std::is_same_v<TValueType, i64>)
-        {
-            valueConsumer->OnValue(MakeUnversionedInt64Value(value, ColumnId_));
-        } else if constexpr (
-            std::is_same_v<TValueType, ui8> ||
-            std::is_same_v<TValueType, ui16> ||
-            std::is_same_v<TValueType, ui32> ||
-            std::is_same_v<TValueType, ui64>)
-        {
-            valueConsumer->OnValue(MakeUnversionedUint64Value(value, ColumnId_));
-        } else if constexpr (std::is_same_v<TValueType, bool>) {
-            valueConsumer->OnValue(MakeUnversionedBooleanValue(value, ColumnId_));
-        } else if constexpr (std::is_same_v<TValueType, double>) {
-            valueConsumer->OnValue(MakeUnversionedDoubleValue(value, ColumnId_));
-        } else if constexpr (std::is_same_v<TValueType, std::nullptr_t>) {
+        auto value = ParseFunction_(parser);
+        if constexpr (ValueType == EValueType::Null) {
             valueConsumer->OnValue(MakeUnversionedNullValue(ColumnId_));
+        } else if constexpr (ValueType == EValueType::Int64) {
+            valueConsumer->OnValue(MakeUnversionedInt64Value(value, ColumnId_));
+        } else if constexpr (ValueType == EValueType::Uint64) {
+            valueConsumer->OnValue(MakeUnversionedUint64Value(value, ColumnId_));
+        } else if constexpr (ValueType == EValueType::Boolean) {
+            valueConsumer->OnValue(MakeUnversionedBooleanValue(value, ColumnId_));
+        } else if constexpr (ValueType == EValueType::Double) {
+            valueConsumer->OnValue(MakeUnversionedDoubleValue(value, ColumnId_));
+        } else if constexpr (ValueType == EValueType::String) {
+            valueConsumer->OnValue(MakeUnversionedStringValue(value, ColumnId_));
         } else {
-            static_assert(std::is_same_v<TValueType, TStringBuf>);
+            static_assert(false, "Unexpected value type");
         }
     }
 
 private:
-    ui32 ColumnId_;
-    TFunction Function_;
+    static constexpr EValueType ValueType = TCppTypeToValueType<TPhysical>::Value;
+
+    const int ColumnId_;
+    TParseFunction ParseFunction_;
 };
 
-template <bool IsNullable, typename TFunction>
-TPrimitiveTypeConverter<IsNullable, TFunction> CreatePrimitiveTypeConverter(ui32 columnId, TFunction function)
-{
-    return TPrimitiveTypeConverter<IsNullable, TFunction>(columnId, function);
-}
+////////////////////////////////////////////////////////////////////////////////
 
-template <bool isNullable>
-class TYson32TypeConverterImpl
+class TYson32ToValueConverter
 {
 public:
-    explicit TYson32TypeConverterImpl(ui16 columnId, TYsonToUnversionedValueConverter* ysonConverter)
+    TYson32ToValueConverter(int columnId, TYsonToUnversionedValueConverter* ysonConverter)
         : ColumnId_(columnId)
         , YsonConverter_(ysonConverter)
-    {}
+    { }
 
     void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
-        if constexpr (isNullable) {
-            ui8 tag = parser->ParseVariant8Tag();
-            if (tag == 0) {
-                valueConsumer->OnValue(MakeUnversionedNullValue(ColumnId_));
-                return;
-            } else if (tag > 1) {
-                const auto name = valueConsumer->GetNameTable()->GetName(ColumnId_);
-                THROW_ERROR_EXCEPTION(
-                    "Found bad variant8 tag %Qv when parsing optional field %Qv",
-                    tag,
-                    name);
-            }
-        }
         YT_VERIFY(YsonConverter_);
         auto ysonString = parser->ParseYson32();
         YsonConverter_->SetColumnIndex(ColumnId_);
@@ -142,246 +104,108 @@ public:
     }
 
 private:
-    const ui16 ColumnId_;
-    TYsonToUnversionedValueConverter* YsonConverter_ = nullptr;
+    const int ColumnId_;
+    TYsonToUnversionedValueConverter* const YsonConverter_;
 };
-
-TSkiffToUnversionedValueConverter CreatePrimitiveTypeConverter(
-    EWireType wireType,
-    bool required,
-    int columnId,
-    TYsonToUnversionedValueConverter* ysonConverter)
-{
-    switch (wireType) {
-#define CASE(x) \
-        case ((x)): \
-            do { \
-                if (required) { \
-                    return TPrimitiveTypeConverter<false, TSimpleSkiffParser<(x)>>(columnId); \
-                } else { \
-                    return TPrimitiveTypeConverter<true, TSimpleSkiffParser<(x)>>(columnId); \
-                } \
-            } while (0)
-        CASE(EWireType::Int8);
-        CASE(EWireType::Int16);
-        CASE(EWireType::Int32);
-        CASE(EWireType::Int64);
-        CASE(EWireType::Uint8);
-        CASE(EWireType::Uint16);
-        CASE(EWireType::Uint32);
-        CASE(EWireType::Uint64);
-        CASE(EWireType::Boolean);
-        CASE(EWireType::Double);
-        CASE(EWireType::String32);
-        CASE(EWireType::Nothing);
-#undef CASE
-        case EWireType::Yson32:
-            if (required) {
-                return TYson32TypeConverterImpl<false>(columnId, ysonConverter);
-            } else {
-                return TYson32TypeConverterImpl<true>(columnId, ysonConverter);
-            }
-        default:
-            break;
-    }
-    YT_ABORT();
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSkiffToUnversionedValueConverter CreateTzTypeConverter(
-    const std::shared_ptr<NSkiff::TSkiffSchema>& skiffSchema,
-    bool required,
-    ui16 columnId,
-    TYsonToUnversionedValueConverter* ysonConverter)
+template <EOptionalKind OptionalKind, typename TInnerConverter>
+class TOptionalParserConverter
 {
-    // Schema is already validated to match tz-time format.
-    auto wireType = skiffSchema->GetWireType();
+public:
+    template <typename... TArgs>
+    TOptionalParserConverter(int columnId, TYsonToUnversionedValueConverter* ysonConverter, TArgs&&... args)
+        : ColumnId_(columnId)
+        , Converter_(columnId, ysonConverter, std::forward<TArgs>(args)...)
+    { }
 
-    switch (wireType) {
-        case EWireType::String32:
-            if (required) {
-                return TPrimitiveTypeConverter<false, TSimpleSkiffParser<EWireType::String32>>(columnId);
-            } else {
-                return TPrimitiveTypeConverter<true, TSimpleSkiffParser<EWireType::String32>>(columnId);
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    {
+        if constexpr (OptionalKind != EOptionalKind::None) {
+            i32 tag;
+            if constexpr (OptionalKind == EOptionalKind::Variant8) {
+                tag = parser->ParseVariant8Tag();
+            } else if constexpr (OptionalKind == EOptionalKind::VariantVar) {
+                tag = parser->ParseVariantVarTag();
             }
-        case EWireType::Tuple:
-        {
-            const auto& children = skiffSchema->GetChildren();
-            YT_VERIFY(children.size() == 2);
-            const auto innerWireType = children[0]->GetWireType();
-            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
-            switch (innerWireType) {
-        #define CASE(x) \
-                case ((x)): \
-                    do { \
-                        if (required) { \
-                            return TPrimitiveTypeConverter<false, TTzSkiffParser<(x)>>(columnId); \
-                        } else { \
-                            return TPrimitiveTypeConverter<true, TTzSkiffParser<(x)>>(columnId); \
-                        } \
-                    } while (0)
-                CASE(EWireType::Int32);
-                CASE(EWireType::Int64);
-                CASE(EWireType::Uint16);
-                CASE(EWireType::Uint32);
-                CASE(EWireType::Uint64);
-        #undef CASE
-                default:
-                    break;
+
+            if (tag == 0) {
+                valueConsumer->OnValue(MakeUnversionedNullValue(ColumnId_));
+                return;
+            } else if (tag != 1) {
+                const auto name = valueConsumer->GetNameTable()->GetName(ColumnId_);
+                THROW_ERROR_EXCEPTION(
+                    "Unexpected %Qlv tag of optional field %Qv: expected 0 or 1, got %v",
+                    OptionalKind,
+                    name,
+                    tag);
             }
-            YT_ABORT();
         }
-        case EWireType::Yson32:
-            if (required) {
-                return TYson32TypeConverterImpl<false>(columnId, ysonConverter);
-            } else {
-                return TYson32TypeConverterImpl<true>(columnId, ysonConverter);
-            }
-        default:
-            YT_ABORT();
+
+        Converter_(parser, valueConsumer);
     }
-}
+
+private:
+    const int ColumnId_;
+    TInnerConverter Converter_;
+};
+
+template <EOptionalKind OptionalKind>
+struct TParserConverters
+{
+    template <typename TPhysical, typename TParseFunction>
+    using TPhysicalConverter = TOptionalParserConverter<
+        OptionalKind,
+        TSkiffToTypedValueConverter<TPhysical, TParseFunction>
+    >;
+
+    using TYson32Converter = TOptionalParserConverter<OptionalKind, TYson32ToValueConverter>;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
     ESimpleLogicalValueType columnType,
     const TFieldDescription& fieldDescription,
-    ui16 columnId,
+    int columnId,
     TYsonToUnversionedValueConverter* ysonConverter)
 {
-    const auto& skiffSchema = DeoptionalizeSchema(fieldDescription.Schema()).first;
-    auto wireType = fieldDescription.ValidatedGetDeoptionalizeType(/*simplify*/ false);
-    bool required = fieldDescription.IsRequired();
-    switch (columnType) {
-        case ESimpleLogicalValueType::Int8:
-        case ESimpleLogicalValueType::Int16:
-        case ESimpleLogicalValueType::Int32:
-        case ESimpleLogicalValueType::Int64:
-
-        case ESimpleLogicalValueType::Interval:
-
-        case ESimpleLogicalValueType::Date32:
-        case ESimpleLogicalValueType::Datetime64:
-        case ESimpleLogicalValueType::Timestamp64:
-        case ESimpleLogicalValueType::Interval64:
-            CheckWireType(
-                wireType,
-                {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Uint8:
-        case ESimpleLogicalValueType::Uint16:
-        case ESimpleLogicalValueType::Uint32:
-        case ESimpleLogicalValueType::Uint64:
-
-        case ESimpleLogicalValueType::Date:
-        case ESimpleLogicalValueType::Datetime:
-        case ESimpleLogicalValueType::Timestamp:
-            CheckWireType(
-                wireType,
-                {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-            CheckTzType(skiffSchema, columnType);
-            return CreateTzTypeConverter(skiffSchema, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::String:
-        case ESimpleLogicalValueType::Json:
-        case ESimpleLogicalValueType::Utf8:
-            CheckWireType(wireType, {EWireType::String32, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Float:
-        case ESimpleLogicalValueType::Double:
-            CheckWireType(wireType, {EWireType::Double, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Boolean:
-            CheckWireType(wireType, {EWireType::Boolean, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Any:
-            CheckWireType(
-                wireType,
-                {
-                    EWireType::Int8,
-                    EWireType::Int16,
-                    EWireType::Int32,
-                    EWireType::Int64,
-
-                    EWireType::Uint8,
-                    EWireType::Uint16,
-                    EWireType::Uint32,
-                    EWireType::Uint64,
-
-                    EWireType::Double,
-                    EWireType::Boolean,
-                    EWireType::String32,
-                    EWireType::Nothing,
-                    EWireType::Yson32,
-                });
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Null:
-        case ESimpleLogicalValueType::Void:
-            CheckWireType(wireType, {EWireType::Nothing, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-        case ESimpleLogicalValueType::Uuid:
-            CheckWireType(wireType, {EWireType::Uint128, EWireType::String32, EWireType::Yson32});
-            if (wireType == EWireType::Uint128) {
-                if (fieldDescription.IsNullable()) {
-                    return CreatePrimitiveTypeConverter<true>(columnId, TUuidParser());
-                } else {
-                    return CreatePrimitiveTypeConverter<false>(columnId, TUuidParser());
-                }
-            } else {
-                return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-            }
-    }
+    ValidateDoesNotMatchOptionalSingular(fieldDescription.Schema());
+    auto [skiffSchema, optionalKind] = StripOptional(fieldDescription.Schema());
+    return DispatchOptionalKind(
+        optionalKind,
+        [&skiffSchema, columnType, columnId, ysonConverter] <EOptionalKind OptionalKind> () {
+            return CreateSimpleConverter<
+                TSkiffToUnversionedValueConverter,
+                TParserConverters<OptionalKind>,
+                TParseFunctions
+            >(skiffSchema, columnType, columnId, ysonConverter);
+        });
 }
 
 TSkiffToUnversionedValueConverter CreateDecimalValueConverter(
     const TFieldDescription& fieldDescription,
-    ui16 columnId,
+    int columnId,
     const TDecimalLogicalType& denullifiedType,
     TYsonToUnversionedValueConverter* ysonConverter)
 {
-    const auto precision = denullifiedType.GetPrecision();
-    const auto wireType = fieldDescription.ValidatedGetDeoptionalizeType(/*simplify*/ false);
-    switch (wireType) {
-#define CASE(x) \
-        case x: \
-            do { \
-                if (fieldDescription.IsNullable()) { \
-                    return CreatePrimitiveTypeConverter<true>(columnId, TDecimalSkiffParser<x>(precision)); \
-                } else { \
-                    return CreatePrimitiveTypeConverter<false>(columnId, TDecimalSkiffParser<x>(precision)); \
-                } \
-            } while (0)
-        CASE(EWireType::Int32);
-        CASE(EWireType::Int64);
-        CASE(EWireType::Int128);
-        CASE(EWireType::Int256);
-#undef CASE
-        case EWireType::Yson32:
-            return CreatePrimitiveTypeConverter(wireType, fieldDescription.IsRequired(), columnId, ysonConverter);
-        default:
-            CheckSkiffWireTypeForDecimal(precision, wireType);
-            YT_ABORT();
-    }
+    auto [skiffSchema, optionalKind] = StripOptional(fieldDescription.Schema());
+    return DispatchOptionalKind(
+        optionalKind,
+        [&skiffSchema, &denullifiedType, columnId, ysonConverter] <EOptionalKind OptionalKind> () {
+            return CreateDecimalConverter<
+                TSkiffToUnversionedValueConverter,
+                TParserConverters<OptionalKind>,
+                TParseFunctions
+            >(skiffSchema, denullifiedType.GetPrecision(), columnId, ysonConverter);
+        });
 }
 
 class TComplexValueConverter
 {
 public:
-    TComplexValueConverter(TSkiffToYsonConverter converter, ui16 columnId)
+    TComplexValueConverter(TSkiffToYsonConverter converter, int columnId)
         : Converter_(std::move(converter))
         , ColumnId_(columnId)
     { }
@@ -406,14 +230,14 @@ public:
 
 private:
     const TSkiffToYsonConverter Converter_;
-    const ui16 ColumnId_;
+    const int ColumnId_;
     TBuffer Buffer_;
 };
 
 TSkiffToUnversionedValueConverter CreateComplexValueConverter(
     const NTableClient::TComplexTypeFieldDescriptor& descriptor,
     const std::shared_ptr<TSkiffSchema>& skiffSchema,
-    ui16 columnId,
+    int columnId,
     bool sparseColumn)
 {
     TSkiffToYsonConverterConfig config;

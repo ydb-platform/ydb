@@ -20,7 +20,7 @@ namespace network
 {
 
 /**
-  Local address of the network connection - IP address or Unix domain socket name.
+  Local address of the network connection - IP address or UNIX domain socket name.
  */
 static constexpr const char *kNetworkLocalAddress = "network.local.address";
 
@@ -30,7 +30,7 @@ static constexpr const char *kNetworkLocalAddress = "network.local.address";
 static constexpr const char *kNetworkLocalPort = "network.local.port";
 
 /**
-  Peer address of the network connection - IP address or Unix domain socket name.
+  Peer address of the network connection - IP address or UNIX domain socket name.
  */
 static constexpr const char *kNetworkPeerAddress = "network.peer.address";
 
@@ -89,7 +89,7 @@ static constexpr const char *kUdp = "udp";
 static constexpr const char *kPipe = "pipe";
 
 /**
-  Unix domain socket
+  UNIX domain socket
  */
 static constexpr const char *kUnix = "unix";
 

@@ -22,8 +22,7 @@ namespace configuration
 class BatchLogRecordProcessorConfiguration : public LogRecordProcessorConfiguration
 {
 public:
-  // TODO: spec default is 1000ms for schedule_delay, using 5000ms to preserve original behavior
-  static constexpr std::size_t kDefaultScheduleDelayMs    = 5000;
+  static constexpr std::size_t kDefaultScheduleDelayMs    = 1000;
   static constexpr std::size_t kDefaultExportTimeoutMs    = 30000;
   static constexpr std::size_t kDefaultMaxQueueSize       = 2048;
   static constexpr std::size_t kDefaultMaxExportBatchSize = 512;

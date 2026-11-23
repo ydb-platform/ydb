@@ -22,12 +22,9 @@ EAttachStreamReadAction HandleAttachSessionState(
                 client->PessimizeNode(nodeId);
             }
         }
-        if (session->GetState() == TKqpSessionCommon::S_IDLE) {
-            if (client) {
-                session->CloseFromServer(client, closeCommand.Reason);
-            }
-        } else {
-            closeCommand.Execute(*session, client.get());
+        closeCommand.Execute(*session, client.get());
+        if (client) {
+            session->CloseFromServer(client, closeCommand.Reason);
         }
         return EAttachStreamReadAction::Stop;
     }

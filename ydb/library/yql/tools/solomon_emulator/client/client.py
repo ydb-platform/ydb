@@ -34,10 +34,8 @@ def cleanup_emulator():
 
 def cleanup_solomon(project, cluster, service):
     url = "{url}/cleanup?project={project}&cluster={cluster}&service={service}".format(
-        url=get_api_url(),
-        project=project,
-        cluster=cluster,
-        service=service)
+        url=get_api_url(), project=project, cluster=cluster, service=service
+    )
     _do_request("POST", url)
 
 
@@ -47,10 +45,8 @@ def cleanup_monitoring(folderId, service):
 
 def add_solomon_metrics(project, cluster, service, metrics):
     url = "{url}/metrics/post?project={project}&cluster={cluster}&service={service}".format(
-        url=get_api_url(),
-        project=project,
-        cluster=cluster,
-        service=service)
+        url=get_api_url(), project=project, cluster=cluster, service=service
+    )
     _do_request("POST", url, metrics)
 
 
@@ -61,21 +57,16 @@ def add_monitoring_metrics(folderId, service, metrics):
 def fail_solomon_push(project, cluster, service, count=1):
     """Make the emulator answer the next ``count`` pushes to the shard with a retriable error."""
     url = "{url}/fail/push?project={project}&cluster={cluster}&service={service}&count={count}".format(
-        url=get_api_url(),
-        project=project,
-        cluster=cluster,
-        service=service,
-        count=count)
+        url=get_api_url(), project=project, cluster=cluster, service=service, count=count
+    )
     _do_request("POST", url)
 
 
 def get_solomon_metrics(project, cluster, service):
     url = "{url}/metrics/get?project={project}&cluster={cluster}&service={service}".format(
-        url=get_api_url(),
-        project=project,
-        cluster=cluster,
-        service=service)
-    return sorted(_do_request("GET", url).json(), key=lambda x : x['ts'])
+        url=get_api_url(), project=project, cluster=cluster, service=service
+    )
+    return sorted(_do_request("GET", url).json(), key=lambda x: x['ts'])
 
 
 def get_monitoring_metrics(folderId, service):

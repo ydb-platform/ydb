@@ -46,7 +46,6 @@ from ._quoters import (
     PATH_QUOTER,
     PATH_REQUOTER,
     PATH_SAFE_UNQUOTER,
-    PATH_UNQUOTER,
     QS_UNQUOTER,
     QUERY_QUOTER,
     QUERY_REQUOTER,
@@ -952,7 +951,7 @@ class URL:
         / for absolute URLs without path part.
 
         """
-        return PATH_UNQUOTER(self._path) if self._path else "/" if self._netloc else ""
+        return UNQUOTER(self._path) if self._path else "/" if self._netloc else ""
 
     @cached_property
     def path_safe(self) -> str:

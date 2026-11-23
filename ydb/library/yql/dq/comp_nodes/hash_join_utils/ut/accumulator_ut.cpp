@@ -28,6 +28,7 @@ static volatile bool IsVerbose = false;
 
 namespace {
 
+[[maybe_unused]]
 TVector<TString> GenerateValues(size_t level) {
     constexpr size_t alphaSize = 'Z' - 'A' + 1;
     if (level == 1) {
@@ -45,8 +46,6 @@ TVector<TString> GenerateValues(size_t level) {
     }
     return values;
 }
-
-static const TVector<TString> threeLetterValues = GenerateValues(3);
 
 } // namespace
 
@@ -408,6 +407,7 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
 }
 
 static bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
+    static const TVector<TString> threeLetterValues = GenerateValues(3);
     auto nBuckets = 1 << log2Buckets;
     TScopedAlloc alloc(__LOCATION__);
     using TBuffer = TAccumulator::TBuffer;
@@ -612,7 +612,6 @@ Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
 #endif
 
 } // Y_UNIT_TEST_SUITE(Accumulator)
-
 
 }
 } // namespace NMiniKQL

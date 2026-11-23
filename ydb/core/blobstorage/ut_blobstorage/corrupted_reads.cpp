@@ -2,6 +2,72 @@
 #include <ydb/core/util/lz4_data_generator.h>
 
 Y_UNIT_TEST_SUITE(CorruptedReads) {
+    Y_UNIT_TEST(SuppressCorruptedBlobRestoration) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        });
+        env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::NVME);
+        env.Sim(TDuration::Minutes(1));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto info = env.GetGroupInfo(groups.front());
+        const TString data(1024 * 1024, 'x');
+        const TLogoBlobID fullId(1, 1, 1, 0, data.size(), 0);
+        const TLogoBlobID partId(fullId, 1);
+        env.PutBlob(info->GroupID.GetRawId(), fullId, data);
+        TDataPartSet parts;
+        info->Type.SplitData(TErasureType::CrcModeNone, data, parts);
+        const auto vdiskId = info->GetVDiskInSubgroup(0, fullId.Hash());
+        const auto actorId = info->GetActorId(TVDiskIdShort(vdiskId));
+
+        TIntrusivePtr<TPDiskMockState> state;
+        for (const auto& [pdiskId, ptr] : env.PDiskMockStates) {
+            if (std::get<0>(pdiskId) == actorId.NodeId()) {
+                UNIT_ASSERT(!state);
+                state = ptr;
+            }
+        }
+        UNIT_ASSERT(state);
+        const auto layout = env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult,
+            TEvBlobStorage::TEvCaptureVDiskLayout>(actorId);
+        ui32 corruptedParts = 0;
+        for (const auto& item : layout->Layout) {
+            if (item.BlobId == fullId) {
+                UNIT_ASSERT(item.RecordType == TEvBlobStorage::TEvCaptureVDiskLayoutResult::ERecordType::HugeBlob);
+                const auto& location = item.Location;
+                state->SetCorruptedArea(location.ChunkIdx, location.Offset, location.Offset + location.Size, true);
+                ++corruptedParts;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(corruptedParts, 1);
+
+        auto read = [&](bool suppressRestoration, NKikimrProto::EReplyStatus status) {
+            const auto edge = env.Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
+            auto get = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {partId});
+            get->IsInternal = true;
+            get->SuppressCorruptedBlobRestoration = suppressRestoration;
+            // Bypass the queue, which clones TEvVGet without its local flags.
+            auto ev = std::make_unique<IEventHandle>(actorId, edge, get.release());
+            ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, actorId);
+            env.Runtime->Send(ev.release(), edge.NodeId());
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetResult(0).GetStatus(), status);
+            if (status == NKikimrProto::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(record.GetResult(0)).ConvertToString(),
+                    parts.Parts[0].OwnedString.ConvertToString());
+            }
+        };
+        read(true, NKikimrProto::CORRUPTED);
+        read(false, NKikimrProto::OK);
+        read(true, NKikimrProto::OK);
+    }
+
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 8,

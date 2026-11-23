@@ -2,7 +2,7 @@ RECURSE(
     filterable
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow

@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(40)
-ENDIF()
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -24,5 +20,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_move.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(move_replace_path_types.h)
 
 END()

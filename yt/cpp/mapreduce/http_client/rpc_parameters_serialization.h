@@ -168,6 +168,10 @@ TNode SerializeParamsForReadTablePartition(
     const TString& cookie,
     const TTablePartitionReaderOptions& options);
 
+TNode SerializeParamsForReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options);
+
 TNode SerializeParamsForReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
@@ -224,6 +228,12 @@ TNode SerializeParamsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options);
+
+TNode SerializeParamsForGetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options);
 
 TNode SerializeParamsForCheckClusterLiveness(
     const TCheckClusterLivenessOptions& options);

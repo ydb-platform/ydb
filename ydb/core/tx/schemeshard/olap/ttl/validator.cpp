@@ -53,6 +53,14 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     const auto& columnType = GetType(*column);
     switch (columnType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+            if (!AppDataVerified().FeatureFlags.GetEnableColumnShardExtendedTtlTypes()) {
+                errors.AddError("TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled");
+                return false;
+            }
+            break;
         case NScheme::NTypeIds::Pg:
             errors.AddError("Unsupported column type for TTL in column tables");
             return false;
@@ -84,10 +92,6 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         } else {
             for (auto&& [_, i] : indexes.GetIndexes()) {
                 auto proto = i.GetIndexMeta().SerializeToProto();
-                if (proto.HasMaxIndex() && proto.GetMaxIndex().GetColumnId() == column->GetId()) {
-                    correct = true;
-                    break;
-                }
                 if (proto.HasMinMaxIndex() && proto.GetMinMaxIndex().GetColumnId() == column->GetId()) {
                     const TString& storageId = proto.GetStorageId();
                     if (storageId != NKikimr::NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId || proto.GetInheritPortionStorage()) {
@@ -114,6 +118,19 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         if (!tier.HasEvictToExternalStorage()) {
             continue;
         }
+
+        if (tier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+            if (!AppDataVerified().FeatureFlags.GetEnableTieringObjectKeyTree()) {
+                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Tree object keys are disabled for OLAP tiering");
+                return false;
+            }
+
+            if (tier.GetEvictToExternalStorage().GetObjectKeyPrefix().size() > 800) {
+                errors.AddError("Tiering object key prefix must not exceed 800 bytes");
+                return false;
+            }
+        }
+
         const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorage();
         TPath tierPath = TPath::Resolve(tierPathString, context.SS);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
@@ -126,7 +143,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         }
         {
             auto* findExternalDataSource = context.SS->ExternalDataSources.FindPtr(tierPath->PathId);
-            AFL_VERIFY(findExternalDataSource);
+            YDB_LOG_VERIFY(findExternalDataSource);
             NKikimrSchemeOp::TExternalDataSourceDescription proto;
             (*findExternalDataSource)->FillProto(proto, false);
             if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {

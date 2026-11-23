@@ -205,6 +205,28 @@ void TDDiskStubActor::HandleConnect(
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
+void TDDiskStubActor::HandleGetPersistentBufferRegistrationToken(
+    const NDDisk::TEvGetPersistentBufferRegistrationToken::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto reply =
+        std::make_unique<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(
+            TReplyStatus::OK);
+    reply->Record.SetToken(1);
+    ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
+}
+
+void TDDiskStubActor::HandleRegisterPersistentBuffer(
+    const NDDisk::TEvRegisterPersistentBuffer::TPtr& ev,
+    const TActorContext& ctx)
+{
+    ctx.Send(
+        ev->Sender,
+        new NDDisk::TEvRegisterPersistentBufferResult(TReplyStatus::OK),
+        0,
+        ev->Cookie);
+}
+
 void TDDiskStubActor::HandleRead(
     const NDDisk::TEvRead::TPtr& ev,
     const TActorContext& ctx)
@@ -386,6 +408,12 @@ STFUNC(TDDiskStubActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
         HFunc(NDDisk::TEvConnect, HandleConnect);
+        HFunc(
+            NDDisk::TEvGetPersistentBufferRegistrationToken,
+            HandleGetPersistentBufferRegistrationToken);
+        HFunc(
+            NDDisk::TEvRegisterPersistentBuffer,
+            HandleRegisterPersistentBuffer);
         HFunc(NDDisk::TEvRead, HandleRead);
         HFunc(NDDisk::TEvWrite, HandleWrite);
         HFunc(NDDisk::TEvWritePersistentBuffer, HandleWritePersistentBuffer);

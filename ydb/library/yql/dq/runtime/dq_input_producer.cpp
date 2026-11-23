@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_input_ready.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -41,7 +42,8 @@ public:
         TInstant& startTs,
         ui64& inputsConsumed,
         NKikimr::NMiniKQL::TWatermark* watermark,
-        TDqComputeActorWatermarks* watermarksTracker
+        TDqComputeActorWatermarks* watermarksTracker,
+        bool useReadySet
     )
         : TBase(memInfo)
         , Inputs(std::move(inputs))
@@ -63,6 +65,9 @@ public:
             } else {
                 Y_ENSURE(false, "Unknown IDqInput type");
             }
+        }
+        if (useReadySet) {
+            BindReadySet();
         }
     }
 
@@ -156,9 +161,60 @@ private:
     }
 
 private:
+    // The inputs are visited when marked, see TDqInputReadySet, a slot each: their index in Inputs, which then stays
+    // as is. An input which does not support it leaves the union polled, as before: the marks of the inputs bound
+    // already go to a set nobody reads
+    void BindReadySet() {
+        if (Inputs.empty()) {
+            return;
+        }
+        auto readySet = std::make_shared<TDqInputReadySet>(Inputs.size());
+        for (ui32 slot = 0; slot < Inputs.size(); ++slot) {
+            if (!Inputs[slot]->BindReadySet(readySet, slot)) {
+                return;
+            }
+        }
+        ReadySet = std::move(readySet);
+    }
+
     NUdf::EFetchStatus FindBuffer() {
         Batch.clear();
 
+        if (ReadySet ? FindNotified() : FindPolled()) {
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+    }
+
+    // Visits the inputs ReadySet hands out: the marked ones, and those which had data the last time
+    bool FindNotified() {
+        ReadySet->Collect();
+        for (auto count = ReadySet->ReadyCount(); count > 0; --count) {
+            auto slot = ReadySet->Next();
+            auto& input = Inputs[slot];
+            if (input->Pop(Batch, Watermark)) {
+                ReadySet->Keep(slot);
+                InputKey = InputKeys[slot];
+                return true;
+            }
+            if (input->IsFinished()) {
+                if (WatermarksEnabled()) {
+                    WatermarksTracker->UnregisterInput(InputKeys[slot].InputId, InputKeys[slot].IsChannel, /*silent=*/true);
+                }
+                ReadySet->Retire(slot);
+                --Alive;
+            } else {
+                // found empty, which asks the input to wake the consumer up on its next push
+                ReadySet->Release(slot);
+            }
+        }
+
+        return false;
+    }
+
+    // Polls every live input, round robin: a finished one is moved past Alive
+    bool FindPolled() {
         auto startIndex = Index++;
         size_t i = 0;
 
@@ -167,7 +223,7 @@ private:
             auto& input = Inputs[currentIndex];
             if (input->Pop(Batch, Watermark)) {
                 InputKey = InputKeys[currentIndex];
-                return NUdf::EFetchStatus::Ok;
+                return true;
             }
             if (input->IsFinished()) {
                 if (WatermarksEnabled()) {
@@ -182,7 +238,7 @@ private:
             }
         }
 
-        return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+        return false;
     }
 
     [[nodiscard]] bool WatermarksEnabled() const {
@@ -221,6 +277,9 @@ private:
 
     NKikimr::NMiniKQL::TWatermark* WatermarkStorage;
     TDqComputeActorWatermarks* WatermarksTracker;
+
+    // set when the inputs are visited when marked rather than polled, see BindReadySet
+    std::shared_ptr<TDqInputReadySet> ReadySet;
 };
 
 template<bool IsWide>
@@ -560,6 +619,18 @@ private:
             ++CurrBlockIndex_;
         }
 
+        void Advance(ui64 count) {
+            Y_DEBUG_ABORT_UNLESS(CurrBlockIndex_ + count <= BlockLen_);
+            CurrBlockIndex_ += count;
+        }
+
+        const arrow::ArrayData& GetColumnArray(ui32 columnIndex) const {
+            Y_DEBUG_ABORT_UNLESS(columnIndex < CurrentRow_.size());
+            const arrow::Datum& datum = CurrentRow_[columnIndex];
+            YQL_ENSURE(datum.is_array());
+            return *datum.array();
+        }
+
         NUdf::EFetchStatus FetchNext() {
             if (IsFinished_) {
                 return NUdf::EFetchStatus::Finish;
@@ -632,26 +703,7 @@ private:
 
         bool operator<(const TDqInputBatchIterator& other) const {
             Y_DEBUG_ABORT_UNLESS(&Data_->Parent() == &other.Data_->Parent());
-            const auto& comparators = Data_->Parent().Comparators_;
-            ui32 comparatorIndex = 0;
-            for (auto& sortCol : Data_->Parent().SortCols_) {
-                ui32 idx = sortCol.Index;
-
-                TBlockItem myValue = GetItem(idx);
-                TBlockItem otherValue = other.GetItem(idx);
-
-                i64 compare = comparators[comparatorIndex++]->Compare(myValue, otherValue);
-                if (!sortCol.Ascending) {
-                    compare = -compare;
-                }
-
-                if (compare) {
-                    return compare > 0;
-                }
-            }
-            // resolve equal elements: when InputIndex()es are equal, we must first process element with smaller BlockIndex()
-            // Note: operator> here since this comparator is used together with max-heap
-            return std::tuple(InputIndex(), BlockIndex()) > std::tuple(other.InputIndex(), other.BlockIndex());
+            return Data_->Parent().ComesAfter(*Data_, InputIndex(), BlockIndex(), other);
         }
 
         TBlockItem GetItem(ui32 columnIndex) const {
@@ -718,18 +770,67 @@ private:
         return NUdf::EFetchStatus::Ok;
     }
 
+    // True when (input, blockIndex) must be produced after `earlier` in merge order.
+    // Shared by the max-heap comparator, run boundary search and sorted-input validation.
+    bool ComesAfter(const TDqInputBatch& input, size_t inputIndex, ui64 blockIndex, const TDqInputBatchIterator& earlier) const {
+        ui32 comparatorIndex = 0;
+        for (const auto& sortCol : SortCols_) {
+            const TBlockItem lhs = input.GetColumnItem(sortCol.Index, blockIndex);
+            const TBlockItem rhs = earlier.GetItem(sortCol.Index);
+            i64 compare = Comparators_[comparatorIndex++]->Compare(lhs, rhs);
+            if (!sortCol.Ascending) {
+                compare = -compare;
+            }
+            if (compare) {
+                return compare > 0;
+            }
+        }
+        // Resolve equal keys by input index, then by row index within the block.
+        return std::tuple(inputIndex, blockIndex) > std::tuple(earlier.InputIndex(), earlier.BlockIndex());
+    }
+
+    // How many leading rows of this sorted input are still ahead of the heap top.
+    // The row at `begin` is already the current minimum and is always included.
+    ui64 TakeRun(const TDqInputBatch& input, size_t inputIndex, ui64 begin, ui64 room) const {
+        const ui64 avail = input.BlockLen() - begin;
+        ui64 count = 1;
+        if (room <= 1 || avail <= 1) {
+            return count;
+        }
+        const ui64 maxCount = std::min(room, avail);
+        if (InputRows_.empty() || !ComesAfter(input, inputIndex, begin + maxCount - 1, InputRows_.front())) {
+            return maxCount;
+        }
+        ui64 good = begin;
+        ui64 bad = begin + maxCount - 1;
+        while (good + 1 < bad) {
+            const ui64 mid = good + (bad - good) / 2;
+            if (ComesAfter(input, inputIndex, mid, InputRows_.front())) {
+                bad = mid;
+            } else {
+                good = mid;
+            }
+        }
+        return good - begin + 1;
+    }
+
     NUdf::EFetchStatus FetchInput(size_t index) {
         YQL_ENSURE(InputData_[index].IsEmpty());
         auto status = InputData_[index].FetchNext();
         if (status == NUdf::EFetchStatus::Ok) {
+#ifndef NDEBUG
+            // Validate the sorted-input assumption before copying runs from this block.
+            for (ui64 row = InputData_[index].CurrentIndex() + 1; row < InputData_[index].BlockLen(); ++row) {
+                const TDqInputBatchIterator current(index, &InputData_[index], row);
+                YQL_ENSURE(!ComesAfter(InputData_[index], index, row - 1, current),
+                    "Sort order violation on input #" << index << " between rows " << row - 1 << " and " << row);
+            }
+#endif
             if (!FirstSeenInputIndex_.Defined()) {
                 FirstSeenInputIndex_ = index;
             }
-            ui64 idx = InputData_[index].CurrentIndex();
-            ui64 len = InputData_[index].BlockLen();
-            while (idx < len) {
-                InputRows_.emplace_back(index, &InputData_[index], idx++);
-            }
+            // One cursor per input. Rows inside the block stay in order, so the heap only needs the head.
+            InputRows_.emplace_back(index, &InputData_[index], InputData_[index].CurrentIndex());
         }
         return status;
     }
@@ -753,28 +854,30 @@ private:
                 return status;
             }
             if (status == NUdf::EFetchStatus::Ok) {
-                std::make_heap(InputRows_.begin(), InputRows_.end());
+                std::push_heap(InputRows_.begin(), InputRows_.end());
             }
             StartInputIndex_ = InputData_.size();
         }
 
         while (OutputBlockLen_ < MaxOutputBlockLen_ && !InputRows_.empty()) {
             std::pop_heap(InputRows_.begin(), InputRows_.end());
-            auto& smallest = InputRows_.back();
+            const TDqInputBatchIterator smallest = InputRows_.back();
+            InputRows_.pop_back();
 
             TDqInputBatch& input = smallest.Input();
             const auto inputIndex = smallest.InputIndex();
             YQL_ENSURE(!input.IsEmpty());
-            YQL_ENSURE(smallest.BlockIndex() == input.CurrentIndex(), "Sort order violation on input #" << inputIndex);
 
+            const ui64 begin = input.CurrentIndex();
+            const ui64 count = TakeRun(input, inputIndex, begin, MaxOutputBlockLen_ - OutputBlockLen_);
             for (size_t i = 0; i < Builders_.size(); ++i) {
                 if (Builders_[i]) {
-                    Builders_[i]->Add(smallest.GetItem(i));
+                    const IArrayBuilder::TArrayDataItem item{.Data = &input.GetColumnArray(static_cast<ui32>(i)), .StartOffset = 0};
+                    Builders_[i]->AddMany(&item, 1, begin, static_cast<size_t>(count));
                 }
             }
-            OutputBlockLen_++;
-            input.NextRow();
-            InputRows_.pop_back();
+            OutputBlockLen_ += count;
+            input.Advance(count);
             if (input.IsEmpty()) {
                 auto status = FetchInput(inputIndex);
                 if (status == NUdf::EFetchStatus::Yield) {
@@ -782,8 +885,11 @@ private:
                     return status;
                 }
                 if (status == NUdf::EFetchStatus::Ok) {
-                    std::make_heap(InputRows_.begin(), InputRows_.end());
+                    std::push_heap(InputRows_.begin(), InputRows_.end());
                 }
+            } else {
+                InputRows_.emplace_back(inputIndex, &input, input.CurrentIndex());
+                std::push_heap(InputRows_.begin(), InputRows_.end());
             }
         }
 
@@ -888,13 +994,14 @@ NUdf::TUnboxedValue CreateInputUnionValue(
     TInstant& startTs,
     ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
-    TDqComputeActorWatermarks* watermarksTracker
+    TDqComputeActorWatermarks* watermarksTracker,
+    bool useReadySet
 ) {
     ValidateInputTypes(type, inputs);
     if (type->IsMulti()) {
-        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker);
+        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
     }
-    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker);
+    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
@@ -914,7 +1021,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr, false);
             }
             return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputsConsumed, pgBuilder);
         }

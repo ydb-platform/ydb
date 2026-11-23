@@ -78,7 +78,8 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     bool analyticsMode,
     TDuration lateArrivalDelay,
     bool defaultWatermarksMode,
-    TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy
+    TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy,
+    const bool checkMinWindowStart
 ) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
@@ -119,6 +120,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
     const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
     const bool enableWatermarks = hopTraits.Traits.Version().Cast<TCoAtom>().StringValue() == "v2" && !analyticsMode && defaultWatermarksMode;
+    const bool shouldCheckMinWindowStart = checkMinWindowStart && !analyticsMode;
 
     const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
     auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
@@ -145,7 +147,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     } else {
         multiHoppingCoreBuilder.Delay(hopTraits.Traits.Delay());
     }
-    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize() || defaultLatePolicy) {
+    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize() || defaultLatePolicy || shouldCheckMinWindowStart) {
         if (hopTraits.Traits.SizeLimit()) {
             multiHoppingCoreBuilder.SizeLimit(hopTraits.Traits.SizeLimit());
         } else {
@@ -170,6 +172,8 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         } else {
             multiHoppingCoreBuilder.LatePolicy<TCoVoid>().Build();
         }
+
+        multiHoppingCoreBuilder.CheckMinWindowStart().Build(shouldCheckMinWindowStart ? "true" : "false");
     }
 
     if (analyticsMode) {
@@ -240,13 +244,14 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     bool analyticsMode,
     TDuration lateArrivalDelay,
     bool defaultWatermarksMode,
-    TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy
+    TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy,
+    const bool checkMinWindowStart
 ) {
     if (!IsSingleConsumerConnection(input, *getParents())) {
         return node;
     }
 
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, defaultLatePolicy);
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, defaultLatePolicy, checkMinWindowStart);
     if (!result) {
         return result;
     }

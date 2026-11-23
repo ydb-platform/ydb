@@ -11,12 +11,12 @@ private:
     using TBase = IKernelFetchLogic;
     std::optional<bool> IsEmptyChunks;
 
-    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoader(const std::shared_ptr<NCommon::IDataSource>& source) const {
-        if (auto loader = source->GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoader(const NCommon::IDataSource& source) const {
+        if (auto loader = source.GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
             return loader;
         }
-        AFL_VERIFY(IsEmptyChunks && *IsEmptyChunks);
-        return source->GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
+        YDB_LOG_VERIFY(IsEmptyChunks && *IsEmptyChunks);
+        return source.GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
     }
 
     class TChunkRestoreInfo {
@@ -46,13 +46,13 @@ private:
         }
 
         TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
-            AFL_VERIFY(!!Data);
+            YDB_LOG_VERIFY(!!Data);
             Data->SetExpectedRecordsCount(RecordsCount);
             return std::move(*Data);
         }
 
         void SetBlobData(const TString& data) {
-            AFL_VERIFY(!Data);
+            YDB_LOG_VERIFY(!Data);
             BlobRange.reset();
             Data.emplace(data);
             if (AdditionalAccessorData) {
@@ -65,7 +65,7 @@ private:
     std::optional<TString> StorageId;
 
     virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
-        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
+        YDB_LOG_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
         for (auto&& i : ColumnChunks) {
             chunks.emplace_back(i.ExtractDataVerified());
@@ -88,42 +88,44 @@ private:
             if (!i.GetBlobRangeOptional()) {
                 continue;
             }
-            AFL_VERIFY(!!StorageId);
+            YDB_LOG_VERIFY(!!StorageId);
             i.SetBlobData(blobs.ExtractVerified(*StorageId, *i.GetBlobRangeOptional()));
         }
     }
 
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
-        auto source = context.GetSource();
-        auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+        auto& source = context.GetSource();
+        auto columnChunks = source.GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         IsEmptyChunks.emplace(columnChunks.empty());
         if (columnChunks.empty()) {
-            ColumnChunks.emplace_back(source->GetRecordsCount(),
-                TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));
+            ColumnChunks.emplace_back(source.GetRecordsCount(),
+                TPortionDataAccessor::TAssembleBlobInfo(source.GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));
             return;
         }
-        StorageId = source->GetColumnStorageId(GetEntityId());
-        TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
+        StorageId = source.GetColumnStorageId(GetEntityId());
+        TBlobsAction blobsAction(source.GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         auto filterPtr = context.GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
-        auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
+        auto itFilter = cFilter.GetBegin(false, source.GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
-            AFL_VERIFY(!itFinished);
+            YDB_LOG_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(source->RestoreBlobRange(c->BlobRange));
+                reading->AddRange(source.RestoreBlobRange(c->BlobRange));
                 ColumnChunks.emplace_back(
-                    c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
+                    c->GetMeta().GetRecordsCount(), source.RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
-                                                        source->GetSourceSchema()->GetExternalDefaultValueVerified(c->GetEntityId())));
+                                                        source.GetSourceSchema()->GetExternalDefaultValueVerified(c->GetEntityId())));
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", source->GetRecordsCount());
+        YDB_LOG_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", source.GetRecordsCount()});
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }

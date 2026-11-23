@@ -7,7 +7,8 @@
 
 namespace NKikimr::NKqp {
 
-TStreamingQueryBehaviour::TFactory::TRegistrator<TStreamingQueryBehaviour> TStreamingQueryBehaviour::Registrator(TStreamingQueryConfig::GetTypeId());
+TStreamingQueryBehaviour::TFactory::TRegistrator<TStreamingQueryBehaviour> TStreamingQueryBehaviour::Registrator(
+    TStreamingQueryConfig::GetTypeId());
 
 NMetadata::NInitializer::IInitializationBehaviour::TPtr TStreamingQueryBehaviour::ConstructInitializer() const {
     return std::make_shared<TStreamingQueryInitializer>();
@@ -34,4 +35,4 @@ NMetadata::IClassBehaviour::TPtr TStreamingQueryBehaviour::GetInstance() {
     return result;
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

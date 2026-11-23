@@ -1,0 +1,57 @@
+From 30dfceaa4ceec88329a7cf40448e16a641b321f6 Mon Sep 17 00:00:00 2001
+From: Anders Borum <palmin@users.noreply.github.com>
+Date: Wed, 14 May 2025 14:30:54 +0000
+Subject: [PATCH 1/2] fix byte amount copied for method in libssh2_agent_sign
+
+---
+ src/agent.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/agent.c b/src/agent.c
+index 492367fb28..f939563e4a 100644
+--- a/src/agent.c
++++ b/src/agent.c
+@@ -1255,7 +1255,7 @@ libssh2_agent_sign(LIBSSH2_AGENT *agent,
+     agent->session->userauth_pblc_method = LIBSSH2_ALLOC(agent->session,
+                                                          method_len);
+ 
+-    memcpy(agent->session->userauth_pblc_method, method, methodLen);
++    memcpy(agent->session->userauth_pblc_method, method, method_len);
+ 
+     rc = agent_sign(agent->session, sig, s_len, data, d_len, &abstract);
+ 
+
+From 469f35fdd9eebbbf0e0e0b7a7297c8f1f1d46809 Mon Sep 17 00:00:00 2001
+From: Anders Borum <palmin@users.noreply.github.com>
+Date: Thu, 15 May 2025 19:25:27 +0000
+Subject: [PATCH 2/2] rename methodLen to key_kind_len in libssh2_agent_sign
+
+---
+ src/agent.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/agent.c b/src/agent.c
+index f939563e4a..3126626e5e 100644
+--- a/src/agent.c
++++ b/src/agent.c
+@@ -1234,7 +1234,7 @@ libssh2_agent_sign(LIBSSH2_AGENT *agent,
+ {
+     void *abstract = agent;
+     int rc;
+-    uint32_t methodLen;
++    uint32_t key_kind_len;
+ 
+     if(agent->session->userauth_pblc_state == libssh2_NB_state_idle) {
+         memset(&agent->transctx, 0, sizeof(agent->transctx));
+@@ -1245,9 +1245,9 @@ libssh2_agent_sign(LIBSSH2_AGENT *agent,
+         return LIBSSH2_ERROR_BUFFER_TOO_SMALL;
+     }
+ 
+-    methodLen = _libssh2_ntohu32(identity->blob);
++    key_kind_len = _libssh2_ntohu32(identity->blob);
+ 
+-    if(identity->blob_len < sizeof(uint32_t) + methodLen) {
++    if(identity->blob_len < sizeof(uint32_t) + key_kind_len) {
+         return LIBSSH2_ERROR_BUFFER_TOO_SMALL;
+     }
+ 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_block_input.cpp
@@ -14,6 +14,7 @@ SRCS(
     yql_yt_datasink.cpp
     yql_yt_datasource_constraints.cpp
     yql_yt_datasource_exec.cpp
+    yql_yt_datasource_trackable.cpp
     yql_yt_datasource_type_ann.cpp
     yql_yt_datasource.cpp
     yql_yt_epoch.cpp
@@ -132,6 +133,8 @@ PEERDIR(
     yt/yql/providers/yt/lib/hash
     yt/yql/providers/yt/lib/key_filter
     yt/yql/providers/yt/lib/mkql_helpers
+    yt/yql/providers/yt/lib/nile
+    yt/yql/providers/yt/lib/qlfilter
     yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/row_spec
     yt/yql/providers/yt/lib/schema
@@ -146,8 +149,6 @@ PEERDIR(
     yt/yql/providers/ytflow/integration/interface
     yt/yql/providers/ytflow/integration/proto
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_op_settings.h)
 

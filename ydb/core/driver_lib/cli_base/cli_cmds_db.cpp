@@ -319,8 +319,11 @@ public:
             switch(entry.GetPathType()) {
             case NKikimrSchemeOp::EPathTypeSysView: {
                 const NKikimrSchemeOp::TSysViewDescription& sysView(path.GetSysViewDescription());
-                TString typeNumValue(Sprintf("%lu", sysView.GetType()));
-                TString typeStringValue(NKikimrSysView::ESysViewType_Name(sysView.GetType()));
+                const auto sysViewType = sysView.GetType();
+                TString typeNumValue(ToString(sysViewType));
+                TString typeStringValue = NKikimrSysView::ESysViewType_IsValid(sysViewType)
+                    ? NKikimrSysView::ESysViewType_Name(static_cast<NKikimrSysView::ESysViewType>(sysViewType))
+                    : "UnknownType";
                 PadString(typeNumValue, 10);
                 PadString(typeStringValue, 50);
                 Cout << typeNumValue << typeStringValue << Endl;

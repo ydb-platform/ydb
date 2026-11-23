@@ -1,8 +1,12 @@
-LIBRARY()
+YQL_LIBRARY()
+
+IF (MKQL_DISABLE_UDF_SERVICE_DISPATCH)
+    CFLAGS(
+        GLOBAL -DMKQL_DISABLE_UDF_SERVICE_DISPATCH
+    )
+ENDIF()
 
 SRCS(
-    aligned_page_pool.cpp
-    aligned_page_pool.h
     compact_hash.cpp
     compact_hash.h
     defs.h
@@ -59,9 +63,30 @@ SRCS(
     primes.h
     watermark_tracker.cpp
     watermark_tracker.h
+    mkql_udf_service.cpp
+    defs.cpp
+    mkql_core_win_frames_collector.cpp
+    mkql_core_win_frames_collector.h
+    mkql_core_window_frames_collector_params_deserializer.cpp
+    mkql_core_window_frames_collector_params_deserializer.h
+    mkql_numeric_cast.cpp
+    mkql_numeric_cast.h
+    mkql_safe_arithmetic_ops.cpp
+    mkql_safe_arithmetic_ops.h
+    mkql_saturated_math.cpp
+    mkql_saturated_math.h
+    mkql_type_helper.cpp
+    mkql_type_helper.h
+    mkql_utils.cpp
+    mkql_utils.h
+    mkql_watermark.cpp
+    mkql_window_comparator_bounds.cpp
+    mkql_window_defs.cpp
+    mkql_window_defs.h
 )
 
 PEERDIR(
+    yql/essentials/minikql/aligned_page_pool
     contrib/libs/apache/arrow
     contrib/libs/cctz/tzdata
     library/cpp/deprecated/enum_codegen
@@ -75,11 +100,13 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/core/issue
     yql/essentials/minikql/dom
+    yql/essentials/minikql/datetime
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
     yql/essentials/public/langver
     yql/essentials/public/udf
+    yql/essentials/public/udf/service/dispatch
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
@@ -94,11 +121,10 @@ IF (MKQL_RUNTIME_VERSION)
     )
 ENDIF()
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
+    aligned_page_pool
     arrow
     codegen
     comp_nodes

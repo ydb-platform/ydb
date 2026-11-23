@@ -1,24 +1,33 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
+    contrib/libs/zstd
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
     ydb/core/kqp/common/events
     ydb/services/scheme_secret
+    ydb/core/persqueue/public/schema
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
+    ydb/core/tx/replication/controller/protos
     ydb/core/tx/replication/ydb_proxy
     ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
+    ydb/library/naming_conventions
+    ydb/public/api/protos
+    ydb/public/sdk/cpp/src/client/proto
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json
+    library/cpp/html/pcdata
+    library/cpp/string_utils/url
 )
 
 SRCS(
@@ -29,10 +38,12 @@ SRCS(
     event_util.cpp
     lag_provider.cpp
     logging.cpp
+    monitoring.cpp
     nodes_manager.cpp
     private_events.cpp
     replication.cpp
     resource_id_resolver.cpp
+    dst_schema_changer.cpp
     secret_resolver.cpp
     session_info.cpp
     stream_consumer_remover.cpp
@@ -42,9 +53,11 @@ SRCS(
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
+    target_topic.cpp
     target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
+    topic_mirror.cpp
     tx_assign_tx_id.cpp
     tx_alter_dst_result.cpp
     tx_alter_replication.cpp
@@ -58,17 +71,20 @@ SRCS(
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
+    tx_index_build.cpp
     tx_init.cpp
+    tx_schema_change.cpp
     tx_init_schema.cpp
     tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
+    tx_run_worker.cpp
     tx_worker_error.cpp
+    tx_source_offset_report.cpp
+    worker_lag_expiry_queue.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 
@@ -76,6 +92,8 @@ RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
     ut_replication
+    ut_schema_change
     ut_stream_creator
     ut_target_discoverer
+    ut_worker_lifecycle
 )

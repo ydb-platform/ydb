@@ -77,7 +77,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         IBlockLayoutConverter::TPackResult result;
         const size_t cols = UserDataCols();
         if (cols == 0) {
-            MKQL_ENSURE(Meta_->Kind == EJoinKind::Cross, "empty payload side is only allowed for Cross join");
+            MKQL_ENSURE(Meta_->KeyColumns.Build.empty(), "empty payload side is only allowed for a keyless join");
             const auto* layout = ArrowBlockToInternalConverter_->GetTupleLayout();
             const ui64 n = GetBlockCount(Buff_[0]);
             result.PackedTuples.resize(layout->TotalRowSize * n, 0);
@@ -154,7 +154,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
             TVector<arrow::Datum> nulls;
             for(auto* type:userNullTypes) {
                 auto strname = type->GetKindAsStr();
-                MKQL_ENSURE(type->IsOptional(), Sprintf("expected every type of right side to be optional when join type is Left, got type №%i: %s  ", nulls.size()+1, strname.data()));
+                MKQL_ENSURE(type->IsOptional() || type->IsNull(), Sprintf("expected every type of right side to be optional or null when join type is Left, got type №%i: %s  ", nulls.size()+1, strname.data()));
                 int blockSize = NMiniKQL::CalcBlockLen(NMiniKQL::CalcMaxBlockItemSize(type));
                 auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, arrowPool, blockSize, nullptr);
                 builder->Add(NYql::NUdf::TBlockItem{});
@@ -183,7 +183,8 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
             this->Output_.SelectSide(Join.Preserved).Clear();
             TVector<arrow::Datum> renamed;
             for(auto rename: *this->Renames_){
-                MKQL_ENSURE(rename.Side == Join.Preserved, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                MKQL_ENSURE(rename.Side == Join.Preserved,
+                            "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;
@@ -220,8 +221,11 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         const auto& userTypes = Meta_->UserTypes;
         for(ESide side: EachSide) {
-            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
+            const auto& keyColumns = Meta_->KeyColumns.SelectSide(side);
+            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), keyColumns);
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
+            layouts.SelectSide(side)->ApplyEqualNulls(
+                EqualNullsInputColumns(Meta_->Settings.EqualNullsKeys, keyColumns));
         }
         const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 
@@ -250,6 +254,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
             , PairFilter_(std::move(pairFilter))
+            , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
 
         void WriteFlushToOutput(NUdf::TUnboxedValue* output, typename TRenamesPackedTupleOutput<Join>::TFlushResult flush) {
@@ -258,6 +263,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(flush.Columns[colIndex]), Ctx_->RuntimeSettings.DatumValidation.Get());
             }
             output[cols] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(flush.Rows)), Ctx_->RuntimeSettings.DatumValidation.Get());
+            OutputRows_.Add(flush.Rows);
         }
 
       private:
@@ -266,8 +272,8 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             MKQL_ENSURE(width == expectedSize,
                         Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
             const auto flushSink = [&](auto flush) { WriteFlushToOutput(output, std::move(flush)); };
-            switch (RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink,
-                                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
+            switch (RunPackedHashJoinBatch(*Ctx_, Join_, Output_, flushSink,
+                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
             case EFetchResult::One:
                 return NYql::NUdf::EFetchStatus::Ok;
             case EFetchResult::Yield:
@@ -287,7 +293,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
-        static constexpr i64 MaxOutputRows_ = 10000;
+        NYql::NUdf::TCounter OutputRows_;
     };
 
     void RegisterDependencies() const final {
@@ -320,6 +326,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
+    EnsureNoPgTypes(leftType);
     const auto leftStreamType = AS_TYPE(TStreamType, leftType);
     MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(), "Expected Multi as a left stream item type");
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
@@ -330,6 +337,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsStream(), "Expected WideStream as a right stream");
+    EnsureNoPgTypes(rightType);
     const auto rightStreamType = AS_TYPE(TStreamType, rightType);
     MKQL_ENSURE(rightStreamType->GetItemType()->IsMulti(), "Expected Multi as a right stream item type");
     const auto rightStreamComponents = GetWideComponents(rightStreamType);
@@ -341,11 +349,12 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinKind = parsed.Kind;
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
+    const bool isGrid = meta.KeyColumns.Build.empty();
 
     MKQL_ENSURE(!joinComponents.empty(), "Expected at least block length column");
     MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least block length column");
     MKQL_ENSURE(!rightStreamComponents.empty(), "Expected at least block length column");
-    if (joinKind != EJoinKind::Cross) {
+    if (!isGrid) {
         MKQL_ENSURE(joinComponents.size() > 1, "Expected at least one data column");
         MKQL_ENSURE(leftStreamComponents.size() > 1, "Expected at least one data column");
         MKQL_ENSURE(rightStreamComponents.size() > 1, "Expected at least one data column");
@@ -369,19 +378,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     meta.Renames = BuildImplRenames(parsed.UserRenames);
 
-    {
-        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
-        if (settingsTuple->GetValuesCount() >= 1) {
-            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
-        }
-    }
-    if (meta.Settings.LeftIsBuild()) {
-        std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
-        std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
-        for (auto& rename : meta.Renames) {
-            rename.Side = OtherSide(rename.Side);
-        }
-    }
+    meta.Settings = ParseHashJoinSettingsTuple(callable.GetInput(7));
+    const bool leftIsBuild = meta.Settings.LeftIsBuild();
+    ApplyLeftBuildSwap(leftIsBuild, meta.InputTypes, meta.KeyColumns, meta.Renames);
 
     ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 1, meta.Renames,
                               meta.ColumnPermutation);
@@ -396,23 +395,18 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
             itemTypes.SelectSide(side).push_back(meta.InputTypes.SelectSide(side)[index]->GetItemType());
         }
     }
-    // Left/Semi/Only joins keep the rows of the SQL left input, which the swap above may have moved to Build
-    const ESide preservedSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
+    const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(itemTypes, meta.Kind, OtherSide(preservedSide), ctx.Env);
-
-    const auto streams = meta.Settings.LeftIsBuild()
-        ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
-        : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
-
-    TJoinFilters filters = ParseJoinFilters(ctx, callable, BaseInputs);
-    if (meta.Settings.LeftIsBuild()) {
-        // Filters are parsed as left/right, so they have to follow the inputs swapped above
-        filters.SwapSides();
+    for (ESide side : EachSide) {
+        EnsureNoResourceKeys(meta.UserTypes.SelectSide(side), meta.KeyColumns.SelectSide(side));
     }
 
+    const auto streams = SidesForLeftBuild(leftIsBuild, leftStream, rightStream);
+    TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, BaseInputs, leftIsBuild);
+
     return DispatchHashJoinByKind<TBlockHashJoinWrapper, IComputationNode>(
-        joinKind, preservedSide, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,
-        std::move(filters));
+        joinKind, preservedSide, isGrid, "unsupported join type in block hash join", ctx.Mutables,
+        std::move(meta), streams, std::move(filters));
 }
 
 } // namespace NKikimr::NMiniKQL

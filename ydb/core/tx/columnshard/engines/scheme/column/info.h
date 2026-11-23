@@ -32,6 +32,7 @@ private:
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);
     YDB_READONLY_DEF(TColumnDefaultScalarValue, DefaultValue);
+    bool OwnSerializer = false;
     std::shared_ptr<TColumnLoader> Loader;
 
 public:
@@ -40,7 +41,7 @@ public:
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex, const NScheme::TTypeInfo& typeInfo = {});
 
     TColumnSaver GetColumnSaver() const {
-        AFL_VERIFY(Serializer);
+        YDB_LOG_VERIFY(Serializer);
         return TColumnSaver(Serializer);
     }
 
@@ -56,8 +57,19 @@ public:
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo);
 
+    // false: the column follows the table's default serializer
+    bool HasOwnSerializer() const {
+        return OwnSerializer;
+    }
+
+    static bool HasOwnSerializer(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
+        return columnInfo.HasSerializer() || columnInfo.HasCompression();
+    }
+
+    void SetDefaultSerializer(const NArrow::NSerialization::TSerializerContainer& serializer);
+
     const std::shared_ptr<TColumnLoader>& GetLoader() const {
-        AFL_VERIFY(Loader);
+        YDB_LOG_VERIFY(Loader);
         return Loader;
     }
 };

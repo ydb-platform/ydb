@@ -14,6 +14,8 @@ if __name__ == '__main__':
     parser.add_argument('--mixed_prefix', default='mixed', help='Mixed path')
     parser.add_argument('--store_type', default='row', choices=['row', 'column'], help='Table type either row or column')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
+    parser.add_argument('--phase', choices=['prepare', 'run', 'clean'], default=None,
+                        help='Phase to run: prepare (init), run, clean. If omitted, all phases run in sequence.')
 
     args = parser.parse_args()
 
@@ -27,5 +29,15 @@ if __name__ == '__main__':
         )
 
     workload = YdbMixedWorkload(args.endpoint, args.database, args.duration, args.store_type, args.mixed_prefix)
-    workload.start()
-    workload.join()
+    if args.phase == 'prepare':
+        workload.prepare()
+    elif args.phase == 'run':
+        workload.start()
+        workload.join()
+    elif args.phase == 'clean':
+        workload.clean()
+    else:
+        workload.prepare()
+        workload.start()
+        workload.join()
+        workload.clean()

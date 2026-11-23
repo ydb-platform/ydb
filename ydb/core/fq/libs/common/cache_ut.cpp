@@ -4,7 +4,7 @@
 
 namespace NFq {
 
-using TCache = TTtlCache<int,int>;
+using TCache = TTtlCache<int, int>;
 
 Y_UNIT_TEST_SUITE(Cache) {
     Y_UNIT_TEST(Test1) {
@@ -24,7 +24,6 @@ Y_UNIT_TEST_SUITE(Cache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 2);
     }
 
-
     Y_UNIT_TEST(Test2) {
         TCache cache(TTtlCacheSettings().SetTtl(TDuration::Minutes(10)).SetMaxSize(3));
         TMaybe<int> t;
@@ -36,7 +35,6 @@ Y_UNIT_TEST_SUITE(Cache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(cache.Get(100, &t), false);
     }
-
 
     Y_UNIT_TEST(Test3) {
         TCache cache(TTtlCacheSettings().SetTtl(TDuration::Minutes(0)).SetMaxSize(3));
@@ -85,4 +83,4 @@ Y_UNIT_TEST_SUITE(Cache) {
     }
 }
 
-}  // namespace NFq
+}   // namespace NFq

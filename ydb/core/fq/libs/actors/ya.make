@@ -45,7 +45,7 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
-    ydb/core/kqp/proxy_service/script_executions_utils
+    ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/core/util
     ydb/library/actors/core
@@ -71,8 +71,8 @@ PEERDIR(
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
     yql/essentials/ast
     yql/essentials/core/dq_integration/transform

@@ -10,7 +10,6 @@ import fnmatch
 import os
 import os.path
 import ssl
-import socket
 from google.protobuf import text_format
 from argparse import FileType
 from functools import wraps
@@ -39,7 +38,6 @@ import typing
 
 bad_hosts = set()
 cache = {}
-name_cache = {}
 
 EPDiskType = kikimr_bs3.EPDiskType
 EVirtualGroupState = kikimr_bs3.EVirtualGroupState
@@ -110,7 +108,6 @@ class ConnectionParams:
         self.cadata = None
         self.insecure = None
         self.parser = None
-        self.use_ip = None
         self.http_endpoints = dict()
         self.grpc_endpoints = dict()
         self.args = None
@@ -142,26 +139,10 @@ class ConnectionParams:
                 self.cadata = f.read()
         return self.cadata
 
-    def get_netloc(self, host, port):
-        netloc = '%s:%d' % (host, port)
-        if netloc in name_cache:
-            netloc = name_cache[netloc]
-        else:
-            for af, socktype, proto, canonname, sa in socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE):
-                host, port = socket.getnameinfo(sa, socket.NI_NUMERICHOST | socket.NI_NUMERICSERV)
-                if af == socket.AF_INET6:
-                    host = '[%s]' % host
-                new_netloc = '%s:%s' % (host, port)
-                name_cache[netloc] = new_netloc
-                netloc = new_netloc
-        return netloc
-
     def make_url(self, endpoint, path, params):
-        if self.use_ip:
-            location = self.get_netloc(endpoint.host, endpoint.port)
-        else:
-            location = endpoint.host_with_port
-        return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
+        return urllib.parse.urlunsplit(
+            (endpoint.protocol, endpoint.host_with_port, path, urllib.parse.urlencode(params), '')
+        )
 
     def assign_token(self, typed_token):
         self.token_type, self.token = typed_token
@@ -208,8 +189,9 @@ class ConnectionParams:
         if token_file_path is None:
             return default_token_type, None
         try:
-            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
-        except Exception:
+            with open(token_file_path, 'r') as token_file:
+                return self.read_token_from_file(token_file, default_token_type)
+        except OSError:
             return default_token_type, None
 
     def parse_token_value(self, token_value, default_token_type):
@@ -273,7 +255,6 @@ class ConnectionParams:
                                                                                   'If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
         g.add_argument('--insecure', action='store_true', help='Allow insecure HTTPS fetching')
-        g.add_argument('--use-ip', action='store_true', help='Use IP addresses instead of hostnames when connecting to endpoints')
 
 
 connection_params = ConnectionParams()
@@ -301,8 +282,8 @@ def get_vslot_extended_id(vslot):
 
 
 def get_pdisk_inferred_settings(pdisk):
-    if (pdisk.PDiskMetrics.HasField('SlotCount')):
-        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    if (pdisk.PDiskMetrics.HasField('ExpectedSlotCount')):
+        return pdisk.PDiskMetrics.ExpectedSlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
     else:
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 
@@ -312,6 +293,23 @@ def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
     vu = group_size_in_units if group_size_in_units else 1
     pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units else 1
     return int(vu / pu) + (1 if (vu % pu) else 0)
+
+
+def get_vslot_quota(group_size_in_units, pdisk_slot_size_in_units, slot_size,
+                    expected_slot_size=0, user_chunk_pool_size=None):
+    if expected_slot_size:
+        quota = (slot_size or expected_slot_size) * max(1, group_size_in_units)
+        return min(quota, user_chunk_pool_size) if user_chunk_pool_size is not None else quota
+    return slot_size * get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units)
+
+
+def get_vslot_quota_from_pdisk(group_size_in_units, pdisk):
+    metrics = pdisk.PDiskMetrics
+    _, slot_size_in_units = get_pdisk_inferred_settings(pdisk)
+    return get_vslot_quota(
+        group_size_in_units, slot_size_in_units, metrics.EnforcedDynamicSlotSize,
+        pdisk.ExpectedSlotSize,
+        metrics.UserChunkPoolSize if metrics.HasField('UserChunkPoolSize') else None)
 
 
 class Location(typing.NamedTuple):
@@ -825,9 +823,9 @@ def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
     if primary_pile_name is None or primary_pile_name == pile_name:
         raise QueryError('Cannot reconnect a pile without a connected primary pile')
 
-    # A disconnected pile shuts down its gRPC servers. Both requests therefore
-    # enter through the connected primary; quorum_piles selects the witnesses
-    # for each update and does not select the RPC endpoint.
+    # A disconnected pile shuts down its gRPC servers, so the request enters
+    # through the connected primary. The update is committed by the quorum of
+    # every pile taking part in the configuration quorum in the new state.
     primary_endpoints = pile_to_endpoints.get(primary_pile_name)
     if not primary_endpoints:
         raise QueryError(
@@ -836,12 +834,6 @@ def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
         )
     update_pile_states(
         (update,),
-        quorum_piles=(primary_pile_name,),
-        endpoints=primary_endpoints,
-    )
-    update_pile_states(
-        (update,),
-        quorum_piles=(pile_name,),
         endpoints=primary_endpoints,
     )
 
@@ -853,10 +845,14 @@ def create_bsc_request(args):
         request.AllowUnusableDisks = True
     if hasattr(args, 'ignore_degraded_group_check') and args.ignore_degraded_group_check:
         request.IgnoreDegradedGroupsChecks = True
+    if hasattr(args, 'treat_phantoms_only_vdisks_as_working') and args.treat_phantoms_only_vdisks_as_working:
+        request.TreatPhantomsOnlyVDisksAsWorking = True
     if hasattr(args, 'ignore_disintegrated_group_check') and args.ignore_disintegrated_group_check:
         request.IgnoreDisintegratedGroupsChecks = args.ignore_disintegrated_group_check
     if hasattr(args, 'ignore_failure_model_group_check') and args.ignore_failure_model_group_check:
         request.IgnoreGroupFailModelChecks = True
+    if getattr(args, 'ignore_group_layout_check', False):
+        request.IgnoreGroupLayoutChecks = True
     if hasattr(args, 'ignore_vslot_quotas') and args.ignore_vslot_quotas:
         request.IgnoreVSlotQuotaCheck = True
     if hasattr(args, 'move_only_to_operational_pdisks') and args.move_only_to_operational_pdisks:
@@ -1044,7 +1040,7 @@ def deserialize_fail_domain(s):
     return res
 
 
-def pdisk_matches_storage_pool(pdisk, sp):
+def pdisk_matches_storage_pool(pdisk, sp, location=None):
     if pdisk.BoxId != sp.BoxId:
         return False
 
@@ -1061,6 +1057,12 @@ def pdisk_matches_storage_pool(pdisk, sp):
                     break
             elif prop.HasField('Kind'):
                 if prop.Kind != pdisk.Kind:
+                    break
+            elif prop.HasField('Location'):
+                if location is None or not all(
+                    location.HasField(field.name) and getattr(location, field.name) == value
+                    for field, value in prop.Location.ListFields()
+                ):
                     break
             else:
                 print('ERROR: unknown property in StoragePool filter', file=sys.stderr)
@@ -1178,12 +1180,15 @@ def build_pdisk_static_slots_map(base_config):
 
 def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
     pdisk_usage_map = {}
+    node_locations = {node.NodeId: node.Location for node in base_config.Node} if storage_pool is not None else {}
 
     group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
 
     pdisk_slot_size_in_units_map = {}
     for pdisk in base_config.PDisk:
-        if storage_pool is not None and not pdisk_matches_storage_pool(pdisk, storage_pool):
+        if storage_pool is not None and not pdisk_matches_storage_pool(
+            pdisk, storage_pool, node_locations.get(pdisk.NodeId)
+        ):
             continue
         pdisk_id = get_pdisk_id(pdisk)
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots
@@ -1486,6 +1491,9 @@ def add_allow_unusable_pdisks_option(p):
 
 def add_ignore_degraded_group_check_option(p):
     p.add_argument('--ignore-degraded-group-check', action='store_true', help='Ignore results of DEGRADED group checks')
+    p.add_argument('--treat-phantoms-only-vdisks-as-working', action='store_true',
+                   help='Treat REPLICATING VDisks with only phantom-like blobs remaining as working ones in group checks; '
+                        'use only when these blobs are known to be phantoms')
 
 
 def add_ignore_disintegrated_group_check_option(p):
@@ -1498,6 +1506,11 @@ def add_ignore_failure_model_group_check_option(p):
 
 def add_ignore_vslot_quotas_option(p):
     p.add_argument('--ignore-vslot-quotas', action='store_true', help='Ignore results of VSlot quota checks')
+
+
+def add_ignore_group_layout_check_option(p):
+    p.add_argument('--ignore-group-layout-check', action='store_true',
+                   help='Allow reassignment to leave an incorrect group layout; other safety and target checks still apply')
 
 
 def apply_args(args):

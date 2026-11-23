@@ -8,7 +8,7 @@
 #include <yt/yt/core/actions/invoker_pool.h>
 #include <yt/yt/core/actions/invoker_util.h>
 
-#include <library/cpp/yt/threading/count_down_latch.h>
+#include <library/cpp/yt/system/count_down_latch.h>
 
 namespace NYT::NConcurrency {
 namespace {

@@ -1,5 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/direct_builder.h>
-#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 

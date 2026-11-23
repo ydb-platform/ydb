@@ -181,7 +181,8 @@ struct TTestEnv {
         ui64 storagePoolId,
         const TString& poolName,
         NKikimrBlobStorage::EPDiskType pdiskType,
-        ui32 numGroups
+        ui32 numGroups,
+        const NActorsInterconnect::TNodeLocation* location = nullptr
     ) {
         NKikimrBlobStorage::TConfigRequest request;
 
@@ -193,7 +194,11 @@ struct TTestEnv {
         pool->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Env.Settings.Erasure.GetErasure()));
         pool->SetVDiskKind("Default");
         pool->SetNumGroups(numGroups);
-        pool->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+        auto* filter = pool->AddPDiskFilter();
+        filter->AddProperty()->SetType(pdiskType);
+        if (location) {
+            *filter->AddProperty()->MutableLocation() = *location;
+        }
 
         const auto response = Env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -253,6 +258,39 @@ struct TTestEnv {
 
 Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
+    Y_UNIT_TEST(PDiskLocationFilterExcludesUnreachableBalancingTargets) {
+        TTestEnv env(4, TBlobStorageGroupType::ErasureNone, 1, 2);
+        const auto initial = env->FetchBaseConfig();
+        UNIT_ASSERT(initial.NodeSize());
+        const auto location = initial.GetNode(0).GetLocation();
+        UNIT_ASSERT(location.HasUnit());
+        env.DefineStoragePool(2, "one node", NKikimrBlobStorage::ROT, 4, &location);
+        env.WaitForDynamicVSlotsReady();
+        const auto pools = env.BuildGroupStoragePoolMap(env->FetchBaseConfig());
+        ui32 iterations = 0;
+        ui32 reassigns = 0;
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                for (const auto& cmd : ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest().GetCommand()) {
+                    if (cmd.HasQueryBaseConfig()) {
+                        ++iterations;
+                    } else if (cmd.HasReassignGroupDisk()) {
+                        if (pools.at(cmd.GetReassignGroupDisk().GetGroupId()) == 2) {
+                            ++reassigns;
+                        }
+                        env.SendReassignNotViable(*ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        // Other nodes have free slots, but cannot improve this pool's placement.
+        env->Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_C(iterations >= 3, iterations);
+        UNIT_ASSERT_VALUES_EQUAL(reassigns, 0);
+    }
+
     Y_UNIT_TEST(ClusterBalancingEvenDistribution) {
         TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));
 
@@ -285,6 +323,88 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
         UNIT_ASSERT(seenParameters);
         UNIT_ASSERT(success);
+    }
+
+    Y_UNIT_TEST(ClusterBalancingUsesReportedSlotCount) {
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 6, 10, TDuration::MilliSeconds(100));
+        UNIT_ASSERT(env.EachPDiskHasNVDisks(6));
+
+        ui32 rewrittenPDisks = 0;
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    if (status.HasBaseConfig()) {
+                        for (auto& pdisk : *status.MutableBaseConfig()->MutablePDisk()) {
+                            // QueryBaseConfig reports the configured count separately from
+                            // the capacity inferred by PDisk for fixed-size slots.
+                            pdisk.SetExpectedSlotCount(0);
+                            pdisk.MutablePDiskMetrics()->SetExpectedSlotCount(16);
+                            ++rewrittenPDisks;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->AlterBox(1, 2);
+        // Reading the configured zero as capacity one would stop balancing after
+        // each new disk receives its first VDisk, leaving a 5:1 distribution.
+        const bool balanced = env.WaitFor([&] {
+            return env.EachPDiskHasNVDisks(3);
+        }, 60);
+        UNIT_ASSERT(rewrittenPDisks);
+        UNIT_ASSERT_C(balanced, "Expected balancing to use the reported slot count");
+    }
+
+    Y_UNIT_TEST(ClusterBalancingRejectsReportedZeroCapacity) {
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));
+        bool reportZeroCapacity = true;
+        ui32 snapshots = 0;
+        ui32 reassignAttempts = 0;
+
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    if (status.HasBaseConfig()) {
+                        ++snapshots;
+                        for (auto& pdisk : *status.MutableBaseConfig()->MutablePDisk()) {
+                            pdisk.SetExpectedSlotCount(0);
+                            auto *metrics = pdisk.MutablePDiskMetrics();
+                            if (reportZeroCapacity) {
+                                metrics->SetExpectedSlotCount(0);
+                            } else {
+                                metrics->ClearExpectedSlotCount();
+                            }
+                        }
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.HasReassignGroupDisk()) {
+                        ++reassignAttempts;
+                        // Keep the distribution unchanged while observing the balancer's decisions.
+                        env.SendReassignNotViable(*ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->AlterBox(1, 2);
+        snapshots = 0;
+        env->Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_C(snapshots >= 2, "Expected multiple balancing iterations");
+        UNIT_ASSERT_VALUES_EQUAL_C(reassignAttempts, 0, "Reported zero capacity must exclude empty targets");
+
+        // An absent metric must retain the legacy fallback, even when the configured count is zero.
+        reportZeroCapacity = false;
+        UNIT_ASSERT_C(env.WaitFor([&] { return reassignAttempts != 0; }, 10),
+            "Expected balancing attempts when the capacity metric is absent");
     }
 
     Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossible) {

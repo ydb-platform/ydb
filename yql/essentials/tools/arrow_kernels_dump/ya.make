@@ -1,5 +1,7 @@
 PROGRAM()
 
+NO_BUILD_IF(EXPORT_CMAKE)
+
 SRCS(
     arrow_kernels_dump.cpp
 )
@@ -18,6 +20,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_CURRENT_ABI_VERSION()
 
 END()

@@ -61,7 +61,7 @@ struct OtlpGrpcClientOptions
 #endif
 
   /** Export timeout. */
-  std::chrono::system_clock::duration timeout;
+  std::chrono::system_clock::duration timeout{};
 
   /** Additional HTTP headers. */
   OtlpHeaders metadata;

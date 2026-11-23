@@ -1,5 +1,7 @@
 #include "yql_facade.h"
 
+#include <yql/essentials/core/project_settings/convert/convert.h>
+
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -8,6 +10,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_gc_transformer.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_partial.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
@@ -66,6 +69,7 @@ const TString LangVerLabel = "LangVer";
 const TString GatewaysLabel = "Gateways";
 const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
+const TString ProjectSettingsLabel = "ProjectSettings";
 const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
 const TString StaticCredentialsLabel = "Credentials";
@@ -74,6 +78,17 @@ const TString FullCaptureLabel = "FullCapture";
 
 const TString GeneralInfoComponent = "GeneralInfo";
 const TString StartTimeLabel = "StartTime";
+
+TProjectSettings HandleProjectSettings(TProjectSettings settings, const TQContext& qContext) {
+    if (qContext.CanWrite()) {
+        qContext.GetWriter()->Put({.Component = FacadeComponent, .Label = ProjectSettingsLabel},
+                                  NYT::NodeToYsonString(ProjectSettingsToYson(settings), NYT::NYson::EYsonFormat::Binary))
+            .GetValueSync();
+    } else if (qContext.CanRead()) {
+        settings = ProjectSettingsFromQContext(qContext);
+    }
+    return settings;
+}
 
 class TUrlLoader: public IUrlLoader {
 public:
@@ -189,6 +204,15 @@ void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStat
 
 } // namespace
 
+TProjectSettings ProjectSettingsFromQContext(const TQContext& context) {
+    YQL_ENSURE(context.CanRead());
+    auto item = context.GetReader()->Get({.Component = FacadeComponent, .Label = ProjectSettingsLabel}).GetValueSync();
+    if (item) {
+        return ProjectSettingsFromYson(NYT::NodeFromYsonString(item->Value));
+    }
+    return {};
+}
+
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
     YQL_ENSURE(context.CanRead());
 
@@ -281,6 +305,10 @@ void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRe
     RemoteLayersProviders_.emplace(alias, std::move(provider));
 }
 
+void TProgramFactory::SetTranslatorsRegistry(NSQLTranslation::TTranslatorsRegistry translatorsRegistry) {
+    TranslatorsRegistry_ = std::move(translatorsRegistry);
+}
+
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
@@ -344,6 +372,11 @@ TProgramPtr TProgramFactory::Create(
     TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr;
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
     IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
+    auto projectSettings = HandleProjectSettings(ProjectSettings_, qContext);
+    const auto langVer = LangVer_.GetOrElse(projectSettings.LangVer.GetOrElse(UnknownLangVersion));
+    if (moduleResolver) {
+        moduleResolver->SetProjectSettings(std::make_shared<const TProjectSettings>(projectSettings));
+    }
     IUrlListerManagerPtr urlListerManager = UrlListerManager_ ? UrlListerManager_->Clone() : nullptr;
 
     auto udfResolver = UdfResolver_;
@@ -354,11 +387,15 @@ TProgramPtr TProgramFactory::Create(
 
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-                        LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+                        langVer, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
                         filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
-                        qContext, RemoteLayersProviders_, BridgeBinaryPath_);
+                        qContext, RemoteLayersProviders_, BridgeBinaryPath_, TranslatorsRegistry_, std::move(projectSettings));
+}
+
+void TProgramFactory::SetProjectSettings(TProjectSettings settings) {
+    ProjectSettings_ = std::move(settings);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -394,7 +431,9 @@ TProgram::TProgram(
     EHiddenMode hiddenMode,
     const TQContext& qContext,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
-    TString bridgeBinaryPath)
+    TString bridgeBinaryPath,
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry,
+    TProjectSettings projectSettings)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
     , RandomProvider_(std::move(randomProvider))
@@ -424,13 +463,18 @@ TProgram::TProgram(
     , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
+    , ProjectSettings_(std::move(projectSettings))
     , BridgeBinaryPath_(std::move(bridgeBinaryPath))
     , EnableRangeComputeFor_(enableRangeComputeFor)
     , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
+    , TranslatorsRegistry_(std::move(translatorsRegistry))
 {
+    if (!ProjectSettings_.Attributes.AsMap().empty()) {
+        SetOperationAttrsYson({});
+    }
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
     }
@@ -552,6 +596,11 @@ void TProgram::SetDisableNativeUdfSupport(bool disable) {
 void TProgram::SetUseTableMetaFromGraph(bool use) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     UseTableMetaFromGraph_ = use;
+}
+
+void TProgram::SetStrictConfigValidation(bool strict) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    StrictConfigValidation_ = strict;
 }
 
 void TProgram::SetOperationTitle(const TString& title) {
@@ -712,6 +761,22 @@ TString TProgram::GetSessionId() const {
     }
 }
 
+void TProgram::SetOperationAttrsYson(const TString& attrs) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (ProjectSettings_.Attributes.AsMap().empty()) {
+        OperationOptions_.AttrsYson = attrs;
+        return;
+    }
+    auto merged = ProjectSettings_.Attributes;
+    if (!attrs.empty()) {
+        const auto operationAttrs = NYT::NodeFromYsonString(attrs);
+        for (const auto& [key, value] : operationAttrs.AsMap()) {
+            merged[key] = value;
+        }
+    }
+    OperationOptions_.AttrsYson = NYT::NodeToYsonString(merged, NYT::NYson::EYsonFormat::Binary);
+}
+
 void TProgram::SetLanguageVersion(TLangVersion version) {
     LangVer_ = version;
 }
@@ -747,6 +812,11 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
     if (UrlListerManager_) {
         UrlListerManager_->SetCredentials(Credentials_);
     }
+}
+
+void TProgram::SetUserCredentials(const TUserCredentials& userCredentials) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    Credentials_->SetUserCredentials(userCredentials);
 }
 
 void TProgram::ClearCredentials() {
@@ -872,12 +942,24 @@ bool TProgram::ValidateLangVersion() {
 
     TMaybe<TIssue> issue;
     auto ret = CheckLangVersion(LangVer_, MaxLangVer_, issue);
+    TIssues issues;
     if (issue) {
+        issues.AddIssue(*issue);
+    }
+    if (StrictConfigValidation_ && ProjectSettings_.LangVer) {
+        TMaybe<TIssue> projectIssue;
+        if (!CheckLangVersion(*ProjectSettings_.LangVer, MaxLangVer_, projectIssue)) {
+            projectIssue->SetMessage(TStringBuilder() << "Invalid project LangVer: " << projectIssue->GetMessage());
+            issues.AddIssue(*projectIssue);
+            ret = false;
+        }
+    }
+    if (!issues.Empty()) {
         if (!ExprCtx_) {
             ExprCtx_.Reset(new TExprContext(NextUniqueId_));
         }
 
-        ExprCtx_->AddError(*issue);
+        ExprCtx_->IssueManager.AddIssues(issues);
     }
 
     return ret;
@@ -928,6 +1010,18 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NYql::TWarningRules warningRules;
     HandleSourceCode();
     NSQLTranslation::TTranslationSettings currentSettings = settings;
+    currentSettings.ProjectSettings = ProjectSettings_;
+    if (!ProjectSettings_.DefaultCluster.empty()) {
+        currentSettings.DefaultCluster = ProjectSettings_.DefaultCluster;
+    }
+    if (currentSettings.StrictConfigValidation) {
+        for (const auto& flag : currentSettings.Flags) {
+            if (!NSQLTranslationV1::IsKnownSimpleFlag(flag)) {
+                throw TErrorException(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR) << "Unknown SQL flag: " << flag;
+            }
+        }
+    }
+    currentSettings.StrictConfigValidation = false;
     if (QContext_) {
         HandleTranslationSettings(currentSettings);
     }
@@ -951,7 +1045,23 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
+        NSQLTranslationPG::MakeTranslator(),
+        TranslatorsRegistry_);
+
+    if (StrictConfigValidation_ && !ProjectSettings_.Pragmas.empty()) {
+        TVector<NSQLTranslation::TTranslatorPtr> projectSettingsTranslators = {translators.V1, translators.PG};
+        for (const auto& [syntax, factory] : TranslatorsRegistry_) {
+            projectSettingsTranslators.push_back(factory());
+        }
+        for (const auto& pragma : ProjectSettings_.Pragmas) {
+            for (const auto& translator : projectSettingsTranslators) {
+                if (translator && translator->AcceptsProjectSetting(pragma)) {
+                    AcceptedSqlProjectSettings_.insert(pragma.Name);
+                    break;
+                }
+            }
+        }
+    }
 
     return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
 }
@@ -961,11 +1071,15 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
 
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
+    const TPartialAnnotationConfig config = {
+        .LangVer = LangVer_,
+        .ConfigProviderFactory = [](TTypeAnnotationContext& newTypeCtx) {
+            return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        },
+    };
+
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
-        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
-    },
-                                    /*typeParser=*/{}, /*typeWriter=*/{})
+    auto ret = PartiallyAnnotateTypes(AstRoot_, issues, config)
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);
@@ -2170,6 +2284,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->SqlFlags = SqlFlags_;
     typeAnnotationContext->FuzzUntypedLambda = FuzzUntypedLambda_;
     typeAnnotationContext->FuzzUniversal = FuzzUniversal_;
+    typeAnnotationContext->StrictConfigValidation = StrictConfigValidation_;
+    typeAnnotationContext->ProjectSettings = ProjectSettings_;
+    typeAnnotationContext->AcceptedSqlProjectSettings = AcceptedSqlProjectSettings_;
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }
@@ -2227,10 +2344,6 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     if (providerNames.contains(KikimrProviderName)) {
         resultProviderDataSources.push_back(TString(KikimrProviderName));
-    }
-
-    if (providerNames.contains(RtmrProviderName)) {
-        resultProviderDataSources.push_back(TString(RtmrProviderName));
     }
 
     if (providerNames.contains(PqProviderName)) {

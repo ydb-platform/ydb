@@ -4,8 +4,7 @@
 #include "dsproxy_strategy_base.h"
 #include "dsproxy_blackboard.h"
 
-#include "dsproxy_strategy_get_m3dc_basic.h"
-#include "dsproxy_strategy_get_m3dc_restore.h"
+#include "dsproxy_strategy_get_mirror3dc.h"
 #include "dsproxy_strategy_get_m3of4.h"
 #include "dsproxy_strategy_restore.h"
 #include "dsproxy_strategy_get_bold.h"
@@ -38,6 +37,20 @@ bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
 
 } // namespace NDsProxyGetImpl
 
+bool TGetImpl::CheckVDiskReadFailure(const TVDiskID& vdisk, NKikimrProto::EReplyStatus status) {
+    if (Info->Type.GetErasure() != TErasureType::ErasureMirror3dc || PhantomCheck) {
+        return true;
+    }
+    if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
+        FailedReadDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, FailedReadDisks);
+    }
+    if (status == NKikimrProto::OK && FailedReadDisks) {
+        FailedReadDisks -= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+    }
+    return true;
+}
+
 void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
     outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
@@ -67,7 +80,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
             outResponse.LooksLikePhantom = PhantomCheck
-                ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
+                ? std::make_optional(blobState.LooksLikePhantom.value_or(
+                    blobState.WholeSituation == TBlobState::ESituation::Absent))
                 : std::nullopt;
 
             // fill in keep/doNotKeep flags
@@ -83,6 +97,9 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
+                        if (!Info->IsFailRealmReadable(Info->GetVDiskId(disk.OrderNumber).FailRealm)) {
+                            continue;
+                        }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {
                             bool possible;
                             switch (Info->Type.GetErasure()) {
@@ -121,8 +138,11 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                     }
 
                     const TBlobStorageGroupInfo::TSubgroupVDisks zero(&Info->GetTopology());
-                    const auto& checker = Info->GetQuorumChecker();
-                    const bool canBeRestored = checker.GetBlobState(possiblyPresent, zero) != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+                    const auto mirror3dcChecker = TMirror3dcWriteQuorumChecker::TryCreate(*Info, query.Id.Hash());
+                    const auto state = mirror3dcChecker
+                        ? mirror3dcChecker->GetBlobState(possiblyPresent, zero)
+                        : Info->GetQuorumChecker().GetBlobState(possiblyPresent, zero);
+                    const bool canBeRestored = state != TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
                     if (canBeRestored) {
                         okay = false; // there is a slight chance that we can restore that blob
                     }
@@ -345,9 +365,8 @@ EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
-    return MustRestoreFirst
-        ? Blackboard.RunStrategy(logCtx, TMirror3dcGetWithRestoreStrategy(), AccelerationParams)
-        : Blackboard.RunStrategy(logCtx, TMirror3dcBasicGetStrategy(NodeLayout, PhantomCheck), AccelerationParams);
+    return Blackboard.RunStrategy(logCtx,
+        TMirror3dcGetStrategy(NodeLayout, PhantomCheck, MustRestoreFirst, false), AccelerationParams);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {

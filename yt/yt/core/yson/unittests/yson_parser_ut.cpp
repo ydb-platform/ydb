@@ -608,7 +608,6 @@ TEST(TYsonTest, ContextInExceptions_ContextAtTheVeryBeginning)
     struct TNoAttributesAllowedConsumer
         : public TNullYsonConsumer
     {
-    public:
         void OnBeginAttributes() override
         {
             THROW_ERROR_EXCEPTION("I don't like attributes");
@@ -753,7 +752,7 @@ TEST(TContextTest, ReaderKeepsDataFromPrevBuffers)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TParseYsonStringNodeTypeTest, Test)
+TEST(TParseYsonStringNodeTypeTest, ParseNodeType)
 {
     auto parseType = [] (TStringBuf buffer) {
         return ParseYsonStringNodeType(buffer).first;

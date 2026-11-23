@@ -20,6 +20,8 @@ public:
 
     MOCK_METHOD(NChunkClient::NProto::TDataStatistics, GetDataStatistics, (), (const, override));
 
+    MOCK_METHOD(TTableReaderTimingStatistics, GetTimingStatistics, (), (const, override));
+
     MOCK_METHOD(TFuture<void>, GetReadyEvent, (), (const, override));
 
     MOCK_METHOD(NTableClient::IUnversionedRowBatchPtr, Read, (const NTableClient::TRowBatchReadOptions& options), (override));

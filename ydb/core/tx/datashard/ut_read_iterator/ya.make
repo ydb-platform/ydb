@@ -18,6 +18,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/kqp/runtime
     ydb/core/kqp/ut/common
+    ydb/core/memory_controller
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy
@@ -30,6 +31,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_read_iterator.cpp
     datashard_ut_read_iterator_ext_blobs.cpp
+    datashard_ut_read_iterator_sampling.cpp
     datashard_ut_read_iterator_scheduler.cpp
 )
 

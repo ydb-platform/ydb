@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_job_base.cpp
@@ -28,7 +28,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/providers/common/mkql
     yql/essentials/providers/common/schema/mkql
     yql/essentials/providers/common/schema/parser
     yt/yql/providers/yt/codec
@@ -38,7 +37,5 @@ PEERDIR(
     yt/yql/providers/yt/lib/lambda_builder
     yt/yql/providers/yt/lib/mkql_helpers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

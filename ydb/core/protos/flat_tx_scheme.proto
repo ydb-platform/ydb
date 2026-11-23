@@ -382,6 +382,7 @@ message TEvSyncTenantSchemeShard {
     optional uint64 TenantStatisticsAggregator = 11;
     optional fixed64 TenantGraphShard = 12;
     optional uint64 TenantBackupController = 13;
+    optional fixed64 TenantWasmCompileController = 14;
 
     optional string TenantRootACL = 10;
 }
@@ -405,6 +406,7 @@ message TEvUpdateTenantSchemeShard {
     optional uint64 TenantStatisticsAggregator = 16;
     optional fixed64 TenantGraphShard = 18;
     optional uint64 TenantBackupController = 19;
+    optional fixed64 TenantWasmCompileController = 22;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
@@ -471,4 +473,28 @@ message TEvShredInfoResponse {
 }
 
 message TEvShredManualStartupRequest {
+}
+
+message TDatabaseFreezeState {
+    optional uint64 Epoch = 1;
+    optional bool Freeze = 2;
+    optional bool Ready = 3;
+    optional uint32 Status = 4; // Ydb.StatusIds.StatusCode
+    optional string Issue = 5;
+    repeated uint64 Shards = 6;
+    optional bool ParticipantsFixed = 7;
+}
+
+message TEvDatabaseFreeze {
+    optional uint64 PathId = 1;
+    optional uint64 Epoch = 2;
+    optional bool Freeze = 3;
+}
+
+message TEvDatabaseFreezeResult {
+    optional uint64 PathId = 1;
+    optional uint64 Epoch = 2;
+    optional bool Ready = 3;
+    optional uint32 Status = 4; // Ydb.StatusIds.StatusCode
+    optional string Issue = 5;
 }

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <library/cpp/threading/future/future.h>
 
@@ -28,6 +29,7 @@ struct TExprContainer : public TAtomicRefCount<TExprContainer> {
     using TPtr = TIntrusivePtr<TExprContainer>;
 
     TExprContext Context;
+    TTypeAnnotationContext TypeContext;
     TExprNode::TPtr Root;
 };
 

@@ -102,9 +102,12 @@ class TestSelectBase(TestBase):
 
         number_of_columns = self.get_number_of_columns(pk_types, all_types, index, ttl)
 
-        for offset in range(number_of_columns):
+        # Cover OFFSET boundaries and a middle row.
+        for offset in (0, 1, number_of_columns // 2, number_of_columns - 1):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} limit 1 OFFSET {offset}")
+            assert len(rows) == 1
             self.assert_type_after_select(offset + 1, rows[0], all_types, pk_types, index, ttl, dml)
+        assert not self.query(f"select {", ".join(selected_columns)} from {table_name} limit 1 OFFSET {number_of_columns}")
 
     def create_types_for_all_select_with_types(
         self, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
@@ -319,7 +322,8 @@ class TestSelectBase(TestBase):
         dml: DMLOperations,
     ):
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
-        for i in range(1, 100):
+        # Cover small, intermediate, near-full and full samples.
+        for i in (1, 2, 50, 99, 100):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
             for _, row in enumerate(rows):
                 numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]

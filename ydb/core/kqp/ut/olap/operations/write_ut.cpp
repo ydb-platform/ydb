@@ -6,12 +6,17 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/events/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -77,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             Sleep(TDuration::Seconds(2));
         }
 
-        AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
     }
 
     Y_UNIT_TEST(TestRemoveTableBeforeIndexation) {
@@ -189,10 +194,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         READ: SELECT SchemaVersion FROM `/Root/ColumnTable/.sys/primary_index_schema_stats` WHERE PresetId = 0 ORDER BY SchemaVersion;
         EXPECTED: [[[6u]];[[9u]];[[11u]]]
         ------
+        STOP_PORTIONS_CLEANUP
+        ------
         DATA:
         DELETE FROM `/Root/ColumnTable`
         ------
         ONE_COMPACTION:
+        ------
+        ONE_PORTIONS_CLEANUP
         ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true
@@ -298,11 +307,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         }
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(5));
-        AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         {
             const auto startInstant = TMonotonic::Now();
-            AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
-            ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+            YDB_LOG_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0,
+                {"count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount()});
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
                    TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {
@@ -315,7 +324,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             }
         }
 
-        AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         const auto writesCountStart = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount();
         const auto deletesCountStart = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount();
         {
@@ -330,10 +339,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Sleep(TDuration::MilliSeconds(500));
             }
         }
-        AFL_VERIFY(writesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount())
-        ("writes", writesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount());
-        AFL_VERIFY(deletesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount())
-        ("deletes", deletesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+        YDB_LOG_VERIFY(writesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount(),
+            {"writes", writesCountStart},
+            {"count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount()});
+        YDB_LOG_VERIFY(deletesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount(),
+            {"deletes", deletesCountStart},
+            {"count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount()});
     }
 
     Y_UNIT_TEST(DefaultValues) {
@@ -414,10 +425,31 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("portion_id")), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
         }
-        AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+        YDB_LOG_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
     }
 
     Y_UNIT_TEST(ColumnShardMaxOperationBytes) {
+        auto checkConfigRange = [&](TKikimrRunner& kikimr) {
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            const auto edgeActor = runtime.AllocateEdgeActor();
+            for (const auto& [configuredBytes, expectedBytes] : std::initializer_list<std::pair<ui64, ui64>>{
+                    {0, 64_MB},
+                    {64_KB, 64_MB},
+                    {64_MB, 64_MB},
+                    {64_GB, 64_MB},
+                    {std::numeric_limits<ui64>::max(), 64_MB}})
+            {
+                auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                request->Record.MutableConfig()->MutableTableServiceConfig()
+                    ->MutableWriteActorSettings()->SetColumnShardMaxOperationBytes(configuredBytes);
+                runtime.Send(MakeKqpNodeServiceID(runtime.GetNodeId()), edgeActor, request.Release());
+                auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+                    edgeActor, TDuration::Seconds(10));
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(GetWriteActorSettings().ColumnShardMaxOperationBytes, expectedBytes);
+            }
+        };
+
         auto countPortionsWithOperationSizeLimit = [&](const size_t limit) -> size_t {
             auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
             csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -433,12 +465,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
             auto result = kikimr.GetQueryClient()
                 .ExecuteQuery(R"(
-                    $rows = ListMap(ListFromRange(0, 50000), ($x) -> { RETURN AsStruct($x AS item); });
+                    $rows = ListMap(ListFromRange(0, 500000), ($x) -> { RETURN AsStruct($x AS item); });
                     UPSERT INTO `/Root/olapStore/olapTable` (pk_int, field)
                     SELECT CAST(item AS Int64), CAST(item AS Utf8) FROM AS_TABLE($rows);
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            checkConfigRange(kikimr);
 
             auto tableClient = kikimr.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, R"(
@@ -446,12 +480,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`;
             )");
             const size_t portions = GetUint64(rows[0].at("count"));
-            UNIT_ASSERT_VALUES_EQUAL(helper.GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore/olapTable`;"), "[[50000u]]");
+            UNIT_ASSERT_VALUES_EQUAL(helper.GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore/olapTable`;"), "[[500000u]]");
             UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
             return portions;
         };
 
-        UNIT_ASSERT_GT(countPortionsWithOperationSizeLimit(64_KB), 3);
+        UNIT_ASSERT_GT(countPortionsWithOperationSizeLimit(1_MB), 3);
         UNIT_ASSERT_VALUES_EQUAL(countPortionsWithOperationSizeLimit(64_MB), 1);
     }
 
@@ -510,7 +544,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("portion_id")), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
         }
-        AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+        YDB_LOG_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
     }
 
     Y_UNIT_TEST(WriteDeleteCleanGC) {
@@ -565,7 +599,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Cerr << "Wait size in memory... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
                 Sleep(TDuration::Seconds(2));
             }
-            AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+            YDB_LOG_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         }
         {
             auto it = client
@@ -586,7 +620,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Cerr << "Wait empty... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
                 Sleep(TDuration::Seconds(2));
             }
-            AFL_VERIFY(!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+            YDB_LOG_VERIFY(!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         }
     }
 

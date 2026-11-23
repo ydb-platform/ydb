@@ -19,7 +19,7 @@ bool IsUserWasmFrame(TStringBuf frame) {
     return true;
 }
 
-} // namespace
+}   // namespace
 
 TString FormatUserWasmCallStack(const WAVM::Platform::CallStack& callStack) {
     const auto description = WAVM::Runtime::describeCallStack(callStack);
@@ -41,4 +41,4 @@ TString FormatUserWasmCallStackFromCurrent(WAVM::Uptr omitTopFrames) {
     return FormatUserWasmCallStack(WAVM::Platform::captureCallStack(omitTopFrames));
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

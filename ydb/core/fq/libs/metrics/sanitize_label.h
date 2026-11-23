@@ -6,4 +6,4 @@ namespace NFq {
 
 TString SanitizeLabel(const TString& value);
 
-} // namespace NFq
+}   // namespace NFq

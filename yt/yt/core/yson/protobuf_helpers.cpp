@@ -14,9 +14,9 @@ void ToProto(TProtobufString* serialized, const TYsonString& original)
     *serialized = original.ToString();
 }
 
-void FromProto(TYsonString* original, const TProtobufString& serialized)
+void FromProto(TYsonString* original, TProtobufString serialized)
 {
-    *original = TYsonString(serialized);
+    *original = TYsonString(NYT::FromProto<std::string>(std::move(serialized)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

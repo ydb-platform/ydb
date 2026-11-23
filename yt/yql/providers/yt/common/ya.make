@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_configuration.cpp
@@ -18,8 +18,6 @@ PEERDIR(
     yql/essentials/providers/common/config
     yql/essentials/providers/common/provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_settings.h)
 

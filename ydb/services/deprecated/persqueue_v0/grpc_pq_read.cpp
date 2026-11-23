@@ -26,9 +26,9 @@ void TPQReadService::TSession::OnCreated() {
         return;
     }
     // Create actor for current session.
-    auto clusters = Proxy->GetClusters();
+    auto clusters = Proxy->GetClusters(GetAuthority());
     auto localCluster = Proxy->GetLocalCluster();
-    if (NeedDiscoverClusters && (clusters.empty() || localCluster.empty())) {
+    if (NeedDiscoverClusters && (localCluster.empty() || !Proxy->HasClustersList())) {
         //TODO: inc sli errors counter
         ReplyWithError("clusters list or local cluster is empty", NPersQueue::NErrorCode::INITIALIZING);
         return;
@@ -156,7 +156,8 @@ void TPQReadService::TSession::CreateActor(std::unique_ptr<NPersQueue::TTopicsLi
 
     auto g(Guard(Lock));
     auto* actor = new TReadSessionActor(this, *topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
-                                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown");
+                                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown",
+                                    GetAuthority());
     ui32 poolId = Proxy->ActorSystem->AppData<::NKikimr::TAppData>()->UserPoolId;
     ActorId = Proxy->ActorSystem->Register(actor, TMailboxType::HTSwap, poolId);
 }
@@ -231,9 +232,9 @@ void TPQReadService::NetClassifierUpdated(NAddressClassifier::TLabeledAddressCla
 }
 
 
-void TPQReadService::CheckClustersListChange(const TVector<TString> &clusters) {
+void TPQReadService::ClustersListUpdated(NPQ::NClusterTracker::TClustersList::TConstPtr list) {
     auto g(Guard(Lock));
-    Clusters = clusters;
+    ClustersList = std::move(list);
 }
 
 void TPQReadService::SetupIncomingRequests() {

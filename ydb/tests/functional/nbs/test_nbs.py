@@ -93,10 +93,10 @@ class TestNbs(NbsTestBase):
             f"expected PBuffer links on DBG detail pages; dbgs={sample_dbgs}"
         )
 
-        pbuffer_html_before = self.fetch_pbuffer_page(pb_ids)
-        assert tablet_id in pbuffer_html_before, (
-            f"expected tablet {tablet_id} LSNs on PBuffer mon before delete; "
-            f"html={pbuffer_html_before[:1500]}"
+        pbuffer_tablets_before = self.fetch_pbuffer_tablets(pb_ids, tablet_id)
+        assert any(int(t['lsnsCount']) > 0 for t in pbuffer_tablets_before), (
+            f"expected tablet {tablet_id} LSNs on PBuffers before delete; "
+            f"tablets={pbuffer_tablets_before}"
         )
 
         deleted_disk_id = self.delete_disk(disk_id)
@@ -115,12 +115,9 @@ class TestNbs(NbsTestBase):
         self.wait_until(tablet_dbg_cleared, description='tablet DBG mon cleared')
 
         def pbuffer_page_empty():
-            html = self.fetch_pbuffer_page(pb_ids)
-            # Deallocated PBuffers report "No response"; wiped ones keep the PB
-            # heading but must not list this tablet's LSN row.
-            assert tablet_id not in html, (
-                f"tablet {tablet_id} still listed on PBuffer mon after delete; "
-                f"html={html[:2000]}"
+            tablets = self.fetch_pbuffer_tablets(pb_ids, tablet_id, allow_missing=True)
+            assert not tablets, (
+                f"tablet {tablet_id} still listed on PBuffers after delete; tablets={tablets}"
             )
             return True
 

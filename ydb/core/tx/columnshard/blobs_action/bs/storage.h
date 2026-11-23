@@ -22,6 +22,10 @@ protected:
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const override;
     virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
 
+    virtual void UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare) override {
+        Manager->UpdateChannelApproximateFreeSpace(channel, approximateFreeSpaceShare);
+    }
+
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) override {
         return Manager->LoadState(dbBlobs, GetSelfTabletId());
     }
@@ -32,7 +36,8 @@ protected:
 
 public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
-        const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs);
+        const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
+        bool weightedDataChannelSelection = false);
 
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
         return Manager->HasToDelete(blobId, tabletId);

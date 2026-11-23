@@ -1,10 +1,11 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stddef.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -98,7 +99,8 @@ void BatchSpanProcessor::OnEnd(std::unique_ptr<Recordable> &&span) noexcept
   size_t buffer_size = buffer_.size();
   if (buffer_size >= max_queue_size_ / 2 || buffer_size >= max_export_batch_size_)
   {
-    // signal the worker thread
+    // Notified without lock to reduce contention for span end. If this notify is lost,
+    // the worker thread may wait until next schedule or until the next notify attempt.
     synchronization_data_->cv.notify_all();
   }
 }
@@ -127,6 +129,7 @@ bool BatchSpanProcessor::ForceFlush(std::chrono::microseconds timeout) noexcept
     if (synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire) >
         synchronization_data_->force_flush_notified_sequence.load(std::memory_order_acquire))
     {
+      std::lock_guard<std::mutex> cv_lock(synchronization_data_->cv_m);
       synchronization_data_->is_force_wakeup_background_worker.store(true,
                                                                      std::memory_order_release);
       synchronization_data_->cv.notify_all();
@@ -188,18 +191,24 @@ void BatchSpanProcessor::DoBackgroundWork()
     }
 #endif /* ENABLE_THREAD_INSTRUMENTATION_PREVIEW */
 
-    // Wait for `timeout` milliseconds
-    std::unique_lock<std::mutex> lk(synchronization_data_->cv_m);
-    synchronization_data_->cv.wait_for(lk, timeout, [this] {
-      if (synchronization_data_->is_force_wakeup_background_worker.load(std::memory_order_acquire))
-      {
-        return true;
-      }
+    // This scope is important! `cv_m` must be released before acquiring `force_flush_cv_m`.
+    // Since `Export()` calls `NotifyCompletion()` which takes `force_flush_cv_m`,
+    // holding `cv_m` while calling `Export()` can lead to a ABBA deadlock.
+    {
+      // Wait for `timeout` milliseconds, or until a full batch is available.
+      std::unique_lock<std::mutex> lk(synchronization_data_->cv_m);
+      synchronization_data_->cv.wait_for(lk, timeout, [this] {
+        if (synchronization_data_->is_force_wakeup_background_worker.load(
+                std::memory_order_acquire))
+        {
+          return true;
+        }
 
-      return !buffer_.empty();
-    });
-    synchronization_data_->is_force_wakeup_background_worker.store(false,
-                                                                   std::memory_order_release);
+        return buffer_.size() >= max_export_batch_size_;
+      });
+      synchronization_data_->is_force_wakeup_background_worker.store(false,
+                                                                     std::memory_order_release);
+    }
 
 #ifdef ENABLE_THREAD_INSTRUMENTATION_PREVIEW
     if (worker_thread_instrumentation_ != nullptr)
@@ -240,28 +249,22 @@ void BatchSpanProcessor::Export()
   }
 #endif /* ENABLE_THREAD_INSTRUMENTATION_PREVIEW */
 
-  do
+  std::uint64_t notify_force_flush =
+      synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire);
+  bool should_drain =
+      notify_force_flush >
+          synchronization_data_->force_flush_notified_sequence.load(std::memory_order_acquire) ||
+      synchronization_data_->is_shutdown.load(std::memory_order_acquire);
+
+  // snapshot the target ONCE, before exporting anything
+  size_t remaining =
+      should_drain ? buffer_.size() : std::min(buffer_.size(), max_export_batch_size_);
+
+  while (remaining > 0)
   {
+    size_t num_records_to_export = std::min(remaining, max_export_batch_size_);
+
     std::vector<std::unique_ptr<Recordable>> spans_arr;
-    size_t num_records_to_export{};
-    std::uint64_t notify_force_flush =
-        synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire);
-    if (notify_force_flush)
-    {
-      num_records_to_export = buffer_.size();
-    }
-    else
-    {
-      num_records_to_export =
-          buffer_.size() >= max_export_batch_size_ ? max_export_batch_size_ : buffer_.size();
-    }
-
-    if (num_records_to_export == 0)
-    {
-      NotifyCompletion(notify_force_flush, exporter_, synchronization_data_);
-      break;
-    }
-
     // Reserve space for the number of records
     spans_arr.reserve(num_records_to_export);
 
@@ -276,8 +279,10 @@ void BatchSpanProcessor::Export()
                     });
 
     exporter_->Export(nostd::span<std::unique_ptr<Recordable>>(spans_arr.data(), spans_arr.size()));
-    NotifyCompletion(notify_force_flush, exporter_, synchronization_data_);
-  } while (true);
+    remaining -= num_records_to_export;
+  }
+
+  NotifyCompletion(notify_force_flush, exporter_, synchronization_data_);
 
 #ifdef ENABLE_THREAD_INSTRUMENTATION_PREVIEW
   if (worker_thread_instrumentation_ != nullptr)
@@ -309,6 +314,7 @@ void BatchSpanProcessor::NotifyCompletion(
       exporter->ForceFlush(timeout);
     }
 
+    std::lock_guard<std::mutex> lock(synchronization_data->force_flush_cv_m);
     std::uint64_t notified_sequence =
         synchronization_data->force_flush_notified_sequence.load(std::memory_order_acquire);
     while (notify_force_flush > notified_sequence)
@@ -339,6 +345,11 @@ void BatchSpanProcessor::GetWaitAdjustedTime(
     std::chrono::microseconds &timeout,
     std::chrono::time_point<std::chrono::system_clock> &start_time)
 {
+  if (timeout == (std::chrono::microseconds::max)())
+  {
+    return;
+  }
+
   auto end_time = std::chrono::system_clock::now();
   auto offset   = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
   start_time    = end_time;
@@ -376,8 +387,12 @@ bool BatchSpanProcessor::InternalShutdown(std::chrono::microseconds timeout) noe
 
   if (worker_thread_.joinable())
   {
-    synchronization_data_->is_force_wakeup_background_worker.store(true, std::memory_order_release);
-    synchronization_data_->cv.notify_all();
+    {
+      std::lock_guard<std::mutex> cv_lock(synchronization_data_->cv_m);
+      synchronization_data_->is_force_wakeup_background_worker.store(true,
+                                                                     std::memory_order_release);
+      synchronization_data_->cv.notify_all();
+    }
     worker_thread_.join();
   }
 

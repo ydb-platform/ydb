@@ -1,6 +1,6 @@
 # List of endpoints
 
-Using the `discovery list` information command, you can get a list of {{ ydb-short-name }} cluster [endponts](../../../../concepts/connect.md#endpoint) that you can connect to in order to access your database:
+Using the `discovery list` information command, you can get a list of {{ ydb-short-name }} cluster [endpoints](../../../../concepts/connect.md#endpoint) that you can connect to in order to access your database:
 
 ```bash
 {{ ydb-cli }} [connection options] discovery list

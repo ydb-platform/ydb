@@ -77,6 +77,17 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         include/benchmark/benchmark.h [3:13]
+        include/benchmark/benchmark_api.h [3:13]
+        include/benchmark/counter.h [3:13]
+        include/benchmark/macros.h [3:13]
+        include/benchmark/managers.h [3:13]
+        include/benchmark/registration.h [3:13]
+        include/benchmark/reporter.h [3:13]
+        include/benchmark/state.h [3:13]
+        include/benchmark/statistics.h [3:13]
+        include/benchmark/sysinfo.h [3:13]
+        include/benchmark/types.h [3:13]
+        include/benchmark/utils.h [3:13]
         src/benchmark.cc [3:13]
         src/benchmark_name.cc [3:13]
         src/benchmark_register.cc [3:13]

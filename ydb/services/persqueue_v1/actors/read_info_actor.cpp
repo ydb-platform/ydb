@@ -8,8 +8,6 @@
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
-
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
@@ -21,6 +19,7 @@ TReadInfoActor::TReadInfoActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
+    , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
@@ -40,7 +39,7 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const ReadInfoRequest*>(GetProtoRequest());
-    AFL_ENSURE(request);
+    YDB_LOG_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer().path(), ctx);
 
     bool readOnlyLocal = request->get_only_original();
@@ -76,14 +75,14 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster()
+            Request().GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster()
     ));
 }
 
 
 bool TReadInfoActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
+    LOG_C("Unhandled exception",
         {"typeName", TypeName(exc)},
         {"exception", exc.what()},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
@@ -103,7 +102,7 @@ void TReadInfoActor::Die(const TActorContext& ctx) {
 
 void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
 
-    YDB_LOG_DEBUG_CTX(ctx, "GetReadInfo auth ok fo read info, got topics",
+    LOG_D("GetReadInfo auth ok fo read info, got topics",
         {"topicAndTabletsSize", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
@@ -137,9 +136,9 @@ void TReadInfoActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCon
     ReadInfoResult result;
 
     const auto& resp = ev->Get()->Record;
-    AFL_ENSURE(resp.HasMetaResponse());
+    YDB_LOG_ENSURE(resp.HasMetaResponse());
 
-    AFL_ENSURE(resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().TopicResultSize() == TopicAndTablets.size());
+    YDB_LOG_ENSURE(resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().TopicResultSize() == TopicAndTablets.size());
     TMap<std::pair<TString, ui64>, ReadInfoResult::TopicInfo::PartitionInfo*> partResultMap;
     for (auto& tt : resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
         auto topicRes = result.add_topics();

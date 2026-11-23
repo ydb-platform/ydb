@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/common/events/scan.h>
+#include <ydb/core/kqp/runtime/common/kqp_compute_context.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/sys_view/common/utils.h>
@@ -304,6 +304,7 @@ private:
 
         TenantName = CanonizePath(entry.Path);
         DomainKey = entry.DomainInfo->DomainKey;
+        IsServerlessDatabase = entry.DomainInfo->IsServerless();
 
         DatabaseOwner = entry.Self->Info.GetOwner();
         Y_ABORT_UNLESS(entry.Self->Info.GetOwner() == entry.SecurityObject->GetOwnerSID());
@@ -385,6 +386,7 @@ protected:
     ui64 SchemeShardId = 0;
     TPathId DomainKey;
     TString TenantName;
+    bool IsServerlessDatabase = false;
     NACLib::TSID DatabaseOwner;
     THashSet<ui32> TenantNodes;
     ui64 HiveId = 0;

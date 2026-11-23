@@ -150,6 +150,14 @@ test_variants = [
         "env": {"TCMALLOC_DISABLE_BIG_SPAN": "1"},
     },
     {
+        "name": "dense_trackers_sorted_on_spans_allocated_disable",
+        "malloc": "//tcmalloc",
+        "deps": [
+            "//tcmalloc:common_8k_pages",
+        ],
+        "env": {"TCMALLOC_DISABLE_DENSE_TRACKERS_SORTED_ON_SPANS_ALLOCATED": "1"},
+    },
+    {
         "name": "256k_pages_pow2_sharded_transfer_cache",
         "malloc": "//tcmalloc:tcmalloc_256k_pages",
         "deps": [
@@ -169,16 +177,16 @@ test_variants = [
         "copts": [],
     },
     {
-        "name": "dense_trackers_sorted_on_spans_allocated_test",
-        "malloc": "//tcmalloc",
-        "deps": ["//tcmalloc:common_8k_pages"],
-        "env": {"BORG_EXPERIMENTS": "TEST_ONLY_TCMALLOC_DENSE_TRACKERS_SORTED_ON_SPANS_ALLOCATED"},
-    },
-    {
         "name": "huge_cache_release_30s",
         "malloc": "//tcmalloc",
         "deps": ["//tcmalloc:common_8k_pages"],
         "env": {"BORG_EXPERIMENTS": "TEST_ONLY_TCMALLOC_HUGE_CACHE_RELEASE_30S"},
+    },
+    {
+        "name": "huge_cache_demand_based_release",
+        "malloc": "//tcmalloc",
+        "deps": ["//tcmalloc:common_8k_pages"],
+        "env": {"BORG_EXPERIMENTS": "TCMALLOC_HUGE_CACHE_DEMAND_BASED_RELEASE"},
     },
     {
         "name": "hpaa",
@@ -233,6 +241,13 @@ test_variants = [
         "deps": ["//tcmalloc:common_legacy_locking"],
         "copts": ["-DTCMALLOC_INTERNAL_8K_PAGES", "-DTCMALLOC_INTERNAL_LEGACY_LOCKING"],
         "tags": ["noubsan"],
+    },
+    {
+        "name": "no_wide_slabs",
+        "malloc": "//tcmalloc:tcmalloc",
+        "deps": ["//tcmalloc:common_8k_pages"],
+        "copts": ["-DTCMALLOC_INTERNAL_8K_PAGES"],
+        "env": {"TCMALLOC_DISABLE_WIDER_SLABS": "1"},
     },
 ]
 

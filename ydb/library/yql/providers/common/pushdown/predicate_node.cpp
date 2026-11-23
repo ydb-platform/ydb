@@ -8,11 +8,13 @@ TPredicateNode::TPredicateNode() = default;
 
 TPredicateNode::TPredicateNode(const TExprNode::TPtr& nodePtr)
     : ExprNode(nodePtr)
-{}
+{
+}
 
 TPredicateNode::TPredicateNode(const NNodes::TExprBase& node)
     : ExprNode(node)
-{}
+{
+}
 
 TPredicateNode::TPredicateNode(const TPredicateNode& predNode) = default;
 
@@ -75,4 +77,4 @@ void TPredicateNode::SetPredicates(const std::vector<TPredicateNode>& predicates
     }
 }
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

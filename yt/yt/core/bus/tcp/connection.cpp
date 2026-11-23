@@ -10,6 +10,7 @@
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/proc.h>
 
+#include <yt/yt/core/net/local_address.h>
 #include <yt/yt/core/net/socket.h>
 #include <yt/yt/core/net/dialer.h>
 
@@ -26,7 +27,6 @@
 
 #include <util/system/error.h>
 #include <util/system/guard.h>
-#include <util/system/hostname.h>
 
 #ifdef __linux__
 #include <netinet/tcp.h>
@@ -418,7 +418,7 @@ TConnectionId TConnection::GetId() const
     return Id_;
 }
 
-void TConnection::Open(TGuard<NThreading::TSpinLock>& guard)
+void TConnection::Open(TGuard<TSpinLock>& guard)
 {
     State_ = EState::Open;
 
@@ -457,13 +457,7 @@ void TConnection::ResolveAddress()
         }
 
         NetworkName_ = LocalNetworkName;
-        try {
-            EndpointHostName_ = FQDNHostName();
-        } catch (const std::exception& ex) {
-            YT_TLOG_ERROR("Failed to resolve local host name")
-                .With(ex);
-            EndpointHostName_ = "localhost";
-        }
+        EndpointHostName_ = NNet::GetLocalHostName();
 
         // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
         OnAddressResolved(
@@ -951,7 +945,10 @@ void TConnection::OnEvent(EPollControl control)
     YT_TLOG_TRACE("Event processing started");
 
     // Update execution pool if needed.
-    if (auto multiplexingBand = MultiplexingBand_.load(); multiplexingBand != ActualMultiplexingBand_) {
+    if (auto multiplexingBand = MultiplexingBand_.load();
+        multiplexingBand != ActualMultiplexingBand_ ||
+        NeedResetInvoker_.exchange(false))
+    {
         Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
         ActualMultiplexingBand_ = multiplexingBand;
     }
@@ -1020,6 +1017,11 @@ void TConnection::OnShutdown()
         .With(error);
 
     Terminated_.Fire(error);
+}
+
+void TConnection::ResetInvoker()
+{
+    NeedResetInvoker_ = true;
 }
 
 void TConnection::OnSocketRead()
@@ -1398,7 +1400,9 @@ TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOpt
     YT_TLOG_DEBUG("Outcoming message enqueued")
         .With("PacketId", queuedMessage.PacketId)
         .With("RequestId", queuedMessage.RequestId)
-        .With("PendingOutPayloadBytes", pendingOutPayloadBytes);
+        .With("PayloadSize", queuedMessage.PayloadSize)
+        .With("PendingOutPayloadBytes", pendingOutPayloadBytes)
+        .With("MultiplexingBand", MultiplexingBand_.load(std::memory_order::relaxed));
 
     if (LastIncompleteWriteTime_ == std::numeric_limits<NProfiling::TCpuInstant>::max()) {
         // Arm stall detection.
@@ -1469,6 +1473,7 @@ void TConnection::OnSocketWrite()
     YT_TLOG_TRACE("Started serving write request");
 
     size_t bytesWrittenTotal = 0;
+    int writeAttempts = 0;
     while (true) {
         if (!HasUnsentData()) {
             // Unarm stall detection at end of write
@@ -1481,6 +1486,7 @@ void TConnection::OnSocketWrite()
         }
 
         size_t bytesWritten;
+        ++writeAttempts;
         bool success = WriteFragments(&bytesWritten);
         bytesWrittenTotal += bytesWritten;
 
@@ -1498,7 +1504,9 @@ void TConnection::OnSocketWrite()
     }
 
     YT_TLOG_TRACE("Finished serving write request")
-        .With("BytesWrittenTotal", bytesWrittenTotal);
+        .With("BytesWrittenTotal", bytesWrittenTotal)
+        .With("WriteAttempts", writeAttempts)
+        .With("PendingOutPayloadBytes", PendingOutPayloadBytes_.load());
 }
 
 bool TConnection::HasUnsentData() const
@@ -1555,12 +1563,16 @@ bool TConnection::WriteFragments(size_t* bytesWritten)
         bytesAvailable -= size;
     }
 
+    auto requestedBytes = MaxBatchWriteSize - bytesAvailable;
     NProfiling::TWallTimer timer;
     auto result = DoWriteFragments(SendVector_);
     auto elapsed = timer.GetElapsedTime();
-    if (elapsed > WriteTimeWarningThreshold) {
-        YT_TLOG_DEBUG("Socket write took too long")
-            .With("Elapsed", elapsed);
+    if (elapsed > WriteTimeWarningThreshold || (result <= 0 && requestedBytes > 0)) {
+        YT_TLOG_DEBUG("Socket write made no progress or took too long")
+            .With("Elapsed", elapsed)
+            .With("RequestedBytes", requestedBytes)
+            .With("Result", result)
+            .With("PendingOutPayloadBytes", PendingOutPayloadBytes_.load());
     }
 
     *bytesWritten = result >= 0 ? static_cast<size_t>(result) : 0;
@@ -1800,7 +1812,11 @@ void  TConnection::OnAckPacketSent(const TPacket& packet)
 void TConnection::OnMessagePacketSent(const TPacket& packet)
 {
     YT_TLOG_DEBUG("Outcoming message sent")
-        .With("PacketId", packet.PacketId);
+        .With("PacketId", packet.PacketId)
+        .With("PayloadSize", packet.PayloadSize)
+        .With("PacketSize", packet.PacketSize)
+        .With("PendingOutPayloadBytes", PendingOutPayloadBytes_.load())
+        .With("MultiplexingBand", MultiplexingBand_.load(std::memory_order::relaxed));
 
     PendingOutPayloadBytes_.fetch_sub(packet.PayloadSize);
 

@@ -6,6 +6,7 @@
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
+#include <ydb/services/sqs_topic/limits.h>
 #include <ydb/services/sqs_topic/receipt.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
@@ -22,6 +23,7 @@
 #include <memory>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/string_utils/url/url.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -110,11 +112,6 @@ namespace {
         TString capturedService;
         with_lock (fixture.AccessServiceMock.MetadataMutex) {
             capturedService = fixture.AccessServiceMock.CapturedAuthenticateService;
-        }
-        if (capturedService.empty()) {
-            with_lock (fixture.AccessServiceMockV2.MetadataMutex) {
-                capturedService = fixture.AccessServiceMockV2.CapturedAuthenticateService;
-            }
         }
         return capturedService;
     }
@@ -1388,6 +1385,35 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         };
 
 
+        Y_UNIT_TEST_F(ClientModificationsSendMessage, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+            for (bool enableClientModifications : {false, true}) {
+                KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+                auto single = SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", "single"}}, enableClientModifications ? 200 : 400);
+                auto batch = SendMessageBatch({
+                    {"QueueUrl", path.QueueUrl},
+                    {"Entries", NJson::TJsonArray{
+                        NJson::TJsonMap{{"Id", "small"}, {"MessageBody", "batch"}},
+                        NJson::TJsonMap{{"Id", "large"}, {"MessageBody", TString(NKikimr::NSQS::TLimits::MaxMessageSize - 1, 'x')}}
+                    }}
+                }, enableClientModifications ? 200 : 400);
+
+                if (enableClientModifications) {
+                    UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
+                    UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
+                } else {
+                    for (const auto* result : {&single, &batch}) {
+                        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "__type"), "AccessDeniedException");
+                        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "message"), "Client data writes are disabled");
+                    }
+                }
+            }
+        }
+
         Y_UNIT_TEST_F(TestSendMessage, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;
@@ -1419,6 +1445,98 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "MessageBody-0");
             UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "");
+        }
+
+        TString FormatCounterLabels(const TVector<std::pair<TString, TString>>& labels) {
+            TStringBuilder out;
+            for (size_t i = 0; i < labels.size(); ++i) {
+                if (i > 0) {
+                    out << ", ";
+                }
+                out << labels[i].first << "=" << labels[i].second;
+            }
+            return out;
+        }
+
+        const NJson::TJsonValue* FindCounterSensor(
+            const NJson::TJsonValue& counters,
+            const TVector<std::pair<TString, TString>>& requiredLabels)
+        {
+            const NJson::TJsonValue* found = nullptr;
+            for (const auto& sensor : counters["sensors"].GetArraySafe()) {
+                if (!sensor.Has("labels") || !sensor["labels"].IsMap()) {
+                    continue;
+                }
+                const auto& labels = sensor["labels"].GetMapSafe();
+                bool match = true;
+                for (const auto& [key, value] : requiredLabels) {
+                    auto it = labels.find(key);
+                    if (it == labels.end() || it->second.GetStringRobust() != value) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    UNIT_ASSERT_C(!found, "duplicate sensor for " << FormatCounterLabels(requiredLabels));
+                    found = &sensor;
+                }
+            }
+            return found;
+        }
+
+        TString DumpSqsSensors(const NJson::TJsonValue& counters) {
+            TStringBuilder out;
+            for (const auto& sensor : counters["sensors"].GetArraySafe()) {
+                if (!sensor.Has("labels") || !sensor["labels"].IsMap()) {
+                    continue;
+                }
+                const auto name = sensor["labels"]["name"].GetStringRobust();
+                if (name.StartsWith("api.sqs.")) {
+                    out << NJson::WriteJson(sensor, true, true, true) << "\n";
+                }
+            }
+            return out;
+        }
+
+        void AssertSqsHttpSensor(
+            const NJson::TJsonValue& counters,
+            const TSqsTopicPaths& path,
+            const TString& name,
+            const TString& method,
+            const TVector<std::pair<TString, TString>>& extraLabels = {})
+        {
+            TVector<std::pair<TString, TString>> required{
+                {"name", name},
+                {"method", method},
+                {"cloud_id", "cloud4"},
+                {"folder_id", "folder4"},
+                {"database_id", "database4"},
+                {"database", path.Database},
+                {"topic", path.TopicName},
+                {"consumer", path.ConsumerName},
+            };
+            required.insert(required.end(), extraLabels.begin(), extraLabels.end());
+            const auto* sensor = FindCounterSensor(counters, required);
+            UNIT_ASSERT_C(sensor, "missing sensor " << name << " method=" << method
+                << " extra=[" << FormatCounterLabels(extraLabels) << "]\nSQS sensors:\n"
+                << DumpSqsSensors(counters));
+        }
+
+        Y_UNIT_TEST_F(TestCounters, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+            SendMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"MessageBody", "MessageBody-0"},
+            });
+
+            const auto counters = NKikimr::NPersQueueTests::SendQuery(MonPort, "/counters/json");
+            AssertSqsHttpSensor(counters, path, "api.sqs.request.count", "SendMessage");
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.count", "SendMessage", {{"code", "200"}});
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.bytes", "SendMessage", {{"code", "200"}});
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.duration_milliseconds", "SendMessage");
         }
 
         Y_UNIT_TEST_F(TestSendMessageBadQueueUrl, TFixture) {
@@ -2272,7 +2390,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto charges = recorder.Take();
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
         // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
-        // blocks by a fresh calculator. 
+        // blocks by a fresh calculator.
         // => Cost = base + blocks
         const ui64 blocks = NBilling::PayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
@@ -2339,7 +2457,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
         UNIT_ASSERT_VALUES_EQUAL(collected, RuMetering_MessageCount);
         // Total payload = count * size (24 KiB) mapped onto READ_BLOCK_SIZE
-        // blocks by a fresh calculator. 
+        // blocks by a fresh calculator.
         // => Cost = base + blocks
         const ui64 blocks = NBilling::PayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
@@ -3064,6 +3182,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        const TDuration expectedRetention = params.RetentionPeriod != TDuration::Zero() ? params.RetentionPeriod : retentionPeriod;
         if (params.Dlq) {
             UNIT_ASSERT(CreateDlqTopic(driver));
         }
@@ -3161,10 +3280,19 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["ReceiveMessageWaitTimeSeconds"], "10");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(expectedRetention.Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
+            if (params.Dlq) {
+                auto recreated = fixture.CreateQueue({
+                    {"QueueName", std::format("{}@{}", topicName.c_str(), consumerName(0))},
+                    {"Attributes", NJson::TJsonMap{
+                        {"FifoQueue", params.Fifo ? "true" : "false"},
+                        {"RedrivePolicy", json["Attributes"]["RedrivePolicy"]}}}
+                });
+                UNIT_ASSERT_VALUES_EQUAL(GetPathFromQueueUrlMap(recreated), resultQueueUrl + (params.Fifo ? ".fifo" : ""));
+            }
         }
 
         {
@@ -3225,7 +3353,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(expectedRetention.Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
@@ -3279,6 +3407,33 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifoWithConsumersRetentionShrinked, TFixture) {
         TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(1)});
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueAttributesAbsoluteDlq, TFixture) {
+        auto driver = MakeDriver(*this);
+        UNIT_ASSERT(CreateDlqTopic(driver));
+        NYdb::NTopic::TCreateTopicSettings settings;
+        auto& consumer = settings.BeginAddSharedConsumer("consumer");
+        auto&& dlq = consumer.BeginDeadLetterPolicy();
+        dlq.Enable();
+        dlq.BeginCondition().MaxProcessingAttempts(5).EndCondition();
+        dlq.MoveAction("/Root/DeadLetterQueue");
+        dlq.EndDeadLetterPolicy();
+        consumer.EndAddConsumer();
+        UNIT_ASSERT(CreateTopic(driver, "topic", settings));
+
+        for (bool enableRelativePaths : {false, true}) {
+            ActorRuntime->GetAppData().FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+            auto json = GetQueueAttributes({
+                {"QueueUrl", "/v1/5//Root/5/topic/8/consumer"},
+                {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}},
+            });
+            NJson::TJsonValue policy;
+            UNIT_ASSERT(NJson::ReadJsonTree(json["Attributes"]["RedrivePolicy"].GetString(), &policy));
+            UNIT_ASSERT_VALUES_EQUAL(policy["deadLetterTargetArn"].GetString(), enableRelativePaths
+                ? "yrn:yc:ymq:ru-central1::/v1/5//Root/15/DeadLetterQueue/8/consumer"
+                : "yrn:yc:ymq:ru-central1::/v1/5//Root/21//Root/DeadLetterQueue/8/consumer");
+        }
     }
 
     Y_UNIT_TEST_F(TestCreateQueue, TFixture) {
@@ -3428,6 +3583,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             description.GetPartitionWriteBurstMessages(),
             NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
+        UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetConsumers()[0].GetAvailabilityPeriod(),
+            NKikimr::NSqsTopic::V1::DEFAULT_MESSAGE_RETENTION_PERIOD);
 
         driver.Stop(true);
     }
@@ -3932,16 +4092,39 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
 
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+        auto describe = [&]() -> NYdb::NTopic::TTopicDescription {
+            auto desc = client.DescribeTopic("TestSetAttrsRetention").GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            return desc.GetTopicDescription();
+        };
+
+        {
+            auto description = describe();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(3600));
+        }
+
         SetQueueAttributes({
             {"QueueUrl", queueUrl},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "7200"}}}
         });
+
+        {
+            auto description = describe();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
+        }
 
         auto attrJson = GetQueueAttributes({
             {"QueueUrl", queueUrl},
             {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
         });
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestPurgeQueueInvalid, TFixture) {

@@ -1,7 +1,9 @@
 #pragma once
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+
 #include <ydb/library/accessor/accessor.h>
+
 #include <util/generic/overloaded.h>
 
 namespace NKikimr::NMetadata::NSecret {
@@ -15,14 +17,17 @@ public:
     inline static const TString PrefixWithUser = "USId:";
 
     TSecretId() = default;
+
     TSecretId(const TString& ownerUserId, const TString& secretId)
         : OwnerUserId(ownerUserId)
-        , SecretId(secretId) {
+        , SecretId(secretId)
+    {
     }
 
     TSecretId(const TStringBuf ownerUserId, const TStringBuf secretId)
         : OwnerUserId(ownerUserId)
-        , SecretId(secretId) {
+        , SecretId(secretId)
+    {
     }
 
     TString SerializeToString() const;
@@ -32,13 +37,15 @@ public:
         if (proto.HasValue()) {
             return proto.GetValue();
         } else {
-            return TStringBuilder() << PrefixWithUser << (proto.GetSecretOwnerId() ? proto.GetSecretOwnerId() : defaultOwnerId) << ":" << SecretId;
+            return TStringBuilder() << PrefixWithUser << (proto.GetSecretOwnerId() ? proto.GetSecretOwnerId() : defaultOwnerId) << ":"
+                                    << SecretId;
         }
     }
 
     bool operator<(const TSecretId& item) const {
         return std::tie(OwnerUserId, SecretId) < std::tie(item.OwnerUserId, item.SecretId);
     }
+
     bool operator==(const TSecretId& item) const {
         return std::tie(OwnerUserId, SecretId) == std::tie(item.OwnerUserId, item.SecretId);
     }
@@ -52,7 +59,11 @@ public:
     inline static const TString PrefixNoUser = "SId:";
 
     TSecretName() = default;
-    TSecretName(const TString& secretId) : SecretId(secretId) {}
+
+    TSecretName(const TString& secretId)
+        : SecretId(secretId)
+    {
+    }
 
     TString SerializeToString() const {
         return TStringBuilder() << "SId:" << SecretId;
@@ -106,13 +117,18 @@ private:
     }
 
     explicit TSecretIdOrValue(const TSecretId& id)
-        : State(id) {
+        : State(id)
+    {
     }
+
     explicit TSecretIdOrValue(const TSecretName& id)
-        : State(id) {
+        : State(id)
+    {
     }
+
     explicit TSecretIdOrValue(const TString& value)
-        : State(value) {
+        : State(value)
+    {
     }
 
 public:
@@ -153,19 +169,18 @@ public:
     NKikimrSchemeOp::TSecretableVariable SerializeToProto() const {
         NKikimrSchemeOp::TSecretableVariable result;
         std::visit(TOverloaded(
-            [](std::monostate){ },
-            [&result](const TSecretId& id){
-                result.MutableSecretId()->SetId(id.GetSecretId());
-                result.MutableSecretId()->SetOwnerId(id.GetOwnerUserId());
-            },
-            [&result](const TSecretName& name){
-                result.MutableSecretId()->SetId(name.GetSecretId());
-            },
-            [&result](const TString& value){
-                result.MutableValue()->SetData(value);
-            }
-        ),
-        State);
+                       [](std::monostate) {
+                       },
+                       [&result](const TSecretId& id) {
+                           result.MutableSecretId()->SetId(id.GetSecretId());
+                           result.MutableSecretId()->SetOwnerId(id.GetOwnerUserId());
+                       },
+                       [&result](const TSecretName& name) {
+                           result.MutableSecretId()->SetId(name.GetSecretId());
+                       },
+                       [&result](const TString& value) {
+                           result.MutableValue()->SetData(value);
+                       }), State);
         return result;
     }
 
@@ -202,20 +217,18 @@ public:
 
     TString SerializeToString() const {
         return std::visit(TOverloaded(
-            [](std::monostate) -> TString{
-                return "";
-            },
-            [](const TSecretId& id) -> TString{
-                return TStringBuilder() << TSecretId::PrefixWithUser << id.GetOwnerUserId() << ":" << id.GetSecretId();
-            },
-            [](const TSecretName& name) -> TString{
-                return TStringBuilder() << TSecretName::PrefixNoUser << name.GetSecretId();
-            },
-            [](const TString& value) -> TString{
-                return value;
-            }
-        ),
-        State);
+                              [](std::monostate) -> TString {
+                                  return "";
+                              },
+                              [](const TSecretId& id) -> TString {
+                                  return TStringBuilder() << TSecretId::PrefixWithUser << id.GetOwnerUserId() << ":" << id.GetSecretId();
+                              },
+                              [](const TSecretName& name) -> TString {
+                                  return TStringBuilder() << TSecretName::PrefixNoUser << name.GetSecretId();
+                              },
+                              [](const TString& value) -> TString {
+                                  return value;
+                              }), State);
     }
 
     TString DebugString() const;

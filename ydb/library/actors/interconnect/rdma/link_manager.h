@@ -48,6 +48,7 @@ using TCtxsMap = std::vector<std::pair<ibv_gid, std::shared_ptr<NInterconnect::N
 TRdmaCtx* GetCtx(int sockfd);
 TRdmaCtx* GetCtx(const in6_addr& );
 TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr);
+TRdmaCtx* GetCtxByInterface(const TString& interfaceName);
 const TCtxsMap& GetAllCtxs();
 bool Init();
   

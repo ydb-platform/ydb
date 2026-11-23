@@ -53,7 +53,7 @@ public:
 private:
     class TCancelableInvoker;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::atomic<bool> Canceled_ = false;
     TError CancelationError_;
     TSingleShotCallbackList<void(const TError&)> Handlers_;

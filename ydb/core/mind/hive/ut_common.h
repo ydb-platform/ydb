@@ -6,11 +6,10 @@
 
 #include "hive_impl.h"
 
-#ifdef NDEBUG
-static constexpr bool ENABLE_DETAILED_HIVE_LOG = false;
-#else
-static constexpr bool ENABLE_DETAILED_HIVE_LOG = true;
-#endif
+#include <util/system/env.h>
+
+// Enable verbose diagnostics without rebuilding the tests.
+inline const bool ENABLE_DETAILED_HIVE_LOG = GetEnv("ENABLE_DETAILED_HIVE_LOG") == "1";
 
 namespace NKikimr {
 
@@ -19,11 +18,20 @@ NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestActorRuntime& runtime
 ui64 GetSimpleCounter(TTestActorRuntime& runtime, ui64 tabletId,
     NHive::ESimpleCounters counter);
 
+ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId,
+    NHive::ECumulativeCounters counter);
+
 namespace NHive {
 
 class TTestHive : public THive {
 public:
     TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
+
+    using THive::GetStats;
+
+    TNodeInfo& Node(TNodeId nodeId) {
+        return Nodes.at(nodeId);
+    }
 
     template<typename F>
     void UpdateConfig(F func) {

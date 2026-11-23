@@ -34,6 +34,9 @@ using TEvCreatePartitionRequest =
 using TEvDeletePartitionRequest =
     TGrpcRequestOperationCall<Ydb::Nbs::DeletePartitionRequest,
         Ydb::Nbs::DeletePartitionResponse>;
+using TEvResizePartitionRequest =
+    TGrpcRequestOperationCall<Ydb::Nbs::ResizePartitionRequest,
+        Ydb::Nbs::ResizePartitionResponse>;
 using TEvGetLoadActorAdapterActorIdRequest =
     TGrpcRequestOperationCall<Ydb::Nbs::GetLoadActorAdapterActorIdRequest,
         Ydb::Nbs::GetLoadActorAdapterActorIdResponse>;
@@ -477,6 +480,238 @@ private:
     }
 };
 
+// Grows a single-partition BlockStoreVolume via DescribeScheme +
+// AlterBlockStoreVolume. SchemeShard merges the alter into the existing
+// volume config and pushes TEvUpdateVolumeConfig to the volume tablet.
+class TResizePartitionRequest
+    : public TRpcOperationRequestActor<TResizePartitionRequest, TEvResizePartitionRequest> {
+
+public:
+    TResizePartitionRequest(IRequestOpCtx* request)
+        : TRpcOperationRequestActor(request) {}
+
+    void Bootstrap() {
+        const auto& ctx = TActivationContext::AsActorContext();
+
+        Become(&TThis::StateDescribeScheme);
+
+        const auto* request = GetProtoRequest();
+        DiskId = request->GetDiskId();
+        NewBlocksCount = request->GetBlocksCount();
+
+        YDB_LOG_DEBUG_CTX(ctx, "ResizePartition: sending DescribeScheme request for disk",
+            {"diskId", DiskId},
+            {"blocksCount", NewBlocksCount});
+
+        SendDescribeScheme(ctx);
+    }
+
+private:
+    enum class EResizePhase {
+        // Looking up the current volume before deciding whether to alter.
+        InitialDescribe,
+        // Waiting for AlterBlockStoreVolume.
+        Alter,
+        // Re-describing after a successful alter to report the applied size.
+        ConfirmDescribe,
+    };
+
+    enum class EAlterAttempt {
+        // First AlterBlockStoreVolume.
+        First,
+        // One describe+alter retry after a version or availability conflict.
+        Retried,
+    };
+
+    STFUNC(StateDescribeScheme) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSSProxy::TEvDescribeSchemeResponse, HandleDescribeScheme);
+            default:
+                break;
+        }
+    }
+
+    STFUNC(StateAlter) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSSProxy::TEvModifySchemeResponse, HandleModifyScheme);
+            default:
+                break;
+        }
+    }
+
+    void SendDescribeScheme(const TActorContext& ctx) {
+        auto describeRequest =
+            std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(DiskId);
+        NYdb::NBS::Send(
+            ctx,
+            MakeSSProxyServiceId(),
+            std::move(describeRequest),
+            0);
+    }
+
+    void ReplySuccess(const TActorContext& ctx, ui64 blocksCount) {
+        Ydb::Nbs::ResizePartitionResult result;
+        result.SetBlocksCount(blocksCount);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+    }
+
+    void HandleDescribeScheme(TEvSSProxy::TEvDescribeSchemeResponse::TPtr& ev) {
+        const auto& ctx = TActivationContext::AsActorContext();
+        const auto& response = *ev->Get();
+
+        const auto& error = response.GetError();
+        if (NYdb::NBS::HasError(error)) {
+            YDB_LOG_ERROR_CTX(ctx, "ResizePartition: DescribeScheme failed",
+                {"diskId", DiskId},
+                {"error", NYdb::NBS::FormatError(error)});
+            if (Phase == EResizePhase::ConfirmDescribe) {
+                // Alter already succeeded; report the requested size.
+                ReplySuccess(ctx, NewBlocksCount);
+                return;
+            }
+            auto issue = NYql::TIssue(
+                error.GetMessage().empty()
+                    ? NYdb::NBS::FormatError(error)
+                    : error.GetMessage());
+            Request_->RaiseIssue(issue);
+            Reply(NbsErrorToYdbStatus(error), ctx);
+            return;
+        }
+
+        const auto& pathDescription = response.PathDescription;
+        const auto pathType = pathDescription.GetSelf().GetPathType();
+        if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
+            YDB_LOG_ERROR_CTX(ctx, "ResizePartition: path is not a BlockStoreVolume",
+                {"type", static_cast<int>(pathType)});
+            Request_->RaiseIssue(NYql::TIssue("Path is not a BlockStoreVolume"));
+            Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            return;
+        }
+
+        const auto& volumeDescription =
+            pathDescription.GetBlockStoreVolumeDescription();
+        const auto& currentConfig = volumeDescription.GetVolumeConfig();
+        if (currentConfig.PartitionsSize() == 0) {
+            YDB_LOG_ERROR_CTX(ctx, "ResizePartition: volume has no partitions",
+                {"diskId", DiskId});
+            Request_->RaiseIssue(NYql::TIssue("Volume has no partitions"));
+            Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            return;
+        }
+        if (currentConfig.PartitionsSize() != 1) {
+            YDB_LOG_ERROR_CTX(ctx, "ResizePartition: multi-partition volume is unsupported",
+                {"diskId", DiskId},
+                {"partitions", currentConfig.PartitionsSize()});
+            Request_->RaiseIssue(NYql::TIssue(
+                "ResizePartition supports only single-partition volumes"));
+            Reply(Ydb::StatusIds::UNSUPPORTED, ctx);
+            return;
+        }
+
+        const ui64 currentBlocksCount =
+            currentConfig.GetPartitions(0).GetBlockCount();
+
+        if (Phase == EResizePhase::ConfirmDescribe) {
+            YDB_LOG_DEBUG_CTX(ctx, "ResizePartition: confirm describe",
+                {"diskId", DiskId},
+                {"blocksCount", currentBlocksCount});
+            ReplySuccess(ctx, currentBlocksCount);
+            return;
+        }
+
+        if (NewBlocksCount < currentBlocksCount) {
+            auto issue = NYql::TIssue(TStringBuilder()
+                << "Cannot decrease block count from " << currentBlocksCount
+                << " to " << NewBlocksCount);
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            return;
+        }
+        if (NewBlocksCount == currentBlocksCount) {
+            YDB_LOG_DEBUG_CTX(ctx, "ResizePartition: requested size equals current size",
+                {"diskId", DiskId},
+                {"blocksCount", NewBlocksCount});
+            ReplySuccess(ctx, currentBlocksCount);
+            return;
+        }
+
+        NKikimrBlockStore::TVolumeConfig alterConfig;
+        alterConfig.SetVersion(volumeDescription.GetAlterVersion());
+        alterConfig.SetDiskId(DiskId);
+        auto* partition = alterConfig.AddPartitions();
+        partition->SetBlockCount(NewBlocksCount);
+        partition->SetType(currentConfig.GetPartitions(0).GetType());
+
+        Phase = EResizePhase::Alter;
+        Become(&TThis::StateAlter);
+
+        auto alterRequest = CreateModifySchemeRequestForAlterVolume(
+            response.Path,
+            pathDescription.GetSelf().GetPathId(),
+            pathDescription.GetSelf().GetPathVersion(),
+            alterConfig);
+
+        YDB_LOG_DEBUG_CTX(ctx, "ResizePartition: sending AlterBlockStoreVolume",
+            {"diskId", DiskId},
+            {"path", response.Path},
+            {"currentBlocksCount", currentBlocksCount},
+            {"newBlocksCount", NewBlocksCount});
+
+        NYdb::NBS::Send(
+            ctx,
+            MakeSSProxyServiceId(),
+            std::move(alterRequest),
+            0);
+    }
+
+    void HandleModifyScheme(TEvSSProxy::TEvModifySchemeResponse::TPtr& ev) {
+        const auto& ctx = TActivationContext::AsActorContext();
+        const auto& error = ev->Get()->GetError();
+
+        if (NYdb::NBS::HasError(error)) {
+            const auto status = NbsErrorToYdbStatus(error);
+            const bool retryableConflict =
+                status == Ydb::StatusIds::PRECONDITION_FAILED ||
+                status == Ydb::StatusIds::UNAVAILABLE ||
+                status == Ydb::StatusIds::ABORTED;
+            if (retryableConflict && AlterAttempt == EAlterAttempt::First) {
+                AlterAttempt = EAlterAttempt::Retried;
+                Phase = EResizePhase::InitialDescribe;
+                YDB_LOG_DEBUG_CTX(ctx, "ResizePartition: retrying describe+alter once",
+                    {"diskId", DiskId},
+                    {"error", NYdb::NBS::FormatError(error)});
+                Become(&TThis::StateDescribeScheme);
+                SendDescribeScheme(ctx);
+                return;
+            }
+
+            YDB_LOG_ERROR_CTX(ctx, "ResizePartition: AlterBlockStoreVolume failed",
+                {"diskId", DiskId},
+                {"error", NYdb::NBS::FormatError(error)});
+            auto issue = NYql::TIssue(
+                error.GetMessage().empty()
+                    ? NYdb::NBS::FormatError(error)
+                    : error.GetMessage());
+            Request_->RaiseIssue(issue);
+            Reply(status, ctx);
+            return;
+        }
+
+        YDB_LOG_DEBUG_CTX(ctx, "ResizePartition: AlterBlockStoreVolume succeeded",
+            {"diskId", DiskId},
+            {"blocksCount", NewBlocksCount});
+
+        Phase = EResizePhase::ConfirmDescribe;
+        Become(&TThis::StateDescribeScheme);
+        SendDescribeScheme(ctx);
+    }
+
+    TString DiskId;
+    ui64 NewBlocksCount = 0;
+    EResizePhase Phase = EResizePhase::InitialDescribe;
+    EAlterAttempt AlterAttempt = EAlterAttempt::First;
+};
+
 class TGetLoadActorAdapterActorIdRequest
     : public TRpcOperationRequestActor<TGetLoadActorAdapterActorIdRequest, TEvGetLoadActorAdapterActorIdRequest> {
 
@@ -635,6 +870,10 @@ void DoCreatePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider
 
 void DoDeletePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TDeletePartitionRequest(p.release()));
+}
+
+void DoResizePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TResizePartitionRequest(p.release()));
 }
 
 void DoGetLoadActorAdapterActorId(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

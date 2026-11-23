@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/dns/public.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <util/generic/fwd.h>
 
 namespace NYT {
@@ -34,7 +36,7 @@ TString GetFullUrlForProxy(const TString& hostName, const TClientContext& contex
 
 TString TruncateForLogs(const TString& text, size_t maxSize);
 
-TString GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit);
+NLogging::TLoggingTagList GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit);
 
 void LogRequest(const THttpHeader& header, const TString& url, bool includeParameters, const TString& requestId, const TString& hostName);
 

@@ -25,6 +25,7 @@
 
 ```yql
 SELECT String::Base64Encode("YQL"); -- "WVFM"
+SELECT String::Base64Decode("WVFM"); -- "YQL"
 ```
 
 `String::Strip(string:String{Flags:AutoMap}) -> String`
@@ -71,7 +72,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Переводят регистр ascii символов строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
-*
+* {#splittolist}
 
   ```text
   String::SplitToList(string:String?, delimeter:String,

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt_phy_build_stage.cpp
@@ -24,7 +24,5 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/utils/plan
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

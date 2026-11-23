@@ -3,9 +3,9 @@
 libssh2 is a library implementing the SSH2 protocol, available under
 the revised BSD license.
 
-[Web site](https://www.libssh2.org/)
+[Web site](https://libssh2.org/)
 
-[Mailing list](https://cool.haxx.se/mailman/listinfo/libssh2-devel)
+[Mailing list](https://lists.haxx.se/listinfo/libssh2-devel)
 
 [BSD Licensed](https://libssh2.org/license.html)
 

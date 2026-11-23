@@ -6,4 +6,4 @@ namespace NFq {
 
 NActors::TActorId YqQuoterServiceActorId();
 
-} // namespace NFq
+}   // namespace NFq

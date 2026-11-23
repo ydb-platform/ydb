@@ -5,6 +5,7 @@
 #include <util/system/mutex.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimr::NOlap {
 
@@ -40,19 +41,21 @@ public:
         ~TEntryGuard() {
             Object.reset();
             if (auto cache = Cache.lock()) {
-                cache->TryFree(Key);
+                cache->EraseIfExpired(Key);
             }
         }
     };
 
+private:
+    std::shared_ptr<const TObject> LockObject(const TKey& key) const {
+        auto* weakObject = Objects.FindPtr(key);
+        return weakObject ? weakObject->lock() : nullptr;
+    }
+
 public:
-    TEntryGuard Upsert(TKey key, TObject&& object) {
+    TEntryGuard GetOrInsert(TKey key, TObject&& object) {
         TGuard lock(Mutex);
-        auto* findSchema = Objects.FindPtr(key);
-        std::shared_ptr<const TObject> cachedObject;
-        if (findSchema) {
-            cachedObject = findSchema->lock();
-        }
+        std::shared_ptr<const TObject> cachedObject = LockObject(key);
         if (!cachedObject) {
             cachedObject = std::make_shared<const TObject>(std::move(object));
             Objects[key] = cachedObject;
@@ -60,13 +63,20 @@ public:
         return TEntryGuard(std::move(key), cachedObject, this);
     }
 
-    void TryFree(const TKey& key) {
+    std::optional<TEntryGuard> Find(const TKey& key) {
         TGuard lock(Mutex);
-        auto findObject = Objects.FindPtr(key);
-        if (findObject) {
-            if (findObject->expired()) {
-                Objects.erase(key);
-            }
+        std::shared_ptr<const TObject> cachedObject = LockObject(key);
+        if (!cachedObject) {
+            return std::nullopt;
+        }
+        return std::optional<TEntryGuard>(std::in_place, key, cachedObject, this);
+    }
+
+    void EraseIfExpired(const TKey& key) {
+        TGuard lock(Mutex);
+        auto* weakObject = Objects.FindPtr(key);
+        if (weakObject && weakObject->expired()) {
+            Objects.erase(key);
         }
     }
 };

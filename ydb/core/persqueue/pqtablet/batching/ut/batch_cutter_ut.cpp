@@ -406,6 +406,29 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
         UNIT_ASSERT_VALUES_EQUAL(chunk1.GetData(), "value1");
     }
 
+    Y_UNIT_TEST(CutKafkaBatchWithWrappingTimestamps) {
+        for (const auto compression : {NKafka::ECompressionType::NONE, NKafka::ECompressionType::GZIP, NKafka::ECompressionType::ZSTD}) {
+            for (const auto baseTimestamp : {Min<i64>(), Max<i64>()}) {
+                auto batch = NKafka::ReadKafkaRecordBatch(MakeKafkaBatchPayload(compression));
+                batch.BaseTimestamp = baseTimestamp;
+                batch.MaxTimestamp = Max<i64>();
+                batch.Records[0].TimestampDelta = baseTimestamp == Min<i64>() ? -1 : 1;
+                batch.Records[1].TimestampDelta = 0;
+                const auto readResult = MakeKafkaBatchReadResult(NKafka::WriteKafkaRecordBatch(batch));
+                const auto cut = TKafkaBatchCutter().Cut(
+                    TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10);
+
+                UNIT_ASSERT_C(cut.has_value(), cut.error());
+                UNIT_ASSERT_VALUES_EQUAL(cut->size(), 2);
+                const size_t positiveTimestampIndex = baseTimestamp == Min<i64>() ? 0 : 1;
+                UNIT_ASSERT_VALUES_EQUAL((*cut)[positiveTimestampIndex].GetCreateTimestampMS(), Max<i64>());
+                UNIT_ASSERT(!(*cut)[1 - positiveTimestampIndex].HasCreateTimestampMS());
+                UNIT_ASSERT_VALUES_EQUAL((*cut)[0].GetOffset(), 10);
+                UNIT_ASSERT_VALUES_EQUAL((*cut)[1].GetOffset(), 11);
+            }
+        }
+    }
+
     Y_UNIT_TEST(CutSkipsNonPositiveCreateTimestamp) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayloadWithTimestamps(0, 0, -1));
         const auto cut = TKafkaBatchCutter().Cut(

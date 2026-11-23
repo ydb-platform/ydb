@@ -3,9 +3,11 @@ UNITTEST_FOR(ydb/core/tx/replication/service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
+    ydb/core/fq/libs/row_dispatcher/purecalc_compilation
+    ydb/core/testlib/basics
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy
     ydb/public/sdk/cpp/src/client/topic

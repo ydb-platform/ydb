@@ -47,6 +47,9 @@ namespace NMem {
         ui16 Items;
         ERowOp Rop : 4;
         ELockMode Lock : 4;
+        // Savepoint seq num of the operation that wrote this delta, 0 when absent.
+        // Only meaningful for uncommitted deltas, fits into the struct padding.
+        ui32 SavepointSeqNum;
     };
 
     struct TTreeKey {

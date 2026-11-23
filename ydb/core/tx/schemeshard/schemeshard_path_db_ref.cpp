@@ -1,0 +1,32 @@
+#include "schemeshard_path_db_ref.h"
+
+#include "schemeshard_impl.h"
+
+namespace NKikimr::NSchemeShard {
+
+void TPathDbRef::Acquire() {
+    if (SS) {
+        SS->IncrementPathDbRefCount(PathId, Reason.c_str());
+    }
+}
+
+void TPathDbRef::Release() {
+    if (SS) {
+        SS->DecrementPathDbRefCount(PathId, Reason.c_str());
+        SS = nullptr;
+    }
+}
+
+void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason) {
+    if (ss) {
+        ss->IncrementPathDbRefCount(pathId, reason.c_str());
+    }
+}
+
+void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason) {
+    if (ss) {
+        ss->DecrementPathDbRefCount(pathId, reason.c_str());
+    }
+}
+
+} // NKikimr::NSchemeShard

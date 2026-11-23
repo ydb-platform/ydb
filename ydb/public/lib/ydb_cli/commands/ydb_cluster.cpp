@@ -8,6 +8,8 @@
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
+#include <util/string/split.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -27,6 +29,15 @@ TCommandCluster::TCommandCluster()
     AddCommand(std::make_unique<TCommandClusterDiagnostics>());
 }
 
+void TCommandCluster::Validate(TConfig& config) {
+    TClientCommandTree::Validate(config);
+    if (config.NeedToConnect && config.AllowEmptyDatabase && !config.Database.empty()
+        && (!config.Database.StartsWith('/') || StringSplitter(config.Database).Split('/').SkipEmpty().Count() != 1)) {
+        throw TMisuseException() << "This cluster-wide command requires a root domain, for example '-d /Root', "
+            << "or no database. Database '" << config.Database << "' is not a root domain.";
+    }
+}
+
 TCommandClusterBootstrap::TCommandClusterBootstrap()
     : TYdbCommand("bootstrap", {}, "Bootstrap automatically-assembled cluster")
 {}
@@ -34,6 +45,8 @@ TCommandClusterBootstrap::TCommandClusterBootstrap()
 void TCommandClusterBootstrap::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("uuid", "Self-assembly UUID").RequiredArgument("STRING").StoreResult(&SelfAssemblyUUID);
+    config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
+        .StoreTrue(&AllowUnknownFields);
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = true;
 }
@@ -45,7 +58,8 @@ void TCommandClusterBootstrap::Parse(TConfig& config) {
 int TCommandClusterBootstrap::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     NYdb::NConfig::TConfigClient client(driver);
-    auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
+    auto settings = NYdb::NConfig::TBootstrapClusterSettings().AllowUnknownFields(AllowUnknownFields);
+    auto result = client.BootstrapCluster(SelfAssemblyUUID, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;
 }

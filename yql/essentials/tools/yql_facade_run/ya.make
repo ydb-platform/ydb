@@ -1,10 +1,11 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_facade_run.cpp
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings/convert
     yql/essentials/providers/pg/provider
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/proto
@@ -59,7 +60,5 @@ PEERDIR(
 
     contrib/libs/protobuf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

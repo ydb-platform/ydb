@@ -1,8 +1,9 @@
 #pragma once
 
+#include "type_builder.h"
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
-#include <yql/essentials/minikql/protobuf_udf/type_builder.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
 #include <util/generic/vector.h>

@@ -32,8 +32,13 @@ def do(args):
         'MaxScrubbedDisksAtOnce',
         'EnableGroupLayoutSanitizer',
         'PDiskSpaceColorBorder',
+        'DatabaseSpaceBlockColor',
+        'DatabaseSpaceUnblockColor',
+        'BridgeSyncTotalRateBytesPerSecond',
+        'BridgeSyncMaxSyncers',
         'SerialManagementStage',
     ]
+    color_columns = {'PDiskSpaceColorBorder', 'DatabaseSpaceBlockColor', 'DatabaseSpaceUnblockColor'}
 
     table_output = table.TableOutput(columns, default_visible_columns=columns)
 
@@ -42,8 +47,11 @@ def do(args):
     for attr in columns:
         if not hasattr(settings, attr):
             continue
-        value = getattr(settings, attr)[0]
-        if attr == 'PDiskSpaceColorBorder':
+        values = getattr(settings, attr)
+        if not values:
+            continue  # not reported by this version of BSC
+        value = values[0]
+        if attr in color_columns:
             row[attr] = disk_color.TPDiskSpaceColor.E.Name(value)
         elif attr == 'SerialManagementStage':
             row[attr] = kikimr_bs3.TSerialManagementStage.E.Name(value)

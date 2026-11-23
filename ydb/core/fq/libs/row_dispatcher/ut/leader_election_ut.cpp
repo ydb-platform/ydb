@@ -1,10 +1,11 @@
-#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
-#include <ydb/core/testlib/actor_helpers.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace {
@@ -12,19 +13,21 @@ namespace {
 using namespace NKikimr;
 using namespace NFq;
 
-class TFixture : public NUnitTest::TBaseFixture {
-
+class TFixture: public NUnitTest::TBaseFixture {
 public:
     TFixture()
-    : Runtime(1, false) {}
+        : Runtime(1, false)
+    {
+    }
 
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-   
+        YqSharedResources =
+            NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+
         RowDispatcher = Runtime.AllocateEdgeActor();
         Coordinator1 = Runtime.AllocateEdgeActor();
         Coordinator2 = Runtime.AllocateEdgeActor();
@@ -39,36 +42,18 @@ public:
         database.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         database.SetDatabase(GetEnv("YDB_DATABASE"));
         database.SetToken("");
-                
-        LeaderElection1 = Runtime.Register(NewLeaderElection(
-            RowDispatcher,
-            Coordinator1,
-            config,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources->UserSpaceYdbDriver,
-            "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
-            ).release());
 
-        LeaderElection2 = Runtime.Register(NewLeaderElection(
-            RowDispatcher,
-            Coordinator2,
-            config,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources->UserSpaceYdbDriver,
-            "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
-            ).release());
+        LeaderElection1 = Runtime.Register(NewLeaderElection(RowDispatcher, Coordinator1, config, NKikimr::CreateYdbCredentialsProviderFactory,
+            YqSharedResources->UserSpaceYdbDriver, "/tenant", MakeIntrusive<NMonitoring::TDynamicCounters>())
+                                               .release());
 
-        LeaderElection3 = Runtime.Register(NewLeaderElection(
-            RowDispatcher,
-            Coordinator3,
-            config,
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources->UserSpaceYdbDriver,
-            "/tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
-            ).release());
+        LeaderElection2 = Runtime.Register(NewLeaderElection(RowDispatcher, Coordinator2, config, NKikimr::CreateYdbCredentialsProviderFactory,
+            YqSharedResources->UserSpaceYdbDriver, "/tenant", MakeIntrusive<NMonitoring::TDynamicCounters>())
+                                               .release());
+
+        LeaderElection3 = Runtime.Register(NewLeaderElection(RowDispatcher, Coordinator3, config, NKikimr::CreateYdbCredentialsProviderFactory,
+            YqSharedResources->UserSpaceYdbDriver, "/tenant", MakeIntrusive<NMonitoring::TDynamicCounters>())
+                                               .release());
 
         Runtime.EnableScheduleForActor(LeaderElection1);
         Runtime.EnableScheduleForActor(LeaderElection2);
@@ -144,9 +129,9 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         auto coordinatorId1 = ExpectCoordinatorChanged();
         auto coordinatorId2 = ExpectCoordinatorChanged();
         auto coordinatorId3 = ExpectCoordinatorChanged();
-        TSet<NActors::TActorId> set {coordinatorId1, coordinatorId2, coordinatorId3};
+        TSet<NActors::TActorId> set{ coordinatorId1, coordinatorId2, coordinatorId3 };
         UNIT_ASSERT(set.size() == 3);
     }
 }
 
-}
+}   // namespace

@@ -1,12 +1,11 @@
 #include "schemeshard__operation_rotate_cdc_stream.h"
 
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,21 +14,19 @@ namespace NCdc {
 namespace {
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "RotateCdcStream TPropose"
-            << " opId# " << OperationId << " ";
-    }
-
 public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({
+            TEvHive::TEvCreateTabletReply::EventType,
+        });
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -44,8 +41,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -69,11 +67,11 @@ public:
         context.SS->PersistCreateStep(db, newStreamPathId, step);
 
         context.SS->PersistCdcStream(db, newStreamPathId);
-        context.SS->CdcStreams[newStreamPathId] = newStream->AlterData;
+        context.SS->CdcStreams.Set(newStreamPathId, newStream->AlterData);
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams[oldStreamPathId]->FinishAlter();
+        context.SS->CdcStreams.at(oldStreamPathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -90,12 +88,16 @@ private:
 }; // TPropose
 
 class TRotateCdcStream: public TSubOperation {
-    static TTxState::ETxState NextState() {
-        return TTxState::Propose;
-    }
+public:
+    virtual const char* Name() const override final { return "TRotateCdcStream"; }
 
+private:
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
         default:
@@ -105,6 +107,10 @@ class TRotateCdcStream: public TSubOperation {
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
+        case TTxState::CreateParts:
+            return MakeHolder<TCreateParts>(OperationId);
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
@@ -117,7 +123,7 @@ class TRotateCdcStream: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& oldStreamName = op.GetOldStreamName();
@@ -126,10 +132,10 @@ public:
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TRotateCdcStream Propose"
-            << ": opId# " << OperationId
-            << ", oldStream# " << workingDir << "/" << oldStreamName
-            << ", newStream# " << workingDir << "/" << newStreamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"oldStream", workingDir + "/" + oldStreamName},
+            {"newStream", workingDir + "/" + newStreamName},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -292,6 +298,39 @@ public:
             return result;
         }
 
+        switch (newStreamDesc.GetCompression()) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            if (newStreamDesc.HasCompressionLevel()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "COMPRESSION_LEVEL requires ZSTD compression");
+                return result;
+            }
+            break;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+            if (newStreamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ZSTD compression is supported only for JSON changefeed formats");
+                return result;
+            }
+            if (newStreamDesc.HasCompressionLevel()
+                    && (newStreamDesc.GetCompressionLevel() < 1 || newStreamDesc.GetCompressionLevel() > 22)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ZSTD compression level must be in range [1, 22]");
+                return result;
+            }
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                << "Invalid compression codec: " << static_cast<ui32>(newStreamDesc.GetCompression()));
+            return result;
+        }
+
+        if (newStreamDesc.HasHeartbeatMode() || newStreamDesc.HasAggregatorTabletId()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "HeartbeatMode and AggregatorTabletId are assigned by SchemeShard and cannot be set in a request");
+            return result;
+        }
+
         if (!newStreamDesc.GetAwsRegion().empty()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
@@ -352,6 +391,14 @@ public:
             return result;
         }
 
+        TMaybe<TChannelsBindings> aggregatorChannels;
+        if (ShouldAggregateHeartbeats(newStreamDesc)) {
+            aggregatorChannels = CheckCdcAggregatorCanBeCreated(newStreamOp, newStreamPath, context, result);
+            if (!aggregatorChannels) {
+                return result;
+            }
+        }
+
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
         context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
@@ -380,7 +427,6 @@ public:
 
         auto newStream = TCdcStreamInfo::Create(newStreamDesc);
         Y_ABORT_UNLESS(newStream);
-        context.SS->CdcStreams[pathId] = newStream;
 
         newStreamPath.MaterializeLeaf(owner, pathId);
         result->SetPathId(pathId.LocalPathId);
@@ -400,26 +446,31 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->CdcStreams.Set(pathId, newStream);
+
+        if (aggregatorChannels) {
+            PlanCdcAggregatorCreation(OperationId, newStreamPath, *aggregatorChannels, context);
+        }
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(NextState());
+        SetState(txState.State);
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TRotateCdcStream AbortPropose"
-            << ": opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TRotateCdcStream AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream AbortUnsafe",
+            {"schemeshard", context.SS->TabletID()},
+            {"operationId", OperationId},
+            {"txId", txId},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -466,6 +517,10 @@ public:
 }; // TConfigurePartsAtTable
 
 class TRotateCdcStreamAtTable: public TSubOperation {
+public:
+    virtual const char* Name() const override final { return "TRotateCdcStreamAtTable"; }
+
+private:
     static TTxState::ETxState NextState() {
         return TTxState::ConfigureParts;
     }
@@ -513,17 +568,17 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& tableName = op.GetTableName();
         const auto& oldStreamName = op.GetOldStreamName();
         const auto& newStreamName = op.GetNewStream().GetStreamDescription().GetName();
 
-        LOG_N("TRotateCdcStreamAtTable Propose"
-            << ": opId# " << OperationId
-            << ", oldStream# " << workingDir << "/" << tableName << "/" << oldStreamName
-            << ", newStream# " << workingDir << "/" << tableName << "/" << newStreamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"oldStream", workingDir + "/" + tableName + "/" + oldStreamName},
+            {"newStream", workingDir + "/" + tableName + "/" + newStreamName},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -619,7 +674,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        if (!context.SS->CanCreateSnapshot(tablePath.Base()->PathId, OperationId.GetTxId(), status, errStr)) {
+        if (!context.SS->CanCreateSingleSnapshot(tablePath.Base()->PathId, OperationId.GetTxId(), status, errStr)) {
             result->SetError(status, errStr);
             return result;
         }
@@ -662,15 +717,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TRotateCdcStreamAtTable AbortPropose"
-            << ": opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TRotateCdcStreamAtTable AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable AbortUnsafe",
+            {"schemeshard", context.SS->TabletID()},
+            {"operationId", OperationId},
+            {"txId", txId},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 }; // TRotateCdcStreamAtTable
@@ -720,9 +776,11 @@ ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, TTxState::ETxS
 TVector<ISubOperation::TPtr> CreateRotateCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream);
 
-    LOG_D("CreateRotateCdcStream"
-        << ": opId# " << opId
-        << ", tx# " << tx.ShortDebugString());
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CreateRotateCdcStream",
+        {"schemeshard", context.SS->TabletID()},
+        {"operationId", opId},
+        {"tx", tx.ShortDebugString()},
+    );
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetRotateCdcStream();
@@ -827,3 +885,5 @@ TVector<ISubOperation::TPtr> CreateRotateCdcStream(TOperationId opId, const TTxT
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

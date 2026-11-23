@@ -7,12 +7,11 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -22,7 +21,6 @@
 #include <google/protobuf/util/time_util.h>
 
 #include <type_traits>
-#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -55,6 +53,21 @@ struct TPartitionActorInfo {
     ui64 NodeId;
     bool ReadingFinished;
     ui64 EndOffset;
+
+    // True when the client's max_offset window is exhausted and the
+    // end_partition_session to the client is deferred until all in-flight
+    // direct reads are acked (data goes to StreamDirectRead, the EOF goes to
+    // the control StreamRead, so the client could otherwise drop the last
+    // batch when it stops the partition session on EOF).
+    bool WindowExhausted = false;
+
+    // True when the end_partition_session caused by max_offset exhaustion has
+    // already been delivered to the client for this partition session. A later
+    // TEvReadingFinished (e.g. from auto-partitioning) must not send a second
+    // end_partition_session for the same partition session id: the balancer is
+    // still notified about the real finish, but the client already considers
+    // the partition done.
+    bool WindowExhaustedSent = false;
 
 
     struct TDirectReadInfo {
@@ -90,8 +103,9 @@ struct TPartitionActorInfo {
         , NodeId(0)
         , ReadingFinished(false)
     {
-        AFL_ENSURE(partition.DiscoveryConverter != nullptr)
-            ("partition", partition.Partition)("assign_id", partition.AssignId);
+        YDB_LOG_ENSURE(partition.DiscoveryConverter != nullptr,
+            {"partition", partition.Partition},
+            {"assignId", partition.AssignId});
     }
 
     bool IsLastOffsetCommitted() const {
@@ -163,10 +177,10 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
 
 template <EProtocol Protocol>
 class TReadSessionActor
-    : public TActorBootstrapped<TReadSessionActor<Protocol>>
+    : public NPQ::TBaseActor<TReadSessionActor<Protocol>>
     , private NPQ::TRlHelpers
-    , public NActors::IActorExceptionHandler
 {
+    using TBase = NPQ::TBaseActor<TReadSessionActor<Protocol>>;
     using TClientMessage = typename std::conditional_t<Protocol == EProtocol::PQv1,
         PersQueue::V1::MigrationStreamingReadClientMessage,
         Topic::StreamReadMessage::FromClient>;
@@ -228,6 +242,13 @@ public:
 
     bool OnUnhandledException(const std::exception& exc) override;
 
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session});
+    }
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -261,6 +282,8 @@ private:
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadWindowExhausted, Handle); // from partitionActor
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
 
             // Balancer events
@@ -314,6 +337,8 @@ private:
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
@@ -350,13 +375,24 @@ private:
         TPartitionsMap::iterator it,
         const TActorContext& ctx
     );
+    // Sends the deferred (window-exhausted) end_partition_session to the client
+    // once all in-flight direct reads of the partition have been acked.
+    void SendWindowExhaustedIfNeeded(TPartitionsMap::iterator it, const TActorContext& ctx);
+
+    // Resolves a partition-actor event to the partition it refers to: the
+    // sender must be a current partition actor, the partition session must
+    // exist by its session-unique AssignId, and the event's topic and
+    // partition ids must match the partition. Returns Partitions.end() for
+    // stale or inconsistent events; callers must ignore it, matching the
+    // other stale-event paths in this actor.
+    TPartitionsMap::iterator ResolvePartitionActorEvent(const TActorId& sender, const TString& topic, ui32 partitionId, ui64 assignId);
 
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);
-    void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
+    bool SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
     void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
 
-    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const;
+    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic) const;
 
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
@@ -385,6 +421,7 @@ private:
     bool ReadWithoutConsumer;
 
     bool InitDone;
+    bool Dead = false;
     bool RangesMode;
 
     ui32 MaxReadMessagesCount;
@@ -409,11 +446,13 @@ private:
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
+    THashMap<TString, TString> AliasedTopicPaths;
     THashMap<TString, i64> ReadFromTimestamp;
     THashMap<TString, i64> MaxLagByTopic;
 
     bool ReadOnlyLocal;
     bool BatchingSupported = false;
+    bool SupportsReplicationMessages = false;
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;

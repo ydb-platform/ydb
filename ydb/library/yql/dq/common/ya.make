@@ -20,3 +20,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(dq_common.h)
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -9,8 +9,8 @@ extern "C" {
 
 typedef struct {
     PyUnicodeObject str;
-    PyObject *canonical;
-    mod_state *state;
+    PyObject* canonical;
+    mod_state* state;
 } istrobject;
 
 #define IStr_CheckExact(state, obj) Py_IS_TYPE(obj, state->IStrType)
@@ -20,27 +20,29 @@ typedef struct {
 PyDoc_STRVAR(istr__doc__, "istr class implementation");
 
 static inline void
-istr_dealloc(istrobject *self)
+istr_dealloc(istrobject* self)
 {
+    PyTypeObject* tp = Py_TYPE(self);
     Py_XDECREF(self->canonical);
-    PyUnicode_Type.tp_dealloc((PyObject *)self);
+    PyUnicode_Type.tp_dealloc((PyObject*)self);
+    Py_DECREF(tp);
 }
 
-static inline PyObject *
-istr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+static inline PyObject*
+istr_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
 {
-    PyObject *mod = PyType_GetModuleByDef(type, &multidict_module);
+    PyObject* mod = PyType_GetModuleByDef(type, &multidict_module);
     if (mod == NULL) {
         return NULL;
     }
-    mod_state *state = get_mod_state(mod);
+    mod_state* state = get_mod_state(mod);
 
-    PyObject *x = NULL;
-    static char *kwlist[] = {"object", "encoding", "errors", 0};
-    PyObject *encoding = NULL;
-    PyObject *errors = NULL;
-    PyObject *canonical = NULL;
-    PyObject *ret = NULL;
+    PyObject* x = NULL;
+    static char* kwlist[] = {"object", "encoding", "errors", 0};
+    PyObject* encoding = NULL;
+    PyObject* errors = NULL;
+    PyObject* canonical = NULL;
+    PyObject* ret = NULL;
 
     if (!PyArg_ParseTupleAndKeywords(
             args, kwds, "|OOO:str", kwlist, &x, &encoding, &errors)) {
@@ -58,20 +60,20 @@ istr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!canonical) {
         goto fail;
     }
-    ((istrobject *)ret)->canonical = canonical;
-    ((istrobject *)ret)->state = state;
+    ((istrobject*)ret)->canonical = canonical;
+    ((istrobject*)ret)->state = state;
     return ret;
 fail:
     Py_XDECREF(ret);
     return NULL;
 }
 
-static inline PyObject *
-istr_reduce(PyObject *self)
+static inline PyObject*
+istr_reduce(PyObject* self)
 {
-    PyObject *str = NULL;
-    PyObject *args = NULL;
-    PyObject *result = NULL;
+    PyObject* str = NULL;
+    PyObject* args = NULL;
+    PyObject* result = NULL;
 
     str = PyUnicode_FromObject(self);
     if (str == NULL) {
@@ -95,7 +97,7 @@ static PyMethodDef istr_methods[] = {
 
 static PyType_Slot istr_slots[] = {
     {Py_tp_dealloc, istr_dealloc},
-    {Py_tp_doc, (void *)istr__doc__},
+    {Py_tp_doc, (void*)istr__doc__},
     {Py_tp_methods, istr_methods},
     {Py_tp_new, istr_new},
     {0, NULL},
@@ -112,11 +114,11 @@ static PyType_Spec istr_spec = {
     .slots = istr_slots,
 };
 
-static inline PyObject *
-IStr_New(mod_state *state, PyObject *str, PyObject *canonical)
+static inline PyObject*
+IStr_New(mod_state* state, PyObject* str, PyObject* canonical)
 {
-    PyObject *args = NULL;
-    PyObject *res = NULL;
+    PyObject* args = NULL;
+    PyObject* res = NULL;
     args = PyTuple_Pack(1, str);
     if (args == NULL) {
         goto ret;
@@ -126,26 +128,26 @@ IStr_New(mod_state *state, PyObject *str, PyObject *canonical)
         goto ret;
     }
     Py_INCREF(canonical);
-    ((istrobject *)res)->canonical = canonical;
-    ((istrobject *)res)->state = state;
+    ((istrobject*)res)->canonical = canonical;
+    ((istrobject*)res)->state = state;
 ret:
     Py_CLEAR(args);
     return res;
 }
 
 static inline int
-istr_init(PyObject *module, mod_state *state)
+istr_init(PyObject* module, mod_state* state)
 {
-    PyObject *tpl = PyTuple_Pack(1, (PyObject *)&PyUnicode_Type);
+    PyObject* tpl = PyTuple_Pack(1, (PyObject*)&PyUnicode_Type);
     if (tpl == NULL) {
         return -1;
     }
-    PyObject *tmp = PyType_FromModuleAndSpec(module, &istr_spec, tpl);
+    PyObject* tmp = PyType_FromModuleAndSpec(module, &istr_spec, tpl);
     Py_DECREF(tpl);
     if (tmp == NULL) {
         return -1;
     }
-    state->IStrType = (PyTypeObject *)tmp;
+    state->IStrType = (PyTypeObject*)tmp;
     return 0;
 }
 

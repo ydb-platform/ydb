@@ -252,13 +252,16 @@ namespace NKikimr {
             case TBlobType::MemBlob:
                 Y_VERIFY_S(dataSize, HullCtx->VCtx->VDiskLogPrefix);
                 MemDataSize += AlignUp(dataSize, 8u);
+                OutputEstimate.AddInline(dataSize);
                 break;
             case TBlobType::DiskBlob:
                 Y_VERIFY_S(!memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
+                OutputEstimate.AddIndexOnly();
                 break;
             case TBlobType::HugeBlob:
                 Y_VERIFY_S(memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
                 HugeDataSize += memRec.DataSize();
+                OutputEstimate.AddHuge();
                 break;
             default:
                 Y_ABORT("Unexpected type: type# %d", int(type));
@@ -709,6 +712,10 @@ namespace NKikimr {
                 DIV_CLASS("panel-heading") {
                     STRONG() { str << "Segment: " << which; }
                     str << "    StartTime: " + ToStringLocalTimeUpToSeconds(StartTime);
+                    const TFreshOutputEstimate estimate = GetOutputEstimate();
+                    str << "    CompactedBytes: " << estimate.GetCharge(OutputGeometry)
+                        << "    CompactedChunks: " << estimate.GetChunks(OutputGeometry)
+                        << "    ReservedChunks: " << ReservedChunks.size();
                 }
                 DIV_CLASS("panel-body") {
                     DIV_CLASS("row") {

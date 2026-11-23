@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/conclusion
@@ -50,6 +50,7 @@ SRCS(
     projection.cpp
     assign_const.cpp
     assign_internal.cpp
+    pattern_hints.cpp
     custom_registry.cpp
     GLOBAL kernel_logic.cpp
     reserve.cpp
@@ -58,8 +59,6 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(abstract.h)
 GENERATE_ENUM_SERIALIZATION(aggr_common.h)
 GENERATE_ENUM_SERIALIZATION(execution.h)
-
-YQL_LAST_ABI_VERSION()
 
 CFLAGS(
     -Wno-unused-parameter

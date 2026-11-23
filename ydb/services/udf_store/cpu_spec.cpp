@@ -1,4 +1,5 @@
 #include "cpu_spec.h"
+
 #include "metadata_subscription/storage_paths.h"
 
 #include <WAVM/LLVMJIT/LLVMJIT.h>
@@ -13,4 +14,4 @@ TString DetectLocalCpuSpec(const TString& overrideSpec) {
     return NormalizeCpuSpec(targetSpec.triple, targetSpec.cpu);
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

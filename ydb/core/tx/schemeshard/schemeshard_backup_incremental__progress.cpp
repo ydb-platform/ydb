@@ -1,7 +1,7 @@
 #include "schemeshard_continuous_backup_cleaner.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/backup/impl/logging.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
 
 namespace NKikimr::NSchemeShard {
 
@@ -110,13 +110,17 @@ public:
         auto tabletId = TTabletId(record.GetTabletId());
         ui32 partitionId = record.GetPartitionId();
 
-        LOG_D("OnOffloadStatus id# " << id
-            << ", tabletId# " << tabletId
-            << ", partitionId# " << partitionId);
+        YDB_LOG_DEBUG(GetLogPrefix() << "OnOffloadStatus",
+            {"id", id},
+            {"tabletId", tabletId},
+            {"partitionId", partitionId},
+        );
 
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
-            LOG_E("Shard index for tabletId# " << tabletId << " not found");
+            YDB_LOG_ERROR(GetLogPrefix() << "Shard index not found",
+                {"tabletId", tabletId},
+            );
             return;
         }
 
@@ -125,14 +129,18 @@ public:
         Y_ABORT_UNLESS(shardInfo.TabletType == ETabletType::PersQueue);
 
         if (!Self->Topics.contains(shardInfo.PathId)) {
-            LOG_E("Topic with pathId# " << shardInfo.PathId
-                << " not found, likely dropped concurrently, ignoring offload status");
+            YDB_LOG_ERROR(GetLogPrefix() << "Topic not found, likely dropped concurrently, ignoring offload status",
+                {"pathId", shardInfo.PathId},
+            );
             return;
         }
         const auto& topic = Self->Topics.at(shardInfo.PathId);
 
         if (!topic->Partitions.contains(partitionId)) {
-            LOG_E("Partition with id# " << partitionId << " not found in topic with pathId# " << shardInfo.PathId);
+            YDB_LOG_ERROR(GetLogPrefix() << "Partition not found in topic",
+                {"partitionId", partitionId},
+                {"pathId", shardInfo.PathId},
+            );
             return;
         }
 
@@ -142,21 +150,28 @@ public:
         }
 
         if (!Self->IncrementalBackups.contains(id)) {
-            LOG_E("Incremental backup with id# " << id << " not found");
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup not found",
+                {"id", id},
+            );
             TryStartOrphanCleaner(shardInfo.PathId);
             return;
         }
 
         auto& backupInfo = *Self->IncrementalBackups.at(id);
         if (backupInfo.IsFinished()) {
-            LOG_E("Incremental backup with id# " << id << " is already finished");
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup is already finished",
+                {"id", id},
+            );
             return;
         }
 
         Y_ABORT_UNLESS(Self->PathsById.contains(shardInfo.PathId));
         auto itemPathId = Self->PathsById.at(shardInfo.PathId)->ParentPathId;
         if (!backupInfo.Items.contains(itemPathId)) {
-            LOG_E("Incremental backup item with pathId# " << itemPathId << " not found in backup with id# " << id);
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup item not found in backup",
+                {"pathId", itemPathId},
+                {"id", id},
+            );
             return;
         }
 
@@ -177,39 +192,52 @@ public:
         auto success = CleanerResult->Get()->Success;
         auto error = CleanerResult->Get()->Error;
 
-        LOG_D("OnCleanerResult id# " << id
-            << ", itemPathId# " << itemPathId
-            << ", success# " << success
-            << ", error# " << error);
+        YDB_LOG_DEBUG(GetLogPrefix() << "OnCleanerResult",
+            {"id", id},
+            {"itemPathId", itemPathId},
+            {"success", success},
+            {"error", error},
+        );
 
         Self->RunningContinuousBackupCleaners.erase(CleanerResult->Sender);
 
         if (!success) {
-            LOG_E("Continuous backup cleaner has failed: " << error);
+            YDB_LOG_ERROR(GetLogPrefix() << "Continuous backup cleaner has failed",
+                {"error", error},
+            );
             return;
         }
 
         if (!Self->IncrementalBackups.contains(id)) {
-            LOG_E("Incremental backup with id# " << id << " not found");
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup not found",
+                {"id", id},
+            );
             return;
         }
 
         auto& backupInfo = *Self->IncrementalBackups.at(id);
         if (backupInfo.IsFinished()) {
-            LOG_E("Incremental backup with id# " << id << " is already finished");
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup is already finished",
+                {"id", id},
+            );
             return;
         }
 
         if (!backupInfo.Items.contains(itemPathId)) {
-            LOG_E("Incremental backup item with pathId# " << itemPathId << " not found in backup with id# " << id);
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup item not found in backup",
+                {"pathId", itemPathId},
+                {"id", id},
+            );
             return;
         }
 
         auto& item = backupInfo.Items.at(itemPathId);
         if (item.State != TIncrementalBackupInfo::TItem::EState::Dropping) {
-            LOG_E("Incremental backup item with pathId# " << itemPathId
-                << " in backup with id# " << id
-                << " is not in Dropping state, but in " << item.State);
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup item is not in Dropping state",
+                {"pathId", itemPathId},
+                {"id", id},
+                {"state", item.State},
+            );
             return;
         }
 
@@ -217,16 +245,22 @@ public:
     }
 
     void Resume(TTransactionContext& txc) {
-        LOG_D("Resume id# " << Id);
+        YDB_LOG_DEBUG(GetLogPrefix() << "Resume",
+            {"id", Id},
+        );
 
         if (!Self->IncrementalBackups.contains(Id)) {
-            LOG_E("Incremental backup with id# " << Id << " not found");
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup not found",
+                {"id", Id},
+            );
             return;
         }
 
         auto& backupInfo = *Self->IncrementalBackups.at(Id);
         if (backupInfo.IsFinished()) {
-            LOG_E("Incremental backup with id# " << Id << " is already finished");
+            YDB_LOG_ERROR(GetLogPrefix() << "Incremental backup is already finished",
+                {"id", Id},
+            );
             return;
         }
 
@@ -279,3 +313,5 @@ ITransaction* TSchemeShard::CreateTxProgress(TEvPrivate::TEvContinuousBackupClea
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

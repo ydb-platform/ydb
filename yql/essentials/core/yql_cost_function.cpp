@@ -3,8 +3,8 @@
 
 namespace NYql {
 
-bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
-    if (c1.RelName < c2.RelName){
+bool NDq::operator<(const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
+    if (c1.RelName < c2.RelName) {
         return true;
     } else if (c1.RelName == c2.RelName) {
         return c1.AttributeName < c2.AttributeName;
@@ -12,4 +12,4 @@ bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
     return false;
 }
 
-}  // namespace NYql
+} // namespace NYql

@@ -62,6 +62,9 @@ public:
             return true;
         }
 
+        // Vacuum collects garbage under the current MVCC retention policy. Its
+        // completion does not invalidate snapshots or wait for their release:
+        // history protected by the registry or local readers is still live data.
         if (Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
             YDB_LOG_DEBUG_CTX(ctx, "Vacuum: expired snapshots removed",
                 {"tabletId", Self->TabletID()});

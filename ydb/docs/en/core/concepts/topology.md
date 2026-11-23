@@ -110,4 +110,4 @@ For a database to survive the failure of one data center in a cluster using the 
 
 {% endif %}
 
-[*recommended-node-count]: Using fewer nodes will limit the cluster's ability to [automatically recover](../maintenance/manual/selfheal.md).
+[*recommended-node-count]: Using fewer nodes will limit the cluster's ability to [automatically recover](../devops/concepts/selfheal-storage.md).

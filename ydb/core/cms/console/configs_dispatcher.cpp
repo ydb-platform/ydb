@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/config/init/mock.h>
 
@@ -25,6 +26,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
+
+#include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -46,6 +49,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
     (ui32)NKikimrConsole::TConfigItem::HiveConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::InterconnectConfigItem,
     (ui32)NKikimrConsole::TConfigItem::LogConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
@@ -61,7 +65,6 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
     (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
-    (ui32)NKikimrConsole::TConfigItem::UserFacingTracingConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
@@ -72,6 +75,9 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
     (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -160,6 +166,9 @@ public:
     TSubscription::TPtr FindSubscription(const TDynBitMap &kinds);
 
     TSubscriber::TPtr FindSubscriber(TActorId aid);
+
+    // Publish the current YAML config versions, using zero for disabled or unknown versions.
+    void UpdateYamlConfigVersionMetrics();
 
     void UpdateYamlVersion(const TSubscription::TPtr &kinds) const;
 
@@ -311,6 +320,8 @@ private:
     const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    TString PathAliasesConfig;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     const TString StartupConfigYaml;
     const TString StartupStorageYaml;
     NKikimrConfig::TAppConfig CandidateStartupConfig;
@@ -320,6 +331,10 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
+    // Main YAML version, or zero when YAML is disabled or the version is unknown; initialized during bootstrap.
+    ::NMonitoring::TDynamicCounters::TCounterPtr MainYamlConfigVersion;
+    // Database YAML version, or zero when YAML is disabled or the version is unknown; initialized during bootstrap.
+    ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseYamlConfigVersion;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     std::vector<TString> Args;
@@ -364,6 +379,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , ItemsServeRules(initInfo.ItemsServeRules)
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
+        , PathAliasesConfig(initInfo.InitialConfig.GetResourcePathPrefixMapping().SerializeAsString())
         , StartupConfigYaml(initInfo.StartupConfigYaml)
         , StartupStorageYaml(initInfo.StartupStorageYaml)
         , CandidateStartupConfig(initInfo.InitialConfig)
@@ -378,8 +394,10 @@ void TConfigsDispatcher::Bootstrap()
 {
     YDB_LOG_DEBUG("TConfigsDispatcher Bootstrap");
 
+    PathNormalizer = AppData()->GetPathNormalizer();
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
+        mon->UpdatePathNormalizer(PathNormalizer);
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TActivationContext::ActorSystem(), SelfId());
     }
@@ -389,6 +407,10 @@ void TConfigsDispatcher::Bootstrap()
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
     ConfigurationV1 = counters->GetCounter("ConfigurationV1", false);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
+    MainYamlConfigVersion = counters->GetCounter("MainYamlConfigVersion", false);
+    DatabaseYamlConfigVersion = counters->GetCounter("DatabaseYamlConfigVersion", false);
+    *MainYamlConfigVersion = 0;
+    *DatabaseYamlConfigVersion = 0;
 
     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
@@ -438,6 +460,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
     // Parsed once when UpdateInProcess was built; share the (read-only) result.
     notification->OpaqueConfigs = subscription->UpdateInProcess->OpaqueConfigs;
+    notification->PathNormalizer = subscription->UpdateInProcess->PathNormalizer;
 
     YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest",
         {"subscriber", subscriber},
@@ -1308,6 +1331,28 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
     std::swap(YamlProtoConfig, newYamlProtoConfig);
 
+    const auto aliasKinds = FilterKinds(KindsToBitMap(TVector<ui32>{
+        NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}));
+    if (!aliasKinds.Empty()) {
+        const auto& source = YamlConfigEnabled ? YamlProtoConfig : CurrentConfig;
+        const auto& aliases = source.HasResourcePathPrefixMapping()
+            ? source.GetResourcePathPrefixMapping() : BaseConfig.GetResourcePathPrefixMapping();
+        const TString serialized = aliases.SerializeAsString();
+        if (serialized != PathAliasesConfig) {
+            try {
+                PathNormalizer = aliases.RulesSize()
+                    ? std::make_shared<NPathAliasing::TPathNormalizer>(aliases, AppData()->Counters) : nullptr;
+                PathAliasesConfig = serialized;
+                AppData()->SetPathNormalizer(PathNormalizer);
+                if (AppData()->Mon) {
+                    AppData()->Mon->UpdatePathNormalizer(PathNormalizer);
+                }
+            } catch (const yexception& e) {
+                YDB_LOG_ERROR("Invalid path aliases configuration", {"error", e.what()});
+            }
+        }
+    }
+
     THashSet<ui32> affectedKinds;
     for (const auto& kind : ev->Get()->Record.GetAffectedKinds()) {
         affectedKinds.insert(kind);
@@ -1358,7 +1403,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
-                if (affectedKinds.contains(kind)) {
+                if (affectedKinds.contains(kind) || affectedOpaqueKinds.contains(kind)) {
                     hasAffectedKinds = true;
                     break;
                 }
@@ -1383,11 +1428,14 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             PopulateWithOpaqueConfigs(*subscription->UpdateInProcess, FilterKinds(kinds));
+            subscription->UpdateInProcess->PathNormalizer = PathNormalizer;
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
             if (YamlConfigEnabled) {
                 UpdateYamlVersion(subscription);
+            } else {
+                subscription->UpdateInProcessYamlVersion = std::nullopt;
             }
 
             for (auto &[subscriber, updates] : subscription->Subscribers) {
@@ -1404,12 +1452,47 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
     }
 
+    if (isYamlChanged) {
+        UpdateYamlConfigVersionMetrics();
+    }
+
     if (CurrentStateFunc() == &TThis::StateInit) {
         YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
     }
     YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: exit");
+}
+
+// Publish versions from the current documents independently of subscriber acknowledgements.
+// Keep unavailable versions at zero and isolate metadata errors from config delivery.
+void TConfigsDispatcher::UpdateYamlConfigVersionMetrics()
+{
+    // Read each source independently so one unreadable version does not hide the other.
+    ui64 mainVersion = 0;
+    ui64 databaseVersion = 0;
+    if (YamlConfigEnabled) {
+        try {
+            mainVersion = NYamlConfig::GetMainMetadata(MainYamlConfig).Version.value_or(0);
+        } catch (const yexception& ex) {
+            YDB_LOG_WARN("Failed to read main YAML config version",
+                {"error", ex.what()},
+            );
+        }
+        if (DatabaseYamlConfig) {
+            try {
+                databaseVersion = NYamlConfig::GetDatabaseMetadata(*DatabaseYamlConfig).Version.value_or(0);
+            } catch (const yexception& ex) {
+                YDB_LOG_WARN("Failed to read database YAML config version",
+                    {"error", ex.what()},
+                );
+            }
+        }
+    }
+
+    // Assign the completed values without a transient zero during successful updates.
+    *MainYamlConfigVersion = mainVersion;
+    *DatabaseYamlConfigVersion = databaseVersion;
 }
 
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const
@@ -1526,10 +1609,12 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
                 ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);
             }
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
+            subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, kinds) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             PopulateWithOpaqueConfigs(*subscription->UpdateInProcess, FilterKinds(kinds));
+            subscription->UpdateInProcess->PathNormalizer = PathNormalizer;
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }

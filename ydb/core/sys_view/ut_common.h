@@ -27,6 +27,7 @@ struct TTestEnvSettings {
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
     bool ShowCreateTable = false;
+    bool EnablePgCompatibility = false;
     bool AlterObjectEnabled = false;
     bool EnableSparsedColumns = false;
     bool EnableOlapCompression = false;
@@ -38,6 +39,7 @@ struct TTestEnvSettings {
     bool EnableLocalBloomNgramFilterIndex = false;
     bool EnableLocalIndexAsSchemeObject = false;
     bool EnableLocalMinMaxIndex = false;
+    bool EnableDetailedMetrics = false;
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

@@ -1,23 +1,24 @@
 #include "v2_event_serializer.h"
 
+#include "event_destructor.h"
+
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
 #include <cstring>
+#include <vector>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
 
 namespace NActors {
 
     TRcBuf AllocateXdcSectionBuffer(size_t size, size_t headroom, size_t tailroom, size_t alignment) {
-        // The geometry reaches here straight off the wire on the receive path, so the invariants the
-        // arithmetic below relies on are enforced unconditionally: a non-power-of-two alignment makes
-        // `extra - shift` wrap, and an oversized sum makes the allocation wrap.
-        Y_ABORT_UNLESS((alignment & (alignment - 1)) == 0, "alignment %zu is not a power of two", alignment);
-        Y_ABORT_UNLESS(size <= EventMaxByteSize && headroom <= EventMaxByteSize && tailroom <= EventMaxByteSize
-            && alignment <= EventMaxByteSize, "section geometry out of range: size# %zu headroom# %zu"
-            " tailroom# %zu alignment# %zu", size, headroom, tailroom, alignment);
+        // Callers on the declare path must reject out-of-range geometry first. This is the last-resort
+        // check so a missed bound cannot wrap the allocation.
+        Y_ABORT_UNLESS(IsXdcSectionGeometryInRange(size, headroom, tailroom, alignment),
+            "section geometry out of range: size# %zu headroom# %zu tailroom# %zu alignment# %zu",
+            size, headroom, tailroom, alignment);
         if (alignment > 1) {
             // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base
             // buffer, but headroom may still shift the visible data away from the requested alignment, so
@@ -71,11 +72,25 @@ namespace NActors {
 
     size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             size_t maxBytesToProduce) {
-        return ProduceOutputStream(buffer, out, nullptr, nullptr, maxBytesToProduce);
+        return ProduceOutputStream(buffer, out, nullptr, nullptr, maxBytesToProduce, 0, maxBytesToProduce);
     }
 
     size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut, size_t maxBytesToProduce) {
+        return ProduceOutputStream(buffer, out, xdcBuffer, xdcOut, maxBytesToProduce,
+            xdcOut ? maxBytesToProduce : 0, maxBytesToProduce);
+    }
+
+    size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut, size_t maxMainBytes, size_t maxXdcBytes) {
+        const size_t maxTotalBytes = maxMainBytes > Max<size_t>() - maxXdcBytes
+            ? Max<size_t>() : maxMainBytes + maxXdcBytes;
+        return ProduceOutputStream(buffer, out, xdcBuffer, xdcOut, maxMainBytes, maxXdcBytes, maxTotalBytes);
+    }
+
+    size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut, size_t maxMainBytes, size_t maxXdcBytes,
+            size_t maxTotalBytes) {
         size_t totalBytesProduced = 0;
         ui64 mainBufferProduced = 0;
         ui64 xdcBufferProduced = 0;
@@ -112,7 +127,7 @@ namespace NActors {
             xdc = &xdcState;
         }
 
-        while (!PerChannelQuotaHeap.empty()) {
+        while (!PerChannelQuotaHeap.empty() && maxTotalBytes) {
             if (PerChannelQuotaHeap.front().Quota < MinUsefulQuota) {
                 for (auto& item : PerChannelQuotaHeap) {
                     Y_ABORT_UNLESS(item.Channel != TChunkHeader::SystemChannel);
@@ -124,13 +139,13 @@ namespace NActors {
             TPerChannelQueue& queue = GetQueue(q.Channel);
             const bool isSystemChannel = q.Channel == TChunkHeader::SystemChannel;
             const size_t numBytesProduced = ProduceOutputStreamForQueue(q.Channel, queue,
-                Min<size_t>(maxBytesToProduce, q.Quota), main, xdc);
+                Min<size_t>(maxTotalBytes, q.Quota), maxMainBytes, maxXdcBytes, main, xdc);
             if (!numBytesProduced) {
                 break;
             }
             Y_ABORT_UNLESS(numBytesProduced <= q.Quota);
             totalBytesProduced += numBytesProduced;
-            maxBytesToProduce -= numBytesProduced;
+            maxTotalBytes -= numBytesProduced;
 
             std::ranges::pop_heap(PerChannelQuotaHeap, std::less<ui16>{}, &TPerChannelQuota::Quota);
             if (!queue.Events.Peek() && queue.SystemRequests.empty()) {
@@ -144,10 +159,9 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(mainProducedOnEntry + xdcProducedOnEntry + totalBytesProduced
             == CumulativeProducedMain + CumulativeProducedXdc);
 
-        buffer.TrimFront(main.Buffer.size() - main.Buffer.size() % 64);
-        const size_t scratchBytesUsed = bufferSizeOnEntry - buffer.size();
-
         if (mainBufferProduced) {
+            buffer.TrimFront(main.Buffer.size() - main.Buffer.size() % 64);
+            const size_t scratchBytesUsed = bufferSizeOnEntry - buffer.size();
             RefcountItems.push_back({
                 .MainEndOffset = mainBufferProduced,
                 .XdcEndOffset = 0,
@@ -156,39 +170,32 @@ namespace NActors {
                 .EventReceivedTimestamp = 0,
             });
             NumBytesInScratchBuffers += scratchBytesUsed;
-        } else {
-            Y_DEBUG_ABORT_UNLESS(scratchBytesUsed == 0);
         }
 
-        if (xdc && xdcBuffer) {
+        if (xdc && xdcBuffer && xdcBufferProduced) {
             xdcBuffer->TrimFront(xdcState.Buffer.size() - xdcState.Buffer.size() % 64);
             const size_t xdcScratchUsed = xdcBufferSizeOnEntry - xdcBuffer->size();
-            if (xdcBufferProduced) {
-                RefcountItems.push_back({
-                    .MainEndOffset = 0,
-                    .XdcEndOffset = xdcBufferProduced,
-                    .Scratch = *xdcBuffer,
-                    .ScratchBytesUsed = xdcScratchUsed,
-                    .EventReceivedTimestamp = 0,
-                });
-                NumBytesInScratchBuffers += xdcScratchUsed;
-            } else {
-                Y_DEBUG_ABORT_UNLESS(xdcScratchUsed == 0);
-            }
+            RefcountItems.push_back({
+                .MainEndOffset = 0,
+                .XdcEndOffset = xdcBufferProduced,
+                .Scratch = *xdcBuffer,
+                .ScratchBytesUsed = xdcScratchUsed,
+                .EventReceivedTimestamp = 0,
+            });
+            NumBytesInScratchBuffers += xdcScratchUsed;
         }
 
         return totalBytesProduced;
     }
 
-    void TEventSerializer::CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes,
-            std::vector<ui64> *eventToWireTime,
-            std::vector<std::unique_ptr<IEventBase>> *events,
-            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+    size_t TEventSerializer::CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes,
+            std::vector<ui64> *eventToWireTime, IEventDestructor* eventDestructor) {
         CumulativeCommittedMain += numMainBytes;
         CumulativeCommittedXdc += numXdcBytes;
         Y_ABORT_UNLESS(CumulativeCommittedMain <= CumulativeProducedMain);
         Y_ABORT_UNLESS(CumulativeCommittedXdc <= CumulativeProducedXdc);
 
+        size_t bytes = 0;
         const ui64 timestamp = GetCycleCountFast();
         while (!RefcountItems.empty()
                 && RefcountItems.front().MainEndOffset <= CumulativeCommittedMain
@@ -198,14 +205,18 @@ namespace NActors {
                 eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
             }
             NumBytesInScratchBuffers -= front.ScratchBytesUsed;
-            if (events && front.Event) {
-                events->push_back(std::move(front.Event));
+            if (front.Event) {
+                bytes += front.Event->CalculateSerializedSizeCached();
             }
-            if (buffers && front.Buffer) {
-                buffers->push_back(std::move(front.Buffer));
+            if (front.Buffer) {
+                bytes += front.Buffer->GetSize();
+            }
+            if (eventDestructor && (front.Event || front.Buffer)) {
+                eventDestructor->DestroyEvent(std::move(front.Event), std::move(front.Buffer));
             }
             RefcountItems.pop_front();
         }
+        return bytes;
     }
 
     void TEventSerializer::IssueMainBytes(ui64 mainEndOffset) {
@@ -264,13 +275,20 @@ namespace NActors {
     }
 
     size_t TEventSerializer::ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
-            TStreamState& main, TStreamState *xdc) {
+            size_t& maxMainBytes, size_t& maxXdcBytes, TStreamState& main, TStreamState *xdc) {
         size_t numBytesProduced = 0;
 
         main.EventEnd = &queue.EventMainEnd;
         if (xdc) {
             xdc->EventEnd = &queue.EventXdcEnd;
         }
+
+        auto streamBudget = [&](TStreamState& st) -> size_t& {
+            return &st == &main ? maxMainBytes : maxXdcBytes;
+        };
+        auto remainingAfter = [](size_t budget, size_t cost) -> size_t {
+            return budget > cost ? budget - cost : 0;
+        };
 
         auto produceOutputSpan = [&](TStreamState& st, TContiguousSpan span, bool addToChecksum) {
             if (Y_UNLIKELY(addToChecksum)) {
@@ -289,7 +307,9 @@ namespace NActors {
             }
 
             Y_ABORT_UNLESS(span.size() <= maxBytesToProduce);
+            Y_ABORT_UNLESS(span.size() <= streamBudget(st));
             maxBytesToProduce -= span.size();
+            streamBudget(st) -= span.size();
             numBytesProduced += span.size();
             *st.CumulativeProduced += span.size();
             *st.EventEnd = *st.CumulativeProduced;
@@ -312,6 +332,7 @@ namespace NActors {
 
         auto takeInBuffer = [&](size_t numBytes) -> void* {
             Y_ABORT_UNLESS(numBytes <= maxBytesToProduce);
+            Y_ABORT_UNLESS(numBytes <= maxMainBytes);
             Y_ABORT_UNLESS(numBytes <= main.Buffer.size());
             TMutableContiguousSpan res(main.Buffer.data(), numBytes);
             main.Buffer = main.Buffer.SubSpan(numBytes, Max<size_t>());
@@ -321,7 +342,9 @@ namespace NActors {
 
         while (Y_UNLIKELY(!queue.SystemRequests.empty())) {
             auto& request = queue.SystemRequests.front();
-            if (maxBytesToProduce < sizeof(TChunkHeader) + request.size() || main.Buffer.size() < sizeof(TChunkHeader)) {
+            if (maxMainBytes < sizeof(TChunkHeader) + request.size()
+                    || maxBytesToProduce < sizeof(TChunkHeader) + request.size()
+                    || main.Buffer.size() < sizeof(TChunkHeader)) {
                 break;
             }
             *static_cast<TChunkHeader*>(takeInBuffer(sizeof(TChunkHeader))) = {
@@ -338,7 +361,8 @@ namespace NActors {
             queue.SystemRequests.pop_front();
         }
 
-        while (Min(main.Buffer.size(), maxBytesToProduce) >= MinUsefulQuota && queue.Events.Peek()) {
+        while (queue.Events.Peek()
+                && Min(main.Buffer.size(), maxMainBytes, maxBytesToProduce) >= MinUsefulQuota) {
             IEventHandle& ev = *queue.Events.Peek();
 
             TChunkHeader *header = nullptr;
@@ -427,6 +451,10 @@ namespace NActors {
                     queue.SectionBytesRemain = 0;
                     queue.XdcDeclareIndex = 0;
                     if (queue.UseXdcForEvent) {
+                        if (!IsXdcDeclareWithinLimit(*queue.EvSerInfo, queue.SerializedBytesPending, EventMaxByteSize)) {
+                            ResetEventState(queue);
+                            throw TExEventTooLarge();
+                        }
                         queue.SerializeStage = ESerializeStage::kXdcDeclare;
                     }
                     break;
@@ -434,12 +462,14 @@ namespace NActors {
                 case ESerializeStage::kXdcDeclare: {
                     const auto& sections = queue.EvSerInfo->Sections;
                     while (queue.XdcDeclareIndex < sections.size()) {
-                        if (maxBytesToProduce < sizeof(TChunkHeader) + sizeof(TXdcSection)
+                        if (maxMainBytes < sizeof(TChunkHeader) + sizeof(TXdcSection)
+                                || maxBytesToProduce < sizeof(TChunkHeader) + sizeof(TXdcSection)
                                 || main.Buffer.size() < sizeof(TChunkHeader) + sizeof(TXdcSection)) {
                             break;
                         }
                         const size_t remain = (sections.size() - queue.XdcDeclareIndex) * sizeof(TXdcSection);
-                        size_t n = Min(remain, maxBytesToProduce - sizeof(TChunkHeader),
+                        size_t n = Min(remain, remainingAfter(maxMainBytes, sizeof(TChunkHeader)),
+                            remainingAfter(maxBytesToProduce, sizeof(TChunkHeader)),
                             main.Buffer.size() - sizeof(TChunkHeader), size_t(Max<ui16>()));
                         n = n / sizeof(TXdcSection) * sizeof(TXdcSection);
                         if (!n) {
@@ -486,8 +516,16 @@ namespace NActors {
                         break;
                     }
                     while (queue.Iter.Valid() && queue.SectionBytesRemain) {
+                        const bool toXdc = !queue.CurrentIsInline;
+                        const size_t headerCost = header ? 0 : sizeof(TChunkHeader);
+                        if (maxMainBytes < headerCost || maxBytesToProduce < headerCost) {
+                            break;
+                        }
+                        const size_t payloadBudget = toXdc
+                            ? Min(maxXdcBytes, remainingAfter(maxBytesToProduce, headerCost))
+                            : Min(remainingAfter(maxMainBytes, headerCost), remainingAfter(maxBytesToProduce, headerCost));
                         const size_t numBytes = Min(
-                            static_cast<size_t>(maxBytesToProduce - (header ? 0 : sizeof(TChunkHeader))),
+                            payloadBudget,
                             queue.Iter.ContiguousSize(),
                             queue.SectionBytesRemain,
                             static_cast<size_t>(Max<ui16>() - (header ? header->Length : 0))
@@ -522,10 +560,20 @@ namespace NActors {
                     }
 
                     TMutableContiguousSpan span = queue.CurrentIsInline
-                        ? main.Buffer.SubSpan(sizeof(TChunkHeader), Max<size_t>())
-                        : xdc->Buffer;
+                        ? (main.Buffer.size() > sizeof(TChunkHeader)
+                            ? main.Buffer.SubSpan(sizeof(TChunkHeader), Max<size_t>())
+                            : TMutableContiguousSpan())
+                        : (xdc ? xdc->Buffer : TMutableContiguousSpan());
 
-                    if (const size_t payloadLimit = Min(maxBytesToProduce - sizeof(TChunkHeader), queue.SectionBytesRemain)) {
+                    const bool toXdc = !queue.CurrentIsInline;
+                    const size_t headerCost = sizeof(TChunkHeader);
+                    size_t payloadBudget = 0;
+                    if (maxMainBytes >= headerCost && maxBytesToProduce >= headerCost) {
+                        payloadBudget = toXdc
+                            ? Min(maxXdcBytes, remainingAfter(maxBytesToProduce, headerCost))
+                            : Min(remainingAfter(maxMainBytes, headerCost), remainingAfter(maxBytesToProduce, headerCost));
+                    }
+                    if (const size_t payloadLimit = Min(payloadBudget, queue.SectionBytesRemain, span.size())) {
                         auto chunks = queue.CoroutineChunkSerializer.FeedBuf(&span, payloadLimit);
                         if (queue.CurrentIsInline) {
                             Y_DEBUG_ABORT_UNLESS(main.Buffer.data() + main.Buffer.size() == span.data() + span.size());
@@ -569,11 +617,14 @@ namespace NActors {
                     }
 
                     const size_t numDataBytes = Min(
-                        main.Buffer.size() - sizeof(TChunkHeader),
-                        maxBytesToProduce - sizeof(TChunkHeader),
+                        remainingAfter(main.Buffer.size(), sizeof(TChunkHeader)),
+                        remainingAfter(maxMainBytes, sizeof(TChunkHeader)),
+                        remainingAfter(maxBytesToProduce, sizeof(TChunkHeader)),
                         sizeof(TEventHeader) - queue.EventHeaderOffset
                     );
-                    Y_DEBUG_ABORT_UNLESS(numDataBytes);
+                    if (!numDataBytes) {
+                        break;
+                    }
                     *static_cast<TChunkHeader*>(takeInBuffer(sizeof(TChunkHeader))) = {
                         .Length = static_cast<ui16>(numDataBytes),
                         .TypeChannel = static_cast<ui16>(channel | TChunkHeader::kEventHeader),
@@ -638,13 +689,24 @@ namespace NActors {
         Y_ABORT_UNLESS(!ev.EventHeaderOffset);
 
         const size_t count = length / sizeof(TXdcSection);
-        for (size_t i = 0; i < count; ++i) {
-            TXdcSection rec;
-            memcpy(&rec, data + i * sizeof(TXdcSection), sizeof(rec));
+        // Copy out of the wire buffer first: records are packed and may be unaligned.
+        // Validate the whole chunk before allocating so a later record cannot leave a
+        // half-applied event, and tests can cover the limit without allocating EventMaxByteSize.
+        std::vector<TXdcSection> recs(count);
+        if (count) {
+            memcpy(recs.data(), data, length);
+        }
+        size_t declared = ev.DeclaredSize;
+        for (const auto& rec : recs) {
+            if (!CanAddXdcSection(rec.Size, rec.Headroom, rec.Tailroom, rec.Alignment,
+                    declared, EventMaxByteSize)) {
+                throw TExEventFormatError();
+            }
+            declared += rec.Size;
+        }
+        for (const auto& rec : recs) {
             const bool isInline = rec.Flags & TXdcSection::FlagInline;
             ev.DeclaredSize += rec.Size;
-            Y_ABORT_UNLESS(ev.DeclaredSize <= EventMaxByteSize,
-                "declared section sizes total %zu, over the maximum event size", ev.DeclaredSize);
             ev.EvSerInfo.Sections.push_back(TEventSectionInfo{
                 rec.Headroom, rec.Size, rec.Tailroom, rec.Alignment, isInline, false});
             if (!isInline && rec.Size) {

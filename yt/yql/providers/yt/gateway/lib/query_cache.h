@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yql/providers/yt/gateway/lib/op_tracker.h>
+#include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <yql/essentials/utils/threading/async_queue.h>
@@ -82,7 +83,7 @@ public:
         const TMaybe<TString>& singleOutputHash,
         const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs, const TString& userName,
         const TString& tmpFolder, const NYT::TNode& mergeSpec,
-        const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
+        const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout,
         const std::pair<TString, TString>& logCtx);
 
     // returns true if cache was used
@@ -92,7 +93,7 @@ public:
     void SetOperationId(NYT::TOperationId operationId);
 
     void SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
-        const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter);
+        const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter, bool enableProgressDataStatistics);
 
 private:
     static TString GetCachePath(const TString& userName, const TString& tmpFolder);
@@ -105,6 +106,7 @@ private:
     TMaybe<ui32> PublicId_;
     TOperationProgressWriter ProgressWriter_;
     TStatWriter StatWriter_;
+    bool EnableProgressDataStatistics_ = DEFAULT_ENABLE_PROGRESS_DATA_STATISTICS;
 
     const TTransactionCache::TEntry::TPtr Entry;
     const TVector<TString> DstTables;
@@ -113,7 +115,6 @@ private:
     TVector<TString> CachedPaths;
     const ui64 ChunkLimit;
     const bool UseExpirationTimeout;
-    const bool UseMultiSet;
     const std::pair<TString, TString> LogCtx;
     TMap<TString, ui32> SortedCachedPaths;
     const NYT::TNode MergeSpec;

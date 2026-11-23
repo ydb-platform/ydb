@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 
@@ -45,9 +46,12 @@ struct TKeyCompactionCounters {
     ui64 WriteCyclesCount = 0;
 };
 
-class TPartitionCompaction {
+class TPartitionCompaction : public TLogPrefix {
+    static TStructuredMessage MakeLogPrefix(const TPartition* actor, const char* compactionStep);
+
 public:
     TPartitionCompaction(ui64 lastCompactedOffset, ui64 partReqestCookie, TPartition* partitionActor);
+    TStructuredMessage LogPrefix() const override;
 
     enum class EStep {
         PENDING,
@@ -56,7 +60,7 @@ public:
     };
 
 
-    struct TReadState {
+    struct TReadState : TLogPrefix {
         friend TPartitionCompaction;
         constexpr static const ui64 MAX_DATA_KEYS = 5000;
 
@@ -73,6 +77,7 @@ public:
 
     public:
         TReadState(ui64 firstOffset, TPartition* partitionActor);
+        TStructuredMessage LogPrefix() const override;
 
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
         void ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev);
@@ -82,7 +87,7 @@ public:
         void UpdateConfig(ui64 maxBurst, ui64 readQuota); //ToDo;
     };
 
-    struct TCompactState {
+    struct TCompactState : TLogPrefix {
         friend TPartitionCompaction;
         using TKeysIter = std::deque<TDataKey>::iterator;
 
@@ -124,6 +129,7 @@ public:
         TKeyCompactionCounters* Counters;
 
         TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor, TKeyCompactionCounters* counters);
+        TStructuredMessage LogPrefix() const override;
 
         bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);

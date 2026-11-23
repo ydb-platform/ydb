@@ -26,7 +26,6 @@ struct TSysTables {
 
         struct TDefaultExpressionColumnInfo {
             TString ExprText;
-            TString Context;
             TVector<TString> Dependencies;
             bool Stored = false;
         };

@@ -91,8 +91,8 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     return true;
 }
 
-void TKqpQueryState::FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views) {
-    for (const auto& view : views) {
+void TKqpQueryState::FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos) {
+    for (const auto& view : infos) {
         const auto& pathId = view.GetTableId();
         const auto schemaVersion = view.GetSchemaVersion();
         auto [it, isInserted] = TableVersions.emplace(TTableId(pathId.GetOwnerId(), pathId.GetTableId()), schemaVersion);
@@ -108,7 +108,11 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     for (const auto& tx : PreparedQuery->GetPhysicalQuery().GetTransactions()) {
         FillTables(tx);
     }
-    FillViews(PreparedQuery->GetPhysicalQuery().GetViewInfos());
+    // The physical plan only names the tables it actually reads, so a query served entirely
+    // from an index leaves the table it logically reads out of the set. Take the logical
+    // tables too, otherwise a change to such a table never invalidates the compiled query.
+    FiilTablesAndViews(PreparedQuery->GetPhysicalQuery().GetTableInfos());
+    FiilTablesAndViews(PreparedQuery->GetPhysicalQuery().GetViewInfos());
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;
@@ -164,20 +168,15 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
     }
-    for (const auto& param : PreparedQuery->GetParameters()) {
-        const auto& ast = CompileResult->GetAst();
-        if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->Contains(param.GetName())) {
-            ResultParams.push_back(param);
+    if (KqpSessionSpan) {
+        auto description = DescribeQueryTrace(GetType(),
+            PreparedQuery->GetPhysicalQuery(), CommandTagName);
+        if (description.Operation) {
+            TraceDescription = std::move(description);
         }
     }
-    return true;
-}
-
-bool TKqpQueryState::SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev) {
-    Statements = std::move(ev.AstStatements);
-    CurrentStatementId = 0;
-    Orbit = std::move(ev.Orbit);
-    CommandTagName = Statements.back().CommandTagName;
+    const auto& params = PreparedQuery->GetParameters();
+    ResultParams.assign(params.begin(), params.end());
     return true;
 }
 
@@ -214,6 +213,7 @@ bool TKqpQueryState::TryGetFromCache(
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
@@ -251,6 +251,7 @@ bool TKqpQueryState::TryGetFromCache(
     auto compileResult = cache.Find(
         uid,
         query,
+        GetDisablePgCompatibility(),
         TempTablesState,
         keepInCache,
         UserToken->GetUserSID(),
@@ -277,13 +278,13 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
     settings.UsePessimisticLocks = (GetIsolationLevel(txCtx) == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
     bool keepInCache = false;
-    bool perStatementResult = HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
     switch (GetAction()) {
@@ -318,16 +319,10 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
     bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
 
-    TMaybe<TQueryAst> statementAst;
-    if (!Statements.empty()) {
-        YQL_ENSURE(CurrentStatementId < Statements.size());
-        statementAst = Statements[CurrentStatementId];
-    }
-
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
-        isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
-        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks);
+        isQueryActionPrepare, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
+        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
+        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks, GetDisablePgCompatibility());
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
@@ -339,6 +334,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
@@ -372,7 +368,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
-        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks);
+        false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics(), GetDisablePgCompatibility());
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -388,6 +384,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
@@ -409,26 +406,26 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
-    const bool perStatementResult = (!HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
-
-    TMaybe<TQueryAst> statementAst;
-    if (!Statements.empty()) {
-        YQL_ENSURE(CurrentStatementId < Statements.size());
-        statementAst = Statements[CurrentStatementId];
-    }
-
     if (GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
         // Splitted Expr can be used only for CTAS statement.
         // CTAS consists of 3 exprs: CREATE TABLE, REPLACE, ALTER TABLE RENAME.
         // For explain we need only REPLACE, because explain doesn't support for DDL statements.
-        AFL_ENSURE(SplittedExprs.size() == 3);
+        YDB_LOG_ENSURE(SplittedExprs.size() == 3);
         NextSplittedExpr = 1;
     }
 
+    // Split parts can share child nodes. Give the compiler its own graph and
+    // context so it cannot race with this session destroying the other parts.
+    auto splitExpr = std::move(SplittedExprs.at(NextSplittedExpr));
+    auto splitCtx = std::make_shared<NYql::TExprContext>();
+
+    NYql::TNodeOnNodeOwnedMap deepClones;
+    auto compileExpr = splitCtx->DeepCopy(*splitExpr, *SplittedCtx, deepClones, /* internStrings */ true, /* copyTypes */ false);
+
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
-        false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
-        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx, std::move(SplittedExprs.at(NextSplittedExpr)), false, settings.UsePessimisticLocks);
+        false, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
+        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
+        false, std::move(splitCtx), std::move(compileExpr), false, settings.UsePessimisticLocks, GetDisablePgCompatibility());
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {

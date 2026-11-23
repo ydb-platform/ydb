@@ -17,9 +17,10 @@ FederatedQuery::BindingSetting::BindingCase GetBindingType(const TString& typeSt
     return static_cast<FederatedQuery::BindingSetting::BindingCase>(type);
 }
 
-}
+}   // namespace
 
-TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfigProto)
+TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config,
+    const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfigProto)
     : Proto(FillDefaultParameters(config))
     , ComputeConfigProto(computeConfigProto)
     , IdsPrefix(common.GetIdsPrefix())
@@ -44,8 +45,7 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         AvailableStreamingConnections.insert(GetConnectionType(availableConnection));
     }
 
-    GeneratorPathsLimit =
-        s3Config.HasGeneratorPathsLimit() ? s3Config.GetGeneratorPathsLimit() : 50'000;
+    GeneratorPathsLimit = s3Config.HasGeneratorPathsLimit() ? s3Config.GetGeneratorPathsLimit() : 50'000;
 
     for (const auto& mapping : Proto.GetRetryPolicyMapping()) {
         auto& retryPolicy = mapping.GetPolicy();
@@ -53,19 +53,15 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         auto retryLimit = retryPolicy.GetRetryLimit();
         auto retryPeriod = GetDuration(retryPolicy.GetRetryPeriod(), TDuration::Hours(1));
         auto backoffPeriod = GetDuration(retryPolicy.GetBackoffPeriod(), TDuration::Zero());
-        for (const auto statusCode: mapping.GetStatusCode()) {
+        for (const auto statusCode : mapping.GetStatusCode()) {
             RetryPolicies.emplace(statusCode, NKikimr::NKqp::TRetryPolicyItem(retryCount, retryLimit, retryPeriod, backoffPeriod));
         }
     }
 
     if (Proto.HasTaskLeaseRetryPolicy()) {
-        TaskLeaseRetryPolicy = NKikimr::NKqp::TRetryPolicyItem(
-            Proto.GetTaskLeaseRetryPolicy().GetRetryCount(),
-            0,
-            GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1)),
-            TDuration::Zero()
-        );
+        TaskLeaseRetryPolicy = NKikimr::NKqp::TRetryPolicyItem(Proto.GetTaskLeaseRetryPolicy().GetRetryCount(), 0,
+            GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1)), TDuration::Zero());
     }
 }
 
-} // NFq
+}   // namespace NFq

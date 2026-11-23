@@ -1,15 +1,15 @@
 #pragma once
 
+#include "compressor.h"
+
 #include <util/system/defaults.h>
 #include <util/generic/yexception.h>
-#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
 #include <utility>
 
+#include <memory>
 #include <queue>
-
-#include "compressor.h"
 
 namespace NCompProto {
     template <size_t CacheSize, typename TEntry>
@@ -60,13 +60,13 @@ namespace NCompProto {
 
     struct TAccum {
         struct TTable {
-            TAutoPtr<TTable> Tables[16];
+            std::unique_ptr<TTable> Tables[16];
             i64 Counts[16];
             TTable(const TTable& other) {
                 for (size_t i = 0; i < 16; ++i) {
                     Counts[i] = other.Counts[i];
-                    if (other.Tables[i].Get()) {
-                        Tables[i].Reset(new TTable(*other.Tables[i].Get()));
+                    if (other.Tables[i].get()) {
+                        Tables[i].reset(new TTable(*other.Tables[i].get()));
                     }
                 }
             }
@@ -77,7 +77,7 @@ namespace NCompProto {
 
             i64 GetCellCount(size_t i) {
                 i64 count = Counts[i];
-                if (Tables[i].Get()) {
+                if (Tables[i].get()) {
                     for (size_t j = 0; j < 16; ++j) {
                         count += Tables[i]->GetCellCount(j);
                     }
@@ -97,9 +97,9 @@ namespace NCompProto {
                 if (depth == termDepth) {
                     for (size_t i = 0; i < 16; ++i) {
                         i64 iCount = GetCellCount(i);
-                        if (Tables[i].Get()) {
+                        if (Tables[i].get()) {
                             Counts[i] = iCount;
-                            Tables[i].Reset(nullptr);
+                            Tables[i].reset(nullptr);
                         }
 
                         if (iCount > cnt || (termDepth == 0 && iCount > 0)) {
@@ -114,7 +114,7 @@ namespace NCompProto {
                     }
                 }
                 for (size_t i = 0; i < 16; ++i) {
-                    if (Tables[i].Get()) {
+                    if (Tables[i].get()) {
                         Tables[i]->GenerateFreqs(codes, depth + 4, termDepth, code + (i << (28 - depth)), cnt);
                     }
                 }
@@ -167,10 +167,10 @@ namespace NCompProto {
             TTable* root = &Root;
             for (size_t i = 0; i < 15; ++i) {
                 ui32 index2 = (value >> (28 - i * 4)) & 0xf;
-                if (!root->Tables[index2].Get()) {
+                if (!root->Tables[index2].get()) {
                     if (TableCount < 1024) {
                         ++TableCount;
-                        root->Tables[index2].Reset(new TTable);
+                        root->Tables[index2].reset(new TTable);
                     } else {
                         Cache.CacheKey[index2] = value;
                         Cache.CacheVal[index2] = &root->Counts[index2];
@@ -178,7 +178,7 @@ namespace NCompProto {
                         return;
                     }
                 }
-                root = root->Tables[index2].Get();
+                root = root->Tables[index2].get();
             }
 
             Cache.CacheKey[index] = value;

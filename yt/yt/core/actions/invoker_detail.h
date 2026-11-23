@@ -36,7 +36,7 @@ class TInvokerWrapper
 public:
     void Invoke(TMutableRange<TClosure> callbacks) override;
 
-    NThreading::TThreadId GetThreadId() const override;
+    TThreadId GetThreadId() const override;
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
     DECLARE_SIGNAL_OVERRIDE(IInvoker::TWaitTimeObserver::TSignature, WaitTimeObserved);

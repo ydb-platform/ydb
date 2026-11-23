@@ -740,6 +740,9 @@ public:
 
     static TCell ExtractCell(std::string_view data, size_t pos);
 
+    // Parses cells pointing directly into `data`, which must outlive the cells
+    static bool TryParseCells(std::string_view data, TVector<TCell>& cells);
+
     const TString& GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {
@@ -973,7 +976,8 @@ public:
     }
 
 private:
-    static constexpr size_t InitialPoolSize = 1ULL << 16;
+    // Reserve 256 bytes for the private pool chunk header so the first allocation rounds to 64 KiB.
+    static constexpr size_t InitialPoolSize = (1ULL << 16) - 256;
 
     std::unique_ptr<TMemoryPool> Pool;
     TVector<TConstArrayRef<TCell>> CellVectors;

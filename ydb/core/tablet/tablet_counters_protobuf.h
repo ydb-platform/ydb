@@ -31,6 +31,8 @@ protected:
     TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges;
     TVector<bool> Integral;
 
+    TVector<bool> LeaderOnly;
+
     /**
      * The list of source counters for each enum value.
      *
@@ -47,6 +49,7 @@ public:
         Names.reserve(Size);
         Ranges.reserve(Size);
         Integral.reserve(Size);
+        LeaderOnly.reserve(Size);
 
         if constexpr (ParseSourceCounters) {
             SourceCounters.reserve(Size);
@@ -61,6 +64,7 @@ public:
                 NamesStrings.emplace_back(); // empty name
                 Ranges.emplace_back(); // empty ranges
                 Integral.push_back(false);
+                LeaderOnly.push_back(false);
 
                 Y_ABORT_UNLESS(
                     !ParseSourceCounters,
@@ -84,6 +88,7 @@ public:
             NamesStrings.emplace_back(nameString);
             Ranges.push_back(ParseRanges(co));
             Integral.push_back(co.GetIntegral());
+            LeaderOnly.push_back(co.GetLeaderOnly());
 
             if constexpr (ParseSourceCounters) {
                 // Parse SourceCounters but make sure there is always at least one
@@ -139,6 +144,15 @@ public:
     }
 
     /**
+     * @return Whether the counter at idx is meaningful only on leaders
+     *         (TCounterOptions::LeaderOnly, step 09.5)
+     */
+    virtual bool GetLeaderOnly(size_t idx) const {
+        Y_ABORT_UNLESS(idx < Size);
+        return LeaderOnly[idx];
+    }
+
+    /**
      * Return the source counters for the given enum index.
      *
      * @warning This function can be called only if ParseSourceCounters is set.
@@ -190,6 +204,7 @@ private:
     using TBase::Names;
     using TBase::Ranges;
     using TBase::Integral;
+    using TBase::LeaderOnly;
     using TBase::AppGlobalRanges;
     TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges;
 public:
@@ -208,7 +223,9 @@ public:
             TTxType txType = tt->number();
             Y_ABORT_UNLESS((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)",
                    tt->full_name().c_str(), txType, tt->index());
-            Y_ABORT_UNLESS(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
+            // A deprecated tx type may omit TxTypeOpts: its counters stay unnamed and are not exported
+            const bool hasTxTypeOpts = tt->options().HasExtension(TxTypeOpts);
+            Y_ABORT_UNLESS(hasTxTypeOpts || tt->options().deprecated(), "tx type '%s' number (%d) is missing TxTypeOpts and is not deprecated",
                     tt->full_name().c_str(), txType);
             const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts);
             TString txPrefix = tto.GetName() + "/";
@@ -216,10 +233,11 @@ public:
                 const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
                 Y_ABORT_UNLESS(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
                        v->full_name().c_str(), v->number(), v->index());
-                if (!v->options().HasExtension(CounterOpts)) {
+                if (!hasTxTypeOpts || !v->options().HasExtension(CounterOpts)) {
                     NamesStrings.emplace_back(); // empty name
                     Ranges.emplace_back(); // empty ranges
                     Integral.push_back(false);
+                    LeaderOnly.push_back(false);
                     continue;
                 }
                 const TCounterOptions& co = v->options().GetExtension(CounterOpts);
@@ -229,6 +247,7 @@ public:
                 NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
                 Ranges.push_back(TBase::ParseRanges(co));
                 Integral.push_back(co.GetIntegral());
+                LeaderOnly.push_back(co.GetLeaderOnly());
             }
         }
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase

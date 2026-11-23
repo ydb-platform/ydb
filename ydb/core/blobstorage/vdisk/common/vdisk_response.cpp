@@ -198,11 +198,11 @@ void UpdateMonResponseStatus(NKikimrProto::EReplyStatus status, const TCommonHan
     }
 
     if (std::holds_alternative<NKikimrBlobStorage::EPutHandleClass>(handleClass.HandleClass)) {
-        monGroup->GetCounter(status, std::get<NKikimrBlobStorage::EPutHandleClass>(handleClass.HandleClass)).Inc();
+        monGroup->Count(status, std::get<NKikimrBlobStorage::EPutHandleClass>(handleClass.HandleClass));
     } else if (std::holds_alternative<NKikimrBlobStorage::EGetHandleClass>(handleClass.HandleClass)) {
-        monGroup->GetCounter(status, std::get<NKikimrBlobStorage::EGetHandleClass>(handleClass.HandleClass)).Inc();
+        monGroup->Count(status, std::get<NKikimrBlobStorage::EGetHandleClass>(handleClass.HandleClass));
     } else {
-        monGroup->GetCounter(status).Inc();
+        monGroup->Count(status);
     }
 }
 

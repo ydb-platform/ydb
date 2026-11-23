@@ -1,5 +1,9 @@
 PY3_LIBRARY()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(__init__.py)
+
     PY_SRCS (
         workload_manager.py
 
@@ -11,6 +15,7 @@ PY3_LIBRARY()
         contrib/python/matplotlib
         contrib/python/pytest-timeout
         ydb/public/sdk/python/enable_v3_new_behavior
+        ydb/tests/library
         ydb/tests/olap/lib
         ydb/tests/olap/load/lib
         library/python/testing/yatest_common

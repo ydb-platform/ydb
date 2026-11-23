@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     service.cpp
@@ -19,8 +19,6 @@ PEERDIR(
     ydb/services/metadata/secret
     ydb/services/metadata
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -51,6 +51,7 @@ struct TConnectionConfig
     std::optional<std::string> ClusterName;
     TTableMountCacheConfigPtr TableMountCache;
     NChaosClient::TReplicationCardCacheConfigPtr ReplicationCardCache;
+    NChaosClient::TChaosLeaseCacheConfigPtr ChaosLeaseCache;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 
@@ -209,6 +210,12 @@ struct TDynamicJournalWriterConfig
     : public virtual NYTree::TYsonStruct
 {
     std::optional<bool> ValidateErasureCoding;
+    std::optional<int> MaxBatchRowCount;
+    std::optional<i64> MaxBatchDataSize;
+    std::optional<int> MaxFlushRowCount;
+    std::optional<i64> MaxFlushDataSize;
+    std::optional<bool> PreferLocalHost;
+    std::optional<bool> TryDisjointPreallocatedSessionNodes;
 
     REGISTER_YSON_STRUCT(TDynamicJournalWriterConfig);
 
@@ -238,6 +245,11 @@ struct TJournalWriterConfig
     bool DontClose;
     bool DontSeal;
     bool DontPreallocate;
+
+    //! If true, tries to preallocate the chunk session on nodes disjoint
+    //! from the current chunk session's nodes, so that a single bad node cannot
+    //! invalidate both sessions at once.
+    bool TryDisjointPreallocatedSessionNodes;
 
     std::optional<TDuration> OpenDelay;
 

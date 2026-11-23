@@ -1,6 +1,6 @@
 #include "../mkql_multihopping.h"
 #include "mkql_computation_node_ut.h"
-#include "mkql_program_builder_test_utils.h"
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -156,10 +156,11 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),       // delay
         NTest::ConvertValueToLiteralNode(pgmBuilder, dataWatermarks),
         NTest::ConvertValueToLiteralNode(pgmBuilder, withWatermarks),
-        {}, // SizeLimit
-        {}, // TimeLimit
-        {}, // EarlyPolicy
-        {}  // LatePolicy
+        {},   // SizeLimit
+        {},   // TimeLimit
+        {},   // EarlyPolicy
+        {},   // LatePolicy
+        false // CheckMinWindowStart
     );
 
     auto graph = setup.BuildGraph(pgmReturn, {streamNode});

@@ -19,7 +19,7 @@ namespace NKikimr::NOlap {
 ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
     : TablePath(tablePath)
 {
-    AFL_VERIFY(!!TablePath);
+    YDB_LOG_VERIFY(!!TablePath);
 }
 
 std::vector<TNameTypeInfo> ITableMetadataAccessor::GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const {
@@ -38,12 +38,12 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
     : TBase(tableName)
     , PathId(pathId)
 {
-    AFL_VERIFY(pathId.IsValid());
+    YDB_LOG_VERIFY(pathId.IsValid());
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
     const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
-    AFL_VERIFY(readDescription.PKRangesFilter);
+    YDB_LOG_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
         context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());
@@ -56,21 +56,27 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
         case NReader::EReaderClass::Simple: {
             std::deque<NReader::NSimple::TSourceConstructor> sources;
             for (auto&& i : portions) {
-                sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+                sources.emplace_back(
+                    NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsConflicting(), readDescription.GetRequestSorting()));
             }
             return std::make_unique<NReader::NSimple::TPortionsSources>(
-                std::move(sources), readDescription.GetSorting(), needDuplicateFiltering);
+                std::move(sources), readDescription.GetSourcesSorting(), needDuplicateFiltering);
         }
         case NReader::EReaderClass::Trivial: {
             std::deque<NReader::NTrivial::TSourceConstructor> sources;
             for (auto&& i : portions) {
-                sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+                sources.emplace_back(
+                    NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsConflicting(), readDescription.GetRequestSorting()));
             }
             return std::make_unique<NReader::NTrivial::TPortionsSources>(
-                std::move(sources), readDescription.GetSorting(), readDescription.GetFakeSort(), needDuplicateFiltering);
+                std::move(sources), readDescription.GetSourcesSorting(), needDuplicateFiltering);
         }
     }
     return nullptr;
+}
+
+bool TUserTableAccessor::ArePortionsLoaded(const IColumnEngine& engine, const TPKRangesFilter& ranges) const {
+    return engine.ArePortionsLoaded(PathId.InternalPathId, ranges);
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,

@@ -199,7 +199,7 @@ private:
                     if (AiModel->GetId().empty()) {
                         auto persisted = ConfigurationManager->PromoteInMemoryProfile(AiModel);
                         if (!persisted) {
-                            std::exit(EXIT_FAILURE);
+                            throw yexception() << "Failed to save AI profile into file after changing";
                         }
                         AiModel = std::move(persisted);
                     }
@@ -215,7 +215,7 @@ private:
                     AiModel = ConfigurationManager->ActivateAiProfile();
                     if (!AiModel) {
                         // Can not continue in AI mode
-                        std::exit(EXIT_FAILURE);
+                        throw yexception() << "Failed to activate AI profile after remove";
                     }
 
                     ChangeAiProfile(AiModel);
@@ -245,7 +245,7 @@ private:
 
         if (!profile->GetApiToken()) {
             // Can not continue in AI mode
-            std::exit(EXIT_FAILURE);
+            throw yexception() << "Failed to get API token";
         }
 
         const auto& newProfileName = profile->GetName();

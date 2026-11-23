@@ -87,6 +87,7 @@ namespace NBalancing {
         TBatchManager BatchManager;
 
         TInstant StartTime;
+        bool RequestedReplToken = false;
         bool AquiredReplToken = false;
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -107,15 +108,17 @@ namespace NBalancing {
             auto msg = ev->Get();
             auto vdiskId = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
             auto status = msg->Record.GetStatus();
-            bool replicated = msg->Record.GetReplicated();
+            const bool replicated = msg->Record.GetReplicated();
+            const bool durabilityReplicated = !msg->Record.HasDurabilityReplicated() || msg->Record.GetDurabilityReplicated();
             bool isReadOnly = msg->Record.GetIsReadOnly();
 
-            if (status != NKikimrProto::EReplyStatus::OK || !replicated || isReadOnly) {
+            if (status != NKikimrProto::EReplyStatus::OK || !replicated || !durabilityReplicated || isReadOnly) {
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "VDisk is not ready. Stop balancing"),
                     {"marker", "BSVB02"},
                     {"VDiskId", vdiskId},
                     {"status", NKikimrProto::EReplyStatus_Name(status)},
                     {"replicated", replicated},
+                    {"durabilityReplicated", durabilityReplicated},
                     {"readOnly", isReadOnly});
                 Stop(TDuration::Seconds(10));
                 return;
@@ -183,6 +186,7 @@ namespace NBalancing {
                     }
                 }
 
+                // TODO(kruall): Preserve canonical copies required by mirror-3-dc realm states when balancing.
                 // collect parts to delete
                 if (Ctx->Cfg.EnableDelete && TryDeleteParts.Size() < Ctx->Cfg.MaxToDeletePerEpoch) {
                     if (auto partsToDelete = merger.Ingress.LocalParts(top.GType) & delMask; !partsToDelete.Empty()) {
@@ -245,10 +249,12 @@ namespace NBalancing {
                 {"selfId", SelfId()},
                 {"PDiskId", Ctx->VDiskCfg->BaseInfo.PDiskId});
             Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
+            RequestedReplToken = true;
         }
 
         void ScheduleJobQuant() {
             Y_VERIFY_DEBUG_S(!AquiredReplToken, Ctx->VCtx->VDiskLogPrefix);
+            RequestedReplToken = false;
             AquiredReplToken = true;
             Ctx->MonGroup.ReplTokenAquired()++;
 
@@ -373,8 +379,17 @@ namespace NBalancing {
                 {"tryDeleteParts", TryDeleteParts.Data.size()},
                 {"secondsBeforeNextLaunch", timeoutBeforeNextLaunch.Seconds()});
 
-            if (AquiredReplToken) {
+            TlsActivationContext->Schedule(timeoutBeforeNextLaunch, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
+            PassAway();
+        }
+
+        void PassAway() override {
+            // the broker does not track dead actors: a token granted or requested here and not released blocks
+            // replication and balancing of every VDisk on this PDisk
+            if (RequestedReplToken || AquiredReplToken) {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                RequestedReplToken = false;
+                AquiredReplToken = false;
             }
 
             Send(BatchManager.SenderId, new NActors::TEvents::TEvPoison);
@@ -382,8 +397,7 @@ namespace NBalancing {
             for (const auto& kv : *QueueActorMapPtr) {
                 Send(kv.second, new TEvents::TEvPoison);
             }
-            TlsActivationContext->Schedule(timeoutBeforeNextLaunch, new IEventHandle(Ctx->SkeletonId, SelfId(), new TEvStartBalancing()));
-            PassAway();
+            TActorBootstrapped::PassAway();
         }
 
         STRICT_STFUNC(StateFunc,

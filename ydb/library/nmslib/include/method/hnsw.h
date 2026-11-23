@@ -29,6 +29,8 @@
 #include "params.h"
 
 #include <condition_variable>
+#include <atomic>
+#include <stdexcept>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -458,6 +460,12 @@ namespace similarity {
         virtual void LoadIndex(const string &location) override;
 
         Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data);
+        void SetBuildCancellation(const std::atomic<bool>* cancelled) { BuildCancellation_ = cancelled; }
+        void CheckBuildCancellation() const {
+            if (BuildCancellation_ && BuildCancellation_->load(std::memory_order_relaxed)) {
+                throw std::runtime_error("HNSW build cancelled");
+            }
+        }
         void CreateIndex(const AnyParams &IndexParams) override;
 
         ~Hnsw();
@@ -465,15 +473,17 @@ namespace similarity {
         const std::string StrDesc() const override;
         void Search(RangeQuery<dist_t> *query, IdType) const override;
         void Search(KNNQuery<dist_t> *query, IdType) const override;
+        // Query-local search breadth for concurrent readers of the same graph.
+        void SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const;
 
         void SetQueryTimeParams(const AnyParams &) override;
 
     private:
         typedef std::vector<HnswNode *> ElementList;
-        void baseSearchAlgorithmOld(KNNQuery<dist_t> *query);
-        void baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query);
-        void SearchOld(KNNQuery<dist_t> *query, bool normalize);
-        void SearchV1Merge(KNNQuery<dist_t> *query, bool normalize);
+        void baseSearchAlgorithmOld(KNNQuery<dist_t> *query, size_t ef);
+        void baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query, size_t ef);
+        void SearchOld(KNNQuery<dist_t> *query, bool normalize, size_t ef);
+        void SearchV1Merge(KNNQuery<dist_t> *query, bool normalize, size_t ef);
 
         int getRandomLevel(double revSize)
         {
@@ -546,6 +556,7 @@ namespace similarity {
 
         mutable mutex ElListGuard_;
         mutable mutex MaxLevelGuard_;
+        const std::atomic<bool>* BuildCancellation_ = nullptr;
         ElementList ElList_;
 
         int vectorlength_ = 0;

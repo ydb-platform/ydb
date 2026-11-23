@@ -1,6 +1,7 @@
 RECURSE(
     blobsan
     cfg
+    datashard_read_load
     disk_obliterator
     pdisktool
     mnc

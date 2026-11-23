@@ -1,14 +1,11 @@
 UNITTEST_FOR(ydb/core/kqp/compile_service)
 
-FORK_SUBTESTS()
-SPLIT_FACTOR(50)
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 SRCS(

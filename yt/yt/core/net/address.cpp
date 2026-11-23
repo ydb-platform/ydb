@@ -21,7 +21,7 @@
 
 #include <yt/yt/core/rpc/dispatcher.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -1085,7 +1085,7 @@ private:
 
     std::atomic<bool> HasCachedLocalAddresses_ = false;
     std::vector<TNetworkAddress> CachedLocalAddresses_;
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, CacheLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, CacheLock_);
 
     const TActionQueuePtr Queue_ = New<TActionQueue>("AddressResolver");
 
@@ -1279,36 +1279,6 @@ void TMtnAddress::SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t MaxYPClusterNameSize = 32;
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
-
-std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
-{
-    auto start = hostName.find_first_of('.');
-    if (start == TStringBuf::npos) {
-        return {};
-    }
-    auto end = hostName.find_first_of('.', start + 1);
-    if (end == TStringBuf::npos) {
-        return {};
-    }
-    auto cluster = hostName.substr(start + 1, end - start - 1);
-    if (cluster.empty()) {
-        return {};
-    }
-    if (cluster.length() > MaxYPClusterNameSize) {
-        return {};
-    }
-    return {cluster};
-}
 
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {

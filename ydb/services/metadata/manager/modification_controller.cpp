@@ -1,5 +1,3 @@
 #include "modification_controller.h"
 
-namespace NKikimr::NMetadata::NModifications {
-
-}
+namespace NKikimr::NMetadata::NModifications {}

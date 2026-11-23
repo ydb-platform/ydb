@@ -62,6 +62,8 @@ public:
 
     static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
 
+    TPtr Clone() const;
+
     bool IsStandalone() const {
         return !!StandaloneSharding;
     }

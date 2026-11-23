@@ -9,19 +9,23 @@
 
 namespace NKikimr::NUdfStore {
 
-class TWasmLibraryCompileActor : public NActors::TActorBootstrapped<TWasmLibraryCompileActor> {
+class TWasmLibraryCompileActor: public NActors::TActorBootstrapped<TWasmLibraryCompileActor> {
 private:
     using TBase = NActors::TActorBootstrapped<TWasmLibraryCompileActor>;
 
     enum class EStep {
         ReadLibrarySource,
+        EnsurePending,
         MarkCompiling,
         ReadLibraryChunks,
         DeleteArtifactChunks,
         WriteArtifactChunk,
         UpsertArtifact,
-        UpdateMetaReady,
-        UpdateMetaFailed,
+        VerifyStillCurrent,
+        DeleteStaleArtifactChunks,
+        DeleteStaleArtifacts,
+        ConfirmStillCurrent,
+        MarkArtifactFailed,
     };
 
     NActors::TActorId ReplyTo_;
@@ -40,9 +44,11 @@ private:
     TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
     size_t NextChunkWriteIndex_ = 0;
     TString ErrorMessage_;
+    TVector<TString> SourceChunks_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
     void ReplyError(const TString& message);
+    void ReplyDeferred(const TString& reason);
     void ReplySuccess();
     void HandleQueryResult(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev);
     void HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev);
@@ -53,13 +59,8 @@ private:
     void FailAndPersist(const TString& message);
 
 public:
-    TWasmLibraryCompileActor(
-        const NActors::TActorId& replyTo,
-        const TString& libraryName,
-        const TString& cpuSpec,
-        const TString& modulesTablePath,
-        const TString& moduleChunksTablePath,
-        const TString& artifactTablePath,
+    TWasmLibraryCompileActor(const NActors::TActorId& replyTo, const TString& libraryName, const TString& cpuSpec,
+        const TString& modulesTablePath, const TString& moduleChunksTablePath, const TString& artifactTablePath,
         const TString& artifactChunksTablePath)
         : ReplyTo_(replyTo)
         , LibraryName_(libraryName)
@@ -68,7 +69,8 @@ public:
         , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -82,4 +84,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

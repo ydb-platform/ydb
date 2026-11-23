@@ -148,12 +148,7 @@ get_pivot_smart(type_t *arr, const arrsize_t left, const arrsize_t right)
         return pivot_results<type_t>(
                 comparator::choosePivotMedianIsLargest(median));
     }
-    else {
-        // Should be unreachable
-        return pivot_results<type_t>(median);
-    }
 
-    // Should be unreachable
     return pivot_results<type_t>(median);
 }
 

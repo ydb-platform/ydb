@@ -49,7 +49,7 @@ auth_failed_ex_code = "516"  # ClickHouse AUTHENTICATION_FAILED
 retryable_http_statuses = (429, 503, 504)
 
 # A removed comment leaves a space behind, so the gap before the 0 is not always a single space
-columns_only_re = re.compile(r"LIMIT\s+0\s*$", re.IGNORECASE)
+columns_only_re = re.compile(r"LIMIT\s+0\s*(?:;\s*)*$", re.IGNORECASE)
 
 if "br" in available_compression:
     import brotli

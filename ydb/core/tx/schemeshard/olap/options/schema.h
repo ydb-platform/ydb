@@ -10,8 +10,10 @@ class TOlapSchema;
 class TOlapOptionsDescription {
 private:
     YDB_READONLY(bool, SchemeNeedActualization, false);
+    YDB_READONLY_DEF(std::optional<bool>, TieringNeedActualization);
     YDB_READONLY_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_READONLY_DEF(std::optional<bool>, DeduplicationEnabled);
+    YDB_READONLY_DEF(std::optional<bool>, CacheBlobsAfterWrite);
     YDB_READONLY_DEF(NOlap::TInsertOptionsPolicy, InsertOptions);
     YDB_READONLY_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_READONLY_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);

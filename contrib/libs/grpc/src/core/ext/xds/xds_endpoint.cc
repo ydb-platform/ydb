@@ -81,7 +81,7 @@ TString XdsEndpointResource::Priority::Locality::ToString() const {
   for (const EndpointAddresses& endpoint : endpoints) {
     endpoint_strings.emplace_back(endpoint.ToString());
   }
-  return y_absl::StrCat("{name=", name->AsHumanReadableString(),
+  return y_absl::StrCat("{name=", name->human_readable_string().as_string_view(),
                       ", lb_weight=", lb_weight, ", endpoints=[",
                       y_absl::StrJoin(endpoint_strings, ", "), "]}");
 }
@@ -142,8 +142,9 @@ TString XdsEndpointResource::ToString() const {
     priority_strings.emplace_back(
         y_absl::StrCat("priority ", i, ": ", priority.ToString()));
   }
-  return y_absl::StrCat("priorities=[", y_absl::StrJoin(priority_strings, ", "),
-                      "], drop_config=", drop_config->ToString());
+  return y_absl::StrCat(
+      "priorities=[", y_absl::StrJoin(priority_strings, ", "), "], drop_config=",
+      drop_config == nullptr ? "<null>" : drop_config->ToString());
 }
 
 //
@@ -161,7 +162,8 @@ void MaybeLogClusterLoadAssignment(
         envoy_config_endpoint_v3_ClusterLoadAssignment_getmsgdef(
             context.symtab);
     char buf[10240];
-    upb_TextEncode(cla, msg_type, nullptr, 0, buf, sizeof(buf));
+    upb_TextEncode(reinterpret_cast<const upb_Message*>(cla), msg_type, nullptr,
+                   0, buf, sizeof(buf));
     gpr_log(GPR_DEBUG, "[xds_client %p] ClusterLoadAssignment: %s",
             context.client, buf);
   }
@@ -418,7 +420,8 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
         if (it != locality_map.end()) {
           errors.AddError(y_absl::StrCat(
               "duplicate locality ",
-              parsed_locality->locality.name->AsHumanReadableString(),
+              parsed_locality->locality.name->human_readable_string()
+                  .as_string_view(),
               " found in priority ", parsed_locality->priority));
         } else {
           locality_map.emplace(parsed_locality->locality.name.get(),
@@ -447,7 +450,6 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
     }
   }
   // policy
-  eds_resource->drop_config = MakeRefCounted<XdsEndpointResource::DropConfig>();
   const auto* policy = envoy_config_endpoint_v3_ClusterLoadAssignment_policy(
       cluster_load_assignment);
   if (policy != nullptr) {
@@ -456,6 +458,10 @@ y_absl::StatusOr<std::shared_ptr<const XdsEndpointResource>> EdsResourceParse(
     const auto* const* drop_overload =
         envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_drop_overloads(
             policy, &drop_size);
+    if (drop_size > 0) {
+      eds_resource->drop_config =
+          MakeRefCounted<XdsEndpointResource::DropConfig>();
+    }
     for (size_t i = 0; i < drop_size; ++i) {
       ValidationErrors::ScopedField field(
           &errors, y_absl::StrCat(".drop_overloads[", i, "]"));

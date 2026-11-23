@@ -15,8 +15,10 @@ private:
     NModifications::IOperationsManager::TInternalModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     void StartChecker();
+
 protected:
     void Handle(NProvider::TEvRefreshSubscriberData::TPtr& ev);
+
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
@@ -25,11 +27,11 @@ public:
                 break;
         }
     }
+
     void Bootstrap();
 
-    TSecretPreparationActor(std::vector<TSecret>&& objects,
-        NModifications::IAlterPreparationController<TSecret>::TPtr controller,
+    TSecretPreparationActor(std::vector<TSecret>&& objects, NModifications::IAlterPreparationController<TSecret>::TPtr controller,
         const NModifications::IOperationsManager::TInternalModificationContext& context);
 };
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

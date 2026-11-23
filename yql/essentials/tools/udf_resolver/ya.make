@@ -1,36 +1,9 @@
-PROGRAM()
+YQL_PREBUILT_PROGRAM(udf_resolver)
 
-SRCS(
-    udf_resolver.cpp
-    discover.cpp
-)
-
-IF (OS_LINUX)
-    # prevent external python extensions to lookup protobuf symbols (and maybe
-    # other common stuff) in main binary
-    EXPORTS_SCRIPT(${ARCADIA_ROOT}/yql/essentials/tools/exports.symlist)
-    PEERDIR(
-        contrib/libs/libc_compat
-    )
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
 ENDIF()
 
-PEERDIR(
-    library/cpp/getopt
-    library/cpp/protobuf/util
-    library/cpp/yson
-    library/cpp/yson/node
-    yql/essentials/minikql
-    yql/essentials/public/udf/service/terminate_policy
-    yql/essentials/core
-    yql/essentials/core/poly_args
-    yql/essentials/providers/common/proto
-    yql/essentials/providers/common/schema/mkql
-    yql/essentials/utils/backtrace
-    yql/essentials/utils/sys
-    yql/essentials/sql/pg_dummy
-    yql/essentials/public/langver
-)
-
-YQL_LAST_ABI_VERSION()
+INCLUDE(ya.make.inc)
 
 END()

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

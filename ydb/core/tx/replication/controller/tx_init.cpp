@@ -1,6 +1,9 @@
 #include "controller_impl.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "target_transfer.h"
+
+#include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -61,8 +64,17 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
+            if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
+                Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
+            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
+            Self->CommittedVersions[rid] = TRowVersion(
+                rowset.GetValueOrDefault<Schema::Replications::CommittedStep>(0),
+                rowset.GetValueOrDefault<Schema::Replications::CommittedTxId>(0));
+            if (rowset.GetValueOrDefault<Schema::Replications::DeferredAlter>(false)) {
+                Self->DeferredAlters.insert(rid);
+            }
 
             if (!database) {
                 Self->UnresolvedDatabaseReplications.emplace(replication->GetId(), ResolveDatabaseAttemptsLimit);
@@ -89,7 +101,10 @@ class TController::TTxInit: public TTxBase {
             const auto srcPath = rowset.GetValue<Schema::Targets::SrcPath>();
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
+            const auto srcIsImpl = rowset.GetValue<Schema::Targets::SrcIsImpl>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
+            const auto workerSetComplete =
+                rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
@@ -104,19 +119,47 @@ class TController::TTxInit: public TTxBase {
                 config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
                 break;
             case TReplication::ETargetKind::IndexTable:
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath, srcIsImpl);
                 break;
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
+                break;
+            case TReplication::ETargetKind::Topic:
+                config = std::make_shared<TTargetTopic::TTopicConfig>(srcPath, dstPath);
                 break;
             }
 
             auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
-            target->SetDstState(dstState);
+            // Resume legacy attachment through the current destination validation path.
+            target->SetDstState(dstState == TReplication::EDstState::Attaching
+                ? TReplication::EDstState::Alter
+                : dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
+            if (indexBuild) {
+                target->SetIndexBuild(true);
+                Y_ABORT_UNLESS(Self->IndexBuilds[std::make_pair(rid, tid)].ParseFromString(indexBuild));
+            }
+
+            if (workerSetComplete) {
+                Self->CompleteWorkerSets.insert({rid, tid});
+            }
+            const auto barrierPhase = rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierPhase>(0);
+            if (barrierPhase) {
+                auto& barrier = Self->SchemaBarriers[{rid, tid}];
+                barrier.Phase = static_cast<ESchemaBarrierPhase>(barrierPhase);
+                Y_ABORT_UNLESS(barrier.Schema.ParseFromString(
+                    rowset.GetValue<Schema::Targets::SchemaBarrierChange>()));
+                barrier.DstAlterTxId = rowset.GetValueOrDefault<Schema::Targets::DstAlterTxId>(0);
+                NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
+                Y_ABORT_UNLESS(flushTxIds.ParseFromString(
+                    rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierFlushTxIds>(TString())));
+                Y_ABORT_UNLESS(barrier.Phase != ESchemaBarrierPhase::FlushingTarget || flushTxIds.WriteTxIdsSize());
+                barrier.TargetFlushTxIds.assign(flushTxIds.GetWriteTxIds().begin(), flushTxIds.GetWriteTxIds().end());
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -150,6 +193,9 @@ class TController::TTxInit: public TTxBase {
             target->SetStreamName(name);
             target->SetStreamState(state);
             target->SetStreamConsumerName(consumerName);
+            if (rowset.HaveValue<Schema::SrcStreams::SchemaChanges>()) {
+                target->SetStreamSchemaChanges(rowset.GetValue<Schema::SrcStreams::SchemaChanges>());
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -183,6 +229,24 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadProcessedSourceOffsets(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ProcessedSourceOffsets>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
+            const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -201,15 +265,75 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            worker->SetHeartbeat(version);
-            Self->WorkersWithHeartbeat.insert(id);
-            Self->WorkersByHeartbeat[version].insert(id);
+            // Zero denotes a registered worker that has not reported a
+            // heartbeat yet and must not join a recovered heartbeat quorum.
+            if (version != TRowVersion::Min() && Self->IsHeartbeatParticipant(id)) {
+                worker->SetHeartbeat(version);
+                Self->WorkersWithHeartbeat.insert(id);
+                Self->WorkersByHeartbeat[version].insert(id);
+            }
 
             if (!rowset.Next()) {
                 return false;
             }
         }
 
+        return true;
+    }
+
+    bool LoadSchemaBarrierWorkers(NIceDb::TNiceDb& db) {
+        auto workers = db.Table<Schema::SchemaBarrierWorkers>().Select();
+        if (!workers.IsReady()) {
+            return false;
+        }
+        while (!workers.EndOfSet()) {
+            const auto key = std::make_pair(
+                workers.GetValue<Schema::SchemaBarrierWorkers::ReplicationId>(),
+                workers.GetValue<Schema::SchemaBarrierWorkers::TargetId>());
+            auto it = Self->SchemaBarriers.find(key);
+            Y_ABORT_UNLESS(it != Self->SchemaBarriers.end(), "Barrier member without barrier");
+            const auto id = TWorkerId(key.first, key.second,
+                workers.GetValue<Schema::SchemaBarrierWorkers::WorkerId>());
+            it->second.ExpectedWorkers.insert(id);
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Reported>()) {
+                it->second.ReportedWorkers.insert(id);
+                it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
+            }
+
+            if (workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::IndexMetadata>(false)) {
+                it->second.IndexMetadataWorkers.insert(id);
+            }
+
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
+                it->second.AppliedWorkers.insert(id);
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Completed>()) {
+                it->second.CompletedWorkers.insert(id);
+            }
+            if (!workers.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool LoadIndexBuildWorkers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::IndexBuildWorkers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            const auto id = TWorkerId(
+                rowset.GetValue<Schema::IndexBuildWorkers::ReplicationId>(),
+                rowset.GetValue<Schema::IndexBuildWorkers::TargetId>(),
+                rowset.GetValue<Schema::IndexBuildWorkers::WorkerId>());
+            Y_ABORT_UNLESS(Self->IndexBuildProgress[id].ParseFromString(
+                rowset.GetValue<Schema::IndexBuildWorkers::Progress>()));
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -220,7 +344,10 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
-            && LoadWorkers(db);
+            && LoadWorkers(db)
+            && LoadSchemaBarrierWorkers(db)
+            && LoadIndexBuildWorkers(db)
+            && LoadProcessedSourceOffsets(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

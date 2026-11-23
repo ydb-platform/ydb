@@ -14,7 +14,7 @@
 
 #include <yt/yt/core/misc/mpsc_queue.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 #include <atomic>
 
@@ -126,17 +126,17 @@ class TInvokerQueue
 {
 public:
     TInvokerQueue(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const NProfiling::TTagSet& counterTagSet,
         NProfiling::IRegistryPtr registry = nullptr);
 
     TInvokerQueue(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::vector<NProfiling::TTagSet>& counterTagSets,
         const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
         NProfiling::IRegistryPtr registry = nullptr);
 
-    void SetThreadId(NThreading::TThreadId threadId);
+    void SetThreadId(TThreadId threadId);
 
     void Invoke(TClosure callback) override;
     void Invoke(TMutableRange<TClosure> callbacks) override;
@@ -162,7 +162,7 @@ public:
         NProfiling::TTagId profilingTag = 0,
         NYTProf::TProfilerTagPtr profilerTag = nullptr);
 
-    NThreading::TThreadId GetThreadId() const override;
+    TThreadId GetThreadId() const override;
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
 
@@ -195,11 +195,11 @@ public:
     DECLARE_SIGNAL_OVERRIDE(TWaitTimeObserver::TSignature, WaitTimeObserved);
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
+    const TIntrusivePtr<TEventCount> CallbackEventCount_;
 
     TQueueImpl QueueImpl_;
 
-    NThreading::TThreadId ThreadId_ = NThreading::InvalidThreadId;
+    TThreadId ThreadId_ = InvalidThreadId;
     std::atomic<bool> Running_ = true;
     std::atomic<bool> Stopping_ = false;
     std::atomic<bool> Graceful_ = false;

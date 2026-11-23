@@ -198,6 +198,30 @@ TENANT_DATABASE = '/Root/Tenant'
 
 
 @pytest.fixture(scope='module')
+def serverless_storage_databases(ydb_cluster_with_extra_sids_controls):
+    cluster = ydb_cluster_with_extra_sids_controls
+    shared = '/Root/storage_stats_shared'
+    databases = ('/Root/storage_stats_own', '/Root/storage_stats_foreign')
+    cluster.create_hostel_database(shared, storage_pool_units_count={'hdd': 1}, token='root@builtin')
+    slots = cluster.register_and_start_slots(shared, count=1)
+    cluster.wait_tenant_up(shared, token='root@builtin')
+    base = f'https://{slots[0].host}:{slots[0].mon_port}'
+    for database in databases:
+        cluster.create_serverless_database(database, shared, token='root@builtin')
+        cluster.wait_tenant_up(database, token='root@builtin')
+        wait_for_viewer_ready(base, database=database)
+        run_viewer_query(base, 'CREATE TABLE data (id Uint64, value String, PRIMARY KEY (id));', database=database)
+        run_viewer_query(base, 'UPSERT INTO data (id, value) VALUES (1u, "test data");', database=database)
+    # The strict database user deliberately has no grants on shared or the other serverless database.
+    run_viewer_query(
+        base,
+        f"GRANT 'ydb.granular.describe_schema' ON `{databases[0]}` TO `database@builtin`;",
+        database=databases[0],
+    )
+    return {'base': base, 'shared': shared, 'own': databases[0], 'foreign': databases[1]}
+
+
+@pytest.fixture(scope='module')
 def tenant_database(ydb_cluster_with_extra_sids_controls):
     cluster = ydb_cluster_with_extra_sids_controls
     cluster.create_database(

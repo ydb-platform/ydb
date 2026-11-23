@@ -42,7 +42,7 @@ bool TCheckDataTxUnit::IsReadyToExecute(TOperation::TPtr) const
 }
 
 EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &,
+                                           TTransactionContext &txc,
                                            const TActorContext &ctx)
 {
     Y_ENSURE(op->IsDataTx() || op->IsReadTable());
@@ -83,13 +83,43 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+        if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute).Kick()) {
+            YDB_LOG_ERROR_CTX(ctx, err);
+        }
 
         return EExecutionStatus::Executed;
     }
 
     if (tx->IsMvccSnapshotRead()) {
         auto snapshot = tx->GetMvccSnapshot();
+        auto isSnapshotReadable = [&]() {
+            if (snapshot >= DataShard.GetSnapshotManager().GetLowWatermark()) {
+                return true;
+            }
+            if (op->IsReadTable()) {
+                const auto& table = dataTx->GetReadTableTransaction().GetTableId();
+                return DataShard.GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                    TTableId(table.GetOwnerId(), table.GetTableId()), snapshot);
+            }
+            // Do not admit an old snapshot until we know which tables it reads.
+            if (!dataTx->TxInfo().Loaded) {
+                return false;
+            }
+            bool hasUserTable = false;
+            for (const auto& key : dataTx->TxInfo().Keys) {
+                const auto& tableId = key.Key->TableId;
+                if (DataShard.IsUserTable(tableId)) {
+                    hasUserTable = true;
+                    if (!DataShard.GetSnapshotManager().IsSnapshotReadable(txc.DB, tableId, snapshot)) {
+                        return false;
+                    }
+                }
+            }
+            // Reject empty or system-table-only key sets: there is no user
+            // table identity against which retention could be checked. True
+            // means every referenced user table passed IsSnapshotReadable above.
+            return hasUserTable;
+        };
         if (DataShard.IsFollower()) {
             TString err = TStringBuilder()
                 << "Operation " << *op << " cannot read from snapshot " << snapshot
@@ -103,7 +133,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 {"errorMessage", err});
 
             return EExecutionStatus::Executed;
-        } else if (snapshot < DataShard.GetSnapshotManager().GetLowWatermark()) {
+        } else if (!isSnapshotReadable()) {
             TString err = TStringBuilder()
                 << "Operation " << *op << " reads from stale snapshot " << snapshot
                 << " at " << DataShard.TabletID();
@@ -215,8 +245,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             BuildResult(op)->AddError(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
-
+                            if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute).Kick()) {
+                                YDB_LOG_ERROR_CTX(ctx, err);
+                            }
                             return EExecutionStatus::Executed;
                         }
                     }

@@ -127,7 +127,6 @@ private:
         }
     }
 
-    PHOENIX_DECLARE_FRIEND();
     PHOENIX_DECLARE_POLYMORPHIC_TYPE(THistogram, 0x636d76d7);
 };
 

@@ -30,7 +30,7 @@ scheme = {
         num_datacenters=c.optional(int),
         nodes_per_rack=c.with_default(int, 1),
         shuffle_locations=c.with_default(int, 1),
-        _one_of__=[
+        __one_of__=[
             ["piles", "num_datacenters"],
         ],
     )),

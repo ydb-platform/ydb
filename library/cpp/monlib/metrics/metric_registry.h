@@ -5,9 +5,6 @@
 
 #include <util/system/rwlock.h>
 
-#include <library/cpp/threading/light_rw_lock/lightrwlock.h>
-
-
 namespace NMonitoring {
 
     struct TMetricOpts {
@@ -315,6 +312,7 @@ namespace NMonitoring {
         THashMap<ILabelsPtr, TMetricValue> Metrics_;
 
         TLabels CommonLabels_;
+        ui32 StartTimeSeconds_ = static_cast<ui32>(TInstant::Now().Seconds());
     };
 
     void WriteLabels(IMetricConsumer* consumer, const ILabels& labels);

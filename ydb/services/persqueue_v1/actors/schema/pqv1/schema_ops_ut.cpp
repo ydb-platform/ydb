@@ -149,6 +149,51 @@ NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
 
 Y_UNIT_TEST_SUITE(SchemaOps_PQv1) {
 
+Y_UNIT_TEST(ReplicateOffsets) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_replicate_offsets";
+    auto request = MakeCreateTopicRequest(path);
+    for (const auto* name : {"default", "local", "replicated"}) {
+        auto* rule = request.mutable_settings()->add_read_rules();
+        *rule = MakeStreamingReadRule(name);
+        if (rule->consumer_name() != "default") {
+            rule->set_replicate_offsets(rule->consumer_name() == "replicated");
+        }
+    }
+    auto created = DoActorRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime, request, CreateCreateTopicActor, path);
+    AssertStatus(created, Ydb::StatusIds::SUCCESS);
+
+    auto check = [&](bool localReplicateOffsets) {
+        const auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 3);
+        for (const auto& consumer : config.GetConsumers()) {
+            UNIT_ASSERT_VALUES_EQUAL(consumer.HasReplicateOffsets(), consumer.GetName() != "default");
+            UNIT_ASSERT_VALUES_EQUAL(consumer.GetReplicateOffsets(),
+                consumer.GetName() != "local" || localReplicateOffsets);
+        }
+    };
+    check(false);
+
+    auto alter = MakeAlterTopicRequest(path);
+    *alter.mutable_settings() = request.settings();
+    alter.mutable_settings()->set_retention_period_ms(TDuration::Hours(12).MilliSeconds());
+    for (auto& rule : *alter.mutable_settings()->mutable_read_rules()) {
+        rule.clear_replicate_offsets();
+    }
+    auto altered = DoActorRequest<Ydb::PersQueue::V1::AlterTopicRequest, Ydb::PersQueue::V1::AlterTopicResponse>(
+        runtime, alter, CreateAlterTopicActor, path);
+    AssertStatus(altered, Ydb::StatusIds::SUCCESS);
+    check(false);
+
+    alter.mutable_settings()->mutable_read_rules(1)->set_replicate_offsets(true);
+    altered = DoActorRequest<Ydb::PersQueue::V1::AlterTopicRequest, Ydb::PersQueue::V1::AlterTopicResponse>(
+        runtime, alter, CreateAlterTopicActor, path);
+    AssertStatus(altered, Ydb::StatusIds::SUCCESS);
+    check(true);
+}
+
 Y_UNIT_TEST(DropTopicSuccessAndMissing) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -429,6 +474,47 @@ Y_UNIT_TEST(ZeroPartitionsRejected) {
     auto result = DoActorRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
         runtime, request, CreateCreateTopicActor, request.path());
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Partitions count must be positive");
+}
+
+Y_UNIT_TEST(AutoPartitioningNegativeAndHugeCountsRejected) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto expectBad = [&](const TString& path, auto mutate, const TString& needle) {
+        auto request = MakeCreateTopicRequest(path);
+        mutate(*request.mutable_settings());
+        auto result = DoActorRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, needle);
+    };
+
+    expectBad("/Root/topic_neg_auto_min", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(-1);
+        autoP->set_max_active_partitions(2);
+    }, "positive");
+
+    expectBad("/Root/topic_neg_auto_max", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(1);
+        autoP->set_max_active_partitions(-1);
+    }, "non-negative");
+
+    expectBad("/Root/topic_huge_auto_min", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(static_cast<i64>(NPQ::MAX_TOPIC_PARTITIONS) + 1);
+        autoP->set_max_active_partitions(static_cast<i64>(NPQ::MAX_TOPIC_PARTITIONS) + 1);
+    }, "less than");
+
+    expectBad("/Root/topic_huge_auto_max", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(1);
+        autoP->set_max_active_partitions(static_cast<i64>(NPQ::MAX_TOPIC_PARTITIONS) + 1);
+    }, "less than");
 }
 
 Y_UNIT_TEST(UnknownFormatRejected) {

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 CXXFLAGS(-DMKQL_DISABLE_CODEGEN)
 
@@ -9,4 +9,3 @@ INCLUDE(../ya.make.inc)
 PEERDIR(yql/essentials/minikql/computation/no_llvm)
 
 END()
-

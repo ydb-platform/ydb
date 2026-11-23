@@ -10,24 +10,64 @@ class FunctionalTestBase:
 
     @classmethod
     def setup_cluster(cls, table_service_config: dict = {}, memory_controller_config: dict = {}) -> None:
+        cls.setup_cluster_ext(
+            table_service_config=table_service_config,
+            memory_controller_config=memory_controller_config,
+        )
+
+    @classmethod
+    def setup_cluster_ext(cls,
+                          table_service_config: dict = {},
+                          memory_controller_config: dict = {},
+                          extra_feature_flags: list[str] | None = None,
+                          query_service_config: dict | None = None,
+                          actor_system_config: dict | None = None,
+                          static_nodes: int | None = None,
+                          dynamic_nodes: int = 1,
+                          erasure=None,
+                          use_in_memory_pdisks: bool = True,
+                          binary_paths: list[str] | None = None,
+                          pdisk_store_path: str | None = None,
+                          pdisk_size: int | None = None,
+                          static_pdisk_config: dict | None = None,
+                          storage_pool_erasure=None) -> None:
+        flags = [
+            "enable_resource_pools",
+            "enable_resource_pools_counters",
+            "enable_table_pg_types",
+            "enable_forced_compactions",
+        ]
+        if extra_feature_flags:
+            flags.extend(extra_feature_flags)
+        disk_options = {} if pdisk_size is None else {"static_pdisk_size": pdisk_size}
         config_generator = KikimrConfigGenerator(
             domain_name='local',
-            extra_feature_flags=[
-                "enable_resource_pools",
-                "enable_resource_pools_counters",
-                "enable_table_pg_types",
-                "enable_forced_compactions"
-            ],
-            use_in_memory_pdisks=True,
+            extra_feature_flags=flags,
+            nodes=static_nodes,
+            erasure=erasure,
+            binary_paths=binary_paths,
+            pdisk_store_path=pdisk_store_path,
+            static_pdisk_config=static_pdisk_config,
+            use_in_memory_pdisks=use_in_memory_pdisks,
             column_shard_config={
                 "alter_object_enabled": True,
             },
+            overrided_actor_system_config=actor_system_config,
+            **disk_options,
         )
+        # Override every pool kind, including those not requested by the current database.
+        if storage_pool_erasure is not None:
+            for domain in config_generator.yaml_config["domains_config"]["domain"]:
+                for pool in domain.get("storage_pool_types", []):
+                    pool["pool_config"]["erasure_species"] = str(storage_pool_erasure)
         if table_service_config:
             config_generator.yaml_config["table_service_config"] = table_service_config
 
         if memory_controller_config:
             config_generator.yaml_config["memory_controller_config"] = memory_controller_config
+
+        if query_service_config:
+            config_generator.yaml_config["query_service_config"] = query_service_config
 
         cls.cluster = KiKiMR(configurator=config_generator)
         cls.cluster.start()
@@ -36,7 +76,7 @@ class FunctionalTestBase:
             ydb_endpoint=f'grpc://{node.host}:{node.grpc_port}',
             ydb_database=f'{cls.cluster.domain_name}/test_db',
             ydb_mon_port=node.mon_port,
-            dyn_nodes_count=1
+            dyn_nodes_count=dynamic_nodes
         )
         db = f'/{YdbCluster.ydb_database}'
         cls.cluster.create_database(

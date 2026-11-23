@@ -16,7 +16,7 @@ The result is a table with three fixed columns:
 Recommendations for use:
 
 * To get only a list of tables, make sure to add `...WHERE Type == "table"`. Then, by optionally adding more conditions, you can use the aggregate function [AGGREGATE_LIST](../../builtins/aggregation.md#aggregate-list) from the Path column to get only a list of paths and pass them to [EACH](concat.md#each).
-* Since the Path column is output in the same format as the result of the function [TablePath()](../../builtins/basic.md#tablepath), then they can be used to JOIN table attributes to its rows.
+* Since the Path column is output in the same format as the result of the function {% if feature_bulk_tables %}[TablePath()](../../builtins/basic.md#tablepath){% else %}TablePath(){% endif %}, then they can be used to JOIN table attributes to its rows.
 * We recommend that you work with the Attributes column using [Yson UDF](../../udf/list/yson.md).
 
 {% note warning %}

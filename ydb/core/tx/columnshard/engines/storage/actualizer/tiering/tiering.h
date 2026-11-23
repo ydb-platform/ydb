@@ -108,8 +108,8 @@ private:
 
         bool RemovePortion(const TFindActualizationInfo& info, const ui64 portionId) {
             auto itInstant = Portions.find(info.GetWaitInstant());
-            AFL_VERIFY(itInstant != Portions.end());
-            AFL_VERIFY(itInstant->second.erase(portionId));
+            YDB_LOG_VERIFY(itInstant != Portions.end());
+            YDB_LOG_VERIFY(itInstant->second.erase(portionId));
             if (itInstant->second.empty()) {
                 Portions.erase(itInstant);
             }
@@ -147,6 +147,7 @@ public:
         const TInternalPathId pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
 
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
+    void RefreshScheme(const TAddExternalContext& externalContext);
 
     TTieringActualizer(
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
@@ -155,7 +156,7 @@ public:
         , StoragesManager(storagesManager)
     {
         Y_UNUSED(PathId);
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 

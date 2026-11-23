@@ -20,6 +20,13 @@ class BinaryArtifact:
     path: Path
     sha256: str
     size: int
+    source_path: str = ""
+
+    def manifest_record(self):
+        record = {"name": self.path.name, "sha256": self.sha256, "size": self.size}
+        if self.source_path:
+            record["source_path"] = self.source_path
+        return record
 
 
 def atomic_write_bytes(path, data, mode=None):
@@ -90,3 +97,68 @@ def extract_executable(data, directory, name):
         sha256=hashlib.sha256(data).hexdigest(),
         size=len(data),
     )
+
+
+def copy_executable(source, directory, name):
+    source = Path(source)
+    destination = Path(directory) / name
+    try:
+        if not source.is_file() or not os.access(source, os.R_OK | os.X_OK):
+            raise BenchmarkError("external executable {!s} must be a readable executable file".format(source))
+        atomic_copy_file(source, destination, mode=0o755)
+        digest = hashlib.sha256()
+        size = 0
+        with destination.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+                size += len(chunk)
+        if not size:
+            raise BenchmarkError("external executable {!s} is empty".format(source))
+        return BinaryArtifact(destination, digest.hexdigest(), size, str(source))
+    except OSError as error:
+        raise BenchmarkError("cannot prepare external executable {!s}: {}".format(source, error)) from error
+
+
+def load_profile_binaries(configuration, resource_loader, directory, cache):
+    profile = configuration.parameters.get("local_ydb", {})
+    result = {}
+    for name in configuration.benchmark.resources:
+        source = profile.get("ydbd_binary") if name == "ydbd" else None
+        key = (name, source)
+        if key not in cache:
+            if source:
+                identity = hashlib.sha256(source.encode("utf-8")).hexdigest()
+                cache[key] = copy_executable(source, Path(directory) / "external" / identity, name)
+            else:
+                cache[key] = extract_executable(resource_loader(name), directory, name)
+        result[name] = cache[key]
+    return result
+
+
+def binary_catalog(directory, limit=1000):
+    root = Path(directory).resolve()
+    result = {"root": str(root), "ydbd": [], "truncated": False}
+    try:
+        with os.scandir(root / "ydbd") as entries:
+            for index, entry in enumerate(entries):
+                if index >= limit:
+                    result["truncated"] = True
+                    break
+                try:
+                    if (
+                        entry.name.startswith(".")
+                        or not entry.is_file()
+                        or not os.access(entry.path, os.R_OK | os.X_OK)
+                    ):
+                        continue
+                    size = entry.stat().st_size
+                    if size:
+                        result["ydbd"].append({"version": entry.name, "path": entry.path, "size": size})
+                except OSError:
+                    continue
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        result["error"] = "Cannot read binary catalog: {}".format(error)
+    result["ydbd"].sort(key=lambda item: item["version"])
+    return result

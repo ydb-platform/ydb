@@ -19,13 +19,12 @@
 #ifndef GRPC_GRPC_SECURITY_H
 #define GRPC_GRPC_SECURITY_H
 
-#include <grpc/support/port_platform.h>
-
 #include <stdbool.h>
 
 #include <grpc/grpc.h>
 #include <grpc/grpc_security_constants.h>
 #include <grpc/status.h>
+#include <grpc/support/port_platform.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -818,6 +817,24 @@ GRPCAPI grpc_tls_credentials_options* grpc_tls_credentials_options_create(void);
 /**
  * EXPERIMENTAL API - Subject to change
  *
+ * Sets the minimum TLS version that will be negotiated during the TLS
+ * handshake. If not set, the underlying SSL library will set it to TLS v1.2.
+ */
+GRPCAPI void grpc_tls_credentials_options_set_min_tls_version(
+    grpc_tls_credentials_options* options, grpc_tls_version min_tls_version);
+
+/**
+ * EXPERIMENTAL API - Subject to change
+ *
+ * Sets the maximum TLS version that will be negotiated during the TLS
+ * handshake. If not set, the underlying SSL library will set it to TLS v1.3.
+ */
+GRPCAPI void grpc_tls_credentials_options_set_max_tls_version(
+    grpc_tls_credentials_options* options, grpc_tls_version max_tls_version);
+
+/**
+ * EXPERIMENTAL API - Subject to change
+ *
  * Copies a grpc_tls_credentials_options.
  */
 GRPCAPI grpc_tls_credentials_options* grpc_tls_credentials_options_copy(
@@ -894,7 +911,10 @@ GRPCAPI void grpc_tls_credentials_options_set_identity_cert_name(
 GRPCAPI void grpc_tls_credentials_options_set_cert_request_type(
     grpc_tls_credentials_options* options,
     grpc_ssl_client_certificate_request_type type);
-/**
+
+/** Deprecated in favor of grpc_tls_credentials_options_set_crl_provider. The
+ * crl provider interface provides a significantly more flexible approach to
+ * using CRLs. See gRFC A69 for details.
  * EXPERIMENTAL API - Subject to change
  *
  * If set, gRPC will read all hashed x.509 CRL files in the directory and

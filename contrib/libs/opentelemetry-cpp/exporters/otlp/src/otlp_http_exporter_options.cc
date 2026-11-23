@@ -15,16 +15,8 @@ namespace otlp
 OtlpHttpExporterOptions::OtlpHttpExporterOptions()
     : url(GetOtlpDefaultHttpTracesEndpoint()),
       content_type(GetOtlpHttpProtocolFromString(GetOtlpDefaultHttpTracesProtocol())),
-      json_bytes_mapping(JsonBytesMappingKind::kHexId),
-      use_json_name(false),
-      console_debug(false),
       timeout(GetOtlpDefaultTracesTimeout()),
       http_headers(GetOtlpDefaultTracesHeaders()),
-#ifdef ENABLE_ASYNC_EXPORT
-      max_concurrent_requests{64},
-      max_requests_per_connection{8},
-#endif
-      ssl_insecure_skip_verify(false),
       ssl_ca_cert_path(GetOtlpDefaultTracesSslCertificatePath()),
       ssl_ca_cert_string(GetOtlpDefaultTracesSslCertificateString()),
       ssl_client_key_path(GetOtlpDefaultTracesSslClientKeyPath()),
@@ -42,18 +34,7 @@ OtlpHttpExporterOptions::OtlpHttpExporterOptions()
       retry_policy_backoff_multiplier(GetOtlpDefaultTracesRetryBackoffMultiplier())
 {}
 
-OtlpHttpExporterOptions::OtlpHttpExporterOptions(void *)
-    : url(),
-      content_type(HttpRequestContentType::kBinary),
-      json_bytes_mapping(JsonBytesMappingKind::kHexId),
-      use_json_name(false),
-      console_debug(false),
-#ifdef ENABLE_ASYNC_EXPORT
-      max_concurrent_requests{64},
-      max_requests_per_connection{8},
-#endif
-      ssl_insecure_skip_verify(false)
-{}
+OtlpHttpExporterOptions::OtlpHttpExporterOptions(void *) {}
 
 OtlpHttpExporterOptions::~OtlpHttpExporterOptions() {}
 

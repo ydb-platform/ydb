@@ -25,8 +25,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 //    later (host stays NotLocked until then).
 //  - ReadFromDDisk/WriteToDDisk/ReadFromPBuffer/WriteToPBuffer: configurable
 //    reply status (OK by default).
-//  - ListPBufferEntries: empty successful result (otherwise Run() would hang
-//    inside DoEstablishConnections -> DoListPBuffers).
+//  - ListPBufferEntries: ListPBufferEntriesResult if set, otherwise an empty
+//    successful result (Run() would hang inside DoEstablishConnections ->
+//    DoListPBuffers without a reply).
 //  - Everything else aborts until a test actually needs it.
 class TStorageTransportMock: public IStorageTransport
 {
@@ -55,10 +56,21 @@ public:
     // coordinator.
     std::optional<TReplyStatusE> WriteToManyPBufferCoordinatorOnlyStatus;
 
+    // Every barrier erase sent: (pbuffer node id, barrier lsn).
+    TVector<std::pair<ui32, ui64>> BarrierErases;
+    // Reply to ListPBufferEntries. When set, ListPBufferEntries returns this
+    // future as the listing response. When not set, it returns an empty
+    // successful listing.
+    NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntriesResult;
+
     // Captures the ordered persistentBufferIds of the last WriteToManyPBuffers
     // call (the first element is expected to be the coordinator's DDisk).
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId>
         LastWriteToManyPBuffersDiskIds;
+
+    // Checksums of the last WriteToDDisk, WriteToPBuffer or
+    // WriteToManyPBuffers call.
+    TBlockChecksums LastWriteChecksums;
 
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;
@@ -80,6 +92,16 @@ public:
     [[nodiscard]] static TEvConnectResult MakeConnectResult(
         ui64 ddiskInstanceGuid = 1,
         TReplyStatusE status = TReplyStatus::OK);
+
+    // Builds a successful listing with one block-sized record per key.
+    [[nodiscard]] static TEvListPersistentBufferResult MakeListing(
+        const TVector<TPBufferKey>& keys,
+        ui32 vChunkIndex = 0);
+
+    // Makes ListPBufferEntries reply with MakeListing(keys, vChunkIndex).
+    void SetPBufferListing(
+        const TVector<TPBufferKey>& keys,
+        ui32 vChunkIndex = 0);
 
     // Marks the connection for (type, ddiskId) as pending: the next Connect()
     // returns an unresolved future. The returned promise must be resolved by
@@ -128,6 +150,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     void WriteToManyPBuffers(
@@ -138,6 +161,7 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         std::shared_ptr<NWilson::TSpan> span,
         TWriteToManyPBuffersCallback callback) override;
 
@@ -146,6 +170,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(

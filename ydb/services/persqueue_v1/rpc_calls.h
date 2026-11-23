@@ -4,9 +4,10 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
-#include <ydb/services/persqueue_v1/actors/commit_offset_actor.h>
+#include <ydb/services/persqueue_v1/actors/reset_offset_actor.h>
 
 #include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 
 namespace NKikimr::NGRpcService {
@@ -26,8 +27,11 @@ IActor* TEvRpcCreateTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequest
 }
 
 template<>
-IActor* TEvCommitOffsetRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new NGRpcProxy::V1::TCommitOffsetActor(msg);
+IActor* TEvCommitOffsetRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg);
+
+template<>
+IActor* TEvResetOffsetRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::CreateResetOffsetActor(msg);
 }
 
 template<>

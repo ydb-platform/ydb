@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/abstract/initialization.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
 
@@ -14,6 +14,7 @@ public:
 class TExternalDataSourceBehaviour: public NMetadata::TClassBehaviour<TExternalDataSourceConfig> {
 private:
     static TFactory::TRegistrator<TExternalDataSourceBehaviour> Registrator;
+
 protected:
     virtual std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour> ConstructInitializer() const override;
     virtual std::shared_ptr<NMetadata::NModifications::IOperationsManager> ConstructOperationsManager() const override;
@@ -22,4 +23,4 @@ protected:
     virtual TString GetTypeId() const override;
 };
 
-}
+}   // namespace NKikimr::NKqp

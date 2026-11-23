@@ -1,14 +1,10 @@
 YQL_UDF_CONTRIB(vector_udf)
 
-YQL_ABI_VERSION(
-    2
-    35
-    0
-)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-SRCS(
-    vector_udf.cpp
-)
+INCLUDE(ya.make.inc)
 
 END()
 

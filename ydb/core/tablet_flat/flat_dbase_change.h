@@ -58,6 +58,7 @@ namespace NTable {
         TMemGlobs Annex;        /* Enum of blobs used in redo   */
 
         TVector<ui32> Affects;  /* This tables touched in redo  */
+        TVector<ui32> RollbackAffects; // Tables whose memtable capacity may have changed on rollback
         TVector<ui32> Deleted;  /* Tables deleted in some alter */
         TGarbage Garbage;       /* Wiped tables, ids in Deleted */
 

@@ -37,11 +37,11 @@ protected:
         return result;
     }
     virtual ui32 DoGetNullsCount() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
@@ -70,16 +70,16 @@ protected:
 
 public:
     virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     bool HasSubColumn(const TString& subColumnName) const {
-        return ColumnsData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
-               OthersData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
+        return ColumnsData.GetStats().GetKeyOrPrefixIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OthersData.GetStats().GetKeyOrPrefixIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
     void StoreSourceString(const TString& sourceDeserializationString) {
-        AFL_VERIFY(!SourceDeserializationString);
+        YDB_LOG_VERIFY(!SourceDeserializationString);
         SourceDeserializationString = sourceDeserializationString;
     }
 
@@ -112,12 +112,19 @@ public:
         return nullptr;
     }
 
-    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto accResult = ColumnsData.GetPathAccessor(svPath);
-        if (accResult.IsFail() || accResult.GetResult()->IsValid()) {
-            return accResult;
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const NSubColumns::TParsedJsonPath& parsedPath, const ui32 recordsCount) const {
+        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), parsedPath);
+        if (pathResult.IsFail()) {
+            return TConclusionStatus::Fail(pathResult.GetErrorMessage());
         }
-        return OthersData.GetPathAccessor(svPath, recordsCount);
+        auto path = pathResult.DetachResult();
+        if (path && path->IsColumn) {
+            return ColumnsData.GetPathAccessor(std::move(path->Path));
+        }
+        if (path) {
+            return OthersData.GetPathAccessor(std::move(path->Path), recordsCount);
+        }
+        return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
     }
 };
 
@@ -130,7 +137,7 @@ public:
 
     const NJson::TJsonValue& GetResult() const;
 
-    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue);
+    void SetValueByPath(const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue);
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

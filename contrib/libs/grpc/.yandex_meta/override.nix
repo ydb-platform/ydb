@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.60.2";
+  version = "1.63.2";
   pname = "grpc";
   src = fetchFromGitHub {
     owner = "grpc";
     repo = "grpc";
     rev = "v${version}";
-    hash = "sha256-gYL84LJr858P6qTKa6EXxK9DjTM0FbGkFFMt+y1ALGs=";
+    hash = "sha256-CdK4WceP1kpJt953VPu9mCSXj6eyn54CPHV+ro7HO4A=";
     fetchSubmodules = true;
   };
 

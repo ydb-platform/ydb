@@ -4,10 +4,12 @@
 #include "flat_executor_ut_common.h"
 
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #define USE_CURRENT_UDF_ABI_VERSION
@@ -992,19 +994,33 @@ void WriteFileContent(const TFsPath& path, const TString& content) {
     file.Flush();
 }
 
-struct TRecoveryStarter : public NFake::TStarter {
+struct TBackupStarter : public NFake::TStarter {
     using TBase = NFake::TStarter;
+
+    TBackupStarter(TTabletTypes::EType tabletType, TPathId tenantPathId, ETabletBootType bootType)
+        : TabletType(tabletType)
+        , TenantPathId(tenantPathId)
+        , BootType(bootType)
+    {}
 
     NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
         auto* info = TBase::MakeTabletInfo(tablet, channelsCount);
-        info->BootType = ETabletBootType::Recovery;
+        info->TabletType = TabletType;
+        info->TenantPathId = TenantPathId;
+        info->BootType = BootType;
         return info;
     }
-}; // TRecoveryStarter
+
+    const TTabletTypes::EType TabletType;
+    const TPathId TenantPathId;
+    const ETabletBootType BootType;
+}; // TBackupStarter
 
 struct TEnv : public TMyEnvBase {
-    TEnv()
+    explicit TEnv(TTabletTypes::EType tabletType = TTabletTypes::Dummy, TPathId tenantPathId = {})
         : TMyEnvBase()
+        , TabletType(tabletType)
+        , TenantPathId(tenantPathId)
     {
         Env.SetLogPriority(NKikimrServices::LOCAL_DB_BACKUP, NActors::NLog::PRI_TRACE);
         Env.GetAppData().SystemTabletBackupConfig.MutableFilesystem()->SetPath(Env.GetTempDir());
@@ -1021,11 +1037,24 @@ struct TEnv : public TMyEnvBase {
         }
     };
 
+    class TSystemDummy : public TDummy<TSchema> {
+    public:
+        using TDummy<TSchema>::TDummy;
+
+        bool NeedBackup() const override {
+            return NFlatExecutorSetup::ITablet::NeedBackup();
+        }
+    };
+
     void FireDummyTablet(ui32 flags = 0) override
     {
-        FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
+        TBackupStarter starter(TabletType, TenantPathId, ETabletBootType::Normal);
+        FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            if (TabletType != TTabletTypes::Dummy) {
+                return new TSystemDummy(tablet, info, Edge, flags);
+            }
             return new TDummy<TSchema>(tablet, info, Edge, flags);
-        });
+        }, 0, &starter);
 
         WaitFor<NFake::TEvReady>();
     }
@@ -1200,7 +1229,7 @@ struct TEnv : public TMyEnvBase {
     {
         SendSync(new TEvents::TEvPoison, false, true);
 
-        TRecoveryStarter starter;
+        TBackupStarter starter(TabletType, TenantPathId, ETabletBootType::Recovery);
         FireTablet(Edge, Tablet, &NRecovery::CreateRecoveryShard, 0, &starter);
 
         // Wait for connectivity
@@ -1275,8 +1304,10 @@ struct TEnv : public TMyEnvBase {
     }
 
     TFsPath GetLastBackupPath() {
+        TString tabletTypeName = TTabletTypes::EType_Name(TabletType);
+        NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
         auto tabletIdDir = TFsPath(Env.GetTempDir())
-            .Child("dummy")
+            .Child(tabletTypeName)
             .Child(ToString(Tablet));
 
         TVector<TFsPath> genDirs;
@@ -1328,12 +1359,143 @@ struct TEnv : public TMyEnvBase {
         UNIT_ASSERT_C(result->Success, "Dry-run should have succeeded with warning, but failed: " << result->Error);
         UNIT_ASSERT_C(!result->Error.empty(), "Dry-run must have a warning");
     }
+
+    const TTabletTypes::EType TabletType;
+    const TPathId TenantPathId;
 }; // TEnv
 
 Y_UNIT_TEST_SUITE(Backup) {
     ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Backup)
         | ui32(NFake::TDummy::EFlg::Comp)
         | ui32(NFake::TDummy::EFlg::Vac);
+
+    Y_UNIT_TEST(SystemTabletBackupPolicy) {
+        TActorSystemStub actorSystem;
+        struct TTablet : NFlatExecutorSetup::ITablet {
+            explicit TTablet(TTabletStorageInfo* info)
+                : ITablet(info, {})
+            {}
+
+            void ActivateExecutor(const TActorContext&) override {}
+            void Detach(const TActorContext&) override {}
+        };
+
+        for (auto tenantPathId : {TPathId(), TPathId(42, 7)}) {
+            for (auto bootType : {ETabletBootType::Normal, ETabletBootType::Recovery}) {
+                for (auto tabletType : {
+                    TTabletTypes::Mediator, TTabletTypes::Coordinator, TTabletTypes::Hive,
+                    TTabletTypes::BSController, TTabletTypes::SchemeShard, TTabletTypes::Cms,
+                    TTabletTypes::NodeBroker, TTabletTypes::TxAllocator, TTabletTypes::Console,
+                    TTabletTypes::SysViewProcessor, TTabletTypes::StatisticsAggregator,
+                    TTabletTypes::DataShard, TTabletTypes::ColumnShard, TTabletTypes::PersQueue,
+                    TTabletTypes::Dummy,
+                }) {
+                    auto info = MakeIntrusive<TTabletStorageInfo>(ui64(123), tabletType);
+                    info->TenantPathId = tenantPathId;
+                    info->BootType = bootType;
+                    TTablet tablet(info.Get());
+                    const bool systemType = tabletType != TTabletTypes::DataShard
+                        && tabletType != TTabletTypes::ColumnShard
+                        && tabletType != TTabletTypes::PersQueue
+                        && tabletType != TTabletTypes::Dummy;
+                    UNIT_ASSERT_VALUES_EQUAL_C(tablet.NeedBackup(),
+                        systemType && bootType == ETabletBootType::Normal,
+                        "type=" << tabletType << " tenant=" << tenantPathId
+                            << " boot=" << ui32(bootType));
+                }
+            }
+        }
+    }
+
+    void TestTenantSystemTabletBackup(TTabletTypes::EType tabletType) {
+        TEnv env(tabletType, TPathId(42, 7));
+        env.FireDummyTablet();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvSnapshotBackedUp>(TDuration::Seconds(10)));
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+
+        env.RestartTablet();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvSnapshotBackedUp>(TDuration::Seconds(10)));
+        env.WriteValue(1, 11);
+        env.EraseRow(2);
+        env.WriteValue(3, 30);
+        env.WaitChangelogFlush();
+        const auto backupPath = env.GetLastBackupPath();
+
+        // Seal this generation before changing live data, so restore must read the backup.
+        env.RestartTablet();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvSnapshotBackedUp>(TDuration::Seconds(10)));
+        env.WriteValue(1, 99);
+        env.EraseRow(3);
+        env.WriteValue(4, 40);
+
+        env.RestoreBackup(backupPath, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 11);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
+    }
+
+    Y_UNIT_TEST(TenantSystemTabletBackup) {
+        TestTenantSystemTabletBackup(TTabletTypes::Coordinator);
+    }
+
+    Y_UNIT_TEST(TenantSysViewProcessorBackup) {
+        TestTenantSystemTabletBackup(TTabletTypes::SysViewProcessor);
+    }
+
+    Y_UNIT_TEST(TenantStatisticsAggregatorBackup) {
+        TestTenantSystemTabletBackup(TTabletTypes::StatisticsAggregator);
+    }
+
+    Y_UNIT_TEST(TenantSystemTabletExcluded) {
+        TEnv env(TTabletTypes::Coordinator, TPathId(42, 7));
+        env->GetAppData().SystemTabletBackupConfig.AddExcludeTabletIds(env.Tablet);
+        env.FireDummyTablet();
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        env.WaitChangelogFlush();
+        UNIT_ASSERT(!TFsPath(env->GetTempDir()).Child("coordinator").Exists());
+    }
+
+    Y_UNIT_TEST(TenantSystemTabletBackupSeparateIds) {
+        TEnv env(TTabletTypes::Coordinator, TPathId(42, 7));
+        env.FireDummyTablet();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvSnapshotBackedUp>(TDuration::Seconds(10)));
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        env.WaitChangelogFlush();
+        const auto firstBackup = env.GetLastBackupPath();
+        const ui64 firstTablet = env.Tablet;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        ++env.Tablet;
+        env.FireDummyTablet();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvSnapshotBackedUp>(TDuration::Seconds(10)));
+        env.InitSchema();
+        env.WriteValue(1, 20);
+        env.WaitChangelogFlush();
+        const auto secondBackup = env.GetLastBackupPath();
+        UNIT_ASSERT(firstBackup.Parent() != secondBackup.Parent());
+
+        env.RestoreBackup(secondBackup, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 20);
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.Tablet = firstTablet;
+        env.FireDummyTablet();
+        env.RestoreBackup(firstBackup, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+    }
+
+    Y_UNIT_TEST(TenantSystemTabletBackupNotConfigured) {
+        TEnv env(TTabletTypes::Coordinator, TPathId(42, 7));
+        env->GetAppData().SystemTabletBackupConfig.Clear();
+        env.FireDummyTablet();
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        env.WaitChangelogFlush();
+        UNIT_ASSERT(!TFsPath(env->GetTempDir()).Child("coordinator").Exists());
+    }
 
     Y_UNIT_TEST(GenerationDirs) {
         TEnv env;
@@ -3407,6 +3569,65 @@ Y_UNIT_TEST_SUITE(Backup) {
         WriteFileContent(manifestPath, NJson::WriteJson(manifest, false));
 
         env.RestoreLastBackupExpectFail();
+    }
+
+    void TestGlobalBackupLimit(size_t existingBackups) {
+        TEnv env(TTabletTypes::Coordinator, TPathId(42, 7));
+        env.Env.AdvanceCurrentTime(TDuration::Days(2));
+        const TFsPath root(env->GetTempDir());
+        const auto oldest = env.Env.GetCurrentTime() - TDuration::Days(1);
+        TVector<TFsPath> backups;
+        for (size_t i = 0; i < existingBackups; ++i) {
+            // The oldest backup deliberately has the highest generation.
+            const auto timestamp = (oldest + TDuration::Seconds(i)).FormatGmTime("%Y%m%d%H%M%SZ");
+            const auto path = root.Child(i % 2 ? "sys_view_processor" : "statistics_aggregator")
+                .Child(ToString(1000 + i / 2))
+                .Child(TStringBuilder() << "backup_" << timestamp << "_g" << 1000 - i << "_s1");
+            path.Child("snapshot").MkDirs();
+            WriteFileContent(path.Child("changelog.json"), "old changelog");
+            backups.push_back(path);
+        }
+
+        const auto otherTablet = root.Child("sys_view_processor").Child("999");
+        const auto incomplete = otherTablet.Child("backup_19700101000000Z_g1_s1");
+        incomplete.Child("snapshot.tmp").MkDirs();
+        const auto unrelated = otherTablet.Child("unrelated");
+        unrelated.Child("snapshot").MkDirs();
+        const auto malformed = otherTablet.Child("backup_invalid_g1_s1");
+        malformed.Child("snapshot").MkDirs();
+        WriteFileContent(root.Child("README"), "not a backup");
+
+        env.FireDummyTablet();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvSnapshotBackedUp>(TDuration::Seconds(10)));
+        const auto current = env.GetLastBackupPath();
+        UNIT_ASSERT(current.Child("snapshot").Exists());
+        const size_t deleted = existingBackups + 1 > 50 ? existingBackups + 1 - 50 : 0;
+        size_t remaining = 1; // The snapshot just completed by the tenant tablet.
+        for (size_t i = 0; i < backups.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(backups[i].Exists(), i >= deleted, backups[i]);
+            remaining += backups[i].Exists();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(remaining, Min(existingBackups + 1, size_t(50)));
+        UNIT_ASSERT(incomplete.Child("snapshot.tmp").Exists());
+        UNIT_ASSERT(unrelated.Child("snapshot").Exists());
+        UNIT_ASSERT(malformed.Child("snapshot").Exists());
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput(root.Child("README")).ReadAll(), "not a backup");
+    }
+
+    Y_UNIT_TEST(GlobalBackupLimitBelowThreshold) {
+        TestGlobalBackupLimit(48);
+    }
+
+    Y_UNIT_TEST(GlobalBackupLimitAtThreshold) {
+        TestGlobalBackupLimit(49);
+    }
+
+    Y_UNIT_TEST(GlobalBackupLimitDeletesOldest) {
+        TestGlobalBackupLimit(50);
+    }
+
+    Y_UNIT_TEST(GlobalBackupLimitDeletesExcess) {
+        TestGlobalBackupLimit(55);
     }
 
     Y_UNIT_TEST(DeleteIncompleteBackups) {

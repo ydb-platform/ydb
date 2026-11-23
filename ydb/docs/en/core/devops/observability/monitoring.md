@@ -26,7 +26,7 @@ The full deployment cycle of Prometheus and Grafana is not covered in this secti
 
 Configuration of metric collection from {{ ydb-short-name }} nodes can be prepared using one of the methods below. In all cases, you will need the `prometheus_ydb.yml` file, which describes the collection of {{ ydb-short-name }} metrics.
 
-The list of [storage nodes](../../concepts/glossary.md#storage-node) and [dynamic nodes](../../concepts/glossary.md#dynamic-node) of the database is specified in the `ydbd-storage.yml` and `ydbd-database.yml` files, respectively. The paths to these files are set in `prometheus_ydb.yml` (for more details, see the [Running Prometheus with a prepared configuration](#prometheus-start) section).
+The list of [storage nodes](../../concepts/glossary.md#storage-node) and [dynamic nodes](../../concepts/glossary.md#dynamic) of the database is specified in the `ydbd-storage.yml` and `ydbd-database.yml` files, respectively. The paths to these files are set in `prometheus_ydb.yml` (for more details, see the [Running Prometheus with a prepared configuration](#prometheus-start) section).
 
 {% list tabs %}
 

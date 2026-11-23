@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import shutil
 import sys
 import time
@@ -16,6 +17,8 @@ load_yaml = None
 BUILD_VOLUME_PROFILE_KEY = "build_volume"
 BUILD_VOLUME_STATISTICS_KEY = "source-manager.NumFileBytesInTranslationUnit"
 CLANG_TIDY_STATS_FILE = "clang-tidy-stats.json"
+CLANG_TIDY_MAX_ATTEMPTS = 2
+CLANG_TIDY_SIGSEGV_EXIT_CODE = -signal.SIGSEGV
 
 
 def setup_script(args):
@@ -41,6 +44,7 @@ def parse_args():
     parser.add_argument("--default-config-file", required=True)
     parser.add_argument("--project-config-file", required=True)
     parser.add_argument("--export-fixes", required=True)
+    parser.add_argument("--check-option", action="append", type=parse_check_option, default=[])
     parser.add_argument("--checks", required=False, default="")
     parser.add_argument("--header-filter", required=False, default=None)
     parser.add_argument("--collect-build-volume", action="store_true")
@@ -139,6 +143,23 @@ def filter_configs(result_config, filtered_config):
     return filtered_out
 
 
+def parse_check_option(value):
+    key, separator, option_value = value.partition("=")
+    if not separator or not key:
+        raise argparse.ArgumentTypeError("expected a nonempty check option name followed by =value")
+    return key, option_value
+
+
+def set_check_options(config, overrides):
+    options = config.get("CheckOptions") or {}
+    if not isinstance(options, dict):
+        options = {opt["key"]: opt["value"] for opt in options}
+    options = dict(options)
+    options.update(overrides)
+    config["CheckOptions"] = [{"key": key, "value": value} for key, value in options.items()]
+    return config
+
+
 def filter_cmd(cmd):
     skip = True
 
@@ -181,6 +202,21 @@ def compact_profile(profile):
             grouped_sums[group_key] += value
 
     return {k: round(v, 3) for k, v in grouped_sums.items()}
+
+
+def run_clang_tidy(cmd, process_factory=subprocess.Popen):
+    start_time = time.time()
+    for attempt in range(CLANG_TIDY_MAX_ATTEMPTS):
+        process = process_factory(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        out, err = process.communicate()
+        exit_code = process.returncode
+        if exit_code != CLANG_TIDY_SIGSEGV_EXIT_CODE or attempt + 1 == CLANG_TIDY_MAX_ATTEMPTS:
+            break
+        print(
+            "clang-tidy crashed with exit code {}, retrying once\n{}".format(exit_code, err),
+            file=sys.stderr,
+        )
+    return out, err, time.time() - start_time, exit_code
 
 
 def main():
@@ -227,6 +263,11 @@ def main():
             additional_config_path=filtered_config,
             result_config_path=result_config,
         )
+    if args.check_option:
+        config = load_yaml(result_config_file, remove_comments=False)
+        result_config_file = os.path.join(config_dir, "overridden_tidy_config.json")
+        with open(result_config_file, "w") as afile:
+            json.dump(set_check_options(config, args.check_option), afile)
     compile_command_path = generate_compilation_database(clang_cmd, args.source_root, args.testing_src, db_tmpdir)
 
     cmd = [
@@ -258,11 +299,7 @@ def main():
         cmd += ["--checks", args.checks]
 
     print("cmd: {}".format(' '.join(cmd)))
-    start_time = time.time()
-    res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = res.communicate()
-    wall_time = time.time() - start_time
-    exit_code = res.returncode
+    out, err, wall_time, exit_code = run_clang_tidy(cmd)
     if filtered_out and exit_code in (0, 1):
         for check in filtered_out["Checks"]:
             abs_check = check.lstrip('-')

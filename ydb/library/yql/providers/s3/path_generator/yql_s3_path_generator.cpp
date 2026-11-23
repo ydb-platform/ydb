@@ -1,7 +1,6 @@
 #include "yql_s3_path_generator.h"
 
 #include <library/cpp/scheme/scheme.h>
-#include <regex>
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
@@ -9,11 +8,12 @@
 #include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
-
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+
+#include <regex>
 
 namespace NYql::NPathGenerator {
 
@@ -33,7 +33,8 @@ TInstant Strptime(const TString& input, const TString& format) {
 }
 
 TString Strftime(const char* format, TInstant time) {
-    struct tm tm{};
+    struct tm tm {};
+
     time_t clock = time.Seconds();
     localtime_r(&clock, &tm);
     size_t size = Max<size_t>(strlen(format) * 2 + 1, 107);
@@ -45,10 +46,9 @@ TString Strftime(const char* format, TInstant time) {
     throw yexception() << "Can't format date " << time << " in format " << format;
 }
 
-
 void ReplaceAll(TString& str, const TString& from, const TString& to) {
     size_t start_pos = 0;
-    while((start_pos = str.find(from, start_pos)) != TString::npos) {
+    while ((start_pos = str.find(from, start_pos)) != TString::npos) {
         str.replace(start_pos, from.length(), to);
         start_pos += to.length();
     }
@@ -103,7 +103,7 @@ i64 GetBoolOrThrow(const NSc::TValue& json, const TString& error) {
 
 IPathGenerator::EIntervalUnit ToIntervalUnit(const TString& unit) {
     const auto names = GetEnumNames<IPathGenerator::EIntervalUnit>();
-    for (const auto& name: names) {
+    for (const auto& name : names) {
         if (name.second == unit) {
             return name.first;
         }
@@ -113,15 +113,15 @@ IPathGenerator::EIntervalUnit ToIntervalUnit(const TString& unit) {
 
 TMap<IPathGenerator::EType, TString> ToLowerType() {
     TMap<IPathGenerator::EType, TString> result;
-    for (const auto& p: GetEnumNames<IPathGenerator::EType>()) {
+    for (const auto& p : GetEnumNames<IPathGenerator::EType>()) {
         result[p.first] = to_lower(p.second);
     }
     return result;
 };
 
 IPathGenerator::EType ToType(const TString& type) {
-    static TMap<IPathGenerator::EType, TString> enumNames{ToLowerType()};
-    for (const auto& name: enumNames) {
+    static TMap<IPathGenerator::EType, TString> enumNames{ ToLowerType() };
+    for (const auto& name : enumNames) {
         if (name.second == type) {
             return name.first;
         }
@@ -173,27 +173,27 @@ bool IsOverflow(ui64 a, i64 b) {
 
 TDuration FromUnit(int64_t interval, IPathGenerator::EIntervalUnit unit) {
     switch (unit) {
-    case IPathGenerator::EIntervalUnit::MILLISECONDS:
-        return TDuration::MilliSeconds(interval);
-    case IPathGenerator::EIntervalUnit::SECONDS:
-        return TDuration::Seconds(interval);
-    case IPathGenerator::EIntervalUnit::MINUTES:
-        return TDuration::Minutes(interval);
-    case IPathGenerator::EIntervalUnit::HOURS:
-        return TDuration::Hours(interval);
-    case IPathGenerator::EIntervalUnit::DAYS:
-        return TDuration::Days(interval);
-    case IPathGenerator::EIntervalUnit::WEEKS:
-        return TDuration::Days(interval *  7);
-    case IPathGenerator::EIntervalUnit::MONTHS: // external special handling
-    case IPathGenerator::EIntervalUnit::YEARS:
-    default:
-        throw yexception() << "Only the " << GetEnumAllNames<IPathGenerator::EIntervalUnit>() << " units are supported but got " << unit;
+        case IPathGenerator::EIntervalUnit::MILLISECONDS:
+            return TDuration::MilliSeconds(interval);
+        case IPathGenerator::EIntervalUnit::SECONDS:
+            return TDuration::Seconds(interval);
+        case IPathGenerator::EIntervalUnit::MINUTES:
+            return TDuration::Minutes(interval);
+        case IPathGenerator::EIntervalUnit::HOURS:
+            return TDuration::Hours(interval);
+        case IPathGenerator::EIntervalUnit::DAYS:
+            return TDuration::Days(interval);
+        case IPathGenerator::EIntervalUnit::WEEKS:
+            return TDuration::Days(interval * 7);
+        case IPathGenerator::EIntervalUnit::MONTHS:   // external special handling
+        case IPathGenerator::EIntervalUnit::YEARS:
+        default:
+            throw yexception() << "Only the " << GetEnumAllNames<IPathGenerator::EIntervalUnit>() << " units are supported but got " << unit;
     }
 }
 
 TInstant DoAddMonths(TInstant current, i64 months) {
-    NKikimr::NMiniKQL::TScopedAlloc alloc{__LOCATION__};
+    NKikimr::NMiniKQL::TScopedAlloc alloc{ __LOCATION__ };
     NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("MemoryAddMonths");
     NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
     NKikimr::NMiniKQL::TDefaultValueBuilder builder(holderFactory);
@@ -201,7 +201,7 @@ TInstant DoAddMonths(TInstant current, i64 months) {
 }
 
 TInstant DoAddYears(TInstant current, i64 years) {
-    NKikimr::NMiniKQL::TScopedAlloc alloc{__LOCATION__};
+    NKikimr::NMiniKQL::TScopedAlloc alloc{ __LOCATION__ };
     NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("MemoryAddYears");
     NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
     NKikimr::NMiniKQL::TDefaultValueBuilder builder(holderFactory);
@@ -252,22 +252,23 @@ TInstant ParseDate(const TString& dateStr, const TInstant& now) {
 
 TString FormatColumnValues(const std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue) {
     std::vector<TString> parts;
-    std::transform(columnsWithValue.cbegin(), columnsWithValue.cend(),
-                   std::back_inserter(parts),
-                   [](auto v) { return TStringBuilder{} << "${" << v.Name << "} = " << v.Value; });
+    std::transform(columnsWithValue.cbegin(), columnsWithValue.cend(), std::back_inserter(parts), [](auto v) {
+        return TStringBuilder{} << "${" << v.Name << "} = " << v.Value;
+    });
     return TStringBuilder{} << "{ " << JoinSeq(", ", parts) << " }";
 }
 
-}
+}   // namespace
 
 struct TPathGenerator: public IPathGenerator {
     TExplicitPartitioningConfig Config;
     TRules Rules;
-    TMap<TString, TColumnPartitioningConfig> ColumnConfig; // column name -> config
+    TMap<TString, TColumnPartitioningConfig> ColumnConfig;   // column name -> config
     TMap<TString, NUdf::EDataSlot> Columns;
 
 public:
-    TPathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns, size_t pathsLimit)
+    TPathGenerator(
+        const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns, size_t pathsLimit)
         : Columns(columns)
     {
         try {
@@ -287,27 +288,26 @@ public:
         }
         const auto& config = it->second;
         switch (config.Type) {
-        case IPathGenerator::EType::UNDEFINED: {
-            throw yexception() << columnName << " column has undefined type";
-        }
-        case IPathGenerator::EType::ENUM: {
-            if (Find(config.Values, dataValue) == config.Values.end()) {
-                throw yexception() << dataValue << " data not found as enum item";
+            case IPathGenerator::EType::UNDEFINED: {
+                throw yexception() << columnName << " column has undefined type";
             }
-            return TString{dataValue};
-        }
-        case IPathGenerator::EType::INTEGER: {
-            i64 value = 0;
-            if (!TryFromString(dataValue.data(), dataValue.size(), value)) {
-                throw yexception() << dataValue << " data is not a int64";
+            case IPathGenerator::EType::ENUM: {
+                if (Find(config.Values, dataValue) == config.Values.end()) {
+                    throw yexception() << dataValue << " data not found as enum item";
+                }
+                return TString{ dataValue };
             }
-            return fmtInteger(config.Digits, value);
-        }
-        case IPathGenerator::EType::DATE: {
-            TInstant time = TInstant::ParseIso8601(dataValue);
-            return Strftime(config.Format.c_str(), time);
-        }
-        break;
+            case IPathGenerator::EType::INTEGER: {
+                i64 value = 0;
+                if (!TryFromString(dataValue.data(), dataValue.size(), value)) {
+                    throw yexception() << dataValue << " data is not a int64";
+                }
+                return fmtInteger(config.Digits, value);
+            }
+            case IPathGenerator::EType::DATE: {
+                TInstant time = TInstant::ParseIso8601(dataValue);
+                return Strftime(config.Format.c_str(), time);
+            } break;
         }
     }
 
@@ -318,27 +318,26 @@ public:
         }
         const auto& config = it->second;
         switch (config.Type) {
-        case IPathGenerator::EType::UNDEFINED: {
-            throw yexception() << columnName << " column has undefined type";
-        }
-        case IPathGenerator::EType::ENUM: {
-            if (Find(config.Values, pathValue) == config.Values.end()) {
-                throw yexception() << pathValue << " value not found as enum item";
+            case IPathGenerator::EType::UNDEFINED: {
+                throw yexception() << columnName << " column has undefined type";
             }
-            return TString{pathValue};
-        }
-        case IPathGenerator::EType::INTEGER: {
-            int64_t value = 0;
-            if (!TryFromString(pathValue.data(), pathValue.size(), value)) {
-                throw yexception() << pathValue << " value is not a int64";
+            case IPathGenerator::EType::ENUM: {
+                if (Find(config.Values, pathValue) == config.Values.end()) {
+                    throw yexception() << pathValue << " value not found as enum item";
+                }
+                return TString{ pathValue };
             }
-            return std::to_string(value);
-        }
-        case IPathGenerator::EType::DATE: {
-            TInstant time = Strptime(TString{pathValue}, config.Format);
-            return time.ToStringLocal();
-        }
-        break;
+            case IPathGenerator::EType::INTEGER: {
+                int64_t value = 0;
+                if (!TryFromString(pathValue.data(), pathValue.size(), value)) {
+                    throw yexception() << pathValue << " value is not a int64";
+                }
+                return std::to_string(value);
+            }
+            case IPathGenerator::EType::DATE: {
+                TInstant time = Strptime(TString{ pathValue }, config.Format);
+                return time.ToStringLocal();
+            } break;
         }
     }
 
@@ -359,8 +358,8 @@ private:
 
         if (!config) {
             TStringBuilder builder;
-            for (const auto& columnName: partitionedBy) {
-                builder << columnName << "=${" <<  columnName << "}/";
+            for (const auto& columnName : partitionedBy) {
+                builder << columnName << "=${" << columnName << "}/";
             }
             Config.LocationTemplate = builder;
             return;
@@ -393,7 +392,8 @@ private:
         }
     }
 
-    void AddProjection(const TStringBuf& key, const NSc::TValue& json, const TVector<TString>& path, TMap<TString, TMap<TString, NSc::TValue>>& projection) {
+    void AddProjection(
+        const TStringBuf& key, const NSc::TValue& json, const TVector<TString>& path, TMap<TString, TMap<TString, NSc::TValue>>& projection) {
         if (path.size() != 3 && path.size() != 2) {
             throw yexception() << "The key for 'projection' must be three-component or two-component, but received " << key;
         }
@@ -432,7 +432,7 @@ private:
         if (!projection.contains("type")) {
             throw yexception() << "Invalid projection scheme: type is a required field for " << columnName << " " << type;
         }
-        for (const auto& p: projection) {
+        for (const auto& p : projection) {
             if (p.first == "type") {
                 // already processed
             } else if (p.first == "values") {
@@ -441,7 +441,8 @@ private:
                 for (auto& v : values) {
                     v = StripString(v);
                 }
-                Config.Rules.push_back(IPathGenerator::TColumnPartitioningConfig{.Type=ToType(type), .Name=columnName, .Values=std::move(values)});
+                Config.Rules.push_back(
+                    IPathGenerator::TColumnPartitioningConfig{ .Type = ToType(type), .Name = columnName, .Values = std::move(values) });
             } else {
                 throw yexception() << "Invalid projection scheme: enum element must include only type or values (as string) but got " << p.first;
             }
@@ -473,7 +474,8 @@ private:
             } else if (p.first == "digits") {
                 columnConfig.Digits = GetIntOrThrow(p.second, "The digits must be a number");
             } else {
-                throw yexception() << "Invalid projection scheme: integer element must include only type, min, max, interval, digits but got " << p.first;
+                throw yexception() << "Invalid projection scheme: integer element must include only type, min, max, interval, digits but got "
+                                   << p.first;
             }
         }
         Config.Rules.push_back(columnConfig);
@@ -495,7 +497,7 @@ private:
         IPathGenerator::TColumnPartitioningConfig columnConfig;
         columnConfig.Name = columnName;
         columnConfig.Type = ToType(type);
-        for (const auto& p: projection) {
+        for (const auto& p : projection) {
             if (p.first == "type") {
                 // already processed
             } else if (p.first == "min") {
@@ -509,7 +511,8 @@ private:
             } else if (p.first == "unit") {
                 columnConfig.IntervalUnit = ToIntervalUnit(GetStringOrThrow(p.second, "The unit must be a string"));
             } else {
-                throw yexception() << "Invalid projection scheme: date element must include only type, min, max, format, interval, unit but got " << p.first;
+                throw yexception() << "Invalid projection scheme: date element must include only type, min, max, format, interval, unit but got "
+                                   << p.first;
             }
         }
         Config.Rules.push_back(columnConfig);
@@ -552,7 +555,8 @@ private:
         for (const auto& columnName : partitionedBy) {
             partitionedByColumns.insert(columnName);
             if (!vars.contains(columnName)) {
-                throw yexception() << "Template " << Config.LocationTemplate << " must include ${" << columnName << "} from partitioned_by columns set";
+                throw yexception() << "Template " << Config.LocationTemplate << " must include ${" << columnName
+                                   << "} from partitioned_by columns set";
             }
         }
 
@@ -560,7 +564,8 @@ private:
         for (const auto& rule : Config.Rules) {
             rulesColumns.insert(rule.Name);
             if (!vars.contains(rule.Name)) {
-                throw yexception() << "Template " << Config.LocationTemplate << " must include ${" << rule.Name << "} from projection columns set";
+                throw yexception() << "Template " << Config.LocationTemplate << " must include ${" << rule.Name
+                                   << "} from projection columns set";
             }
         }
 
@@ -577,17 +582,15 @@ private:
     // Generate
     void ExpandPartitioningRules(size_t pathsLimit) {
         if (!Config.Enabled) {
-            Rules = Config.LocationTemplate
-                    ? TRules{TExpandedPartitioningRule{.Path=Config.LocationTemplate}}
-                    : TRules{};
+            Rules = Config.LocationTemplate ? TRules{ TExpandedPartitioningRule{ .Path = Config.LocationTemplate } } : TRules{};
             return;
         }
         auto now = TInstant::Now();
         TMap<TString, std::vector<TColumnWithValue>> result;
         std::vector<TColumnWithValue> columns;
         DoGenerate(Config.Rules, Config.LocationTemplate, columns, result, pathsLimit, now);
-        for (const auto& p: result) {
-            Rules.push_back(TExpandedPartitioningRule{.Path=p.first, .ColumnValues=p.second});
+        for (const auto& p : result) {
+            Rules.push_back(TExpandedPartitioningRule{ .Path = p.first, .ColumnValues = p.second });
         }
 
         if (Rules.empty()) {
@@ -595,16 +598,12 @@ private:
         }
     }
 
-    void DoGenerateDate(const std::vector<TColumnPartitioningConfig>& rules,
-                    TString locationTemplate,
-                    std::vector<TColumnWithValue>& columnsWithValue,
-                    TMap<TString, std::vector<TColumnWithValue>>& result,
-                    size_t pathsLimit,
-                    TInstant now,
-                    size_t p = 0) {
+    void DoGenerateDate(const std::vector<TColumnPartitioningConfig>& rules, TString locationTemplate,
+        std::vector<TColumnWithValue>& columnsWithValue, TMap<TString, std::vector<TColumnWithValue>>& result, size_t pathsLimit, TInstant now,
+        size_t p = 0) {
         const auto& rule = rules[p];
         const TInstant to = ParseDate(rule.To, now);
-        for (TInstant current = ParseDate(rule.From, now); current <= to; ) {
+        for (TInstant current = ParseDate(rule.From, now); current <= to;) {
             TString copyLocationTemplate = locationTemplate;
             const TString time = Strftime(rule.Format.c_str(), current);
             ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
@@ -621,13 +620,9 @@ private:
         }
     }
 
-    void DoGenerate(const std::vector<TColumnPartitioningConfig>& rules,
-                    TString locationTemplate,
-                    std::vector<TColumnWithValue>& columnsWithValue,
-                    TMap<TString, std::vector<TColumnWithValue>>& result,
-                    size_t pathsLimit,
-                    TInstant now,
-                    size_t p = 0) {
+    void DoGenerate(const std::vector<TColumnPartitioningConfig>& rules, TString locationTemplate,
+        std::vector<TColumnWithValue>& columnsWithValue, TMap<TString, std::vector<TColumnWithValue>>& result, size_t pathsLimit, TInstant now,
+        size_t p = 0) {
         if (rules.size() == p) {
             if (result.size() == pathsLimit) {
                 throw yexception() << "The limit on the number of paths has been reached: " << result.size() << " of " << pathsLimit;
@@ -635,51 +630,44 @@ private:
 
             auto pib = result.emplace(locationTemplate, columnsWithValue);
             if (!pib.second) {
-                throw yexception() << "Location path " << locationTemplate << " is composed by different projection value sets " << FormatColumnValues(pib.first->second) << " and " << FormatColumnValues(columnsWithValue);
+                throw yexception() << "Location path " << locationTemplate << " is composed by different projection value sets "
+                                   << FormatColumnValues(pib.first->second) << " and " << FormatColumnValues(columnsWithValue);
             }
             return;
         }
 
         const auto& rule = rules[p];
         switch (rule.Type) {
-        case IPathGenerator::EType::ENUM:
-            DoGenerateEnum(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
-            break;
-        case IPathGenerator::EType::INTEGER:
-            DoGenerateInteger(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
-            break;
-        case IPathGenerator::EType::DATE:
-            DoGenerateDate(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
-            break;
-        default:
-            throw yexception() << "Only the enum, integer, date types are supported but got " << to_lower(ToString(rule.Type));
+            case IPathGenerator::EType::ENUM:
+                DoGenerateEnum(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
+                break;
+            case IPathGenerator::EType::INTEGER:
+                DoGenerateInteger(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
+                break;
+            case IPathGenerator::EType::DATE:
+                DoGenerateDate(rules, locationTemplate, columnsWithValue, result, pathsLimit, now, p);
+                break;
+            default:
+                throw yexception() << "Only the enum, integer, date types are supported but got " << to_lower(ToString(rule.Type));
         }
     }
 
-    void DoGenerateEnum(const std::vector<IPathGenerator::TColumnPartitioningConfig>& rules,
-                    TString locationTemplate,
-                    std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue,
-                    TMap<TString, std::vector<IPathGenerator::TColumnWithValue>>& result,
-                    size_t pathsLimit,
-                    TInstant now,
-                    size_t p = 0) {
+    void DoGenerateEnum(const std::vector<IPathGenerator::TColumnPartitioningConfig>& rules, TString locationTemplate,
+        std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue, TMap<TString, std::vector<IPathGenerator::TColumnWithValue>>& result,
+        size_t pathsLimit, TInstant now, size_t p = 0) {
         const auto& rule = rules[p];
-        for (const auto& value: rule.Values) {
+        for (const auto& value : rule.Values) {
             TString copyLocationTemplate = locationTemplate;
             ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", value);
-            columnsWithValue.push_back(IPathGenerator::TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::String, .Value=value});
+            columnsWithValue.push_back(IPathGenerator::TColumnWithValue{ .Name = rule.Name, .Type = NUdf::EDataSlot::String, .Value = value });
             DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
             columnsWithValue.pop_back();
         }
     }
 
-    void DoGenerateInteger(const std::vector<IPathGenerator::TColumnPartitioningConfig>& rules,
-                       TString locationTemplate,
-                       std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue,
-                       TMap<TString, std::vector<IPathGenerator::TColumnWithValue>>& result,
-                       size_t pathsLimit,
-                       TInstant now,
-                       size_t p = 0) {
+    void DoGenerateInteger(const std::vector<IPathGenerator::TColumnPartitioningConfig>& rules, TString locationTemplate,
+        std::vector<IPathGenerator::TColumnWithValue>& columnsWithValue, TMap<TString, std::vector<IPathGenerator::TColumnWithValue>>& result,
+        size_t pathsLimit, TInstant now, size_t p = 0) {
         const auto& rule = rules[p];
         for (i64 i = rule.Min; i <= rule.Max; i += rule.Interval) {
             TString copyLocationTemplate = locationTemplate;
@@ -689,7 +677,7 @@ private:
             columnsWithValue.pop_back();
 
             if (IsOverflow(i, rule.Interval)) {
-                return; // correct overflow handling
+                return;   // correct overflow handling
             }
         }
     }
@@ -699,12 +687,12 @@ private:
         auto slot = it == Columns.end() ? NUdf::EDataSlot::Date : it->second;
         switch (slot) {
             case NUdf::EDataSlot::Datetime:
-                return {.Name=name, .Type=NUdf::EDataSlot::Datetime, .Value=Strftime("%FT%TZ", current)};
+                return { .Name = name, .Type = NUdf::EDataSlot::Datetime, .Value = Strftime("%FT%TZ", current) };
             default:
-            break;
+                break;
         }
 
-        return {.Name=name, .Type=NUdf::EDataSlot::Date, .Value=Strftime("%F", current)};
+        return { .Name = name, .Type = NUdf::EDataSlot::Date, .Value = Strftime("%F", current) };
     }
 
     IPathGenerator::TColumnWithValue CreateIntegerColumnWithValue(const TString& name, int64_t value) {
@@ -713,17 +701,17 @@ private:
         switch (slot) {
             case NUdf::EDataSlot::Int32:
                 CheckCastInt32(value, name);
-                return {.Name=name, .Type=NUdf::EDataSlot::Int32, .Value=ToString(value)};
+                return { .Name = name, .Type = NUdf::EDataSlot::Int32, .Value = ToString(value) };
             case NUdf::EDataSlot::Uint32:
                 CheckCastUint32(value, name);
-                return {.Name=name, .Type=NUdf::EDataSlot::Uint32, .Value=ToString(value)};
+                return { .Name = name, .Type = NUdf::EDataSlot::Uint32, .Value = ToString(value) };
             case NUdf::EDataSlot::Uint64:
                 CheckCastUint64(value, name);
-                return {.Name=name, .Type=NUdf::EDataSlot::Uint64, .Value=ToString(value)};
+                return { .Name = name, .Type = NUdf::EDataSlot::Uint64, .Value = ToString(value) };
             default:
-            break;
+                break;
         }
-        return {.Name=name, .Type=NUdf::EDataSlot::Int64, .Value=ToString(value)};
+        return { .Name = name, .Type = NUdf::EDataSlot::Int64, .Value = ToString(value) };
     }
 
     static void CheckCastInt32(int64_t value, const TString& column) {
@@ -748,8 +736,9 @@ private:
     }
 };
 
-TPathGeneratorPtr CreatePathGenerator(const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns, size_t pathsLimit) {
+TPathGeneratorPtr CreatePathGenerator(
+    const TString& projection, const std::vector<TString>& partitionedBy, const TMap<TString, NUdf::EDataSlot>& columns, size_t pathsLimit) {
     return std::make_shared<TPathGenerator>(projection, partitionedBy, columns, pathsLimit);
 }
 
-}
+}   // namespace NYql::NPathGenerator

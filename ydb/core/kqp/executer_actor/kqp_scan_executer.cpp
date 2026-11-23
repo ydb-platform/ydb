@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -49,14 +49,14 @@ public:
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
         const std::optional<TLlvmSettings>& llvmSettings,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
         const IKqpTransactionManagerPtr& txManager,
         bool useKqpTasksGraphV2)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(formatsSettings), counters, executerConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
+            userRequestContext, TWilsonKqp::ScanExecuter, "ScanExecuter",
             {}, txManager, Nothing(), channelService, useKqpTasksGraphV2)
         , LlvmSettings(llvmSettings)
     {
@@ -77,7 +77,6 @@ public:
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
@@ -133,24 +132,13 @@ private:
 private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (TBase::HandleResolve(ev) == CONTINUE) {
-            if (!TBase::GetPartitionStats()) {
-                GetResourcesSnapshot();
-            }
+            GetResourcesSnapshot();
         }
     }
 
     void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
-        if (!TBase::GetPartitionStats()) {
-            GetResourcesSnapshot();
-        }
-    }
-
-    void HandlePartitionStats(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        TBase::ApplyPartitionStatsResult(ev);
-        if (TBase::PendingPartitionStatsRequests == 0) {
-            GetResourcesSnapshot();
-        }
+        GetResourcesSnapshot();
     }
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
@@ -240,7 +228,12 @@ private:
             {"count", nShardScans},
             {"traceId", TraceId()});
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ScanExecuterRunTasks,
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Run tasks",
+                .Phase = "RunTasks",
+                .Component = "DqExecution",
+            }, NWilson::EFlags::AUTO_END);
 
         if (!ExecuteScanTx()) {
             return;
@@ -260,12 +253,9 @@ public:
         AlreadyReplied = true;
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        EndQueryTraceSpan(ExecuterStateSpan, Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
-
-        if (ExecuterSpan) {
-            ExecuterSpan.EndOk();
-        }
 
         PassAway();
     }
@@ -318,13 +308,13 @@ private:
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters,
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
     const IKqpTransactionManagerPtr& txManager, bool useKqpTasksGraphV2)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
-        counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
+        counters, executerConfig, std::move(asyncIoFactory), userRequestContext,
         federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager, useKqpTasksGraphV2);
 }
 

@@ -7,7 +7,11 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -1517,13 +1521,13 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                               pathParts.begin()))
         {
             // headOpPath is a prefix of the path
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "ResolveWithInactive: attach to the TargetPath of head operation"
-                         << " path: " << path
-                         << " opId: " << opId
-                         << " head opId: " << headOpId
-                         << " headOpPath: " << headOpPath.PathString()
-                         << " headOpPath id: " << headOpPath->PathId);
+            YDB_LOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation",
+                {"path", path},
+                {"opId", opId},
+                {"headOpId", headOpId},
+                {"headOpPath", headOpPath.PathString()},
+                {"headOpPathId", headOpPath->PathId},
+            );
 
             return headOpPath.Child(pathParts.back());
         }
@@ -1531,10 +1535,10 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         --headSubTxId;
     }
 
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "ResolveWithInactive: NO attach to the TargetPath of head operation"
-                 << " path: " << path
-                 << " opId: " << opId);
+    YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
+        {"path", path},
+        {"opId", opId},
+    );
 
     return Resolve(nullPrefix, std::move(pathParts));
 }
@@ -1873,6 +1877,28 @@ bool TPath::IsAsyncReplicaTable() const {
     return tableInfo->IsAsyncReplica();
 }
 
+bool TPath::IsWaitingImportReplica() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto& tableInfo = SS->Tables.at(Base()->PathId);
+    return tableInfo->IsWaitingImportReplica();
+}
+
+bool TPath::IsImportingReplica() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto& tableInfo = SS->Tables.at(Base()->PathId);
+    return tableInfo->IsImportingReplica();
+}
+
 bool TPath::IsCdcStream() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -1921,6 +1947,8 @@ bool TPath::IsSupportedInExports() const {
             return SS->BackupSettings.S3Settings.EnableExternalTableExport;
         case NKikimrSchemeOp::EPathTypeSysView:
             return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
+        case NKikimrSchemeOp::EPathTypeKesus:
+            return SS->BackupSettings.S3Settings.EnableKesusExport;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
         case NKikimrSchemeOp::EPathTypeTable:
             return true;
@@ -2149,7 +2177,8 @@ EAttachChildResult TPath::MaterializeImpl(const TString& owner, const TPathId& n
 
     auto attachResult = SS->AttachChild(newPath);
 
-    Base()->DbRefCount++;
+    SS->IncrementPathDbRefCount(Base()->PathId, "child path row");
+    newPath->ParentRefHeld = true;
     Base()->AllChildrenCount++;
 
     Y_VERIFY_S(!SS->PathsById.contains(newPathId), "There's another path with PathId: " << newPathId);
@@ -2184,3 +2213,5 @@ TPathId TPath::GetPathIdSafe() const {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

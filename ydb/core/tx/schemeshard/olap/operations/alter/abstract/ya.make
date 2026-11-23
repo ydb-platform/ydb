@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     object.cpp
@@ -16,7 +16,5 @@ PEERDIR(
     ydb/library/formats/arrow
     ydb/public/sdk/cpp/src/client/types/credentials
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

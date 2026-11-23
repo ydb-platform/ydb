@@ -1,9 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
 SRCS(
     dqs_expr_nodes.h
+    dqs_expr_nodes.cpp
 )
 
 PEERDIR(

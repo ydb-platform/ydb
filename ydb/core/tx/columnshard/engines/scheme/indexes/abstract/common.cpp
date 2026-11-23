@@ -11,18 +11,6 @@ TString TNodeId::ToString() const {
     return TStringBuilder() << "[" << ColumnId << "." << GenerationId << "." << NodeType << "]";
 }
 
-TNodeId TNodeId::Original(const ui32 columnId, const TString& subColumnName) {
-    AFL_VERIFY(columnId);
-    TNodeId result(columnId, Counter.Inc(), ENodeType::OriginalColumn);
-    result.SubColumnName = subColumnName;
-    return result;
-}
-
-TOriginalDataAddress TNodeId::BuildOriginalDataAddress() const {
-    AFL_VERIFY(NodeType == ENodeType::OriginalColumn);
-    return TOriginalDataAddress(ColumnId, SubColumnName);
-}
-
 TString TOriginalDataAddress::DebugString() const {
     if (SubColumnName) {
         return TStringBuilder() << "{cId=" << ColumnId << ";sub=" << SubColumnName << "}";

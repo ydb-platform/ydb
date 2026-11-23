@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_ast.cpp
@@ -21,6 +21,8 @@ SRCS(
     yql_gc_nodes.h
     yql_type_string.cpp
     yql_type_string.h
+    yql_pos_handle.cpp
+    yql_pos_handle.h
 )
 
 PEERDIR(
@@ -42,10 +44,10 @@ PEERDIR(
     yql/essentials/parser/pg_catalog
 )
 
-YQL_LAST_ABI_VERSION()
 
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

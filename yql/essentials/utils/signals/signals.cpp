@@ -19,6 +19,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <array>
+#include <vector>
 
 namespace NYql {
 

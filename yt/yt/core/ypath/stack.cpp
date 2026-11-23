@@ -10,24 +10,30 @@
 #include <library/cpp/yt/string/string.h>
 
 namespace NYT::NYPath {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr int InitialItemCapacity = 8;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYPathStack::Push(TStringBuf key)
 {
-    auto keyLiteral = ToYPathLiteral(key);
-    PushLiteral(std::move(keyLiteral));
-}
-
-void TYPathStack::PushLiteral(std::string key)
-{
     if (PathMaterialized_) {
+        auto keyLiteral = ToYPathLiteral(key);
         PreviousPathLengths_.push_back(Path_.size());
-        Path_.reserve(key.length() + 1);
         Path_ += "/";
-        Path_ += key;
+        Path_ += keyLiteral;
     }
-    Items_.push_back(std::move(key));
+    if (Items_.capacity() == 0) {
+        Items_.reserve(InitialItemCapacity);
+    }
+    Items_.emplace_back(std::in_place_type<std::string>, key);
 }
 
 void TYPathStack::Push(int index)
@@ -36,6 +42,9 @@ void TYPathStack::Push(int index)
         PreviousPathLengths_.push_back(Path_.size());
         Path_ += "/";
         Path_ += std::to_string(index);
+    }
+    if (Items_.capacity() == 0) {
+        Items_.reserve(InitialItemCapacity);
     }
     Items_.emplace_back(index);
 }
@@ -75,7 +84,7 @@ const TYPath& TYPathStack::GetPath() const
             Path_ += "/";
             Visit(entry,
                 [&] (const std::string& value) {
-                    Path_ += value;
+                    Path_ += ToYPathLiteral(value);
                 },
                 [&] (int value) {
                     Path_ += std::to_string(value);

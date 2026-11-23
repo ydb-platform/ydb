@@ -1,49 +1,21 @@
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
 namespace NFq::NRowDispatcher {
 
+struct TActorFactory: public IActorFactory {
+    TActorFactory() {
+    }
 
-struct TActorFactory : public IActorFactory {
-    TActorFactory() {}
-
-    NActors::TActorId RegisterTopicSession(
-        const TString& readGroup,
-        const TString& topicPath,
-        const TString& endpoint,
-        const TString& database,
-        const TRowDispatcherSettings& config,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        NActors::TActorId rowDispatcherActorId,
-        NActors::TActorId compileServiceActorId,
-        ui32 partitionId,
-        NYdb::TDriver driver,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqStaticGateway::TPtr& pqGateway,
-        ui64 maxBufferSize,
+    NActors::TActorId RegisterTopicSession(const TString& readGroup, const TString& topicPath, const TString& endpoint, const TString& database,
+        const TRowDispatcherSettings& config, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        NActors::TActorId rowDispatcherActorId, NActors::TActorId compileServiceActorId, ui32 partitionId, NYdb::TDriver driver,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory, const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& countersRoot, const NYql::IPqStaticGateway::TPtr& pqGateway, ui64 maxBufferSize,
         bool enableStreamingQueriesCounters) const override {
-
-        auto actorPtr = NFq::NewTopicSession(
-            readGroup,
-            topicPath,
-            endpoint,
-            database,
-            config,
-            functionRegistry,
-            rowDispatcherActorId,
-            compileServiceActorId,
-            partitionId,
-            std::move(driver),
-            credentialsProviderFactory,
-            counters,
-            countersRoot,
-            pqGateway,
-            maxBufferSize,
-            enableStreamingQueriesCounters
-        );
+        auto actorPtr = NFq::NewTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId,
+            compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize,
+            enableStreamingQueriesCounters);
         return NActors::TActivationContext::Register(actorPtr.release(), {}, NActors::TMailboxType::HTSwap, Max<ui32>());
     }
 };
@@ -52,4 +24,4 @@ IActorFactory::TPtr CreateActorFactory() {
     return MakeIntrusive<TActorFactory>();
 }
 
-}
+}   // namespace NFq::NRowDispatcher

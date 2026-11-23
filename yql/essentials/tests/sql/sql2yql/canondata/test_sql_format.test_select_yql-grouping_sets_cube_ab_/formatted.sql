@@ -18,5 +18,8 @@ FROM (
     z
 )
 GROUP BY
-    CUBE (a, b)
+    CUBE (
+        a,
+        b
+    )
 ;

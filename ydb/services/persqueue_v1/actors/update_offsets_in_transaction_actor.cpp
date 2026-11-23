@@ -12,6 +12,10 @@ TUpdateOffsetsInTransactionActor::TUpdateOffsetsInTransactionActor(IRequestOpCtx
 void TUpdateOffsetsInTransactionActor::Bootstrap(const NActors::TActorContext& ctx)
 {
     TBase::Bootstrap(ctx);
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            "Consumer offset commits are disabled", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+    }
     Become(&TUpdateOffsetsInTransactionActor::StateWork);
     Proceed(ctx);
 }
@@ -57,7 +61,7 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
 
     for (const auto& topic : req->topics()) {
         auto* newTopic = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
-        newTopic->set_path(topic.path());
+        newTopic->set_path(Request_->NormalizePath(topic.path()));
 
         for (const auto& partition : topic.partitions()) {
             auto* newPartition = newTopic->add_partitions();

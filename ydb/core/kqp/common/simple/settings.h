@@ -15,6 +15,7 @@ namespace NKikimr::NKqp {
 struct TKqpQuerySettings {
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
+    bool IsAnalyze = false;
     i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
@@ -29,6 +30,7 @@ struct TKqpQuerySettings {
         return
             DocumentApiRestricted == other.DocumentApiRestricted &&
             IsInternalCall == other.IsInternalCall &&
+            IsAnalyze == other.IsAnalyze &&
             QueryType == other.QueryType &&
             Syntax == other.Syntax &&
             UsePessimisticLocks == other.UsePessimisticLocks &&
@@ -47,7 +49,7 @@ struct TKqpQuerySettings {
 
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(
-            DocumentApiRestricted, IsInternalCall, QueryType, Syntax,
+            DocumentApiRestricted, IsInternalCall, IsAnalyze, QueryType, Syntax,
             UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
         return THash<decltype(tuple)>()(tuple);
     }
@@ -56,6 +58,7 @@ struct TKqpQuerySettings {
         TStringBuilder result = TStringBuilder() << "{"
             << "DocumentApiRestricted: " << DocumentApiRestricted << ", "
             << "IsInternalCall: " << IsInternalCall << ", "
+            << "IsAnalyze: " << IsAnalyze << ", "
             << "QueryType: " << QueryType << ", "
             << "Syntax: " << static_cast<int>(Syntax) << ", "
             << "UsePessimisticLocks: " << UsePessimisticLocks << ", "

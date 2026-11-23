@@ -1,0 +1,18 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Md5",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk"
+  ],
+  "functions": [
+    {
+      "name": "md5",
+      "argument_types": [
+        "Optional<String>"
+      ],
+      "result_type": "Optional<String>"
+    }
+  ]
+}

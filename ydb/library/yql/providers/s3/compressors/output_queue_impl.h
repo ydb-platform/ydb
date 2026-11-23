@@ -2,12 +2,11 @@
 
 #include "output_queue.h"
 
+#include <util/generic/size_literals.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <util/generic/size_literals.h>
-
-#include <numeric>
 #include <deque>
+#include <numeric>
 
 namespace NYql {
 
@@ -15,7 +14,7 @@ namespace NYql {
 constexpr size_t S3PartUploadMinSize = 5_MB;
 
 template <size_t MinItemSize = S3PartUploadMinSize, size_t MaxItemSize = 0ULL>
-class TOutputQueue : public IOutputQueue {
+class TOutputQueue: public IOutputQueue {
 public:
     TOutputQueue() = default;
 
@@ -108,7 +107,9 @@ public:
     }
 
     size_t Volume() const override {
-        return std::accumulate(Queue.cbegin(), Queue.cend(), 0ULL, [](size_t sum, const TString& item) { return sum += item.size(); });
+        return std::accumulate(Queue.cbegin(), Queue.cend(), 0ULL, [](size_t sum, const TString& item) {
+            return sum += item.size();
+        });
     }
 
 private:
@@ -116,4 +117,4 @@ private:
     bool Sealed = false;
 };
 
-} // namespace NYql
+}   // namespace NYql

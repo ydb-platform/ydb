@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -16,13 +17,8 @@
 #include <utility>
 #include <vector>
 
-#if defined(HAVE_GSL)
-#  error #include <gsl/gsl>
-#else
-#  include <assert.h>
-#endif
-
 #include "nlohmann/json.hpp"
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/exporters/otlp/otlp_http.h"
 #include "opentelemetry/exporters/otlp/otlp_http_client.h"
@@ -99,7 +95,7 @@ public:
     ss << "Status:" << response.GetStatusCode() << ", Header:";
     response.ForEachHeader([&ss](opentelemetry::nostd::string_view header_name,
                                  opentelemetry::nostd::string_view header_value) {
-      ss << "\t" << header_name.data() << ": " << header_value.data() << ",";
+      ss << "\t" << header_name << ": " << header_value << ",";
       return true;
     });
     ss << "Body:" << body;
@@ -185,6 +181,10 @@ public:
                opentelemetry::nostd::string_view reason) noexcept override
   {
     // need to modify stopping_ under lock before calling callback
+    //
+    // Every state the client can end a request on. A state missing from here leaves the caller
+    // waiting for a callback that never comes. The exchange below decides ordering, so a state
+    // arriving after a response does not report a second time.
     bool need_stop = false;
     switch (state)
     {
@@ -194,6 +194,9 @@ public:
       case http_client::SessionState::SSLHandshakeFailed:
       case http_client::SessionState::TimedOut:
       case http_client::SessionState::NetworkError:
+      case http_client::SessionState::Destroyed:
+      case http_client::SessionState::ReadError:
+      case http_client::SessionState::WriteError:
       case http_client::SessionState::Cancelled: {
         need_stop = true;
       }
@@ -414,23 +417,6 @@ private:
   bool console_debug_ = false;
 };
 
-static inline char HexEncode(unsigned char byte)
-{
-#if defined(HAVE_GSL)
-  Expects(byte <= 16);
-#else
-  assert(byte <= 16);
-#endif
-  if (byte >= 10)
-  {
-    return static_cast<char>(byte - 10 + 'a');
-  }
-  else
-  {
-    return static_cast<char>(byte + '0');
-  }
-}
-
 static std::string HexEncode(const std::string &bytes)
 {
   std::string ret;
@@ -438,8 +424,8 @@ static std::string HexEncode(const std::string &bytes)
   for (std::string::size_type i = 0; i < bytes.size(); ++i)
   {
     unsigned char byte = static_cast<unsigned char>(bytes[i]);
-    ret.push_back(HexEncode(byte >> 4));
-    ret.push_back(HexEncode(byte & 0x0f));
+    ret.push_back(opentelemetry::common::detail::LowerHexDigit(byte >> 4));
+    ret.push_back(opentelemetry::common::detail::LowerHexDigit(byte));
   }
   return ret;
 }
@@ -857,8 +843,12 @@ bool OtlpHttpClient::ForceFlush(std::chrono::microseconds timeout) noexcept
     // When changes of running_sessions_ and notify_one/notify_all happen between predicate
     // checking and waiting, we should not wait forever.We should cleanup gc sessions here as soon
     // as possible to call FinishSession() and cleanup resources.
+    const std::chrono::steady_clock::duration wait_interval = (std::min)(
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(options_.timeout),
+        timeout_steady);
+
     std::chrono::steady_clock::time_point start_timepoint = std::chrono::steady_clock::now();
-    if (std::cv_status::timeout == session_waker_.wait_for(lock, options_.timeout))
+    if (std::cv_status::timeout == session_waker_.wait_for(lock, wait_interval))
     {
       cleanupGCSessions();
     }
@@ -870,7 +860,10 @@ bool OtlpHttpClient::ForceFlush(std::chrono::microseconds timeout) noexcept
     timeout_steady -= std::chrono::steady_clock::now() - start_timepoint;
   }
 
-  return timeout_steady > std::chrono::steady_clock::duration::zero();
+  // What the wait was for, rather than what is left of the deadline. A session that finishes
+  // between the last check and the last wait takes its notification with it, and the flush it was
+  // holding up has happened.
+  return finished_session_counter_.load(std::memory_order_acquire) >= wait_counter;
 }
 
 bool OtlpHttpClient::Shutdown(std::chrono::microseconds timeout) noexcept

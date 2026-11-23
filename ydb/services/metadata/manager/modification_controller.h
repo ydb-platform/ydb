@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NMetadata::NModifications {
@@ -19,11 +20,12 @@ public:
 class TEvModificationProblem: public TEventLocal<TEvModificationProblem, EvModificationProblem> {
 private:
     YDB_ACCESSOR_DEF(TString, ErrorMessage);
+
 public:
     TEvModificationProblem(const TString& errorMessage)
-        : ErrorMessage(errorMessage) {
-
+        : ErrorMessage(errorMessage)
+    {
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

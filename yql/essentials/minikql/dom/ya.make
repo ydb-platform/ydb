@@ -1,6 +1,4 @@
-LIBRARY()
-
-YQL_ABI_VERSION(2 44 0)
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/deprecated/enum_codegen
@@ -18,10 +16,12 @@ SRCS(
     make.cpp
     peel.cpp
     hash.cpp
+    convert.cpp
 )
 
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

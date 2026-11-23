@@ -5,6 +5,7 @@
 #include "blobstorage_synclogdata.h"
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_synclogkeeper_committer.h"
+#include "blobstorage_synclog_private_events.h"
 
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_state.h>
@@ -57,6 +58,8 @@ namespace NKikimr {
                 SyncLogPtr->FillInLogEssence(e);
             }
 
+            void FillInSpaceStat(TEvSyncLogSpaceStatResult *result) const;
+
             // Calculate first lsn in recovery log we must to keep
             ui64 CalculateFirstLsnToKeep() const;
             TString CalculateFirstLsnToKeepDecomposed() const;
@@ -67,6 +70,7 @@ namespace NKikimr {
 
             // incoming events
             void TrimTailEvent(ui64 trimTailLsn);
+            void AdvanceRecoveryBase(ui64 lsn);
             void BaldLogEvent(bool dropChunksExplicitly);
             void CutLogEvent(ui64 freeUpToLsn);
             void RetryCutLogEvent();
@@ -127,6 +131,7 @@ namespace NKikimr {
             TCommitHistory LastCommit;
             // all vdisk peers synced with this lsn, i.e. confirmed lsn
             ui64 TrimTailLsn = 0;
+            ui64 RecoveryBaseLsn = 0;
             // last request to cut log from Yard/PDisk
             ui64 FreeUpToLsn = 0;
             // actions we must apply but have not applied yet
@@ -191,4 +196,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

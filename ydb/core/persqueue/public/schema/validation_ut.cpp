@@ -93,6 +93,29 @@ Y_UNIT_TEST(CheckRetentionPeriod) {
     }
 }
 
+Y_UNIT_TEST(ValidateTopicPartitionCount) {
+    {
+        auto r = ValidateTopicPartitionCount(0, "Partitions count");
+        UNIT_ASSERT(r);
+    }
+    {
+        auto r = ValidateTopicPartitionCount(MAX_TOPIC_PARTITIONS, "Partitions count");
+        UNIT_ASSERT(r);
+    }
+    {
+        auto r = ValidateTopicPartitionCount(MAX_TOPIC_PARTITIONS + 1, "Partitions count");
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), ToString(MAX_TOPIC_PARTITIONS));
+    }
+    {
+        auto r = ValidateTopicPartitionCount(static_cast<i64>(Max<ui32>()), "Max active partitions");
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Max active partitions");
+    }
+}
+
 Y_UNIT_TEST(ConvertPositiveDuration) {
     {
         google::protobuf::Duration d;
@@ -336,8 +359,10 @@ Y_UNIT_TEST(ValidatePartitionStrategyThresholdPercents) {
     }
     {
         auto config = makeOkBase();
-        config.MutablePartitionStrategy()->SetMaxPartitionCount(0); // unlimited
-        UNIT_ASSERT(ValidatePartitionStrategy(config));
+        config.MutablePartitionStrategy()->SetMaxPartitionCount(0);
+        auto r = ValidatePartitionStrategy(config);
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Max active partitions");
     }
 }
 
@@ -813,6 +838,9 @@ Y_UNIT_TEST(ProcessTopicAttributesInvalidValues) {
 
         expectBad("_allow_unauthenticated_read", "not-bool", "not bool");
         expectBad("_allow_unauthenticated_write", "xx", "not bool");
+        for (const auto* value : {"", "true", "false", "unknown", "AVAILABLE"}) {
+            expectBad("_write_mode", value, "expected available, unavailable or prohibited");
+        }
         expectBad("_abc_id", "NaN", "not integer");
         expectBad("_max_partition_storage_size", "-5", "can't be negative");
         expectBad("_max_partition_storage_size", "oops", "not ui64");

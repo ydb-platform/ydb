@@ -256,6 +256,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .PathId = pathId,
                     .ColumnTags = std::move(columnTags),
                     .Path = path,
+                    .SampleRate = rowset.GetValueOrDefault<Schema::ForceTraversalTables::SampleRate>(1.0),
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
@@ -288,12 +289,15 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
         Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
+        Self->EnableBackgroundAnalyzeChangeRatio = AppData(ctx)->FeatureFlags.GetEnableBackgroundAnalyzeChangeRatio();
+        Self->EnableAnalyzeSampling = AppData(ctx)->FeatureFlags.GetEnableAnalyzeSampling();
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
+        Self->Schedule(Self->AnalyzeCountersReportPeriod, new TEvPrivate::TEvReportAnalyzeCounters());
 
         if (Self->EnableColumnStatistics) {
-            Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            Self->StartTraversalScheduler();
             Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             YDB_LOG_WARN("TTxInit::Complete. EnableColumnStatistics=false",
@@ -312,7 +316,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 Self->TraversalDatabase, Self->TraversalPathId);
         }
 
-        Self->ReportBaseStatisticsCounters();
+        Self->RebuildBaseStatisticsCounters();
         Self->Become(&TThis::StateWork);
     }
 };

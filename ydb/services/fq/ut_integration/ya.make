@@ -3,7 +3,9 @@ UNITTEST_FOR(ydb/services/fq)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
+
+SUPPRESSIONS(tsan.supp)
 
 SRCS(
     ut_utils.cpp

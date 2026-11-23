@@ -1,0 +1,19 @@
+nexusrpc: 1.0.0
+services:
+  temporal.api.workflowservice.v1.WorkflowService:
+    operations:
+      SignalWithStartWorkflowExecution:
+        input:
+          $dotnetRef: Temporalio.Api.WorkflowService.V1.SignalWithStartWorkflowExecutionRequest
+          $goRef: go.temporal.io/api/workflowservice/v1.SignalWithStartWorkflowExecutionRequest
+          $javaRef: io.temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest
+          $pythonRef: temporalio.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest
+          $rubyRef: Temporalio::Api::WorkflowService::V1::SignalWithStartWorkflowExecutionRequest
+          $typescriptRef: '@temporalio/api/workflowservice/v1.SignalWithStartWorkflowExecutionRequest'
+        output:
+          $dotnetRef: Temporalio.Api.WorkflowService.V1.SignalWithStartWorkflowExecutionResponse
+          $goRef: go.temporal.io/api/workflowservice/v1.SignalWithStartWorkflowExecutionResponse
+          $javaRef: io.temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionResponse
+          $pythonRef: temporalio.api.workflowservice.v1.SignalWithStartWorkflowExecutionResponse
+          $rubyRef: Temporalio::Api::WorkflowService::V1::SignalWithStartWorkflowExecutionResponse
+          $typescriptRef: '@temporalio/api/workflowservice/v1.SignalWithStartWorkflowExecutionResponse'

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/kqp/expr_nodes
@@ -21,11 +21,10 @@ SRCS(
     kqp_opt_join_cbo_factory.cpp
     kqp_opt_join_cost_based.cpp
     kqp_opt_join_tree_node.cpp
+    kqp_opt_predicate_normalize.cpp
     kqp_opt_predicate_selectivity.cpp
     kqp_opt_stat.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

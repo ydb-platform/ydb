@@ -1,6 +1,7 @@
 #pragma once
 
-#include <util/generic/hash.h>
+#include <yql/essentials/utils/meta/hash.h>
+
 #include <util/stream/output.h>
 
 namespace NSQLPureAST {
@@ -15,9 +16,10 @@ struct TPosition {
 
 } // namespace NSQLPureAST
 
-template <>
-struct THash<NSQLPureAST::TPosition> {
-    size_t operator()(const NSQLPureAST::TPosition& x) const {
-        return THash<std::tuple<ui32, ui32>>()(std::tie(x.Line, x.Column));
-    }
-};
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NSQLPureAST::TPosition, (Line)(Column));
+
+} // namespace NYql::NReflection
+
+YQL_DERIVE_HASH(NSQLPureAST::TPosition);

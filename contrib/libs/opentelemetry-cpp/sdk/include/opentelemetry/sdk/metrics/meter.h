@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,6 +22,7 @@
 #include "opentelemetry/sdk/metrics/instruments.h"
 #include "opentelemetry/sdk/metrics/meter_config.h"
 #include "opentelemetry/sdk/metrics/meter_context.h"
+#include "opentelemetry/sdk/metrics/meter_enabled_state.h"
 #include "opentelemetry/sdk/metrics/state/async_metric_storage.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk_config.h"
@@ -44,7 +46,7 @@ public:
   explicit Meter(
       std::weak_ptr<sdk::metrics::MeterContext> meter_context,
       std::unique_ptr<opentelemetry::sdk::instrumentationscope::InstrumentationScope> scope =
-          opentelemetry::sdk::instrumentationscope::InstrumentationScope::Create("")) noexcept;
+          opentelemetry::sdk::instrumentationscope::InstrumentationScope::Create(""));
 
   nostd::unique_ptr<opentelemetry::metrics::Counter<uint64_t>> CreateUInt64Counter(
       nostd::string_view name,
@@ -140,6 +142,20 @@ public:
   void DeregisterCallback(uintptr_t callback_id) noexcept override;
 #endif
 private:
+  // MeterProvider needs access to UpdateMeterConfig to propagate configuration updates to
+  // existing meters.
+  friend class MeterProvider;
+
+  /**
+   * Update this meter's MeterConfig. Called on construction, and by
+   * MeterProvider::UpdateMeterConfigurator when the provider-level MeterConfigurator is
+   * replaced at runtime.
+   */
+  void UpdateMeterConfig(MeterConfig config) noexcept;
+
+  /** Returns whether this meter is enabled by its current MeterConfig. */
+  bool IsEnabled() const noexcept { return meter_enabled_state_->IsEnabled(); }
+
   // order of declaration is important here - instrumentation scope should destroy after
   // meter-context.
   std::unique_ptr<sdk::instrumentationscope::InstrumentationScope> scope_;
@@ -151,14 +167,13 @@ private:
                                               InstrumentEqualNameCaseInsensitive>;
   MetricStorageMap storage_registry_;
   std::shared_ptr<ObservableRegistry> observable_registry_;
-  MeterConfig meter_config_;
+  // Shared with this meter's instruments so updates reach them; atomic so recording never blocks.
+  std::shared_ptr<MeterEnabledState> meter_enabled_state_{new MeterEnabledState()};
   std::unique_ptr<SyncWritableMetricStorage> RegisterSyncMetricStorage(
       InstrumentDescriptor &instrument_descriptor);
   std::unique_ptr<AsyncWritableMetricStorage> RegisterAsyncMetricStorage(
       InstrumentDescriptor &instrument_descriptor);
-  opentelemetry::common::SpinLockMutex storage_lock_;
-
-  static opentelemetry::metrics::NoopMeter kNoopMeter;
+  std::mutex storage_lock_;
 
   static nostd::shared_ptr<opentelemetry::metrics::ObservableInstrument>
   GetNoopObservableInsrument()
@@ -189,6 +204,12 @@ private:
   static void WarnOnNameCaseConflict(const sdk::instrumentationscope::InstrumentationScope *scope,
                                      const InstrumentDescriptor &existing_instrument,
                                      const InstrumentDescriptor &new_instrument);
+
+  // Emits a warning that the view will create a semantic error and will be ignored.
+  static void WarnOnViewSemanticError(const sdk::instrumentationscope::InstrumentationScope *scope,
+                                      const InstrumentDescriptor &existing_instrument,
+                                      const InstrumentDescriptor &stream,
+                                      const View &view);
 };
 }  // namespace metrics
 }  // namespace sdk

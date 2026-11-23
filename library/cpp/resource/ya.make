@@ -9,6 +9,7 @@ PEERDIR(
 SRCS(
     registry.cpp
     resource.cpp
+    static_blob_default.cpp
 )
 
 END()

@@ -62,14 +62,14 @@ static constexpr const char *kPprofProfileComment = "pprof.profile.comment";
 static constexpr const char *kPprofProfileDocUrl = "pprof.profile.doc_url";
 
 /**
-  Frames with Function.function_name fully matching the regexp will be dropped from the samples,
-  along with their successors.
+  Frames with Function.function_name fully matching the regular expression will be dropped from the
+  samples, along with their successors.
  */
 static constexpr const char *kPprofProfileDropFrames = "pprof.profile.drop_frames";
 
 /**
-  Frames with Function.function_name fully matching the regexp will be kept, even if it matches
-  drop_frames.
+  Frames with Function.function_name fully matching the regular expression will be kept, even if it
+  matches drop_frames.
  */
 static constexpr const char *kPprofProfileKeepFrames = "pprof.profile.keep_frames";
 

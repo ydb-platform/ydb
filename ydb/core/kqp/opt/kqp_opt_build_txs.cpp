@@ -1,6 +1,6 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -10,9 +10,10 @@
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
-#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -55,8 +56,9 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(
 
 class TKqpBuildTxTransformer : public TSyncTransformerBase {
 public:
-    TKqpBuildTxTransformer()
-        : QueryType(EKikimrQueryType::Unspecified)
+    explicit TKqpBuildTxTransformer(const TKikimrConfiguration::TPtr& config)
+        : Config(config)
+        , QueryType(EKikimrQueryType::Unspecified)
         , IsPrecompute(false)
         , MergeOutputAndEffect(false)
     {
@@ -242,9 +244,27 @@ private:
         return stages;
     }
 
-    static bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) {
+    bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) const {
+        const bool useStateTable = !Config->StreamingAggregationStateTablePath.Get().GetOrElse("").empty();
         // TODO: Avoid lambda analysis here, use sources/sinks for table interaction.
-        return std::all_of(stages.begin(), stages.end(), [](const auto& x) { return IsKqpPureLambda(x.Program()) && IsKqpPureInputs(x.Inputs()); });
+        return std::all_of(stages.begin(), stages.end(), [useStateTable](const auto& stage) {
+            if (!IsKqpPureLambda(stage.Program()) || !IsKqpPureInputs(stage.Inputs())) {
+                return false;
+            }
+
+            if (!useStateTable) {
+                return true;
+            }
+
+            // State table queries yield and require a compute actor, unlike literal execution.
+            return !FindNode(stage.Program().Ptr(), [](const TExprNode::TPtr& node) {
+                if (const auto aggregation = TMaybeNode<TKqpStreamingAggregation>(node)) {
+                    const auto stateTablePath = GetSetting(aggregation.Cast().Settings().Ref(), "state_table_path");
+                    return stateTablePath && !stateTablePath->Tail().Content().empty();
+                }
+                return false;
+            });
+        });
     }
 
     TMaybeNode<TExprList> BuildTxResults(TExprNode::TPtr inputExpr, TVector<TDqPhyStage>& stages,
@@ -441,7 +461,7 @@ private:
             const auto& inputArg = stage.Program().Args().Arg(i);
 
             // Scan inputs that may contain TKqpTxResultBinding
-            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
+            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>() || input.Maybe<TKqpCnVectorSearch>()) {
                 collectBindings(input.Ptr());
             }
 
@@ -511,6 +531,7 @@ private:
     }
 
 private:
+    const TKikimrConfiguration::TPtr Config;
     EKikimrQueryType QueryType;
     bool IsPrecompute;
     bool MergeOutputAndEffect;
@@ -545,6 +566,8 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
             collectPrecomputes(maybeSource.Cast().Ptr(), /* checkConnections */ true);
         } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
             collectPrecomputes(maybeStreamLookup.Cast().Settings().Ptr());
+        } else if (auto maybeVectorSearch = input.Maybe<TKqpCnVectorSearch>()) {
+            collectPrecomputes(maybeVectorSearch.Cast().TopK().Ptr());
         }
     }
 
@@ -552,6 +575,53 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     collectPrecomputes(stage.Program().Body().Ptr());
 
     return result;
+}
+
+TMaybeNode<TKqlUnsafeTruncate> GetUnsafeTruncate(const TKqlQuery& query) {
+    for (const auto& effect : query.Effects()) {
+        if (auto truncate = effect.Maybe<TKqlUnsafeTruncate>()) {
+            return truncate;
+        }
+    }
+    return {};
+}
+
+TKqpSinkEffect BuildTableTruncateEffect(const TKqlUnsafeTruncate& truncate, TExprContext& ctx) {
+    const auto pos = truncate.Pos();
+    const auto* rowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+    const auto rows = Build<TCoList>(ctx, pos)
+        .ListType(ExpandType(pos, *ctx.MakeType<TListExprType>(rowType), ctx))
+        .Done();
+
+    TDqStageSettings stageSettings;
+    stageSettings.PartitionMode = TDqStageSettings::EPartitionMode::Single;
+
+    // The sink carries the operation in the physical plan. Its executer needs no input rows.
+    const auto stage = Build<TDqStage>(ctx, pos)
+        .Inputs().Build()
+        .Program()
+            .Args({})
+            .Body<TCoToFlow>().Input(rows).Build()
+            .Build()
+        .Outputs()
+            .Add<TDqSink>()
+                .Index().Build("0")
+                .DataSink<TKqpTableSink>()
+                    .Category().Build(KqpTableTruncateSinkName)
+                    .Cluster().Build("db")
+                    .Build()
+                .Settings<TKqpTableTruncateSettings>()
+                    .TablePath(truncate.TablePath())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(stageSettings.BuildNode(ctx, pos))
+        .Done();
+
+    return Build<TKqpSinkEffect>(ctx, pos)
+        .Stage(stage)
+        .SinkIndex().Build("0")
+        .Done();
 }
 
 class TKqpBuildTxsTransformer : public TSyncTransformerBase {
@@ -597,7 +667,7 @@ public:
         : KqpCtx(kqpCtx)
         , BuildCtx(buildCtx)
     {
-        BuildTxTransformer = new TKqpBuildTxTransformer();
+        BuildTxTransformer = new TKqpBuildTxTransformer(config);
 
         bool enableSpilling = config->GetEnableQueryServiceSpilling() && (kqpCtx->IsGenericQuery() || kqpCtx->IsScanQuery()) && config->SpillingEnabled();
 
@@ -614,7 +684,7 @@ public:
             .Add(CreateKqpTxPeepholeTransformer(
                 typesCtx, config,
                 /* withFinalStageRules */ config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
-                {"KqpPeephole-RewriteCrossJoin"}),
+                {"KqpPeephole-RewriteCrossJoin", "KqpPeephole-ChooseHashJoin"}),
                 "Peephole")
             .Build(false);
     }
@@ -625,6 +695,36 @@ public:
         YQL_CLOG(DEBUG, ProviderKqp) << ">>> TKqpBuildTxsTransformer: " << KqpExprToPrettyString(*inputExpr, ctx);
 
         TKqlQuery query(inputExpr);
+
+        if (auto truncate = GetUnsafeTruncate(query)) {
+            // The truncate must be the only effect so that no other operations are discarded.
+            YDB_LOG_ENSURE(query.Results().Empty() && query.Effects().Size() == 1,
+                {"results", query.Results().Size()},
+                {"effects", query.Effects().Size()});
+
+            const auto effects = Build<TExprList>(ctx, query.Pos())
+                .Add(BuildTableTruncateEffect(truncate.Cast(), ctx))
+                .Done();
+            const auto sinkQuery = Build<TKqlQuery>(ctx, query.Pos())
+                .Results().Build()
+                .Effects(effects)
+                .Done();
+            auto tx = BuildTx(KqpCtx->Config->GetEnableIndexStreamWrite() ? sinkQuery.Ptr() : effects.Ptr(),
+                ctx, /* isPrecompute */ false);
+            if (!tx) {
+                return TStatus::Error;
+            }
+
+            // Truncate has its own transaction and is never deferred as a regular table write.
+            TKqpPhyTxSettings txSettings;
+            txSettings.Type = EPhysicalTxType::Generic;
+            BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())
+                .InitFrom(tx.Cast())
+                .Settings(txSettings.BuildNode(ctx, query.Pos()))
+                .Done());
+
+            return TStatus::Ok;
+        }
 
         if (auto status = TryBuildPrecomputeTx(query, outputExpr, ctx)) {
             return *status;
@@ -825,12 +925,12 @@ private:
 
         for (const auto& expr : list) {
             auto sinkEffect = expr.Maybe<TKqpSinkEffect>();
-            AFL_ENSURE(sinkEffect);
+            YDB_LOG_ENSURE(sinkEffect);
             const auto sinkSettings = GetStageSinkSettings(sinkEffect.Cast());
             if (!sinkSettings) {
                 const auto dqSink = GetStageSink(sinkEffect.Cast());
-                AFL_ENSURE(dqSink);
-                AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
+                YDB_LOG_ENSURE(dqSink);
+                YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks);
                 externalEffects.emplace_back(sinkEffect.Cast());
             } else {
                 // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
@@ -841,7 +941,7 @@ private:
                     || kqpCtx.UsePessimisticLocks;
 
                 // At current time Read Committed (pessimistic locks) support only one effect per query.
-                AFL_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
+                YDB_LOG_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
 
                 if (needSingleEffect) {
                     const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
@@ -990,17 +1090,24 @@ private:
         }
 
         // For each effects group, find which RETURNING results belong to it.
+        // A result may have consumer stages after a ReturningSink (for example,
+        // a projection over its physical output), so match every reachable stage.
         // After replaces, stages in EffectsGroups and UpdatedResults are consistent.
         THashMap<const TExprNode*, TVector<ui32>> rebuiltStageToResults;
         for (ui32 i = 0; i < collected.UpdatedResults.size(); ++i) {
-            if (auto maybeUnionAll = collected.UpdatedResults[i].Value().Maybe<TDqCnUnionAll>()) {
-                const auto stage = maybeUnionAll.Cast().Output().Stage();
-                rebuiltStageToResults[stage.Raw()].push_back(i);
-            }
+            VisitExpr(collected.UpdatedResults[i].Value().Ptr(), [](const TExprNode::TPtr& node) {
+                return !node->IsLambda();
+            }, [&](const TExprNode::TPtr& node) {
+                if (const auto maybeStage = TMaybeNode<TDqStageBase>(node)) {
+                    rebuiltStageToResults[maybeStage.Cast().Raw()].push_back(i);
+                }
+                return true;
+            });
         }
 
         for (const auto& effectsGroup : collected.EffectsGroups) {
             TVector<ui32> returningIndices;
+            THashSet<ui32> seenReturningIndices;
             VisitExpr(effectsGroup.Ptr(), [](const TExprNode::TPtr& node) {
                 return !node->IsLambda();
             }, [&](const TExprNode::TPtr& node) {
@@ -1009,7 +1116,9 @@ private:
                     auto it = rebuiltStageToResults.find(stage.Raw());
                     if (it != rebuiltStageToResults.end()) {
                         for (ui32 idx : it->second) {
-                            returningIndices.push_back(idx);
+                            if (seenReturningIndices.insert(idx).second) {
+                                returningIndices.push_back(idx);
+                            }
                         }
                     }
                 }
@@ -1024,11 +1133,11 @@ private:
     bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
             auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>();
-            AFL_ENSURE(maybeSinkEffect);
+            YDB_LOG_ENSURE(maybeSinkEffect);
             // Both TDqSink and TDqTransform derive from TDqOutputAnnotationBase,
             // so the DataSink is read from the base uniformly for sinks and transforms.
             const auto output = GetStageOutput(maybeSinkEffect.Cast());
-            AFL_ENSURE(output);
+            YDB_LOG_ENSURE(output);
             auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
             if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
                 return true;

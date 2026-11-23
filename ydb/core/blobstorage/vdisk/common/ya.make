@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/blobstorage/contracts
     ydb/library/actors/protos
     library/cpp/monlib/service/pages
     ydb/core/base
@@ -25,6 +26,7 @@ SRCS(
     defs.h
     disk_part.h
     sublog.h
+    vdisk_compaction_priority.h
     vdisk_config.cpp
     vdisk_config.h
     vdisk_context.cpp
@@ -61,6 +63,8 @@ SRCS(
     vdisk_pdisk_error.h
     vdisk_pdiskctx.h
     vdisk_private_events.h
+    vdisk_sector_sealing.cpp
+    vdisk_sector_sealing.h
     vdisk_queues.h
     vdisk_recoverylogwriter.cpp
     vdisk_recoverylogwriter.h

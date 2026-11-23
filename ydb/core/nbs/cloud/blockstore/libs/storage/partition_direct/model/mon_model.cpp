@@ -20,7 +20,6 @@ THostSnapshot THostSnapshot::Make(
         .Health = health,
         .InflightByOperation = hostStat.GetInflightByOperation(),
         .Errors = hostStat.GetErrorsInfo(now),
-        .PBuffersUsage = state.UsedPBuffers,
         .LatencyByOperation = latencyByOperation};
 }
 

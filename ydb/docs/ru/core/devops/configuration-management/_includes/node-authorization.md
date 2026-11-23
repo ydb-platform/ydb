@@ -84,7 +84,7 @@
       - "registerNode@cert"
     ```
 
-    Более подробная информация по настройке параметров аутентификации кластера приведена в [соответствующем разделе документации](../../../reference/configuration/index.md#security-access-levels).
+    Более подробная информация по настройке параметров аутентификации кластера приведена в [соответствующем разделе документации](../../../reference/configuration/security_config.md#security-access-levels).
 
 1. В блоке настроек `auth_config` присвойте параметру `node_registration_token` пустую строку. Пример:
 

@@ -40,7 +40,9 @@ Subcommand options:
 > {{ ydb-cli }} --profile quickstart workload topic init --partitions 256 --consumers 2
 > ```
 
-## Write load {#run-write}
+## Running the load {#run}
+
+### Write load {#run-write}
 
 This load type generates and writes messages to the topic asynchronously.
 
@@ -112,7 +114,7 @@ Total   7203    70      3023            250
 
 If you enable transactions, the command output will also include the `Commit time` column. It displays the percentile of transaction commit time, in milliseconds.
 
-## Read load {#run-read}
+### Read load {#run-read}
 
 This type of load reads messages from the topic asynchronously. To make sure that the topic includes messages, run the [write load](#run-write) before you start reading.
 
@@ -178,7 +180,7 @@ Total   30176           0               80267   784     0
 * `Read`: Message read rate for the consumer (in messages per second and MB/s).
 * `Full time`: Percentile of the full message processing time (from writing by the producer to reading by the consumer), in milliseconds.
 
-## Read and write load {#run-full}
+### Read and write load {#run-full}
 
 This type of load both reads messages from the topic and writes them to the topic asynchronously. This command is equivalent to running both read and write loads in parallel.
 

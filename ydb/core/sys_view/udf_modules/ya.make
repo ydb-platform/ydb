@@ -1,16 +1,15 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     udf_modules.cpp
 )
 
 PEERDIR(
-    ydb/core/kqp/runtime
+    ydb/core/kqp/common/events
+    ydb/core/kqp/runtime/common
     ydb/core/sys_view/common
     ydb/library/actors/core
     ydb/library/query_actor
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

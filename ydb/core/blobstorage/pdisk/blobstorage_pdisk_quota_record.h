@@ -37,6 +37,7 @@ class TQuotaRecord {
     TString Name;
     std::optional<TVDiskID> VDiskId;
     ui32 Weight = 1;
+    ui32 GroupSizeInUnits = 0;
 public:
     void SetName(const TString& name) {
         Name = name;
@@ -48,6 +49,14 @@ public:
 
     void SetWeight(ui32 v) {
         Weight = v;
+    }
+
+    void SetGroupSizeInUnits(ui32 v) {
+        GroupSizeInUnits = v;
+    }
+
+    ui32 GetGroupSizeInUnits() const {
+        return GroupSizeInUnits;
     }
 
     i64 GetUsed() const {
@@ -82,6 +91,7 @@ public:
         str << " Free# " << AtomicGet(Free);
         str << " Used# " << GetUsed();
         str << " Weight# " << GetWeight();
+        str << " GroupSizeInUnits# " << GetGroupSizeInUnits();
         double occupancy;
         str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0, &occupancy)) << "\n";
         str << " Occupancy# " << occupancy << "\n";
@@ -182,6 +192,32 @@ public:
         } else {
             return TColor::BLACK;
         }
+    }
+
+    // Largest allocation that still leaves this record strictly better than `color`.
+    // Mirrors EstimateSpaceColor, which reports a color better than X exactly while
+    // the free space left after the allocation is above the X boundary.
+    i64 GetHeadroomBelow(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        i64 boundary = 0;
+        switch (color) {
+        case TColor::PRE_ORANGE:
+            boundary = AtomicGet(PreOrange);
+            break;
+        case TColor::ORANGE:
+            boundary = AtomicGet(Orange);
+            break;
+        case TColor::RED:
+            boundary = AtomicGet(Red);
+            break;
+        case TColor::BLACK:
+            boundary = AtomicGet(Black);
+            break;
+        default:
+            Y_ABORT("no headroom is reported for color# %d", int(color));
+        }
+        return Max<i64>(0, AtomicGet(Free) - boundary - 1);
     }
 
     ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {

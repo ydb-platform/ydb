@@ -9,18 +9,25 @@ namespace NKqp {
 TIntrusivePtr<IOperator> TPullUpMapOverCBORule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
 
-    for (const auto& child : input->Children) {
+    for (size_t index = 0; index < input->GetChildCount(); ++index) {
+        auto child = input->GetChild(index);
         if (child->Kind == EOperator::Map && CastOperator<TOpMap>(child)->GetInput()->Kind == EOperator::CBOTree) {
             auto map = CastOperator<TOpMap>(child);
 
-            // We can always pull up a map above the join, unless we try to pull up from a right side of a non-inner join
-            // But we need to check that the join doesn't depend on the map
+            YQL_CLOG(TRACE, CoreDq) << "Trying to pull up map";
+
+            // Pulling computations above a NULL-extended side would replace the
+            // NULLs of unmatched rows with newly computed values.
             if (input->Kind == EOperator::Join) {
                 auto join = CastOperator<TOpJoin>(input);
-                if (join->JoinKind != "Inner" && join->GetLeftInput().Get() != map.Get()) {
+                const bool leftPreserved = join->JoinKind == "Cross" || join->JoinKind == "Left"
+                    || join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly";
+                if (join->JoinKind != "Inner" && (join->GetLeftInput() != map || !leftPreserved)) {
                     continue;
                 }
-                if (!IUIsSubset(join->GetUsedIUs(props), map->GetInput()->GetOutputIUs())) {
+                // Residual predicates, as well as keys, must not use definitions
+                // that would only become available above the join.
+                if (join->GetUsedIUs(props).HasAny(map->GetMapElements().Keys())) {
                     continue;
                 }
             }
@@ -28,7 +35,7 @@ TIntrusivePtr<IOperator> TPullUpMapOverCBORule::SimpleMatchAndApply(const TIntru
             // We also pull up the map above filters, but only if the filter doesn't depend on map output
             else if (input->Kind == EOperator::Filter) {
                 auto filter = CastOperator<TOpFilter>(input);
-                if (!IUIsSubset(filter->GetUsedIUs(props), map->GetInput()->GetOutputIUs())) {
+                if (!filter->GetUsedIUs(props).IsSubsetOf(map->GetInput()->GetOutputIUs())) {
                     continue;
                 }
             }
@@ -39,8 +46,8 @@ TIntrusivePtr<IOperator> TPullUpMapOverCBORule::SimpleMatchAndApply(const TIntru
             }
 
             // Perform the actual pull-up
-            input->ReplaceChild(child, map->GetInput());
-            map->ReplaceChild(map->GetInput(), input);
+            input->SetChild(index, map->GetInput());
+            map->SetInput(input);
             return map;
         }
         else {

@@ -8,7 +8,7 @@ using namespace NKikimr;
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageTest) {
     Y_UNIT_TEST(ShouldCreateTable)
     {
-        TTestBootstrap bootstrap{"ShouldCreateTable"};
+        TTestBootstrap bootstrap{ "ShouldCreateTable" };
 
         {
             auto description = bootstrap.WaitTable("queries");
@@ -72,4 +72,4 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageTest) {
     }
 }
 
-} // NFq
+}   // namespace NFq

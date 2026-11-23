@@ -1,7 +1,7 @@
 #include "hmac.h"
 
-#include <openssl/hmac.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <openssl/hmac.h>
 #include <util/generic/yexception.h>
 
 namespace NFq {
@@ -18,4 +18,4 @@ TString HmacSha1(const TStringBuf data, const TStringBuf secret) {
 TString HmacSha1Base64(const TStringBuf data, const TStringBuf secret) {
     return Base64Encode(HmacSha1(data, secret));
 }
-}
+}   // namespace NFq

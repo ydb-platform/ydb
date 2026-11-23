@@ -2,6 +2,7 @@
 #include "contexts.h"
 #include "fetching_executor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
@@ -86,16 +87,18 @@ public:
         , Environment(environment)
         , ConveyorCategory(conveyorCategory)
     {
-        AFL_VERIFY(Environment);
-        AFL_VERIFY(Callback);
+        YDB_LOG_VERIFY(Environment);
+        YDB_LOG_VERIFY(Callback);
     }
 
     ~TPortionsDataFetcher() {
         if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
             CurrentContext.Abort();
         }
-        AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
-            || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
+        YDB_LOG_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
+            || Callback->IsAborted(),
+            {"stage", Guard.GetStage()},
+            {"className", Callback->GetClassName()});
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
@@ -147,7 +150,7 @@ public:
             {"consumer", Input.GetConsumer()},
             {"taskId", Input.GetExternalTaskId()},
             {"script", Script.GetScriptClassName()});
-        AFL_VERIFY(!IsFinishedFlag);
+        YDB_LOG_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Error);
         Callback->OnError(errMessage);
@@ -159,7 +162,7 @@ public:
             {"consumer", Input.GetConsumer()},
             {"taskId", Input.GetExternalTaskId()},
             {"script", Script.GetScriptClassName()});
-        AFL_VERIFY(!IsFinishedFlag);
+        YDB_LOG_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Finished);
         Callback->OnFinished(std::move(CurrentContext));
@@ -173,7 +176,10 @@ public:
         if (IsFinishedFlag) {
             return false;
         }
-        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);
+        const bool useBatchPool = ConveyorCategory == NConveyorComposite::ESpecialTaskCategory::Compaction && HasAppData() &&
+                                  AppDataVerified().ColumnShardConfig.HasCompactionDefaultPool() &&
+                                  AppDataVerified().ColumnShardConfig.GetCompactionDefaultPool() == "Batch";
+        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0, useBatchPool);
         return true;
     }
 };

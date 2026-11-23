@@ -122,6 +122,11 @@ void SerialContourGenerator::export_lines(
     }
 }
 
+const char* SerialContourGenerator::get_name() const
+{
+    return "serial";
+}
+
 void SerialContourGenerator::march(std::vector<py::list>& return_lists)
 {
     auto n_chunks = get_n_chunks();

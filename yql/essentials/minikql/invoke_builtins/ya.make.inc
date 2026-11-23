@@ -47,6 +47,9 @@ SET(ORIG_SOURCES
     mkql_builtins_less_or_equal.cpp
     mkql_builtins_greater.cpp
     mkql_builtins_greater_or_equal.cpp
+    mkql_builtins_compare.cpp
+    mkql_builtins_datetime.cpp
+    mkql_builtins_impl_common.cpp
 )
 
 PEERDIR(
@@ -56,8 +59,6 @@ PEERDIR(
     yql/essentials/public/udf
     contrib/libs/apache/arrow
 )
-
-YQL_LAST_ABI_VERSION()
 
 ADDINCL(
     ${ORIG_SRC_DIR}

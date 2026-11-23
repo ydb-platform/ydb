@@ -6,7 +6,13 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    dq_channel_failure_ut.cpp
+    dq_channel_finish_ut.cpp
+    dq_channel_misc_ut.cpp
+    dq_channel_quota_ut.cpp
     dq_channel_service_ut.cpp
+    dq_channel_session_ut.cpp
+    dq_channel_spilling_ut.cpp
 )
 
 PEERDIR(

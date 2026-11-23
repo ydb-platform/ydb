@@ -25,6 +25,8 @@
 #include <util/string/cast.h>
 #include <vector>
 
+#include "y_absl/strings/string_view.h"
+
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/http/httpcli.h"
@@ -48,6 +50,8 @@ class UrlExternalAccountCredentials final : public ExternalAccountCredentials {
   void RetrieveSubjectToken(
       HTTPRequestContext* ctx, const Options& options,
       std::function<void(TString, grpc_error_handle)> cb) override;
+
+  y_absl::string_view CredentialSourceType() override;
 
   static void OnRetrieveSubjectToken(void* arg, grpc_error_handle error);
   void OnRetrieveSubjectTokenInternal(grpc_error_handle error);

@@ -65,6 +65,8 @@ private:
 
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev);
 
+    void HandleExecute(TEvKqpCompute::TEvScanWarning::TPtr& ev);
+
     bool IsDebugLogEnabled(const TActorSystem* actorSystem);
 
     ui64 CalculateFreeSpace() const;

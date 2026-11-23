@@ -100,7 +100,7 @@ public:
 
     void Abort() override
     {
-        YT_LOG_WARNING("Abort for this stream type is not supported");
+        YT_TLOG_WARNING("Abort for this stream type is not supported");
     }
 
 private:

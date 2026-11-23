@@ -249,9 +249,9 @@ public:
             const auto& keyTags = KeyColumnIds;
             NKikimrChangeExchange::TDataChange body;
             if (auto updates = NIncrRestoreHelpers::MakeRestoreUpdates(v.GetCells(), ValueTags, Columns); updates) {
-                Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
+                SerializeUpdates(body, ERowOp::Upsert, key, keyTags, *updates);
             } else {
-                Serialize(body, ERowOp::Erase, key, keyTags, {});
+                SerializeUpdates(body, ERowOp::Erase, key, keyTags, {});
             }
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::IncrementalRestore)
                 .WithOrder(++Order)
@@ -265,7 +265,7 @@ public:
 
             const auto& record = *recordPtr;
 
-            records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
+            records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBodySize());
             PendingRecords.emplace(record.GetOrder(), recordPtr);
         }
 

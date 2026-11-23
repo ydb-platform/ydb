@@ -23,6 +23,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 CLUSTER_CONFIG = dict(
+    disabled_feature_flags=["disable_old_secret_creation"],
     additional_log_configs={
         # 'TX_PROXY': LogLevels.DEBUG,
     },

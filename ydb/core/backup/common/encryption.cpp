@@ -249,6 +249,21 @@ public:
         return buffer;
     }
 
+    TBuffer AddData(TStringBuf data, bool last) {
+        TBuffer result;
+        do {
+            const size_t blockSize = Min(data.size(), MAX_BLOCK_SIZE);
+            TBuffer block = AddBlock(data.Head(blockSize), last && data.size() == blockSize);
+            if (result.Empty()) {
+                result = std::move(block);
+            } else {
+                result.Append(block.Data(), block.Size());
+            }
+            data.Skip(blockSize);
+        } while (data);
+        return result;
+    }
+
     void ResetCtx() {
         if (!Algorithm) {
             throw yexception() << "No cipher algorithm specified";
@@ -424,9 +439,13 @@ TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {
     return Impl->AddBlock(data, last);
 }
 
+TBuffer TEncryptedFileSerializer::AddData(TStringBuf data, bool last) {
+    return Impl->AddData(data, last);
+}
+
 TBuffer TEncryptedFileSerializer::EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
     TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv));
-    return serializer.AddBlock(data, true);
+    return serializer.AddData(data, true);
 }
 
 

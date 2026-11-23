@@ -955,7 +955,7 @@
                 "uid": "$ds"
               },
               "exemplar": false,
-              "expr": "sum by (execpool) (rate(utils_EventProcessingCount{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+              "expr": "sum by (execpool) (rate(utils_EventProcessingCountUs_count{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "time_series",
               "interval": "",
               "legendFormat": "{{execpool}}",

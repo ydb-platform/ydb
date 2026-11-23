@@ -8,22 +8,6 @@
 #ifndef AVX512_QSORT_32BIT
 #define AVX512_QSORT_32BIT
 
-/*
- * Constants used in sorting 16 elements in a ZMM registers. Based on Bitonic
- * sorting network (see
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg)
- */
-#define NETWORK_32BIT_1 14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1
-#define NETWORK_32BIT_2 12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3
-#define NETWORK_32BIT_3 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7
-#define NETWORK_32BIT_4 13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2
-#define NETWORK_32BIT_5 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-#define NETWORK_32BIT_6 11, 10, 9, 8, 15, 14, 13, 12, 3, 2, 1, 0, 7, 6, 5, 4
-#define NETWORK_32BIT_7 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8
-
-template <typename vtype, typename reg_t>
-X86_SIMD_SORT_INLINE reg_t sort_zmm_32bit(reg_t zmm);
-
 struct avx512_32bit_swizzle_ops;
 
 template <>
@@ -185,12 +169,12 @@ struct zmm_vector<int32_t> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const auto rev_index = _mm512_set_epi32(NETWORK_32BIT_5);
+        const auto rev_index = _mm512_set_epi32(NETWORK_REVERSE_16LANES);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_32bit<zmm_vector<type_t>>(x);
+        return sort_reg_16lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {
@@ -372,12 +356,12 @@ struct zmm_vector<uint32_t> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const auto rev_index = _mm512_set_epi32(NETWORK_32BIT_5);
+        const auto rev_index = _mm512_set_epi32(NETWORK_REVERSE_16LANES);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_32bit<zmm_vector<type_t>>(x);
+        return sort_reg_16lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {
@@ -573,12 +557,12 @@ struct zmm_vector<float> {
     }
     static reg_t reverse(reg_t zmm)
     {
-        const auto rev_index = _mm512_set_epi32(NETWORK_32BIT_5);
+        const auto rev_index = _mm512_set_epi32(NETWORK_REVERSE_16LANES);
         return permutexvar(rev_index, zmm);
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_zmm_32bit<zmm_vector<type_t>>(x);
+        return sort_reg_16lanes<zmm_vector<type_t>>(x);
     }
     static reg_t cast_from(__m512i v)
     {
@@ -601,56 +585,6 @@ struct zmm_vector<float> {
                 left_addr, right_addr, k, reg);
     }
 };
-
-/*
- * Assumes zmm is random and performs a full sorting network defined in
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg
- */
-template <typename vtype, typename reg_t = typename vtype::reg_t>
-X86_SIMD_SORT_INLINE reg_t sort_zmm_32bit(reg_t zmm)
-{
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(2, 3, 0, 1)>(zmm),
-            0xAAAA);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(0, 1, 2, 3)>(zmm),
-            0xCCCC);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(2, 3, 0, 1)>(zmm),
-            0xAAAA);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::permutexvar(_mm512_set_epi32(NETWORK_32BIT_3), zmm),
-            0xF0F0);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(1, 0, 3, 2)>(zmm),
-            0xCCCC);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(2, 3, 0, 1)>(zmm),
-            0xAAAA);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::permutexvar(_mm512_set_epi32(NETWORK_32BIT_5), zmm),
-            0xFF00);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::permutexvar(_mm512_set_epi32(NETWORK_32BIT_6), zmm),
-            0xF0F0);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(1, 0, 3, 2)>(zmm),
-            0xCCCC);
-    zmm = cmp_merge<vtype>(
-            zmm,
-            vtype::template shuffle<SHUFFLE_MASK(2, 3, 0, 1)>(zmm),
-            0xAAAA);
-    return zmm;
-}
 
 struct avx512_32bit_swizzle_ops {
     template <typename vtype, int scale>

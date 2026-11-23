@@ -66,6 +66,19 @@ public:
    */
   void Clear();
 
+  /**
+   * Adds the value at index `from` to the value at index `to` and resets the
+   * value at index `from` to zero.
+   *
+   * Equivalent to Increment(to, Get(from)) followed by zeroing `from`, but it
+   * dispatches on the cell width once instead of three times. Does nothing when
+   * the two indices are equal or when the source value is zero.
+   *
+   * @param from The index of the value to move.
+   * @param to The index of the value to move it into.
+   */
+  void Fold(size_t from, size_t to);
+
 private:
   void EnlargeToFit(uint64_t value);
 
@@ -143,8 +156,28 @@ public:
    */
   uint64_t Get(int32_t index) const;
 
+  /**
+   * Folds every populated bucket into the bucket at `index >> by`, in place.
+   *
+   * This is the counter side of an exponential histogram scale reduction. The
+   * backing array is reused, so no allocation happens unless a merged bucket
+   * count no longer fits the current cell width.
+   *
+   * Does nothing when the counter is empty or when `by` is zero. Values greater
+   * than 31 are treated as 31 because every int32_t index has already collapsed
+   * to either -1 or 0 at that point.
+   *
+   * @param by The number of scales to reduce by.
+   */
+  void Downscale(uint32_t by);
+
 private:
   size_t ToBufferIndex(int32_t index) const;
+  size_t ToBufferIndex(int32_t index, int32_t base_index) const;
+
+  // Moves the count at `index` into the bucket it folds into, expressed against
+  // the post-downscale base index. Only valid as a step of Downscale().
+  void FoldBucket(int32_t index, int32_t new_base_index, uint32_t shift);
 
   static constexpr int32_t kNullIndex = (std::numeric_limits<int32_t>::min)();
 

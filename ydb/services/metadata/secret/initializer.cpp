@@ -1,6 +1,6 @@
+#include "access.h"
 #include "initializer.h"
 #include "secret.h"
-#include "access.h"
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -32,7 +32,8 @@ void TSecretInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr control
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(hRequest, "create_history"));
     }
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageTablePath(), "acl"));
-    result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
+    result.emplace_back(
+        NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
     {
         Ydb::Table::AlterTableRequest request;
         request.set_session_id("");
@@ -78,8 +79,9 @@ void TAccessInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr control
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(hRequest, "create_history"));
     }
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetBehaviour()->GetStorageTablePath(), "acl"));
-    result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
+    result.emplace_back(
+        NInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
     controller->OnPreparationFinished(result);
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

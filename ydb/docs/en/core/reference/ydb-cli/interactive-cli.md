@@ -105,7 +105,7 @@ Special commands are CLI-specific commands and are not part of the YQL syntax. T
 | Command                  | Description                                                                                                                                                                      |
 |--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `SET param = value`      | Sets the value of the [internal variable](#internal-vars) `param` to `value`.                                                                                                    |
-| `EXPLAIN query-text`     | Outputs the query plan for `query-text`. Equivalent to the command [ydb table query explain](commands/explain-plan.md#explain-plan).                                             |
+| `EXPLAIN query-text`     | Outputs the query plan for `query-text`. Equivalent to the command [ydb table query explain](commands/explain-plan.md#query-execution-plans).                                             |
 | `EXPLAIN AST query-text` | Outputs the query plan for `query-text` along with the [AST](commands/explain-plan.md). Equivalent to the command [ydb table query explain --ast](commands/explain-plan.md#ast). |
 
 ### List of internal variables {#internal-vars}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -43,7 +44,7 @@ class TTester: public TNonCopyable {
 public:
     static constexpr const ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
 
-    static void Setup(TTestActorRuntime& runtime);
+    static void Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 };
 
 // Installs, on every node of the runtime, a stand-in snapshot registry whose OldestCollectionTime tracks
@@ -215,7 +216,7 @@ struct TTestSchema {
                     break;
                 }
             }
-            AFL_VERIFY(found);
+            YDB_LOG_VERIFY(found);
         }
         return result;
     }
@@ -491,6 +492,8 @@ void ProposeCommitFail(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
 [[nodiscard]] TPlanStep ProposeCommit(
     TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
+[[nodiscard]] std::optional<TPlanStep> TryProposeCommit(
+    TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId);
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, TPlanStep planStep, const TSet<ui64>& txIds);
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep planStep, const TSet<ui64>& txIds);
@@ -509,6 +512,14 @@ void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shard
 
 ui64 CountLocalDbTableRows(
     TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec);
+// asserts IndexPortionsByLastKey has exactly the (PathId, PortionId) of IndexPortions; returns the number of portions
+ui64 AssertIndexMatchesPortions(TTestBasicRuntime& runtime, ui64 tabletId, const std::vector<NArrow::NTest::TTestColumn>& pk);
+void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec);
+void UpdateLocalDbTableRow(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec);
+std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> ReadSchemaPresetVersions(TTestBasicRuntime& runtime, ui64 tabletId);
+
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId = TTestTxConfig::TxTablet0);
 
 void VerifyNoBackupOrRestoreArtifacts(
     TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId = TTestTxConfig::TxTablet0);
@@ -526,6 +537,8 @@ TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NA
     const TTestBlobOptions& options = {}, const std::set<std::string>& notNullColumns = {});
 TSerializedTableRange MakeTestRange(
     std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo, const std::vector<NArrow::NTest::TTestColumn>& columns);
+// The key MakeTestBlob gives to the row of this value.
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk);
 
 }   // namespace NKikimr::NTxUT
 

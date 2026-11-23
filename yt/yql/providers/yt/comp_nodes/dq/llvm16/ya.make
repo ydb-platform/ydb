@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq

@@ -153,7 +153,7 @@ void TMiniKqlExecutionActor::Bootstrap() {
         try {
             RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Serializing params: " << MiniKQLParamsToString(mkqlTx.GetParams().GetProto()));
             auto counters = Counters_ && Counters_->AllocPoolCounters ? *Counters_->AllocPoolCounters : TAlignedPagePoolCounters();
-            NMiniKQL::TScopedAlloc alloc(__LOCATION__, std::move(counters), AppData()->FunctionRegistry->SupportsSizedAllocators());
+            NMiniKQL::TScopedAlloc alloc(__LOCATION__, std::move(counters));
             NMiniKQL::TTypeEnvironment env(alloc);
             NMiniKQL::TRuntimeNode node = NMiniKQL::ImportValueFromProto(mkqlTx.GetParams().GetProto(), env);
             TString bin = NMiniKQL::SerializeRuntimeNode(node, env);

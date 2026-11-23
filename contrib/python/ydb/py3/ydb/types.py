@@ -15,7 +15,6 @@ from google.protobuf import struct_pb2
 
 from . import table
 
-
 try:
     from ydb.public.api.protos import ydb_value_pb2
 except ImportError:
@@ -55,12 +54,10 @@ def _to_date32(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
         pb.int32_value = value
 
 
-def _from_datetime_number(
-    x: typing.Union[float, datetime], table_client_settings: table.TableClientSettings
-) -> typing.Union[float, datetime]:
+def _from_datetime_number(x: int, table_client_settings: table.TableClientSettings) -> typing.Union[int, datetime]:
     if table_client_settings is not None and table_client_settings._native_datetime_in_result_sets:
-        # x is float when native_datetime_in_result_sets is True
-        return datetime.utcfromtimestamp(typing.cast(float, x))
+        # x is the raw Unix timestamp (seconds) from uint32_value/int64_value
+        return _EPOCH + timedelta(seconds=x)
     return x
 
 
@@ -640,3 +637,10 @@ class BulkUpsertColumns(AbstractTypeBuilder):
 class TypedValue:
     value: typing.Any
     value_type: typing.Optional[typing.Union[PrimitiveType, AbstractTypeBuilder]] = None
+
+
+def convert_floats_to_embedding_bytes(values: typing.Sequence[typing.Union[int, float]]) -> bytes:
+    """Encode numeric values as a YDB FloatVector for a Bytes query parameter."""
+    if len(values) == 0:
+        raise ValueError("embedding must not be empty")
+    return struct.pack(f"<{len(values)}f", *values) + b"\x01"

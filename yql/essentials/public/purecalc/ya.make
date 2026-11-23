@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     purecalc.cpp
@@ -8,8 +8,6 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/public/purecalc/common
 )
-
-YQL_LAST_ABI_VERSION()
 
 PROVIDES(YQL_PURECALC)
 

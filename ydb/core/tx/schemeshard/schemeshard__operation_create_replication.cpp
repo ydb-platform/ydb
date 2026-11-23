@@ -3,13 +3,17 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/util/proto_duration.h>
+#include <ydb/library/actors/core/log.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <google/protobuf/util/time_util.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -40,10 +44,40 @@ struct TReplicationStrategy : public IStrategy {
             return true;
         }
 
+        if (desc.GetConfig().HasAvailabilityPeriod()) {
+            const auto& period = desc.GetConfig().GetAvailabilityPeriod();
+            if (period.HasDuration()) {
+                const auto& duration = period.GetDuration();
+                if (!google::protobuf::util::TimeUtil::IsDurationValid(duration)
+                    || duration.seconds() < 0 || duration.nanos() < 0
+                    || (duration.seconds() == 0 && duration.nanos() == 0))
+                {
+                    result.SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Availability period must be a positive, representable duration");
+                    return true;
+                }
+
+                if (GetDuration(duration).MicroSeconds() >= NYql::NUdf::MAX_TIMESTAMP) {
+                    result.SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Availability period cannot be represented as SQL Interval after rounding to milliseconds");
+                    return true;
+                }
+            } else if (!period.HasUnlimited()) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period is not set");
+                return true;
+            }
+        }
+
         return false;
     }
 
-    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString&) const override {
+        if (!config.HasAvailabilityPeriod()) {
+            config.MutableAvailabilityPeriod()->MutableUnlimited();
+        } else if (config.GetAvailabilityPeriod().HasDuration()) {
+            auto& duration = *config.MutableAvailabilityPeriod()->MutableDuration();
+            SetDuration(GetDuration(duration), duration);
+        }
     }
 };
 
@@ -55,6 +89,10 @@ struct TTransferStrategy : public IStrategy {
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
+            return true;
+        }
+        if (desc.GetConfig().HasAvailabilityPeriod()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period is only supported for replication");
             return true;
         }
         if (desc.HasState()) {
@@ -112,23 +150,19 @@ static constexpr TReplicationStrategy ReplicationStrategy;
 static constexpr TTransferStrategy TransferStrategy;
 
 class TConfigureParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TConfigureParts"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TConfigureParts"; }
 
 public:
     explicit TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
         });
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -148,8 +182,9 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             if (tabletId == InvalidTabletId) {
-                LOG_D(DebugHint() << "Shard is not created yet"
-                    << ": shardIdx# " << shard.Idx);
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Shard is not created yet",
+                    {"shardIdx", shard.Idx},
+                );
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
@@ -175,9 +210,10 @@ public:
                     location.SetMonitoringProjectId(it->second);
                 }
 
-                LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
-                    << ": tabletId# " << tabletId
-                    << ", ev# " << ev->ToString());
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvCreateReplication to controller",
+                    {"tabletId", tabletId},
+                    {"message", ev->ToString()},
+                );
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
             }
 
@@ -188,7 +224,7 @@ public:
     }
 
     bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -198,9 +234,10 @@ public:
         case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
-                << " tabletId# " << tabletId
-                << " status# " << static_cast<int>(status));
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvCreateReplicationResult",
+                {"tabletId", tabletId},
+                {"status", static_cast<int>(status)},
+            );
             return false;
         }
 
@@ -211,7 +248,7 @@ public:
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvCreateReplicationResult");
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvCreateReplicationResult");
             return false;
         }
 
@@ -234,24 +271,20 @@ private:
 }; // TConfigureParts
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TPropose"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
             NReplication::TEvController::TEvCreateReplicationResult::EventType,
         });
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -264,8 +297,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -286,7 +320,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Replications[pathId] = alterData;
+        context.SS->Replications.Set(pathId, alterData);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
@@ -349,6 +383,8 @@ class TCreateReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    virtual const char* Name() const override final { return "TCreateReplication"; }
+
     explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, const IStrategy* strategy)
         : TSubOperation(id, state)
         , Strategy(strategy)
@@ -361,16 +397,16 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
         const auto& name = desc.GetName();
         const auto& acl = Transaction.GetModifyACL().GetDiffACL();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TCreateReplication Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", workingDir + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
@@ -462,7 +498,6 @@ public:
         path->PathType = Strategy->GetPathType();
         result->SetPathId(path->PathId.LocalPathId);
 
-        context.SS->IncrementPathDbRefCount(path->PathId);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
 
@@ -476,9 +511,52 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
-        desc.MutableState()->MutableStandBy();
+        if (desc.GetConfig().HasBootstrap()) {
+            const auto bootstrap = desc.GetConfig().GetBootstrap();
+            const bool scans = bootstrap == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SCAN;
+            const bool switchover = bootstrap == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER;
+
+            // BOOTSTRAP names what INITIAL_SCAN only implied. Both may be given, but not with
+            // contradictory meanings.
+            if (desc.GetConfig().HasInitialScan() && desc.GetConfig().GetInitialScan() != scans) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "BOOTSTRAP and INITIAL_SCAN contradict each other");
+                return result;
+            }
+            if (desc.GetConfig().HasTransferSpecific()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "BOOTSTRAP is not supported for a transfer");
+                return result;
+            }
+            // A switchover demotes tables the replication did not create, bypassing every
+            // protection a replica table has, so it needs a real cluster administrator. "All
+            // users are admins by default" does not count, as for an index implementation
+            // table alter.
+            const bool clusterAdmin = IsAdministrator(AppData(), context.UserToken.Get())
+                && !AppData()->AdministrationAllowedSIDs.empty();
+            if (switchover && !clusterAdmin) {
+                result->SetError(NKikimrScheme::StatusAccessDenied,
+                    "BOOTSTRAP = 'SWITCHOVER' requires a cluster administrator");
+                return result;
+            }
+            desc.MutableConfig()->SetInitialScan(scans);
+        }
+
+        if (desc.GetConfig().HasTransferSpecific()) {
+            desc.MutableConfig()->ClearInitialScan();
+        } else if (!desc.GetConfig().HasInitialScan()) {
+            desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
+        }
+        // A switchover has nothing to wait for: its destination tables already hold the data.
+        const bool startsWorking = desc.GetConfig().GetInitialScan()
+            || desc.GetConfig().GetBootstrap() == NKikimrReplication::TReplicationConfig::BOOTSTRAP_MODE_SWITCHOVER;
+        if (startsWorking) {
+            desc.MutableState()->MutableStandBy();
+        } else {
+            desc.MutableState()->MutablePaused();
+        }
         auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications[path->PathId] = replication;
+        context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
         replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
@@ -500,6 +578,12 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
+        // Undo-safety contract: the first direct DB write follows — from here
+        // on this Propose is undo-unsafe. Single-part suboperation only
+        // (enforced at ignite time in ProcessOperationParts): a failed propose
+        // aborts the whole transaction and the txc rolls everything back.
+        // All validations MUST stay above this line — a SetError/return after
+        // it would leave unreverted memory changes.
         NIceDb::TNiceDb db(context.GetDB());
 
         if (!acl.empty()) {
@@ -541,14 +625,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateReplication");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TCreateReplication AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", txId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -605,3 +691,5 @@ ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state)
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

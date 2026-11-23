@@ -4,6 +4,15 @@
 
 namespace NSQLTranslationV1 {
 
+struct TFlattenByArg {
+    TNodePtr Column;
+    TNodePtr Expression;
+};
+
+struct TFlattenByArgs {
+    TVector<TFlattenByArg> Arguments;
+};
+
 struct TYqlColumnRef {
     TPosition Position;
     TString Name;
@@ -25,6 +34,7 @@ struct TYqlSourceAlias {
 struct TYqlSource {
     TNodePtr Node;
     TMaybe<TYqlSourceAlias> Alias;
+    TNodePtr Flatten;
 };
 
 enum class EYqlJoinKind {
@@ -45,11 +55,18 @@ struct TYqlJoin {
     TVector<TYqlJoinConstraint> Constraints;
 };
 
-struct TPlainAsterisk {};
+using TProjection = TVector<TNodePtr>;
 
-using TProjection = std::variant<
-    TVector<TNodePtr>,
-    TPlainAsterisk>;
+struct TYqlWithout {
+    struct TColumn {
+        TPosition Position;
+        TString Source;
+        TString Name;
+    };
+
+    TVector<TColumn> Columns;
+    bool IsIfExists = false;
+};
 
 struct TGroupingSets {
     struct TRollup {
@@ -71,6 +88,7 @@ struct TGroupBy {
         TGroupingSets::TCube>;
 
     TVector<TElement> Elements;
+    bool IsCompact = false;
 };
 
 struct TOrderBy {
@@ -88,6 +106,7 @@ struct TYqlTableRefArgs {
     TString Service;
     TDeferredAtom Cluster;
     TDeferredAtom Key;
+    TViewDescription View;
     bool IsAnonymous = false;
 };
 
@@ -99,6 +118,7 @@ struct TYqlSetItemArgs {
     TPosition Position;
     bool Distinct = false;
     TProjection Projection;
+    TMaybe<TYqlWithout> Without;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
     TMaybe<TGroupBy> GroupBy;
@@ -141,6 +161,13 @@ TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlSelf(TPosition position);
 
+TNodePtr BuildYqlFlattenColumns(TPosition position);
+
+TNodePtr BuildYqlFlattenBy(
+    TPosition position,
+    TString mode,
+    TFlattenByArgs&& args);
+
 TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
 TSourcePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
@@ -152,6 +179,8 @@ TNodePtr BuildYqlScalarSubquery(TNodePtr node);
 TNodePtr BuildYqlExistsSubquery(TNodePtr node);
 
 TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression);
+
+TNodePtr BuildYqlStar(TPosition position, TMaybe<TString> source = Nothing());
 
 TNodePtr BuildYqlStatement(TNodePtr node);
 

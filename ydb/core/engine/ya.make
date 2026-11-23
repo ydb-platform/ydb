@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kikimr_program_builder.cpp
@@ -11,12 +11,14 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/deprecated/enum_codegen
     library/cpp/random_provider
     library/cpp/time_provider
     ydb/core/base
     ydb/core/scheme
+    ydb/core/scheme/mkql
     ydb/core/tablet
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos
@@ -27,11 +29,10 @@ PEERDIR(
     yql/essentials/public/decimal
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
+    benchmark
     minikql
 )
 

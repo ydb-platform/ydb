@@ -182,6 +182,10 @@ private:
         DependsOn(Partitions_);
     }
 
+    bool IsSuitableForCache() const final {
+        return false;
+    }
+
     NUdf::TUnboxedValue CreateStream(TComputationContext& ctx) const {
         auto partitions = ExtractPartitions(Partitions_->GetValue(ctx));
 

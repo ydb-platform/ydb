@@ -5,7 +5,7 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/result_set_format/kqp_result_set_builders.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
@@ -16,16 +16,16 @@ namespace NKqp {
 using namespace NMiniKQL;
 using namespace NYql;
 
-TKqpProtoBuilder::TSelfHosted::TSelfHosted(const IFunctionRegistry& funcRegistry)
-    : Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+TKqpProtoBuilder::TSelfHosted::TSelfHosted()
+    : Alloc(__LOCATION__)
     , TypeEnv(Alloc)
     , MemInfo("KqpProtoBuilder")
     , HolderFactory(Alloc.Ref(), MemInfo)
 {
 }
 
-TKqpProtoBuilder::TKqpProtoBuilder(const IFunctionRegistry& funcRegistry)
-    : SelfHosted(MakeHolder<TSelfHosted>(funcRegistry))
+TKqpProtoBuilder::TKqpProtoBuilder()
+    : SelfHosted(MakeHolder<TSelfHosted>())
 {
     Alloc = &SelfHosted->Alloc;
     TypeEnv = &SelfHosted->TypeEnv;

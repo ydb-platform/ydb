@@ -2,13 +2,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
-
 Y_UNIT_TEST_SUITE(TStreamMatcherPredicate) {
-
-
     Y_UNIT_TEST(NulloptAcceptsAny) {
         // No filter — every query passes regardless of streaming ops.
         {
@@ -49,4 +45,4 @@ Y_UNIT_TEST_SUITE(TStreamMatcherPredicate) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

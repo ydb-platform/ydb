@@ -8,13 +8,14 @@ Troubleshooting performance issues in {{ ydb-short-name }} involves the followin
 
 - [{{ ydb-short-name }} metrics](../../reference/observability/metrics/index.md)
 
-    Diagnistic steps for most performance issues involve analyzing [Grafana dashboards](../../reference/observability/metrics/grafana-dashboards.md) that use {{ ydb-short-name }} metrics collected by Prometheus For information about how to set up Grafana and Prometheus, see [{#T}](../../devops/observability/monitoring.md).
+    Diagnostic steps for most performance issues involve analyzing [Grafana dashboards](../../reference/observability/metrics/grafana-dashboards.md) that use {{ ydb-short-name }} metrics collected by Prometheus For information about how to set up Grafana and Prometheus, see [{#T}](../../devops/observability/monitoring.md).
 
 - [{{ ydb-short-name }} logs](../../devops/observability/logging.md)
 - [Tracing](../../reference/observability/tracing/setup.md)
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md)
 - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md)
-- [Query plans](../../dev/query-execution-optimization/query-plans-optimization.md)
+- [Query execution optimization](../../dev/optimization/index.md);
+- [Parameterized queries and recompilation](../../dev/optimization/parameterized-queries.md);
 - Third-party observability tools
 
 ## Classification of {{ ydb-short-name }} performance issues
@@ -33,7 +34,7 @@ Database performance issues can be classified into several categories based on t
 
 ### Insufficient resource issues
 
-These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database. In some cases, suboptimal allocation of resources, for example misconfigured [control groups (cgroups)](https://en.wikipedia.org/wiki/Cgroups) or [actor system pools](../../concepts/glossary.md#actor-system-pool), may also result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
+These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database. In some cases, suboptimal allocation of resources, for example misconfigured [control groups (cgroups)](https://en.wikipedia.org/wiki/Cgroups) or [actor system pools](../../reference/configuration/actor_system_config.md#tuneconfig), may also result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
 
 - **[CPU bottlenecks](hardware/cpu-bottleneck.md)**. High CPU usage can result in slow query processing and increased response times. When CPU resources are limited, the database may struggle to handle complex queries or large transaction loads.
 

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT YQL::@@(block '(
     (let times16 (lambda '(x) (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x (Concat x x)))))))))))))))))
     (let s2_8 (Apply times16 (String '"1000000000000007")))

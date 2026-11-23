@@ -1,0 +1,43 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NUdfStore;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "WasmCompileController";
+
+enum ESimpleCounters {
+    COUNTER_SIMPLE_IGNORE = 0;
+    COUNTER_WORKERS_REGISTERED = 1                        [(CounterOpts) = {Name: "WorkersRegistered"}];
+    COUNTER_ASSIGNMENTS_ACTIVE = 2                        [(CounterOpts) = {Name: "AssignmentsActive"}];
+    COUNTER_QUEUE_LENGTH = 3                              [(CounterOpts) = {Name: "QueueLength"}];
+    COUNTER_MODULES_MISSING_ARTIFACT = 4                  [(CounterOpts) = {Name: "ModulesMissingArtifact"}];
+    // A steady non-zero here is the "eternal hole" the retry budget stops at:
+    // nothing will pick these up again without an operator or a re-upload.
+    COUNTER_MODULES_POISONED = 5                          [(CounterOpts) = {Name: "ModulesPoisoned"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_CUMULATIVE_IGNORE = 0;
+    COUNTER_ASSIGNMENTS_ISSUED = 1                        [(CounterOpts) = {Name: "AssignmentsIssued"}];
+    COUNTER_ASSIGNMENT_TIMEOUTS = 2                       [(CounterOpts) = {Name: "AssignmentTimeouts"}];
+    COUNTER_COMPILES_DONE = 3                             [(CounterOpts) = {Name: "CompilesDone"}];
+    COUNTER_COMPILES_FAILED = 4                           [(CounterOpts) = {Name: "CompilesFailed"}];
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0 Name: "0 ms" }
+        Ranges { Value: 1 Name: "1 ms" }
+    };
+
+    COUNTER_PERCENTILE_IGNORE = 0;
+}
+
+enum ETxTypes {
+    TXTYPE_INIT_SCHEMA = 0                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_INIT = 1                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_REGISTER_WORKER = 2                            [(TxTypeOpts) = {Name: "TxRegisterWorker"}];
+    TXTYPE_ASSIGN = 3                                     [(TxTypeOpts) = {Name: "TxAssign"}];
+    TXTYPE_FINISH = 4                                     [(TxTypeOpts) = {Name: "TxFinish"}];
+}

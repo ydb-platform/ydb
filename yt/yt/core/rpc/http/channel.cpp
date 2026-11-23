@@ -147,7 +147,7 @@ private:
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     TError TerminationError_;
 
     void RecreateClient()

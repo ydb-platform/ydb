@@ -9,14 +9,19 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/settings/translator.h>
 
+#include <functional>
+
 namespace NSQLTranslation {
+
+using TTranslatorsRegistry = THashMap<TString, std::function<TTranslatorPtr()>>;
 
 struct TTranslators {
     TTranslatorPtr const V0;
     TTranslatorPtr const V1;
     TTranslatorPtr const PG;
+    TTranslatorsRegistry const Registry;
 
-    TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg);
+    TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg, TTranslatorsRegistry registry = {});
 };
 
 NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
@@ -28,7 +33,7 @@ google::protobuf::Message* SqlAST(const TTranslators& translators, const TString
 
 ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
 
-NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query, const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings);
+NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query, const google::protobuf::Message& protoAst, const TParsedTokenList& tokens, const TTranslationSettings& settings);
 
 TVector<NYql::TAstParseResult> SqlToAstStatements(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
                                                   NYql::TWarningRules* warningRules = nullptr, ui16* actualSyntaxVersion = nullptr, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);

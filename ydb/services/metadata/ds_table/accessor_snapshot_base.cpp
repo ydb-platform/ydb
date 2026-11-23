@@ -1,4 +1,5 @@
 #include "accessor_snapshot_base.h"
+
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
@@ -16,6 +17,7 @@ void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qRe
 
 void TDSAccessorBase::OnConstructSnapshotError(const TString& errorMessage) {
     YDB_LOG_ERROR("Cannot construct",
+        {"componentId", SnapshotConstructor->GetComponentId()},
         {"snapshot", errorMessage});
 }
 
@@ -58,7 +60,7 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
 
     Y_ABORT_UNLESS((int)replyIdx == qResult.result_sets().size());
     Y_ABORT_UNLESS((size_t)qResultFull.result_sets().size() == SnapshotConstructor->GetManagers().size());
-    
+
     auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(qResultFull, RequestedActuality);
 
     if (!parsedSnapshot) {
@@ -87,6 +89,7 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& e
     if (it == ExistenceChecks.end() || it->second.RetryCount == 0) {
         YDB_LOG_ERROR("",
             {"action", "cannot detect path existence"},
+            {"componentId", SnapshotConstructor->GetComponentId()},
             {"path", ev->Get()->GetPath()},
             {"error", ev->Get()->GetErrorMessage()});
     }
@@ -169,7 +172,6 @@ TDSAccessorBase::TDSAccessorBase(const NRequest::TConfig& config, NFetcher::ISna
     : Config(config)
     , SnapshotConstructor(snapshotConstructor)
 {
-
 }
 
 void TDSAccessorBase::Bootstrap() {
@@ -177,4 +179,4 @@ void TDSAccessorBase::Bootstrap() {
     OnBootstrap();
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

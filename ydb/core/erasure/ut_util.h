@@ -7,7 +7,7 @@
 #include <util/string/printf.h>
 #include <util/system/unaligned_mem.h>
 
-IOutputStream& Ctest = Cnull;
+inline IOutputStream& Ctest = Cnull;
 
 #define VERBOSE_COUT(a) Ctest << a
 

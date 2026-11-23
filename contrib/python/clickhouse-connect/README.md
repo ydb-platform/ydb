@@ -44,7 +44,7 @@ because Apache Superset currently requires `sqlalchemy>=1.4,<2`.
 Supported features include:
 - Basic query execution via SQLAlchemy Core
 - `SELECT` queries with `JOIN`s (including ClickHouse-specific strictness, `USING`, and `GLOBAL` modifiers),
-  `ARRAY JOIN` (single and multi-column), `FINAL`, `SAMPLE`, and materialized CTEs
+  `ARRAY JOIN` (single and multi-column), `FINAL`, `SAMPLE`, compound selects, and materialized CTEs
 - `VALUES` table function syntax
 - Lightweight `DELETE` statements
 - **Alembic** schema migrations (autogenerate, upgrade/downgrade, ClickHouse engine support)

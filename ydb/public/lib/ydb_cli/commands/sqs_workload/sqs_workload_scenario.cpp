@@ -38,7 +38,7 @@ namespace NYdb::NConsoleClient {
     TSqsWorkloadScenario::~TSqsWorkloadScenario() {}
 
     void TSqsWorkloadScenario::InitAwsSdk() {
-        AwsOptions.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;
+        AwsOptions.loggingOptions.logLevel = GetAwsSdkLogLevel();
         Aws::InitAPI(AwsOptions);
     }
 
@@ -52,13 +52,20 @@ namespace NYdb::NConsoleClient {
             TotalSec.Seconds(), 0, Percentile, ErrorFlag);
     }
 
-    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
+    Aws::Utils::Logging::LogLevel TSqsWorkloadScenario::GetAwsSdkLogLevel() const {
+        return AwsSdkLog
+            ? Aws::Utils::Logging::LogLevel::Debug
+            : Aws::Utils::Logging::LogLevel::Off;
+    }
+
+    Aws::Client::ClientConfiguration TSqsWorkloadScenario::CreateSqsClientConfiguration() const {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
         sqsClientConfiguration.endpointOverride =
             Aws::String(Endpoint.c_str(), Endpoint.size());
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
+        sqsClientConfiguration.disableExpectHeader = true;
         sqsClientConfiguration.maxConnections = WorkersCount * 4;
         sqsClientConfiguration.executor =
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
@@ -67,6 +74,12 @@ namespace NYdb::NConsoleClient {
         if (AwsRegion.Defined()) {
             sqsClientConfiguration.region = Aws::String(AwsRegion->c_str(), AwsRegion->size());
         }
+
+        return sqsClientConfiguration;
+    }
+
+    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
+        Aws::Client::ClientConfiguration sqsClientConfiguration = CreateSqsClientConfiguration();
 
         Aws::Auth::AWSCredentials credentials;
         if (AwsAccessKeyId.Defined()) {

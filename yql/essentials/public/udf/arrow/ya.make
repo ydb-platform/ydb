@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     args_dechunker.cpp
@@ -15,6 +15,9 @@ SRCS(
     block_item_comparator.cpp
     block_type_helper.cpp
     memory_pool.cpp
+    block_io_buffer.cpp
+    defs.cpp
+    dispatch_traits.cpp
 )
 
 PEERDIR(
@@ -23,8 +26,6 @@ PEERDIR(
 )
 
 PROVIDES(YqlUdfSdkArrow)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

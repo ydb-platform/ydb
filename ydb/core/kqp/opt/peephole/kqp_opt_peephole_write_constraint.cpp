@@ -42,7 +42,7 @@ TExprBase KqpRewriteWriteConstraint(const TExprBase& node, TExprContext& ctx) {
     for (ui32 i = 0; i < pgNotNullColumns->ChildrenSize(); i++) {
         auto structToCheck = chainEnsure ? chainEnsure : structArg.Ptr();
         const auto structToCheckType = GetSeqItemType(input->GetTypeAnn());
-        AFL_ENSURE(structToCheckType);
+        YDB_LOG_ENSURE(structToCheckType);
         if (structToCheckType->GetKind() == ETypeAnnotationKind::Struct) {
             const auto* structType = structToCheckType->Cast<TStructExprType>();
             if (IsTwoRowStruct(structType)) {

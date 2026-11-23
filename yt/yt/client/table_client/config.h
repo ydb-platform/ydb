@@ -385,9 +385,7 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Queues have no legacy of null-to-entity conversion to preserve, so an explicit null
-//! written into an `any` column of a queue stays a null instead of silently becoming
-//! a YSON entity.
+//! Same as #TInsertRowsFormatConfig, but disables null-to-entity conversion by default.
 struct TPushQueueProducerFormatConfig
     : public TInsertRowsFormatConfig
 {
@@ -475,6 +473,8 @@ struct TMinHashDigestConfig
 {
     int WriteTimestampCount;
     int DeleteTimestampCount;
+
+    i64 GetTotalTimestampCount() const;
 
     REGISTER_YSON_STRUCT(TMinHashDigestConfig);
 

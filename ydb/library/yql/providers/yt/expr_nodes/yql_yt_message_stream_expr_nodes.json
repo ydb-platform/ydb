@@ -1,0 +1,110 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TYtMessageStreamDataSource",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Match": {
+                "Type": "Callable",
+                "Name": "DataSource"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "Category",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 1,
+                    "Name": "Cluster",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 2,
+                    "Name": "ObjectKind",
+                    "Type": "TCoAtom"
+                }
+            ]
+        },
+        {
+            "Name": "TYtMessageStreamReadTable",
+            "Base": "TCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "YtReadMessageStream!"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "DataSource",
+                    "Type": "TYtMessageStreamDataSource"
+                },
+                {
+                    "Index": 2,
+                    "Name": "Table",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 3,
+                    "Name": "Columns",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 4,
+                    "Name": "Consumer",
+                    "Type": "TCoAtom"
+                }
+            ]
+        },
+        {
+            "Name": "TYtMessageStreamSourceSettings",
+            "Base": "TCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "YtMessageStreamSourceSettings"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "Table",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 2,
+                    "Name": "Token",
+                    "Type": "TCoSecureParam"
+                },
+                {
+                    "Index": 3,
+                    "Name": "Columns",
+                    "Type": "TCoAtomList"
+                },
+                {
+                    "Index": 4,
+                    "Name": "Consumer",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 5,
+                    "Name": "Partitions",
+                    "Type": "TCoAtom"
+                }
+            ]
+        }
+    ]
+}

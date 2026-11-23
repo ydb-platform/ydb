@@ -47,6 +47,7 @@ namespace NKikimr {
         // We call this function when PDisk returned ERROR and we pass pdiskFlags to set the correct state
         EState Set(NKikimrProto::EReplyStatus status, ui32 pdiskFlags, const TString& errorReason) {
             switch (status) {
+                case NKikimrProto::ERROR: // the PDisk is stopped or its device is out of order
                 case NKikimrProto::CORRUPTED:
                     return SetPrivate(NoWrites, errorReason);
                 case NKikimrProto::OUT_OF_SPACE:

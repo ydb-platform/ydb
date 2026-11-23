@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/comparable.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -63,9 +64,9 @@ private:
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<NCommon::TDataSourceLease> self) override;
+    virtual void DoBuildStageResult() override;
+    virtual void DoOnEmptyStageData() override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
     std::optional<ui32> PurposeSyncPointIndex;
@@ -79,7 +80,7 @@ protected:
         return NJson::JSON_MAP;
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& step) = 0;
 
 public:
     static bool CheckTypeCast(const EType type) {
@@ -89,7 +90,7 @@ public:
 
     void ActualizeAggregatedMemoryGuards() {
         const ui64 originalRecordsCount = GetRecordsCount();
-        AFL_VERIFY(originalRecordsCount);
+        YDB_LOG_VERIFY(originalRecordsCount);
         if (!HasStageData()) {
             return;
         }
@@ -111,33 +112,33 @@ public:
     void ClearMemoryGuards();
 
     ui32 GetPurposeSyncPointIndex() const {
-        AFL_VERIFY(PurposeSyncPointIndex);
+        YDB_LOG_VERIFY(PurposeSyncPointIndex);
         return *PurposeSyncPointIndex;
     }
 
     void ResetPurposeSyncPointIndex() {
-        AFL_VERIFY(PurposeSyncPointIndex);
+        YDB_LOG_VERIFY(PurposeSyncPointIndex);
         PurposeSyncPointIndex.reset();
     }
 
     void SetPurposeSyncPointIndex(const ui32 value) {
         if (!PurposeSyncPointIndex) {
-            AFL_VERIFY(value == 0);
+            YDB_LOG_VERIFY(value == 0);
         } else {
-            AFL_VERIFY(*PurposeSyncPointIndex + 1 == value);
+            YDB_LOG_VERIFY(*PurposeSyncPointIndex + 1 == value);
         }
         PurposeSyncPointIndex = value;
     }
 
     void InitPurposeSyncPointIndex(const ui32 value) {
-        AFL_VERIFY(!PurposeSyncPointIndex);
+        YDB_LOG_VERIFY(!PurposeSyncPointIndex);
         PurposeSyncPointIndex = value;
     }
 
     virtual void InitUsedRawBytes() = 0;
 
     ui64 GetUsedRawBytes() const {
-        AFL_VERIFY(UsedRawBytes);
+        YDB_LOG_VERIFY(UsedRawBytes);
         return *UsedRawBytes;
     }
 
@@ -146,7 +147,7 @@ public:
     }
 
     void SetUsedRawBytes(const ui64 value) {
-        AFL_VERIFY(!UsedRawBytes);
+        YDB_LOG_VERIFY(!UsedRawBytes);
         UsedRawBytes = value;
     }
 
@@ -155,19 +156,19 @@ public:
     }
 
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& GetGroupGuard() const {
-        AFL_VERIFY(SourceGroupGuard);
+        YDB_LOG_VERIFY(SourceGroupGuard);
         return SourceGroupGuard;
     }
 
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> ExtractGroupGuard() {
-        AFL_VERIFY(SourceGroupGuard);
+        YDB_LOG_VERIFY(SourceGroupGuard);
         auto result = std::move(SourceGroupGuard);
         SourceGroupGuard = nullptr;
         return std::move(result);
     }
 
     ui64 GetMemoryGroupId() const {
-        AFL_VERIFY(SourceGroupGuard);
+        YDB_LOG_VERIFY(SourceGroupGuard);
         return SourceGroupGuard->GetGroupId();
     }
 
@@ -183,20 +184,21 @@ public:
     }
 
     void SetCursor(TFetchingScriptCursor&& scriptCursor) {
-        AFL_VERIFY(!ScriptCursor);
+        YDB_LOG_VERIFY(!ScriptCursor);
         ScriptCursor = std::move(scriptCursor);
     }
 
-    void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    static void ContinueCursor(std::unique_ptr<NCommon::TDataSourceLease> sourceLease);
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetFirstPK() const = 0;
+    virtual NArrow::TSimpleRow GetLastPK() const = 0;
 
-    void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
-    virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    static void StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease);
+    virtual void InitializeProcessing();
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
-    bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
-        return DoStartFetchingAccessor(sourcePtr, step);
+    NCommon::TExecutionResult StartFetchingAccessor(const TFetchingScriptCursor& step) {
+        return DoStartFetchingAccessor(step);
     }
 
     virtual TInternalPathId GetPathId() const override = 0;
@@ -230,10 +232,11 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
-        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
+        : TBase(type, sourceIdx, context, isConflicting, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions,
+              deprecatedPortionId)
     {
     }
 
@@ -253,17 +256,20 @@ private:
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
         const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& op) const;
+    // Resolves the index meta (nullptr if there is no suitable index) for every check operation of the fetch context.
+    THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> SelectIndexesForFetch(const TFetchIndexContext& indexContext) const;
+    // Stored bytes of the indexes selected for the given contexts. Inplace payload is included: the scan copies it.
+    ui64 GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const;
 
-    virtual TConclusion<bool> DoStartFetchImpl(
+    virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
 
-    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
         const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& headers,
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) override;
@@ -310,11 +316,11 @@ private:
         return Portion->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& step) override;
 
 public:
     virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
+        YDB_LOG_VERIFY(!UsedRawBytes);
         UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
     }
 
@@ -324,6 +330,10 @@ public:
 
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
         return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+    }
+
+    virtual TString GetIndexStorageId(const ui32 indexId) const override {
+        return Portion->GetIndexStorageId(indexId, Schema->GetIndexInfo());
     }
 
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
@@ -354,16 +364,25 @@ public:
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }
 
-    virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override {
-        AFL_VERIFY(HasPortionAccessor())("type", GetType());
-        TBase::InitializeProcessing(sourcePtr);
+    virtual void InitializeProcessing() override {
+        YDB_LOG_VERIFY(HasPortionAccessor(),
+            {"type", GetType()});
+        TBase::InitializeProcessing();
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             return Portion->IndexKeyEnd();
         } else {
             return Portion->IndexKeyStart();
+        }
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            return Portion->IndexKeyStart();
+        } else {
+            return Portion->IndexKeyEnd();
         }
     }
 
@@ -378,7 +397,7 @@ public:
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
-        AFL_VERIFY(columnIds.size());
+        YDB_LOG_VERIFY(columnIds.size());
         switch (type) {
             case EMemType::Raw:
                 return GetPortionAccessor().GetColumnRawBytes(columnIds, false);
@@ -390,7 +409,7 @@ public:
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
-        AFL_VERIFY(columnsIds.size());
+        YDB_LOG_VERIFY(columnsIds.size());
         return GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
     }
 
@@ -410,36 +429,23 @@ public:
         return Portion;
     }
 
-    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
-        auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        const auto duplicatesManager = context->GetDuplicatesManager();
-        if (!duplicatesManager) {
-            // Scan abort raced with this step: UnregisterActors already dropped the manager.
-            AFL_VERIFY(!context->IsActive());
-            return;
-        }
-        NActors::TActivationContext::AsActorContext().Send(
-            duplicatesManager, new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
-    }
-
     std::optional<ui64> GetPortionIdOptional() const override {
         return Portion->GetPortionId();
     }
 
-    TPortionDataSource(
-        const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context);
+    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion,
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting);
 };
 
 class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
+    YDB_READONLY_DEF(std::vector<std::unique_ptr<NCommon::TDataSourceLease>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
-    const ui64 LastDeprecatedPortionId;
     const std::optional<ui64> LastPortionIdOptional;
 
-    void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
+    void DoBuildStageResult() override {
         const ui32 recordsCount = GetStageData().GetTable().GetRecordsCountActualVerified();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
@@ -447,25 +453,24 @@ private:
     }
 
     virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
-        const TColumnsSetIds& /*columns*/) override {
-        AFL_VERIFY(false);
-        return true;
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& /*step*/, const TColumnsSetIds& /*columns*/) override {
+        YDB_LOG_VERIFY(false);
+        return NCommon::TExecutionResult::Done();
     }
 
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& /*columns*/, const bool /*sequential*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
-    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchImpl for TAggregationDataSource");
     }
 
-    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
         const THashMap<ui32, IDataSource::TDataAddress>& /*columns*/, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/,
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) override {
@@ -494,7 +499,7 @@ private:
 
     virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TConclusionStatus::Fail("not implemented DoAssembleAccessor for TAggregationDataSource");
     }
 
@@ -513,19 +518,18 @@ private:
     }
 
     virtual TInternalPathId GetPathId() const override {
-        return Sources.front()->GetAs<IDataSource>()->GetPathId();
+        return Sources.front()->GetSource().GetAs<IDataSource>()->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
-        AFL_VERIFY(false);
-        return false;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& /*step*/) override {
+        YDB_LOG_VERIFY(false);
+        return NCommon::TExecutionResult::Done();
     }
 
-    static ui32 CalcInputRecordsCount(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+    static ui32 CalcInputRecordsCount(const std::vector<std::unique_ptr<NCommon::TDataSourceLease>>& sources) {
         ui32 recordsCount = 0;
         for (auto&& i : sources) {
-            recordsCount += i->GetStageData().GetTable().GetRecordsCountActualVerified();
+            recordsCount += i->GetSource().GetStageData().GetTable().GetRecordsCountActualVerified();
         }
         return recordsCount;
     }
@@ -547,91 +551,108 @@ public:
         return LastSourceRecordsCount;
     }
 
-    ui64 GetLastDeprecatedPortionId() const {
-        return LastDeprecatedPortionId;
-    }
-
     const std::optional<ui64>& GetLastPortionIdOptional() const {
         return LastPortionIdOptional;
     }
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
+        return "";
+    }
+
+    virtual TString GetIndexStorageId(const ui32 /*indexId*/) const override {
+        YDB_LOG_VERIFY(false);
         return "";
     }
 
     virtual TString GetColumnStorageId(const ui32 /*columnId*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return "";
     }
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TBlobRange();
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return Default<std::shared_ptr<ISnapshotSchema>>();
     }
 
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& /*entityIds*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
-        AFL_VERIFY(false);
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
+        YDB_LOG_VERIFY(false);
+        return NArrow::TSimpleRow(nullptr, 0);
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        YDB_LOG_VERIFY(false,
+            {"error", "GetLastPK not implemented"});
         return NArrow::TSimpleRow(nullptr, 0);
     }
 
     virtual bool DoAddTxConflict() override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
     virtual bool HasIndexes(const std::set<ui32>& /*indexIds*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
         NBlobOperations::NRead::TCompositeReadBlobs&& /*blobsOriginal*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return {};
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& /*columnIds*/, const EMemType /*type*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& /*columnsIds*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& /*indexIds*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
     TAggregationDataSource(
-        std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
-        , Sources(std::move(sources))
-        , LastSourceIdx(Sources.back()->GetSourceIdx())
-        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
-        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
-        , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
+        std::vector<std::unique_ptr<NCommon::TDataSourceLease>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+        : TAggregationDataSource(std::move(sources), LastOf(sources), context)
     {
-        AFL_VERIFY(Sources.size());
+    }
+
+private:
+    static const NCommon::IDataSource& LastOf(const std::vector<std::unique_ptr<NCommon::TDataSourceLease>>& sources) {
+        YDB_LOG_VERIFY(sources.size());
+        return sources.back()->GetSource();
+    }
+
+    TAggregationDataSource(std::vector<std::unique_ptr<NCommon::TDataSourceLease>>&& sources, const NCommon::IDataSource& last,
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+        : TBase(EType::SimpleAggregation, last.GetSourceIdx(), context, false, TSnapshot::Zero(), TSnapshot::Zero(),
+              CalcInputRecordsCount(sources), std::nullopt, false, last.GetSourceId())
+        , Sources(std::move(sources))
+        , LastSourceIdx(last.GetSourceIdx())
+        , LastSourceRecordsCount(last.GetRecordsCount())
+        , LastPortionIdOptional(last.GetPortionIdOptional())
+    {
     }
 };
 

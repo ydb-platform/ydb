@@ -1,15 +1,24 @@
 #pragma once
 
 #include <ydb/core/fq/libs/ydb/ydb.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/size_literals.h>
+
+#include <memory>
+
+namespace NYql::NDq {
+
+struct IMemoryQuotaManager;
+
+}   // namespace NYql::NDq
 
 namespace NKikimrConfig {
 
 class TStreamingQueriesConfig_TExternalStorageConfig;
 
-} // namespace NKikimrConfig
+}   // namespace NKikimrConfig
 
 namespace NFq {
 
@@ -20,7 +29,7 @@ class TJsonParserConfig;
 class TRowDispatcherConfig;
 class TRowDispatcherCoordinatorConfig;
 
-} // namespace NConfig
+}   // namespace NConfig
 
 class TRowDispatcherSettings {
 public:
@@ -66,7 +75,8 @@ public:
 
     TRowDispatcherSettings() = default;
     TRowDispatcherSettings(const NConfig::TRowDispatcherConfig& config);
-    TRowDispatcherSettings(const NKikimrConfig::TStreamingQueriesConfig_TExternalStorageConfig& config, bool enableStructuredJsonParsing = false);
+    TRowDispatcherSettings(
+        const NKikimrConfig::TStreamingQueriesConfig_TExternalStorageConfig& config, bool enableStructuredJsonParsing = false);
 
 private:
     YDB_ACCESSOR_MUTABLE(TCoordinatorSettings, Coordinator, {});
@@ -76,6 +86,7 @@ private:
     YDB_ACCESSOR(TDuration, TimeoutBeforeStartSession, TDuration::Seconds(10));
     YDB_ACCESSOR(ui64, MaxSessionUsedMemory, 4_MB);
     YDB_ACCESSOR(EConsumerMode, ConsumerMode, EConsumerMode::Auto);
+    YDB_ACCESSOR_DEF(std::shared_ptr<NYql::NDq::IMemoryQuotaManager>, MemoryQuotaManager);
 };
 
-} // namespace NFq
+}   // namespace NFq

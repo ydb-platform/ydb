@@ -36,9 +36,10 @@ TEST_P(TErasureStabilityTest, TErasureStabilityTest)
         return;
     }
 
+    const auto& codecParams = codec->GetParams();
     std::vector<TSharedRef> dataParts;
-    for (int i = 0; i < codec->GetDataPartCount(); ++i) {
-        dataParts.push_back(TSharedRef::FromBlob(GenerateDataBuffer(codec->GetWordSize())));
+    for (int i = 0; i < codecParams.DataPartCount; ++i) {
+        dataParts.push_back(TSharedRef::FromBlob(GenerateDataBuffer(codecParams.WordSize)));
     }
 
     auto parities = codec->Encode(dataParts);

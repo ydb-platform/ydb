@@ -212,6 +212,7 @@ class KikimrConfigGenerator(object):
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
+            lb_user_database_root=None,
             shutdown_config=None,
             replication_config=None,
     ):
@@ -374,6 +375,7 @@ class KikimrConfigGenerator(object):
         # disable kqp pattern cache on darwin platform to avoid using llvm versions of computational
         # nodes. These compute nodes are not properly tested and maintained on darwin platform.
         if sys.platform == "darwin":
+            self.yaml_config["table_service_config"]["enable_async_computation_pattern_compilation"] = False
             self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
 
         # dirty hack for internal ydbd flavour
@@ -410,6 +412,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
             self.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = False
+        if lb_user_database_root:
+            self.yaml_config['pqconfig'].setdefault('pqdiscovery_config', {})['lb_user_database_root'] = lb_user_database_root
         if pq_client_service_types:
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
@@ -590,13 +594,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
         if pg_compatible_expirement:
-            self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config["feature_flags"].setdefault('disable_pg_compatibility', False)
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-
-            # https://github.com/ydb-platform/ydb/issues/5152
-            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
 
         if generic_connector_config:
             if "query_service_config" not in self.yaml_config:
@@ -869,12 +870,12 @@ class KikimrConfigGenerator(object):
     def kafka_proxy_enabled(self):
         return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
 
-    def get_kafka_api_port(self, node_id):
+    def get_kafka_api_port(self, node_id, port_allocator=None):
         # An explicitly requested port must be honored as-is, otherwise the node would
         # still pick a dynamic port from the port manager (--kafka-port overrides the
         # config's listening_port). The fixed-port allocator already applies the
         # requested port together with its per-node offset, so keep using it there.
-        node_allocator = self.port_allocator.get_node_port_allocator(node_id)
+        node_allocator = port_allocator if port_allocator is not None else self.port_allocator.get_node_port_allocator(node_id)
         if self.__kafka_api_port not in (None, 'auto') and not isinstance(node_allocator, KikimrFixedNodePortAllocator):
             return self.__kafka_api_port
         return node_allocator.kafka_api_port

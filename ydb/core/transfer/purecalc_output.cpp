@@ -1,5 +1,4 @@
 #include "purecalc.h"
-#include "scheme.h"
 
 namespace NKikimr::NReplication::NTransfer {
 
@@ -10,10 +9,6 @@ TMessageOutputSpec::TMessageOutputSpec(const TScheme::TPtr& tableScheme, const N
 
 const NYT::TNode& TMessageOutputSpec::GetSchema() const {
     return Schema;
-}
-
-const TVector<NKikimrKqp::TKqpColumnMetadataProto>& TMessageOutputSpec::GetTableColumns() const {
-    return TableScheme->ColumnsMetadata;
 }
 
 const TVector<NKikimrKqp::TKqpColumnMetadataProto>& TMessageOutputSpec::GetStructColumns() const {
@@ -30,7 +25,6 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 
 class TOutputListImpl final: public IStream<TOutputMessage*> {
-protected:
     TWorkerHolder<IPullListWorker> WorkerHolder_;
     const TMessageOutputSpec& OutputSpec;
 
@@ -39,10 +33,15 @@ public:
         : WorkerHolder_(std::move(worker))
         , OutputSpec(outputSpec)
     {
-        Row.resize(1);
     }
 
-public:
+    ~TOutputListImpl() override {
+        with_lock(WorkerHolder_->GetScopedAlloc()) {
+            ResetOutput();
+            WorkerHolder_->Invalidate();
+        }
+    }
+
     TOutputMessage* Fetch() override {
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
@@ -53,6 +52,8 @@ public:
 
             NYql::NUdf::TUnboxedValue value;
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                ResetOutput();
+                WorkerHolder_->Invalidate();
                 return nullptr;
             }
 
@@ -96,7 +97,13 @@ public:
     }
 
 private:
-    std::vector<NUdf::TUnboxedValue> Row;
+    void ResetOutput() {
+        Out.Data.clear();
+        Out.Value = {};
+        Out.Table.reset();
+        Out.EstimateSize = 0;
+    }
+
     TOutputMessage Out;
 };
 

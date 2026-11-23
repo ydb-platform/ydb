@@ -208,6 +208,9 @@ QueryServiceConfig {
             port: {{settings.connector.grpc_port}}
         }
         UseSsl: false
+        {% for cluster in generic_settings.ydb_clusters %}
+        DatabaseNames: "{{cluster.database}}"
+        {% endfor %}
     }
 
     DefaultSettings {
@@ -269,8 +272,10 @@ class KqpRunner(Runner):
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} ' + \
-              f'--result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} --exclude-linked-udfs '
+        cmd = (
+            f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} '
+            + f'--result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} --exclude-linked-udfs '
+        )
 
         output = None
         data_out = None

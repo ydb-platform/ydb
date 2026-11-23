@@ -1,12 +1,9 @@
-#include <ydb/services/workload_manager/has_shared_reading_matcher.h>
-
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/services/workload_manager/has_shared_reading_matcher.h>
 
 #include <google/protobuf/any.pb.h>
-
 #include <library/cpp/testing/unittest/registar.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -25,30 +22,23 @@ NKqpProto::TKqpPhyStage* GetOrAddStage(TKqpPhyQuery& phy, size_t txIndex = 0, si
     return tx->MutableStages(stageIndex);
 }
 
-void AddPqTopicSourceAt(
-    TKqpPhyQuery& phy,
-    size_t txIndex,
-    size_t stageIndex,
-    const TString& topicPath,
-    bool sharedReading)
+void AddPqTopicSourceAt(TKqpPhyQuery& phy, size_t txIndex, size_t stageIndex, const TString& topicPath, bool sharedReading)
 {
     auto* source = GetOrAddStage(phy, txIndex, stageIndex)->AddSources();
     NYql::NPq::NProto::TDqPqTopicSource pqSource;
     pqSource.SetTopicPath(topicPath);
     pqSource.SetSharedReading(sharedReading);
     source->MutableExternalSource()->MutableSettings()->PackFrom(pqSource);
-    source->MutableExternalSource()->SetType(TString{NYql::PqSource});
+    source->MutableExternalSource()->SetType(TString{ NYql::PqSource });
 }
 
 void AddPqTopicSource(TKqpPhyQuery& phy, const TString& topicPath, bool sharedReading) {
     AddPqTopicSourceAt(phy, /*txIndex=*/0, /*stageIndex=*/0, topicPath, sharedReading);
 }
 
-
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSharedReadingMatcher) {
-
     Y_UNIT_TEST(EmptyQueryHasNoSharedReading) {
         TKqpPhyQuery phy;
         UNIT_ASSERT(!UsesSharedReading(phy));
@@ -94,7 +84,6 @@ Y_UNIT_TEST_SUITE(TSharedReadingMatcher) {
         AddPqTopicSourceAt(phy, /*txIndex=*/1, /*stageIndex=*/0, "/Root/topic3", false);
         UNIT_ASSERT(!UsesSharedReading(phy));
     }
-
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

@@ -5,7 +5,7 @@ from collections.abc import MutableSequence, Sequence
 from math import isinf, isnan, nan
 from typing import Any
 
-from clickhouse_connect.datatypes.base import ArrayType, ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.base import ArrayType, ClickHouseType, TypeDef, _TypeArgs
 from clickhouse_connect.driver import ctypes as driver_ctypes
 from clickhouse_connect.driver import options
 from clickhouse_connect.driver.common import array_type, decimal_prec, decimal_size, first_value, write_array
@@ -236,7 +236,7 @@ class BFloat16(ArrayType):
         if self.nullable:
             first = next((x for x in column if x is not None), None)
             if isinstance(first, float):
-                column = [0 if (x is None or isnan(x) or isinf(x)) else x for x in column]
+                column = [0 if x is None else x for x in column]
             else:
                 column = [0 if x is None else float(x) for x in column]
         elif not isinstance(column[0], float):
@@ -314,6 +314,7 @@ class Enum(ClickHouseType):
     _array_type = "b"
     valid_formats = "native", "int"
     python_type = str
+    _type_args = _TypeArgs(1, None, integer_bounds=(("value", -32768, 32767),))
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -344,6 +345,7 @@ class Enum(ClickHouseType):
 class Enum8(Enum):
     _array_type = "b"
     byte_size = 1
+    _type_args = _TypeArgs(1, None, integer_bounds=(("value", -128, 127),))
 
 
 class Enum16(Enum):
@@ -355,6 +357,7 @@ class Decimal(ClickHouseType):
     __slots__ = "prec", "scale", "_mult", "_zeros", "byte_size", "_array_type"
     python_type = decimal.Decimal
     dec_size = 0
+    _type_args = _TypeArgs(2, 2, integer_bounds=((0, 1, 76), (1, 0, 76)))
 
     @classmethod
     def build(cls: type["Decimal"], type_def: TypeDef):
@@ -443,59 +446,75 @@ class BigDecimal(Decimal, registered=False):
 
 class Decimal32(Decimal):
     dec_size = 32
+    _type_args = _TypeArgs(1, 1, integer_bounds=((0, 0, 9),))
 
 
 class Decimal64(Decimal):
     dec_size = 64
+    _type_args = _TypeArgs(1, 1, integer_bounds=((0, 0, 18),))
 
 
 class Decimal128(BigDecimal):
     dec_size = 128
+    _type_args = _TypeArgs(1, 1, integer_bounds=((0, 0, 38),))
 
 
 class Decimal256(BigDecimal):
     dec_size = 256
+    _type_args = _TypeArgs(1, 1, integer_bounds=((0, 0, 76),))
 
 
-class IntervalNanosecond(Int32):
+class Interval(Int64, registered=False):
+    def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
+        if self.read_format(ctx) == "string":
+            return [str(x) for x in column]
+        if ctx.use_extended_dtypes and self.nullable:
+            # base_type is the interval type name, which is not a pandas dtype
+            return options.pd.array(column, dtype="Int64")
+        if ctx.use_numpy and self.nullable and (not ctx.use_none):
+            return options.np.array(column, dtype=self.np_type)
+        return column
+
+
+class IntervalNanosecond(Interval):
     pass
 
 
-class IntervalMicrosecond(Int32):
+class IntervalMicrosecond(Interval):
     pass
 
 
-class IntervalMillisecond(Int32):
+class IntervalMillisecond(Interval):
     pass
 
 
-class IntervalSecond(Int32):
+class IntervalSecond(Interval):
     pass
 
 
-class IntervalMinute(Int32):
+class IntervalMinute(Interval):
     pass
 
 
-class IntervalHour(Int32):
+class IntervalHour(Interval):
     pass
 
 
-class IntervalDay(Int32):
+class IntervalDay(Interval):
     pass
 
 
-class IntervalWeek(Int32):
+class IntervalWeek(Interval):
     pass
 
 
-class IntervalMonth(Int32):
+class IntervalMonth(Interval):
     pass
 
 
-class IntervalQuarter(Int32):
+class IntervalQuarter(Interval):
     pass
 
 
-class IntervalYear(Int32):
+class IntervalYear(Interval):
     pass

@@ -14,9 +14,12 @@
 #include <ydb/core/protos/import.pb.h>
 #include <ydb/core/util/address_classifier.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -105,6 +108,15 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
                                    NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
                                    const TString& peerName, const TString& userSID, const TString& sanitizedToken,
                                    ui64 txId, const TParts& additionalParts) {
+    const auto generalStatus = GeneralStatus(status);
+    if (generalStatus == "ERROR" && reason.empty()) {
+        YDB_LOG_CRIT("Scheme operation failed without a reason",
+            {"operation", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())},
+            {"status", NKikimrScheme::EStatus_Name(status)},
+            {"txId", txId},
+        );
+    }
+
     auto logEntry = MakeAuditLogFragment(operation);
 
     TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
@@ -120,7 +132,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
         AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
         AUDIT_PART("operation", logEntry.Operation)
         AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
-        AUDIT_PART("status", GeneralStatus(status))
+        AUDIT_PART("status", generalStatus)
         AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(status))
         AUDIT_PART("reason", reason, !reason.empty())
 
@@ -170,7 +182,9 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
     const auto reason = response.HasReason() ? response.GetReason() : TString();
     for (const auto& operation : request.GetTransaction()) {
         const auto type = operation.GetOperationType();
-        if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type) {
+        if (NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin == type
+            || (type == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData && operation.GetInternal()))
+        {
             continue;
         }
         AuditLogModifySchemeOperation(operation, status, reason, SS, peerName, userSID, sanitizedToken, txId, TParts());
@@ -183,6 +197,9 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     for (const auto& operation : request.GetTransaction()) {
+        if (operation.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData && operation.GetInternal()) {
+            continue;
+        }
         auto logEntry = MakeAuditLogFragment(operation);
 
         TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
@@ -219,7 +236,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
             entry << ", remove access: " << i;
         }
 
-        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);
+        YDB_LOG_NOTICE("AUDIT: " << entry);
     }
 }
 
@@ -458,3 +475,5 @@ void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

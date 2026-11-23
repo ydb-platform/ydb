@@ -1,6 +1,6 @@
 #include "read_metadata.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
@@ -13,9 +13,16 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+std::unique_ptr<TDataSourceLease> ISourcesConstructor::TryExtractNext(
+    const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
+    YDB_LOG_VERIFY(!IsFinished());
+    YDB_LOG_VERIFY(InitCursorFlag);
+    return DoTryExtractNext(context, inFlightCurrentLimit);
+}
+
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
-    InitShardingInfo(read.TableMetadataAccessor);
+    InitShardingInfo(read.GetTableMetadataAccessor());
     TxId = read.TxId;
     LockId = read.LockId;
     auto lockNodeId = read.LockNodeId;
@@ -45,10 +52,10 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 
     ITableMetadataAccessor::TSelectMetadataContext context(
         owner->GetTablesManager(), owner->GetIndexVerified(), read.Orbit, owner->GetDataLocksManager());
-    SourcesConstructor = read.TableMetadataAccessor->SelectMetadata(context, read, readerClass);
+    SourcesConstructor = read.GetTableMetadataAccessor()->SelectMetadata(context, read, readerClass);
 
     if (!SourcesConstructor) {
-        return TConclusionStatus::Fail("cannot build sources constructor for " + read.TableMetadataAccessor->GetTablePath());
+        return TConclusionStatus::Fail("cannot build sources constructor for " + read.GetTableMetadataAccessor()->GetTablePath());
     }
 
     SourcesConstructor->InitCursor(read.GetScanCursorVerified());
@@ -70,7 +77,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
             for (const TPortionInfo::TConstPtr& p : conflictingPortions) {
                 // add maybe conflicting writes
                 if (!p->IsCommitted()) {
-                    AFL_VERIFY(p->GetPortionType() == EPortionType::Written);
+                    YDB_LOG_VERIFY(p->GetPortionType() == EPortionType::Written);
                     auto* written = static_cast<const TWrittenPortionInfo*>(p.get());
                     auto writeId = written->GetInsertWriteId();
                     auto op = opManager.GetOperationByInsertWriteIdVerified(writeId);
@@ -90,10 +97,11 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 }
 
 TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
-    : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
+    : TBase(schemaIndex, read.GetRequestSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
     , DuplicateFilteringNeeded(read.NeedDuplicateFiltering())
-    , TableMetadataAccessor(read.TableMetadataAccessor)
+    , TableMetadataAccessor(read.GetTableMetadataAccessor())
+    , SourcesSorting(read.GetSourcesSorting())
     , ReadStats(std::make_shared<TReadStats>())
 {
 }
@@ -102,9 +110,10 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     const auto& ids = GetProgram().GetEarlyFilterColumns();
     std::set<ui32> result(ids.begin(), ids.end());
-    AFL_VERIFY(result.size() == ids.size());
+    YDB_LOG_VERIFY(result.size() == ids.size());
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
-        AFL_VERIFY(indexInfo.HasColumnId(i))("column_id", i);
+        YDB_LOG_VERIFY(indexInfo.HasColumnId(i),
+            {"columnId", i});
     }
     return result;
 }
@@ -132,21 +141,30 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
         return;
     }
 
-    const ui64 lock = *GetLockId();
-    if (GetBreakLockOnReadFinished()) {
-        owner.GetOperationsManager().GetLockVerified(lock).SetBroken();
-    } else {
-        NOlap::NTxInteractions::TTxConflicts conflicts;
-        for (auto&& lockIdToCommit : GetConflictingLockIds()) {
-            // if lockIdToCommit commits, lock must be broken
-            conflicts.Add(lockIdToCommit, lock);
-        }
-        if (!conflicts.IsEmpty()) {
-            auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(
-                TableMetadataAccessor->GetPathIdVerified().InternalPathId, conflicts);
-            owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
-        }
+    // Already broken, nothing left to arrange.
+    if (LockSharingInfo->IsBroken()) {
+        return;
     }
+
+    // The scan saw writes that only conflict if they commit. Remember them: break this lock if they commit.
+    const ui64 lock = *GetLockId();
+    NOlap::NTxInteractions::TTxConflicts conflicts;
+    for (auto&& lockIdToCommit : GetConflictingLockIds()) {
+        conflicts.Add(lockIdToCommit, lock);
+    }
+    if (!conflicts.IsEmpty()) {
+        auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(
+            TableMetadataAccessor->GetPathIdVerified().InternalPathId, conflicts);
+        owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
+    }
+}
+
+void TReadMetadata::BreakLock() const {
+    LockSharingInfo->SetBroken();
+}
+
+bool TReadMetadata::HasWritesAndBroken() const {
+    return LockSharingInfo && LockSharingInfo->IsBroken() && LockSharingInfo->HasWrites();
 }
 
 void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const {

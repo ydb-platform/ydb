@@ -2,7 +2,7 @@ RECURSE_FOR_TESTS(
     ut
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     access_service.cpp

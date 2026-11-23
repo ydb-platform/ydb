@@ -1,18 +1,24 @@
 UNITTEST_FOR(ydb/core/kqp/provider)
 
 SRCS(
+    read_attributes_utils_ut.cpp
+    sql_path_aliases_ut.cpp
     yql_kikimr_gateway_ut.cpp
     yql_kikimr_provider_ut.cpp
-    read_attributes_utils_ut.cpp
+    yql_kikimr_provider_streaming_ut.cpp
 )
 
 PEERDIR(
+    library/cpp/testing/gmock_in_unittest
+    ydb/core/kqp/opt
+    ydb/core/kqp/query_compiler
     ydb/core/kqp/ut/common
     ydb/core/resource_pools
+    ydb/library/yql/providers/pq/provider
     yql/essentials/ast
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
     yql/essentials/sql/v1/translation
-    library/cpp/testing/gmock_in_unittest
 )
 
 YQL_LAST_ABI_VERSION()
@@ -24,7 +30,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 END()

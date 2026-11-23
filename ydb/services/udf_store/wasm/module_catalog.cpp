@@ -7,40 +7,21 @@ namespace NKikimr::NUdfStore::NWasm {
 
 void TWasmModuleCatalog::Register(TWasmModuleArtifactPtr artifact) {
     Y_ENSURE(artifact);
-    Y_ENSURE(!artifact->Md5.empty());
     Y_ENSURE(!artifact->ModuleName.empty());
 
-    with_lock (Mutex_) {
-        if (auto it = ByMd5_.find(artifact->Md5); it != ByMd5_.end()) {
-            ByModuleName_.erase(it->second->ModuleName);
-        }
-        ByMd5_[artifact->Md5] = artifact;
+    with_lock(Mutex_) {
         ByModuleName_[artifact->ModuleName] = artifact;
     }
 }
 
-void TWasmModuleCatalog::Unregister(const TString& md5) {
-    with_lock (Mutex_) {
-        auto it = ByMd5_.find(md5);
-        if (it == ByMd5_.end()) {
-            return;
-        }
-        ByModuleName_.erase(it->second->ModuleName);
-        ByMd5_.erase(it);
+void TWasmModuleCatalog::Unregister(const TString& moduleName) {
+    with_lock(Mutex_) {
+        ByModuleName_.erase(moduleName);
     }
-}
-
-TWasmModuleArtifactPtr TWasmModuleCatalog::FindByMd5(const TString& md5) const {
-    with_lock (Mutex_) {
-        if (auto it = ByMd5_.find(md5); it != ByMd5_.end()) {
-            return it->second;
-        }
-    }
-    return {};
 }
 
 TWasmModuleArtifactPtr TWasmModuleCatalog::FindByModuleName(const TString& moduleName) const {
-    with_lock (Mutex_) {
+    with_lock(Mutex_) {
         if (auto it = ByModuleName_.find(moduleName); it != ByModuleName_.end()) {
             return it->second;
         }
@@ -50,7 +31,7 @@ TWasmModuleArtifactPtr TWasmModuleCatalog::FindByModuleName(const TString& modul
 
 TVector<TString> TWasmModuleCatalog::ListModuleNames() const {
     TVector<TString> result;
-    with_lock (Mutex_) {
+    with_lock(Mutex_) {
         result.reserve(ByModuleName_.size());
         for (const auto& [name, _] : ByModuleName_) {
             result.push_back(name);
@@ -59,12 +40,10 @@ TVector<TString> TWasmModuleCatalog::ListModuleNames() const {
     return result;
 }
 
-TVector<TWasmModuleArtifactPtr> TWasmModuleCatalog::ResolveModules(
-    const TVector<TString>& moduleNames) const
-{
+TVector<TWasmModuleArtifactPtr> TWasmModuleCatalog::ResolveModules(const TVector<TString>& moduleNames) const {
     TVector<TWasmModuleArtifactPtr> result;
     result.reserve(moduleNames.size());
-    with_lock (Mutex_) {
+    with_lock(Mutex_) {
         for (const auto& name : moduleNames) {
             auto it = ByModuleName_.find(name);
             if (it == ByModuleName_.end()) {
@@ -81,4 +60,4 @@ TWasmModuleCatalog& GetWasmModuleCatalog() {
     return catalog;
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

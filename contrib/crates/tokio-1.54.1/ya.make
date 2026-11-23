@@ -1,0 +1,465 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(tokio)
+
+CRATE_VERSION(1.54.1)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/blocking.rs
+    src/doc/mod.rs
+    src/doc/os.rs
+    src/fs/canonicalize.rs
+    src/fs/copy.rs
+    src/fs/create_dir.rs
+    src/fs/create_dir_all.rs
+    src/fs/dir_builder.rs
+    src/fs/file.rs
+    src/fs/file/tests.rs
+    src/fs/file_times.rs
+    src/fs/hard_link.rs
+    src/fs/metadata.rs
+    src/fs/mocks.rs
+    src/fs/mod.rs
+    src/fs/open_options.rs
+    src/fs/open_options/mock_open_options.rs
+    src/fs/open_options/uring_open_options.rs
+    src/fs/read.rs
+    src/fs/read_dir.rs
+    src/fs/read_link.rs
+    src/fs/read_to_string.rs
+    src/fs/read_uring.rs
+    src/fs/remove_dir.rs
+    src/fs/remove_dir_all.rs
+    src/fs/remove_file.rs
+    src/fs/rename.rs
+    src/fs/set_permissions.rs
+    src/fs/symlink.rs
+    src/fs/symlink_dir.rs
+    src/fs/symlink_file.rs
+    src/fs/symlink_metadata.rs
+    src/fs/try_exists.rs
+    src/fs/write.rs
+    src/future/block_on.rs
+    src/future/maybe_done.rs
+    src/future/mod.rs
+    src/future/trace.rs
+    src/future/try_join.rs
+    src/fuzz.rs
+    src/io/async_buf_read.rs
+    src/io/async_fd.rs
+    src/io/async_read.rs
+    src/io/async_seek.rs
+    src/io/async_write.rs
+    src/io/blocking.rs
+    src/io/bsd/poll_aio.rs
+    src/io/interest.rs
+    src/io/join.rs
+    src/io/mod.rs
+    src/io/poll_evented.rs
+    src/io/read_buf.rs
+    src/io/ready.rs
+    src/io/seek.rs
+    src/io/split.rs
+    src/io/stderr.rs
+    src/io/stdin.rs
+    src/io/stdio_common.rs
+    src/io/stdout.rs
+    src/io/uring/mod.rs
+    src/io/uring/open.rs
+    src/io/uring/read.rs
+    src/io/uring/rename.rs
+    src/io/uring/statx.rs
+    src/io/uring/utils.rs
+    src/io/uring/write.rs
+    src/io/util/async_buf_read_ext.rs
+    src/io/util/async_read_ext.rs
+    src/io/util/async_seek_ext.rs
+    src/io/util/async_write_ext.rs
+    src/io/util/buf_reader.rs
+    src/io/util/buf_stream.rs
+    src/io/util/buf_writer.rs
+    src/io/util/chain.rs
+    src/io/util/copy.rs
+    src/io/util/copy_bidirectional.rs
+    src/io/util/copy_buf.rs
+    src/io/util/empty.rs
+    src/io/util/fill_buf.rs
+    src/io/util/flush.rs
+    src/io/util/lines.rs
+    src/io/util/mem.rs
+    src/io/util/mod.rs
+    src/io/util/read.rs
+    src/io/util/read_buf.rs
+    src/io/util/read_exact.rs
+    src/io/util/read_int.rs
+    src/io/util/read_line.rs
+    src/io/util/read_to_end.rs
+    src/io/util/read_to_string.rs
+    src/io/util/read_until.rs
+    src/io/util/repeat.rs
+    src/io/util/shutdown.rs
+    src/io/util/sink.rs
+    src/io/util/split.rs
+    src/io/util/take.rs
+    src/io/util/vec_with_initialized.rs
+    src/io/util/write.rs
+    src/io/util/write_all.rs
+    src/io/util/write_all_buf.rs
+    src/io/util/write_buf.rs
+    src/io/util/write_int.rs
+    src/io/util/write_vectored.rs
+    src/loom/mocked.rs
+    src/loom/mod.rs
+    src/loom/std/atomic_u16.rs
+    src/loom/std/atomic_u32.rs
+    src/loom/std/atomic_u64.rs
+    src/loom/std/atomic_u64_as_mutex.rs
+    src/loom/std/atomic_u64_native.rs
+    src/loom/std/atomic_u64_static_const_new.rs
+    src/loom/std/atomic_u64_static_once_cell.rs
+    src/loom/std/atomic_usize.rs
+    src/loom/std/barrier.rs
+    src/loom/std/mod.rs
+    src/loom/std/mutex.rs
+    src/loom/std/parking_lot.rs
+    src/loom/std/rwlock.rs
+    src/loom/std/unsafe_cell.rs
+    src/macros/addr_of.rs
+    src/macros/cfg.rs
+    src/macros/join.rs
+    src/macros/loom.rs
+    src/macros/mod.rs
+    src/macros/pin.rs
+    src/macros/select.rs
+    src/macros/support.rs
+    src/macros/thread_local.rs
+    src/macros/trace.rs
+    src/macros/try_join.rs
+    src/net/addr.rs
+    src/net/lookup_host.rs
+    src/net/mod.rs
+    src/net/tcp/listener.rs
+    src/net/tcp/mod.rs
+    src/net/tcp/socket.rs
+    src/net/tcp/split.rs
+    src/net/tcp/split_owned.rs
+    src/net/tcp/stream.rs
+    src/net/udp.rs
+    src/net/unix/datagram/mod.rs
+    src/net/unix/datagram/socket.rs
+    src/net/unix/listener.rs
+    src/net/unix/mod.rs
+    src/net/unix/pipe.rs
+    src/net/unix/socket.rs
+    src/net/unix/socketaddr.rs
+    src/net/unix/split.rs
+    src/net/unix/split_owned.rs
+    src/net/unix/stream.rs
+    src/net/unix/ucred.rs
+    src/net/windows/mod.rs
+    src/net/windows/named_pipe.rs
+    src/process/kill.rs
+    src/process/mod.rs
+    src/process/unix/mod.rs
+    src/process/unix/orphan.rs
+    src/process/unix/pidfd_reaper.rs
+    src/process/unix/reap.rs
+    src/process/windows.rs
+    src/runtime/blocking/mod.rs
+    src/runtime/blocking/pool.rs
+    src/runtime/blocking/schedule.rs
+    src/runtime/blocking/sharded.rs
+    src/runtime/blocking/shutdown.rs
+    src/runtime/blocking/task.rs
+    src/runtime/builder.rs
+    src/runtime/config.rs
+    src/runtime/context.rs
+    src/runtime/context/blocking.rs
+    src/runtime/context/current.rs
+    src/runtime/context/runtime.rs
+    src/runtime/context/runtime_mt.rs
+    src/runtime/context/scoped.rs
+    src/runtime/driver.rs
+    src/runtime/driver/op.rs
+    src/runtime/dump.rs
+    src/runtime/handle.rs
+    src/runtime/id.rs
+    src/runtime/io/driver.rs
+    src/runtime/io/driver/signal.rs
+    src/runtime/io/driver/uring.rs
+    src/runtime/io/driver/uring/tests.rs
+    src/runtime/io/metrics.rs
+    src/runtime/io/mod.rs
+    src/runtime/io/registration.rs
+    src/runtime/io/registration_set.rs
+    src/runtime/io/scheduled_io.rs
+    src/runtime/jspi.rs
+    src/runtime/local_runtime/mod.rs
+    src/runtime/local_runtime/options.rs
+    src/runtime/local_runtime/runtime.rs
+    src/runtime/metrics/batch.rs
+    src/runtime/metrics/histogram.rs
+    src/runtime/metrics/histogram/h2_histogram.rs
+    src/runtime/metrics/io.rs
+    src/runtime/metrics/mock.rs
+    src/runtime/metrics/mod.rs
+    src/runtime/metrics/runtime.rs
+    src/runtime/metrics/schedule_latency.rs
+    src/runtime/metrics/schedule_latency_mock.rs
+    src/runtime/metrics/scheduler.rs
+    src/runtime/metrics/worker.rs
+    src/runtime/mod.rs
+    src/runtime/park.rs
+    src/runtime/process.rs
+    src/runtime/runtime.rs
+    src/runtime/scheduler/block_in_place.rs
+    src/runtime/scheduler/current_thread/mod.rs
+    src/runtime/scheduler/defer.rs
+    src/runtime/scheduler/inject.rs
+    src/runtime/scheduler/inject/metrics.rs
+    src/runtime/scheduler/inject/pop.rs
+    src/runtime/scheduler/inject/rt_multi_thread.rs
+    src/runtime/scheduler/inject/shared.rs
+    src/runtime/scheduler/inject/synced.rs
+    src/runtime/scheduler/mod.rs
+    src/runtime/scheduler/multi_thread/counters.rs
+    src/runtime/scheduler/multi_thread/handle.rs
+    src/runtime/scheduler/multi_thread/handle/metrics.rs
+    src/runtime/scheduler/multi_thread/handle/taskdump.rs
+    src/runtime/scheduler/multi_thread/idle.rs
+    src/runtime/scheduler/multi_thread/mod.rs
+    src/runtime/scheduler/multi_thread/overflow.rs
+    src/runtime/scheduler/multi_thread/park.rs
+    src/runtime/scheduler/multi_thread/queue.rs
+    src/runtime/scheduler/multi_thread/stats.rs
+    src/runtime/scheduler/multi_thread/trace.rs
+    src/runtime/scheduler/multi_thread/trace_mock.rs
+    src/runtime/scheduler/multi_thread/worker.rs
+    src/runtime/scheduler/multi_thread/worker/metrics.rs
+    src/runtime/scheduler/multi_thread/worker/taskdump.rs
+    src/runtime/scheduler/multi_thread/worker/taskdump_mock.rs
+    src/runtime/scheduler/util/mod.rs
+    src/runtime/scheduler/util/time_alt.rs
+    src/runtime/signal/mod.rs
+    src/runtime/task/abort.rs
+    src/runtime/task/core.rs
+    src/runtime/task/error.rs
+    src/runtime/task/harness.rs
+    src/runtime/task/id.rs
+    src/runtime/task/join.rs
+    src/runtime/task/list.rs
+    src/runtime/task/mod.rs
+    src/runtime/task/raw.rs
+    src/runtime/task/state.rs
+    src/runtime/task/trace/mod.rs
+    src/runtime/task/trace/symbol.rs
+    src/runtime/task/trace/trace_impl.rs
+    src/runtime/task/trace/tree.rs
+    src/runtime/task/waker.rs
+    src/runtime/task_hooks.rs
+    src/runtime/thread_id.rs
+    src/runtime/time/entry.rs
+    src/runtime/time/handle.rs
+    src/runtime/time/mod.rs
+    src/runtime/time/source.rs
+    src/runtime/time/wheel/level.rs
+    src/runtime/time/wheel/mod.rs
+    src/runtime/time_alt/cancellation_queue.rs
+    src/runtime/time_alt/cancellation_queue/tests.rs
+    src/runtime/time_alt/context.rs
+    src/runtime/time_alt/entry.rs
+    src/runtime/time_alt/mod.rs
+    src/runtime/time_alt/registration_queue.rs
+    src/runtime/time_alt/registration_queue/tests.rs
+    src/runtime/time_alt/tests.rs
+    src/runtime/time_alt/timer.rs
+    src/runtime/time_alt/wake_queue.rs
+    src/runtime/time_alt/wake_queue/tests.rs
+    src/runtime/time_alt/wheel/level.rs
+    src/runtime/time_alt/wheel/mod.rs
+    src/signal/ctrl_c.rs
+    src/signal/mod.rs
+    src/signal/registry.rs
+    src/signal/reusable_box.rs
+    src/signal/unix.rs
+    src/signal/windows.rs
+    src/signal/windows/stub.rs
+    src/signal/windows/sys.rs
+    src/sync/barrier.rs
+    src/sync/batch_semaphore.rs
+    src/sync/broadcast.rs
+    src/sync/mod.rs
+    src/sync/mpsc/block.rs
+    src/sync/mpsc/bounded.rs
+    src/sync/mpsc/chan.rs
+    src/sync/mpsc/error.rs
+    src/sync/mpsc/list.rs
+    src/sync/mpsc/mod.rs
+    src/sync/mpsc/unbounded.rs
+    src/sync/mutex.rs
+    src/sync/notify.rs
+    src/sync/once_cell.rs
+    src/sync/oneshot.rs
+    src/sync/rwlock.rs
+    src/sync/rwlock/owned_read_guard.rs
+    src/sync/rwlock/owned_write_guard.rs
+    src/sync/rwlock/owned_write_guard_mapped.rs
+    src/sync/rwlock/read_guard.rs
+    src/sync/rwlock/write_guard.rs
+    src/sync/rwlock/write_guard_mapped.rs
+    src/sync/semaphore.rs
+    src/sync/set_once.rs
+    src/sync/task/atomic_waker.rs
+    src/sync/task/mod.rs
+    src/sync/watch.rs
+    src/task/blocking.rs
+    src/task/builder.rs
+    src/task/coop/consume_budget.rs
+    src/task/coop/mod.rs
+    src/task/coop/unconstrained.rs
+    src/task/join_set.rs
+    src/task/local.rs
+    src/task/mod.rs
+    src/task/spawn.rs
+    src/task/task_local.rs
+    src/task/yield_now.rs
+    src/time/clock.rs
+    src/time/error.rs
+    src/time/instant.rs
+    src/time/interval.rs
+    src/time/mod.rs
+    src/time/sleep.rs
+    src/time/timeout.rs
+    src/util/as_ref.rs
+    src/util/atomic_cell.rs
+    src/util/bit.rs
+    src/util/blocking_check.rs
+    src/util/cacheline.rs
+    src/util/error.rs
+    src/util/idle_notified_set.rs
+    src/util/linked_list.rs
+    src/util/markers.rs
+    src/util/memchr.rs
+    src/util/metric_atomics.rs
+    src/util/mod.rs
+    src/util/ptr_expose.rs
+    src/util/rand.rs
+    src/util/rand/rt.rs
+    src/util/rand/rt_unstable.rs
+    src/util/rc_cell.rs
+    src/util/sharded_list.rs
+    src/util/sync_wrapper.rs
+    src/util/trace.rs
+    src/util/try_lock.rs
+    src/util/typeid.rs
+    src/util/wake.rs
+    src/util/wake_list.rs
+)
+
+CRATE_INPUTS(
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    bytes
+    default
+    fs
+    io-util
+    libc
+    macros
+    mio
+    net
+    parking_lot
+    process
+    rt
+    rt-multi-thread
+    signal-hook-registry
+    socket2
+    sync
+    time
+    tokio-macros
+)
+
+PEERDIR(
+    contrib/crates/bytes-1.12.1
+    contrib/crates/mio-1.2.4
+    contrib/crates/parking_lot-0.12.5
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/socket2-0.6.5
+)
+
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL)
+    PEERDIR(
+    contrib/crates/libc-0.2.191
+    contrib/crates/signal-hook-registry-1.4.8
+)
+
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    CRATE_FEATURES(
+        windows-sys
+    )
+
+    PEERDIR(
+    contrib/crates/windows-sys-0.61.2
+)
+
+ENDIF()
+
+LICENSE("MIT")
+VERSION(1.54.1)
+ORIGINAL_SOURCE(https://static.crates.io/crates/tokio/tokio-1.54.1.crate)
+
+CRATE_FEATURES(
+    full
+    io-std
+    signal
+    tracing
+)
+
+CRATE_SOURCES(
+    src/runtime/tests/inject.rs
+    src/runtime/tests/loom_blocking.rs
+    src/runtime/tests/loom_current_thread.rs
+    src/runtime/tests/loom_current_thread/yield_now.rs
+    src/runtime/tests/loom_join_set.rs
+    src/runtime/tests/loom_local.rs
+    src/runtime/tests/loom_multi_thread.rs
+    src/runtime/tests/loom_multi_thread/queue.rs
+    src/runtime/tests/loom_multi_thread/shutdown.rs
+    src/runtime/tests/loom_multi_thread/yield_now.rs
+    src/runtime/tests/loom_oneshot.rs
+    src/runtime/tests/mod.rs
+    src/runtime/tests/queue.rs
+    src/runtime/tests/task.rs
+    src/runtime/tests/task_combinations.rs
+    src/runtime/time/tests/mod.rs
+    src/sync/tests/atomic_waker.rs
+    src/sync/tests/loom_atomic_waker.rs
+    src/sync/tests/loom_broadcast.rs
+    src/sync/tests/loom_list.rs
+    src/sync/tests/loom_mpsc.rs
+    src/sync/tests/loom_notify.rs
+    src/sync/tests/loom_oneshot.rs
+    src/sync/tests/loom_rwlock.rs
+    src/sync/tests/loom_semaphore_batch.rs
+    src/sync/tests/loom_set_once.rs
+    src/sync/tests/loom_watch.rs
+    src/sync/tests/mod.rs
+    src/sync/tests/notify.rs
+    src/sync/tests/semaphore_batch.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tokio-macros-2.7.2
+)
+
+END()

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
+
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/testing/common/env.h>
@@ -21,7 +22,8 @@ std::terminate_handler DefaultTerminateHandler;
 void TerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
-    Cerr << colors.Red() << "std::terminate called in thread " << (std::stringstream() << std::this_thread::get_id()).str() << colors.Default() << Endl;
+    Cerr << colors.Red() << "std::terminate called in thread " << (std::stringstream() << std::this_thread::get_id()).str() << colors.Default()
+         << Endl;
     if (std::current_exception()) {
         Cerr << colors.Red() << "Uncaught exception: " << CurrentExceptionMessage() << colors.Default() << Endl;
     } else {
@@ -85,9 +87,10 @@ TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
     return Nothing();
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
-void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> predicate, TDuration initialDelay, bool throwException) {
+void WaitFor(
+    TDuration timeout, const TString& description, std::function<bool(TString&)> predicate, TDuration initialDelay, bool throwException) {
     auto delay = initialDelay;
     const TInstant start = TInstant::Now();
     TString errorString;
@@ -101,7 +104,8 @@ void WaitFor(TDuration timeout, const TString& description, std::function<bool(T
         delay = std::min(2 * delay, TDuration::Seconds(1));
     }
 
-    const auto error = TStringBuilder() << "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString << ". Fail at " << TInstant::Now();
+    const auto error = TStringBuilder() << "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit "
+                                        << timeout << ", last error: " << errorString << ". Fail at " << TInstant::Now();
 
     if (throwException) {
         ythrow yexception() << error;
@@ -120,7 +124,7 @@ void SetupSignalHandlers() {
     NKikimr::EnableYDBBacktraceFormat();
 
     DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
-    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+    for (auto sig : { SIGFPE, SIGILL, SIGSEGV }) {
         signal(sig, &BackTraceSignalHandler);
     }
 }
@@ -170,13 +174,11 @@ void SetupLogLevel(NActors::TTestActorRuntimeBase& runtime, const std::optional<
 }
 
 void RestartTablet(const NActors::TActorSystem& runtime, ui64 tabletId) {
-    runtime.Send(NKikimr::MakeTabletResolverID(), new NKikimr::TEvTabletResolver::TEvForward(
-        tabletId,
-        new NActors::IEventHandle(NActors::TActorId(), NActors::TActorId(), new NActors::TEvents::TEvPoisonPill()),
-        {},
-        NKikimr::TEvTabletResolver::TEvForward::EActor::Tablet
-    ));
+    runtime.Send(NKikimr::MakeTabletResolverID(),
+        new NKikimr::TEvTabletResolver::TEvForward(tabletId,
+            new NActors::IEventHandle(NActors::TActorId(), NActors::TActorId(), new NActors::TEvents::TEvPoisonPill()), {},
+            NKikimr::TEvTabletResolver::TEvForward::EActor::Tablet));
     runtime.Send(NKikimr::MakeTabletResolverID(), new NKikimr::TEvTabletResolver::TEvTabletProblem(tabletId, NActors::TActorId()));
 }
 
-}  // namespace NTestUtils
+}   // namespace NTestUtils

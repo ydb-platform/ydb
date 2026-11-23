@@ -1,12 +1,19 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_activation_groups.cpp
     yql_dispatch.cpp
     yql_setting.h
+    yql_activation_policy.cpp
+    yql_activation_policy.h
+    yql_config_qplayer.cpp
+    yql_config_qplayer.h
+    yql_setting.cpp
 )
 
 PEERDIR(
+    yql/essentials/sql/settings
+    yql/essentials/core/project_settings
     yql/essentials/core/credentials
     yql/essentials/core/qplayer/storage/interface
     yql/essentials/core/sql_types
@@ -22,7 +29,6 @@ PEERDIR(
     yql/essentials/providers/common/proto
 )
 
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -3,7 +3,7 @@
 #include "aligned_page_pool.h"
 #include "primes.h"
 
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
 #include <yql/essentials/utils/meta/struct.h>
 

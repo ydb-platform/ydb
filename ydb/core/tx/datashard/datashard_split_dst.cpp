@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -163,6 +164,20 @@ public:
         }
     }
 
+    void RestoreLocalHnswMetadata(TTransactionContext& txc) {
+        // Modern split initialization receives the logical schema from SchemeShard.
+        // Local graph annotations belong to the source DataShard's persisted schema.
+        const auto& source = Ev->Get()->Record.GetUserTableScheme();
+        const ui64 tableId = source.HasPathId() ? source.GetPathId().GetLocalId() : source.GetId_Deprecated();
+        if (source.HasLocalHnswIndex()) {
+            TUserTable::TPtr updated = new TUserTable(*Self->TableInfos.at(tableId));
+            updated->UpdateLocalHnswIndex(source);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUserTable(db, tableId, *updated);
+            Self->SetUserTable(TPathId(Self->GetPathOwnerId(), tableId), std::move(updated));
+        }
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
 
@@ -187,13 +202,25 @@ public:
 
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
+        } else {
+            RestoreLocalHnswMetadata(txc);
         }
 
+        bool restoreLegacyRemovedRowVersions = false;
         for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {
             ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId();
             TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData();
             TString snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
             txc.Env.LoanTable(localTableId, snapBody);
+            const auto& tableSnapshot = record.GetTableSnapshot(i);
+            if (tableSnapshot.HasRemovedRowVersions()) {
+                // Union across merge sources: a snapshot is readable only if
+                // its history is available in every source key range.
+                TSnapshotManager::RestoreRemovedRowVersions(txc.DB, localTableId,
+                    tableSnapshot.GetRemovedRowVersions());
+            } else if (localTableId >= Schema::MinLocalTid) {
+                restoreLegacyRemovedRowVersions = true;
+            }
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -249,6 +276,82 @@ public:
             }
         }
 
+        if (restoreLegacyRemovedRowVersions) {
+            // Old sources only guaranteed persistent snapshots below their
+            // watermark. Restore those read guarantees even if the registry is
+            // unready, independently of optional additional cleanup below.
+            Self->GetSnapshotManager().RemoveRowVersions(txc.DB, TRowVersion::Min(), lowWatermark);
+        }
+
+        // Restore ancestor locks transferred from the src shard.
+        // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
+        if (record.LocksSize() > 0) {
+            TDataShardLocksDb locksDb(*Self, txc);
+            TVector<std::pair<ui64, ui64>> pendingConflicts; // (lockId, conflictId)
+            for (const auto& srcLockInfo : record.GetLocks()) {
+                if (!srcLockInfo.GetReadTables().empty()) {
+                    // Skip if someone sent us a read lock.
+                    continue;
+                }
+
+                ILocksDb::TLockRow row;
+                row.LockId = srcLockInfo.GetLockId();
+                row.LockNodeId = srcLockInfo.GetLockNodeId();
+                row.Generation = srcLockInfo.GetGeneration();
+                row.Counter = srcLockInfo.GetCounter();
+                row.CreateTs = srcLockInfo.GetCreateTimestamp();
+                row.Flags = ui64(srcLockInfo.GetFlags());
+
+                auto writeSeqNumStateFromProto = [](const auto& proto) {
+                    TWriteSeqNumState state;
+                    state.WriterIndex = proto.GetWriterIndex();
+                    state.WriteSeqNum = proto.GetWriteSeqNum();
+                    state.SerializedResult = proto.GetSerializedResult();
+                    return state;
+                };
+
+                for (const auto& proto : srcLockInfo.GetWriteSeqNumStates()) {
+                    auto state = writeSeqNumStateFromProto(proto);
+                    if (state.WriteSeqNum) {
+                        row.WriteSeqNumStates.push_back(std::move(state));
+                    }
+                }
+
+                row.AncestorLocks.reserve(srcLockInfo.GetAncestorLocks().size());
+                for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
+                    TAncestorLock ancestorLock;
+                    ancestorLock.TabletId = protoLock.GetTabletId();
+                    ancestorLock.Generation = protoLock.GetGeneration();
+                    ancestorLock.Counter = protoLock.GetCounter();
+                    ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
+                    ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
+
+                    for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
+                        auto state = writeSeqNumStateFromProto(proto);
+                        if (state.WriteSeqNum) {
+                            ancestorLock.WriteSeqNumStates[state.WriterIndex] = state;
+                        }
+                    }
+
+                    row.AncestorLocks.push_back(std::move(ancestorLock));
+                }
+
+                for (const auto& pathProto : srcLockInfo.GetWriteTables()) {
+                    row.WriteTables.push_back(TPathId::FromProto(pathProto));
+                }
+
+                for (ui64 conflictId : srcLockInfo.GetConflicts()) {
+                    pendingConflicts.emplace_back(row.LockId, conflictId);
+                }
+
+                Self->SysLocksTable().RestoreLockFromSplitSrc(srcTabletId, std::move(row), locksDb);
+            }
+
+            for (auto [lockId, conflictId] : pendingConflicts) {
+                Self->SysLocksTable().RestoreConflictFromSplitSrc(lockId, conflictId, locksDb);
+            }
+        }
+
         // Persist the fact that the snapshot has been received, so that duplicate event can be ignored
         db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update();
         Self->ReceiveSnapshotsFrom.erase(srcTabletId);
@@ -261,26 +364,10 @@ public:
         if (Self->ReceiveSnapshotsFrom.empty()) {
             const auto minVersion = Self->GetSnapshotManager().GetLowWatermark();
 
-            // Mark versions not accessible via snapshots as deleted
-            for (const auto& kv : Self->GetUserTables()) {
-                // FIXME: tables need to always have owner id
-                ui64 ownerId = Self->GetPathOwnerId();
-                ui64 tableId = kv.first;
-                ui32 localTableId = kv.second->LocalTid;
-                TRowVersion vlower = TRowVersion::Min();
-
-                for (const auto& kv : Self->GetSnapshotManager().GetSnapshots(TSnapshotTableKey(ownerId, tableId))) {
-                    TRowVersion vupper(kv.first.Step, kv.first.TxId);
-                    if (vlower < vupper) {
-                        txc.DB.RemoveRowVersions(localTableId, vlower, vupper);
-                    }
-                    vlower = vupper.Next();
-                }
-
-                if (vlower < minVersion) {
-                    txc.DB.RemoveRowVersions(localTableId, vlower, minVersion);
-                }
-            }
+            // Source deletions (or the legacy fallback) were restored above
+            // without consulting retention. Only additional cleanup is gated:
+            // the merged watermark may still contain retained snapshot points.
+            Self->GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
 
             for (auto& kv : Self->ReplicatedTables) {
                 TReplicationSourceOffsetsDb rdb(txc);
@@ -341,6 +428,9 @@ public:
 
                 // We are already in StateWork, but we need to repeat many steps now that we are Ready
                 Self->SwitchToWork(ctx);
+
+                // Subscribe to any ancestor locks transferred during split/merge
+                Self->SubscribeNewLocks(ctx);
 
                 // We can send the registration request now that we are ready
                 Self->SendRegistrationRequestTimeCast(ctx);
@@ -423,7 +513,11 @@ public:
         TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes = tableInfo->KeyColumnTypes;
 
         auto* replTable = Self->EnsureReplicatedTable(msg->PathId);
-        Y_ENSURE(replTable);
+        if (!replTable) {
+            // An older source may send offsets after replication was disabled.
+            // Keep the receipt bookkeeping without recreating replication state.
+            return true;
+        }
 
         if (Self->SrcTabletToRange.empty()) {
             for (const auto& srcRange : Self->DstSplitDescription->GetSourceRanges()) {

@@ -1,15 +1,16 @@
 #pragma once
 
 #include "events.h"
+
 #include "metadata_subscription/wasm_artifact.h"
 
-#include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/table_creator/table_creator.h>
 
 namespace NKikimr::NUdfStore {
 
-class TWasmArtifactTableInitializer : public NActors::TActorBootstrapped<TWasmArtifactTableInitializer> {
+class TWasmArtifactTableInitializer: public NActors::TActorBootstrapped<TWasmArtifactTableInitializer> {
 private:
     using TBase = NActors::TActorBootstrapped<TWasmArtifactTableInitializer>;
 
@@ -27,14 +28,12 @@ private:
     void HandleTableCreated(TEvTableCreator::TEvCreateTableResponse::TPtr& ev);
 
 public:
-    TWasmArtifactTableInitializer(
-        const NActors::TActorId& parentId,
-        const TString& artifactTablePath,
-        const TString& artifactChunksTablePath)
+    TWasmArtifactTableInitializer(const NActors::TActorId& parentId, const TString& artifactTablePath, const TString& artifactChunksTablePath)
         : ParentId_(parentId)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -47,4 +46,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

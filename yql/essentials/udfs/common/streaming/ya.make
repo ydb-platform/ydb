@@ -1,18 +1,10 @@
 YQL_UDF_CONTRIB(streaming_udf)
 
-YQL_ABI_VERSION(
-    2
-    27
-    0
-)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-SRCS(
-    streaming_udf.cpp
-)
-
-PEERDIR(
-    library/cpp/deprecated/kmp
-)
+INCLUDE(ya.make.inc)
 
 END()
 

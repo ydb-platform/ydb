@@ -11,7 +11,15 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 class IDataSource;
+class TDataSourceLease;
 class TFetchingScriptCursor;
+
+using TExecutionResult = NArrow::NSSA::TExecutionResult;
+
+class IAsyncJob: public NArrow::NSSA::IAsyncJob {
+public:
+    virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) = 0;
+};
 
 class IFetchingStep: public TNonCopyable {
 private:
@@ -21,7 +29,7 @@ private:
     std::shared_ptr<TFetchingStepSignals> Signals;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const = 0;
 
     virtual TString DoDebugString() const {
         return "";
@@ -44,11 +52,11 @@ public:
 
     virtual ~IFetchingStep() = default;
 
-    [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    [[nodiscard]] TConclusion<TExecutionResult> ExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const {
         return DoExecuteInplace(source, step);
     }
 
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const {
+    virtual ui64 GetProcessingDataSize(const IDataSource& /*source*/) const {
         return 0;
     }
 
@@ -88,16 +96,16 @@ public:
     TString ProfileDebugString() const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
-        AFL_VERIFY(index < Steps.size());
+        YDB_LOG_VERIFY(index < Steps.size());
         return Steps[index];
     }
 
     bool IsFinished(const ui32 currentStepIdx) const {
-        AFL_VERIFY(currentStepIdx <= Steps.size());
+        YDB_LOG_VERIFY(currentStepIdx <= Steps.size());
         return currentStepIdx == Steps.size();
     }
 
-    ui32 Execute(const ui32 startStepIdx, const std::shared_ptr<IDataSource>& source) const;
+    ui32 Execute(const ui32 startStepIdx, IDataSource& source) const;
 };
 
 class TFetchingScriptOwner: TNonCopyable {
@@ -111,7 +119,7 @@ private:
 
     void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
         Script = std::move(script);
-        AFL_VERIFY(AtomicCas(&InitializationDetector, StateInitialized, StateInProgress));
+        YDB_LOG_VERIFY(AtomicCas(&InitializationDetector, StateInitialized, StateInProgress));
     }
 
     // Script is published by the release AtomicCas above and may happen on another thread
@@ -122,8 +130,8 @@ private:
 
 public:
     const std::shared_ptr<TFetchingScript>& GetScriptVerified() const {
-        AFL_VERIFY(IsInitialized());
-        AFL_VERIFY(Script);
+        YDB_LOG_VERIFY(IsInitialized());
+        YDB_LOG_VERIFY(Script);
         return Script;
     }
 
@@ -159,7 +167,7 @@ public:
         }
 
         ~TInitializationGuard() {
-            AFL_VERIFY(!Owner.NeedInitialization());
+            YDB_LOG_VERIFY(!Owner.NeedInitialization());
         }
     };
 
@@ -193,7 +201,9 @@ private:
 
     template <class T, typename... Args>
     std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
-        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
+        YDB_LOG_VERIFY(index <= Steps.size(),
+            {"index", index},
+            {"size", Steps.size()});
         auto result = std::make_shared<T>(args...);
         Steps.insert(Steps.begin() + index, result);
         return result;
@@ -207,7 +217,7 @@ public:
     }
 
     void AddStep(const std::shared_ptr<IFetchingStep>& step) {
-        AFL_VERIFY(step);
+        YDB_LOG_VERIFY(step);
         Steps.emplace_back(step);
     }
 

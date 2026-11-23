@@ -1,13 +1,11 @@
 UNITTEST_FOR(ydb/library/ycloud/impl)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ELSE()
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(
@@ -21,7 +19,10 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     access_service_ut.cpp
     folder_service_ut.cpp
+    iam_token_service_ut.cpp
+    operation_service_ut.cpp
     service_account_service_ut.cpp
+    service_control_service_ut.cpp
     user_account_service_ut.cpp
     util_ut.cpp
 )

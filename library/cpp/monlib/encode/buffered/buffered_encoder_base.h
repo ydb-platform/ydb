@@ -19,6 +19,7 @@ public:
     void OnStreamEnd() override;
 
     void OnCommonTime(TInstant time) override;
+    void OnCommonStartTimeSeconds(ui32 startTimeSeconds) override;
 
     void OnMetricBegin(EMetricType type) override;
     void OnMetricEnd() override;
@@ -38,6 +39,7 @@ public:
     void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override;
 
     void OnMemOnly(bool isMemOnly) override;
+    void OnStartTimeSeconds(ui32 startTimeSeconds) override;
 
 protected:
     using TPooledStr = TStringPoolBuilder::TValue;
@@ -82,7 +84,9 @@ protected:
         EMetricType MetricType = EMetricType::UNKNOWN;
         TPooledLabels Labels;
         TMetricTimeSeries TimeSeries;
-        bool IsMemOnly;
+        bool IsMemOnly = false;
+        bool HasStartTime = false;
+        ui32 StartTimeSeconds = 0;
     };
 
 protected:
@@ -94,6 +98,7 @@ protected:
     TStringPoolBuilder LabelNamesPool_;
     TStringPoolBuilder LabelValuesPool_;
     TInstant CommonTime_ = TInstant::Zero();
+    ui32 CommonStartTimeSeconds_ = 0;
     TPooledLabels CommonLabels_;
     TVector<TMetric> Metrics_;
     TMetricMap MetricMap_;

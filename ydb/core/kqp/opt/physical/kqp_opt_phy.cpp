@@ -47,6 +47,7 @@ public:
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStages));
         AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
         AddHandler(0, IsSort, HNDL(RemoveRedundantSortOverReadTable));
+        AddHandler(0, &TDqCnMerge::Match, HNDL(ReadOlapWithMerge));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToFullTextIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
@@ -170,6 +171,12 @@ public:
     }
 
 protected:
+    TMaybeNode<TExprBase> ReadOlapWithMerge(TExprBase node, TExprContext& ctx) {
+        auto output = KqpReadOlapWithMerge(node, ctx, KqpCtx);
+        DumpAppliedRule("ReadOlapWithMerge", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> BuildReturning(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReturning(node, ctx, TypesCtx, KqpCtx);
         DumpAppliedRule("BuildReturning", node.Ptr(), output.Ptr(), ctx);
@@ -549,7 +556,7 @@ protected:
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
-        const bool windowFunctionsV2 = KqpCtx.Config->WindowFunctionsV2.Get().GetOrElse(false);
+        const bool windowFunctionsV2 = KqpCtx.Config->GetWindowFunctionsV2();
         TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -687,7 +694,9 @@ protected:
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
             pushLeftStage, TypesCtx, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
-            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
+            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false),
+            KqpCtx.Config->GetUseScalarHashJoin(),
+            KqpCtx.Config->GetUseScalarHashJoinForMap()
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

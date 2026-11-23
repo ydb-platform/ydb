@@ -204,7 +204,7 @@ When parsing floating-point values, the numbers can sometimes be too small
 (e.g., `1e-1000`) or too large (e.g., `1e1000`). The C language established the
 precedent that these small values are out of range. In such cases, it is
 customary to parse small values to zero and large values to infinity. That is
-the behaviour of the C language (e.g., `stdtod`). That is the behaviour followed
+the behaviour of the C language (e.g., `strtod`). That is the behaviour followed
 by the fast_float library.
 
 Specifically, we follow Jonathan Wakely's interpretation of the standard:
@@ -384,6 +384,62 @@ int main() {
 }
 ```
 
+### You may also enforce the JavaScript format ([ECMAScript DecimalLiteral](https://tc39.es/ecma262/#prod-DecimalLiteral))
+
+The JavaScript format is like the JSON format, except that the integer part may
+be empty (`.5`) and the fractional part may be empty (`5.`, `5.e3`). Leading
+zeros are still rejected (`01`), as are `inf` and `nan`.
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+  std::string input = "01"; // not valid: leading zero
+  double result;
+  fast_float::parse_options options{fast_float::chars_format::javascript};
+  auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
+  if (answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
+  return EXIT_SUCCESS;
+}
+```
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+  std::string input = ".5"; // valid in JavaScript, not in JSON
+  double result;
+  fast_float::parse_options options{fast_float::chars_format::javascript};
+  auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
+  if (answer.ec != std::errc() || result != 0.5) { std::cerr << "should have parsed 0.5\n"; return EXIT_FAILURE; }
+  return EXIT_SUCCESS;
+}
+```
+
+`fast_float::chars_format::javascript` follows the strict-mode grammar. In sloppy
+mode, JavaScript also accepts a leading zero when one of the digits is 8 or 9
+(`08.5` is 8.5, a `NonOctalDecimalIntegerLiteral`), which you can enable with
+`fast_float::chars_format::javascript_sloppy`. A leading zero followed only by
+octal digits (`0775`) is a legacy octal literal, not a decimal number: it is
+rejected with `fast_float::parse_error::legacy_octal_integer_part`, and you may
+parse it in base 8 instead.
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+  std::string input = "08.5"; // valid in sloppy-mode JavaScript
+  double result;
+  fast_float::parse_options options{fast_float::chars_format::javascript_sloppy};
+  auto answer = fast_float::from_chars_advanced(input.data(), input.data() + input.size(), result, options);
+  if (answer.ec != std::errc() || result != 8.5) { std::cerr << "should have parsed 8.5\n"; return EXIT_FAILURE; }
+  return EXIT_SUCCESS;
+}
+```
+
 ## Multiplication of an integer by a power of 10
 An integer `W` can be multiplied by a power of ten `10^Q` and
 converted to `double` with correctly rounded value
@@ -531,7 +587,7 @@ sufficiently recent version of CMake (3.11 or better at least):
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
-  GIT_TAG tags/v8.2.10
+  GIT_TAG tags/v8.3.0
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -547,7 +603,7 @@ You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
 CPMAddPackage(
   NAME fast_float
   GITHUB_REPOSITORY "fastfloat/fast_float"
-  GIT_TAG v8.2.10)
+  GIT_TAG v8.3.0)
 ```
 
 ## Using as single header
@@ -559,7 +615,7 @@ if desired as described in the command line help.
 
 You may directly download automatically generated single-header files:
 
-<https://github.com/fastfloat/fast_float/releases/download/v8.2.10/fast_float.h>
+<https://github.com/fastfloat/fast_float/releases/download/v8.3.0/fast_float.h>
 
 ## Benchmarking
 
@@ -612,11 +668,6 @@ long digits.
 
 The library includes code adapted from Google Wuffs (written by Nigel Tao) which
 was originally published under the Apache 2.0 license.
-
-## Stars
-
-
-[![Star History Chart](https://api.star-history.com/svg?repos=fastfloat/fast_float&type=Date)](https://www.star-history.com/#fastfloat/fast_float&Date)
 
 ## License
 

@@ -12,40 +12,63 @@ YDB follows the "Documentation as Code" approach. For comprehensive information 
 - **[Structure](https://ydb.tech/docs/en/contributor/documentation/structure/?version=main)** - Organization and hierarchy of documentation content
 - **[Genres](https://ydb.tech/docs/en/contributor/documentation/genres/?version=main)** - Different types of documentation and their purposes
 
-## Documentation Writing Skill 🤖
+## AI Skills 🤖
 
-YDB provides an AI-powered documentation writing skill that helps developers create well-integrated documentation automatically.
+YDB provides reusable AI skills for documentation work:
 
-### Quick Start with the Skill
+- **[YDB documentation](.ruler/skills/ydb-documentation/SKILL.md)** creates
+  well-integrated documentation in Russian and English.
+- **[Internal server release notes](.ruler/skills/generate-internal-changelog/SKILL.md)**
+  prepares feature-only server release notes for a stable release line.
 
-1. **Prepare your material first** - gather all information about what needs to be documented:
+### Quick Start with the Skills
+
+1. **Prepare the required input**:
+
+   For product documentation, gather:
+
    - Description and purpose
    - Parameters, options, configurations
    - Code examples and usage patterns
    - Limitations and constraints
    - Links to PR/Issue where it was implemented
 
-2. **From `ydb/docs`, run `ruler apply`** to generate agent configurations:
+   For an internal release, provide a three-component release identifier, for
+   example `26.3.1`.
+
+2. **From `ydb/docs`, run `ruler apply --skills`** to generate agent
+   configurations and distribute the skills:
 
 ```bash
 cd ydb/docs
 npm install -g @intellectronica/ruler
-ruler apply
+ruler apply --skills
 ```
 
-3. **In any IDE** (Cursor, VSCode, JetBrains, Copilot, etc.), provide the information and ask the skill to create documentation
+3. **Ask the agent for the required workflow**.
 
-The skill will guide you through a 5-stage workflow to create fully-integrated documentation with glossary, reference, recipes, cross-links, and TOC updates — all in Russian and English.
+   Examples:
 
-**Important:** The skill cannot invent technical details. Provide complete information for best results.
+   - "Document this YDB feature."
+   - "Сделай внутренний релиз YDB 26.3.1."
+   - "Prepare the internal release for 26.3.1."
+
+The skill descriptions provide automatic routing. Requests containing
+"внутренний релиз" or "internal release" activate
+`generate-internal-changelog`.
 
 ### Key Resources
 
 All documentation tools are in [`.ruler/`](.ruler/):
-- **[DOCUMENTATION_SKILL.md](.ruler/DOCUMENTATION_SKILL.md)** — Complete 5-stage workflow
-- **[DOCUMENTATION_RULES.md](.ruler/DOCUMENTATION_RULES.md)** — 15 content rules
-- **[FORMAT_RULES.md](.ruler/FORMAT_RULES.md)** — Markdown formatting standards
-- **[ruler.toml](.ruler/ruler.toml)** — Agent configuration
+
+- **[ydb-documentation](.ruler/skills/ydb-documentation/SKILL.md)** -
+  Documentation writing workflow.
+- **[generate-internal-changelog](.ruler/skills/generate-internal-changelog/SKILL.md)** -
+  Internal server release-notes workflow, coverage evaluator, and evals.
+- **[DOCUMENTATION_RULES.md](.ruler/DOCUMENTATION_RULES.md)** - 15 content rules.
+- **[FORMAT_RULES.md](.ruler/FORMAT_RULES.md)** - Markdown formatting standards.
+- **[ruler.toml](.ruler/ruler.toml)** - Agent and skill distribution
+  configuration.
 
 ## Quick Start
 

@@ -1,12 +1,12 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/base/appdata.h>
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
-#include <library/cpp/time_provider/time_provider.h>
 
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NMetadata::NInitializer {
 
@@ -14,8 +14,10 @@ class TDBInitializationKey {
 private:
     YDB_READONLY_PROTECT_DEF(TString, ComponentId);
     YDB_READONLY_PROTECT_DEF(TString, ModificationId);
+
 public:
     TDBInitializationKey() = default;
+
     TDBInitializationKey(const TString& componentId, const TString& modificationId)
         : ComponentId(componentId)
         , ModificationId(modificationId)
@@ -31,6 +33,7 @@ class TDBInitialization: public TDBInitializationKey, public NModifications::TOb
 private:
     using TBase = TDBInitializationKey;
     YDB_READONLY(TInstant, Instant, AppData()->TimeProvider->Now());
+
 public:
     static IClassBehaviour::TPtr GetBehaviour();
 
@@ -39,6 +42,7 @@ public:
         YDB_ACCESSOR(i32, ComponentIdIdx, -1);
         YDB_ACCESSOR(i32, ModificationIdIdx, -1);
         YDB_ACCESSOR(i32, InstantIdx, -1);
+
     public:
         static inline const TString ComponentId = "componentId";
         static inline const TString ModificationId = "modificationId";
@@ -55,9 +59,10 @@ public:
 
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
     NInternal::TTableRecord SerializeToRecord() const;
+
     static TString GetTypeId() {
         return "INITIALIZATION";
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

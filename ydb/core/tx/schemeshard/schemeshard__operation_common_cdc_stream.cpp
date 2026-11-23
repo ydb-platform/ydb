@@ -5,6 +5,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard::NCdcStreamState {
 
@@ -65,13 +66,11 @@ TTableVersionContext BuildTableVersionContext(
 TConfigurePartsAtTable::TConfigurePartsAtTable(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {});
+    IgnoreMessages({});
 }
 
 bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << ", at schemeshard: " << context.SS->SelfTabletId());
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -89,10 +88,13 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
     txState->ClearShardsInProgress();
     Y_ABORT_UNLESS(txState->Shards.size());
 
+    // The body is identical for all shards of the table: serialize once and share.
+    const TString txBody = tx.SerializeAsString();
+
     for (ui32 i = 0; i < txState->Shards.size(); ++i) {
         const auto& idx = txState->Shards[i].Idx;
         const auto datashardId = context.SS->ShardInfos[idx].TabletID;
-        auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, tx.SerializeAsString(), context.Ctx);
+        auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, txBody, context.Ctx);
         context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, ev.Release());
     }
 
@@ -101,9 +103,7 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
 }
 
 bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply " << ev->Get()->ToString()
-                            << ", at schemeshard: " << context.SS->SelfTabletId());
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {
         return false;
@@ -116,13 +116,11 @@ bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResu
 TProposeAtTable::TProposeAtTable(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+    IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType});
 }
 
 bool TProposeAtTable::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << ", at schemeshard: " << context.SS->SelfTabletId());
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     const auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -139,10 +137,9 @@ bool TProposeAtTable::ProgressState(TOperationContext& context) {
 }
 
 bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvOperationPlan"
-                            << ", step: " << ev->Get()->StepId
-                            << ", at schemeshard: " << context.SS->SelfTabletId());
+    YDB_LOG_INFO_CTX(context.Ctx, "",
+        {"step", ev->Get()->StepId},
+    );
 
     const auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -261,10 +258,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 }
 
 bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " TEvDataShard::TEvSchemaChanged"
-                            << " triggers early, save it"
-                            << ", at schemeshard: " << context.SS->SelfTabletId());
+    YDB_LOG_INFO_CTX(context.Ctx, "triggers early, save it");
 
     NTableState::CollectSchemaChanged(OperationId, ev, context);
     return false;
@@ -278,19 +272,8 @@ bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr
     Y_ABORT_UNLESS(txState);
     const auto& pathId = txState->TargetPathId;
 
-    Y_ABORT_UNLESS(context.SS->TablesWithSnapshots.contains(pathId));
-    const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
-
-    auto it = context.SS->SnapshotTables.find(snapshotTxId);
-    if (it != context.SS->SnapshotTables.end()) {
-        it->second.erase(pathId);
-        if (it->second.empty()) {
-            context.SS->SnapshotTables.erase(it);
-        }
-    }
-
-    context.SS->SnapshotsStepIds.erase(snapshotTxId);
-    context.SS->TablesWithSnapshots.erase(pathId);
+    const auto snapshotTxId = context.SS->GetSingleTableSnapshot(pathId);
+    context.SS->RemoveTableSnapshot(pathId, snapshotTxId);
 
     NIceDb::TNiceDb db(context.GetDB());
     context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);
@@ -300,3 +283,5 @@ bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr
 }
 
 }  // NKikimr::NSchemeShard::NCdcStreamState
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

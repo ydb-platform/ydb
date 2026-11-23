@@ -177,6 +177,47 @@ public:
     }
 };
 
+// One piece of a PreformattedSectors write. The write's own completion runs when the last piece is done, as a
+// failure if any piece failed. A piece dropped unsent (TChunkWrite::AbortPiece, when the PDisk stops) counts as a
+// failed one, so the write is always answered exactly once.
+class TCompletionChunkWritePreformattedPiece : public TCompletionAction {
+    TIntrusivePtr<TChunkWrite> Write;
+
+public:
+    TCompletionChunkWritePreformattedPiece(TChunkWrite *write)
+        : Write(write)
+    {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false; // as TCompletionChunkWrite
+    }
+
+    void Exec(TActorSystem *actorSystem) override {
+        Done(actorSystem, false);
+    }
+
+    void Release(TActorSystem *actorSystem) override {
+        Done(actorSystem, true);
+    }
+
+private:
+    void Done(TActorSystem *actorSystem, bool failed) {
+        if (failed) {
+            Write->PreformattedPieceFailed.store(true);
+        }
+        if (Write->PreformattedPiecesInFlight.fetch_sub(1) == 1) {
+            TCompletionChunkWrite *completion = Write->Completion.Release();
+            if (Write->PreformattedPieceFailed.load()) {
+                completion->ErrorReason = failed && !ErrorReason.empty()
+                    ? ErrorReason
+                    : TString("a piece of the preformatted write failed");
+                completion->Release(actorSystem);
+            } else {
+                completion->Exec(actorSystem);
+            }
+        }
+        delete this;
+    }
+};
+
 class TCompletionLogWrite : public TCompletionAction {
     TPDisk *PDisk;
     TVector<TLogWrite*> LogWriteQueue;
@@ -446,15 +487,22 @@ class TCompletionChunkReadRaw : public TCompletionAction {
     TRcBuf Buffer;
     TActorId Sender;
     ui64 Cookie;
+    std::function<void()> OnDestroy;
     NWilson::TSpan Span;
 
 public:
-    TCompletionChunkReadRaw(size_t bytesToRead, TActorId sender, ui64 cookie, NWilson::TSpan span)
+    TCompletionChunkReadRaw(size_t bytesToRead, TActorId sender, ui64 cookie,
+            std::function<void()> onDestroy, NWilson::TSpan span)
         : Buffer(TRcBuf::UninitializedPageAligned(bytesToRead))
         , Sender(sender)
         , Cookie(cookie)
+        , OnDestroy(std::move(onDestroy))
         , Span(std::move(span))
     {}
+
+    ~TCompletionChunkReadRaw() override {
+        OnDestroy();
+    }
 
     void *GetBuffer() {
         return Buffer.GetDataMut();
@@ -481,15 +529,22 @@ class TCompletionChunkWriteRaw : public TCompletionAction {
     TRcBuf Buffer; // just to retain ownership while data is being written
     TActorId Sender;
     ui64 Cookie;
+    std::function<void()> OnDestroy;
     NWilson::TSpan Span;
 
 public:
-    TCompletionChunkWriteRaw(TRcBuf&& buffer, TActorId sender, ui64 cookie, NWilson::TSpan span)
+    TCompletionChunkWriteRaw(TRcBuf&& buffer, TActorId sender, ui64 cookie,
+            std::function<void()> onDestroy, NWilson::TSpan span)
         : Buffer(std::move(buffer))
         , Sender(sender)
         , Cookie(cookie)
+        , OnDestroy(std::move(onDestroy))
         , Span(std::move(span))
     {}
+
+    ~TCompletionChunkWriteRaw() override {
+        OnDestroy();
+    }
 
     bool CanHandleResult() const override {
         return true;

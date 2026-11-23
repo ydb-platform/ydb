@@ -30,10 +30,14 @@
         }
     ],
     "test.test[InvalidRegexFail_2025.02-Results]": [
-        ""
+        {
+            "uri": "file://test.test_InvalidRegexFail_2025.02-Results_/extracted"
+        }
     ],
     "test.test[InvalidRegexFail_2025.03-Results]": [
-        ""
+        {
+            "uri": "file://test.test_InvalidRegexFail_2025.03-Results_/extracted"
+        }
     ],
     "test.test[InvalidRegexSuccess_2025.02-Results]": [
         {
@@ -48,6 +52,31 @@
     "test.test[LikeEscape-Results]": [
         {
             "uri": "file://test.test_LikeEscape-Results_/results.txt"
+        }
+    ],
+    "test.test[LikeSpark-Results]": [
+        {
+            "uri": "file://test.test_LikeSpark-Results_/results.txt"
+        }
+    ],
+    "test.test[LikeSparkEmptyEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkEmptyEscape-Results_/extracted"
+        }
+    ],
+    "test.test[LikeSparkInvalidEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkInvalidEscape-Results_/extracted"
+        }
+    ],
+    "test.test[LikeSparkLongEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkLongEscape-Results_/extracted"
+        }
+    ],
+    "test.test[LikeSparkTrailingEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkTrailingEscape-Results_/extracted"
         }
     ],
     "test.test[MultipleCaptureGroups-Results]": [

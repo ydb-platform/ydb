@@ -2,7 +2,7 @@
 
 **Metadata distribution services** are three interconnected subsystems of the {{ ydb-short-name }} cluster that deliver service information between nodes: **StateStorage**, **Board**, and **SchemeBoard**. All of them are built on a distributed quorum service with deterministic replica placement.
 
-This article provides an overview of the purpose of the services without diving into internal identifiers and core mechanisms. A detailed description for core developers is in the [Metadata distribution subsystems](../../contributor/metadata-distribution.md) section. Configuration instructions are in Configuring metadata distribution subsystems.
+This article provides an overview of the purpose of the services without diving into internal identifiers and core mechanisms. A detailed description for core developers is in the [Metadata distribution subsystems](../../contributor/metadata-distribution.md) section. Configuration instructions are in the [Configuring metadata distribution subsystems](../../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md) section.
 
 ## Why metadata distribution services are needed {#why}
 
@@ -50,8 +50,8 @@ Details (replica rings, quorum, configuration changes, placement across failure 
 ## Related materials {#related}
 
 - [Metadata distribution subsystems](../../contributor/metadata-distribution.md) — a detailed description for core contributors.
-- Configuring metadata distribution subsystems.
-- [Self Heal State Storage](../../maintenance/manual/selfheal_statestorage.md).
+- [Configuring metadata distribution subsystems](../../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md).
+- [Metadata Distribution SelfHeal](../../devops/concepts/selfheal-metadata-distribution.md).
 - [Bridge mode](../bridge.md).
 - [Cluster topology](../topology.md).
 - [Glossary](../glossary.md).

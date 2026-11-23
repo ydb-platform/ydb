@@ -1,24 +1,37 @@
-#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
+
 #include <ydb/services/metadata/ds_table/accessor_snapshot_base.h>
 #include <ydb/services/metadata/ds_table/service.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
-class TTestBehaviour : public IClassBehaviour {
+class TTestBehaviour: public IClassBehaviour {
 public:
-    TString GetInternalStorageTablePath() const override { return "my_table"; }
-    TString GetTypeId() const override { return "test_type"; }
-    std::shared_ptr<NInitializer::IInitializationBehaviour> ConstructInitializer() const override { return nullptr; }
-    std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const override { return nullptr; }
+    TString GetInternalStorageTablePath() const override {
+        return "my_table";
+    }
+
+    TString GetTypeId() const override {
+        return "test_type";
+    }
+
+    std::shared_ptr<NInitializer::IInitializationBehaviour> ConstructInitializer() const override {
+        return nullptr;
+    }
+
+    std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const override {
+        return nullptr;
+    }
 };
 
-class TTestSnapshot : public NFetcher::ISnapshot {
+class TTestSnapshot: public NFetcher::ISnapshot {
 protected:
     bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult&) override {
         // Accept any data, parse nothing
-        return true; 
+        return true;
     }
 
     TString DoSerializeToString() const override {
@@ -29,12 +42,14 @@ public:
     using NFetcher::ISnapshot::ISnapshot;
 };
 
-class TMockFetcher : public NFetcher::ISnapshotsFetcher {
+class TMockFetcher: public NFetcher::ISnapshotsFetcher {
     std::vector<IClassBehaviour::TPtr> Managers;
+
 public:
-    TMockFetcher(std::vector<IClassBehaviour::TPtr> managers) 
+    TMockFetcher(std::vector<IClassBehaviour::TPtr> managers)
         : Managers(std::move(managers))
-    {}
+    {
+    }
 
 protected:
     std::vector<IClassBehaviour::TPtr> DoGetManagers() const override {
@@ -42,21 +57,21 @@ protected:
     }
 
     NFetcher::ISnapshot::TPtr CreateSnapshot(const TInstant actuality) const override {
-        return std::make_shared<TTestSnapshot>(actuality); 
+        return std::make_shared<TTestSnapshot>(actuality);
     }
 
 public:
 };
 
-class TTestAccessor : public TDSAccessorBase {
+class TTestAccessor: public TDSAccessorBase {
     ISnapshotConstructorController::TPtr OutputController;
+
 public:
-    TTestAccessor(const NRequest::TConfig& cfg,
-                  ISnapshotConstructorController::TPtr out,
-                  NFetcher::ISnapshotsFetcher::TPtr fetcher)
+    TTestAccessor(const NRequest::TConfig& cfg, ISnapshotConstructorController::TPtr out, NFetcher::ISnapshotsFetcher::TPtr fetcher)
         : TDSAccessorBase(cfg, fetcher)
         , OutputController(out)
-    {}
+    {
+    }
 
     void OnBootstrap() override {
         Become(&TDSAccessorBase::StateMain);
@@ -86,10 +101,9 @@ void SetServicePath(const TString& path) {
     NProvider::TService service1(config1);
 }
 
-std::unique_ptr<NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>> 
-CreateYQLResponse(ui32 resultSetsCount = 1) {
+std::unique_ptr<NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>> CreateYQLResponse(ui32 resultSetsCount = 1) {
     NRequest::TDialogYQLRequest::TResponse response;
-    
+
     Ydb::Table::ExecuteQueryResult qResult;
     for (ui32 i = 0; i < resultSetsCount; ++i) {
         qResult.add_result_sets();
@@ -99,7 +113,7 @@ CreateYQLResponse(ui32 resultSetsCount = 1) {
     op->set_ready(true);
     op->set_status(Ydb::StatusIds::SUCCESS);
     op->mutable_result()->PackFrom(qResult);
-    
+
     return std::make_unique<NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>>(std::move(response));
 }
 
@@ -131,10 +145,8 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
                 auto nav = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
                 auto& entry = nav->ResultSet.emplace_back();
                 entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-                entry.Kind   = NSchemeCache::TSchemeCacheNavigate::EKind::KindTable;
-                runtime.Send(new IEventHandle(
-                    ev->Sender, ev->Recipient,
-                    new TEvTxProxySchemeCache::TEvNavigateKeySetResult(nav.Release())));
+                entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindTable;
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(nav.Release())));
 
                 return TTestActorRuntimeBase::EEventAction::DROP;
             }
@@ -144,20 +156,20 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
 
         // Set init path
         SetServicePath("v1_path");
-        
+
         auto manager = std::make_shared<TTestBehaviour>();
-        auto fetcher = std::make_shared<TMockFetcher>(std::vector<IClassBehaviour::TPtr>{manager});
+        auto fetcher = std::make_shared<TMockFetcher>(std::vector<IClassBehaviour::TPtr>{ manager });
 
         // AppData exists only in a runtime context
-        const TString path1 = RunInContext(runtime, [&] { 
-            return manager->GetStorageTablePath(); 
+        const TString path1 = RunInContext(runtime, [&] {
+            return manager->GetStorageTablePath();
         });
 
         UNIT_ASSERT_EQUAL(path1, "/test_db/v1_path/my_table");
 
-        // Messages sent to a non-existent service (e.g., MakeSchemeCacheID()) 
+        // Messages sent to a non-existent service (e.g., MakeSchemeCacheID())
         // are dropped by the runtime and won't reach the ObserverFunc.
-        // We must register the service ID to ensure TEvTxProxySchemeCache events 
+        // We must register the service ID to ensure TEvTxProxySchemeCache events
         // are intercepted correctly. Just use a dummy actor.
         TActorId s = runtime.AllocateEdgeActor();
         runtime.RegisterService(MakeSchemeCacheID(), s);
@@ -171,7 +183,9 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
 
         // Wait until the manager's storage path is pinned and sent to YQL
         TDispatchOptions options2;
-        options2.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+        options2.FinalEvents.emplace_back([](IEventHandle&) {
+            return false;
+        });
         options2.CustomFinalCondition = [&]() -> bool {
             return actor->IsPathPinned("/test_db/v1_path/my_table");
         };
@@ -179,8 +193,8 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
 
         // Mutate path
         SetServicePath("v2_new_path");
-        const TString path2 = RunInContext(runtime, [&] { 
-            return manager->GetStorageTablePath(); 
+        const TString path2 = RunInContext(runtime, [&] {
+            return manager->GetStorageTablePath();
         });
 
         UNIT_ASSERT_EQUAL(path2, "/test_db/v2_new_path/my_table");
@@ -195,4 +209,4 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
     }
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

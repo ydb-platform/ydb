@@ -13,6 +13,9 @@
 #include <util/stream/file.h>
 #include <util/system/env.h>
 
+#include <algorithm>
+#include <cmath>
+
 using namespace NPlan2Svg;
 
 namespace {
@@ -149,6 +152,272 @@ Y_UNIT_TEST_SUITE(TPlan2SvgGolden) {
     Y_UNIT_TEST(MultiQueryHot) {
         CheckGolden("multi_query_hot");
     }
+
+    // cluster_nodes with per-node task counts (Stats.Nodes) on most stages: the
+    // task column draws the per-node task profile instead of the dashed line.
+    // Covers a partially finished node, a node with nothing finished, tasks not
+    // started yet, a single node, unsorted input, and two stages plus the
+    // external sources that keep the dashed line.
+    Y_UNIT_TEST(StageNodes) {
+        CheckGolden("stage_nodes");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
+
+    TString StagePlan(TStringBuf stats) {
+        return TStringBuilder() << R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":2,"Plans":[
+            {"Node Type":"Stage","PlanNodeId":1,"Operators":[{"Name":"Filter","Predicate":"x"}],"Stats":{)"
+            << stats << "}}]}]}}";
+    }
+
+    // The extent of a node with this many tasks, when the stage runs total
+    // tasks on nodes: value / average thirds of the column, to the nearest pixel.
+    i32 Width(ui64 tasks, ui64 nodes, ui64 total) {
+        return std::lround(double(tasks * nodes * TPlanViewConfig().TaskWidth) / double(3 * total));
+    }
+
+    // The extent of a node with the average task count: a third of the column.
+    i32 PlotUnit() {
+        return Width(1, 1, 1);
+    }
+
+    // The plot's own viewport over the task column: pixels across, half bands
+    // down, whatever the stage height.
+    TString PlotViewport(ui32 nodes) {
+        TPlanViewConfig config;
+        return TStringBuilder()
+            << "<svg x='" << config.TaskLeft << "' y='0' width='" << config.TaskWidth << "' height='100%' viewBox='0 0 "
+            << config.TaskWidth << ' ' << 2 * nodes << "' preserveAspectRatio='none' pointer-events='none'>";
+    }
+
+    // Both areas end the same way: same colour, half transparent.
+    TString AreaEnd() {
+        return TStringBuilder() << "z' stroke='none' fill='" << TPlanViewConfig().Palette.Cpu.Medium << "' opacity='0.5'/>";
+    }
+
+    // The curve between two band centres: a step, both control points at the
+    // mid height.
+    TString Step(i32 dx) {
+        return TStringBuilder() << "c0,1," << dx << ",1," << dx << ",2";
+    }
+
+    TString RenderStage(const TString& plan) {
+        TVisualizer viz;
+        viz.LoadPlans(plan);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages.size(), 1);
+        return viz.PrintSvg();
+    }
+
+    size_t CountAreas(const TString& svg) {
+        size_t count = 0;
+        for (size_t pos = svg.find(AreaEnd()); pos != TString::npos; pos = svg.find(AreaEnd(), pos + 1)) {
+            count++;
+        }
+        return count;
+    }
+
+    Y_UNIT_TEST(TwoNodesAreTwoBands) {
+        auto svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":16,"FinishedTasks":9,
+            "Nodes":[{"NodeId":7,"Tasks":6,"Finished":3},{"NodeId":3,"Tasks":6,"Finished":6}])"));
+        AssertWellFormed(svg, "stage with Nodes");
+
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 9 of 16; 2 nodes, 6 tasks each; running on 1 node; not started: 4</title>"), svg);
+        UNIT_ASSERT_C(svg.Contains(PlotViewport(2)), svg);
+
+        // Two bands: node 3 centred at y=1, node 7 at y=3. Both have the
+        // average count, so the all-tasks area is one unit wide throughout.
+        i32 w = PlotUnit();
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << w << ",0L" << w << ",1" << Step(0)
+            << 'L' << w << ",4L0,4" << AreaEnd()), svg);
+        // Running: node 3 has none, node 7 has 3 of the 6 (half a unit); the
+        // area steps from the left edge to the half unit between the bands.
+        i32 running = Width(3, 2, 12);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L0,0L0,1" << Step(running)
+            << 'L' << running << ",4L0,4" << AreaEnd()), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 2, svg);
+    }
+
+    // A stage that only reports its totals is drawn as a single node: the
+    // all-tasks area is one unit wide, the running one its share of it.
+    Y_UNIT_TEST(NoNodesIsASingleNode) {
+        auto svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":16,"FinishedTasks":12)"));
+        AssertWellFormed(svg, "stage without Nodes");
+
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 12 of 16</title>"), svg);
+        UNIT_ASSERT_C(svg.Contains(PlotViewport(1)), svg);
+        i32 w = PlotUnit();
+        i32 running = Width(4, 1, 16);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << w << ",0L" << w << ",1L" << w << ",2L0,2" << AreaEnd()), svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << running << ",0L" << running << ",1L" << running << ",2L0,2" << AreaEnd()), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 2, svg);
+    }
+
+    // A single node has no bands to curve between: the area is a rectangle,
+    // and with everything finished there is no running area at all.
+    Y_UNIT_TEST(SingleFinishedNodeIsARectangle) {
+        auto svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":4,"FinishedTasks":4,
+            "Nodes":[{"NodeId":1,"Tasks":4,"Finished":4}])"));
+        i32 w = PlotUnit();
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << w << ",0L" << w << ",1L" << w << ",2L0,2" << AreaEnd()), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 1, svg);
+    }
+
+    // The average node is one unit wide; a busier node grows past it and a
+    // node too small for a pixel still gets one.
+    Y_UNIT_TEST(AverageNodeIsOneUnit) {
+        auto svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":101,"FinishedTasks":100,
+            "Nodes":[{"NodeId":1,"Tasks":100,"Finished":100},{"NodeId":2,"Tasks":1,"Finished":0}])"));
+        i32 w = PlotUnit();
+        // Average 50.5: the wide node is 100 / 50.5 units, the small one 1px.
+        i32 wide = Width(100, 2, 101);
+        UNIT_ASSERT_C(wide > w, svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << wide << ",0L" << wide << ",1" << Step(1 - wide)
+            << "L1,4L0,4" << AreaEnd()), svg);
+        // Running: none on the wide node, the one task of the small node.
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L0,0L0,1" << Step(1)
+            << "L1,4L0,4" << AreaEnd()), svg);
+    }
+
+    // A node far above the average is cut at the column width.
+    Y_UNIT_TEST(BusyNodeIsCutAtTheColumn) {
+        auto svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":103,"FinishedTasks":103,
+            "Nodes":[{"NodeId":1,"Tasks":100,"Finished":100},{"NodeId":2,"Tasks":1,"Finished":1},{"NodeId":3,"Tasks":1,"Finished":1},{"NodeId":4,"Tasks":1,"Finished":1}])"));
+        TPlanViewConfig config;
+        ui32 w = config.TaskWidth;
+        UNIT_ASSERT_C(Width(100, 4, 103) > i32(w), svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder() << "<path d='M0,0L" << w << ",0L" << w << ",1c0,"), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 1, svg);
+    }
+
+    // The profile is one path however many nodes there are, stretched over
+    // the stage box: one step per band boundary, each with its control points
+    // at the mid height, the last band centred just above the bottom edge.
+    // With more nodes than the stage has pixels, in pixels the band centres
+    // and the control points rounded together: steps collapsed flat or bent
+    // into hooks.
+    Y_UNIT_TEST(ManyNodesFitTheStageHeight) {
+        // Nodes 1, 2, 3, 4 ... 100 have 2, 3, 1, 2 ... 2 tasks, 2 on average.
+        auto tasks = [](ui32 i) -> ui32 {
+            return 1 + i % 3;
+        };
+        TStringBuilder nodes;
+        for (ui32 i = 1; i <= 100; i++) {
+            nodes << (i > 1 ? "," : "") << R"({"NodeId":)" << i << R"(,"Tasks":)" << tasks(i) << R"(,"Finished":)" << i % 2 << "}";
+        }
+        TVisualizer viz;
+        viz.LoadPlans(StagePlan(TStringBuilder() << R"("PhysicalStageId":5,"Tasks":200,"FinishedTasks":50,"Nodes":[)" << nodes << "]"));
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages.size(), 1);
+        UNIT_ASSERT_C(viz.Plans[0]->Stages[0]->Height < 100, viz.Plans[0]->Stages[0]->Height);
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "stage with 100 nodes");
+        UNIT_ASSERT_C(svg.Contains(PlotViewport(100)), svg);
+
+        auto extent = [&](ui32 i) -> i32 {
+            return Width(tasks(i), 100, 200);
+        };
+        TStringBuilder all;
+        all << "<path d='M0,0L" << extent(1) << ",0L" << extent(1) << ",1";
+        for (ui32 i = 2; i <= 100; i++) {
+            all << Step(extent(i) - extent(i - 1));
+        }
+        all << 'L' << extent(100) << ",200L0,200" << AreaEnd();
+        UNIT_ASSERT_C(svg.Contains(all), svg);
+    }
+
+    // A stage with a nested table read is loaded twice over the same Stats
+    // block (LoadSubPlans re-enters LoadStage); the nodes must not double up.
+    Y_UNIT_TEST(NestedTableReadLoadsNodesOnce) {
+        TVisualizer viz;
+        viz.LoadPlans(TString(R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":3,"Plans":[
+            {"Node Type":"TopSort-Filter","PlanNodeId":2,"Operators":[{"Name":"TopSort","Limit":"10"},{"Name":"Filter","Predicate":"x"}],
+             "Stats":{"PhysicalStageId":1,"Tasks":16,"FinishedTasks":9,"Nodes":[{"NodeId":3,"Tasks":6,"Finished":6},{"NodeId":7,"Tasks":6,"Finished":3}]},
+             "Plans":[{"Node Type":"TableFullScan","PlanNodeId":1,"Operators":[{"Name":"TableFullScan","Table":"t","ReadColumns":["a"]}]}]}
+        ]}]}})"));
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        // The stage itself plus the External source stage the table read spawns.
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages.size(), 2);
+        UNIT_ASSERT(!viz.Plans[0]->Stages[0]->External);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages[0]->Nodes.size(), 2);
+        UNIT_ASSERT(viz.Plans[0]->Stages[1]->External);
+        UNIT_ASSERT(viz.Plans[0]->Stages[1]->Nodes.empty());
+
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "stage with a nested table read");
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 1 tasks: finished 9 of 16; 2 nodes, 6 tasks each; running on 1 node; not started: 4</title>"), svg);
+        // Two equal nodes, one unit wide: doubled nodes would have doubled the
+        // bands.
+        UNIT_ASSERT_C(svg.Contains(PlotViewport(2)), svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << PlotUnit() << ",0L" << PlotUnit() << ",1c0,"), svg);
+    }
+
+    // The tooltip sums the nodes up instead of listing them: the spread of the
+    // task counts and where the busiest node is, by its id when it is alone.
+    Y_UNIT_TEST(TooltipSummarizesNodes) {
+        auto svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":7,"FinishedTasks":0,
+            "Nodes":[{"NodeId":1,"Tasks":1},{"NodeId":2,"Tasks":4},{"NodeId":3,"Tasks":2}])"));
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 0 of 7; 3 nodes, 1 to 4 tasks each, 4 on node 2</title>"), svg);
+
+        svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":5,"FinishedTasks":3,
+            "Nodes":[{"NodeId":1,"Tasks":2,"Finished":2},{"NodeId":2,"Tasks":1,"Finished":1},{"NodeId":3,"Tasks":2}])"));
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 3 of 5; 3 nodes, 1 to 2 tasks each, 2 on 2 nodes; running on 1 node</title>"), svg);
+
+        svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":3,"FinishedTasks":1,
+            "Nodes":[{"NodeId":9,"Tasks":1,"Finished":1},{"NodeId":4,"Tasks":1}])"));
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 1 of 3; 2 nodes, 1 task each; running on 1 node; not started: 1</title>"), svg);
+
+        svg = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":1,"FinishedTasks":0,"Nodes":[{"NodeId":7,"Tasks":1}])"));
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 0 of 1; on node 7</title>"), svg);
+    }
+
+    // A cluster node draws its tasks as a single node, in the same viewport.
+    Y_UNIT_TEST(ClusterNodeIsASingleNode) {
+        TVisualizer viz;
+        viz.LoadPlans(TString(R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":2,
+            "Nodes":[{"NodeId":1,"Tasks":4,"FinishedTasks":1}],"Plans":[
+            {"Node Type":"Stage","PlanNodeId":1,"Operators":[{"Name":"Filter","Predicate":"x"}],"Stats":{"PhysicalStageId":5}}]}]}})"));
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Nodes.size(), 1);
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "plan with a cluster node");
+
+        UNIT_ASSERT_C(svg.Contains("data-stage='inner node'"), svg);
+        i32 w = PlotUnit();
+        i32 running = Width(3, 1, 4);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << PlotViewport(1) << "\n"
+            << "<path d='M0,0L" << w << ",0L" << w << ",1L" << w << ",2L0,2" << AreaEnd() << "\n"
+            << "<path d='M0,0L" << running << ",0L" << running << ",1L" << running << ",2L0,2" << AreaEnd()), svg);
+        // The stage has no tasks: the cluster node draws the only plot.
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 2, svg);
+    }
+
+    Y_UNIT_TEST(LoaderSortsAndDropsEmptyNodes) {
+        TVisualizer viz;
+        viz.LoadPlans(StagePlan(R"("PhysicalStageId":5,"Tasks":4,"FinishedTasks":1,
+            "Nodes":[{"NodeId":9,"Tasks":1,"Finished":1},{"NodeId":2,"Tasks":0,"Finished":0},{"NodeId":4,"Tasks":3}])"));
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages.size(), 1);
+        const auto& nodes = viz.Plans[0]->Stages[0]->Nodes;
+        UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[0].NodeId, 4);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[0].Tasks, 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[0].Finished, 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[1].NodeId, 9);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[1].Tasks, 1);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[1].Finished, 1);
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
@@ -195,6 +464,100 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
         UNIT_ASSERT_VALUES_EQUAL(simplified.Plans.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(simplified.Plans[0]->NodeType, "Simple");
         UNIT_ASSERT(simplified.Config.Simplified);
+    }
+
+    Y_UNIT_TEST(SimplifiedResultSetPreservesTopOperator) {
+        const TString plans = R"({"SimplifiedPlan":{
+            "Node Type":"ResultSet","PlanNodeType":"ResultSet","Plans":[{
+                "Node Type":"Sort","PlanNodeId":1,
+                "Operators":[{"Name":"Sort","SortBy":[{"Column":"a","Ascending":true,"NullsFirst":true}]}],
+                "Plans":[{
+                    "Node Type":"Merge","PlanNodeType":"Connection","PlanNodeId":2,
+                    "SortColumns":[{"Column":"a","Ascending":true,"NullsFirst":true}],
+                    "Plans":[{
+                        "Node Type":"TableFullScan","PlanNodeId":3,
+                        "Operators":[{"Name":"TableFullScan","Table":"t","ReadColumns":["a"]}]
+                    }]
+                }]
+            }]
+        }})";
+
+        TVisualizer viz;
+        viz.LoadPlans(plans, /*simplified=*/true);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->NodeType, "ResultSet");
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages[0]->NodeType, "Sort");
+        AssertWellFormed(viz.PrintSvg(), "simplified result set");
+    }
+
+    Y_UNIT_TEST(ReadRangesExpressionIsRendered) {
+        const TString plan = R"({"SimplifiedPlan":{"Plans":[{
+            "Node Type":"ResultSet","PlanNodeId":2,"Plans":[{
+                "Node Type":"TableRangeScan","PlanNodeId":1,"Operators":[{
+                    "Name":"TableRangeScan","Table":"/Root/t","ReadColumns":["a"],
+                    "ReadRangesExpression":"a ∈ (-∞, $hi) ∪ {\"<&\"}"
+                }]
+            }]
+        }]}})";
+        TPlanVisualizer viz;
+        viz.LoadPlans(plan, true);
+        const auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "range expression");
+        UNIT_ASSERT_C(svg.Contains("Range expression: a ∈ (-∞, $hi) ∪ {\"&lt;&amp;\"}"), svg);
+    }
+
+    Y_UNIT_TEST(NamedRangeOperationsAreRendered) {
+        const TString plan = R"json({"SimplifiedPlan":{"Plans":[{
+            "Node Type":"ResultSet","PlanNodeId":2,"Plans":[{
+                "Node Type":"TableRangeScan","PlanNodeId":1,"Operators":[{
+                    "Name":"TableRangeScan","Table":"/Root/t","ReadColumns":["a", "b"],
+                    "ReadRangesExpression":"range_product(in_ranges(a, $list, limit=10000), b ∈ {7}, limit=10000)"
+                }]
+            }]
+        }]}})json";
+        TPlanVisualizer viz;
+        viz.LoadPlans(plan, true);
+        const auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "named range operations");
+        UNIT_ASSERT_C(svg.Contains("Range expression: range_product(in_ranges(a, $list, limit=10000), b ∈ {7}, limit=10000)"), svg);
+    }
+
+    Y_UNIT_TEST(EmptyRangesAndOpaqueExpressionsAreVisible) {
+        for (const bool empty : {true, false}) {
+            const TString plan = TStringBuilder() << R"json({"Plan":{"Plans":[{
+                "Node Type":"ResultSet","PlanNodeId":2,"Plans":[{
+                    "Node Type":"TableRangeScan","PlanNodeId":1,"Operators":[{
+                        "Name":"TableRangeScan","Table":"/Root/t","ReadColumns":["a"],
+                        "ReadRangesExpression":"f2($p)"
+                        )json" << (empty ? ", \"ReadRanges\": []" : "") << R"json(
+                    }]
+                }]
+            }]}})json";
+            TPlanVisualizer viz;
+            viz.LoadPlans(plan);
+            const auto svg = viz.PrintSvg();
+            AssertWellFormed(svg, "empty or opaque ranges");
+            UNIT_ASSERT_VALUES_EQUAL(svg.Contains("∅"), empty);
+            UNIT_ASSERT_VALUES_EQUAL(svg.Contains("Range expression: f2($p)"), !empty);
+        }
+    }
+
+    Y_UNIT_TEST(ReadRangesTakePrecedenceOverExpression) {
+        for (const TStringBuf field : {"ReadRanges", "ReadRange"}) {
+            const TString plan = TStringBuilder() << R"({"Plan":{"Plans":[{
+                "Node Type":"ResultSet","PlanNodeId":2,"Plans":[{
+                    "Node Type":"TableRangeScan","PlanNodeId":1,"Operators":[{
+                        "Name":"TableRangeScan","Table":"/Root/t","ReadColumns":["a"],
+                        ")" << field << R"(":["[{a: 7}, {a: 7}]"],"ReadRangesExpression":"unused fallback"
+                    }]
+                }]
+            }]}})";
+            TPlanVisualizer viz;
+            viz.LoadPlans(plan);
+            const auto svg = viz.PrintSvg();
+            UNIT_ASSERT_C(svg.Contains("[{a: 7}, {a: 7}]"), svg);
+            UNIT_ASSERT_C(!svg.Contains("unused fallback"), svg);
+        }
     }
 
     // A plan node the loader does not understand is rejected rather than drawn wrong.
@@ -391,6 +754,57 @@ Y_UNIT_TEST_SUITE(TPlan2SvgFormat) {
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgParse) {
+
+    Y_UNIT_TEST(StructuredProperties) {
+        const auto sort = Json(R"([{"Column":"t.a","Ascending":false,"NullsFirst":false}])");
+        for (const auto* name : {"SortBy", "TopSortBy", "OrderBy", "SortColumns"}) {
+            UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty(name, sort), "t.a desc nulls last");
+        }
+        const auto columns = Json(R"(["b","a, c"])");
+        for (const auto* name : {"Columns", "GroupBy", "PartitionBy", "LookupKeyPrefix"}) {
+            UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty(name, columns), "b, a, c");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty("Aggregation", Json(R"([
+            {"Output":"n","Function":"count","Arguments":["t.a"],"Distinct":true},
+            {"Output":"s","Function":"sum","Arguments":["t.b"],"Distinct":false}
+        ])")), "{n: count(distinct t.a), s: sum(t.b)}");
+        UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty("Frame", Json(R"({
+            "Type":"Rows","Begin":{"Kind":"Preceding","Value":0},"End":{"Kind":"UnboundedFollowing"}
+        })")), "Rows[Preceding 0, UnboundedFollowing]");
+        UNIT_ASSERT_VALUES_EQUAL(FormatSortColumn(NJson::TJsonValue("a (Desc)")), "a (Desc)");
+    }
+
+    Y_UNIT_TEST(NumericEstimatesAndBooleanFlags) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetEstimation(Json(R"({"E-Cost":123.5,"E-Rows":1000,"E-Size":4096})")),
+            GetEstimation(Json(R"({"E-Cost":"123.5","E-Rows":"1000","E-Size":"4096"})")));
+        for (const auto* flag : {"true", "false", "\"True\"", "\"False\""}) {
+            bool value = true;
+            ReadBoolString(Json(TStringBuilder() << "{\"Parallel\":" << flag << "}"), "Parallel", value);
+            UNIT_ASSERT_VALUES_EQUAL(value, TString(flag) == "true" || TString(flag) == "\"True\"");
+        }
+    }
+
+    Y_UNIT_TEST(StructuredOperatorsRenderLikeLegacy) {
+        auto render = [](TStringBuf operators) {
+            TPlanVisualizer viz;
+            viz.LoadPlans(TStringBuilder() << R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":2,"Plans":[
+                {"Node Type":"Stage","PlanNodeId":1,"Operators":)" << operators << "}]}]}}");
+            return viz.PrintSvg();
+        };
+        const auto legacy = render(R"([
+            {"Name":"Sort","SortBy":"a desc nulls last","E-Cost":"123","E-Rows":"45","E-Size":"2048"},
+            {"Name":"Aggregate","GroupBy":"b, c","Aggregation":"{n: count(distinct a)}","Pushdown":"True"},
+            {"Name":"TopSort","Limit":"5","TopSortBy":"b asc nulls first"}
+        ])");
+        const auto structured = render(R"([
+            {"Name":"Sort","SortBy":[{"Column":"a","Ascending":false,"NullsFirst":false}],"E-Cost":123,"E-Rows":45,"E-Size":2048},
+            {"Name":"Aggregate","GroupBy":["b","c"],"Aggregation":[{"Output":"n","Function":"count","Arguments":["a"],"Distinct":true}],"Pushdown":true},
+            {"Name":"TopSort","Limit":"5","TopSortBy":[{"Column":"b","Ascending":true,"NullsFirst":true}]}
+        ])");
+        UNIT_ASSERT_C(legacy == structured, Diff(legacy, structured));
+        AssertWellFormed(structured, "structured properties");
+    }
 
     Y_UNIT_TEST(TableOrIndexName) {
         UNIT_ASSERT_VALUES_EQUAL(ParseTableOrIndexName("table"), "table");

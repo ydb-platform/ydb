@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package temporal.api.compute.v1;
+
+option go_package = "go.temporal.io/api/compute/v1;compute";
+option java_package = "io.temporal.api.compute.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ProviderProto";
+option ruby_package = "Temporalio::Api::Compute::V1";
+option csharp_namespace = "Temporalio.Api.Compute.V1";
+
+import "temporal/api/common/v1/message.proto";
+
+// ComputeProvider stores information used by a worker control plane controller
+// to respond to worker lifecycle events. For example, when a Task is received
+// on a TaskQueue that has no active pollers, a serverless worker lifecycle
+// controller might need to invoke an AWS Lambda Function that itself ends up
+// calling the SDK's worker.New() function.
+message ComputeProvider {
+    // Type of the compute provider. This string is implementation-specific and
+    // can be used by implementations to understand how to interpret the
+    // contents of the provider_details field.
+    string type = 1;
+
+    // Contains provider-specific instructions and configuration.
+    // For server-implemented providers, use the SDK's default content
+    // converter to ensure the server can understand it.
+    // For remote-implemented providers, you might use your own content
+    // converters according to what the remote endpoints understand.
+    temporal.api.common.v1.Payload details = 2;
+    
+    // Optional. If the compute provider is a Nexus service, this should point
+    // there.
+    string nexus_endpoint = 10;
+}

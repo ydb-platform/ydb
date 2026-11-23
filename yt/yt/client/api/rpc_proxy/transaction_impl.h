@@ -306,7 +306,7 @@ private:
 
     std::atomic<i64> ModifyRowsRequestSequenceCounter_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     ETransactionState State_ = ETransactionState::Active;
     TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
@@ -325,10 +325,10 @@ private:
     bool IsPingableState();
 
     TFuture<void> DoAbort(
-        TGuard<NThreading::TSpinLock>* guard,
+        TGuard<TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
 
-    void Abandon(TGuard<NThreading::TSpinLock>* guard);
+    void Abandon(TGuard<TSpinLock>* guard);
 
     void ValidateActive();
     void DoValidateActive();

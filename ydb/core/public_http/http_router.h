@@ -6,9 +6,9 @@ namespace NKikimr::NPublicHttp {
 
 struct THandlerWithParams {
     THandlerWithParams(TString pathPattern, THttpHandler handler, std::map<TString, TString> pathParams)
-      : PathPattern(std::move(pathPattern))
-      , Handler(std::move(handler))
-      , PathParams(std::move(pathParams))
+        : PathPattern(std::move(pathPattern))
+        , Handler(std::move(handler))
+        , PathParams(std::move(pathParams))
     {
     }
 
@@ -26,6 +26,7 @@ class THttpRequestRouter {
 public:
     void RegisterHandler(TStringBuf method, const TString& pathPattern, THttpHandler handler);
     void RegisterHandler(HTTP_METHOD method, const TString& pathPattern, THttpHandler handler);
+
     void RegisterGetHandler(const TString& pathPattern, THttpHandler handler) {
         RegisterHandler(HTTP_METHOD_GET, pathPattern, handler);
     }
@@ -45,4 +46,4 @@ private:
     std::map<std::pair<HTTP_METHOD, TString>, THttpHandler> Data;
 };
 
-} // namespace NKikimr::NPublicHttp
+}   // namespace NKikimr::NPublicHttp

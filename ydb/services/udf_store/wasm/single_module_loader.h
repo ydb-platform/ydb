@@ -11,7 +11,6 @@
 namespace NKikimr::NUdfStore::NWasm {
 
 struct TWasmLoadParams {
-    TString Md5;
     TWasmManifest Manifest;
     TString ModuleWasmData;
     TString ModuleObjectCode;
@@ -24,4 +23,4 @@ TWasmModuleStatePtr BuildModuleStateFromManifest(const TWasmLoadParams& params);
 // Registers artifact in ModuleCatalog and returns metadata for FunctionRegistry.
 TWasmCompartmentStatePtr LoadWasmFromManifest(const TWasmLoadParams& params);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

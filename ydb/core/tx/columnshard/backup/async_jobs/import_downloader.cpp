@@ -11,19 +11,19 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NBackup {
 
-TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
-    const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
+TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId,
+    ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
     const auto settingsKind = restoreTask.GetSettingsCase();
     switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
 #ifndef KIKIMR_DISABLE_S3_OPS
-            return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo));
+            // ColumnShard consumes row uploads, not flat-table parts.
+            return std::unique_ptr<NActors::IActor>(
+                CreateS3Downloader(subscriberActorId, tabletId, txId, restoreTask, tableInfo, /*directPartImportAllowed=*/false));
 #else
             return TConclusionStatus::Fail("Import from S3 are disabled");
 #endif
@@ -34,9 +34,10 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
 
 class TImportDownloader: public TActorBootstrapped<TImportDownloader> {
 public:
-    TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask,
+    TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask,
         const NKikimr::NDataShard::TTableInfo& tableInfo, const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema)
         : SubscriberActorId(subscriberActorId)
+        , TabletId(tabletId)
         , TxId(txId)
         , RestoreTask(restoreTask)
         , TableInfo(tableInfo)
@@ -46,7 +47,7 @@ public:
 
     void Bootstrap() {
         Counters.OnActorAlive();
-        auto result = CreateAsyncJobImportDownloader(SelfId(), TxId, RestoreTask, TableInfo);
+        auto result = CreateAsyncJobImportDownloader(SelfId(), TabletId, TxId, RestoreTask, TableInfo);
         if (!result) {
             Counters.OnError();
             return Fail(result.GetError().GetErrorMessage());
@@ -61,7 +62,6 @@ public:
                 hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -84,7 +84,7 @@ public:
     }
 
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
-        AFL_VERIFY(google::protobuf::util::MessageDifferencer::Equals(ev->Get()->Info.DownloadState, NKikimrBackup::TS3DownloadState()));
+        // Nothing is stored here: the downloader gets back what it asked to store.
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 
@@ -106,14 +106,14 @@ public:
         for (ui32 i = 0; i < rowScheme.KeyColumnIdsSize(); ++i) {
             const ui32 colId = rowScheme.GetKeyColumnIds(i);
             auto it = YdbSchema.find(colId);
-            AFL_VERIFY(it != YdbSchema.end());
+            YDB_LOG_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
         for (ui32 i = 0; i < rowScheme.ValueColumnIdsSize(); ++i) {
             const ui32 colId = rowScheme.GetValueColumnIds(i);
             auto it = YdbSchema.find(colId);
-            AFL_VERIFY(it != YdbSchema.end());
+            YDB_LOG_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
@@ -154,8 +154,9 @@ public:
                 totalBytes += cell.Size();
             }
 
-            AFL_VERIFY(allCells.size() == rowSchemaOrder.size())
-            ("all_cells_size", allCells.size())("schema_size", rowSchemaOrder.size());
+            YDB_LOG_VERIFY(allCells.size() == rowSchemaOrder.size(),
+                {"allCellsSize", allCells.size()},
+                {"schemaSize", rowSchemaOrder.size()});
 
             batchBuilder.AddRow(TConstArrayRef<TCell>(allCells.data(), allCells.size()));
             allCells.clear();
@@ -176,7 +177,6 @@ public:
             return Fail(product->Error);
         }
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -184,7 +184,6 @@ public:
         auto result = std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true);
         result->Error = error;
         Send(SubscriberActorId, std::move(result));
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -193,6 +192,7 @@ private:
     NDataShard::TS3Download LastInfo;
     TActorId LastActorId;
     NActors::TActorId SubscriberActorId;
+    ui64 TabletId;
     ui64 TxId;
     NKikimrSchemeOp::TRestoreTask RestoreTask;
     NKikimr::NDataShard::TTableInfo TableInfo;
@@ -200,10 +200,10 @@ private:
     TImportDownloaderCounters Counters;
 };
 
-std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
+std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo,
     const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
-    return std::make_unique<TImportDownloader>(subscriberActorId, txId, restoreTask, tableInfo, ydbSchema);
+    return std::make_unique<TImportDownloader>(subscriberActorId, tabletId, txId, restoreTask, tableInfo, ydbSchema);
 }
 
 }   // namespace NKikimr::NColumnShard::NBackup

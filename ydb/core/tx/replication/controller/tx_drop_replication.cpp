@@ -9,6 +9,7 @@ class TController::TTxDropReplication: public TTxBase {
     TEvPrivate::TEvDropReplication::TPtr PrivEv;
     THolder<IEventHandle> Result; // TEvController::TEvDropReplicationResult
     TReplication::TPtr Replication;
+    TVector<std::pair<ui64, ui64>> AlterersToStop;
 
 public:
     explicit TTxDropReplication(TController* self, TEvController::TEvDropReplication::TPtr& ev)
@@ -61,15 +62,52 @@ public:
         }
 
         if (Replication->GetState() == TReplication::EState::Removing) {
+            if (record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON) {
+                NIceDb::TNiceDb db(txc.DB);
+                // An older controller may have admitted this FORCE as ordinary DROP.
+                for (auto* target : Replication->GetTargets()) {
+                    if (target->GetStreamState() != TReplication::EStreamState::Removed) {
+                        target->SetStreamState(TReplication::EStreamState::Removed);
+                        db.Table<Schema::SrcStreams>().Key(Replication->GetId(), target->GetId()).Update(
+                            NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                    }
+                }
+            }
             Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
 
+        Self->DeferredAlters.erase(Replication->GetId());
+        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+            if (it->first.first != Replication->GetId()) {
+                ++it;
+                continue;
+            }
+            const auto key = it->first;
+            for (const auto& workerId : it->second.ExpectedWorkers) {
+                db.Table<Schema::SchemaBarrierWorkers>()
+                    .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
+            }
+            Self->StopSchemaChangeTargetFlush(key);
+            if (Self->SchemaChangeDstAlterers.contains(key)) {
+                AlterersToStop.push_back(key);
+            }
+            if (Replication->FindTarget(key.second)) {
+                db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
+            }
+            it = Self->SchemaBarriers.erase(it);
+        }
+
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
@@ -78,15 +116,25 @@ public:
                 continue;
             }
 
+            Self->CompleteWorkerSets.erase({Replication->GetId(), tid});
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+
             target->Shutdown(ctx);
 
-            target->SetStreamState(TReplication::EStreamState::Removing);
+            target->SetStreamState(record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                ? TReplication::EStreamState::Removed
+                : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade()) {
-                target->SetDstState(TReplication::EDstState::Removing);
+            if (record.GetCascade() || target->GetKind() == TReplication::ETargetKind::Topic) {
+                if (!record.GetCascade() && target->GetKind() == TReplication::ETargetKind::Topic) {
+                    target->SetDstState(TReplication::EDstState::Alter);
+                } else {
+                    target->SetDstState(TReplication::EDstState::Removing);
+                }
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
                 );
@@ -133,6 +181,7 @@ public:
             Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
+        Replication->Shutdown(ctx);
         Self->Remove(rid);
         Replication.Reset();
 
@@ -142,6 +191,10 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
+
+        for (const auto& key : AlterersToStop) {
+            Self->StopSchemaChangeDstAlter(key, ctx);
+        }
 
         if (Result) {
             ctx.Send(Result.Release());

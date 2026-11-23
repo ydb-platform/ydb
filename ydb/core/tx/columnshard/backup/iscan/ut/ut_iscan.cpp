@@ -5,18 +5,29 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/datashard/backup_restore_traits.h>
+#include <ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/datashard/export_scan.h>
 
 #include <ydb/apps/ydbd/export/export.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/builder.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 
 namespace {
+
+using EDataFormat = NDataShard::NBackupRestoreTraits::EDataFormat;
+using ECompressionCodec = NDataShard::NBackupRestoreTraits::ECompressionCodec;
 
 std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
     std::vector<std::string> keys = { "foo", "bar", "baz" };
@@ -63,12 +74,24 @@ NDataShard::IExport::TTableColumns MakeYdbColumns() {
     return columns;
 }
 
-NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName) {
+NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName, EDataFormat dataFormat = EDataFormat::YdbDump)
+{
     NKikimrSchemeOp::TBackupTask backupTask;
     backupTask.SetEnablePermissions(true);
     auto& s3Settings = *backupTask.MutableS3Settings();
     s3Settings.SetBucket(bucketName);
     s3Settings.SetEndpoint(GetEnv("S3_ENDPOINT"));
+    switch (dataFormat) {
+        case EDataFormat::YdbDump:
+            s3Settings.MutableExportDataSettings()->MutableYdbDump();
+            break;
+        case EDataFormat::Parquet:
+            s3Settings.MutableExportDataSettings()->MutableParquet();
+            break;
+        case EDataFormat::Invalid:
+            Y_ABORT("Invalid data format");
+    }
+
     auto& table = *backupTask.MutableTable();
     auto& tableDescription = *table.MutableColumnTableDescription();
     tableDescription.SetColumnShardCount(4);
@@ -83,6 +106,56 @@ NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName) {
     return backupTask;
 }
 
+// Inert for CSV, so every format-parametrized test sets it.
+void EnableParquetFormats(TTestActorRuntime& runtime) {
+    runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+}
+
+void AssertParquetData(const TString& data, const TVector<std::pair<TString, TString>>& expectedRows)
+{
+    UNIT_ASSERT_GE(data.size(), 8u);
+    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(data.data(), 4), "PAR1");
+    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(data.data() + data.size() - 4, 4), "PAR1");
+
+    const auto table = NTestUtils::ReadParquet(data);
+    UNIT_ASSERT_VALUES_EQUAL(table->num_rows(), expectedRows.size());
+    UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
+
+    const auto keyColumn = table->GetColumnByName("key");
+    const auto valueColumn = table->GetColumnByName("value");
+    UNIT_ASSERT(keyColumn);
+    UNIT_ASSERT(valueColumn);
+    UNIT_ASSERT_VALUES_EQUAL(keyColumn->num_chunks(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(valueColumn->num_chunks(), 1);
+
+    const auto keys = std::static_pointer_cast<arrow::BinaryArray>(keyColumn->chunk(0));
+    const auto values = std::static_pointer_cast<arrow::BinaryArray>(valueColumn->chunk(0));
+    for (size_t i = 0; i < expectedRows.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(keys->GetString(i), expectedRows[i].first);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(i), expectedRows[i].second);
+    }
+}
+
+void AssertExportedData(const TString& bucketName, EDataFormat dataFormat, Aws::S3::S3Client& s3Client, const TString& expectedCsv,
+    const TVector<std::pair<TString, TString>>& expectedRows)
+{
+    const TString dataKey = NDataShard::NBackupRestoreTraits::DataKeySuffix(0, dataFormat, ECompressionCodec::None, false);
+    const auto data = NTestUtils::GetObject(bucketName, dataKey, s3Client);
+
+    switch (dataFormat) {
+        case EDataFormat::YdbDump:
+            UNIT_ASSERT_VALUES_EQUAL(dataKey, "data_00.csv");
+            UNIT_ASSERT_VALUES_EQUAL(data, expectedCsv);
+            break;
+        case EDataFormat::Parquet:
+            UNIT_ASSERT_VALUES_EQUAL(dataKey, "data_00.parquet");
+            AssertParquetData(data, expectedRows);
+            break;
+        case EDataFormat::Invalid:
+            UNIT_FAIL("Invalid data format");
+    }
+}
+
 using TRuntimePtr = std::shared_ptr<TTestActorRuntime>;
 
 class TGrabActor: public TActorBootstrapped<TGrabActor> {
@@ -94,12 +167,17 @@ class TGrabActor: public TActorBootstrapped<TGrabActor> {
     // non-owning pointer to the exporter actor
     NTable::IScan* Exporter = nullptr;
 
+    const TString BucketName;
+    const EDataFormat DataFormat;
+
 public:
     // Non-owning pointer to the actor runtime
     TTestActorRuntime* Runtime;
 
-    TGrabActor(TTestActorRuntime* runtime)
-        : Runtime(runtime)
+    TGrabActor(TTestActorRuntime* runtime, TString bucketName, EDataFormat dataFormat)
+        : BucketName(std::move(bucketName))
+        , DataFormat(dataFormat)
+        , Runtime(runtime)
     {
     }
 
@@ -111,7 +189,8 @@ public:
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
 
         std::unique_ptr<NTable::IScan> exporter =
-            NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask("test"), exportFactory.get(), columns, 0).DetachResult();
+            NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask(BucketName, DataFormat), exportFactory.get(), columns, 0)
+                .DetachResult();
         UNIT_ASSERT(exporter);
         Exporter = exporter.get();
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
@@ -185,20 +264,158 @@ public:
     }
 };
 
+enum class EBufferFailurePoint {
+    Collect,   // the second row is rejected
+    PrepareLastEvent,   // the last part cannot be flushed
+};
+
+// Delegates to the real export buffer and fails at the requested point until Clear().
+class TFailingBuffer: public NDataShard::NExportScan::IBuffer {
+public:
+    TFailingBuffer(THolder<IBuffer> inner, EBufferFailurePoint failurePoint, TString error)
+        : Inner(std::move(inner))
+        , FailurePoint(failurePoint)
+        , Error(std::move(error))
+    {
+    }
+
+    void ColumnsOrder(const TVector<ui32>& tags) override {
+        Inner->ColumnsOrder(tags);
+    }
+
+    bool Collect(const NTable::IScan::TRow& row) override {
+        if (FailurePoint == EBufferFailurePoint::Collect && (Failed || ++Collected == 2)) {
+            Failed = true;
+            return false;
+        }
+        return Inner->Collect(row);
+    }
+
+    IEventBase* PrepareEvent(bool last, TStats& stats) override {
+        if (FailurePoint == EBufferFailurePoint::PrepareLastEvent && last) {
+            Failed = true;
+            return nullptr;
+        }
+        return Inner->PrepareEvent(last, stats);
+    }
+
+    void Clear() override {
+        Failed = false;
+        Collected = 0;
+        Inner->Clear();
+    }
+
+    bool IsFilled() const override {
+        return Inner->IsFilled();
+    }
+
+    ui64 GetMemoryBytes() const override {
+        return Inner->GetMemoryBytes();
+    }
+
+    TString GetError() const override {
+        return Failed ? Error : Inner->GetError();
+    }
+
+private:
+    THolder<IBuffer> Inner;
+    const EBufferFailurePoint FailurePoint;
+    const TString Error;
+    ui32 Collected = 0;
+    bool Failed = false;
+};
+
+class TFailingExport: public NDataShard::IExport {
+public:
+    TFailingExport(IExport* inner, EBufferFailurePoint failurePoint, TString error)
+        : Inner(inner)
+        , FailurePoint(failurePoint)
+        , Error(std::move(error))
+    {
+    }
+
+    IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override {
+        return Inner->CreateUploader(dataShard, txId);
+    }
+
+    IBuffer* CreateBuffer() const override {
+        return new TFailingBuffer(THolder<IBuffer>(Inner->CreateBuffer()), FailurePoint, Error);
+    }
+
+    void Shutdown() const override {
+        Inner->Shutdown();
+    }
+
+private:
+    THolder<IExport> Inner;
+    const EBufferFailurePoint FailurePoint;
+    const TString Error;
+};
+
+class TFailingExportFactory: public NDataShard::IExportFactory {
+public:
+    TFailingExportFactory(EBufferFailurePoint failurePoint, TString error)
+        : FailurePoint(failurePoint)
+        , Error(std::move(error))
+    {
+    }
+
+    NDataShard::IExport* CreateExportToYt(
+        const NDataShard::IExport::TTask& task, const NDataShard::IExport::TTableColumns& columns) const override {
+        return Inner.CreateExportToYt(task, columns);
+    }
+
+    NDataShard::IExport* CreateExportToS3(
+        const NDataShard::IExport::TTask& task, const NDataShard::IExport::TTableColumns& columns) const override {
+        return new TFailingExport(Inner.CreateExportToS3(task, columns), FailurePoint, Error);
+    }
+
+    void Shutdown() override {
+        Inner.Shutdown();
+    }
+
+private:
+    TDataShardExportFactory Inner;
+    const EBufferFailurePoint FailurePoint;
+    const TString Error;
+};
+
 }   // namespace
 
 using namespace NColumnShard;
 
 Y_UNIT_TEST_SUITE(IScan) {
-    Y_UNIT_TEST(SimpleExport) {
+    void AssertExportObjects(const TString& bucketName, EDataFormat dataFormat, Aws::S3::S3Client& s3Client, const TString& expectedCsv,
+        const TVector<std::pair<TString, TString>>& expectedRows)
+    {
+        const TString dataKey = NDataShard::NBackupRestoreTraits::DataKeySuffix(0, dataFormat, ECompressionCodec::None, false);
+        std::vector<TString> result = NTestUtils::GetObjectKeys(bucketName, s3Client);
+        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount(bucketName, s3Client), 0);
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), TStringBuilder() << dataKey << ",metadata.json,permissions.pb,scheme.pb");
+
+        const auto scheme = NTestUtils::GetObject(bucketName, "scheme.pb", s3Client);
+        UNIT_ASSERT_VALUES_EQUAL(scheme,
+            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
+            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
+            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
+
+        const auto metadata = NTestUtils::GetObject(bucketName, "metadata.json", s3Client);
+        UNIT_ASSERT_VALUES_EQUAL(
+            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
+
+        AssertExportedData(bucketName, dataFormat, s3Client, expectedCsv, expectedRows);
+    }
+
+    void TestSimpleExport(EDataFormat dataFormat, const TString& bucketName) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test", s3Client);
+        NTestUtils::CreateBucket(bucketName, s3Client);
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        EnableParquetFormats(*runtime);
 
-        auto grabActor = new TGrabActor(runtime.get());
+        auto grabActor = new TGrabActor(runtime.get(), bucketName, dataFormat);
         runtime->Register(grabActor);
 
         while (true) {
@@ -210,33 +427,27 @@ Y_UNIT_TEST_SUITE(IScan) {
             }
         }
 
-        std::vector<TString> result = NTestUtils::GetObjectKeys("test", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test", s3Client), 0);
-        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
-        auto scheme = NTestUtils::GetObject("test", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme,
-            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
-            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
-            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
-        auto metadata = NTestUtils::GetObject("test", "metadata.json", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(
-            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
-        auto data = NTestUtils::GetObject("test", "data_00.csv", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+        AssertExportObjects(bucketName, dataFormat, s3Client, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n",
+            { { "foo", "one" }, { "bar", "two" }, { "baz", "three" } });
     }
 
-    Y_UNIT_TEST(UploaderExport) {
+    Y_UNIT_TEST(SimpleExport, EBackupTestDataFormat) {
+        TestSimpleExport(ToDataFormat(Arg<0>()), TStringBuilder() << "iscan-simple-" << Arg<0>());
+    }
+
+    void TestUploaderExport(EDataFormat dataFormat, const TString& bucketName) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test1", s3Client);
+        NTestUtils::CreateBucket(bucketName, s3Client);
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        EnableParquetFormats(*runtime);
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
-        auto actor =
-            NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test1"), exportFactory.get(), MakeYdbColumns(), 0);
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+            edge, MakeBackupTask(bucketName, dataFormat), exportFactory.get(), MakeYdbColumns(), 0);
         auto exporter = runtime->Register(actor.release());
 
         TAutoPtr<IEventHandle> handle;
@@ -246,33 +457,27 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT(event->IsFinish);
 
         runtime->DispatchEvents({}, TDuration::Seconds(5));
-        std::vector<TString> result = NTestUtils::GetObjectKeys("test1", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test1", s3Client), 0);
-        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
-        auto scheme = NTestUtils::GetObject("test1", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme,
-            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
-            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
-            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
-        auto metadata = NTestUtils::GetObject("test1", "metadata.json", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(
-            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
-        auto data = NTestUtils::GetObject("test1", "data_00.csv", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+        AssertExportObjects(bucketName, dataFormat, s3Client, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n",
+            { { "foo", "one" }, { "bar", "two" }, { "baz", "three" } });
     }
 
-    Y_UNIT_TEST(MultiExport) {
+    Y_UNIT_TEST(UploaderExport, EBackupTestDataFormat) {
+        TestUploaderExport(ToDataFormat(Arg<0>()), TStringBuilder() << "iscan-uploader-" << Arg<0>());
+    }
+
+    void TestMultiExport(EDataFormat dataFormat, const TString& bucketName) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test2", s3Client);
+        NTestUtils::CreateBucket(bucketName, s3Client);
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        EnableParquetFormats(*runtime);
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
-        auto actor =
-            NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test2"), exportFactory.get(), MakeYdbColumns(), 0);
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+            edge, MakeBackupTask(bucketName, dataFormat), exportFactory.get(), MakeYdbColumns(), 0);
         auto exporter = runtime->Register(actor.release());
 
         TAutoPtr<IEventHandle> handle;
@@ -285,20 +490,20 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT(event2->IsFinish);
 
         runtime->DispatchEvents({}, TDuration::Seconds(5));
-        std::vector<TString> result = NTestUtils::GetObjectKeys("test2", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test2", s3Client), 0);
-        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
-        auto scheme = NTestUtils::GetObject("test2", "scheme.pb", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(scheme,
-            "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  }\n}\ncolumns "
-            "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: STRING\n      }\n    }\n  "
-            "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
-        auto metadata = NTestUtils::GetObject("test2", "metadata.json", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(
-            metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
-        auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(
-            data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+        AssertExportObjects(bucketName, dataFormat, s3Client,
+            "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n",
+            {
+                { "foo", "one" },
+                { "bar", "two" },
+                { "baz", "three" },
+                { "foo", "one" },
+                { "bar", "two" },
+                { "baz", "three" },
+            });
+    }
+
+    Y_UNIT_TEST(MultiExport, EBackupTestDataFormat) {
+        TestMultiExport(ToDataFormat(Arg<0>()), TStringBuilder() << "iscan-multi-" << Arg<0>());
     }
 
     Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
@@ -321,6 +526,59 @@ Y_UNIT_TEST_SUITE(IScan) {
 
         UNIT_ASSERT(!result);
         UNIT_ASSERT_STRING_CONTAINS(result.GetErrorMessage(), "Encryption is not supported for parquet files");
+    }
+
+    // The export scan returns EScan::Final synchronously from Feed() (a rejected row) or from Exhausted()
+    // (the last part cannot be flushed). The uploader actor has to report exactly one export error and stop.
+    void TestUploaderReportsBufferFailure(EBufferFailurePoint failurePoint, const TString& bucketName) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucketName, s3Client);
+
+        TRuntimePtr runtime(new TTestBasicRuntime());
+        runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        SetupTabletServices(*runtime);
+        // The uploader talks to the real S3 recipe: do not spin the simulated timers while waiting for it.
+        runtime->SetFastSimulatedTime(false);
+
+        const TString injectedError = "injected export buffer failure";
+        const auto edge = runtime->AllocateEdgeActor(0);
+        auto exportFactory = std::make_shared<TFailingExportFactory>(failurePoint, injectedError);
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+            edge, MakeBackupTask(bucketName), exportFactory.get(), MakeYdbColumns(), 0);
+        auto exporter = runtime->Register(actor.release());
+
+        // A direct Send() is delivered synchronously, ahead of the queued Bootstrap: let the actor start first.
+        {
+            NActors::TDispatchOptions options;
+            options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+                return ev.GetTypeRewrite() == NActors::TEvents::TSystem::Bootstrap && ev.Recipient == exporter;
+            });
+            runtime->DispatchEvents(options);
+        }
+
+        // The batch is queued until the S3 uploader accepts data, so the last part is flushed from Exhausted() itself.
+        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), true)));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* error = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportError>(handle);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(error->ErrorMessage, injectedError);
+
+        UNIT_ASSERT(!runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportError>(handle, TDuration::Seconds(1)));
+        UNIT_ASSERT(!runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle, TDuration::Seconds(1)));
+        UNIT_ASSERT(!runtime->FindActor(exporter));
+
+        const TString dataKey = NDataShard::NBackupRestoreTraits::DataKeySuffix(0, EDataFormat::YdbDump, ECompressionCodec::None, false);
+        const std::vector<TString> keys = NTestUtils::GetObjectKeys(bucketName, s3Client);
+        UNIT_ASSERT_C(std::find(keys.begin(), keys.end(), dataKey) == keys.end(), JoinSeq(",", keys));
+    }
+
+    Y_UNIT_TEST(UploaderReportsCollectFailure) {
+        TestUploaderReportsBufferFailure(EBufferFailurePoint::Collect, "iscan-uploader-collect-failure");
+    }
+
+    Y_UNIT_TEST(UploaderReportsLastFlushFailure) {
+        TestUploaderReportsBufferFailure(EBufferFailurePoint::PrepareLastEvent, "iscan-uploader-last-flush-failure");
     }
 }
 

@@ -10,7 +10,6 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context))
 {
-    std::deque<std::shared_ptr<IDataSource>> sources;
     const auto readMetadata = GetReadMetadataVerifiedAs<const TReadMetadata>();
     auto constructor = GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
@@ -27,7 +26,7 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
     for (auto&& r : result) {
         count += r->GetRecordsCount();
     }
-    AFL_VERIFY(count == ReadyResultsCount);
+    YDB_LOG_VERIFY(count == ReadyResultsCount);
     ReadyResultsCount = 0;
 
     YDB_LOG_DEBUG("",

@@ -25,6 +25,7 @@ namespace NTest {
             : TPart(src, epoch)
             , Store(src.Store)
             , Slices(src.Slices)
+            , PageColls(src.PageColls)
         { }
 
     public:
@@ -34,7 +35,9 @@ namespace NTest {
             , Store(std::move(store))
             , Slices(std::move(slices))
         {
-
+            for (ui32 room : xrange(Store->GetRoomCount())) {
+                PageColls.emplace_back(new TStorePageCollection(Store, room));
+            }
         }
 
         ui64 DataSize() const noexcept override
@@ -47,10 +50,7 @@ namespace NTest {
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
         }
 
-        ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
-        {
-            return Store->GetPageSize(groupId.Index, pageId);
-        }
+        using TPart::GetPageSize;
 
         ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
         {
@@ -59,14 +59,19 @@ namespace NTest {
             return 0;
         }
 
-        NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
+        ui64 GetSlotPageSize(ui32 slot, NPage::TPageId pageId) const override
         {
-            return Store->GetPageType(groupId.Index, pageId);
+            return Store->GetPageSize(slot, pageId);
         }
 
-        ui8 GetGroupChannel(NPage::TGroupId groupId) const override
+        NPage::EPage GetSlotPageType(ui32 slot, NPage::TPageId pageId) const override
         {
-            Y_UNUSED(groupId);
+            return Store->GetPageType(slot, pageId);
+        }
+
+        ui8 GetSlotChannel(ui32 slot) const override
+        {
+            Y_UNUSED(slot);
             return 0;
         }
 
@@ -77,6 +82,12 @@ namespace NTest {
             return 0;
         }
 
+        const NPageCollection::IPageCollection* GetPageCollection(ui32 slot) const override
+        {
+            Y_ENSURE(slot < PageColls.size());
+            return PageColls[slot].Get();
+        }
+
         TIntrusiveConstPtr<NTable::TPart> CloneWithEpoch(NTable::TEpoch epoch) const override
         {
             return new TPartStore(*this, epoch);
@@ -84,6 +95,7 @@ namespace NTest {
 
         const TIntrusiveConstPtr<TStore> Store;
         const TIntrusiveConstPtr<TSlices> Slices;
+        mutable TVector<TIntrusiveConstPtr<NPageCollection::IPageCollection>> PageColls;
     };
 
     class TTestEnv: public IPages {
@@ -108,9 +120,25 @@ namespace NTest {
             return { true, Get(part, room, ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            return Get(part, groupId.Index, pageId);
+            Y_ENSURE(!NPage::IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
+            return CheckedCast<const TPartStore*>(part)->Store->GetPage(part->DataSlot(groupId), location.Offset);
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            Y_ENSURE(location.Type == EPage::Undef || NPage::IsIndexPage(location.Type),
+                "Page " << location << " is requested as an index page");
+            return CheckedCast<const TPartStore*>(part)->Store->GetPage(part->IndexSlot(groupId), location.Offset);
+        }
+
+    protected:
+        ui32 ResolvePageId(const TPart *part, const TPageLocation& location, ui32 slot) const {
+            if (location.Offset.IsByteOffset()) {
+                return CheckedCast<const TPartStore*>(part)->Store->ResolveByteOffset(slot, location.Offset.AsByteOffset());
+            }
+            return location.Offset.AsPageIndex();
         }
 
     private:
@@ -202,7 +230,8 @@ namespace NTest {
                     Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
                     break;
                 }
-                result += part.GetPageSize(index->GetPageId(), groupId);
+                auto location = index->GetLocation();
+                result += location.Size;
             }
 
             return result;
@@ -214,7 +243,7 @@ namespace NTest {
             return index->GetEndRowId();
         }
 
-        inline TRowId GetPageId(const TPart& part, ui32 pageIndex) {
+        inline TPageLocation GetPageLocation(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, { });
 
@@ -223,7 +252,7 @@ namespace NTest {
                 Y_ENSURE(index->Next() == EReady::Data);
             }
 
-            return index->GetPageId();
+            return index->GetLocation();
         }
 
         inline TRowId GetRowId(const TPart& part, ui32 pageIndex) {
@@ -238,18 +267,18 @@ namespace NTest {
             return index->GetRowId();
         }
 
-        inline TPageId GetFirstPageId(const TPart& part, TGroupId groupId) {
+        inline TPageLocation GetFirstPageLocation(const TPart& part, TGroupId groupId) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, groupId);
             index->Seek(0);
-            return index->GetPageId();
+            return index->GetLocation();
         }
 
-        inline TPageId GetLastPageId(const TPart& part, TGroupId groupId) {
+        inline TPageLocation GetLastPageLocation(const TPart& part, TGroupId groupId) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, groupId);
             index->Seek(index->GetEndRowId() - 1);
-            return index->GetPageId();
+            return index->GetLocation();
         }
 
         inline TVector<TCell> GetKey(const TPart& part, ui32 pageIndex) {

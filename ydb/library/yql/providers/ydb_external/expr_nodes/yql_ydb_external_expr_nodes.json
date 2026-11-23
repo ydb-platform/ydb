@@ -1,0 +1,115 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TYdbExternalDataSource",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Match": {
+                "Type": "Callable",
+                "Name": "DataSource"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "Category",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 1,
+                    "Name": "Cluster",
+                    "Type": "TCoAtom"
+                }
+            ]
+        },
+        {
+            "Name": "TYdbExternalRead",
+            "Base": "TFreeArgCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "Read!"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "DataSource",
+                    "Type": "TYdbExternalDataSource"
+                }
+            ]
+        },
+        {
+            "Name": "TYdbExternalReadTable",
+            "Base": "TCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "YdbExternalReadTable!"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "DataSource",
+                    "Type": "TYdbExternalDataSource"
+                },
+                {
+                    "Index": 2,
+                    "Name": "Table",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 3,
+                    "Name": "Columns",
+                    "Type": "TExprBase"
+                }
+            ]
+        },
+        {
+            "Name": "TYdbExternalSourceSettings",
+            "Base": "TCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "YdbExternalSourceSettings"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "Cluster",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 2,
+                    "Name": "Table",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 3,
+                    "Name": "Token",
+                    "Type": "TCoSecureParam"
+                },
+                {
+                    "Index": 4,
+                    "Name": "Columns",
+                    "Type": "TCoAtomList"
+                }
+            ]
+        }
+    ]
+}

@@ -45,11 +45,11 @@ struct TDownloadLink {
     TDownloadLink& operator=(const TDownloadLink&) = default;
 
     static TDownloadLink Url(const TString& path, const TString& md5 = "") {
-        return { /*isUrl=*/true, path, md5 };
+        return {/*isUrl=*/true, path, md5};
     }
 
     static TDownloadLink File(const TString& path, const TString& md5 = "") {
-        return { /*isUrl=*/false, path, md5 };
+        return {/*isUrl=*/false, path, md5};
     }
 
     bool operator==(const TDownloadLink& other) const {
@@ -63,12 +63,11 @@ struct TDownloadLink {
     size_t Hash() const {
         return CombineHashes(
             CombineHashes((size_t)IsUrl, ComputeHash(Path)),
-            ComputeHash(Md5)
-        );
+            ComputeHash(Md5));
     }
 };
 
-struct TResourceInfo : public TThrRefBase {
+struct TResourceInfo: public TThrRefBase {
     using TPtr = TIntrusiveConstPtr<TResourceInfo>;
 
     bool IsTrusted = false;
@@ -89,10 +88,9 @@ inline bool operator<(const TResourceInfo::TPtr& p1, const TResourceInfo::TPtr& 
     return p1.Get() < p2.Get();
 }
 
-class TUdfIndex : public TThrRefBase {
+class TUdfIndex: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUdfIndex>;
-
 
     // todo: trusted resources should not be replaceble regardless of specified mode
     enum class EOverrideMode {
@@ -106,7 +104,6 @@ public:
         NotFound,
         Ambigious
     };
-
 
     TUdfIndex();
     void SetCaseSentiveSearch(bool caseSensitive);
@@ -134,7 +131,6 @@ private:
     TSet<TResourceInfo::TPtr> FindResourcesByModules(const TSet<TString>& modules) const;
     void UnregisterResource(TResourceInfo::TPtr resource);
 
-
     // module => Resource
     TMap<TString, TResourceInfo::TPtr> Resources_;
     bool CaseSensitive_ = true;
@@ -143,6 +139,6 @@ private:
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TString>& paths, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info, const TStringBuf& alias = {}) ;
+void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info, const TStringBuf& alias = {});
 
-}
+} // namespace NYql

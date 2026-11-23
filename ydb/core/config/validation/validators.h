@@ -42,12 +42,18 @@ EValidationResult ValidateStateStorageConfig(
     const NKikimrConfig::TAppConfig& proposed,
     std::vector<TString>& msg);
 
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config);
+
 EValidationResult ValidateAuthConfig(
     const NKikimrProto::TAuthConfig& authConfig,
     std::vector<TString>& msg);
 
 EValidationResult ValidateColumnShardConfig(
     const NKikimrConfig::TColumnShardConfig& columnShardConfig,
+    std::vector<TString>& msg);
+
+EValidationResult ValidateCompositeConveyorConfig(
+    const NKikimrConfig::TCompositeConveyorConfig& compositeConveyorConfig,
     std::vector<TString>& msg);
 
 EValidationResult ValidateMonitoringConfig(
@@ -66,6 +72,9 @@ EValidationResult ValidateConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig);
+TString ValidateStateStorageConfig(
+    const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig,
+    const NKikimrConfig::TStateStorageConfig& newSSConfig,
+    bool allowRingGroupReassignment = false);
 
 } // namespace NKikimr::NConfig

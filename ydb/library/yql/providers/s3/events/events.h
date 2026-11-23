@@ -4,26 +4,24 @@
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 
+#include <arrow/api.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-
-#include <arrow/api.h>
 
 namespace NDB {
 
 // forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
 class Block;
 
-} // namespace NDB
+}   // namespace NDB
 
 namespace NYql::NDq {
 
 struct TEvS3Provider {
-
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_S3_PROVIDER),
         // Lister events
         EvUpdateConsumersCount = EvBegin,
@@ -32,10 +30,10 @@ struct TEvS3Provider {
         EvObjectPathBatch,
         EvObjectPathReadError,
         // Gateway events
-        EvReadResult,      // non-streaming download result
+        EvReadResult,   // non-streaming download result
         EvDownloadStart,   // streaming started
-        EvDownloadData,    // streaming data (part of)
-        EvDownloadFinish,  // streaming finished
+        EvDownloadData,   // streaming data (part of)
+        EvDownloadFinish,   // streaming finished
         // Reader events
         EvReadError,
         EvRetry,
@@ -43,7 +41,7 @@ struct TEvS3Provider {
         EvNextRecordBatch,
         EvFileFinished,
         EvContinue,
-        EvReadResult2, // merge with EvReadResult and rename to EvDownloadResult
+        EvReadResult2,   // merge with EvReadResult and rename to EvDownloadResult
         // Writer events
         // Cache events
         EvCacheSourceStart,
@@ -58,19 +56,17 @@ struct TEvS3Provider {
         EvDecompressDataFinish,
         EvEnd
     };
+
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
-    
-    struct TEvUpdateConsumersCount :
-        public NActors::TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
-        
+
+    struct TEvUpdateConsumersCount
+        : public NActors::TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
         explicit TEvUpdateConsumersCount(ui64 consumersCountDelta = 0) {
             Record.SetConsumersCountDelta(consumersCountDelta);
         }
     };
 
-    struct TEvAck :
-        public NActors::TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
-        
+    struct TEvAck: public NActors::TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
         TEvAck() = default;
 
         explicit TEvAck(const NDqProto::TMessageTransportMeta& transportMeta) {
@@ -78,48 +74,41 @@ struct TEvS3Provider {
         }
     };
 
-    struct TEvGetNextBatch :
-        public NActors::TEventPB<TEvGetNextBatch, NS3::FileQueue::TEvGetNextBatch, EvGetNextBatch> {
-    };
+    struct TEvGetNextBatch: public NActors::TEventPB<TEvGetNextBatch, NS3::FileQueue::TEvGetNextBatch, EvGetNextBatch> {};
 
-    struct TEvObjectPathBatch :
-        public NActors::TEventPB<TEvObjectPathBatch, NS3::FileQueue::TEvObjectPathBatch, EvObjectPathBatch> {
-
+    struct TEvObjectPathBatch: public NActors::TEventPB<TEvObjectPathBatch, NS3::FileQueue::TEvObjectPathBatch, EvObjectPathBatch> {
         TEvObjectPathBatch() {
             Record.SetNoMoreFiles(false);
         }
 
-        TEvObjectPathBatch(std::vector<NS3::FileQueue::TObjectPath> objectPaths, bool noMoreFiles, const NDqProto::TMessageTransportMeta& transportMeta) {
-            Record.MutableObjectPaths()->Assign(
-                std::make_move_iterator(objectPaths.begin()),
-                std::make_move_iterator(objectPaths.end()));
+        TEvObjectPathBatch(
+            std::vector<NS3::FileQueue::TObjectPath> objectPaths, bool noMoreFiles, const NDqProto::TMessageTransportMeta& transportMeta) {
+            Record.MutableObjectPaths()->Assign(std::make_move_iterator(objectPaths.begin()), std::make_move_iterator(objectPaths.end()));
             Record.SetNoMoreFiles(noMoreFiles);
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
         }
     };
 
-    struct TEvObjectPathReadError :
-        public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
-
+    struct TEvObjectPathReadError
+        : public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
         TEvObjectPathReadError() = default;
 
-        TEvObjectPathReadError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode code, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvObjectPathReadError(
+            TIssues issues, NYql::NDqProto::StatusIds::StatusCode code, const NDqProto::TMessageTransportMeta& transportMeta) {
             NYql::IssuesToMessage(issues, Record.MutableIssues());
             Record.MutableTransportMeta()->CopyFrom(transportMeta);
             Record.SetFatalCode(code);
         }
     };
 
-    struct TEvReadResult : public NActors::TEventLocal<TEvReadResult, EvReadResult> {
-        TEvReadResult(
-            IHTTPGateway::TContent&& result,
-            const TString& requestId,
-            size_t pathInd,
-            TString path)
+    struct TEvReadResult: public NActors::TEventLocal<TEvReadResult, EvReadResult> {
+        TEvReadResult(IHTTPGateway::TContent&& result, const TString& requestId, size_t pathInd, TString path)
             : Result(std::move(result))
             , RequestId(requestId)
             , PathIndex(pathInd)
-            , Path(std::move(path)) { }
+            , Path(std::move(path))
+        {
+        }
 
         IHTTPGateway::TContent Result;
         const TString RequestId;
@@ -127,47 +116,62 @@ struct TEvS3Provider {
         const TString Path;
     };
 
-    struct TEvDownloadStart : public NActors::TEventLocal<TEvDownloadStart, EvDownloadStart> {
+    struct TEvDownloadStart: public NActors::TEventLocal<TEvDownloadStart, EvDownloadStart> {
         TEvDownloadStart(CURLcode curlResponseCode, long httpResponseCode)
-            : CurlResponseCode(curlResponseCode), HttpResponseCode(httpResponseCode) {}
+            : CurlResponseCode(curlResponseCode)
+            , HttpResponseCode(httpResponseCode)
+        {
+        }
+
         const CURLcode CurlResponseCode;
         const long HttpResponseCode;
     };
 
-    struct TEvDownloadData : public NActors::TEventLocal<TEvDownloadData, EvDownloadData> {
-        TEvDownloadData(IHTTPGateway::TCountedContent&& data) : Result(std::move(data)) {}
+    struct TEvDownloadData: public NActors::TEventLocal<TEvDownloadData, EvDownloadData> {
+        TEvDownloadData(IHTTPGateway::TCountedContent&& data)
+            : Result(std::move(data))
+        {
+        }
+
         IHTTPGateway::TCountedContent Result;
     };
 
-    struct TEvDownloadFinish : public NActors::TEventLocal<TEvDownloadFinish, EvDownloadFinish> {
+    struct TEvDownloadFinish: public NActors::TEventLocal<TEvDownloadFinish, EvDownloadFinish> {
         TEvDownloadFinish(size_t pathIndex, CURLcode curlResponseCode, TIssues&& issues)
-            : PathIndex(pathIndex), CurlResponseCode(curlResponseCode), Issues(std::move(issues)) {
+            : PathIndex(pathIndex)
+            , CurlResponseCode(curlResponseCode)
+            , Issues(std::move(issues))
+        {
         }
+
         const size_t PathIndex;
         const CURLcode CurlResponseCode;
         TIssues Issues;
     };
 
-    struct TEvFileFinished : public NActors::TEventLocal<TEvFileFinished, EvFileFinished> {
+    struct TEvFileFinished: public NActors::TEventLocal<TEvFileFinished, EvFileFinished> {
         TEvFileFinished(size_t pathIndex, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 splitSize)
-            : PathIndex(pathIndex), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), SplitSize(splitSize) {
+            : PathIndex(pathIndex)
+            , IngressDelta(ingressDelta)
+            , CpuTimeDelta(cpuTimeDelta)
+            , SplitSize(splitSize)
+        {
         }
+
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
         const ui64 SplitSize;
     };
 
-    struct TEvReadError : public NActors::TEventLocal<TEvReadError, EvReadError> {
-        TEvReadError(
-            TIssues&& error,
-            const TString& requestId,
-            size_t pathInd,
-            TString path)
+    struct TEvReadError: public NActors::TEventLocal<TEvReadError, EvReadError> {
+        TEvReadError(TIssues&& error, const TString& requestId, size_t pathInd, TString path)
             : Error(std::move(error))
             , RequestId(requestId)
             , PathIndex(pathInd)
-            , Path(std::move(path)) { }
+            , Path(std::move(path))
+        {
+        }
 
         const TIssues Error;
         const TString RequestId;
@@ -175,15 +179,16 @@ struct TEvS3Provider {
         const TString Path;
     };
 
-    struct TEvRetryEventFunc : public NActors::TEventLocal<TEvRetryEventFunc, EvRetry> {
+    struct TEvRetryEventFunc: public NActors::TEventLocal<TEvRetryEventFunc, EvRetry> {
         explicit TEvRetryEventFunc(std::function<void()> functor)
             : Functor(std::move(functor))
-        {}
+        {
+        }
 
         const std::function<void()> Functor;
     };
 
-    struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
+    struct TEvNextBlock: public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
         TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0);
 
         std::unique_ptr<NDB::Block> Block;
@@ -193,47 +198,55 @@ struct TEvS3Provider {
         const ui64 IngressDecompressedDelta;
     };
 
-    struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
+    struct TEvNextRecordBatch: public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
         TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : Batch(batch), PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
+            : Batch(batch)
+            , PathIndex(pathInd)
+            , IngressDelta(ingressDelta)
+            , CpuTimeDelta(cpuTimeDelta)
+        {
         }
+
         std::shared_ptr<arrow::RecordBatch> Batch;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
     };
 
-    struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
-    };
+    struct TEvContinue: public NActors::TEventLocal<TEvContinue, EvContinue> {};
 
-    struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
+    struct TEvDecompressDataRequest: public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
         explicit TEvDecompressDataRequest(TString&& data)
             : Data(std::move(data))
-        {}
+        {
+        }
 
         TString Data;
     };
 
-    struct TEvDecompressDataResult : public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
-        TEvDecompressDataResult(TString&& data, const TDuration& cpuTime) 
+    struct TEvDecompressDataResult: public NActors::TEventLocal<TEvDecompressDataResult, EvDecompressDataResult> {
+        TEvDecompressDataResult(TString&& data, const TDuration& cpuTime)
             : Data(std::move(data))
             , CpuTime(cpuTime)
-        {}
+        {
+        }
 
-        TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
+        TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime)
             : Exception(std::move(exception))
             , CpuTime(cpuTime)
-        {}
+        {
+        }
 
         TString Data;
         std::exception_ptr Exception;
         TDuration CpuTime;
     };
 
-    struct TEvDecompressDataFinish : public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
+    struct TEvDecompressDataFinish: public NActors::TEventLocal<TEvDecompressDataFinish, EvDecompressDataFinish> {
         TEvDecompressDataFinish(const TDuration& cpuTime)
             : CpuTime(cpuTime)
-        {}
+        {
+        }
 
         TDuration CpuTime;
     };
@@ -243,19 +256,21 @@ struct TEvS3Provider {
         int64_t Length;
     };
 
-    struct TEvReadResult2 : public NActors::TEventLocal<TEvReadResult2, EvReadResult2> {
+    struct TEvReadResult2: public NActors::TEventLocal<TEvReadResult2, EvReadResult2> {
         TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result)
             : ReadRange(readRange)
             , Failure(false)
             , Result(std::move(result))
-        {}
+        {
+        }
 
         TEvReadResult2(TReadRange readRange, TIssues&& issues)
             : ReadRange(readRange)
             , Failure(true)
             , Result("")
             , Issues(std::move(issues))
-        {}
+        {
+        }
 
         const TReadRange ReadRange;
         const bool Failure;
@@ -263,10 +278,12 @@ struct TEvS3Provider {
         const TIssues Issues;
     };
 
-    struct TEvCacheCheckRequest : public NActors::TEventLocal<TEvCacheCheckRequest, EvCacheCheckRequest> {
-
+    struct TEvCacheCheckRequest: public NActors::TEventLocal<TEvCacheCheckRequest, EvCacheCheckRequest> {
         TEvCacheCheckRequest(NActors::TActorId sourceId, const TString& path, ui64 rowGroup)
-            : SourceId(sourceId), Path(path), RowGroup(rowGroup) {
+            : SourceId(sourceId)
+            , Path(path)
+            , RowGroup(rowGroup)
+        {
         }
 
         NActors::TActorId SourceId;
@@ -274,34 +291,34 @@ struct TEvS3Provider {
         const ui64 RowGroup;
     };
 
-    struct TEvCacheCheckResult : public NActors::TEventLocal<TEvCacheCheckResult, EvCacheCheckResult> {
+    struct TEvCacheCheckResult: public NActors::TEventLocal<TEvCacheCheckResult, EvCacheCheckResult> {
         TString Path;
         ui64 RowGroup;
         std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
         bool Hit = false;
     };
 
-    struct TEvCachePutRequest : public NActors::TEventLocal<TEvCachePutRequest, EvCachePutRequest> {
+    struct TEvCachePutRequest: public NActors::TEventLocal<TEvCachePutRequest, EvCachePutRequest> {
         NActors::TActorId SourceId;
         TString Path;
         ui64 RowGroup = 0;
         std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
     };
 
-    struct TEvCacheNotification : public NActors::TEventLocal<TEvCacheNotification, EvCacheNotification> {
+    struct TEvCacheNotification: public NActors::TEventLocal<TEvCacheNotification, EvCacheNotification> {
         TString Path;
         ui64 RowGroup = 0;
         std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
     };
 
-    struct TEvCacheSourceFinish : public NActors::TEventLocal<TEvCacheSourceFinish, EvCacheSourceFinish> {
-
+    struct TEvCacheSourceFinish: public NActors::TEventLocal<TEvCacheSourceFinish, EvCacheSourceFinish> {
         TEvCacheSourceFinish(NActors::TActorId sourceId)
-            : SourceId(sourceId) {
+            : SourceId(sourceId)
+        {
         }
 
         NActors::TActorId SourceId;
     };
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

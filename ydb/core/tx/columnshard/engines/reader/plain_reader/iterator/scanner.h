@@ -13,15 +13,15 @@ class TPlainReadData;
 
 class TDataSourceEndpoint {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, StartSources);
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, FinishSources);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<const IDataSource>>, StartSources);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<const IDataSource>>, FinishSources);
 
 public:
-    void AddStart(std::shared_ptr<IDataSource> source) {
+    void AddStart(const std::shared_ptr<const IDataSource>& source) {
         StartSources.emplace_back(source);
     }
 
-    void AddFinish(std::shared_ptr<IDataSource> source) {
+    void AddFinish(const std::shared_ptr<const IDataSource>& source) {
         FinishSources.emplace_back(source);
     }
 };
@@ -41,7 +41,7 @@ public:
 
 class TScanContext {
 private:
-    using TCurrentSources = THashMap<ui32, std::shared_ptr<IDataSource>>;
+    using TCurrentSources = THashMap<ui32, std::shared_ptr<const IDataSource>>;
     YDB_READONLY(bool, IncludeStart, false);
     YDB_READONLY(bool, IncludeFinish, false);
     YDB_READONLY_DEF(TCurrentSources, CurrentSources);
@@ -55,7 +55,8 @@ public:
         for (auto&& i : point.GetStartSources()) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"addSource", i->GetSourceIdx()});
-            AFL_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
+            YDB_LOG_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second,
+                {"idx", i->GetSourceIdx()});
         }
     }
 
@@ -63,7 +64,8 @@ public:
         for (auto&& i : point.GetFinishSources()) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"removeSource", i->GetSourceIdx()});
-            AFL_VERIFY(CurrentSources.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
+            YDB_LOG_VERIFY(CurrentSources.erase(i->GetSourceIdx()),
+                {"idx", i->GetSourceIdx()});
         }
     }
 
@@ -81,6 +83,8 @@ private:
     std::map<NArrow::NMerger::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::optional<NArrow::NMerger::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
+    THashMap<ui32, std::unique_ptr<NCommon::TDataSourceLease>> NotStartedSources;
+    THashMap<ui32, std::vector<ui32>> WaitingIntervals;
     THashMap<ui32, std::unique_ptr<TPartialReadResult>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
@@ -89,7 +93,16 @@ private:
     ui64 ZeroCount = 0;
     void DrainSources();
     [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(
-        const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
+        const THashMap<ui32, std::shared_ptr<const IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
+
+    IDataSource& MutableNotStartedSource(const ui32 sourceIdx) {
+        auto it = NotStartedSources.find(sourceIdx);
+        YDB_LOG_VERIFY(it != NotStartedSources.end(),
+            {"sourceIdx", sourceIdx});
+        return *it->second->GetSource().MutableAs<IDataSource>();
+    }
+
+    void StartIntervalSources(TFetchingInterval& interval);
 
 public:
     void OnSentDataFromInterval(const TPartialSourceAddress& address) const;
@@ -110,6 +123,8 @@ public:
         }
         return sb;
     }
+
+    void OnSourceReady(std::unique_ptr<NCommon::TDataSourceLease> lease);
 
     void OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
         std::optional<NArrow::TShardedRecordBatch>&& batch, const std::shared_ptr<arrow::RecordBatch>& lastPK,

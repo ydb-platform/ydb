@@ -1,8 +1,10 @@
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>  // for TSchemeShard
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>  // for MakeTestBlob
 #include <ydb/core/scheme_types/scheme_type_info.h>  // for NTypeIds and TTypeInfo
@@ -129,6 +131,74 @@ ui64 GetTotalDiskUsage(const NKikimrSubDomains::TDiskSpaceUsage& usage) {
     return tables.GetTotalSize() + topics.GetAccountSize();
 }
 
+// Recomputes the effective disk space quotas and the quota-accounted usage from the raw subdomain description
+// and checks that DiskSpaceQuotaUsage reported by SchemeShard agrees with them.
+NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
+    bool separateQuotas,
+    bool topicsAccounted,
+    const TString& debugHint = ""
+) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& desc = record.GetPathDescription().GetDomainDescription();
+        const TString hint = TStringBuilder() << debugHint << ", subdomain's description:\n" << desc.DebugString();
+
+        UNIT_ASSERT_C(desc.HasDiskSpaceQuotaUsage(), hint);
+        const auto& quotaUsage = desc.GetDiskSpaceQuotaUsage();
+
+        const auto effective = [](ui64 hard, ui64 soft) {
+            return TQuotasPair{.HardQuota = hard ? hard : soft, .SoftQuota = soft ? soft : hard};
+        };
+        struct TExpectedEntry {
+            ui64 Usage = 0;
+            TQuotasPair Quotas;
+        };
+        TMap<TString, TExpectedEntry> expected;
+        const auto& usage = desc.GetDiskSpaceUsage();
+        const auto& quotas = desc.GetDatabaseQuotas();
+        if (!separateQuotas) {
+            UNIT_ASSERT_VALUES_EQUAL_C(NKikimrSubDomains::TDiskSpaceQuotaUsage::EMode_Name(quotaUsage.GetMode()),
+                                       "MODE_OVERALL", hint);
+            expected[""] = TExpectedEntry{
+                .Usage = usage.GetTables().GetTotalSize() + (topicsAccounted ? usage.GetTopics().GetAccountSize() : 0),
+                .Quotas = effective(quotas.data_size_hard_quota(), quotas.data_size_soft_quota()),
+            };
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(NKikimrSubDomains::TDiskSpaceQuotaUsage::EMode_Name(quotaUsage.GetMode()),
+                                       "MODE_STORAGE_POOL_KINDS", hint);
+            for (const auto& poolUsage : usage.GetStoragePoolsUsage()) {
+                expected[poolUsage.GetPoolKind()].Usage = poolUsage.GetDataSize() + poolUsage.GetIndexSize();
+            }
+            for (const auto& poolQuotas : quotas.storage_quotas()) {
+                expected[poolQuotas.unit_kind()].Quotas = effective(poolQuotas.data_size_hard_quota(),
+                                                                    poolQuotas.data_size_soft_quota());
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(quotaUsage.EntriesSize(), expected.size(), hint);
+        int i = 0;
+        for (const auto& [poolKind, expectedEntry] : expected) {
+            const auto& entry = quotaUsage.GetEntries(i++);
+            UNIT_ASSERT_C(entry.HasPoolKind() && entry.HasUsage() && entry.HasSoftQuota() && entry.HasHardQuota(), hint);
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.GetPoolKind(), poolKind, hint);
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.GetUsage(), expectedEntry.Usage, hint);
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.GetSoftQuota(), expectedEntry.Quotas.SoftQuota, hint);
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.GetHardQuota(), expectedEntry.Quotas.HardQuota, hint);
+        }
+    };
+}
+
+NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
+    TTestActorRuntime& runtime,
+    const TString& debugHint = ""
+) {
+    const auto& flags = runtime.GetAppData().FeatureFlags;
+    return LsCheckDiskSpaceQuotaUsage(
+        flags.GetEnableSeparateDiskSpaceQuotas(),
+        flags.GetEnableTopicDiskSubDomainQuota(),
+        debugHint
+    );
+}
+
 constexpr const char* EntireDatabaseTag = "entire_database";
 
 NLs::TCheckFunc LsCheckDiskQuotaExceeded(
@@ -190,6 +260,27 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
+// The parent schemeshard keeps only a stub of an external subdomain, so it must not report the quota state
+// that is owned by the tenant schemeshard.
+void CheckNoQuotaUsageInParentDescription(TTestActorRuntime& runtime,
+                                          ui64 schemeShard,
+                                          const TString& pathToSubdomain,
+                                          const TString& debugHint
+) {
+    if (schemeShard == TTestTxConfig::SchemeShard) {
+        // the database is hosted by the root schemeshard itself
+        return;
+    }
+    TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, pathToSubdomain), {
+        [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& desc = record.GetPathDescription().GetDomainDescription();
+            UNIT_ASSERT_C(!desc.HasDiskSpaceQuotaUsage(),
+                debugHint << ", parent schemeshard's description:\n" << desc.DebugString()
+            );
+        }
+    });
+}
+
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           ui64 schemeShard,
                           const TString& pathToSubdomain,
@@ -197,8 +288,10 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           const TString& debugHint = ""
 ) {
     TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
-        LsCheckDiskQuotaExceeded(expectExceeded, debugHint)
+        LsCheckDiskQuotaExceeded(expectExceeded, debugHint),
+        LsCheckDiskSpaceQuotaUsage(runtime, debugHint)
     });
+    CheckNoQuotaUsageInParentDescription(runtime, schemeShard, pathToSubdomain, debugHint);
 }
 
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
@@ -212,8 +305,10 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
             expectedExceeders,
             runtime.GetAppData().FeatureFlags.GetEnableSeparateDiskSpaceQuotas(),
             debugHint
-        )
+        ),
+        LsCheckDiskSpaceQuotaUsage(runtime, debugHint)
     });
+    CheckNoQuotaUsageInParentDescription(runtime, schemeShard, pathToSubdomain, debugHint);
 }
 
 TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
@@ -3889,13 +3984,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         };
 
         auto checkQuotaAndDropTable = [&]() {
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {LsCheckDiskQuotaExceeded(true, "Table was created and data was written")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                LsCheckDiskQuotaExceeded(true, "Table was created and data was written"),
+                LsCheckDiskSpaceQuotaUsage(runtime, "Table was created and data was written")
+            });
 
             TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1");
             waitForSchemaChanged(1);
             env.TestWaitNotification(runtime, txId);
 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {LsCheckDiskQuotaExceeded(false, "Table dropped")});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                LsCheckDiskQuotaExceeded(false, "Table dropped"),
+                LsCheckDiskSpaceQuotaUsage(runtime, "Table dropped")
+            });
         };
 
         // Subdomain with a 1-byte data size quota
@@ -3920,7 +4021,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(false, "SubDomain created")});
+                           {LsCheckDiskQuotaExceeded(false, "SubDomain created"),
+                            LsCheckDiskSpaceQuotaUsage(runtime, "SubDomain created")});
 
         // UpdateRow
         {
@@ -4123,7 +4225,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
-                           {LsCheckDiskQuotaExceeded(false, "SubDomain was created")});
+                           {LsCheckDiskQuotaExceeded(false, "SubDomain was created"),
+                            LsCheckDiskSpaceQuotaUsage(runtime, "SubDomain was created")});
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/USER_1", R"(
             Name: "Topic1"
@@ -4139,7 +4242,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
-                           {LsCheckDiskQuotaExceeded(false, "Topic was created")});
+                           {LsCheckDiskQuotaExceeded(false, "Topic was created"),
+                            LsCheckDiskSpaceQuotaUsage(runtime, "Topic was created")});
 
         ui64 balancerId = DescribePath(runtime, "/MyRoot/USER_1/Topic1").GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
 
@@ -4153,7 +4257,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
-                           {LsCheckDiskQuotaExceeded(true, "Message 0 was written")});
+                           {LsCheckDiskQuotaExceeded(true, "Message 0 was written"),
+                            LsCheckDiskSpaceQuotaUsage(runtime, "Message 0 was written")});
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(true, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer after write");
@@ -4163,7 +4268,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
-                           {LsCheckDiskQuotaExceeded(false, "Topic1 was deleted")});
+                           {LsCheckDiskQuotaExceeded(false, "Topic1 was deleted"),
+                            LsCheckDiskSpaceQuotaUsage(runtime, "Topic1 was deleted")});
     }
 
     Y_UNIT_TEST(ConnectRightNotInheritedIntoSubDomain) {
@@ -4210,6 +4316,76 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             NLs::PathExist,
             NLs::HasNoEffectiveRight(connectRight),
         });
+    }
+
+    Y_UNIT_TEST(StorageSpaceStateOfHostedSubDomain) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // subscriptions the schemeshard makes through the local NodeWarden; they are dropped, so that no state from the
+        // real BS_CONTROLLER interferes with the injected ones
+        std::vector<NKikimrBlobStorage::TEvControllerSubscribeDatabaseSpace> requests;
+        auto observer = runtime.AddObserver<TEvBlobStorage::TEvControllerSubscribeDatabaseSpace>([&](auto& ev) {
+            requests.push_back(ev->Get()->Record);
+            ev.Reset();
+        });
+        auto hasScope = [&](auto getScopes, ui64 pathId) {
+            for (const auto& request : requests) {
+                for (const auto& scope : getScopes(request)) {
+                    if (TPathId::FromProto(scope) == TPathId(TTestTxConfig::SchemeShard, pathId)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto subscribes = [](const auto& request) { return request.GetSubscribe(); };
+        auto unsubscribes = [](const auto& request) { return request.GetUnsubscribe(); };
+
+        // a database hosted by the root schemeshard itself (not an external subdomain)
+        TestCreateSubDomain(runtime, txId++,  "/MyRoot",
+                            "PlanResolution: 50 "
+                            "Coordinators: 1 "
+                            "Mediators: 1 "
+                            "TimeCastBucketsPerMediator: 2 "
+                            "Name: \"USER_0\"");
+        env.TestWaitNotification(runtime, txId - 1);
+        const ui64 subDomainPathId = DescribePath(runtime, "/MyRoot/USER_0").GetPathId();
+        UNIT_ASSERT(hasScope(subscribes, subDomainPathId));
+
+        // BS_CONTROLLER reports its storage exhausted
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto setExhausted = [&](bool exhausted) {
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, new TEvBlobStorage::TEvControllerDatabaseSpaceState(
+                TPathId(TTestTxConfig::SchemeShard, subDomainPathId), exhausted));
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        };
+        auto checkState = [](bool exhausted) {
+            return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
+                UNIT_ASSERT_VALUES_EQUAL(state.GetStorageSpaceExhausted(), exhausted);
+                UNIT_ASSERT_VALUES_EQUAL(state.GetDiskQuotaExceeded(), exhausted);
+            };
+        };
+        const TString counter = "SchemeShard/StorageSpaceExhausted";
+        setExhausted(true);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {checkState(true)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {checkState(false)}); // other databases are not affected
+        CheckSimpleCounter(runtime, counter, 1);
+
+        setExhausted(false);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {checkState(false)});
+        CheckSimpleCounter(runtime, counter, 0);
+
+        // the subscription is dropped when the database is removed, and so is its contribution to the counter
+        setExhausted(true);
+        CheckSimpleCounter(runtime, counter, 1);
+        UNIT_ASSERT(!hasScope(unsubscribes, subDomainPathId));
+        TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId - 1);
+        runtime.WaitFor("unsubscription", [&] { return hasScope(unsubscribes, subDomainPathId); });
+        CheckSimpleCounter(runtime, counter, 0);
     }
 }
 
@@ -4553,6 +4729,108 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
         CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    Y_UNIT_TEST(EffectiveDiskSpaceQuotas) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto createDatabase = [&](const TString& name, const TString& quotas) {
+            TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+                    Name: ")" << name << R"("
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "fast"
+                        Kind: "fast_kind"
+                    }
+                    StoragePools {
+                        Name: "large"
+                        Kind: "large_kind"
+                    }
+                )" << quotas
+            );
+            env.TestWaitNotification(runtime, txId);
+        };
+
+        createDatabase("SoftAndHard", R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 200
+                data_size_soft_quota: 100
+                storage_quotas {
+                    unit_kind: "fast_kind"
+                    data_size_hard_quota: 20
+                    data_size_soft_quota: 10
+                }
+                storage_quotas {
+                    unit_kind: "large_kind"
+                    data_size_hard_quota: 40
+                    data_size_soft_quota: 30
+                }
+            }
+        )");
+        createDatabase("HardOnly", R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 200
+                storage_quotas {
+                    unit_kind: "fast_kind"
+                    data_size_hard_quota: 20
+                }
+            }
+        )");
+        createDatabase("SoftOnly", R"(
+            DatabaseQuotas {
+                data_size_soft_quota: 100
+                storage_quotas {
+                    unit_kind: "large_kind"
+                    data_size_soft_quota: 30
+                }
+            }
+        )");
+        createDatabase("NoQuotas", "");
+
+        struct TExpectedEntry {
+            TString PoolKind;
+            ui64 SoftQuota = 0;
+            ui64 HardQuota = 0;
+        };
+        const auto check = [&](const TString& name, const TString& expectedMode, const TVector<TExpectedEntry>& expectedEntries) {
+            const TString hint = TStringBuilder() << name << ", separate quotas: "
+                << runtime.GetAppData().FeatureFlags.GetEnableSeparateDiskSpaceQuotas();
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/" + name), {
+                LsCheckDiskSpaceQuotaUsage(runtime, hint),
+                [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& quotaUsage = record.GetPathDescription().GetDomainDescription().GetDiskSpaceQuotaUsage();
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        NKikimrSubDomains::TDiskSpaceQuotaUsage::EMode_Name(quotaUsage.GetMode()), expectedMode, hint
+                    );
+                    UNIT_ASSERT_VALUES_EQUAL_C(quotaUsage.EntriesSize(), expectedEntries.size(), hint);
+                    for (size_t i = 0; i < quotaUsage.EntriesSize(); ++i) {
+                        const auto& entry = quotaUsage.GetEntries(i);
+                        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetPoolKind(), expectedEntries[i].PoolKind, hint);
+                        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetSoftQuota(), expectedEntries[i].SoftQuota, hint);
+                        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetHardQuota(), expectedEntries[i].HardQuota, hint);
+                    }
+                }
+            });
+        };
+
+        // the overall quota applies, a missing threshold is equal to the configured one, 0 means no limit
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+        check("SoftAndHard", "MODE_OVERALL", {{"", 100, 200}});
+        check("HardOnly", "MODE_OVERALL", {{"", 200, 200}});
+        check("SoftOnly", "MODE_OVERALL", {{"", 100, 100}});
+        check("NoQuotas", "MODE_OVERALL", {{"", 0, 0}});
+
+        // storage pool kind quotas apply, the overall quota is ignored
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
+        check("SoftAndHard", "MODE_STORAGE_POOL_KINDS", {{"fast_kind", 10, 20}, {"large_kind", 30, 40}});
+        check("HardOnly", "MODE_STORAGE_POOL_KINDS", {{"fast_kind", 20, 20}});
+        check("SoftOnly", "MODE_STORAGE_POOL_KINDS", {{"large_kind", 30, 30}});
+        check("NoQuotas", "MODE_STORAGE_POOL_KINDS", {});
     }
 
 #undef DEBUG_HINT

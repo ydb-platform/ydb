@@ -1,0 +1,58 @@
+loops_logical.dispatch.cpp компилируется 3 раза (baseline/AVX2/AVX512_SKX) с
+разными флагами, но все шаблоны и HWY_INLINE-хелперы объявлены в глобальной
+области видимости -> одинаковое мангленое имя во всех трёх .o -> линкер
+схлопывает их в одно COMDAT-определение (например AVX-512), которое потом
+вызывается и из baseline/AVX2 пути -> SIGILL на CPU без AVX-512
+(BOOL_binary_reduce_wrapper<logical_and_t>, np.all()/np.array_equal()).
+Тот же класс бага, что и в 22-fix-avx512.patch, только в другом файле.
+Фикс: анонимный namespace даёт этим символам internal linkage, так что
+каждый TU держит свою копию и линкер их больше не путает.
+
+--- contrib/python/numpy/py3/numpy/_core/src/umath/loops_logical.dispatch.cpp	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/umath/loops_logical.dispatch.cpp	(working tree)
+@@ -8,6 +8,18 @@
+ #include <hwy/highway.h>
+ namespace hn = hwy::HWY_NAMESPACE;
+ 
++/*
++ * Give every symbol below internal linkage. This file is compiled once per
++ * dispatch target (baseline / AVX2 / AVX512_SKX) with different compiler
++ * flags. Without an anonymous namespace, these templates and HWY_INLINE
++ * helpers get the same mangled name in all three object files and the
++ * linker is free to fold them into a single (COMDAT) definition -- e.g. the
++ * AVX512 one -- which then gets called even from the baseline/AVX2 dispatch
++ * path, executing AVX512 instructions on CPUs that don't support them
++ * (observed as SIGILL, same root cause as patches/22-fix-avx512.patch).
++ */
++namespace {
++
+ struct logical_and_t {};
+ struct logical_or_t {};
+ struct absolute_t {};
+@@ -373,6 +385,8 @@ void BOOL_logical_op_wrapper(char** args, npy_intp const* dimensions, npy_intp c
+     }
+ }
+ 
++}  // namespace
++
+ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_logical_and)(
+     char** args, npy_intp const* dimensions, npy_intp const* steps, void* NPY_UNUSED(func))
+ {
+@@ -385,6 +399,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_logical_or)(
+     BOOL_logical_op_wrapper<logical_or_t>(args, dimensions, steps);
+ }
+ 
++namespace {
++
+ template <typename Op>
+ void BOOL_func_wrapper(char** args, npy_intp const* dimensions, npy_intp const* steps)
+ {
+@@ -400,6 +416,8 @@ void BOOL_func_wrapper(char** args, npy_intp const* dimensions, npy_intp const* 
+     }
+ }
+ 
++}  // namespace
++
+ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_logical_not)(
+     char** args, npy_intp const* dimensions, npy_intp const* steps, void* NPY_UNUSED(func))
+ {

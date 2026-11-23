@@ -53,94 +53,77 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
 }
 
 void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {
+    auto& runtime = *Server.GetRuntime();
     NYdb::NTable::TTableClient tClient(*Driver,
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
-    auto expectation = expectSuccess;
-    bool resultReady = false;
+    auto scanIterator = runtime.WaitFuture(tClient.StreamExecuteScanQuery(request,
+        NYdb::NTable::TStreamExecScanQuerySettings().ClientTimeout(TDuration::Seconds(60))));
+    UNIT_ASSERT_C(scanIterator.IsSuccess(), scanIterator.GetIssues().ToString());
+
     TVector<THashMap<TString, NYdb::TValue>> rows;
-    std::optional<NYdb::NTable::TScanQueryPartIterator> scanIterator;
-    tClient.StreamExecuteScanQuery(request).Subscribe([&scanIterator](NThreading::TFuture<NYdb::NTable::TScanQueryPartIterator> f) {
-        scanIterator = f.GetValueSync();
-    });
-    const TInstant start = TInstant::Now();
-    while (!resultReady && start + TDuration::Seconds(60) > TInstant::Now()) {
-        Cerr << "START_SLEEP" << Endl;
-        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
-        Cerr << "FINISHED_SLEEP" << Endl;
-        if (scanIterator && !resultReady) {
-            scanIterator->ReadNext().Subscribe([&](NThreading::TFuture<NYdb::NTable::TScanQueryPart> streamPartFuture) {
-                NYdb::NTable::TScanQueryPart streamPart = streamPartFuture.GetValueSync();
-                if (!streamPart.IsSuccess()) {
-                    resultReady = true;
-                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                } else {
-                    UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(), "Unexpected empty scan query response.");
+    while (true) {
+        auto streamPart = runtime.WaitFuture(scanIterator.ReadNext());
+        if (!streamPart.IsSuccess()) {
+            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+            break;
+        }
 
-                    if (streamPart.HasQueryStats()) {
-                        auto plan = streamPart.GetQueryStats().GetPlan();
-                        NJson::TJsonValue jsonValue;
-                        if (plan) {
-                            UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, &jsonValue));
-                            Cerr << jsonValue << Endl;
-                        }
-                    }
+        UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(), "Unexpected empty scan query response.");
 
-                    if (streamPart.HasResultSet()) {
-                        auto resultSet = streamPart.ExtractResultSet();
-                        NYdb::TResultSetParser rsParser(resultSet);
-                        while (rsParser.TryNextRow()) {
-                            THashMap<TString, NYdb::TValue> row;
-                            for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
-                                row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
-                                Cerr << resultSet.GetColumnsMeta()[ci].Name << "/" << rsParser.GetValue(ci).GetProto().DebugString() << Endl;
-                            }
-                            rows.emplace_back(std::move(row));
-                        }
-                    }
+        if (streamPart.HasQueryStats()) {
+            auto plan = streamPart.GetQueryStats().GetPlan();
+            NJson::TJsonValue jsonValue;
+            if (plan) {
+                UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, &jsonValue));
+                Cerr << jsonValue << Endl;
+            }
+        }
+
+        if (streamPart.HasResultSet()) {
+            auto resultSet = streamPart.ExtractResultSet();
+            NYdb::TResultSetParser rsParser(resultSet);
+            while (rsParser.TryNextRow()) {
+                THashMap<TString, NYdb::TValue> row;
+                for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
+                    row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
+                    Cerr << resultSet.GetColumnsMeta()[ci].Name << "/" << rsParser.GetValue(ci).GetProto().DebugString() << Endl;
                 }
-            });
+
+                rows.emplace_back(std::move(row));
+            }
         }
     }
-    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    UNIT_ASSERT(resultReady);
+
+    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectSuccess << Endl;
     if (result) {
         *result = rows;
     }
 }
 
 void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result) const {
+    auto& runtime = *Server.GetRuntime();
     NYdb::NTable::TTableClient tClient(*Driver,
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
-    auto expectation = expectSuccess;
-    bool resultReady = false;
-    bool* rrPtr = &resultReady;
-    tClient.CreateSession().Subscribe([this, result, rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-        auto session = f.GetValueSync().GetSession();
-        session.ExecuteDataQuery(request
-            , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx())
-            .Subscribe([this, result, rrPtr, expectation, request](NYdb::NTable::TAsyncDataQueryResult f)
-                {
-                    TStringStream ss;
-                    f.GetValueSync().GetIssues().PrintTo(ss, false);
-                    Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
-                    UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
-                    *rrPtr = true;
-                    if (result && expectation) {
-                        TStringStream ss;
-                        NYson::TYsonWriter writer(&ss, NYson::EYsonFormat::Text);
-                        for (auto&& i : f.GetValueSync().GetResultSets()) {
-                            PrintResultSet(i, writer);
-                        }
-                        *result = ss.Str();
-                    }
-                });
-        });
-    const TInstant start = TInstant::Now();
-    while (!resultReady && start + TDuration::Seconds(60) > TInstant::Now()) {
-        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+    auto sessionResult = runtime.WaitFuture(tClient.CreateSession(
+        NYdb::NTable::TCreateSessionSettings().ClientTimeout(TDuration::Seconds(60))));
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.GetSession();
+    auto queryResult = runtime.WaitFuture(session.ExecuteDataQuery(request,
+        NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+        NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(60))));
+
+    TStringStream issues;
+    queryResult.GetIssues().PrintTo(issues, false);
+    Cerr << "REQUEST=" << request << ";RESULT=" << issues.Str() << ";EXPECTATION=" << expectSuccess << Endl;
+    UNIT_ASSERT_C(expectSuccess == queryResult.IsSuccess(), issues.Str());
+    if (result && expectSuccess) {
+        TStringStream ss;
+        NYson::TYsonWriter writer(&ss, NYson::EYsonFormat::Text);
+        for (const auto& resultSet : queryResult.GetResultSets()) {
+            PrintResultSet(resultSet, writer);
+        }
+        *result = ss.Str();
     }
-    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    UNIT_ASSERT(resultReady);
 }
 
 void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {

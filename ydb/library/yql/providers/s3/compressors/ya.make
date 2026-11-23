@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/brotli/c/dec
@@ -35,8 +35,6 @@ ELSE()
         factory.cpp
     )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

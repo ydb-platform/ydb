@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -15,7 +15,9 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
-    virtual void DoOnError(const TString& errorMessage) = 0;
+    // Why the read stopped. ABORTED means the transaction's lock is broken and the read was cut short on
+    // purpose; anything else is a failure of the read itself.
+    virtual void DoOnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) = 0;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
@@ -24,7 +26,7 @@ public:
     virtual TDuration GetTimeout() const = 0;
 
     TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {
-        AFL_VERIFY(data->num_rows());
+        YDB_LOG_VERIFY(data->num_rows());
         return DoOnDataChunk(data);
     }
 
@@ -32,8 +34,8 @@ public:
         return DoOnFinished();
     }
 
-    void OnError(const TString& errorMessage) {
-        DoOnError(errorMessage);
+    void OnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) {
+        DoOnError(status, errorMessage);
     }
 
     std::unique_ptr<TEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {
@@ -69,7 +71,10 @@ private:
 
     void SwitchStage(const std::optional<EStage> from, const EStage to) {
         if (from) {
-            AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
+            YDB_LOG_VERIFY(Stage == *from,
+                {"from", (ui32)*from},
+                {"real", (ui32)Stage},
+                {"to", (ui32)to});
         }
         Stage = to;
     }
@@ -90,7 +95,7 @@ public:
     TActor(const std::shared_ptr<IRestoreTask>& rTask)
         : RestoreTask(rTask)
     {
-        AFL_VERIFY(RestoreTask);
+        YDB_LOG_VERIFY(RestoreTask);
     }
 
     STATEFN(StateFunc) {
@@ -108,10 +113,11 @@ public:
                 hFunc(NActors::TEvents::TEvUndelivered, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
                 default:
-                    AFL_VERIFY(false)("type", ev->GetTypeName());
+                    YDB_LOG_VERIFY(false,
+                        {"type", ev->GetTypeName()});
             }
         } catch (...) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
 

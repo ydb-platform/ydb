@@ -4,6 +4,7 @@
 *******************************************/
 
 
+	.file   "svml_z0_exp2_s_la.s"
 	.text
 .L_2__routine_start___svml_exp2f16_z0_0:
 

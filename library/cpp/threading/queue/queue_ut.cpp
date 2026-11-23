@@ -1,7 +1,9 @@
+#include "ut_helpers.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/thread.h>
 
-#include "ut_helpers.h"
+#include <memory>
 
 typedef void* TMsgLink;
 
@@ -197,8 +199,8 @@ public:
             }
         };
 
-        TVector<TAutoPtr<TPopperThread>> poppers;
-        TVector<TAutoPtr<TPusherThread>> pushers;
+        TVector<std::unique_ptr<TPopperThread>> poppers;
+        TVector<std::unique_ptr<TPusherThread>> pushers;
 
         for (size_t i = 0; i < NUMBER_OF_QUEUES; ++i) {
             poppers.emplace_back(new TPopperThread(&queue[i], (char*)&queue));

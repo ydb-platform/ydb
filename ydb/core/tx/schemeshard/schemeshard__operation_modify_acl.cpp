@@ -3,6 +3,8 @@
 
 #include <ydb/core/base/auth.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -14,10 +16,13 @@ bool CheckSidExistsOrIsNonYdb(const std::unordered_map<TString, NLogin::TLoginPr
 }
 
 class TModifyACL: public TSubOperationBase {
+    virtual const char* Name() const override final { return "TModifyACL"; }
+    virtual const char* CurrentStateName() const override final { return "none"; }
+
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString databaseName = CanonizePath(context.SS->RootPathElements);
 
@@ -27,10 +32,9 @@ public:
         const auto& acl = op.GetDiffACL();
         const auto& owner = op.GetNewOwner();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TModifyACL Propose"
-            << ", path: " << parentPathStr << "/" << name
-            << ", operationId: " << OperationId
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -153,7 +157,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TModifyACL");
     }
 
@@ -180,3 +184,5 @@ ISubOperation::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

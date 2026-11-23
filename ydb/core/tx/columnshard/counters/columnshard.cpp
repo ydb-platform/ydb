@@ -11,7 +11,7 @@ TCSCounters::TCSCounters()
     , TxProgress(*this)
 {
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
-        AFL_VERIFY((ui32)i == WaitingOverloads.size());
+        YDB_LOG_VERIFY((ui32)i == WaitingOverloads.size());
         auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));
         WaitingOverloads.emplace_back(overloadCounters.GetDeriviative("Overload/Waiting/Count"));
         WriteOverloadCount.emplace_back(overloadCounters.GetDeriviative("Overload/Write/Count"));
@@ -33,6 +33,12 @@ TCSCounters::TCSCounters()
     FutureIndexationInputBytes = TBase::GetDeriviative("FutureIndexationInput/Bytes");
     IndexationInputBytes = TBase::GetDeriviative("IndexationInput/Bytes");
 
+    CutHistoryRequestsSent = TBase::GetDeriviative("CutHistory/RequestsSent/Count");
+    CutHistoryCuttableIntervals = TBase::GetDeriviative("CutHistory/CuttableIntervals/Count");
+    CutHistoryScansAborted = TBase::GetDeriviative("CutHistory/ScansAborted/Count");
+    CutHistoryBlobGroupMismatches = TBase::GetDeriviative("CutHistory/BlobGroupMismatches/Count");
+    CutHistoryScanDurationMs = TBase::GetHistogram("CutHistory/Scan/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 1));
+    CutHistoryWaitDurationMs = TBase::GetHistogram("CutHistory/ScanToSend/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 1));
     IndexMetadataLimitBytes = TBase::GetValue("IndexMetadata/Limit/Bytes");
 
     OverloadMetadataBytes = TBase::GetDeriviative("Overload/Metadata/Bytes");
@@ -86,17 +92,17 @@ TCSCounters::TCSCounters()
 void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
     WriteRequests->Sub(1);
     auto it = FailedWriteRequests.find(reason);
-    AFL_VERIFY(it != FailedWriteRequests.end());
+    YDB_LOG_VERIFY(it != FailedWriteRequests.end());
     it->second->Add(1);
 }
 
 void TCSCounters::OnWaitingOverload(const EOverloadStatus status) const {
-    AFL_VERIFY((ui64)status < WaitingOverloads.size());
+    YDB_LOG_VERIFY((ui64)status < WaitingOverloads.size());
     WaitingOverloads[(ui64)status]->Inc();
 }
 
 void TCSCounters::OnWriteOverload(const EOverloadStatus status, const ui32 size) const {
-    AFL_VERIFY((ui64)status < WriteOverloadCount.size());
+    YDB_LOG_VERIFY((ui64)status < WriteOverloadCount.size());
     WriteOverloadCount[(ui64)status]->Inc();
     WriteOverloadBytes[(ui64)status]->Add(size);
 }

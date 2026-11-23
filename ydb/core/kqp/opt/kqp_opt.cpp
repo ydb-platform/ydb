@@ -1,8 +1,10 @@
 #include "kqp_opt_impl.h"
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -54,8 +56,13 @@ TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusiv
     , UserRequestContext(userRequestContext)
     , UsePessimisticLocks(usePessimisticLocks)
 {
+    YQL_ENSURE(Config);
     YQL_ENSURE(QueryCtx);
     YQL_ENSURE(Tables);
+}
+
+bool TKqpOptimizeContext::NeedPessimisticLocks() const {
+    return UsePessimisticLocks && !Config->KqpDisablePessimisticLocks.Get().GetOrElse(false);
 }
 
 std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
@@ -83,6 +90,10 @@ NKikimr::NKqp::TOptimizerHints TKqpOptimizeContext::GetOptimizerHints() {
     return NKikimr::NKqp::TOptimizerHints();
 }
 
+NKikimr::NKqp::TCompileTrace* TKqpOptimizeContext::GetCompileTrace() const {
+    return QueryCtx ? QueryCtx->CompileTrace.Get() : nullptr;
+}
+
 bool TKqpOptimizeContext::IsDataQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
 }
@@ -95,8 +106,8 @@ bool TKqpOptimizeContext::IsGenericQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
 }
 
-bool IsKqpPureLambda(const TCoLambda& lambda) {
-    return !FindNode(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+bool IsKqpPureExpr(const TExprBase& expr, bool checkDqSources, bool checkIndexReads) {
+    return !FindNode(expr.Ptr(), [checkDqSources, checkIndexReads](const TExprNode::TPtr& node) {
         if (TMaybeNode<TKqlReadTableBase>(node)) {
             return true;
         }
@@ -113,8 +124,28 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
+        if (checkDqSources && (TCoDataSource::Match(node.Get()) || TDqSource::Match(node.Get())
+            || TDqReadWrapBase::Match(node.Get()))) {
+            return true;
+        }
+
+        if (checkIndexReads && (TKqlReadTableFullTextIndex::Match(node.Get())
+            || TKqpReadTableFullTextIndex::Match(node.Get()) || TKqlReadTableVectorIndex::Match(node.Get()))) {
+            return true;
+        }
+
         return false;
     });
+}
+
+bool IsKqpPureLambda(const TCoLambda& lambda) {
+    return IsKqpPureExpr(lambda.Body());
+}
+
+bool IsKqpCompletePureExpr(const TExprBase& expr) {
+    return NYql::NDq::IsDqCompletePureExpr(expr, /* isPrecomputePure */ false)
+        && IsPureIsolatedLambda(expr.Ref())
+        && IsKqpPureExpr(expr, /* checkDqSources */ true, /* checkIndexReads */ true);
 }
 
 bool IsKqpPureInputs(const TExprList& inputs) {
@@ -225,6 +256,30 @@ TVector<TString> ExtractSortingKeys(const NYql::NNodes::TCoLambda& keySelector) 
     return sortingKeys;
 };
 
+bool OlapProcessPreservesSorting(const TExprNode::TPtr& lambda, const THashSet<TString>& sortColumns) {
+    if (!lambda) {
+        return true;
+    }
+    const auto process = TCoLambda(lambda);
+    auto input = process.Body();
+    while (input.Raw() != process.Args().Arg(0).Raw()) {
+        if (const auto filter = input.Maybe<TKqpOlapFilter>()) {
+            input = filter.Cast().Input();
+        } else if (const auto projections = input.Maybe<TKqpOlapProjections>()) {
+            for (const auto& item : projections.Cast().Projections()) {
+                if (sortColumns.contains(item.Cast<TKqpOlapProjection>().ColumnName().StringValue())) {
+                    return false;
+                }
+            }
+            input = projections.Cast().Input();
+        } else {
+            // Aggregation, distinct and unknown operations do not supply the storage's PK order.
+            return false;
+        }
+    }
+    return true;
+}
+
 bool IsSortKeyPrimary(
     const NYql::NNodes::TCoLambda& keySelector,
     const NYql::TKikimrTableDescription& tableDesc,
@@ -328,6 +383,11 @@ ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
 };
 
 bool IsBuiltEffect(const TExprBase& effect) {
+    // BuildTxs will turn this effect into a stage with a truncate sink.
+    if (effect.Maybe<TKqlUnsafeTruncate>()) {
+        return true;
+    }
+
     // Stage with effect output
     if (effect.Maybe<TDqOutput>()) {
         return true;

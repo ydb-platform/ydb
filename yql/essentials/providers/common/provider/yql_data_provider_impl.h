@@ -23,6 +23,7 @@ public:
     void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     TString GetOperationDisplayName(const TExprNode& node) override;
+    TString GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) override;
     bool WriteSchemaHeader(NYson::TYsonWriter& writer) override;
     void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override;
 };
@@ -31,8 +32,8 @@ class TTrackableNodeProcessorBase: public ITrackableNodeProcessor {
 public:
     TTrackableNodeProcessorBase() = default;
 
-    void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) override;
-    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) override;
+    void GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) override;
+    void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) override;
     IGraphTransformer& GetCleanupTransformer() override;
 
 protected:
@@ -45,6 +46,7 @@ public:
     ~TDataProviderBase() override = default;
 
     bool Initialize(TExprContext& ctx) override;
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma&) const override;
     IGraphTransformer& GetConfigurationTransformer() override;
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override;

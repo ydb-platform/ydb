@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 std::partial_ordering TReplaceKeyAdapter::Compare(const TReplaceKeyAdapter& item) const {
-    AFL_VERIFY(Reverse == item.Reverse);
+    YDB_LOG_VERIFY(Reverse == item.Reverse);
     const std::partial_ordering result = Value.CompareNotNull(item.Value);
     if (result == std::partial_ordering::equivalent) {
         return std::partial_ordering::equivalent;
@@ -15,21 +15,21 @@ std::partial_ordering TReplaceKeyAdapter::Compare(const TReplaceKeyAdapter& item
     } else if (result == std::partial_ordering::greater) {
         return Reverse ? std::partial_ordering::less : std::partial_ordering::greater;
     } else {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::partial_ordering::less;
     }
 }
 
-TReplaceKeyAdapter TReplaceKeyAdapter::BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata) {
-    if (readMetadata.IsDescSorted()) {
+TReplaceKeyAdapter TReplaceKeyAdapter::BuildStart(const TPortionInfo& portion, const ERequestSorting sorting) {
+    if (sorting == ERequestSorting::DESC) {
         return TReplaceKeyAdapter(portion.IndexKeyEnd(), true);
     } else {
         return TReplaceKeyAdapter(portion.IndexKeyStart(), false);
     }
 }
 
-TReplaceKeyAdapter TReplaceKeyAdapter::BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata) {
-    if (readMetadata.IsDescSorted()) {
+TReplaceKeyAdapter TReplaceKeyAdapter::BuildFinish(const TPortionInfo& portion, const ERequestSorting sorting) {
+    if (sorting == ERequestSorting::DESC) {
         return TReplaceKeyAdapter(portion.IndexKeyStart(), true);
     } else {
         return TReplaceKeyAdapter(portion.IndexKeyEnd(), false);

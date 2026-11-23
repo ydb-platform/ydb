@@ -9,11 +9,9 @@ from ydb.tests.fq.tools.kqprun import KqpRun
 from test_utils import get_config, get_parameters_files, replace_vars
 from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path, yql_source_path
 
-
 DATA_PATH = yatest.common.source_path('yt/yql/tests/sql/suites')
 
-EXCLUDED_SUITES = [
-]
+EXCLUDED_SUITES = []
 
 EXCLUDED_TESTS = [
     # FAULT, CalcHash(): requirement false failed, YQ-3139
@@ -204,9 +202,11 @@ def run_file_kqp_no_cache(suite, case, cfg):
     if is_xfail(config):
         pytest.skip('skip fail tests')
 
-    kqprun = KqpRun(config_file=os.path.join('ydb/tests/fq/yt/kqp_yt/cfg', 'kqprun_config.conf'),
-                    scheme_file=os.path.join('ydb/tests/fq/yt/kqp_yt/cfg', 'kqprun_scheme.sql'),
-                    udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'))
+    kqprun = KqpRun(
+        config_file=os.path.join('ydb/tests/fq/yt/kqp_yt/cfg', 'kqprun_config.conf'),
+        scheme_file=os.path.join('ydb/tests/fq/yt/kqp_yt/cfg', 'kqprun_scheme.sql'),
+        udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
+    )
 
     return kqprun.yql_exec(yql_program=sql_query, verbose=True, check_error=True, yql_tables=in_tables)
 

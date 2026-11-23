@@ -121,12 +121,14 @@ public:
 
     // Fill specific initialization
     void Init(NCommon::TCodecContext& codecCtx,
-        const TString& outSpecs
+        const TString& outSpecs,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr
     );
 
     // Fill specific initialization
     void Init(NCommon::TCodecContext& codecCtx,
-        const NYT::TNode& outAttrs
+        const NYT::TNode& outAttrs,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr
     );
 
     void SetUseSkiff(const TString& optLLVM, TSystemFields sysFields = {}) {

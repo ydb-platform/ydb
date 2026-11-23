@@ -2,8 +2,12 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -57,10 +61,10 @@ protected:
             return;
         }
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "SendNotifications: "
-                << ": id# " << info->Id
-                << ", subscribers count# " << info->Subscribers.size());
+        YDB_LOG_TRACE("SendNotifications",
+            {"id", info->Id},
+            {"subscriberCount", info->Subscribers.size()},
+        );
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);
@@ -89,3 +93,5 @@ public:
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -1,5 +1,6 @@
 #include "kqp_column_statistics_requester.h"
 #include "kqp_column_statistics_utils.h"
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/core/statistics/service/service.h>
@@ -78,10 +79,11 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
     );
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
+    TCompileTraceDependencies trace(GetTrace ? GetTrace() : nullptr, "Await column statistics");
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; }, &trace);
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;
@@ -129,6 +131,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
             }
         }
     });
+    AsyncReadiness = trace.Await(AsyncReadiness);
     SharedState = sharedState;
 
     return TStatus::Async;
@@ -136,6 +139,9 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
     Y_ENSURE(AsyncReadiness.IsReady() && SharedState && SharedState->Response.has_value());
+    if (auto* trace = GetTrace ? GetTrace() : nullptr) {
+        trace->ResumeWaits();
+    }
 
     if (!SharedState->Response->Issues().Empty()) {
         TStringStream ss; SharedState->Response->Issues().PrintTo(ss);
@@ -352,9 +358,10 @@ TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     TKikimrTablesData& tables,
     const TString& cluster,
     const TString& database,
-    TActorSystem* actorSystem
+    TActorSystem* actorSystem,
+    std::function<TCompileTrace*()> getTrace
 ) {
-    return THolder<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, database, actorSystem));
+    return THolder<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, database, actorSystem, std::move(getTrace)));
 }
 
 } // end of NKikimr::NKqp

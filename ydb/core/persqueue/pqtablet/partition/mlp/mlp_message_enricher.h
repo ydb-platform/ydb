@@ -22,7 +22,17 @@ public:
     void Bootstrap();
     void PassAway() override;
 
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"partition", PartitionId},
+            {"consumer", ConsumerName});
+    }
+
+    const ui64 TabletId;
+
 private:
+    const ui32 PartitionId;
+    const TString ConsumerName;
     struct TOffsetEntry {
         ui64 Offset;
         size_t ReplyIndex;
@@ -50,10 +60,6 @@ private:
     void ProcessQueue();
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
-private:
-    const ui64 TabletId;
-    const ui32 PartitionId;
-    const TString ConsumerName;
     std::deque<TReadResult> Replies;
     std::vector<TPendingResponse> PendingResponses;
     std::vector<TOffsetEntry> SortedEntries;

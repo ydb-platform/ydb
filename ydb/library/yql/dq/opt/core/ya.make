@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCDIR(ydb/library/yql/dq/opt)
 
@@ -23,7 +23,5 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/dq/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

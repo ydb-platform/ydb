@@ -17,14 +17,14 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> GetSchema(const TExprNode& settings)
     return {};
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TTopicKeyParser::TTopicKeyParser(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx) {
     YQL_ENSURE(Parse(expr, readSettings, ctx), "Failed to parse topic info");
 }
 
 bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx) {
-    if (readSettings && expr.IsCallable("MrObject")) { // todo: remove MrObject support
+    if (readSettings && expr.IsCallable("MrObject")) {   // todo: remove MrObject support
         return TryParseObject(expr, readSettings);
     }
 
@@ -112,8 +112,8 @@ bool TTopicKeyParser::TryParseKey(const TExprNode& expr, TExprContext& ctx) {
     }
 
     const auto& keyArg = maybeKey.Cast().Ref().Head();
-    if (!keyArg.IsList() || keyArg.ChildrenSize() != 2 ||
-        !keyArg.Head().IsAtom("table") || !keyArg.Child(1)->IsCallable(NNodes::TCoString::CallableName())) {
+    if (!keyArg.IsList() || keyArg.ChildrenSize() != 2 || !keyArg.Head().IsAtom("table") ||
+        !keyArg.Child(1)->IsCallable(NNodes::TCoString::CallableName())) {
         ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), "Expected single table name"));
         return false;
     }
@@ -150,4 +150,4 @@ std::optional<bool> TTopicKeyParser::ParseStreamingTopicRead(const TExprNode& ex
     return streamingTopicRead;
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -14,7 +14,7 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
-    AFL_VERIFY(!Accessor);
+    YDB_LOG_VERIFY(!Accessor);
     TEncodingSparsedBuilder builder(valueType, RecordIndexes.size(), DataSize);
     for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
         builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
@@ -23,7 +23,7 @@ void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValue
 }
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
-    AFL_VERIFY(!Accessor);
+    YDB_LOG_VERIFY(!Accessor);
     TEncodingPlainBuilder builder(valueType, recordsCount, DataSize);
     for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
         builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
@@ -86,7 +86,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
                 case IChunkedArray::EType::SubColumnsArray:
                 case IChunkedArray::EType::SubColumnsPartialArray:
                 case IChunkedArray::EType::ChunkedArray:
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
             }
             ++columnIdx;
         }
@@ -107,7 +107,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     ui32 idx = 0;
     for (auto&& i : otherKeys) {
         heap.emplace_back(i, idx);
-        AFL_VERIFY(heap.back().IsValid());
+        YDB_LOG_VERIFY(heap.back().IsValid());
         ++idx;
     }
     std::make_heap(heap.begin(), heap.end());
@@ -127,23 +127,12 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount, false)));
 }
 
-std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
-    TStringBuilder builder;
-    const auto escapedKey = QuoteJsonItem(key);
-    if (currentPrefix.size()) {
-        builder << currentPrefix << ".";
-    }
-    builder << escapedKey;
-
-    return builder;
-}
-
 TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
     auto it = StorageHash.find(TStorageAddress(currentPrefix, TStringBuf(key.data(), key.size())));
     if (it == StorageHash.end()) {
         Storage.emplace_back(std::move(key));
         TStringBuf sbKey(Storage.back().data(), Storage.back().size());
-        it = StorageHash.emplace(TStorageAddress(currentPrefix, sbKey), BuildString(currentPrefix, sbKey)).first;
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, sbKey), BuildSubcolumnName(currentPrefix, sbKey)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }
@@ -152,7 +141,10 @@ TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf
     TStorageAddress keyAddress(currentPrefix, key);
     auto it = StorageHash.find(keyAddress);
     if (it == StorageHash.end()) {
-        it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key)).first;
+        // The input array may be released before the next chunk is processed.
+        Storage.emplace_back(key.data(), key.size());
+        const TStringBuf storedKey(Storage.back().data(), Storage.back().size());
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, storedKey), BuildSubcolumnName(currentPrefix, storedKey)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }

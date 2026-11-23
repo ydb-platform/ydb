@@ -40,8 +40,8 @@ private:
         const auto req = GetProtoRequest();
         for (const auto& item: req->tables()) {
             auto description = copy->AddCopyTableDescriptions();
-            description->SetSrcPath(item.source_path());
-            description->SetDstPath(item.destination_path());
+            description->SetSrcPath(Request_->NormalizePath(item.source_path()));
+            description->SetDstPath(Request_->NormalizePath(item.destination_path()));
             description->SetOmitIndexes(item.omit_indexes());
         }
 

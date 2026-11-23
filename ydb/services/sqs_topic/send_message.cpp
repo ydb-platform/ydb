@@ -96,6 +96,10 @@ namespace NKikimr::NSqsTopic::V1 {
             TBase::CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
+            if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED, "Client data writes are disabled"));
+            }
+
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
             }
@@ -185,6 +189,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::Success) {
                 auto describerStatus = MapDescriberStatus(FullTopicPath_, ev->Get()->DescribeStatus);
                 this->ReplyWithError(*describerStatus.Error);
+                return;
+            }
+            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                this->ReplyWithError(MapWriteModeError(ev->Get()->Status, ev->Get()->ErrorDescription));
                 return;
             }
 

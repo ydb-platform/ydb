@@ -1,0 +1,27 @@
+Avoid glib.h include.
+
+In C mode GUnicodeScript defaults to int.
+
+--- a/src/hb-glib.h
++++ b/src/hb-glib.h
+@@ -34,1 +34,4 @@
+-#include <glib.h>
++#ifdef __cplusplus
++enum GUnicodeScript : int;
++#endif
++struct _GBytes;
+@@ -49,4 +52,2 @@
+-#if GLIB_CHECK_VERSION(2,31,10)
+ HB_EXTERN hb_blob_t *
+-hb_glib_blob_create (GBytes *gbytes);
+-#endif
++hb_glib_blob_create (struct _GBytes *gbytes);
+--- a/src/hb-glib.cc
++++ b/src/hb-glib.cc
+@@ -33,4 +33,6 @@
+ #include "hb-glib.h"
+ 
++#include <glib.h>
++
+ #include "hb-machinery.hh"
+ 

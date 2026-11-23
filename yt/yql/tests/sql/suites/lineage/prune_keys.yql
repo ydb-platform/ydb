@@ -1,0 +1,9 @@
+USE plato;
+
+PRAGMA config.flags("OptimizerFlags", "EmitPruneKeys");
+
+INSERT INTO Output WITH TRUNCATE
+SELECT a.*
+FROM Input AS a
+LEFT ONLY JOIN Input AS b
+ON a.key = b.key;

@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT {
 
@@ -22,7 +22,7 @@ const TCallback<TIntrusivePtr<T>()>& DefaultRefCountedFactory()
 }
 
 //! Intrusive ptr with lazy creation and double-checked locking.
-template <class T, class TLock = NThreading::TSpinLock>
+template <class T, class TLock = TSpinLock>
 class TLazyIntrusivePtr
     : public TPointerCommon<TLazyIntrusivePtr<T, TLock>, T>
 {

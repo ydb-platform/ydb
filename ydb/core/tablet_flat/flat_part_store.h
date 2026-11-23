@@ -73,11 +73,7 @@ public:
         return BackingSize() - IndexesRawSize;
     }
 
-    ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
-    {
-        Y_ENSURE(groupId.Index < PageCollections.size());
-        return PageCollections[groupId.Index]->GetPageSize(pageId);
-    }
+    using TPart::GetPageSize;
 
     ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
     {
@@ -86,16 +82,28 @@ public:
         return cache->PageCollection->Page(ref).Size;
     }
 
-    NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
+    const NPageCollection::IPageCollection* GetPageCollection(ui32 slot) const override
     {
-        Y_ENSURE(groupId.Index < PageCollections.size());
-        return PageCollections[groupId.Index]->GetPageType(pageId);
+        Y_ENSURE(slot < PageCollections.size());
+        return PageCollections[slot]->PageCollection.Get();
     }
 
-    ui8 GetGroupChannel(NPage::TGroupId groupId) const override
+    ui64 GetSlotPageSize(ui32 slot, NPage::TPageId pageId) const override
     {
-        Y_ENSURE(groupId.Index < PageCollections.size());
-        return PageCollections[groupId.Index]->Id.Channel();
+        Y_ENSURE(slot < PageCollections.size());
+        return PageCollections[slot]->GetPageSize(pageId);
+    }
+
+    NPage::EPage GetSlotPageType(ui32 slot, NPage::TPageId pageId) const override
+    {
+        Y_ENSURE(slot < PageCollections.size());
+        return PageCollections[slot]->GetPageType(pageId);
+    }
+
+    ui8 GetSlotChannel(ui32 slot) const override
+    {
+        Y_ENSURE(slot < PageCollections.size());
+        return PageCollections[slot]->Id.Channel();
     }
 
     ui8 GetPageChannel(ELargeObj lob, ui64 ref) const override
@@ -109,7 +117,7 @@ public:
             auto glob = Pseudo.Get()->PageCollection->Glob(bounds.Lo.Blob);
             return glob.Logo.Channel();
         } else {
-            return PageCollections.at(GroupsCount).Get()->Id.Channel();
+            return PageCollections.at(OuterSlot()).Get()->Id.Channel();
         }
     }
 
@@ -131,32 +139,34 @@ public:
             Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
         }
 
-        return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
+        return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(OuterSlot())).Get();
     }
 
-    TVector<TPageId> GetPages(ui32 room) const
+    /**
+     * Returns all live pages of the page collection, except pages superseded by the V2 b-tree of the group,
+     * which the shared cache walks by itself
+     */
+    TVector<TPageLocation> GetPages(ui32 slot, NPage::TGroupId groupId) const
     {
-        Y_ENSURE(room < PageCollections.size());
+        Y_ENSURE(slot < PageCollections.size());
 
-        auto total = PageCollections[room]->PageCollection->Total();
-
-        TVector<TPageId> pages(total);
-        for (size_t i : xrange(total)) {
-            pages[i] = i;
+        auto& pageCollection = *PageCollections[slot]->PageCollection;
+        const auto& metas = groupId.IsHistoric() ? IndexPages.BTreeHistoric : IndexPages.BTreeGroups;
+        auto meta = groupId.Index < metas.size() ? &IndexPages.GetBTree(groupId) : nullptr;
+        bool supersededByV2Tree = meta && meta->HasRootV2();
+        auto total = pageCollection.MetaPages();
+        TVector<TPageLocation> pages(Reserve(supersededByV2Tree ? 8 : total));
+        for (ui32 i = 0; i < total; ++i) {
+            auto type = pageCollection.Page(i).Type;
+            if (type == ui32(EPage::Skip) ||
+                (supersededByV2Tree && (type == ui32(EPage::BTreeIndex) || type == ui32(EPage::BTreeIndexV2) ||
+                               type == ui32(EPage::DataPage)))) {
+                continue;
+            }
+            pages.push_back(pageCollection.GetLocation(i));
         }
 
         return pages;
-    }
-
-    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
-    {
-        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
-
-        for (auto &one: components) {
-            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
-        }
-
-        return pageCollections;
     }
 
     static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)

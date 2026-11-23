@@ -60,9 +60,9 @@ You can omit the `clusters` and `levels` parameters when creating an index. In t
 
 If a cluster’s centroid is closest to the query, the vectors in that cluster are usually closer to the query than vectors in other clusters. For complex data topologies this may not hold, so {{ ydb-short-name }} allows scanning vectors in more than one cluster per level.
 
-The number of clusters participating in search is set by the `KMeansTreeSearchTopSize` parameter. By default it is 1: {{ ydb-short-name }} picks one nearest cluster at the first level, then requests its child clusters at the second level over the network, picks one nearest again, and so on. This parameter is not set at index creation time but [for the search](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize).
+The number of clusters participating in search is set by the `KMeansTreeSearchTopSize` parameter. By default it is 4 with overlapping clusters (`overlap_clusters > 1`) and 10 without overlap. This parameter is not set at index creation time but [for the search](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
 
-If you set a larger value, e.g. 3, the system will select three nearest clusters at each level instead of one. Moving to the next level then requires fetching the child vectors of all three selected clusters over the network, from which the next three are chosen. This improves recall but increases network traffic and the number of vectors scanned.
+If you set a larger value, e.g. 20, the system will select up to 20 nearest clusters at each level. Moving to the next level then requires fetching the child centroids of all selected clusters over the network, from which the next 20 are chosen. This improves recall but increases network traffic and the number of vectors scanned.
 
 ## Covering index {#covering-index}
 

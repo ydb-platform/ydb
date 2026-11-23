@@ -199,6 +199,19 @@ static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvEraseRowsRequest:
     return false;
 }
 
+template <typename TEvRequest>
+static bool AllowExecuteAtReplicated(TDataShard*, TEvRequest&) {
+    return false;
+}
+
+static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
+    return self->IsImportingReplica() && ev->Get()->Record.GetWriteToTableShadow();
+}
+
+static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
+    return self->IsImportingReplica();
+}
+
 template <typename TEvResponse>
 using TSetStatusFunc = void(*)(TEvResponse&);
 
@@ -208,9 +221,13 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
         TSetStatusFunc<TEvResponse> setStatusFunc, const TActorContext& ctx,
         TDataShard::ELogThrottlerType logThrottlerType)
 {
-    LOG_LOG_S_THROTTLE(self->GetLogThrottler(logThrottlerType), ctx, NActors::NLog::PRI_NOTICE, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
-        << ": tablet# " << self->TabletID()
-        << ", error# " << rejectDescription);
+    if (self->GetLogThrottler(logThrottlerType).Kick()) {
+        YDB_LOG_NOTICE_CTX(ctx, "Rejecting request on datashard",
+            {"txDesc", txDesc},
+            {"tabletId", self->TabletID()},
+            {"error", rejectDescription}
+        );
+    }
 
     auto response = MakeHolder<TEvResponse>();
     setStatusFunc(*response);
@@ -228,7 +245,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated()) {
+    if (self->IsReplicated() && !AllowExecuteAtReplicated(self, ev)) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);

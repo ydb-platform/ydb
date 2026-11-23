@@ -11,7 +11,7 @@ namespace {
 using namespace NNodes;
 
 TExprNode::TPtr EquiJoinPushAny(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    // Add any to EquiJoin tree
+    // Propagate Any eligibility through the EquiJoin tree for PruneKeys.
     if (!IsEmitPruneKeysEnabled(optCtx.Types)) {
         return node;
     }
@@ -67,6 +67,7 @@ TExprNode::TPtr EquiJoinEmitPruneKeys(const TExprNode::TPtr& node, TExprContext&
         }
         auto pruneKeysCallable = IsOrdered(list.Ref(), columns) ? "PruneAdjacentKeys" : "PruneKeys";
         YQL_CLOG(DEBUG, Core) << "Add " << pruneKeysCallable << " to EquiJoin input #" << i << ", label " << scope.Ref().Content();
+        // clang-format off
         children.push_back(ctx.Builder(child.Pos())
             .List()
                 .Callable(0, pruneKeysCallable)
@@ -76,6 +77,7 @@ TExprNode::TPtr EquiJoinEmitPruneKeys(const TExprNode::TPtr& node, TExprContext&
                 .Add(1, scope.Ptr())
             .Seal()
             .Build());
+        // clang-format on
         hasChanges = true;
     }
 

@@ -42,6 +42,15 @@ namespace NKikimr {
             InFly.Pop();
         }
 
+        void AdvanceConfirmed(ui64 lsn) {
+            TGuard<TSerializableAccessChecker> guard(WriteLock);
+            if (lsn <= static_cast<ui64>(AtomicGet(ConfirmedLsn))) {
+                return;
+            }
+            Y_ABORT_UNLESS(InFly.Empty() || InFly.Top().First > lsn);
+            AtomicSet(ConfirmedLsn, lsn);
+        }
+
         // returned confirmed, i.e. already committed lsn
         ui64 GetConfirmed() const {
             return static_cast<ui64>(AtomicGet(ConfirmedLsn));
@@ -217,6 +226,12 @@ namespace NKikimr {
         // synclog confirmed lsn
         ui64 GetConfirmedLsnForSyncLog() const {
             return AllocForSyncLog->GetConfirmed();
+        }
+
+        // A durable recovered prefix may contain Hull data without SyncLog records.
+        void AdvanceSyncLogRecoveryBase(ui64 lsn) {
+            Y_ABORT_UNLESS(lsn <= GetConfirmedLsnForHull());
+            AllocForSyncLog->AdvanceConfirmed(lsn);
         }
 
         // lsn we starting with after local recovery and lsn shift

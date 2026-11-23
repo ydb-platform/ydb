@@ -1,6 +1,6 @@
 # DateTime
 
-The DateTime module provides a set of functions for working with dates and times in {{ ydb-short-name }}. These functions support all available timestamp and interval data types with both [basic range of valid values](../../types/primitive.md#datetime-basic) and [extended range](../../types/primitive.md#datetime-extended). Additionally, these functions use their own internal representation of values, where each value is split into separate components. This representation is described [below](#resource).
+The DateTime module provides a set of functions for working with dates and times in {{ ydb-short-name }}. These functions support all available timestamp and interval data types with both [basic range of valid values](../../types/primitive.md#datetime) and [extended range](../../types/primitive.md#datetime). Additionally, these functions use their own internal representation of values, where each value is split into separate components. This representation is described [below](#resource).
 
 The simplest operations with timestamps and intervals can be performed without using the DateTime module. For example, conversion between strings and timestamps according to [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is available through [`CAST`](../../syntax/expressions.md#cast), timestamp precision can also be changed using `CAST`, and [arithmetic operators](../../syntax/expressions.md#math-operators) work between timestamps and intervals. The DateTime module is intended for tasks where these basic operations are insufficient and more complex transformations are required.
 
@@ -16,7 +16,7 @@ Most functions in the DateTime module operate not on original timestamps and int
     - [`Format`](#format) to get a string representation
     - [`Get...`](#get) to get individual components
 
-{{ ydb-short-name }} supports two ranges of valid timestamp values: [basic](../../types/primitive.md#datetime-basic) and [extended](../../types/primitive.md#datetime-extended). In the DateTime module, these correspond to two separate internal representations: `Resource<TM>` for basic data types and `Resource<TM64>` for data types with extended range of valid values.
+{{ ydb-short-name }} supports two ranges of valid timestamp values: [basic](../../types/primitive.md#datetime) and [extended](../../types/primitive.md#datetime). In the DateTime module, these correspond to two separate internal representations: `Resource<TM>` for basic data types and `Resource<TM64>` for data types with extended range of valid values.
 
 `Resource<TM>` and `Resource<TM64>` contain the following date components:
 

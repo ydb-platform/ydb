@@ -1,6 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
+    client_config.cpp
+    client_config.h
     downloader.cpp
     downloader.h
     exec_ctx.h
@@ -48,11 +50,10 @@ PEERDIR(
     yt/yql/providers/yt/provider
     yt/yql/providers/yt/common
     yt/yql/providers/yt/lib/hash
+    yt/yql/providers/yt/lib/qlfilter
     yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

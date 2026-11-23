@@ -143,28 +143,44 @@ namespace NMonitoring {
         return RateWithOpts(std::move(labels));
     }
     TRate* TMetricRegistry::RateWithOpts(TLabels labels, TMetricOpts opts) {
-        return Metric<TRate, EMetricType::RATE>(std::move(labels), std::move(opts));
+        return Metric<TRate, EMetricType::RATE>(
+            std::move(labels),
+            std::move(opts),
+            ui64{0},
+            static_cast<ui32>(TInstant::Now().Seconds()));
     }
 
     TRate* TMetricRegistry::Rate(ILabelsPtr labels) {
         return RateWithOpts(std::move(labels));
     }
     TRate* TMetricRegistry::RateWithOpts(ILabelsPtr labels, TMetricOpts opts) {
-        return Metric<TRate, EMetricType::RATE>(std::move(labels), std::move(opts));
+        return Metric<TRate, EMetricType::RATE>(
+            std::move(labels),
+            std::move(opts),
+            ui64{0},
+            static_cast<ui32>(TInstant::Now().Seconds()));
     }
 
     TLazyRate* TMetricRegistry::LazyRate(TLabels labels, std::function<ui64()> supplier) {
         return LazyRateWithOpts(std::move(labels), std::move(supplier));
     }
     TLazyRate* TMetricRegistry::LazyRateWithOpts(TLabels labels, std::function<ui64()> supplier, TMetricOpts opts) {
-        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(opts), std::move(supplier));
+        return Metric<TLazyRate, EMetricType::RATE>(
+            std::move(labels),
+            std::move(opts),
+            std::move(supplier),
+            static_cast<ui32>(TInstant::Now().Seconds()));
     }
 
     TLazyRate* TMetricRegistry::LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) {
         return LazyRateWithOpts(std::move(labels), std::move(supplier));
     }
     TLazyRate* TMetricRegistry::LazyRateWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts) {
-        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(opts), std::move(supplier));
+        return Metric<TLazyRate, EMetricType::RATE>(
+            std::move(labels),
+            std::move(opts),
+            std::move(supplier),
+            static_cast<ui32>(TInstant::Now().Seconds()));
     }
 
     THistogram* TMetricRegistry::HistogramCounter(TLabels labels, IHistogramCollectorPtr collector) {
@@ -242,6 +258,7 @@ namespace NMonitoring {
 
     void TMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {
         consumer->OnStreamBegin();
+        consumer->OnCommonStartTimeSeconds(StartTimeSeconds_);
 
         if (!CommonLabels_.Empty()) {
             consumer->OnLabelsBegin();
@@ -307,6 +324,7 @@ namespace NMonitoring {
 
     void TMetricRegistry::Took(TInstant time, IMetricConsumer* consumer) const {
         consumer->OnStreamBegin();
+        consumer->OnCommonStartTimeSeconds(StartTimeSeconds_);
 
         TVector<std::pair<ILabelsPtr, TMetricValue>> tmpMetrics;
 

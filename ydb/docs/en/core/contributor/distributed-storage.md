@@ -80,9 +80,34 @@ Each PDisk has an ID that consists of the number of the node it is running on an
 
 Each VDisk runs on top of a specific PDisk and has a *slot ID* comprising three fields (NodeID:PDiskId:VSlotId), as well as the above-mentioned VDisk ID. Strictly speaking, there are different concepts: a slot is a reserved location on a PDisk occupied by a VDisk, while a VDisk is an element of a group that occupies a certain slot and performs operations with the slot. Similar to PDisks, if you know the slot ID, you can calculate the service ActorId of the running VDisk and send it a message. To send messages from the DS proxy to the VDisk, an intermediate actor called *BS_QUEUE* is used.
 
+To diagnose how chunks allocated to a VDisk are distributed, use the internal API described in [{#T}](vdisk-space-report.md).
+
 The composition of each group is not constant and may change while the system is running. Hence the concept of group generation. Each "GroupId:GroupGeneration" pair corresponds to a fixed set of slots (a vector consisting of N slot IDs, where N is equal to group size) that stores the data of an entire group. *Group generation is not to be confused with tablet generation, as they are not related in any way*.
 
 As a rule, groups of two adjacent generations differ by no more than one slot.
+
+#### Per-pile allocation overrides
+
+In a bridged cluster, `blob_storage_config.storage_pool_pile_overrides` selects allocation settings by pile name. Rules are stored in the distributed storage configuration, separately from pool definitions. BSC applies them to physical pile groups, including inline groups, when allocating or repairing groups and when Console resends `DefineStoragePool`, for example to increase the group count. Overrides do not rewrite the base pool definition. Ordinary groups spanning piles and DDisk groups do not use these overrides.
+
+```yaml
+blob_storage_config:
+  storage_pool_pile_overrides:
+    - pile_name: [dc2, dc3]
+      all_kinds: true
+      static_group_override: true
+      erasure_species: block-4-2
+      geometry: {}
+```
+
+`pile_name` must be a nonempty list without duplicate names. The rule applies the same settings to every listed pile. Within each pile, the following selectors are independent:
+
+- `kind: [ssd, hdd]` selects the listed pool kinds in BSC. An empty or omitted list selects no dynamic pools. Use `all_kinds: true` instead of `kind` to select all dynamic pool kinds, including future ones.
+- `static_group_override: true` selects static groups in distconf. It can be combined with either dynamic-pool selector or used alone; no pool kind is reserved for static groups.
+
+BSC and distconf share the rule matcher and replacement semantics. Omitted settings inherit the base `DefineStoragePool` or `self_management_config` values. `geometry` replaces the entire geometry, and `{}` selects the erasure's defaults; specifying `erasure_species` requires explicit `geometry`. The `pdisk_filters` wrapper replaces the whole `pdisk_filter` list: `pdisk_filters: {pdisk_filter: []}` clears it. For static groups, replacing filters also clears the base `pdisk_type` shorthand.
+
+At most one rule may match each `(pile, pool kind)` or each pile's static groups. Overlapping rules and changes that would alter an existing physical group's erasure or topology are rejected. Activation requires nodes supporting the per-pile override bridge feature level. To change erasure, create and synchronize replacement parts before removing the old parts. Overrides specify allocation settings; they do not schedule migration or limit it to one pool at a time.
 
 ### Subgroups
 

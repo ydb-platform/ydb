@@ -38,22 +38,21 @@ constexpr EFileFormat ConvertFileFormat(TStringBuf format) {
 
 constexpr TStringBuf ConvertFileFormat(EFileFormat format) {
     switch (format) {
-
-    case EFileFormat::CsvWithNames:
-        return "csv_with_names";
-    case EFileFormat::TsvWithNames:
-        return "tsv_with_names";
-    case EFileFormat::Csv:
-        return "csv";
-    case EFileFormat::JsonEachRow:
-        return "json_each_row";
-    case EFileFormat::JsonList:
-        return "json_list";
-    case EFileFormat::Parquet:
-      return "parquet";
-    case EFileFormat::Undefined:
-    default:
-        return "UNSUPPORTED";
+        case EFileFormat::CsvWithNames:
+            return "csv_with_names";
+        case EFileFormat::TsvWithNames:
+            return "tsv_with_names";
+        case EFileFormat::Csv:
+            return "csv";
+        case EFileFormat::JsonEachRow:
+            return "json_each_row";
+        case EFileFormat::JsonList:
+            return "json_list";
+        case EFileFormat::Parquet:
+            return "parquet";
+        case EFileFormat::Undefined:
+        default:
+            return "UNSUPPORTED";
     }
 }
 
@@ -66,4 +65,4 @@ constexpr bool IsArrowInferredFormat(TStringBuf format) {
 }
 
 NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher);
-} // namespace NKikimr::NExternalSource::NObjectStorage::NInference
+}   // namespace NKikimr::NExternalSource::NObjectStorage::NInference

@@ -573,6 +573,19 @@ void Deserialize(TMultiTablePartitions& partitions, const TNode& node)
     DESERIALIZE_ITEM("partitions", partitions.Partitions);
 }
 
+void Deserialize(TFilePartition& partition, const TNode& node)
+{
+    const auto& nodeMap = node.AsMap();
+    DESERIALIZE_ITEM("cookie", partition.Cookie);
+    DESERIALIZE_ITEM("length", partition.Length);
+}
+
+void Deserialize(TFilePartitions& partitions, const TNode& node)
+{
+    const auto& nodeMap = node.AsMap();
+    DESERIALIZE_ITEM("partitions", partitions.Partitions);
+}
+
 void Serialize(const TGUID& value, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer).Value(GetGuidAsString(value));

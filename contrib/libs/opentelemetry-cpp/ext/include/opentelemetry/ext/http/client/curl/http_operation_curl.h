@@ -115,6 +115,20 @@ private:
 
   static size_t ReadMemoryCallback(char *buffer, size_t size, size_t nitems, void *userp);
 
+  /**
+   * Reposition the request body for libcurl.
+   *
+   * libcurl calls this when it has to restart an upload it already began, for example after a
+   * connection it had reused was closed before the response arrived. Without it libcurl has no way
+   * to rewind the body and fails the transfer with CURLE_SEND_FAIL_REWIND.
+   *
+   * @param userp The HttpOperation, set through CURLOPT_SEEKDATA
+   * @param offset Byte offset to seek to, interpreted relative to origin
+   * @param origin One of SEEK_SET, SEEK_CUR or SEEK_END
+   * @return CURL_SEEKFUNC_OK on success, CURL_SEEKFUNC_CANTSEEK to tell libcurl to find another way
+   */
+  static int SeekCallback(void *userp, curl_off_t offset, int origin);
+
   static int CurlLoggerCallback(const CURL * /* handle */,
                                 curl_infotype type,
                                 const char *data,
@@ -280,22 +294,22 @@ public:
   void Abort();
 
   /**
-   * Perform curl message, this function only can be called in the polling thread and it can only
-   * be called when got a CURLMSG_DONE.
+   * Process a completed curl message. This is called directly by synchronous requests or from the
+   * polling thread after receiving CURLMSG_DONE.
    *
    * @param code CURLcode
+   * @return true if the request was re-armed for a retry, false if the operation was cleaned up
    */
-  void PerformCurlMessage(CURLcode code);
+  bool PerformCurlMessage(CURLcode code);
 
   inline CURL *GetCurlEasyHandle() noexcept { return curl_resource_.easy_handle; }
 
 private:
-  CURLcode SetCurlPtrOption(CURLoption option, void *value);
+  CURLcode SetCurlPtrOption(CURLoption option, const void *value);
 
   CURLcode SetCurlStrOption(CURLoption option, const char *str)
   {
-    void *ptr = const_cast<char *>(str);
-    return SetCurlPtrOption(option, ptr);
+    return SetCurlPtrOption(option, str);
   }
 
   CURLcode SetCurlBlobOption(CURLoption option, struct curl_blob *blob)
@@ -316,6 +330,8 @@ private:
 
   const char *GetCurlErrorMessage(CURLcode code);
 
+  std::chrono::system_clock::time_point CalculateNextRetryTime();
+
   std::atomic<bool> is_aborted_{false};   // Set to 'true' when async callback is aborted
   std::atomic<bool> is_finished_{false};  // Set to 'true' when async callback is finished.
   std::atomic<bool> is_cleaned_{false};   // Set to 'true' when async callback is cleaned.
@@ -323,9 +339,10 @@ private:
   const bool reuse_connection_{false};    // Reuse connection
   const std::chrono::milliseconds http_conn_timeout_;  // Timeout for connect.  Default: 5000ms
 
-  char curl_error_message_[CURL_ERROR_SIZE];
+  char curl_error_message_[CURL_ERROR_SIZE]{};
   HttpCurlEasyResource curl_resource_;
-  CURLcode last_curl_result_{CURLE_OK};  // Curl result OR HTTP status code if successful
+  CURLcode last_curl_result_{CURLE_OK};     // Curl result OR HTTP status code if successful
+  CURLcode header_setup_result_{CURLE_OK};  // Construction-time header validation/allocation result
 
   opentelemetry::ext::http::client::EventHandler *event_handle_{nullptr};
 
@@ -348,6 +365,7 @@ private:
   const RetryPolicy retry_policy_;
   decltype(RetryPolicy::max_attempts) retry_attempts_;
   std::chrono::system_clock::time_point last_attempt_time_;
+  std::chrono::system_clock::time_point next_retry_time_point_{};
 
   // Processed response headers and body
   // See CURLINFO_RESPONSE_CODE, type is long
@@ -361,7 +379,8 @@ private:
 
   struct AsyncData
   {
-    Session *session;  // Owner Session
+    // Read by Abort() on whichever thread cancels, cleared by Cleanup() on the IO thread.
+    std::atomic<Session *> session{nullptr};  // Owner Session
 
     std::thread::id callback_thread;
     std::function<void(HttpOperation &)> callback;
@@ -370,6 +389,7 @@ private:
     std::future<CURLcode> result_future;
   };
   friend class HttpOperationAccessor;
+  friend class HttpOperationTestPeer;
   std::unique_ptr<AsyncData> async_data_;
 };
 }  // namespace curl

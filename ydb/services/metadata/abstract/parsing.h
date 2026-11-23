@@ -4,21 +4,20 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
 
 namespace NObjectOptionsParsing {
 
-Y_HAS_MEMBER(ExistingOk); // for create
-Y_HAS_MEMBER(MissingOk); // for alter, drop
-Y_HAS_MEMBER(ReplaceIfExists); // for create
-Y_HAS_MEMBER(ResetFeatures); // for alter
+Y_HAS_MEMBER(ExistingOk);   // for create
+Y_HAS_MEMBER(MissingOk);   // for alter, drop
+Y_HAS_MEMBER(ReplaceIfExists);   // for create
+Y_HAS_MEMBER(ResetFeatures);   // for alter
 
-} // namespace NObjectOptionsParsing
+}   // namespace NObjectOptionsParsing
 
 class TObjectSettingsImpl {
 public:
@@ -28,9 +27,9 @@ private:
     using TResetFeatures = std::unordered_set<TString>;
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
-    YDB_READONLY_DEF(bool, ExistingOk); // for create
-    YDB_READONLY_DEF(bool, MissingOk); // for alter, drop
-    YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
+    YDB_READONLY_DEF(bool, ExistingOk);   // for create
+    YDB_READONLY_DEF(bool, MissingOk);   // for alter, drop
+    YDB_READONLY_DEF(bool, ReplaceIfExists);   // for create
     TFeaturesExtractor::TFeatures Features;
     TResetFeatures ResetFeatures;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
@@ -38,7 +37,8 @@ private:
 public:
     TObjectSettingsImpl() = default;
 
-    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const THashMap<TString, TString>& features, const TResetFeatures& resetFeatures = {});
+    TObjectSettingsImpl(
+        const TString& typeId, const TString& objectId, const THashMap<TString, TString>& features, const TResetFeatures& resetFeatures = {});
 
     TFeaturesExtractor& GetFeaturesExtractor() const;
 
@@ -76,4 +76,4 @@ using TUpsertObjectSettings = TObjectSettingsImpl;
 using TAlterObjectSettings = TObjectSettingsImpl;
 using TDropObjectSettings = TObjectSettingsImpl;
 
-} // namespace NYql
+}   // namespace NYql

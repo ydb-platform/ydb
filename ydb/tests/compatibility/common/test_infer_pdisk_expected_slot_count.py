@@ -108,10 +108,10 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.DriveStatus == blobstorage_base3_pb2.EDriveStatus.ACTIVE
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 if self.versions[0] < (25, 3):
-                    assert not pdisk.PDiskMetrics.HasField('SlotCount')
+                    assert not pdisk.PDiskMetrics.HasField('ExpectedSlotCount')
                     assert not pdisk.PDiskMetrics.HasField('SlotSizeInUnits')
                 else:
-                    assert pdisk.PDiskMetrics.SlotCount == CONST_INITIAL_SLOT_COUNT
+                    assert pdisk.PDiskMetrics.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                     assert pdisk.PDiskMetrics.HasField('SlotSizeInUnits') and \
                         pdisk.PDiskMetrics.SlotSizeInUnits == 0
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t1
@@ -146,7 +146,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                 assert pdisk.PDiskConfig.SlotSizeInUnits == 2
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
-                assert pdisk.PDiskMetrics.SlotCount == CONST_CUSTOM_SLOT_COUNT
+                assert pdisk.PDiskMetrics.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                 assert pdisk.PDiskMetrics.SlotSizeInUnits == 2
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t2
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 < deadline
@@ -172,10 +172,10 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.PDiskConfig.SlotSizeInUnits == 2
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 if self.versions[0] < (25, 3):
-                    assert not pdisk.PDiskMetrics.HasField('SlotCount')
+                    assert not pdisk.PDiskMetrics.HasField('ExpectedSlotCount')
                     assert not pdisk.PDiskMetrics.HasField('SlotSizeInUnits')
                 else:
-                    assert pdisk.PDiskMetrics.SlotCount == CONST_CUSTOM_SLOT_COUNT
+                    assert pdisk.PDiskMetrics.ExpectedSlotCount == CONST_CUSTOM_SLOT_COUNT
                     assert pdisk.PDiskMetrics.SlotSizeInUnits == 2
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t3
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 < deadline
@@ -200,10 +200,10 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 if self.versions[0] < (25, 3):
-                    assert not pdisk.PDiskMetrics.HasField('SlotCount')
+                    assert not pdisk.PDiskMetrics.HasField('ExpectedSlotCount')
                     assert not pdisk.PDiskMetrics.HasField('SlotSizeInUnits')
                 else:
-                    assert pdisk.PDiskMetrics.SlotCount == CONST_INITIAL_SLOT_COUNT
+                    assert pdisk.PDiskMetrics.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                     assert pdisk.PDiskMetrics.HasField('SlotSizeInUnits') and \
                         pdisk.PDiskMetrics.SlotSizeInUnits == 0
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t1
@@ -241,7 +241,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.PDiskConfig.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
-                assert pdisk.PDiskMetrics.SlotCount == inferred_slot_count
+                assert pdisk.PDiskMetrics.ExpectedSlotCount == inferred_slot_count
                 assert pdisk.PDiskMetrics.SlotSizeInUnits == inferred_slot_size_in_units
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t2
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 < deadline
@@ -266,13 +266,14 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
                 assert pdisk.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                 assert pdisk.PDiskMetrics.TotalSize == CONST_480_GB
                 if self.versions[0] < (25, 3):
-                    assert not pdisk.PDiskMetrics.HasField('SlotCount')
+                    assert not pdisk.PDiskMetrics.HasField('ExpectedSlotCount')
                     assert not pdisk.PDiskMetrics.HasField('SlotSizeInUnits')
                 elif self.versions[0] < (25, 5):
-                    assert pdisk.PDiskMetrics.HasField('SlotCount') and pdisk.PDiskMetrics.SlotCount == CONST_INITIAL_SLOT_COUNT
+                    assert pdisk.PDiskMetrics.HasField('ExpectedSlotCount') and \
+                        pdisk.PDiskMetrics.ExpectedSlotCount == CONST_INITIAL_SLOT_COUNT
                     assert pdisk.PDiskMetrics.HasField('SlotSizeInUnits') and pdisk.PDiskMetrics.SlotSizeInUnits == 0
                 else:
-                    assert pdisk.PDiskMetrics.SlotCount == inferred_slot_count
+                    assert pdisk.PDiskMetrics.ExpectedSlotCount == inferred_slot_count
                     assert pdisk.PDiskMetrics.SlotSizeInUnits == inferred_slot_size_in_units
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 > t3
                 assert pdisk.PDiskMetrics.UpdateTimestamp * 1e-6 < deadline

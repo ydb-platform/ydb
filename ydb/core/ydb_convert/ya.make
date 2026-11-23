@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     column_families.cpp
@@ -18,26 +18,26 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine
+    ydb/core/external_sources
     ydb/core/formats/arrow/switch
-    yql/essentials/core
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
     ydb/core/util
-    yql/essentials/types/binary_json
-    yql/essentials/providers/result/expr_nodes
-    yql/essentials/types/dynumber
     ydb/library/conclusion
     ydb/library/mkql_proto/protos
-    yql/essentials/minikql/dom
-    yql/essentials/public/udf
     ydb/public/api/protos
+    ydb/public/lib/ydb_cli/dump/util
+    yql/essentials/core
+    yql/essentials/minikql/dom
+    yql/essentials/providers/result/expr_nodes
+    yql/essentials/public/udf
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
 )
 
 GENERATE_ENUM_SERIALIZATION(table_description.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

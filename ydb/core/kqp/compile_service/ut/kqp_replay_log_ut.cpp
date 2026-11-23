@@ -86,7 +86,6 @@ void CompileQuery(TTestActorRuntime& runtime, const TString& sql) {
             TMaybe<TKqpQueryId>(std::move(queryId)),
             /*keepInCache*/ false,
             /*isQueryActionPrepare*/ false,
-            /*perStatementResult*/ false,
             /*deadline*/ TInstant::Max(),
             /*dbCounters*/ nullptr,
             /*gUCSettings*/ std::make_shared<TGUCSettings>(),

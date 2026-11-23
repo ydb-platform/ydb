@@ -29,7 +29,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NNoBaggageRpc, ExpectNoBaggage)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto baggage = GetCurrentTraceContext()->UnpackBaggage();
         EXPECT_FALSE(baggage);
         context->Reply();

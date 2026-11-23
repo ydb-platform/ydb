@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(ConvertColumnTableDictionaryEncodingFeatureFlag) {
                 {
                     auto* msg = cols.Add();
                     msg->set_name("message");
-                    msg->mutable_type()->set_type_id(Ydb::Type::UTF8);
+                    msg->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
                     msg->set_not_null(false);
                     msg->add_encoding()->mutable_dictionary();
                 }

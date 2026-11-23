@@ -9,6 +9,8 @@ SRCS(
     folder_service_mock.h
     iam_token_service_mock.h
     nebius_access_service_mock.h
+    operation_service_mock.h
+    service_control_service_mock.h
     profile_service_mock.h
     service_account_service_mock.h
     user_account_service_mock.h
@@ -16,6 +18,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/googleapis-common-protos
     ydb/public/api/client/nc_private/iam/v1
     ydb/public/api/client/yc_private/servicecontrol
     ydb/public/api/client/yc_private/accessservice

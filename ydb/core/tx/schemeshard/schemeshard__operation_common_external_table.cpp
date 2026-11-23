@@ -107,6 +107,12 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
             return std::make_pair(nullptr, errStr);
         }
 
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility() && typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+            errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s' of type '%s' (DisablePgCompatibility feature flag is on)",
+                             colName.c_str(), NScheme::TypeName(typeInfo, typeInfo.GetPgTypeMod(typeName)).c_str());
+            return std::make_pair(nullptr, errStr);
+        }
+
         ui32 colId = col.HasId() ? col.GetId() : nextColumnId;
         if (externalTableInfo->Columns.contains(colId)) {
             errStr = Sprintf("Duplicate column id: %" PRIu32, colId);
@@ -126,7 +132,12 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
     try {
         NKikimrExternalSources::TGeneral general;
         general.ParseFromStringOrThrow(desc.GetContent());
-        const auto source = factory->GetOrCreate(sourceType);
+        const auto databaseType = NYql::DatabaseTypeFromString(sourceType);
+        if (!databaseType) {
+            errStr = TStringBuilder() << "Unknown source type: " << sourceType;
+            return std::make_pair(nullptr, errStr);
+        }
+        const auto source = factory->GetOrCreate(*databaseType);
         if (!source->HasExternalTable()) {
             errStr = TStringBuilder{} << "External table isn't supported for " << sourceType;
             return std::make_pair(nullptr, errStr);

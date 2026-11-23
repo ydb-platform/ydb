@@ -488,6 +488,7 @@ struct TPQTestClusterInfo {
     TString Balancer;
     bool Enabled;
     ui64 Weight = 1000;
+    bool IsFnx = false;
 };
 
 static THashMap<TString, TPQTestClusterInfo> DEFAULT_CLUSTERS_LIST = {
@@ -552,6 +553,21 @@ public:
         });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         return rs;
+    }
+
+    TMaybe<NYdb::TResultSet> TryRunYqlDataQuery(TString query) {
+        auto tableClient = NYdb::NTable::TTableClient(*Driver);
+        auto sessionResult = tableClient.CreateSession().GetValueSync();
+        if (!sessionResult.IsSuccess()) {
+            return Nothing();
+        }
+        auto qr = sessionResult.GetSession().ExecuteDataQuery(
+            query,
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+        if (!qr.IsSuccess() || qr.GetResultSets().empty()) {
+            return Nothing();
+        }
+        return qr.GetResultSet(0);
     }
 
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
@@ -674,7 +690,7 @@ public:
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE `/Root/PQ/Config/V2/Cluster` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Cluster` (
                 name Utf8,
                 balancer Utf8,
                 local Bool,
@@ -682,7 +698,7 @@ public:
                 weight Uint64,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE `/Root/PQ/Config/V2/Topics` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Topics` (
                 path Utf8,
                 dc Utf8,
                 PRIMARY KEY (path, dc)
@@ -690,7 +706,7 @@ public:
         )___");
 
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE `/Root/PQ/Config/V2/Versions` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Versions` (
                 name Utf8,
                 version Int64,
                 PRIMARY KEY (name)
@@ -726,6 +742,7 @@ public:
             UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer);
             UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled);
             UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight);
+            UNIT_ASSERT_EQUAL(info.IsFnx, trackerInfo.IsFnx);
         };
 
         TInstant now = TInstant::Now();
@@ -802,6 +819,31 @@ public:
             )___", name.c_str(), (local ? "true" : "false"), (enabled ? "true" : "false"));
 
         RunYqlDataQuery(query);
+    }
+
+    void UpsertCluster(
+        const TString& name,
+        const TString& balancer,
+        bool local,
+        bool enabled,
+        ui64 weight)
+    {
+        TStringBuilder query;
+        query << "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) VALUES (\""
+              << name << "\", \"" << balancer << "\", " << (local ? "true" : "false") << ", "
+              << (enabled ? "true" : "false") << ", " << weight << ");\n"
+              << "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+              << "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";";
+        RunYqlDataQuery(TString(query));
+    }
+
+    void UpsertBalancer(const TString& name, const TString& clustersCsv, i64 version = 1) {
+        TStringBuilder query;
+        query << "UPSERT INTO `/Root/PQ/Config/V2/Balancer` (name, clusters) VALUES (\""
+              << name << "\", \"" << clustersCsv << "\");\n"
+              << "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES (\"Balancer\", "
+              << version << ");";
+        RunYqlDataQuery(TString(query));
     }
 
     void DisableDC() {

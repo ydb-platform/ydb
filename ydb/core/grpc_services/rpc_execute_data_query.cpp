@@ -14,7 +14,7 @@
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/common/events/stream.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -47,7 +47,12 @@ public:
     using TResult = Ydb::Table::ExecuteQueryResult;
 
     TExecuteDataQueryRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg) {
+        if (this->Span_) {
+            this->Span_.Name("Execute data query request");
+            this->Span_.Attribute("ydb.actor.type", TString("TExecuteDataQueryRPC"));
+        }
+    }
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
@@ -59,7 +64,7 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            IgnoreFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress);
+            IgnoreFunc(NKqp::TEvKqpExecuterProgress);
             default: TBase::StateWork(ev);
         }
     }

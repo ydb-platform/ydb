@@ -1795,12 +1795,9 @@ convert_datetime_metadata_tuple_to_datetime_metadata(PyObject *tuple,
 
     /* (unit, num, event) */
     if (tuple_size == 3) {
-        /* Numpy 1.14, 2017-08-11 */
-        if (DEPRECATE(
-                "When passing a 3-tuple as (unit, num, event), the event "
-                "is ignored (since 1.7) - use (unit, num) instead") < 0) {
-            return -1;
-        }
+        PyErr_SetString(PyExc_ValueError,
+                "Use (unit, num) with no event");
+        return -1;
     }
     /* (unit, num, den, event) */
     else if (tuple_size == 4) {
@@ -1830,13 +1827,11 @@ convert_datetime_metadata_tuple_to_datetime_metadata(PyObject *tuple,
             }
         }
         else if (event != Py_None) {
-            /* Numpy 1.14, 2017-08-11 */
-            if (DEPRECATE(
+            PyErr_SetString(PyExc_ValueError,
                     "When passing a 4-tuple as (unit, num, den, event), the "
-                    "event argument is ignored (since 1.7), so should be None"
-                    ) < 0) {
-                return -1;
-            }
+                    "event argument must be None"
+                    );
+            return -1;
         }
         den = PyLong_AsLong(PyTuple_GET_ITEM(tuple, 2));
         if (error_converting(den)) {
@@ -3123,15 +3118,18 @@ cast_datetime_to_datetime(PyArray_DatetimeMetaData *src_meta,
  */
 NPY_NO_EXPORT int
 cast_timedelta_to_timedelta(PyArray_DatetimeMetaData *src_meta,
-                          PyArray_DatetimeMetaData *dst_meta,
-                          npy_timedelta src_dt,
-                          npy_timedelta *dst_dt)
+                            PyArray_DatetimeMetaData *dst_meta,
+                            npy_timedelta src_dt,
+                            npy_timedelta *dst_dt)
 {
     npy_int64 num = 0, denom = 0;
 
-    /* If the metadata is the same, short-circuit the conversion */
-    if (src_meta->base == dst_meta->base &&
-            src_meta->num == dst_meta->num) {
+    /*
+     * If the metadata is the same or if src_dt is NAT, short-circuit
+     * the conversion.
+     */
+    if ((src_meta->base == dst_meta->base && src_meta->num == dst_meta->num)
+            || src_dt == NPY_DATETIME_NAT) {
         *dst_dt = src_dt;
         return 0;
     }

@@ -27,6 +27,7 @@ struct TCmsSentinelConfig {
         ui32 NodeGoodStateLimit;
         ui32 NodePrettyGoodStateLimit;
         TDuration WaitForConfigStep;
+        TDuration SelfHealStateRequestTimeout;
         TDuration RelaxTime;
         bool PileupReplicas;
         ui32 OverrideReplicasInRingCount;
@@ -39,6 +40,7 @@ struct TCmsSentinelConfig {
             config.SetNodeGoodStateLimit(NodeGoodStateLimit);
             config.SetNodePrettyGoodStateLimit(NodePrettyGoodStateLimit);
             config.SetWaitForConfigStep(WaitForConfigStep.GetValue());
+            config.SetSelfHealStateRequestTimeout(SelfHealStateRequestTimeout.GetValue());
             config.SetRelaxTime(RelaxTime.GetValue());
             config.SetPileupReplicas(PileupReplicas);
             config.SetOverrideReplicasInRingCount(OverrideReplicasInRingCount);
@@ -52,6 +54,7 @@ struct TCmsSentinelConfig {
             NodeGoodStateLimit = config.GetNodeGoodStateLimit();
             NodePrettyGoodStateLimit = config.GetNodePrettyGoodStateLimit();
             WaitForConfigStep = TDuration::MicroSeconds(config.GetWaitForConfigStep());
+            SelfHealStateRequestTimeout = TDuration::MicroSeconds(config.GetSelfHealStateRequestTimeout());
             RelaxTime = TDuration::MicroSeconds(config.GetRelaxTime());
             PileupReplicas = config.GetPileupReplicas();
             OverrideReplicasInRingCount = config.GetOverrideReplicasInRingCount();
@@ -281,6 +284,7 @@ struct TCmsConfig {
     TDuration DefaultPermissionDuration;
     TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
     TDuration InfoCollectionTimeout;
+    TDuration StateStorageRestartCooldown;
     NKikimrCms::TLimits TenantLimits;
     NKikimrCms::TLimits ClusterLimits;
     TCmsSentinelConfig SentinelConfig;
@@ -299,6 +303,7 @@ struct TCmsConfig {
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
+        config.SetStateStorageRestartCooldown(StateStorageRestartCooldown.GetValue());
         config.MutableTenantLimits()->CopyFrom(TenantLimits);
         config.MutableClusterLimits()->CopyFrom(ClusterLimits);
         SentinelConfig.Serialize(*config.MutableSentinelConfig());
@@ -310,6 +315,7 @@ struct TCmsConfig {
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
+        StateStorageRestartCooldown = TDuration::MicroSeconds(config.GetStateStorageRestartCooldown());
         TenantLimits.CopyFrom(config.GetTenantLimits());
         ClusterLimits.CopyFrom(config.GetClusterLimits());
         SentinelConfig.Deserialize(config.GetSentinelConfig());

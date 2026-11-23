@@ -13,6 +13,7 @@ SRCS(
     async_slru_cache_ut.cpp
     atomic_ptr_ut.cpp
     backoff_strategy_ut.cpp
+    backtrace_ut.cpp
     bit_packed_integer_vector_ut.cpp
     bitmap_ut.cpp
     boolean_formula_ut.cpp
@@ -53,6 +54,7 @@ SRCS(
     mpsc_stack_ut.cpp
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
+    object_pool_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp

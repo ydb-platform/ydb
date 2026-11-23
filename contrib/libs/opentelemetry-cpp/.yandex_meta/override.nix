@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.28.0";
+  version = "1.30.0";
 
   src = fetchFromGitHub {
     owner = "open-telemetry";
     repo = "opentelemetry-cpp";
     rev = "v${version}";
-    hash = "sha256-+S/C+msuUEzOVIcx/1lEuQh6ZmyujALVXsiSqb0s2FM=";
+    hash = "sha256-AsdN70T8PBKBR674/MXoCwm7b8iI1wtqLlZLktq54hc=";
   };
 
   patches = [];

@@ -4,23 +4,29 @@ import logging
 import os
 import tempfile
 import time
-from typing import Optional, Self
 import yatest.common
 import yaml
 import ydb
 import pytest
 import random
 import requests
+import re
 
+from collections import defaultdict
+from typing import List, Dict, Optional, Self
+
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
-from ydb.tests.library.common.types import Erasure
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,8 @@ def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
+    os.environ["YDB_TEST_NODES_MANAGER_CHECK_PERIOD_MS"] = param.get("nodes_manager_check_period_ms", "5000")
+    os.environ["YDB_TEST_NODES_MANAGER_START_DELAY_MS"] = param.get("nodes_manager_start_delay_ms", "5000")
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
@@ -55,7 +63,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
-    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_kqp_constraints_transformer = param.get("enable_kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
         "enable_dq_source_stream_lookup_join_local_lookups", True
     )
@@ -63,6 +71,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
     )
+    enable_streaming_aggregation = param.get("enable_streaming_aggregation", True)
 
     extra_feature_flags = {
         "enable_streaming_queries_counters",
@@ -71,8 +80,22 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
+        "enable_pq_source_rescaling",
     }
     disabled_feature_flags = []
+
+    if param.get("enable_exactly_once_topics_writing", False):
+        extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
+
+    for flag in (
+        "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_state_recompute",
+    ):
+        if flag in param:
+            if param[flag]:
+                extra_feature_flags.add(flag)
+            else:
+                disabled_feature_flags.append(flag)
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     else:
@@ -96,13 +119,10 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
-    if not enable_kqp_constraints_transformer:
-        disabled_feature_flags.append("enable_kqp_constraints_transformer")
-
-    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
-        extra_feature_flags.add("enable_access_service_v2_interface")
+    if enable_kqp_constraints_transformer:
+        extra_feature_flags.add("enable_kqp_constraints_transformer")
     else:
-        disabled_feature_flags.append("enable_access_service_v2_interface")
+        disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 
@@ -110,6 +130,11 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_external_data_sources")
     else:
         disabled_feature_flags.append("enable_external_data_sources")
+
+    if enable_streaming_aggregation:
+        extra_feature_flags.add("enable_streaming_aggregation")
+    else:
+        disabled_feature_flags.append("enable_streaming_aggregation")
 
     replication_config = {
         "iam_service_control": {
@@ -123,11 +148,12 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
+        additional_log_configs=param.get("log_levels"),
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
         query_service_config={
-            "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
+            "available_external_data_sources": ["ObjectStorage", "Ydb"],
             "enable_match_recognize": True,
         },
         table_service_config={
@@ -158,7 +184,6 @@ def get_ydb_config(request, enable_fq_connector=None):
             },
         }
 
-    config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
     config.yaml_config["auth_config"]["local_metadata_service"] = {
@@ -432,6 +457,151 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
     raise AssertionError("CMS configuration was not applied to all dynamic nodes")
 
 
+def get_streaming_query_diagnostics(context, path: str) -> str:
+    try:
+        query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+        if hasattr(context, "kikimr"):
+            result_sets = context.kikimr.ydb_client.query(query)
+        elif hasattr(context, "driver"):
+            with ydb.QuerySessionPool(context.driver) as session_pool:
+                result_sets = session_pool.execute_with_retries(query)
+        else:
+            raise AttributeError("Context must provide either 'kikimr' or 'driver'")
+        return (
+            "\n".join(
+                "Status: {status}\nIssues:\n{issues}".format(
+                    status=row["Status"],
+                    issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                )
+                for row in result_sets[0].rows
+            )
+            if result_sets
+            else []
+        )
+    except Exception as error:
+        return f"failed to retrieve Status / Issues: {error}"
+
+
+class MessageAcceptor:
+    class MessageGroup:
+        def __init__(self):
+            self.messages: List[str] = []
+            self.messages_index: Dict[str, int] = {}
+            self.unaccepted_count = 0
+            self.receive_idx: Optional[int] = None
+            self.start_idx = 0
+
+        def accept(self, messages: List[str]):
+            for message in messages:
+                idx = len(self.messages_index)
+                self.messages_index[message] = idx
+
+            self.messages.extend(messages)
+            self.unaccepted_count += len(messages)
+
+        def reset(self):
+            self.receive_idx = None
+
+        def advance(self, data: str):
+            data_idx = self.messages_index[data]
+
+            if self.receive_idx is not None:
+                assert self.receive_idx + 1 < len(self.messages), (
+                    f"All messages in order group already received, got unexpected message: '{data}' "
+                    f"(index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                assert data_idx == self.receive_idx + 1, (
+                    f"Expected message '{self.messages[self.receive_idx + 1]}' "
+                    f"(index {self.receive_idx + 1} / {len(self.messages) - 1}), "
+                    f"but got '{data}' (index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                self.receive_idx += 1
+            else:
+                if self.unaccepted_count > 0:
+                    max_expected_idx = len(self.messages) - self.unaccepted_count
+                    assert data_idx <= max_expected_idx, (
+                        f"Unexpected message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                        f"{data_idx - max_expected_idx} unseen messages were skipped, {self.debug_info()}"
+                    )
+                assert data_idx >= self.start_idx, (
+                    f"Unexpected starting message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                    f"previous query start was on newer message {self.messages[self.start_idx]} "
+                    f"(index {self.start_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                self.receive_idx = data_idx
+                self.start_idx = data_idx
+
+            if data_idx == len(self.messages) - self.unaccepted_count:
+                self.unaccepted_count -= 1
+
+        def __len__(self) -> int:
+            if self.receive_idx is not None:
+                return len(self.messages) - self.receive_idx - 1
+            return self.unaccepted_count
+
+        def debug_info(self) -> str:
+            return (
+                f"full expected messages order: {self.messages}, start_idx: {self.start_idx}, "
+                f"receive_idx: {self.receive_idx}, unaccepted_count: {self.unaccepted_count}"
+            )
+
+    def __init__(self):
+        self.all_messages: Dict[str, int] = {}
+        self.groups = defaultdict(MessageAcceptor.MessageGroup)
+
+    def accept(self, messages: List[str], ordered_group: int = 0):
+        for message in messages:
+            assert message not in self.all_messages, (
+                f"All test messages must be unique, got validation set: {self.all_messages} "
+                f"(failed after adding duplicated '{message}')"
+            )
+            self.all_messages[message] = ordered_group
+
+        self.groups[ordered_group].accept(messages)
+
+    # Must be called on query restart, when may occur duplicates
+    def reset(self):
+        for group in self.groups.values():
+            group.reset()
+
+    def advance(self, read_data: List[str]):
+        for data in read_data:
+            group_id = self.all_messages.get(data)
+            assert group_id is not None, f"Unexpected message: {data}, only expected messages are: {self.all_messages}"
+            self.groups[group_id].advance(data)
+
+    def debug_info(self) -> str:
+        return ";\n".join(f"{idx}: {group.debug_info()}" for idx, group in self.groups.items())
+
+    def __len__(self) -> int:
+        return sum(len(group) for group in self.groups.values())
+
+
+def read_and_check_data(
+    context, query_path, acceptor: MessageAcceptor, endpoint, database_path, consumer_name, topic_name
+):
+    try:
+        logger.debug("read data from stream")
+        deadline = time.time() + plain_or_under_sanitizer_wrapper(60, 300)
+
+        while len(acceptor) != 0:
+            remaining_timeout = deadline - time.time()
+            assert remaining_timeout > 0, f"Timed out waiting for expected data: {acceptor.debug_info()}"
+
+            acceptor.advance(
+                read_stream(
+                    path=topic_name,
+                    messages_count=len(acceptor),
+                    consumer_name=consumer_name,
+                    database=database_path,
+                    endpoint=endpoint,
+                    timeout=remaining_timeout,
+                )
+            )
+    except AssertionError as error:
+        raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(context, query_path)}") from error
+
+
 class Kikimr:
     def __init__(
         self,
@@ -448,18 +618,59 @@ class Kikimr:
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
 
+        # Tenant slots start before the full config reaches CMS. Keep this setting
+        # in the bootstrap config so KQP honors it for the first test queries.
+        table_service_config = full_yaml_config.get("table_service_config", {})
+        if "enable_compile_cache_warmup" in table_service_config:
+            config.yaml_config["table_service_config"] = {
+                "enable_compile_cache_warmup": table_service_config["enable_compile_cache_warmup"]
+            }
+
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
         token = config.default_clusteradmin
-        logger.info("Sleep")
-        time.sleep(10)
         logger.info(f"Creating tenant {tenant_database} with token={token!r}")
-        self.cluster.create_database(
-            tenant_database,
-            storage_pool_units_count={"hdd": 1},
-            token=token,
-        )
+        create_deadline = time.time() + 30
+        retryable_codes = {
+            StatusIds.UNAVAILABLE,
+            StatusIds.TIMEOUT,
+            StatusIds.UNDETERMINED,
+            StatusIds.OVERLOADED,
+        }
+        while True:
+            remaining = create_deadline - time.time()
+            if remaining <= 0:
+                raise RuntimeError(f"create_database not ready within 30s for {tenant_database}")
+            try:
+                self.cluster.create_database(
+                    tenant_database,
+                    storage_pool_units_count={"hdd": 1},
+                    token=token,
+                    timeout_seconds=max(1, int(remaining)),
+                )
+                break
+            except Exception as e:
+                message = str(e)
+                message_l = message.lower()
+                # create_database raises RuntimeError("... failed: <code>: <reason>")
+                code = None
+                if "create_database failed:" in message_l:
+                    try:
+                        code = int(message.split(":", 2)[1].strip().split(",", 1)[0].strip())
+                    except (IndexError, ValueError):
+                        code = None
+                if code == StatusIds.ALREADY_EXISTS or "already exists" in message_l:
+                    logger.info("create_database already exists, continuing: %r", e)
+                    break
+                if code in retryable_codes or any(
+                    needle in message_l
+                    for needle in ("unavailable", "connection", "timeout", "deadline", "not ready", "transport")
+                ):
+                    logger.info("create_database not ready yet, retrying: %r", e)
+                    time.sleep(0.5)
+                    continue
+                raise
         self.cluster.register_and_start_slots(database=tenant_database, count=2)
         self.cluster.wait_tenant_up(tenant_database, token=token)
 
@@ -478,11 +689,16 @@ class Kikimr:
             self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
             self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
 
-    def recreate_driver(self):
-        self.ydb_client.stop()
-        self.ydb_client = YdbClient(
-            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
-        )
+    def recreate_driver(self, node_id=None):
+        if hasattr(self, "ydb_client"):
+            self.ydb_client.stop()
+
+        if node_id is None:
+            node_id = random.choice(list(self.cluster.slots.keys()))
+        node = self.cluster.slots[node_id]
+        self.endpoint = Endpoint(f"{node.host}:{node.port}", self.get_database_name())
+
+        self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery=False)
 
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
@@ -498,6 +714,33 @@ class Kikimr:
 
     def get_database_name(self) -> str:
         return self.endpoint.database
+
+    def wait_kqp_node_count(self, expected_count: int, timeout_seconds: int = 60) -> None:
+        node_counts = {}
+
+        def resources_updated() -> bool:
+            node_counts.clear()
+            for node_id in counter_nodes(self.cluster):
+                try:
+                    response = requests.get(
+                        monitoring_endpoint(self.cluster, node_id) + "/actors/kqp_resource_manager",
+                        headers={"Authorization": "root@builtin"},
+                        timeout=5,
+                    )
+                    response.raise_for_status()
+                except requests.RequestException as error:
+                    node_counts[node_id] = str(error)
+                    continue
+                # Read the published snapshot used by the planner. The
+                # RM/NodeNumberInSnapshot counter changes before it is published.
+                match = re.search(r"Nodes count: (\d+)", response.text)
+                node_counts[node_id] = int(match.group(1)) if match else 0
+            logger.info("KQP resource snapshot node counts: %s (expected %s)", node_counts, expected_count)
+            return bool(node_counts) and all(count == expected_count for count in node_counts.values())
+
+        assert wait_for(
+            resources_updated, timeout_seconds=timeout_seconds, step_seconds=0.5, multiply=1
+        ), f"Expected {expected_count} nodes in every KQP resource snapshot, got {node_counts}"
 
 
 class StreamingTestBase(TestYdsBase):
@@ -577,15 +820,25 @@ class StreamingTestBase(TestYdsBase):
         node.start()
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
-        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        """Find and restart the node hosting the streaming query reader.
         Returns the restarted node ID."""
-        restart_node_id = None
-        for node_id in kikimr.cluster.slots:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
-                break
-        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+
+        def _find_node():
+            for node_id in kikimr.cluster.slots:
+                if any(
+                    self.get_actor_count(kikimr, node_id, actor_name)
+                    for actor_name in ("DQ_MESSAGE_STREAM_READ_ACTOR", "DQ_PQ_READ_ACTOR")
+                ):
+                    return node_id
+            return None
+
+        wait_for(
+            lambda: _find_node() is not None,
+            timeout_seconds=30,
+            step_seconds=1,
+        )
+        restart_node_id = _find_node()
+        assert restart_node_id is not None, "No node found with a streaming query reader"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id
 
@@ -718,4 +971,5 @@ class StreamingTestBase(TestYdsBase):
             logger.info(f"upgrading {role} {node_id}")
             node.stop()
             node.start()
+            kikimr.recreate_driver()
             yield

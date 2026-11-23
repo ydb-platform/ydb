@@ -8,6 +8,7 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/loaded_key_ranges.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -93,7 +94,14 @@ struct TEvPrivate {
         EvBackupImportRecordBatchResult,
 
         EvRetryConfigSubscription,
+        EvUpdateChannelApproximateFreeSpace,
 
+        EvPrefetchPortionsMetadata,
+        EvSetLoadedKeyRanges,
+
+        EvBackupExportReset,
+
+        EvPassWriteGate,
         EvEnd
     };
 
@@ -115,7 +123,7 @@ struct TEvPrivate {
         }
 
         NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
-            AFL_VERIFY(Result);
+            YDB_LOG_VERIFY(Result);
             auto result = std::move(*Result);
             Result.reset();
             return result;
@@ -186,8 +194,8 @@ struct TEvPrivate {
             : Requests(std::move(requests))
             , Callback(callback)
         {
-            AFL_VERIFY(Callback);
-            AFL_VERIFY(Requests.size());
+            YDB_LOG_VERIFY(Callback);
+            YDB_LOG_VERIFY(Requests.size());
         }
     };
 
@@ -363,12 +371,38 @@ struct TEvPrivate {
         TEvPingSnapshotsUsage() = default;
     };
 
+    struct TEvPrefetchPortionsMetadata: public TEventLocal<TEvPrefetchPortionsMetadata, EvPrefetchPortionsMetadata> {};
+
+    // only tests move the loaded key ranges until portions are loaded after the start
+    struct TEvSetLoadedKeyRanges: public TEventLocal<TEvSetLoadedKeyRanges, EvSetLoadedKeyRanges> {
+        const TInternalPathId PathId;
+        NOlap::TLoadedKeyRanges LoadedKeyRanges;
+
+        TEvSetLoadedKeyRanges(const TInternalPathId pathId, NOlap::TLoadedKeyRanges&& loadedKeyRanges)
+            : PathId(pathId)
+            , LoadedKeyRanges(std::move(loadedKeyRanges))
+        {
+        }
+    };
+
+    struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
+        const ui32 Channel;
+        const float ApproximateFreeSpaceShare;
+
+        TEvUpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare)
+            : Channel(channel)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+        {
+        }
+    };
+
     class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     public:
         enum EErrorClass {
             Internal,
             Request,
-            ConstraintViolation
+            ConstraintViolation,
+            LocksBroken
         };
 
     private:
@@ -386,6 +420,8 @@ struct TEvPrivate {
                     return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
                 case EErrorClass::ConstraintViolation:
                     return NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION;
+                case EErrorClass::LocksBroken:
+                    return NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
             }
         }
 
@@ -455,23 +491,36 @@ struct TEvPrivate {
     3. TEvBackupExportState - internal message for iscan iface
     */
     struct TEvBackupExportRecordBatch: public TEventLocal<TEvBackupExportRecordBatch, EvBackupExportRecordBatch> {
-        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast, ui32 generation = 0)
             : Data(data)
             , IsLast(isLast)
+            , Generation(generation)
         {
         }
 
         std::shared_ptr<arrow::RecordBatch> Data;
         bool IsLast;
+        ui32 Generation;
     };
 
     struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {
-        explicit TEvBackupExportRecordBatchResult(bool isFinish)
+        explicit TEvBackupExportRecordBatchResult(bool isFinish, ui32 generation = 0)
             : IsFinish(isFinish)
+            , Generation(generation)
         {
         }
 
         bool IsFinish = false;
+        ui32 Generation;
+    };
+
+    struct TEvBackupExportReset: public TEventLocal<TEvBackupExportReset, EvBackupExportReset> {
+        explicit TEvBackupExportReset(ui32 generation)
+            : Generation(generation)
+        {
+        }
+
+        ui32 Generation;
     };
 
     struct TEvBackupExportState: public TEventLocal<TEvBackupExportState, EvBackupExportState> {

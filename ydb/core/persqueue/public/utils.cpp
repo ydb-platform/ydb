@@ -2,6 +2,7 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -40,8 +41,32 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().HasMirrorFrom();
 }
 
+bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets();
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
+}
+
+std::optional<TWriteModeError> GetWriteModeError(const NKikimrPQ::TPQTabletConfig& config) {
+    switch (config.GetWriteMode()) {
+        case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+            return std::nullopt;
+        case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::ERROR,
+                .Status = Ydb::StatusIds::UNAVAILABLE,
+                .Reason = "Write to topic is temporarily disabled",
+            };
+        case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::BAD_REQUEST,
+                .Status = Ydb::StatusIds::BAD_REQUEST,
+                .Reason = "Write to topic is prohibited",
+            };
+    }
+    return std::nullopt;
 }
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
@@ -130,6 +155,13 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         consumer->SetReadFromTimestampsMs(0);
         consumer->SetImportant(true);
     }
+}
+
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database) {
+    if (dlq.empty() || dlq.StartsWith("sqs://")) {
+        return dlq;
+    }
+    return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
@@ -325,21 +357,33 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
 
     std::deque<TPartitionGraph::Node*> queue;
 
-    for (const auto& p : partitions) {
-        auto& node = result[GetPartitionId(p)];
+    auto findNode = [&](auto id) -> TPartitionGraph::Node* {
+        auto it = result.find(static_cast<ui32>(id));
+        return it == result.end() ? nullptr : &it->second;
+    };
 
-        node.DirectChildren.reserve(p.ChildPartitionIdsSize());
-        for (auto id : p.GetChildPartitionIds()) {
-            node.DirectChildren.push_back(&result[id]);
+    for (const auto& p : partitions) {
+        auto* node = findNode(GetPartitionId(p));
+        if (!node) {
+            continue;
         }
 
-        node.DirectParents.reserve(p.ParentPartitionIdsSize());
+        node->DirectChildren.reserve(p.ChildPartitionIdsSize());
+        for (auto id : p.GetChildPartitionIds()) {
+            if (auto* child = findNode(id)) {
+                node->DirectChildren.push_back(child);
+            }
+        }
+
+        node->DirectParents.reserve(p.ParentPartitionIdsSize());
         for (auto id : p.GetParentPartitionIds()) {
-            node.DirectParents.push_back(&result[id]);
+            if (auto* parent = findNode(id)) {
+                node->DirectParents.push_back(parent);
+            }
         }
 
         if (p.GetParentPartitionIds().empty()) {
-            queue.push_back(&node);
+            queue.push_back(node);
         }
     }
 

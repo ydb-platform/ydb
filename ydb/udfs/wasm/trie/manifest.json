@@ -1,0 +1,47 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Trie",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk"
+  ],
+  "functions": [
+    {
+      "name": "Lookup",
+      "export": "lookup",
+      "argument_types": [
+        "Optional<String>",
+        "Optional<String>"
+      ],
+      "result_type": "Optional<Int64>"
+    },
+    {
+      "name": "LookupWithString",
+      "export": "lookup_with_string",
+      "argument_types": [
+        "Optional<String>",
+        "Optional<String>"
+      ],
+      "result_type": "Optional<String>"
+    },
+    {
+      "name": "LookupCachedBlob",
+      "export": "lookup_cached_blob",
+      "argument_types": [
+        "Optional<String>",
+        "Optional<String>"
+      ],
+      "result_type": "Optional<Int64>"
+    },
+    {
+      "name": "LookupDict",
+      "export": "lookup_dict",
+      "argument_types": [
+        "Optional<String>",
+        "Dict<String, Int64>"
+      ],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

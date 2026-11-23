@@ -2,6 +2,8 @@
 #include <util/generic/vector.h>
 #include <util/system/thread.h>
 
+#include <memory>
+
 #include "ut_helpers.h"
 
 template <typename TQueueType>
@@ -71,7 +73,7 @@ public:
             }
         };
 
-        TVector<TAutoPtr<TCycleThread>> cyclers;
+        TVector<std::unique_ptr<TCycleThread>> cyclers;
 
         for (size_t i = 0; i < NUMBER_OF_THREADS; ++i) {
             cyclers.emplace_back(new TCycleThread);

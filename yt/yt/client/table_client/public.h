@@ -203,6 +203,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
     ((UnableToSynchronizeReplicationCard)(329))
+    ((RequiredWriteLockMissing)          (330))
 );
 
 DEFINE_ENUM(EControlAttribute,
@@ -368,6 +369,7 @@ DECLARE_REFCOUNTED_STRUCT(ISchemafulUnversionedReader)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedWriter)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedTableFragmentWriter)
 DECLARE_REFCOUNTED_STRUCT(IUnversionedRowsetWriter)
+DECLARE_REFCOUNTED_STRUCT(IColumnarUnversionedWriter)
 
 using TSchemalessWriterFactory = std::function<IUnversionedRowsetWriterPtr(
     TNameTablePtr,
@@ -434,6 +436,7 @@ DECLARE_REFCOUNTED_STRUCT(IUnversionedColumnarRowBatch)
 DECLARE_REFCOUNTED_STRUCT(IVersionedRowBatch)
 
 struct IValueConsumer;
+struct IColumnarValueConsumer;
 struct IFlushableValueConsumer;
 
 class TComplexTypeFieldDescriptor;

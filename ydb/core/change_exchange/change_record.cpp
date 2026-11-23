@@ -27,7 +27,7 @@ void TChangeRecordBase::Out(IOutputStream& out) const {
         << " TxId: " << GetTxId()
         << " Kind: " << GetKind()
         << " Source: " << GetSource()
-        << " Body: " << GetBody().size() << "b"
+        << " Body: " << GetBodySize() << "b"
     << " }";
 }
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     yql/essentials/core/services
@@ -19,7 +19,5 @@ SRCS(
     dqs_task_graph.cpp
     execution_planner.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

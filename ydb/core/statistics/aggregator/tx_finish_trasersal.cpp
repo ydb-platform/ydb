@@ -63,6 +63,11 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
             {"lastTraversalWasForce", Self->LastTraversalWasForceString()},
             {"pathId", PathId});
 
+        // Advance queued work even when no reply is sent.
+        if (Self->EnableColumnStatistics) {
+            ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
+        }
+
         if (!ReplyToActorId) {
             YDB_LOG_DEBUG("TTxFinishTraversal::Complete. No ActorId to send reply",
                 {"tabletId", Self->TabletID()});
@@ -108,6 +113,10 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
 void TStatisticsAggregator::DispatchFinishTraversalTx(
         NKikimrStat::TEvAnalyzeResponse::EStatus status,
         NYql::TIssues issues) {
+    if (FinishingTraversal || (!TraversalPathId && !ForceTraversalOperationId)) {
+        return;
+    }
+    FinishingTraversal = true;
     Execute(
         new TTxFinishTraversal(this, status, std::move(issues)),
         TActivationContext::AsActorContext());

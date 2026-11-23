@@ -1,8 +1,4 @@
-UNITTEST_FOR(ydb/core/load_test)
-
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(10)
+UNITTEST_FOR(ydb/core/load_test/ycsb)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
@@ -16,7 +12,6 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/load_test
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy

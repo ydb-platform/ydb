@@ -18,22 +18,22 @@ TAllocationGuard::~TAllocationGuard() {
 }
 
 void TAllocationGuard::Update(const ui64 newVolume, const bool notify) {
-    AFL_VERIFY(!Released);
+    YDB_LOG_VERIFY(!Released);
     if (Stage) {
         Stage->UpdateVolume(Memory, newVolume, true);
     }
     if (notify && TlsActivationContext) {
         NActors::TActivationContext::AsActorContext().Send(
-            ActorId, std::make_unique<NEvents::TEvExternal::TEvTaskUpdated>(ProcessId, ScopeId, AllocationId));
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvTaskUpdated>(ProcessId, ScopeId, AllocationId, newVolume));
     }
     Memory = newVolume;
 }
 
 bool IAllocation::OnAllocated(std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) {
-    AFL_VERIFY(!Allocated);
+    YDB_LOG_VERIFY(!Allocated);
     Allocated = true;
-    AFL_VERIFY(allocation);
-    AFL_VERIFY(guard);
+    YDB_LOG_VERIFY(allocation);
+    YDB_LOG_VERIFY(guard);
     return DoOnAllocated(std::move(guard), allocation);
 }
 

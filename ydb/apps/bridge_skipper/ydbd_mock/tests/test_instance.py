@@ -1,0 +1,256 @@
+"""Node gRPC listener ownership across failed starts and cancellation."""
+import asyncio
+import errno
+import os
+import socket
+import tempfile
+import unittest
+from types import SimpleNamespace
+from unittest import mock
+
+from ydb.apps.bridge_skipper.ydbd_mock.lib import instance, model
+from ydb.apps.bridge_skipper.ydbd_mock.lib.replica import Replica
+from ydb.apps.bridge_skipper.ydbd_mock.lib.testkit import LiveCluster, tiny_timings, wait_until
+from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology, TopologyError
+from ydb.public.api.protos.draft import ydb_bridge_pb2
+
+
+class PersistentPilePathsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_existing_literal_replica_paths_still_load(self):
+        with tempfile.TemporaryDirectory() as root:
+            names = ["pile%1", "pile one", "пайл"]
+            for name in names:
+                Replica(len(names), os.path.join(root, name, "replica.json")).set_detached(True)
+            cluster = LiveCluster(topology=Topology.with_free_ports(names, 1), state_root=root)
+            try:
+                await cluster.start()
+                for name in names:
+                    self.assertTrue((await cluster.state(name))["detached"])
+            finally:
+                await cluster.stop()
+
+    async def test_testkit_replica_paths_are_local_distinct_and_survive_recreation(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "nested", "run")
+            names = ["", ".", "..", "%", "../../foreign", os.path.join(root, "absolute")]
+            cluster = LiveCluster(topology=Topology.with_free_ports(names, 1), state_root=run)
+            try:
+                await cluster.start()
+                paths = [os.path.abspath(proc.inst.replica.path) for proc in cluster.procs.values()]
+                self.assertEqual(len(set(paths)), len(names))
+                for path in paths:
+                    self.assertEqual(os.path.commonpath([run, path]), run)
+                status, state = await cluster.http("", "POST", "/replica", {"detach": True})
+                self.assertEqual(status, 200, state)
+                self.assertTrue(state["detached"])
+                await cluster.stop()
+                await cluster.start()
+                for name in names:
+                    self.assertEqual((await cluster.state(name))["detached"], name == "")
+            finally:
+                await cluster.stop()
+
+
+class ControlledGrpcServer:
+    def __init__(self):
+        self.start_entered = asyncio.Event()
+        self.allow_start = asyncio.Event()
+        self.started = asyncio.Event()
+        self.start_cancelled = False
+        self.stop_entered = asyncio.Event()
+        self.allow_stop = asyncio.Event()
+        self.stopped = asyncio.Event()
+        self.stop_cancelled = False
+        self.stop_calls = 0
+
+    def add_insecure_port(self, endpoint):
+        return 12345
+
+    async def start(self):
+        self.start_entered.set()
+        try:
+            await self.allow_start.wait()
+        except asyncio.CancelledError:
+            self.start_cancelled = True
+            raise
+        self.started.set()
+
+    async def stop(self, grace):
+        self.stop_calls += 1
+        self.stop_entered.set()
+        try:
+            await self.allow_stop.wait()
+        except asyncio.CancelledError:
+            self.stop_cancelled = True
+            raise
+        self.stopped.set()
+
+
+class NodeServerLifecycleTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.topology = Topology.with_free_ports(["pile1"], 1)
+        pile = self.topology.pile("pile1")
+        self.process = SimpleNamespace(
+            topo=self.topology,
+            inst=SimpleNamespace(pile_info=pile),
+            events=mock.Mock(),
+            runtimes=[mock.Mock()],
+        )
+        self.server = ControlledGrpcServer()
+        self.node = instance.NodeServer(self.process, 0)
+        self.server_factory = mock.patch.object(instance.grpc.aio, "server", return_value=self.server)
+        self.server_factory.start()
+        self.addCleanup(self.server_factory.stop)
+        self.register = mock.patch.object(instance.services, "register")
+        self.register.start()
+        self.addCleanup(self.register.stop)
+        self.addAsyncCleanup(self._release_server)
+
+    async def _release_server(self):
+        self.server.allow_start.set()
+        self.server.allow_stop.set()
+        await self.node.stop()
+
+    async def test_cancelled_start_keeps_server_owned_until_start_and_stop_finish(self):
+        start_waiter = asyncio.create_task(self.node.start())
+        await asyncio.wait_for(self.server.start_entered.wait(), timeout=1.0)
+        start_waiter.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await start_waiter
+
+        self.assertIs(self.node.server, self.server)
+        self.assertFalse(self.server.start_cancelled)
+
+        stop_waiter = asyncio.create_task(self.node.stop())
+        await asyncio.sleep(0)
+        self.assertFalse(self.server.stop_entered.is_set())
+
+        self.server.allow_start.set()
+        await asyncio.wait_for(self.server.started.wait(), timeout=1.0)
+        await asyncio.wait_for(self.server.stop_entered.wait(), timeout=1.0)
+        self.assertIs(self.node.server, self.server)
+
+        self.server.allow_stop.set()
+        await asyncio.wait_for(stop_waiter, timeout=1.0)
+        self.assertTrue(self.server.stopped.is_set())
+        self.assertIsNone(self.node.server)
+
+    async def test_cancelled_stop_keeps_server_owned_until_shutdown_finishes(self):
+        self.server.allow_start.set()
+        await self.node.start()
+
+        stop_waiter = asyncio.create_task(self.node.stop())
+        await asyncio.wait_for(self.server.stop_entered.wait(), timeout=1.0)
+        stop_waiter.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await stop_waiter
+
+        self.assertIs(self.node.server, self.server)
+        self.assertFalse(self.server.stop_cancelled)
+
+        repeated_stop = asyncio.create_task(self.node.stop())
+        await asyncio.sleep(0)
+        self.assertEqual(self.server.stop_calls, 1)
+
+        self.server.allow_stop.set()
+        await asyncio.wait_for(repeated_stop, timeout=1.0)
+        self.assertTrue(self.server.stopped.is_set())
+        self.assertIsNone(self.node.server)
+
+    async def test_bind_failure_starts_then_stops_allocated_server(self):
+        self.server.allow_start.set()
+        self.server.allow_stop.set()
+        with mock.patch.object(self.server, "add_insecure_port", return_value=0):
+            with self.assertRaises(OSError):
+                await self.node.start()
+
+        self.assertTrue(self.server.started.is_set())
+        self.assertTrue(self.server.stopped.is_set())
+        self.assertIsNone(self.node.server)
+
+
+class InvalidTlsStartupTest(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_tls_is_rejected_before_server_creation_and_cleans_processes(self):
+        cluster = LiveCluster(tls={"cert_file": "/nonexistent/cert.pem", "key_file": "/nonexistent/key.pem"})
+        self.addAsyncCleanup(cluster.stop)
+
+        with mock.patch.object(instance.grpc.aio, "server") as server_factory:
+            with self.assertRaises(TopologyError):
+                await cluster.start()
+
+        self.assertTrue(cluster.procs)
+        open_runners = [name for name, process in cluster.procs.items() if process._runner is not None]
+        self.assertEqual((server_factory.call_count, open_runners), (0, []))
+
+
+class MockProcessShutdownTest(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_joins_gated_listener_start_before_closing_process_resources(self):
+        topology = Topology.with_free_ports(["pile1"], 1)
+        process = instance.MockProcess(topology, "pile1")
+        server = ControlledGrpcServer()
+        start_task = None
+
+        async def cleanup():
+            server.allow_start.set()
+            server.allow_stop.set()
+            if start_task is not None and not start_task.done():
+                await asyncio.gather(start_task, return_exceptions=True)
+            if process._runner is not None or not server.stopped.is_set():
+                await process.stop(0.0)
+
+        self.addAsyncCleanup(cleanup)
+        with mock.patch.object(instance.grpc.aio, "server", return_value=server):
+            with mock.patch.object(instance.services, "register"):
+                start_task = asyncio.create_task(process.start())
+                await asyncio.wait_for(server.start_entered.wait(), timeout=1.0)
+
+                stop_task = asyncio.create_task(process.stop(0.0))
+                await asyncio.sleep(0)
+                self.assertFalse(stop_task.done())
+                self.assertFalse(server.stop_entered.is_set())
+                self.assertIsNotNone(process._runner)
+
+                server.allow_start.set()
+                await asyncio.wait_for(start_task, timeout=1.0)
+                await asyncio.wait_for(server.stop_entered.wait(), timeout=1.0)
+                self.assertIs(process.nodes[0].server, server)
+                self.assertFalse(stop_task.done())
+
+                server.allow_stop.set()
+                await asyncio.wait_for(stop_task, timeout=1.0)
+
+        self.assertTrue(server.stopped.is_set())
+        self.assertIsNone(process.nodes[0].server)
+        self.assertIsNone(process._runner)
+
+
+class Ipv6LoopbackTest(unittest.IsolatedAsyncioTestCase):
+    async def test_ipv6_cluster_has_http_grpc_and_peer_heartbeats(self):
+        try:
+            probe = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            try:
+                probe.bind(("::1", 0))
+            finally:
+                probe.close()
+        except OSError as error:
+            if error.errno in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL):
+                self.skipTest("IPv6 loopback is unavailable: %s" % error)
+            raise
+
+        topology = Topology.with_free_ports(["pile1", "pile2"], 1, host="::1", timings=tiny_timings())
+        cluster = LiveCluster(topology=topology)
+        self.addAsyncCleanup(cluster.stop)
+        await cluster.start()
+        for own, peer in (("pile1", 1), ("pile2", 0)):
+            await wait_until(lambda own=own, peer=peer: cluster.inst(own).connected(peer),
+                             message="IPv6 peer heartbeat")
+            status, state = await cluster.http(own, "GET", "/state")
+            self.assertEqual(status, 200, state)
+            self.assertEqual(state["pile"], own)
+            response = await cluster.bridge(cluster.label(own)).GetClusterState(
+                ydb_bridge_pb2.GetClusterStateRequest(), timeout=2)
+            self.assertEqual(response.operation.status, model.SUCCESS, response)
+
+
+if __name__ == "__main__":
+    unittest.main()

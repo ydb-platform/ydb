@@ -6,6 +6,8 @@ PEERDIR(
 
 SRCS(
     dispatcher.cpp
+    re.cpp
+    registrator.cpp
 )
 
 END()

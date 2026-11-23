@@ -1,4 +1,7 @@
 PY3TEST()
+
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ERASURE=mirror_3_dc)

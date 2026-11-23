@@ -26,13 +26,13 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
-        AFL_VERIFY(p);
-        AFL_VERIFY(Portions.emplace(p->GetPortionId(), p).second);
+        YDB_LOG_VERIFY(p);
+        YDB_LOG_VERIFY(Portions.emplace(p->GetPortionId(), p).second);
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
-        AFL_VERIFY(p);
-        AFL_VERIFY(Portions.erase(p->GetPortionId()));
+        YDB_LOG_VERIFY(p);
+        YDB_LOG_VERIFY(Portions.erase(p->GetPortionId()));
     }
 
     TPortionsSnapshot GetPortionsSnapshot() const {
@@ -44,7 +44,13 @@ public:
         return result;
     }
 
-    static bool HasOlderIntervals(const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions);
+    using TKeyInterval = std::pair<NArrow::TSimpleRow, NArrow::TSimpleRow>;
+
+    // Primary key ranges of the portions in `portions` that intersect `inputPortion`, are not listed in `skipPortions` and may hold
+    // records older than the ones in `inputPortion`. Deletion markers of `inputPortion` are still required inside these ranges.
+    // The result is sorted by range start and intersecting ranges are merged.
+    static std::vector<TKeyInterval> GetOlderIntervals(
+        const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions);
 };
 
 }   // namespace NKikimr::NOlap::NGranule::NPortionsIndex

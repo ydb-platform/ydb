@@ -57,6 +57,9 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
         appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
         appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
+    if (settings.EnableMtls) {
+        appConfig.MutableKafkaProxyConfig()->SetMtlsEnable(true);
+    }
 
     appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(settings.EnableQuoting);
     if (!settings.EnableQuoting) {
@@ -212,11 +215,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
         // Access Server Mock
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials());
-        if (!KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableAccessServiceV2Interface()) {
-            builder.RegisterService(&accessServiceMock);
-        }
-        // We should always register v2 because BulkAuth uses V2 AS even with V1
-        builder.RegisterService(&accessServiceMockV2);
+        builder.RegisterService(&accessServiceMock);
         AccessServer = builder.BuildAndStart();
     }
 }

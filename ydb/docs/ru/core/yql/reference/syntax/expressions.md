@@ -39,7 +39,7 @@ SELECT "fo" || "o";
 
 ### LIKE / ILIKE с полнотекстовым индексом {#like-ilike-with-fulltext-index}
 
-Для [полнотекстовых индексов](../../../dev/fulltext-indexes.md) с N-граммами (параметры `use_filter_ngram` / `use_filter_edge_ngram`) поддерживается `LIKE`/`ILIKE` по индексируемой текстовой колонке.
+Для [полнотекстовых индексов](../../../dev/fulltext-indexes.md) с N-граммами (`use_filter_ngram` / `use_filter_edge_ngram`) поддерживается `LIKE`/`ILIKE` по индексируемой текстовой колонке. Шаблон можно передать параметром или вычислить выражением. Поддерживается `ESCAPE`. Для поиска по `ILIKE` через индекс требуется `use_filter_lowercase=true`.
 
 ```yql
 SELECT id, title
@@ -47,6 +47,8 @@ FROM articles VIEW ft_idx
 WHERE body ILIKE "%обуч%ние%"
 LIMIT 20;
 ```
+
+Если шаблон слишком короткий для N-граммного индекса, поиск может выполняться по основной таблице. Подробнее см. [Поиск по коротким шаблонам](select/fulltext_index.md#scan-fallback).
 
 ### Примеры
 
@@ -272,8 +274,6 @@ SELECT * FROM my_table WHERE
 
 ### Примеры
 
-{% if select_command != "SELECT STREAM" %}
-
 ```yql
 SELECT key AS k FROM my_table;
 ```
@@ -287,23 +287,6 @@ SELECT
     MyFunction(key, 123 AS my_optional_arg)
 FROM my_table;
 ```
-{% else %}
-
-```yql
-SELECT STREAM key AS k FROM my_stream;
-```
-
-```yql
-SELECT STREAM s.key FROM my_stream AS s;
-```
-
-```yql
-SELECT STREAM
-    MyFunction(key, 123 AS my_optional_arg)
-FROM my_stream;
-```
-
-{% endif %}
 
 ## CAST {#cast}
 
@@ -484,7 +467,7 @@ $x, $y = AsTuple($y, $x); -- swap значений выражений
 
     Здесь табличные выражения работают как ожидается – например `$input = SELECT a, b, c FROM T; SELECT * FROM $input` вернет таблицу с тремя колонками.
 
-    Табличный контекст также возникает после [UNION ALL](select/index.md#unionall){% if feature_join %}, [JOIN](select/join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
+    Табличный контекст также возникает после [UNION ALL](select/union.md#union-all){% if feature_join %}, [JOIN](select/join.md){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
 
 * векторный контекст - после [IN](#in). В этом контексте табличное выражение обязано содержать ровно одну колонку (имя этой колонки никак не влияет на результат выражения).
 

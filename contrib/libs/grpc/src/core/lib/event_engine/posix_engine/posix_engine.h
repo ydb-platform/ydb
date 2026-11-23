@@ -35,11 +35,12 @@
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/event_engine/memory_allocator.h>
 
-#include "src/core/lib/event_engine/ares_resolver.h"
+#include "src/core/lib/event_engine/forkable.h"
 #include "src/core/lib/event_engine/handle_containers.h"
 #include "src/core/lib/event_engine/posix.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/posix_engine/timer_manager.h"
+#include "src/core/lib/event_engine/ref_counted_dns_resolver_interface.h"
 #include "src/core/lib/event_engine/thread_pool/thread_pool.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/sync.h"
@@ -122,12 +123,23 @@ class PosixEnginePollerManager
   }
   void TriggerShutdown();
 
+  // Set when the poll loop stops on a Kick() while not shutting down, i.e.
+  // on the Kick() issued by the poller's PrepareFork(). The fork handler uses
+  // it to restart the loop after fork.
+  void SetPollLoopStopped() {
+    poll_loop_stopped_.store(true, std::memory_order_release);
+  }
+  bool ResetPollLoopStopped() {
+    return poll_loop_stopped_.exchange(false, std::memory_order_acq_rel);
+  }
+
   ~PosixEnginePollerManager() override;
 
  private:
   enum class PollerState { kExternal, kOk, kShuttingDown };
   std::shared_ptr<grpc_event_engine::experimental::PosixEventPoller> poller_;
   std::atomic<PollerState> poller_state_{PollerState::kOk};
+  std::atomic<bool> poll_loop_stopped_{false};
   std::shared_ptr<ThreadPool> executor_;
   bool trigger_shutdown_called_;
 };
@@ -142,11 +154,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
  public:
   class PosixDNSResolver : public EventEngine::DNSResolver {
    public:
-    PosixDNSResolver() = delete;
-#if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
     explicit PosixDNSResolver(
-        grpc_core::OrphanablePtr<AresResolver> ares_resolver);
-#endif  // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
+        grpc_core::OrphanablePtr<RefCountedDNSResolverInterface> dns_resolver);
     void LookupHostname(LookupHostnameCallback on_resolve,
                         y_absl::string_view name,
                         y_absl::string_view default_port) override;
@@ -155,10 +164,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
     void LookupTXT(LookupTXTCallback on_resolve,
                    y_absl::string_view name) override;
 
-#if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
    private:
-    grpc_core::OrphanablePtr<AresResolver> ares_resolver_;
-#endif  // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_TCP)
+    grpc_core::OrphanablePtr<RefCountedDNSResolverInterface> dns_resolver_;
   };
 
 #ifdef GRPC_POSIX_SOCKET_TCP
@@ -176,7 +183,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
 
   ~PosixEventEngine() override;
 
-  std::unique_ptr<PosixEndpointWithFdSupport> CreatePosixEndpointFromFd(
+  std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
       int fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) override;
 
@@ -187,8 +194,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
       std::unique_ptr<MemoryAllocatorFactory> memory_allocator_factory)
       override;
 
-  y_absl::StatusOr<std::unique_ptr<PosixListenerWithFdSupport>>
-  CreatePosixListener(
+  y_absl::StatusOr<std::unique_ptr<EventEngine::Listener>> CreatePosixListener(
       PosixEventEngineWithFdSupport::PosixAcceptCallback on_accept,
       y_absl::AnyInvocable<void(y_absl::Status)> on_shutdown,
       const EndpointConfig& config,
@@ -204,7 +210,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   bool CancelConnect(ConnectionHandle handle) override;
   bool IsWorkerThread() override;
   y_absl::StatusOr<std::unique_ptr<DNSResolver>> GetDNSResolver(
-      const DNSResolver::ResolverOptions& options) override;
+      GRPC_UNUSED const DNSResolver::ResolverOptions& options) override;
   void Run(Closure* closure) override;
   void Run(y_absl::AnyInvocable<void()> closure) override;
   // Caution!! The timer implementation cannot create any fds. See #20418.
@@ -263,6 +269,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   std::shared_ptr<TimerManager> timer_manager_;
 #ifdef GRPC_POSIX_SOCKET_TCP
   std::shared_ptr<PosixEnginePollerManager> poller_manager_;
+  // Restarts the poll loop in the parent process after fork.
+  std::shared_ptr<Forkable> poll_loop_fork_handler_;
 #endif  // GRPC_POSIX_SOCKET_TCP
 };
 

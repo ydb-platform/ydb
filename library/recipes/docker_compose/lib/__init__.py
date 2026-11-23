@@ -95,6 +95,12 @@ def _compose_global_cli_flags(compose_argv):
     return ["--log-level", "DEBUG", "--no-ansi"]
 
 
+def _compose_ps(compose_argv):
+    if _is_docker_compose_v2_plugin(compose_argv):
+        return ["ps", "-a"]
+    return ["ps"]
+
+
 class DockerComposeRecipeException(Exception):
 
     def __init__(self, msg):
@@ -210,7 +216,7 @@ def stop(argv):
 
     try:
         containers_ids_res = yatest.common.execute(
-            compose_argv + ["-f", yaml] + _compose_global_cli_flags(compose_argv) + ["ps", "-q"],
+            compose_argv + ["-f", yaml] + _compose_global_cli_flags(compose_argv) + _compose_ps(compose_argv) + ["-q"],
             cwd=cwd,
             stdout=subprocess.PIPE,
             text=True,
@@ -773,7 +779,7 @@ def _get_requested_paths(yaml_path, config):
     if config:
         for service_name, logs in six.iteritems(config.get("save", {})):
             try:
-                res = yatest.common.execute(get_docker_compose() + ["-f", yaml_path, "ps", "-q", service_name])
+                res = yatest.common.execute(get_docker_compose() + ["-f", yaml_path] + _compose_ps(get_docker_compose()) + ["-q", service_name])
                 requested_logs[six.ensure_str(res.std_out).strip()] = logs
             except yatest.common.ExecutionError:
                 logging.exception("Error while trying to find docker compose service by name: %s", service_name)
@@ -781,7 +787,7 @@ def _get_requested_paths(yaml_path, config):
 
 
 def _get_containers(yaml_path):
-    res = yatest.common.execute(get_docker_compose() + ["-f", yaml_path, "ps", "-q"])
+    res = yatest.common.execute(get_docker_compose() + ["-f", yaml_path] + _compose_ps(get_docker_compose()) + ["-q"])
     return {container_id: _get_container_name(container_id) for container_id in filter(None, six.ensure_str(res.std_out).split("\n"))}
 
 

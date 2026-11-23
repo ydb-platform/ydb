@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/core/project_settings
     library/cpp/deprecated/split
     library/cpp/json
     yql/essentials/public/issue
@@ -25,4 +26,8 @@ END()
 
 RECURSE(
     flags
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

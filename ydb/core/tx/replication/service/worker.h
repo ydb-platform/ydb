@@ -2,8 +2,10 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 #include <functional>
@@ -42,8 +44,12 @@ struct TEvWorker {
         EvStatus,
         EvDataEnd,
         EvCommit,
+        EvCommitResult,
+        EvReaderStarted,
         EvTerminateWriter,
         EvStatsWakeup,
+        EvSchemaChange,
+        EvSchemaChangeApplied,
         EvEnd,
     };
 
@@ -65,6 +71,41 @@ struct TEvWorker {
         TString ToString() const override;
     };
 
+    struct TEvCommitResult: public TEventLocal<TEvCommitResult, EvCommitResult> {
+        size_t Offset;
+
+        explicit TEvCommitResult(size_t offset);
+        TString ToString() const override;
+    };
+
+    // The writer has drained every old-schema record before Offset and has
+    // validated the schema record at Offset. The worker must checkpoint that
+    // prefix before it can report the barrier to the controller.
+    struct TEvSchemaChange: public TEventLocal<TEvSchemaChange, EvSchemaChange> {
+        NKikimrReplication::TSchemaChange Schema;
+        size_t Offset;
+
+        TEvSchemaChange(const NKikimrReplication::TSchemaChange& schema, size_t offset);
+        TString ToString() const override;
+    };
+
+    // The writer has re-resolved the destination following a controller
+    // release. The worker may discard the retained schema record and feed its
+    // raw suffix back to the writer.
+    struct TEvSchemaChangeApplied: public TEventLocal<TEvSchemaChangeApplied, EvSchemaChangeApplied> {
+        NKikimrReplication::TSchemaChange Schema;
+
+        explicit TEvSchemaChangeApplied(const NKikimrReplication::TSchemaChange& schema);
+        TString ToString() const override;
+    };
+
+    struct TEvReaderStarted: public TEventLocal<TEvReaderStarted, EvReaderStarted> {
+        ui64 CommittedOffset;
+
+        explicit TEvReaderStarted(ui64 committedOffset);
+        TString ToString() const override;
+    };
+
     struct TEvData: public TEventLocal<TEvData, EvData> {
         ui32 PartitionId;
         TString Source;
@@ -82,7 +123,9 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
-            OVERLOAD
+            OVERLOAD,
+            DATA_ERROR,
+            DATA_LOSS,
         };
 
         EStatus Status;
@@ -94,6 +137,8 @@ struct TEvWorker {
 
     struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
         TDuration Lag;
+        TString SourceOffsetMismatch;
+        TMaybe<ui64> SourceCommittedOffset;
         std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);
@@ -129,7 +174,9 @@ struct TEvWorker {
 IActor* CreateWorker(
     const TActorId& parent,
     std::function<IActor*(void)>&& createReaderFn,
-    std::function<IActor*(void)>&& createWriterFn);
+    std::function<IActor*(void)>&& createWriterFn,
+    bool trackSourceOffsets = false,
+    TMaybe<ui64> processedSourceOffset = Nothing());
 
 } // NService
 } // NKikimr::NReplication

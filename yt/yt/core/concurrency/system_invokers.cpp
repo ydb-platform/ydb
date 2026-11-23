@@ -44,7 +44,7 @@ protected:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
     const IInvokerPtr Invoker_;
     const TMpscSingleQueueSchedulerThreadPtr Thread_;
@@ -78,12 +78,12 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IInvokerPtr GetFinalizerInvoker()
+const IInvokerPtr& GetFinalizerInvoker()
 {
     return LeakySingleton<TFinalizerInvokerThread>()->GetInvoker();
 }
 
-IInvokerPtr GetShutdownInvoker()
+const IInvokerPtr& GetShutdownInvoker()
 {
     return LeakySingleton<TShutdownInvokerThread>()->GetInvoker();
 }

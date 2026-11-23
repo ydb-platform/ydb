@@ -12,6 +12,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/system/event.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 
@@ -22,6 +23,11 @@ namespace NYql {
 
 namespace NNative {
 
+THashMap<TString, i64> GetProgressDataStatistics(
+    const NYT::TJobStatistics& operationStatistic,
+    const NYT::TOperationAttributes& attributes,
+    bool final);
+
 class TOperationTracker: public IOperationTracker {
 public:
     TOperationTracker();
@@ -31,7 +37,8 @@ public:
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
         const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
-        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress) override;
+        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted,
+        bool isExternalProgress, bool enableProgressDataStatistics) override;
 private:
     static void* Tracker(void* param);
 
@@ -41,6 +48,7 @@ private:
     TMutex Mutex_;
     TVector<std::function<bool()>> RunningOperations_;
     std::atomic<bool> Running_{false};
+    TManualEvent StopEvent_;
     TThread Thread_;
 };
 

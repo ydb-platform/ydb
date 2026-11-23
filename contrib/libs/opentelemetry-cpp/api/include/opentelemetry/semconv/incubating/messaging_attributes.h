@@ -52,9 +52,8 @@ static constexpr const char *kMessagingDestinationAnonymous = "messaging.destina
 /**
   The message destination name
   <p>
-  Destination name SHOULD uniquely identify a specific queue, topic or other entity within the
-  broker. If the broker doesn't have such notion, the destination name SHOULD uniquely identify the
-  broker.
+  SHOULD uniquely identify a specific queue, topic or other entity within the broker. If
+  the broker doesn't have such notion, it SHOULD uniquely identify the broker.
  */
 static constexpr const char *kMessagingDestinationName = "messaging.destination.name";
 
@@ -79,7 +78,7 @@ static constexpr const char *kMessagingDestinationSubscriptionName =
   Low cardinality representation of the messaging destination name
   <p>
   Destination names could be constructed from templates. An example would be a destination name
-  involving a user name or product id. Although the destination name in this case is of high
+  involving a username or product ID. Although the destination name in this case is of high
   cardinality, the underlying template is of low cardinality and can be effectively used for
   grouping and aggregation.
  */
@@ -132,7 +131,7 @@ static constexpr const char *kMessagingGcpPubsubMessageAckDeadline =
     "messaging.gcp_pubsub.message.ack_deadline";
 
 /**
-  The ack id for a given message.
+  The ack ID for a given message.
  */
 static constexpr const char *kMessagingGcpPubsubMessageAckId =
     "messaging.gcp_pubsub.message.ack_id";
@@ -151,6 +150,14 @@ static constexpr const char *kMessagingGcpPubsubMessageOrderingKey =
     "messaging.gcp_pubsub.message.ordering_key";
 
 /**
+  The Kafka cluster ID, obtained from the broker metadata exposed through the Kafka client (or
+  AdminClient) API. <p> The cluster ID is a unique identifier reported by the Kafka broker. It
+  identifies the cluster independently of the individual brokers the client is configured to connect
+  to, and remains stable even if broker hostnames, IP addresses, or ports change.
+ */
+static constexpr const char *kMessagingKafkaClusterId = "messaging.kafka.cluster.id";
+
+/**
   Deprecated, use @code messaging.consumer.group.name @endcode instead.
 
   @deprecated
@@ -164,7 +171,7 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kMessagingKafkaConsumerGro
   Deprecated, use @code messaging.destination.partition.id @endcode instead.
 
   @deprecated
-  {"note": "Record string representation of the partition id in @code
+  {"note": "Record string representation of the partition ID in @code
   messaging.destination.partition.id @endcode attribute.", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMessagingKafkaDestinationPartition =
@@ -294,7 +301,7 @@ static constexpr const char *kMessagingRocketmqMessageDeliveryTimestamp =
 static constexpr const char *kMessagingRocketmqMessageGroup = "messaging.rocketmq.message.group";
 
 /**
-  Key(s) of message, another way to mark message besides message id.
+  Key(s) of message, another way to mark message besides message ID.
  */
 static constexpr const char *kMessagingRocketmqMessageKeys = "messaging.rocketmq.message.keys";
 

@@ -1641,9 +1641,19 @@ static inline uint32_t unique(uint16_t *out, uint32_t len) {
     return pos;
 }
 
-// use with qsort, could be avoided
-static int uint16_compare(const void *a, const void *b) {
-    return (*(uint16_t *)a - *(uint16_t *)b);
+// Sort a very short run of uint16 values in place. The callers below feed this
+// at most 16 values; calling qsort() for that costs more in glibc merge-sort
+// setup, function-pointer compares and memmove traffic than the sort itself.
+static inline void sort_uint16_short(uint16_t *z, uint32_t n) {
+    for (uint32_t i = 1; i < n; i++) {
+        uint16_t v = z[i];
+        uint32_t j = i;
+        while (j > 0 && z[j - 1] > v) {
+            z[j] = z[j - 1];
+            j--;
+        }
+        z[j] = v;
+    }
 }
 
 CROARING_TARGET_AVX2
@@ -1712,7 +1722,7 @@ uint32_t union_vector16(const uint16_t *array1, uint32_t length1,
         memcpy(buffer + leftoversize, array1 + 8 * pos1,
                (length1 - 8 * len1) * sizeof(uint16_t));
         leftoversize += length1 - 8 * len1;
-        qsort(buffer, leftoversize, sizeof(uint16_t), uint16_compare);
+        sort_uint16_short(buffer, leftoversize);
 
         leftoversize = unique(buffer, leftoversize);
         len += (uint32_t)union_uint16(buffer, leftoversize, array2 + 8 * pos2,
@@ -1721,7 +1731,7 @@ uint32_t union_vector16(const uint16_t *array1, uint32_t length1,
         memcpy(buffer + leftoversize, array2 + 8 * pos2,
                (length2 - 8 * len2) * sizeof(uint16_t));
         leftoversize += length2 - 8 * len2;
-        qsort(buffer, leftoversize, sizeof(uint16_t), uint16_compare);
+        sort_uint16_short(buffer, leftoversize);
         leftoversize = unique(buffer, leftoversize);
         len += (uint32_t)union_uint16(buffer, leftoversize, array1 + 8 * pos1,
                                       length1 - 8 * pos1, output);
@@ -1733,6 +1743,193 @@ CROARING_UNTARGET_AVX2
 /**
  * End of the SIMD 16-bit union code
  *
+ */
+
+/**
+ * Start of the AVX-512 16-bit union code.
+ *
+ * union_vector16 above merges 8 lanes at a time with an odd-even transposition
+ * network: 8 dependent min/max stages per 8 output values, which measures at
+ * ~2.3 cycles per input element -- no better than the scalar union_uint16.
+ *
+ * With AVX-512 we can merge 32+32 lanes with a Batcher bitonic network: one
+ * reverse plus 5 compare-exchange stages per sorted half, i.e. ~4x fewer
+ * operations per output value. This needs cross-lane 16-bit permutes (vpermw,
+ * vpermt2w) and a 16-bit compress store (vpcompressw); AVX2 has none of these,
+ * so the algorithm is genuinely AVX-512-only rather than a wider rerun of the
+ * SSE code.
+ */
+#if CROARING_COMPILER_SUPPORTS_AVX512
+
+CROARING_TARGET_AVX512
+
+// A compare-exchange at distance d pairs lane i with lane i^d and keeps the
+// smaller value in whichever lane has its d-bit clear. `hi` selects the lanes
+// whose d-bit is set.
+static inline __m512i avx512_cx16(__m512i v, __m512i t, __mmask32 hi) {
+    return _mm512_mask_mov_epi16(_mm512_min_epu16(v, t), hi,
+                                 _mm512_max_epu16(v, t));
+}
+
+// Sort a bitonic 32-lane sequence into ascending order. Each distance has a
+// dedicated cheap shuffle, so no stage needs a full vpermw.
+static inline __m512i avx512_bitonic_sort32(__m512i v) {
+    v = avx512_cx16(v, _mm512_shuffle_i64x2(v, v, 0x4E), 0xFFFF0000u);  // d=16
+    v = avx512_cx16(v, _mm512_shuffle_i64x2(v, v, 0xB1), 0xFF00FF00u);  // d=8
+    v = avx512_cx16(v, _mm512_shuffle_epi32(v, 0x4E), 0xF0F0F0F0u);     // d=4
+    v = avx512_cx16(v, _mm512_shuffle_epi32(v, 0xB1), 0xCCCCCCCCu);     // d=2
+    v = avx512_cx16(v, _mm512_rol_epi32(v, 16), 0xAAAAAAAAu);           // d=1
+    return v;
+}
+
+// Merge two ascending 32-lane vectors: *lo receives the 32 smallest values in
+// ascending order, *hi the 32 largest, also ascending.
+static inline void avx512_bitonic_merge32(__m512i a, __m512i b, __m512i *lo,
+                                          __m512i *hi) {
+    static const uint16_t revtab[32] = {
+        31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16,
+        15, 14, 13, 12, 11, 10, 9,  8,  7,  6,  5,  4,  3,  2,  1,  0};
+    __m512i br = _mm512_permutexvar_epi16(
+        _mm512_loadu_si512((const __m512i *)revtab), b);
+    *lo = avx512_bitonic_sort32(_mm512_min_epu16(a, br));
+    *hi = avx512_bitonic_sort32(_mm512_max_epu16(a, br));
+}
+
+// Write the values of the ascending vector `v` that differ from their
+// predecessor, where the predecessor of lane 0 is *last. Updates *last to the
+// largest value emitted and returns how many values were written.
+static inline int avx512_emit_unique16(__m512i v, uint16_t *out,
+                                       uint16_t *last) {
+    static const uint16_t shift1[32] = {
+        32, 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30};
+    __m512i prev = _mm512_permutex2var_epi16(
+        v, _mm512_loadu_si512((const __m512i *)shift1),
+        _mm512_set1_epi16((short)*last));
+    __mmask32 keep = _mm512_cmpneq_epi16_mask(v, prev);
+    _mm512_mask_compressstoreu_epi16(out, keep, v);
+    *last = (uint16_t)_mm_extract_epi16(_mm512_extracti32x4_epi32(v, 3), 7);
+    return (int)roaring_hamming(keep);
+}
+
+/**
+ * A one-pass AVX-512 union of two sorted uint16 arrays.
+ *
+ * As with union_vector16, the caller must guarantee that `output` has room for
+ * size_1 + size_2 values. Partial overlap of `output` with the inputs is
+ * tolerated in exactly the same way union_vector16 tolerates it (see the long
+ * comment in array_run_container_inplace_union): after consuming p1 + p2 whole
+ * 32-lane blocks this routine has written at most 32*(p1+p2) - 32 values,
+ * because one merged block is always held back in `vmax`. The output pointer
+ * therefore stays strictly behind the read pointers.
+ *
+ * That bound is exactly tight rather than merely satisfied: in the worst case
+ * the final merge below writes its last value to precisely the slot the last
+ * input value was read from. Anything that reduces how much the tail holds back
+ * -- shrinking `pending`, emitting `vmax` sooner -- silently breaks aliased
+ * callers, so re-derive the bound before changing the buffering here.
+ */
+uint32_t avx512_union_uint16(const uint16_t *array1, uint32_t length1,
+                             const uint16_t *array2, uint32_t length2,
+                             uint16_t *output) {
+    const uint32_t W = 32;  // lanes per 512-bit register
+    if (length1 < W || length2 < W) {
+        // Not enough on one side to fill a block. union_vector16 keeps
+        // vectorizing at 8-lane granularity, so it still beats the scalar
+        // merge once there is a worthwhile amount of data on the other side;
+        // below that its own fixed overhead dominates.
+        if (length1 + length2 >= 64) {
+            return union_vector16(array1, length1, array2, length2, output);
+        }
+        return (uint32_t)union_uint16(array1, length1, array2, length2, output);
+    }
+    const uint32_t blocks1 = length1 / W, blocks2 = length2 / W;
+    uint32_t p1 = 0, p2 = 0;
+    uint16_t *out = output;
+    __m512i vmin, vmax;
+
+    avx512_bitonic_merge32(_mm512_loadu_si512((const __m512i *)array1),
+                           _mm512_loadu_si512((const __m512i *)array2), &vmin,
+                           &vmax);
+    p1 = 1;
+    p2 = 1;
+    // Lane 0 of the very first block has no predecessor. Seeding `last` with a
+    // value that differs from it in one bit keeps the first value.
+    uint16_t last =
+        (uint16_t)(_mm_extract_epi16(_mm512_castsi512_si128(vmin), 0) ^ 1);
+    out += avx512_emit_unique16(vmin, out, &last);
+
+    while (p1 < blocks1 && p2 < blocks2) {
+        // Which side advances is essentially unpredictable, so select the
+        // source pointer without branching.
+        const uint16_t *pa = array1 + W * p1;
+        const uint16_t *pb = array2 + W * p2;
+        const uint32_t take1 = (*pa <= *pb) ? 1 : 0;
+        const __m512i v =
+            _mm512_loadu_si512((const __m512i *)(take1 ? pa : pb));
+        p1 += take1;
+        p2 += 1 - take1;
+        avx512_bitonic_merge32(v, vmax, &vmin, &vmax);
+        out += avx512_emit_unique16(vmin, out, &last);
+    }
+
+    // The ragged tail: the values still held in vmax, plus at most W-1 leftover
+    // values from the exhausted side, plus the rest of the other side. Two
+    // two-way merges branch-predict far better than one three-way merge.
+    //
+    // vmax can hold the same value twice (once from each input), so it goes
+    // through avx512_emit_unique16 rather than a raw store: that dedups within
+    // the block and against `last` at the same time. Every remaining tail value
+    // is >= last and the tail is sorted, so for the two scalar inputs only the
+    // very first value can still duplicate `last`.
+    uint16_t pending[32];
+    uint16_t pending_last = last;
+    size_t npending =
+        (size_t)avx512_emit_unique16(vmax, pending, &pending_last);
+
+    const uint16_t *rest1 = array1 + W * p1, *rest2 = array2 + W * p2;
+    size_t nrest1 = length1 - W * p1, nrest2 = length2 - W * p2;
+    const uint16_t *shortrest, *longrest;
+    size_t nshort, nlong;
+    if (p1 == blocks1) {
+        shortrest = rest1;
+        nshort = nrest1;
+        longrest = rest2;
+        nlong = nrest2;
+    } else {
+        shortrest = rest2;
+        nshort = nrest2;
+        longrest = rest1;
+        nlong = nrest1;
+    }
+    if (nshort > 0 && shortrest[0] == last) {
+        shortrest++;
+        nshort--;
+    }
+    if (nlong > 0 && longrest[0] == last) {
+        longrest++;
+        nlong--;
+    }
+
+    uint16_t merged[2 * 32];  // <= W pending + (W-1) leftover
+    size_t nmerged = union_uint16(pending, npending, shortrest, nshort, merged);
+    // When the small side held fewer than two blocks the loop above ran at most
+    // once, so `longrest` can still be most of the larger input. Finishing that
+    // scalar would give away more than the block loop won, hence the same
+    // 8-lane handoff as in the short-input case.
+    if (nlong >= 64) {
+        out += union_vector16(merged, (uint32_t)nmerged, longrest,
+                              (uint32_t)nlong, out);
+    } else {
+        out += union_uint16(merged, nmerged, longrest, nlong, out);
+    }
+    return (uint32_t)(out - output);
+}
+CROARING_UNTARGET_AVX512
+#endif  // CROARING_COMPILER_SUPPORTS_AVX512
+
+/**
+ * End of the AVX-512 16-bit union code.
  */
 
 /**
@@ -1853,7 +2050,7 @@ uint32_t xor_vector16(const uint16_t *array1, uint32_t length1,
                    (length2 - 8 * pos2) * sizeof(uint16_t));
             len += (length2 - 8 * pos2);
         } else {
-            qsort(buffer, leftoversize, sizeof(uint16_t), uint16_compare);
+            sort_uint16_short(buffer, leftoversize);
             leftoversize = unique_xor(buffer, leftoversize);
             len += xor_uint16(buffer, leftoversize, array2 + 8 * pos2,
                               length2 - 8 * pos2, output);
@@ -1867,7 +2064,7 @@ uint32_t xor_vector16(const uint16_t *array1, uint32_t length1,
                    (length1 - 8 * pos1) * sizeof(uint16_t));
             len += (length1 - 8 * pos1);
         } else {
-            qsort(buffer, leftoversize, sizeof(uint16_t), uint16_compare);
+            sort_uint16_short(buffer, leftoversize);
             leftoversize = unique_xor(buffer, leftoversize);
             len += xor_uint16(buffer, leftoversize, array1 + 8 * pos1,
                               length1 - 8 * pos1, output);
@@ -1979,7 +2176,20 @@ size_t fast_union_uint16(const uint16_t *set_1, size_t size_1,
                          const uint16_t *set_2, size_t size_2,
                          uint16_t *buffer) {
 #if CROARING_IS_X64
-    if (croaring_hardware_support() & ROARING_SUPPORTS_AVX2) {
+    const unsigned support = (unsigned)croaring_hardware_support();
+#if CROARING_COMPILER_SUPPORTS_AVX512
+    if (support & ROARING_SUPPORTS_AVX512) {
+        // compute union with smallest array first
+        if (size_1 < size_2) {
+            return avx512_union_uint16(set_1, (uint32_t)size_1, set_2,
+                                       (uint32_t)size_2, buffer);
+        } else {
+            return avx512_union_uint16(set_2, (uint32_t)size_2, set_1,
+                                       (uint32_t)size_1, buffer);
+        }
+    }
+#endif  // CROARING_COMPILER_SUPPORTS_AVX512
+    if (support & ROARING_SUPPORTS_AVX2) {
         // compute union with smallest array first
         if (size_1 < size_2) {
             return union_vector16(set_1, (uint32_t)size_1, set_2,

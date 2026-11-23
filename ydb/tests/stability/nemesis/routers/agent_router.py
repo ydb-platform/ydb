@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import logging
 import time
 
 from flask import Blueprint, request, jsonify
 
-from ydb.tests.stability.nemesis.internal.models import ProcessInfo
+from ydb.tests.stability.nemesis.internal.models import ProcessInfo, WardenTimeWindow, parse_warden_time_window
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
 from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
@@ -71,16 +73,21 @@ def wait_for_local_processes(timeout: float = 20.0, poll_interval: float = 0.2) 
     return pending
 
 
-def start_warden_checks_helper():
+def start_warden_checks_helper(time_window: WardenTimeWindow | None = None):
     """Helper function to start warden checks (can be called directly)"""
-    logger.info("Agent warden checks start requested")
+    window = time_window or WardenTimeWindow.from_hours_back(24)
+    logger.info(
+        "Agent warden checks start requested start_time=%s end_time=%s",
+        window.start_ts,
+        window.end_ts,
+    )
 
     # start_checks() is now synchronous - it submits to background event loop
-    started = warden_checker.start_checks()
+    started = warden_checker.start_checks(window)
 
     if started:
         logger.info("Agent warden checks started successfully")
-        return {"status": "started"}
+        return {"status": "started", **window.to_json()}
     else:
         logger.info("Agent warden checks already running")
         return {"status": "already_running"}
@@ -124,8 +131,18 @@ def create_process():
 
 @blueprint.route("/api/warden/start", methods=["POST"])
 def start_warden_checks():
-    """Start warden checks."""
-    return jsonify(start_warden_checks_helper())
+    """Start warden checks.
+
+    Optional JSON body:
+    - ``start_time`` / ``end_time`` — unix timestamps
+    - ``since`` / ``until`` — ISO-8601 datetimes
+    - ``hours_back`` — relative window ending at now (default 24)
+    """
+    data = request.get_json(silent=True) or {}
+    ok, error, window = parse_warden_time_window(data)
+    if not ok:
+        return jsonify({"status": "error", "message": error}), 400
+    return jsonify(start_warden_checks_helper(window))
 
 
 @blueprint.route("/api/warden/result", methods=["GET"])

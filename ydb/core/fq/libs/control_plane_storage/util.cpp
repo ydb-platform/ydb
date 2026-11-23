@@ -7,8 +7,8 @@ namespace NFq {
 
 bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 {
-    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM,
-        FederatedQuery::QueryMeta::COMPLETED, FederatedQuery::QueryMeta::FAILED }, status);
+    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM, FederatedQuery::QueryMeta::COMPLETED,
+                    FederatedQuery::QueryMeta::FAILED }, status);
 }
 
 bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status)
@@ -17,22 +17,22 @@ bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 }
 
 bool IsFailedStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
-    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM,
-         FederatedQuery::QueryMeta::FAILED }, status);
+    return IsIn(
+        { FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM, FederatedQuery::QueryMeta::FAILED }, status);
 }
 
 bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode) {
-    switch(status) {
-    case FederatedQuery::QueryMeta::ABORTED_BY_USER:
-        return statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED;
-    case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
-        return false;
-    case FederatedQuery::QueryMeta::COMPLETED:
-        return true;
-    case FederatedQuery::QueryMeta::FAILED:
-        return IsIn({NYql::NDqProto::StatusIds::BAD_REQUEST, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED}, statusCode);
-    default:
-        return false;
+    switch (status) {
+        case FederatedQuery::QueryMeta::ABORTED_BY_USER:
+            return statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED;
+        case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
+            return false;
+        case FederatedQuery::QueryMeta::COMPLETED:
+            return true;
+        case FederatedQuery::QueryMeta::FAILED:
+            return IsIn({ NYql::NDqProto::StatusIds::BAD_REQUEST, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED }, statusCode);
+        default:
+            return false;
     }
 }
 
@@ -145,37 +145,19 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
 }
 
 bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request) {
-    return request.status() != FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED
-        || !request.issues().empty()
-        || !request.transient_issues().empty()
-        || request.statistics()
-        || request.timeline()
-        || !request.result_set_meta().empty()
-        || request.ast()
-        || request.ast_compressed().data()
-        || request.plan()
-        || request.plan_compressed().data()
-        || request.has_started_at()
-        || request.has_finished_at()
-        || request.resign_query()
-        || !request.created_topic_consumers().empty()
-        || !request.dq_graph().empty()
-        || !request.dq_graph_compressed().empty()
-        || request.dq_graph_index()
-        || request.state_load_mode()
-        || request.has_disposition()
-        || request.has_resources()
-        || !request.internal_issues().empty()
-        || !request.execution_id().empty()
-        || !request.operation_id().empty()
-        || !request.result_id().value().empty()
-    ;
+    return request.status() != FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED || !request.issues().empty() ||
+           !request.transient_issues().empty() || request.statistics() || request.timeline() || !request.result_set_meta().empty() ||
+           request.ast() || request.ast_compressed().data() || request.plan() || request.plan_compressed().data() || request.has_started_at() ||
+           request.has_finished_at() || request.resign_query() || !request.created_topic_consumers().empty() || !request.dq_graph().empty() ||
+           !request.dq_graph_compressed().empty() || request.dq_graph_index() || request.state_load_mode() || request.has_disposition() ||
+           request.has_resources() || !request.internal_issues().empty() || !request.execution_id().empty() || !request.operation_id().empty() ||
+           !request.result_id().value().empty();
 }
 
 NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) {
     NYdb::TValueBuilder itemsAsList;
     itemsAsList.BeginList();
-    for (const NYdb::TValue& item: items) {
+    for (const NYdb::TValue& item : items) {
         itemsAsList.AddListItem(item);
     }
     itemsAsList.EndList();
@@ -184,40 +166,24 @@ NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) {
 
 std::pair<TString, TString> SplitId(const TString& id, char delim) {
     auto it = std::find(id.begin(), id.end(), delim);
-    return std::make_pair(id.substr(0, it - id.begin()),
-        (it != id.end() ? id.substr(it - id.begin() + 1) : TString{""}));
+    return std::make_pair(id.substr(0, it - id.begin()), (it != id.end() ? id.substr(it - id.begin() + 1) : TString{ "" }));
 }
 
 bool IsValidIntervalUnit(const TString& unit) {
-    static constexpr std::array<std::string_view, 7> IntervalUnits = {
-        "MICROSECONDS"sv,
-        "MILLISECONDS"sv,
-        "SECONDS"sv,
-        "MINUTES"sv,
-        "HOURS"sv,
-        "DAYS"sv,
-        "WEEKS"sv
-    };
+    static constexpr std::array<std::string_view, 7> IntervalUnits = { "MICROSECONDS"sv, "MILLISECONDS"sv, "SECONDS"sv, "MINUTES"sv, "HOURS"sv,
+        "DAYS"sv, "WEEKS"sv };
     return IsIn(IntervalUnits, unit);
 }
 
 bool IsValidDateTimeFormatName(const TString& formatName) {
-    static constexpr std::array<std::string_view, 2> FormatNames = {
-        "POSIX"sv,
-        "ISO"sv
-    };
+    static constexpr std::array<std::string_view, 2> FormatNames = { "POSIX"sv, "ISO"sv };
     return IsIn(FormatNames, formatName);
 }
 
 bool IsValidTimestampFormatName(const TString& formatName) {
-    static constexpr std::array<std::string_view, 5> FormatNames = {
-        "POSIX"sv,
-        "ISO"sv,
-        "UNIX_TIME_MILLISECONDS"sv,
-        "UNIX_TIME_SECONDS"sv,
-        "UNIX_TIME_MICROSECONDS"sv
-    };
+    static constexpr std::array<std::string_view, 5> FormatNames = { "POSIX"sv, "ISO"sv, "UNIX_TIME_MILLISECONDS"sv, "UNIX_TIME_SECONDS"sv,
+        "UNIX_TIME_MICROSECONDS"sv };
     return IsIn(FormatNames, formatName);
 }
 
-} //namespace NFq
+}   //namespace NFq

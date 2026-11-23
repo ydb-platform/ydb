@@ -8,13 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline
- ** sse2 sse41
- ** vsx2
- ** neon asimd
- **/
-
 /**
  * Force use SSE only on x86, even if AVX2 or AVX512F are enabled
  * through the baseline, since scatter(AVX512F) and gather very costly
@@ -407,10 +400,10 @@ npyv_pack_signbit_f64(npyv_f64 v0, npyv_f64 v1, npyv_f64 v2, npyv_f64 v3,
 #define CONTIG  0
 #define NCONTIG 1
 
-#line 406
+#line 399
 #if NPY_SIMD_F32
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_isnan_FLOAT_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -502,7 +495,7 @@ static void simd_unary_isnan_FLOAT_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isnan_FLOAT_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -594,7 +587,7 @@ static void simd_unary_isnan_FLOAT_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isnan_FLOAT_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -686,7 +679,7 @@ static void simd_unary_isnan_FLOAT_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isnan_FLOAT_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -779,8 +772,8 @@ static void simd_unary_isnan_FLOAT_NCONTIG_NCONTIG
 }
 
 
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_isinf_FLOAT_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -872,7 +865,7 @@ static void simd_unary_isinf_FLOAT_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isinf_FLOAT_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -964,7 +957,7 @@ static void simd_unary_isinf_FLOAT_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isinf_FLOAT_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1056,7 +1049,7 @@ static void simd_unary_isinf_FLOAT_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isinf_FLOAT_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1149,8 +1142,8 @@ static void simd_unary_isinf_FLOAT_NCONTIG_NCONTIG
 }
 
 
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_isfinite_FLOAT_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1242,7 +1235,7 @@ static void simd_unary_isfinite_FLOAT_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isfinite_FLOAT_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1334,7 +1327,7 @@ static void simd_unary_isfinite_FLOAT_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isfinite_FLOAT_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1426,7 +1419,7 @@ static void simd_unary_isfinite_FLOAT_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isfinite_FLOAT_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1519,8 +1512,8 @@ static void simd_unary_isfinite_FLOAT_NCONTIG_NCONTIG
 }
 
 
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_signbit_FLOAT_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1612,7 +1605,7 @@ static void simd_unary_signbit_FLOAT_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_signbit_FLOAT_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1704,7 +1697,7 @@ static void simd_unary_signbit_FLOAT_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_signbit_FLOAT_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1796,7 +1789,7 @@ static void simd_unary_signbit_FLOAT_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_signbit_FLOAT_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1892,10 +1885,10 @@ static void simd_unary_signbit_FLOAT_NCONTIG_NCONTIG
 
 #endif // NPY_SIMD_F32
 
-#line 406
+#line 399
 #if NPY_SIMD_F64
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_isnan_DOUBLE_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -1987,7 +1980,7 @@ static void simd_unary_isnan_DOUBLE_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isnan_DOUBLE_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2079,7 +2072,7 @@ static void simd_unary_isnan_DOUBLE_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isnan_DOUBLE_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2171,7 +2164,7 @@ static void simd_unary_isnan_DOUBLE_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isnan_DOUBLE_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2264,8 +2257,8 @@ static void simd_unary_isnan_DOUBLE_NCONTIG_NCONTIG
 }
 
 
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_isinf_DOUBLE_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2357,7 +2350,7 @@ static void simd_unary_isinf_DOUBLE_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isinf_DOUBLE_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2449,7 +2442,7 @@ static void simd_unary_isinf_DOUBLE_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isinf_DOUBLE_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2541,7 +2534,7 @@ static void simd_unary_isinf_DOUBLE_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isinf_DOUBLE_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2634,8 +2627,8 @@ static void simd_unary_isinf_DOUBLE_NCONTIG_NCONTIG
 }
 
 
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_isfinite_DOUBLE_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2727,7 +2720,7 @@ static void simd_unary_isfinite_DOUBLE_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isfinite_DOUBLE_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2819,7 +2812,7 @@ static void simd_unary_isfinite_DOUBLE_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isfinite_DOUBLE_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -2911,7 +2904,7 @@ static void simd_unary_isfinite_DOUBLE_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_isfinite_DOUBLE_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -3004,8 +2997,8 @@ static void simd_unary_isfinite_DOUBLE_NCONTIG_NCONTIG
 }
 
 
-#line 410
-#line 414
+#line 403
+#line 407
 static void simd_unary_signbit_DOUBLE_CONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -3097,7 +3090,7 @@ static void simd_unary_signbit_DOUBLE_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_signbit_DOUBLE_NCONTIG_CONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -3189,7 +3182,7 @@ static void simd_unary_signbit_DOUBLE_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_signbit_DOUBLE_CONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -3281,7 +3274,7 @@ static void simd_unary_signbit_DOUBLE_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 414
+#line 407
 static void simd_unary_signbit_DOUBLE_NCONTIG_NCONTIG
 (const void *src, npy_intp istride, void *dst, npy_intp ostride, npy_intp len)
 {
@@ -3381,9 +3374,9 @@ static void simd_unary_signbit_DOUBLE_NCONTIG_NCONTIG
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 518
+#line 511
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3424,7 +3417,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isnan)
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3465,7 +3458,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isinf)
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3506,7 +3499,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_isfinite)
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_signbit)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3548,9 +3541,9 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_signbit)
 }
 
 
-#line 518
+#line 511
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3591,7 +3584,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isnan)
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3632,7 +3625,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isinf)
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3673,7 +3666,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_isfinite)
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 522
+#line 515
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_signbit)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

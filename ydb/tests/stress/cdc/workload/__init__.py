@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
+import logging
 import random
 import threading
 import time
+import uuid
 import ydb
 
 from enum import IntEnum, auto
 
 from ydb.tests.stress.common.common import WorkloadBase
+
+logger = logging.getLogger(__name__)
 
 
 class WorkloadRW(WorkloadBase):
@@ -86,10 +90,17 @@ class WorkloadAlterTable(WorkloadBase):
 
 
 class WorkloadRunner:
-    def __init__(self, client, duration):
+    def __init__(self, client, duration, path=None):
         self.client = client
         self.duration = duration
-        self.table_path = '/'.join([self.client.database, "table", str(random.randint(100, 999))])
+        db = self.client.database.rstrip('/')
+        if path:
+            if path.startswith('/'):
+                self.table_path = path
+            else:
+                self.table_path = '/'.join([db, path])
+        else:
+            self.table_path = '/'.join([db, "table", uuid.uuid4().hex])
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):
@@ -98,7 +109,7 @@ class WorkloadRunner:
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    def run(self):
+    def prepare(self):
         self.client.query(f"""
             CREATE TABLE `{self.table_path}` (
                 key Int32,
@@ -113,6 +124,7 @@ class WorkloadRunner:
             );
         """, True)
 
+    def run_load(self):
         stop = threading.Event()
         workloads = [
             WorkloadRW(self.client, self.table_path, stop),
@@ -132,3 +144,18 @@ class WorkloadRunner:
         for w in workloads:
             w.join()
         print("Stopped")
+
+    def clean(self):
+        try:
+            self.client.query(f"ALTER TABLE `{self.table_path}` DROP CHANGEFEED `updates`;", True)
+        except Exception as e:
+            logger.warning("drop changefeed failed: %s", e)
+        try:
+            self.client.query(f"DROP TABLE `{self.table_path}`;", True)
+        except Exception as e:
+            logger.warning("drop table failed: %s", e)
+
+    def run(self):
+        self.prepare()
+        self.run_load()
+        self.clean()

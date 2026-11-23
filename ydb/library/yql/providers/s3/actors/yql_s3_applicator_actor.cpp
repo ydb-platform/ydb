@@ -2,21 +2,21 @@
 #include "yql_s3_applicator_actor.h"
 
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/library/services/services.pb.h>
 
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
-
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
 
 #ifdef THROW
 #undef THROW
@@ -25,17 +25,20 @@
 
 #include <queue>
 
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-#define LOG_W(stream) LOG_WARN_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
+#define LOG_E(stream) \
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
+#define LOG_W(stream) \
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
+#define LOG_D(stream) \
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
+#define LOG_T(stream) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
 
 namespace NYql::NDq {
 
 namespace {
 
 struct TCompleteMultipartUpload {
-
     using TPtr = std::shared_ptr<TCompleteMultipartUpload>;
 
     TString RequestId;
@@ -45,7 +48,11 @@ struct TCompleteMultipartUpload {
     std::vector<TString> Tags;
 
     TCompleteMultipartUpload(const TString& requestId, const TString& url, const TString& uploadId, const TString& token)
-        : RequestId(requestId), Url(url), UploadId(uploadId), Token(token) {
+        : RequestId(requestId)
+        , Url(url)
+        , UploadId(uploadId)
+        , Token(token)
+    {
     }
 
     TString BuildUrl() const {
@@ -59,15 +66,15 @@ struct TCompleteMultipartUpload {
         result << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << Endl;
         result << "<CompleteMultipartUpload xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">" << Endl;
         ui32 i = 0;
-        for (const auto& tag : Tags)
+        for (const auto& tag : Tags) {
             result << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
+        }
         result << "</CompleteMultipartUpload>" << Endl;
         return result;
     }
 };
 
 struct TListMultipartUploads {
-
     using TPtr = std::shared_ptr<TListMultipartUploads>;
 
     TString RequestId;
@@ -79,7 +86,13 @@ struct TListMultipartUploads {
 
     TListMultipartUploads(const TString& requestId, const TString& url, const TString& prefix, const TString& token,
         const TString& keyMarker = "", const TString& uploadIdMarker = "")
-        : RequestId(requestId), Url(url), Prefix(prefix), Token(token), KeyMarker(keyMarker), UploadIdMarker(uploadIdMarker) {
+        : RequestId(requestId)
+        , Url(url)
+        , Prefix(prefix)
+        , Token(token)
+        , KeyMarker(keyMarker)
+        , UploadIdMarker(uploadIdMarker)
+    {
     }
 
     TString BuildUrl() const {
@@ -101,7 +114,6 @@ struct TListMultipartUploads {
 };
 
 struct TAbortMultipartUpload {
-
     using TPtr = std::shared_ptr<TAbortMultipartUpload>;
 
     TString RequestId;
@@ -110,7 +122,11 @@ struct TAbortMultipartUpload {
     TString Token;
 
     TAbortMultipartUpload(const TString& requestId, const TString& url, const TString& uploadId, const TString& token)
-        : RequestId(requestId), Url(url), UploadId(uploadId), Token(token) {
+        : RequestId(requestId)
+        , Url(url)
+        , UploadId(uploadId)
+        , Token(token)
+    {
     }
 
     TString BuildUrl() const {
@@ -121,7 +137,6 @@ struct TAbortMultipartUpload {
 };
 
 struct TListParts {
-
     using TPtr = std::shared_ptr<TListParts>;
 
     TString RequestId;
@@ -131,9 +146,14 @@ struct TListParts {
     TString PartNumberMarker;
     TCompleteMultipartUpload::TPtr CompleteState;
 
-    TListParts(const TString& requestId, const TString& url, const TString& uploadId, const TString& token, 
+    TListParts(const TString& requestId, const TString& url, const TString& uploadId, const TString& token,
         TCompleteMultipartUpload::TPtr completeState)
-        : RequestId(requestId), Url(url), UploadId(uploadId), Token(token), CompleteState(completeState) {
+        : RequestId(requestId)
+        , Url(url)
+        , UploadId(uploadId)
+        , Token(token)
+        , CompleteState(completeState)
+    {
     }
 
     TString BuildUrl() const {
@@ -152,7 +172,7 @@ struct TListParts {
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvCommitMultipartUpload = EvBegin,
@@ -166,34 +186,46 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvCommitMultipartUpload : public NActors::TEventLocal<TEvCommitMultipartUpload, EvCommitMultipartUpload> {
+    struct TEvCommitMultipartUpload: public NActors::TEventLocal<TEvCommitMultipartUpload, EvCommitMultipartUpload> {
         TEvCommitMultipartUpload(TCompleteMultipartUpload::TPtr state, IHTTPGateway::TResult&& result)
-            : State(state), Result(std::move(result)) {
+            : State(state)
+            , Result(std::move(result))
+        {
         }
+
         TCompleteMultipartUpload::TPtr State;
         IHTTPGateway::TResult Result;
     };
 
-    struct TEvListMultipartUploads : public NActors::TEventLocal<TEvListMultipartUploads, EvListMultipartUploads> {
+    struct TEvListMultipartUploads: public NActors::TEventLocal<TEvListMultipartUploads, EvListMultipartUploads> {
         TEvListMultipartUploads(TListMultipartUploads::TPtr state, IHTTPGateway::TResult&& result)
-            : State(state), Result(std::move(result)) {
+            : State(state)
+            , Result(std::move(result))
+        {
         }
+
         TListMultipartUploads::TPtr State;
         IHTTPGateway::TResult Result;
     };
 
-    struct TEvAbortMultipartUpload : public NActors::TEventLocal<TEvAbortMultipartUpload, EvAbortMultipartUpload> {
+    struct TEvAbortMultipartUpload: public NActors::TEventLocal<TEvAbortMultipartUpload, EvAbortMultipartUpload> {
         TEvAbortMultipartUpload(TAbortMultipartUpload::TPtr state, IHTTPGateway::TResult&& result)
-            : State(state), Result(std::move(result)) {
+            : State(state)
+            , Result(std::move(result))
+        {
         }
+
         TAbortMultipartUpload::TPtr State;
         IHTTPGateway::TResult Result;
     };
 
-    struct TEvListParts : public NActors::TEventLocal<TEvListParts, EvListParts> {
+    struct TEvListParts: public NActors::TEventLocal<TEvListParts, EvListParts> {
         TEvListParts(TListParts::TPtr state, IHTTPGateway::TResult&& result)
-            : State(state), Result(std::move(result)) {
+            : State(state)
+            , Result(std::move(result))
+        {
         }
+
         TListParts::TPtr State;
         IHTTPGateway::TResult Result;
     };
@@ -203,7 +235,7 @@ class TS3ApplicatorActor;
 
 using TObjectStorageRequest = std::function<void(TS3ApplicatorActor& actor)>;
 
-class TS3ApplicatorActor : public NActors::TActorBootstrapped<TS3ApplicatorActor> {
+class TS3ApplicatorActor: public NActors::TActorBootstrapped<TS3ApplicatorActor> {
     static constexpr ui64 GLOBAL_RETRY_LIMIT = 100;
 
 public:
@@ -211,28 +243,22 @@ public:
 
     static constexpr char ActorName[] = "S3_APPLICATOR_ACTOR";
 
-    TS3ApplicatorActor(
-        NActors::TActorId parentId,
-        IHTTPGateway::TPtr gateway,
-        const TString& queryId,
-        const TString& jobId,
-        std::optional<ui32> restartNumber,
-        bool commit,
-        const THashMap<TString, TString>& secureParams,
-        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        const NYql::NDqProto::TExternalEffect& externalEffect)
-    : ParentId(parentId)
-    , Gateway(gateway)
-    , QueryId(queryId)
-    , KeyPrefix(jobId ? jobId + "_" : "")
-    , KeySubPrefix(restartNumber ? ToString(*restartNumber) + "_" : "")
-    , Commit(commit)
-    , SecureParams(secureParams)
-    , CredentialsFactory(credentialsFactory)
-    , ExternalEffect(externalEffect)
-    , ActorSystem(NActors::TActivationContext::ActorSystem())
-    , RetryPolicy(NYql::GetFqHTTPRetryPolicy())
-    , RetryCount(GLOBAL_RETRY_LIMIT) {
+    TS3ApplicatorActor(NActors::TActorId parentId, IHTTPGateway::TPtr gateway, const TString& queryId, const TString& jobId,
+        std::optional<ui32> restartNumber, bool commit, const THashMap<TString, TString>& secureParams,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NYql::NDqProto::TExternalEffect& externalEffect)
+        : ParentId(parentId)
+        , Gateway(gateway)
+        , QueryId(queryId)
+        , KeyPrefix(jobId ? jobId + "_" : "")
+        , KeySubPrefix(restartNumber ? ToString(*restartNumber) + "_" : "")
+        , Commit(commit)
+        , SecureParams(secureParams)
+        , CredentialsFactory(credentialsFactory)
+        , ExternalEffect(externalEffect)
+        , ActorSystem(NActors::TActivationContext::ActorSystem())
+        , RetryPolicy(NYql::GetFqHTTPRetryPolicy())
+        , RetryCount(GLOBAL_RETRY_LIMIT)
+    {
         // ^^^ 3 retries in HTTP GW per operation
         // up to 100 retries at app level for all operations ^^^
     }
@@ -247,8 +273,8 @@ public:
                 if (Commit) {
                     auto& commitEffect = sinkEffect.GetCommit();
                     CommitUploads.insert(commitEffect.GetUploadId());
-                    auto state = std::make_shared<TCompleteMultipartUpload>(CreateGuidAsString(),
-                        commitEffect.GetUrl(), commitEffect.GetUploadId(), sinkEffect.GetToken());
+                    auto state = std::make_shared<TCompleteMultipartUpload>(
+                        CreateGuidAsString(), commitEffect.GetUrl(), commitEffect.GetUploadId(), sinkEffect.GetToken());
                     state->Tags.reserve(commitEffect.GetETag().size());
                     for (auto& tag : commitEffect.GetETag()) {
                         state->Tags.push_back(tag);
@@ -257,8 +283,8 @@ public:
                 }
             } else if (sinkEffect.HasCleanup()) {
                 auto& cleanupEffect = sinkEffect.GetCleanup();
-                auto state = std::make_shared<TListMultipartUploads>(CreateGuidAsString(),
-                    cleanupEffect.GetUrl(), cleanupEffect.GetPrefix(), sinkEffect.GetToken());
+                auto state = std::make_shared<TListMultipartUploads>(
+                    CreateGuidAsString(), cleanupEffect.GetUrl(), cleanupEffect.GetPrefix(), sinkEffect.GetToken());
                 PushListMultipartUploads(state);
             }
         }
@@ -279,7 +305,8 @@ public:
         const auto result = RetryCount && GetRetryState(operationName)->GetNextRetryDelay(curlResponseCode, httpResponseCode);
 
         NYql::TIssues issues = std::move(operationResult.Issues);
-        TStringBuilder errorMessage = TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url;
+        TStringBuilder errorMessage = TStringBuilder() << "Retry operation " << operationName
+                                                       << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url;
         if (const TString errorText = operationResult.Content.Extract()) {
             TString errorCode;
             TString message;
@@ -300,12 +327,10 @@ public:
         if (result) {
             RetryCount--;
         } else {
-            Issues.AddIssues(NS3Util::AddParentIssue(
-                RetryCount
-                    ? TStringBuilder() << "Number of retries exceeded limit for operation " << operationName
-                    : TStringBuilder() << "Number of retries exceeded global limit in " << GLOBAL_RETRY_LIMIT << " retries",
-                NYql::TIssues(RetryIssues)
-            ));
+            Issues.AddIssues(
+                NS3Util::AddParentIssue(RetryCount ? TStringBuilder() << "Number of retries exceeded limit for operation " << operationName
+                                                   : TStringBuilder() << "Number of retries exceeded global limit in " << GLOBAL_RETRY_LIMIT
+                                                                      << " retries", NYql::TIssues(RetryIssues)));
             RetryIssues.Clear();
             Finish(true);
         }
@@ -424,12 +449,11 @@ public:
                 LOG_D("ListMultipartUploads SUCCESS " << ev->Get()->State->BuildUrl());
                 const auto& root = s3Result.GetRootNode();
                 if (root.Name() == "ListMultipartUploadsResult") {
-                    const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
+                    const NXml::TNamespacesForXPath nss(1U, { "s3", "http://s3.amazonaws.com/doc/2006-03-01/" });
                     if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {
                         // pagination
-                        auto state = std::make_shared<TListMultipartUploads>(CreateGuidAsString(),
-                            ev->Get()->State->Url, ev->Get()->State->Prefix, ev->Get()->State->Token,
-                            root.Node("s3:NextKeyMarker", false, nss).Value<TString>(),
+                        auto state = std::make_shared<TListMultipartUploads>(CreateGuidAsString(), ev->Get()->State->Url,
+                            ev->Get()->State->Prefix, ev->Get()->State->Token, root.Node("s3:NextKeyMarker", false, nss).Value<TString>(),
                             root.Node("s3:NextUploadIdMarker", false, nss).Value<TString>());
                         PushListMultipartUploads(state);
                     }
@@ -460,15 +484,13 @@ public:
                                 if (!CommitUploads.contains(uploadId)) {
                                     // have no explicit effect for some reason, list and commit
                                     auto requestId = CreateGuidAsString();
-                                    auto state = std::make_shared<TListParts>(requestId,
-                                        url, uploadId, ev->Get()->State->Token,
-                                        std::make_shared<TCompleteMultipartUpload>(requestId,
-                                        url, uploadId, ev->Get()->State->Token));
+                                    auto state = std::make_shared<TListParts>(requestId, url, uploadId, ev->Get()->State->Token,
+                                        std::make_shared<TCompleteMultipartUpload>(requestId, url, uploadId, ev->Get()->State->Token));
                                     PushListParts(state);
                                 }
                             } else {
-                                auto state = std::make_shared<TAbortMultipartUpload>(CreateGuidAsString(),
-                                    url, uploadId, ev->Get()->State->Token);
+                                auto state =
+                                    std::make_shared<TAbortMultipartUpload>(CreateGuidAsString(), url, uploadId, ev->Get()->State->Token);
                                 PushAbortMultipartUpload(state);
                             }
                         }
@@ -530,7 +552,7 @@ public:
                     LOG_D("ListParts SUCCESS " << ev->Get()->State->BuildUrl());
                     const auto& root = s3Result.GetRootNode();
                     if (root.Name() == "ListPartsResult") {
-                        const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
+                        const NXml::TNamespacesForXPath nss(1U, { "s3", "http://s3.amazonaws.com/doc/2006-03-01/" });
                         auto state = ev->Get()->State->CompleteState;
                         state->Tags.reserve(state->Tags.size() + root.Node("s3:MaxParts", false, nss).Value<ui32>());
                         const auto& parts = root.XPath("s3:Part", true, nss);
@@ -542,7 +564,8 @@ public:
                             PushListParts(ev->Get()->State);
                         } else {
                             if (state->Tags.empty()) {
-                                LOG_W("ListParts returned empty parts list for " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                                LOG_W("ListParts returned empty parts list for " << ev->Get()->State->BuildUrl()
+                                                                                 << " (multipart upload may be completed already)");
                                 return;
                             }
                             PushCommitMultipartUpload(state);
@@ -569,15 +592,13 @@ public:
     void CommitMultipartUpload(TCompleteMultipartUpload::TPtr state) {
         LOG_D("CommitMultipartUpload BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
-        Gateway->Upload(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
-            state->BuildMessage(),
-            std::bind(&TS3ApplicatorActor::OnCommitMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1),
-            false,
-            RetryPolicy);
+        Gateway->Upload(state->BuildUrl(), IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml",
+                                               authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()), state->BuildMessage(),
+            std::bind(&TS3ApplicatorActor::OnCommitMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1), false, RetryPolicy);
     }
 
-    static void OnCommitMultipartUpload(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TCompleteMultipartUpload::TPtr state, IHTTPGateway::TResult&& result) {
+    static void OnCommitMultipartUpload(
+        NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TCompleteMultipartUpload::TPtr state, IHTTPGateway::TResult&& result) {
         actorSystem->Send(new NActors::IEventHandle(selfId, {}, new TEvPrivate::TEvCommitMultipartUpload(state, std::move(result))));
     }
 
@@ -585,28 +606,25 @@ public:
         LOG_D("ListMultipartUploads BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
-            0U,
-            0U,
-            std::bind(&TS3ApplicatorActor::OnListMultipartUploads, ActorSystem, SelfId(), state, std::placeholders::_1),
-            {},
-            RetryPolicy);
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()), 0U, 0U,
+            std::bind(&TS3ApplicatorActor::OnListMultipartUploads, ActorSystem, SelfId(), state, std::placeholders::_1), {}, RetryPolicy);
     }
 
-    static void OnListMultipartUploads(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TListMultipartUploads::TPtr state, IHTTPGateway::TResult&& result) {
+    static void OnListMultipartUploads(
+        NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TListMultipartUploads::TPtr state, IHTTPGateway::TResult&& result) {
         actorSystem->Send(new NActors::IEventHandle(selfId, {}, new TEvPrivate::TEvListMultipartUploads(state, std::move(result))));
     }
 
     void AbortMultipartUpload(TAbortMultipartUpload::TPtr state) {
         LOG_D("AbortMultipartUpload BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
-        Gateway->Delete(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
-            std::bind(&TS3ApplicatorActor::OnAbortMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1),
-            RetryPolicy);
+        Gateway->Delete(state->BuildUrl(), IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml",
+                                               authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
+            std::bind(&TS3ApplicatorActor::OnAbortMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1), RetryPolicy);
     }
 
-    static void OnAbortMultipartUpload(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TAbortMultipartUpload::TPtr state, IHTTPGateway::TResult&& result) {
+    static void OnAbortMultipartUpload(
+        NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TAbortMultipartUpload::TPtr state, IHTTPGateway::TResult&& result) {
         actorSystem->Send(new NActors::IEventHandle(selfId, {}, new TEvPrivate::TEvAbortMultipartUpload(state, std::move(result))));
     }
 
@@ -614,15 +632,12 @@ public:
         LOG_D("ListParts BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
-            0U,
-            0U,
-            std::bind(&TS3ApplicatorActor::OnListParts, ActorSystem, SelfId(), state, std::placeholders::_1),
-            {},
-            RetryPolicy);
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()), 0U, 0U,
+            std::bind(&TS3ApplicatorActor::OnListParts, ActorSystem, SelfId(), state, std::placeholders::_1), {}, RetryPolicy);
     }
 
-    static void OnListParts(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TListParts::TPtr state, IHTTPGateway::TResult&& result) {
+    static void OnListParts(
+        NActors::TActorSystem* actorSystem, NActors::TActorId selfId, TListParts::TPtr state, IHTTPGateway::TResult&& result) {
         actorSystem->Send(new NActors::IEventHandle(selfId, {}, new TEvPrivate::TEvListParts(state, std::move(result))));
     }
 
@@ -630,15 +645,15 @@ public:
         if (const auto it = RetryStates.find(operationName); it != RetryStates.end()) {
             return it->second;
         }
-        return RetryStates.insert({operationName, RetryPolicy->CreateRetryState()}).first->second;
+        return RetryStates.insert({ operationName, RetryPolicy->CreateRetryState() }).first->second;
     }
 
 private:
     NActors::TActorId ParentId;
     IHTTPGateway::TPtr Gateway;
     const TString QueryId;
-    const TString KeyPrefix;    // job_id ## _
-    const TString KeySubPrefix; // run_id ## _
+    const TString KeyPrefix;   // job_id ## _
+    const TString KeySubPrefix;   // run_id ## _
     const bool Commit;
     const THashMap<TString, TString> SecureParams;
     IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
@@ -656,30 +671,13 @@ private:
     bool ApplicationFinished = false;
 };
 
-} // namespace
+}   // namespace
 
-THolder<NActors::IActor> MakeS3ApplicatorActor(
-    NActors::TActorId parentId,
-    IHTTPGateway::TPtr gateway,
-    const TString& queryId,
-    const TString& jobId,
-    std::optional<ui32> restartNumber,
-    bool commit,
-    const THashMap<TString, TString>& secureParams,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const NYql::NDqProto::TExternalEffect& externalEffect) {
-
+THolder<NActors::IActor> MakeS3ApplicatorActor(NActors::TActorId parentId, IHTTPGateway::TPtr gateway, const TString& queryId,
+    const TString& jobId, std::optional<ui32> restartNumber, bool commit, const THashMap<TString, TString>& secureParams,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NYql::NDqProto::TExternalEffect& externalEffect) {
     return MakeHolder<TS3ApplicatorActor>(
-        parentId,
-        gateway,
-        queryId,
-        jobId,
-        restartNumber,
-        commit,
-        secureParams,
-        credentialsFactory,
-        externalEffect
-    );
+        parentId, gateway, queryId, jobId, restartNumber, commit, secureParams, credentialsFactory, externalEffect);
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

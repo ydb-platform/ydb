@@ -1586,6 +1586,11 @@
                 "ColumnId": 34,
                 "ColumnName": "TablesMetricsLevel",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "StorageSpaceExhausted",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1625,7 +1630,8 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2973,11 +2979,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "NeedSyncHive",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TxId",
                 "ColumnType": "Uint64"
@@ -3056,13 +3057,22 @@
                 "ColumnId": 16,
                 "ColumnName": "NeedUpdateObject",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "NeedSyncHive",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "LoadSplitLineage",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -3078,7 +3088,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3327,6 +3339,11 @@
                 "ColumnId": 21,
                 "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "CancelRequestedBy",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -3353,7 +3370,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5437,6 +5455,11 @@
                 "ColumnId": 59,
                 "ColumnName": "IsRebuild",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 60,
+                "ColumnName": "RebuildIndexName",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5501,7 +5524,8 @@
                     56,
                     57,
                     58,
-                    59
+                    59,
+                    60
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6552,6 +6576,11 @@
                 "ColumnId": 14,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CanRestoreRateLimiterMetering",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6571,7 +6600,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6709,6 +6739,16 @@
                 "ColumnId": 22,
                 "ColumnName": "SysView",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "ReplicationConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "Kesus",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6736,7 +6776,9 @@
                     19,
                     20,
                     21,
-                    22
+                    22,
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7353,6 +7395,21 @@
                 "ColumnId": 12,
                 "ColumnName": "TraceIds",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Compression",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7370,7 +7427,10 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7458,6 +7518,21 @@
                 "ColumnId": 12,
                 "ColumnName": "TraceIds",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "Compression",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7475,7 +7550,10 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9577,6 +9655,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Properties",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "OperationOwnerActorId",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],
@@ -9586,7 +9669,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10405,6 +10489,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "DomainLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OperationId",
                 "ColumnType": "Uint64"
@@ -10478,12 +10567,18 @@
                 "ColumnId": 15,
                 "ColumnName": "CancellationReason",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "DomainOwnerId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -10498,7 +10593,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10619,6 +10715,50 @@
                     2,
                     3,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 141,
+        "TableName": "DatabaseFreezes",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
                 ],
                 "RoomID": 0,
                 "Codec": 0,

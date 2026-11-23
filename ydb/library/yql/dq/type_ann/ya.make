@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/yql/dq/common
@@ -14,8 +14,6 @@ PEERDIR(
 SRCS(
     dq_type_ann.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(dq_type_ann.h)
 

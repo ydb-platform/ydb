@@ -1,7 +1,8 @@
-#include "ydb.h"
 #include "util.h"
+#include "ydb.h"
 
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <util/stream/str.h>
@@ -31,17 +32,11 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         SELECT %s, %s
         FROM %s
         WHERE %s = $pk;
-    )", context->TablePathPrefix.c_str(),
-        context->PrimaryKeyColumn.c_str(),
-        context->GenerationColumn.c_str(),
-        context->Table.c_str(),
+    )", context->TablePathPrefix.c_str(), context->PrimaryKeyColumn.c_str(), context->GenerationColumn.c_str(), context->Table.c_str(),
         context->PrimaryKeyColumn.c_str());
 
     auto params = std::make_unique<NYdb::TParamsBuilder>();
-    params->
-         AddParam("$pk")
-        .String(context->PrimaryKey)
-        .Build();
+    params->AddParam("$pk").String(context->PrimaryKey).Build();
 
     auto ttxControl = TTxControl::BeginTx();
     if (context->OperationType == TGenerationContext::Check && context->CommitTx) {
@@ -51,9 +46,7 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
     return context->Session->ExecuteDataQuery(query, ttxControl, std::move(params));
 }
 
-TFuture<TStatus> CheckGeneration(
-    const TDataQueryResult& selectResult,
-    const TGenerationContextPtr& context)
+TFuture<TStatus> CheckGeneration(const TDataQueryResult& selectResult, const TGenerationContextPtr& context)
 {
     if (!selectResult.IsSuccess()) {
         return MakeFuture<TStatus>(selectResult);
@@ -67,39 +60,34 @@ TFuture<TStatus> CheckGeneration(
     bool isOk = false;
     bool requiresTransaction = false;
     switch (context->OperationType) {
-    case TGenerationContext::Register:
-    {
-        isOk = context->GenerationRead < context->Generation;
-        requiresTransaction = true;
-        break;
-    }
-    case TGenerationContext::RegisterCheck:
-    {
-        isOk = context->GenerationRead <= context->Generation;
-        requiresTransaction = true;
-        break;
-    }
-    case TGenerationContext::Check:
-    {
-        isOk = context->GenerationRead == context->Generation;
-        if (!context->CommitTx) {
+        case TGenerationContext::Register: {
+            isOk = context->GenerationRead < context->Generation;
             requiresTransaction = true;
+            break;
         }
-        break;
-    }
+        case TGenerationContext::RegisterCheck: {
+            isOk = context->GenerationRead <= context->Generation;
+            requiresTransaction = true;
+            break;
+        }
+        case TGenerationContext::Check: {
+            isOk = context->GenerationRead == context->Generation;
+            if (!context->CommitTx) {
+                requiresTransaction = true;
+            }
+            break;
+        }
     }
 
     context->Session->UpdateTransaction(selectResult.GetTransaction());
     selectResult.GetTransaction().reset();
 
     if (!isOk) {
-        RollbackTransaction(context); // don't care about result
+        RollbackTransaction(context);   // don't care about result
 
         TStringStream ss;
-        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
-           << ", pk: " << context->PrimaryKey
-           << ", current generation: " << context->GenerationRead
-           << ", expected/new generation: " << context->Generation
+        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table) << ", pk: " << context->PrimaryKey
+           << ", current generation: " << context->GenerationRead << ", expected/new generation: " << context->Generation
            << ", operation: " << context->OperationType;
 
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
@@ -109,10 +97,8 @@ TFuture<TStatus> CheckGeneration(
         // just sanity check, normally should not happen.
         // note that we use retriable error
         TStringStream ss;
-        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
-           << ", pk: " << context->PrimaryKey
-           << ", current generation: " << context->GenerationRead
-           << ", expected/new generation: " << context->Generation
+        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table) << ", pk: " << context->PrimaryKey
+           << ", current generation: " << context->GenerationRead << ", expected/new generation: " << context->Generation
            << ", failed to get transaction after select";
 
         return MakeFuture(MakeErrorStatus(EStatus::ABORTED, ss.Str(), NYql::TSeverityIds::S_WARNING));
@@ -123,10 +109,9 @@ TFuture<TStatus> CheckGeneration(
 
 TFuture<TStatus> SelectGenerationWithCheck(const TGenerationContextPtr& context) {
     auto future = SelectGeneration(context);
-    return future.Apply(
-        [context] (const TFuture<TDataQueryResult>& future) {
-            return CheckGeneration(future.GetValue(), context);
-        });
+    return future.Apply([context](const TFuture<TDataQueryResult>& future) {
+        return CheckGeneration(future.GetValue(), context);
+    });
 }
 
 TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
@@ -138,19 +123,10 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
 
         UPSERT INTO %s (%s, %s) VALUES
             ($pk, $generation);
-    )", context->TablePathPrefix.c_str(),
-        context->Table.c_str(),
-        context->PrimaryKeyColumn.c_str(),
-        context->GenerationColumn.c_str());
+    )", context->TablePathPrefix.c_str(), context->Table.c_str(), context->PrimaryKeyColumn.c_str(), context->GenerationColumn.c_str());
 
     auto params = std::make_unique<NYdb::TParamsBuilder>();
-    params->
-         AddParam("$pk")
-        .String(context->PrimaryKey)
-        .Build()
-        .AddParam("$generation")
-        .Uint64(context->Generation)
-        .Build();
+    params->AddParam("$pk").String(context->PrimaryKey).Build() .AddParam("$generation").Uint64(context->Generation).Build();
 
     auto ttxControl = TTxControl::ContinueTx();
     if (context->CommitTx) {
@@ -162,28 +138,24 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->Session->UpdateTransaction(std::nullopt);
     }
 
-    return f.Apply(
-        [] (const TFuture<TDataQueryResult>& future) {
-            TStatus status = future.GetValue();
-            return status;
-        });
+    return f.Apply([](const TFuture<TDataQueryResult>& future) {
+        TStatus status = future.GetValue();
+        return status;
+    });
 }
 
-TFuture<TStatus> RegisterGenerationWrapper(
-    const TFuture<TStatus>& selectGenerationFuture,
-    const TGenerationContextPtr& context)
+TFuture<TStatus> RegisterGenerationWrapper(const TFuture<TStatus>& selectGenerationFuture, const TGenerationContextPtr& context)
 {
-    return selectGenerationFuture.Apply(
-        [context] (const TFuture<TStatus>& selectGenerationFuture) {
-            const auto& selectResult = selectGenerationFuture.GetValue();
-            if (!selectResult.IsSuccess()) {
-                return MakeFuture(selectResult);
-            }
-            return UpsertGeneration(context);
-        });
+    return selectGenerationFuture.Apply([context](const TFuture<TStatus>& selectGenerationFuture) {
+        const auto& selectResult = selectGenerationFuture.GetValue();
+        if (!selectResult.IsSuccess()) {
+            return MakeFuture(selectResult);
+        }
+        return UpsertGeneration(context);
+    });
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -230,9 +202,8 @@ TExternalStorageSettings::TExternalStorageSettings(const NKikimrConfig::TStreami
     }
 }
 
-TYdbConnection::TYdbConnection(const TExternalStorageSettings& config,
-                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-                               const NYdb::TDriver& driver)
+TYdbConnection::TYdbConnection(
+    const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver)
     : Driver(driver)
     , TableClient(Driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory))
     , SchemeClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
@@ -240,20 +211,17 @@ TYdbConnection::TYdbConnection(const TExternalStorageSettings& config,
     , RateLimiterClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
     , DB(config.GetDatabase())
     , TablePathPrefix(JoinPath(DB, config.GetPathPrefix()))
-{}
+{
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYdbConnectionPtr NewYdbConnection(const TExternalStorageSettings& config,
-                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-                                   const NYdb::TDriver& driver) {
+TYdbConnectionPtr NewYdbConnection(
+    const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver) {
     return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
 }
 
-TStatus MakeErrorStatus(
-    EStatus code,
-    const TString& msg,
-    NYql::ESeverity severity)
+TStatus MakeErrorStatus(EStatus code, const TString& msg, NYql::ESeverity severity)
 {
     NYql::TIssues issues;
     issues.AddIssue(msg);
@@ -277,54 +245,43 @@ NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
 }
 
 TFuture<TIssues> StatusToIssues(const TFuture<TStatus>& future) {
-    return future.Apply(
-        [] (const TFuture<TStatus>& future) {
-            try {
-                return StatusToIssues(future.GetValue());
-            } catch (...) {
-                TIssues issues;
-                issues.AddIssue("StatusToIssues failed with exception: " + CurrentExceptionMessage());
-                return issues;
-            }
+    return future.Apply([](const TFuture<TStatus>& future) {
+        try {
+            return StatusToIssues(future.GetValue());
+        } catch (...) {
+            TIssues issues;
+            issues.AddIssue("StatusToIssues failed with exception: " + CurrentExceptionMessage());
+            return issues;
+        }
     });
 }
 
-TFuture<TStatus> CreateTable(
-    const TYdbConnectionPtr& ydbConnection,
-    const TString& name,
-    TTableDescription&& description)
+TFuture<TStatus> CreateTable(const TYdbConnectionPtr& ydbConnection, const TString& name, TTableDescription&& description)
 {
     auto tablePath = JoinPath(ydbConnection->TablePathPrefix, name.c_str());
 
     return ydbConnection->TableClient.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+        [tablePath = std::move(tablePath), description = std::move(description)](TSession session) mutable {
             return session.CreateTable(tablePath, TTableDescription(description));
         });
 }
 
 TFuture<TStatus> CreateTable(
-    const IYdbConnection::TPtr& ydbConnection,
-    const TString& name,
-    TTableDescription&& description,
-    const NACLib::TDiffACL& acl)
+    const IYdbConnection::TPtr& ydbConnection, const TString& name, TTableDescription&& description, const NACLib::TDiffACL& acl)
 {
     auto tablePath = JoinPath(ydbConnection->GetTablePathPrefixWithoutDb(), name.c_str());
-    return ydbConnection->GetTableClient()->RetryOperation(
-        [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description), acl = acl] (ISession::TPtr session) mutable {
-            return session->CreateTable(db, tablePath, TTableDescription(description), acl);
-        });
+    return ydbConnection->GetTableClient()->RetryOperation([db = ydbConnection->GetDb(), tablePath = std::move(tablePath),
+                                                               description = std::move(description), acl = acl](ISession::TPtr session) mutable {
+        return session->CreateTable(db, tablePath, TTableDescription(description), acl);
+    });
 }
 
 bool IsTableCreated(const NYdb::TStatus& status) {
-    return status.IsSuccess() ||
-        status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
-            status.GetStatus() == NYdb::EStatus::CLIENT_CANCELLED;
+    return status.IsSuccess() || status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS || status.GetStatus() == NYdb::EStatus::CLIENT_CANCELLED;
 }
 
 bool IsTableDeleted(const NYdb::TStatus& status) {
-    return status.IsSuccess() ||
-        status.GetStatus() == NYdb::EStatus::NOT_FOUND ||
-            status.GetStatus() == NYdb::EStatus::CLIENT_CANCELLED;
+    return status.IsSuccess() || status.GetStatus() == NYdb::EStatus::NOT_FOUND || status.GetStatus() == NYdb::EStatus::CLIENT_CANCELLED;
 }
 
 TFuture<TStatus> RegisterGeneration(const TGenerationContextPtr& context) {
@@ -337,35 +294,34 @@ TFuture<TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context) {
     context->OperationType = TGenerationContext::RegisterCheck;
     auto future = SelectGenerationWithCheck(context);
 
-    return future.Apply(
-        [context] (const TFuture<TStatus>& future) {
-            if (future.HasException()) {
-                return future;
-            }
-            const auto& status = future.GetValue();
-            if (!status.IsSuccess()) {
-                return future;
-            }
+    return future.Apply([context](const TFuture<TStatus>& future) {
+        if (future.HasException()) {
+            return future;
+        }
+        const auto& status = future.GetValue();
+        if (!status.IsSuccess()) {
+            return future;
+        }
 
-            // check successful, which means that either:
-            // - generation in DB is same as in context
-            // - generation in DB is lower than in context
-            if (context->Generation > context->GenerationRead) {
-                // Check was OK, but we still have to register our generation
-                return RegisterGenerationWrapper(future, context);
-            } else {
-                // Check was OK, but we need to care about transaction:
-                // we will not upsert, if user requested to finish transaction
-                // we need to finish it (rare case, nobody probably needs check
-                // without transaction)
-                if (context->CommitTx) {
-                    // we don't check result of rollback, because don't care
-                    RollbackTransaction(context);
-                    return future;
-                }
+        // check successful, which means that either:
+        // - generation in DB is same as in context
+        // - generation in DB is lower than in context
+        if (context->Generation > context->GenerationRead) {
+            // Check was OK, but we still have to register our generation
+            return RegisterGenerationWrapper(future, context);
+        } else {
+            // Check was OK, but we need to care about transaction:
+            // we will not upsert, if user requested to finish transaction
+            // we need to finish it (rare case, nobody probably needs check
+            // without transaction)
+            if (context->CommitTx) {
+                // we don't check result of rollback, because don't care
+                RollbackTransaction(context);
                 return future;
             }
-        });
+            return future;
+        }
+    });
 }
 
 TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
@@ -374,7 +330,6 @@ TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
 }
 
 TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
-
     if (!context->Session->HasActiveTransaction()) {
         auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "trying to rollback non-active transaction");
         return MakeFuture(status);
@@ -402,4 +357,4 @@ NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const TExternalStorage
     return credSettings;
 }
 
-} // namespace NFq
+}   // namespace NFq

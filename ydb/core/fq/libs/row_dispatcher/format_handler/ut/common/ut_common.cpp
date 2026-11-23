@@ -1,13 +1,14 @@
 #include "ut_common.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/backtrace.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
 #include <ydb/core/testlib/basics/appdata.h>
 
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
+#include <library/cpp/testing/common/env.h>
+#include <util/system/datetime.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
@@ -16,9 +17,10 @@ namespace NFq::NRowDispatcher::NTests {
 
 namespace {
 
-const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
+const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry =
+    NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
 
-class TPurecalcCompileServiceMock : public NActors::TActor<TPurecalcCompileServiceMock> {
+class TPurecalcCompileServiceMock: public NActors::TActor<TPurecalcCompileServiceMock> {
     using TBase = NActors::TActor<TPurecalcCompileServiceMock>;
 
 public:
@@ -27,7 +29,8 @@ public:
         , Owner(owner)
         , ProgramFactory(NYql::NPureCalc::MakeProgramFactory())
         , ResponseDelay(responseDelay)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle)
@@ -60,11 +63,12 @@ private:
 
 //// TBaseFixture::ICell
 
-class TOptionalCell : public TBaseFixture::ICell {
+class TOptionalCell: public TBaseFixture::ICell {
 public:
     TOptionalCell(ICell::TPtr value)
         : Value(value)
-    {}
+    {
+    }
 
 public:
     TString GetType() const override {
@@ -83,11 +87,12 @@ private:
     const ICell::TPtr Value;
 };
 
-class TStringSell : public TBaseFixture::ICell {
+class TStringSell: public TBaseFixture::ICell {
 public:
     TStringSell(const TString& value)
         : Value(value)
-    {}
+    {
+    }
 
 public:
     TString GetType() const override {
@@ -102,11 +107,12 @@ private:
     const TString Value;
 };
 
-class TUint64Sell : public TBaseFixture::ICell {
+class TUint64Sell: public TBaseFixture::ICell {
 public:
     TUint64Sell(ui64 value)
         : Value(value)
-    {}
+    {
+    }
 
 public:
     TString GetType() const override {
@@ -121,7 +127,7 @@ private:
     const ui64 Value;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 //// TBaseFixture::TRow
 
@@ -146,7 +152,8 @@ TBaseFixture::TRow& TBaseFixture::TRow::AddUint64(ui64 value, bool optional) {
 
 TBaseFixture::TBatch::TBatch(std::initializer_list<TRow> rows)
     : Rows(rows)
-{}
+{
+}
 
 TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
     Rows.emplace_back(row);
@@ -154,6 +161,49 @@ TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
 }
 
 //// TBaseFixture
+
+TFormatHandlerTestRuntime::TFormatHandlerTestRuntime()
+    : TTestActorRuntimeBase(/* nodeCount */ 1, /* useRealThreads */ true)
+{
+}
+
+void TFormatHandlerTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
+    // These tests need AppData for actor helpers, but no tablet services or factories.
+    node->AppData0 = std::make_shared<NKikimr::TAppData>(0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, FunctionRegistry.Get(), nullptr, nullptr);
+    node->LogSettings->Append(NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+
+    const THashMap<TString, NActors::NLog::EPriority> priorities = {
+        { "TRACE", NActors::NLog::PRI_TRACE },
+        { "DEBUG", NActors::NLog::PRI_DEBUG },
+        { "INFO", NActors::NLog::PRI_INFO },
+        { "NOTICE", NActors::NLog::PRI_NOTICE },
+        { "WARN", NActors::NLog::PRI_WARN },
+        { "ERROR", NActors::NLog::PRI_ERROR },
+        { "CRIT", NActors::NLog::PRI_CRIT },
+        { "ALERT", NActors::NLog::PRI_ALERT },
+        { "EMERG", NActors::NLog::PRI_EMERG },
+    };
+    for (int service = NKikimrServices::EServiceKikimr_MIN; service <= NKikimrServices::EServiceKikimr_MAX; ++service) {
+        if (!NKikimrServices::EServiceKikimr_IsValid(service)) {
+            continue;
+        }
+        TString level = GetTestParam(
+            TStringBuilder() << "TEST_LOG_" << NKikimrServices::EServiceKikimr_Name(static_cast<NKikimrServices::EServiceKikimr>(service)));
+        if (level.empty()) {
+            level = GetTestParam("TEST_LOG");
+        }
+        auto priority = service == NKikimrServices::FQ_ROW_DISPATCHER ? NActors::NLog::PRI_TRACE : NActors::NLog::PRI_WARN;
+        if (!level.empty()) {
+            level.to_upper();
+            const auto it = priorities.find(level);
+            UNIT_ASSERT_C(it != priorities.end(), "Unknown log level: " << level);
+            priority = it->second;
+        }
+        TString explanation;
+        UNIT_ASSERT_C(!node->LogSettings->SetLevel(priority, service, explanation), explanation);
+    }
+    TTestActorRuntimeBase::InitNodeImpl(node, nodeIndex);
+}
 
 TBaseFixture::TBaseFixture()
     : TTypeParser(__LOCATION__, ::NFq::NRowDispatcher::NTests::FunctionRegistry.Get(), {})
@@ -163,20 +213,28 @@ TBaseFixture::TBaseFixture()
     Alloc.Ref().UseRefLocking = true;
 }
 
-void TBaseFixture::SetUp(NUnitTest::TTestContext& ctx) {
-    Settings.WaitTimeout = WAIT_TIMEOUT;
-    Settings.LogSettings.AddLogPriority(NKikimrServices::EServiceKikimr::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
-    TBase::SetUp(ctx);
+void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
+    NKikimr::EnableYDBBacktraceFormat();
+    Runtime.SetLogBackend(NActors::CreateStderrBackend());
+    Runtime.SetDispatchTimeout(WAIT_TIMEOUT);
+    Runtime.Initialize();
+
+    Mailbox = std::make_unique<NActors::TMailbox>();
+    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, Runtime.GetActorSystem(0), nullptr, "test thread");
+    ActorCtx = std::make_unique<NActors::TActorContext>(*Mailbox, *ExecutorThread, GetCycleCountFast(), NActors::TActorId());
+    PrevActorCtx = NActors::TlsActivationContext;
+    NActors::TlsActivationContext = ActorCtx.get();
 }
 
-void TBaseFixture::TearDown(NUnitTest::TTestContext& ctx) {
+void TBaseFixture::TearDown(NUnitTest::TTestContext&) {
     with_lock(Alloc) {
         ProgramBuilder.reset();
         TypeEnv.reset();
         HolderFactory.reset();
     }
 
-    TBase::TearDown(ctx);
+    NActors::TlsActivationContext = PrevActorCtx;
+    PrevActorCtx = nullptr;
 }
 
 void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const {
@@ -194,7 +252,8 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     with_lock(Alloc) {
         // Parse messages
         const auto rowType = ProgramBuilder->NewMultiType(columnTypes);
-        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
+        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(
+            rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
 
         NKikimr::NMiniKQL::TUnboxedValueBatch parsedData(rowType);
         dataUnpacker->UnpackBatch(NYql::MakeChunkedBuffer(std::move(serializedBatch)), *HolderFactory, parsedData);
@@ -204,7 +263,7 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
         UNIT_ASSERT_VALUES_EQUAL(parsedData.Width(), expectedFirstRow.size());
 
         ui64 rowIndex = 0;
-        parsedData.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width){
+        parsedData.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width) {
             UNIT_ASSERT_GE(expectedRows.size(), rowIndex + 1);
             const auto& expectedRow = expectedRows[rowIndex++].Cells;
 
@@ -216,12 +275,27 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     }
 }
 
-NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage TBaseFixture::GetMessage(ui64 offset, const TString& data) {
-    NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation info(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "");
-    return NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage(data, nullptr, info, nullptr);
+TMessageStreamRecord TBaseFixture::GetRecord(ui64 offset, const TString& data) {
+    TMessageStreamRecord record;
+    record.Data = data;
+    record.Id.Offset = offset;
+    return record;
 }
 
 //// Functions
+
+void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate) {
+    const auto start = TInstant::Now();
+    auto delay = TDuration::MilliSeconds(1);
+    while (TInstant::Now() - start <= timeout) {
+        if (predicate()) {
+            return;
+        }
+        Sleep(delay);
+        delay = Min(delay * 2, TDuration::Seconds(1));
+    }
+    UNIT_FAIL("Timeout waiting for " << description);
+}
 
 NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay) {
     return new TPurecalcCompileServiceMock(owner, responseDelay);
@@ -232,8 +306,11 @@ void CheckSuccess(const TStatus& status) {
 }
 
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage) {
-    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " ("<< status.GetErrorMessage() << ")");
-    UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage, "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
+    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode,
+        "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: "
+                                 << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " (" << status.GetErrorMessage() << ")");
+    UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage,
+        "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
 }
 
-}  // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

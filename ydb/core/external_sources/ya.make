@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     external_data_source.cpp
@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_external/common
     contrib/libs/apache/arrow
     library/cpp/regex/pcre
     library/cpp/scheme

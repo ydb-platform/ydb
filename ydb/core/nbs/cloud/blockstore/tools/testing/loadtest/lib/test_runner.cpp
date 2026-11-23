@@ -2,7 +2,7 @@
 
 #include "request_generator.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 

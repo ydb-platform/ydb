@@ -1998,7 +1998,7 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 
     // Compact structures rely on the TAlignedPagePool invariant that every allocated page is aligned to POOL_PAGE_SIZE.
     // However, this invariant does not hold when PROFILE_MEMORY_ALLOCATIONS is enabled
-    const bool isCompact = TAlignedPagePool::IsDefaultAllocatorUsed() ? false : AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
+    const bool isCompact = IsDefaultAllocatorUsed() ? false : AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
 
     const bool isOptional = keyType->IsOptional();
     const auto unwrappedKeyType = isOptional ? AS_TYPE(TOptionalType, keyType)->GetItemType() : keyType;

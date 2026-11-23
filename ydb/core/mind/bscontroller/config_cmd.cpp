@@ -2,6 +2,8 @@
 #include "config.h"
 #include "select_groups.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
@@ -18,6 +20,7 @@ namespace NKikimr::NBsController {
             std::optional<TConfigState> State;
             bool Success = true;
             bool RollbackSuccess = false;
+            bool GroupLayoutPolicyChanged = false;
             TString Error;
 
         public:
@@ -112,6 +115,20 @@ namespace NKikimr::NBsController {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
                         const auto& settings = cmd.GetUpdateSettings();
                         using T = Schema::State;
+
+                        // validate database space thresholds before applying anything
+                        auto databaseSpaceBlockColor = Self->DatabaseSpace.GetBlockColor();
+                        auto databaseSpaceUnblockColor = Self->DatabaseSpace.GetUnblockColor();
+                        for (auto value : settings.GetDatabaseSpaceBlockColor()) {
+                            databaseSpaceBlockColor = static_cast<T::DatabaseSpaceBlockColor::Type>(value);
+                        }
+                        for (auto value : settings.GetDatabaseSpaceUnblockColor()) {
+                            databaseSpaceUnblockColor = static_cast<T::DatabaseSpaceUnblockColor::Type>(value);
+                        }
+                        if (!TDatabaseSpaceTracker::IsValidThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor)) {
+                            throw TExError() << "DatabaseSpaceUnblockColor must not be worse than DatabaseSpaceBlockColor";
+                        }
+
                         for (ui32 value : settings.GetDefaultMaxSlots()) {
                             Self->DefaultMaxSlots = value;
                             db.Table<T>().Key(true).Update<T::DefaultMaxSlots>(Self->DefaultMaxSlots);
@@ -155,6 +172,12 @@ namespace NKikimr::NBsController {
                             Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
                         }
+                        if (settings.DatabaseSpaceBlockColorSize() || settings.DatabaseSpaceUnblockColorSize()) {
+                            db.Table<T>().Key(true).Update<T::DatabaseSpaceBlockColor, T::DatabaseSpaceUnblockColor>(
+                                databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->DatabaseSpace.SetThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->CommitDatabaseSpaceChanges(db);
+                        }
                         for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
                             Self->GroupLayoutSanitizerEnabled = value;
                             db.Table<T>().Key(true).Update<T::GroupLayoutSanitizer>(Self->GroupLayoutSanitizerEnabled);
@@ -163,6 +186,7 @@ namespace NKikimr::NBsController {
                             Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (bool value : settings.GetAllowMultipleRealmsOccupation()) {
+                            GroupLayoutPolicyChanged |= Self->AllowMultipleRealmsOccupation != value;
                             Self->AllowMultipleRealmsOccupation = value;
                             db.Table<T>().Key(true).Update<T::AllowMultipleRealmsOccupation>(Self->AllowMultipleRealmsOccupation);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
@@ -182,6 +206,15 @@ namespace NKikimr::NBsController {
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
                             Self->Send(Self->SelfHealId, ev.release());
+                        }
+                        for (ui64 value : settings.GetBridgeSyncTotalRateBytesPerSecond()) {
+                            Self->BridgeSyncTotalRate = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncTotalRate>(Self->BridgeSyncTotalRate);
+                            Self->BridgeSyncNodeRatesDirty = true;
+                        }
+                        for (ui32 value : settings.GetBridgeSyncMaxSyncers()) {
+                            Self->BridgeSyncMaxSyncers = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncMaxSyncers>(Self->BridgeSyncMaxSyncers);
                         }
                         return;
                     }
@@ -244,7 +277,7 @@ namespace NKikimr::NBsController {
                             }
                         }
                         const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
-                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status);
+                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status, !SelfHeal && !GroupLayoutSanitizer);
 
                         const TDuration passed = TDuration::Seconds(timer.Passed());
                         switch (step.GetCommandCase()) {
@@ -304,10 +337,12 @@ namespace NKikimr::NBsController {
 
                 const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
                 const TValidateConfigUpdatesParameters validationParameters{
+                    .FromGroupStateActor = NotifyId == Self->GroupStateActorId,
                     .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
                     .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                    .TreatPhantomsOnlyVDisksAsWorking = Cmd.GetTreatPhantomsOnlyVDisksAsWorking(),
                 };
                 Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 
@@ -424,6 +459,10 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DeleteDDiskPool)
                     HANDLE_COMMAND(MoveDDisk)
                     HANDLE_COMMAND(DeleteSpecificGroups)
+                    HANDLE_COMMAND(UpdateStoragePoolSettings)
+                    HANDLE_COMMAND(DefineDataCenterStates)
+                    HANDLE_COMMAND(DefineGroupState)
+                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
 
                     default: break;
                 }
@@ -436,6 +475,9 @@ namespace NKikimr::NBsController {
             }
 
             void Complete(const TActorContext&) override {
+                if (GroupLayoutPolicyChanged) {
+                    Self->UpdateGroupLayoutStatus();
+                }
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
                     YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction complete",
@@ -446,10 +488,32 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
-                TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                *Ev->Record.MutableResponse()->MutableAppliedDataCenterStates() = SerializeDataCenterStates(Self->DataCenterStates);
+                if (NotifyId == Self->GroupStateActorId) {
+                    Self->Send(NotifyId, new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, Cookie);
+                } else {
+                    TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                }
                 Self->UpdatePDisksCounters();
             }
         };
+
+        void TBlobStorageController::Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr& ev) {
+            if (ev->Sender != GroupStateActorId) {
+                return;
+            }
+            const auto& proposal = *ev->Get();
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* group = request.AddCommand()->MutableDefineGroupState()->AddGroups();
+            group->SetGroupId(proposal.GroupId);
+            group->SetExpectedGroupGeneration(proposal.Generation);
+            group->SetGroupState(proposal.Next.State);
+            for (EMirror3dcFailRealmState state : proposal.Next.Realms) {
+                group->AddFailRealmStates(state);
+            }
+            TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, false, false, std::nullopt, this));
+        }
 
         void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev) {
             TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);

@@ -1,12 +1,11 @@
 #include "ydb_test_bootstrap.h"
 
-#include <util/datetime/base.h>
+#include <ydb/core/fq/libs/config/yq_issue.h>
+#include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <ydb/core/fq/libs/config/yq_issue.h>
-#include <ydb/core/fq/libs/quota_manager/quota_manager.h>
+#include <util/datetime/base.h>
 
 namespace NFq {
 
@@ -18,7 +17,7 @@ static const TString TestScope = "yandexcloud://test_folder_id_1";
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageWriteResultData) {
     Y_UNIT_TEST(ShouldValidateWrite)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.Build());
@@ -28,7 +27,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageWriteResultData) {
 
     Y_UNIT_TEST(ShouldValidateRead)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             const auto [result, issues] = bootstrap.GetResultData(TGetResultDataBuilder{}.Build());
@@ -38,7 +37,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageWriteResultData) {
 
     Y_UNIT_TEST(ShouldSuccess)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         {
@@ -57,7 +56,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageWriteResultData) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageGetTask) {
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             const auto [handler, event] = bootstrap.GetTask(TGetTaskBuilder{}.SetOwner("").Build());
@@ -67,7 +66,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageGetTask) {
 
     Y_UNIT_TEST(ShouldWorkWithEmptyPending)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             const auto [handler, event] = bootstrap.GetTask(TGetTaskBuilder{}.Build());
@@ -77,7 +76,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageGetTask) {
 
     Y_UNIT_TEST(ShouldBatchingGetTasks)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         const size_t batchSize = 3;
         for (size_t i = 0; i < batchSize; ++i) {
@@ -95,7 +94,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageGetTask) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePingTask) {
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             const auto [handler, event] = bootstrap.PingTask(TPingTaskBuilder{}.Build());
@@ -107,7 +106,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePingTask) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageNodesHealthCheck) {
     Y_UNIT_TEST(ShouldValidate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             const auto [handler, event] = bootstrap.NodesHealthCheck(TNodesHealthCheckBuilder{}.Build());
@@ -117,26 +116,21 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageNodesHealthCheck) {
 }
 
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageRateLimiter) {
-    class TTestBootstrap : public ::NFq::TTestBootstrap {
+    class TTestBootstrap: public ::NFq::TTestBootstrap {
     public:
         TTestBootstrap(std::string tablePrefix, const NConfig::TControlPlaneStorageConfig& config = {})
             : ::NFq::TTestBootstrap(std::move(tablePrefix), config)
         {
-            NActors::TActorId quotaServiceActor = Runtime->Register(NFq::CreateQuotaServiceActor(
-                NConfig::TQuotasManagerConfig{},
-                Config.GetStorage(),
-                YqSharedResources,
-                NKikimr::CreateYdbCredentialsProviderFactory,
-                MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                {
-                    TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_CPU_PERCENT_LIMIT, 200, 3200)
-                }));
+            NActors::TActorId quotaServiceActor = Runtime->Register(NFq::CreateQuotaServiceActor(NConfig::TQuotasManagerConfig{},
+                Config.GetStorage(), YqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory,
+                MakeIntrusive<NMonitoring::TDynamicCounters>(), { TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_CPU_PERCENT_LIMIT, 200, 3200) }));
             Runtime->RegisterService(NFq::MakeQuotaServiceActorId(quotaServiceActor.NodeId()), quotaServiceActor);
 
             // Create resource for cloud (in normal system it is created by proxy)
             {
                 NActors::TActorId edge = Runtime->AllocateEdgeActor();
-                Runtime->Send(new IEventHandle(NFq::RateLimiterControlPlaneServiceId(), edge, new TEvRateLimiter::TEvCreateResource("mock_cloud", 42000)));
+                Runtime->Send(
+                    new IEventHandle(NFq::RateLimiterControlPlaneServiceId(), edge, new TEvRateLimiter::TEvCreateResource("mock_cloud", 42000)));
                 auto response = Runtime->GrabEdgeEvent<TEvRateLimiter::TEvCreateResourceResponse>();
                 UNIT_ASSERT_C(response->Success, response->Issues.ToOneLineString());
             }
@@ -145,47 +139,53 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageRateLimiter) {
 
     Y_UNIT_TEST(ShouldValidateCreate)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
-            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetScope("scope").SetTenant("tenant").Build());
+            const auto [handler, event] =
+                bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetScope("scope").SetTenant("tenant").Build());
             UNIT_ASSERT(event->Issues);
         }
 
         {
-            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetQueryId("query_id").SetTenant("tenant").Build());
+            const auto [handler, event] =
+                bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetQueryId("query_id").SetTenant("tenant").Build());
             UNIT_ASSERT(event->Issues);
         }
 
         {
-            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetQueryId("query_id").SetScope("scope").Build());
+            const auto [handler, event] =
+                bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetQueryId("query_id").SetScope("scope").Build());
             UNIT_ASSERT(event->Issues);
         }
     }
 
     Y_UNIT_TEST(ShouldValidateDelete)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
-            const auto [handler, event] = bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetScope("scope").SetTenant("tenant").Build());
+            const auto [handler, event] =
+                bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetScope("scope").SetTenant("tenant").Build());
             UNIT_ASSERT(event->Issues);
         }
 
         {
-            const auto [handler, event] = bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetQueryId("query_id").SetTenant("tenant").Build());
+            const auto [handler, event] =
+                bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetQueryId("query_id").SetTenant("tenant").Build());
             UNIT_ASSERT(event->Issues);
         }
 
         {
-            const auto [handler, event] = bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetQueryId("query_id").SetScope("scope").Build());
+            const auto [handler, event] =
+                bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetQueryId("query_id").SetScope("scope").Build());
             UNIT_ASSERT(event->Issues);
         }
     }
 
     Y_UNIT_TEST(ShouldCreateRateLimiterResource)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         {
@@ -201,14 +201,18 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageRateLimiter) {
         }
 
         {
-            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetQueryId(queryId).SetScope(TestScope).SetTenant(TTestBootstrap::GetDefaultTenantName()).Build());
+            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}
+                                                                                  .SetQueryId(queryId)
+                                                                                  .SetScope(TestScope)
+                                                                                  .SetTenant(TTestBootstrap::GetDefaultTenantName())
+                                                                                  .Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
     }
 
     Y_UNIT_TEST(ShouldDeleteRateLimiterResource)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         {
@@ -224,12 +228,20 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageRateLimiter) {
         }
 
         {
-            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}.SetQueryId(queryId).SetScope(TestScope).SetTenant(TTestBootstrap::GetDefaultTenantName()).Build());
+            const auto [handler, event] = bootstrap.CreateRateLimiterResource(TCreateRateLimiterResourceBuilder{}
+                                                                                  .SetQueryId(queryId)
+                                                                                  .SetScope(TestScope)
+                                                                                  .SetTenant(TTestBootstrap::GetDefaultTenantName())
+                                                                                  .Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            const auto [handler, event] = bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}.SetQueryId(queryId).SetScope(TestScope).SetTenant(TTestBootstrap::GetDefaultTenantName()).Build());
+            const auto [handler, event] = bootstrap.DeleteRateLimiterResource(TDeleteRateLimiterResourceBuilder{}
+                                                                                  .SetQueryId(queryId)
+                                                                                  .SetScope(TestScope)
+                                                                                  .SetTenant(TTestBootstrap::GetDefaultTenantName())
+                                                                                  .Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
     }
@@ -238,7 +250,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageRateLimiter) {
 Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     Y_UNIT_TEST(ShouldCheckSimplePipeline)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString connectionId;
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
@@ -254,7 +266,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_2").Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(connectionId).SetName("test_binding_name_2").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -284,7 +297,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         {
             const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultId(resId).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
-
         }
 
         {
@@ -292,14 +304,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetResultId(resId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetResultId(resId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -327,7 +339,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyQuery(TModifyQueryBuilder{}.SetQueryId(queryId).Build(), TPermissions{}, TestScope, "test_user@staff", "token2");
+            const auto [result, issues] =
+                bootstrap.ModifyQuery(TModifyQueryBuilder{}.SetQueryId(queryId).Build(), TPermissions{}, TestScope, "test_user@staff", "token2");
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -347,10 +360,11 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldIncrementGeneration)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
-            const auto [result, issues] = bootstrap.CreateQuery(TCreateQueryBuilder{}.SetText("select ListSkip(ListFromRange(0,10*1000*1000),1);").Build());
+            const auto [result, issues] =
+                bootstrap.CreateQuery(TCreateQueryBuilder{}.SetText("select ListSkip(ListFromRange(0,10*1000*1000),1);").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -366,7 +380,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckStopModifyRun)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         {
@@ -393,12 +407,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner("owner")
-                                .SetDeadline(deadline)
-                                .Build();
+            auto request = TPingTaskBuilder{}.SetScope(TestScope).SetQueryId(queryId).SetOwner("owner").SetDeadline(deadline).Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             UNIT_ASSERT_EQUAL(event->Record.action(), FederatedQuery::ABORT);
@@ -407,12 +416,12 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
         {
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner("owner")
-                                .SetStatus(FederatedQuery::QueryMeta::ABORTED_BY_USER)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner("owner")
+                               .SetStatus(FederatedQuery::QueryMeta::ABORTED_BY_USER)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             UNIT_ASSERT_EQUAL(event->Record.action(), FederatedQuery::ABORT);
@@ -434,12 +443,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner("owner")
-                                .SetDeadline(deadline)
-                                .Build();
+            auto request = TPingTaskBuilder{}.SetScope(TestScope).SetQueryId(queryId).SetOwner("owner").SetDeadline(deadline).Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             UNIT_ASSERT_EQUAL(event->Record.action(), FederatedQuery::QUERY_ACTION_UNSPECIFIED);
@@ -448,7 +452,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckAbortInTerminatedState)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         {
@@ -475,12 +479,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner("owner")
-                                .SetDeadline(deadline)
-                                .Build();
+            auto request = TPingTaskBuilder{}.SetScope(TestScope).SetQueryId(queryId).SetOwner("owner").SetDeadline(deadline).Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             UNIT_ASSERT_EQUAL(event->Record.action(), FederatedQuery::ABORT);
@@ -489,12 +488,12 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
         {
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner("owner")
-                                .SetStatus(FederatedQuery::QueryMeta::ABORTED_BY_USER)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner("owner")
+                               .SetStatus(FederatedQuery::QueryMeta::ABORTED_BY_USER)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             UNIT_ASSERT_EQUAL(event->Record.action(), FederatedQuery::ABORT);
@@ -508,7 +507,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckJobMeta)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -535,13 +534,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -578,15 +577,15 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetStatedAt(TInstant::Now())
-                                .SetFinishedAt(TInstant::Now() + TDuration::Seconds(1))
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetStatedAt(TInstant::Now())
+                               .SetFinishedAt(TInstant::Now() + TDuration::Seconds(1))
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -596,7 +595,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query().content().name(), "test_query_name_2");
             UNIT_ASSERT_EQUAL(result.query().meta().status(), FederatedQuery::QueryMeta::COMPLETED);
-            UNIT_ASSERT_UNEQUAL(NProtoInterop::CastFromProto(result.query().meta().started_at()), NProtoInterop::CastFromProto(result.query().meta().finished_at()));
+            UNIT_ASSERT_UNEQUAL(NProtoInterop::CastFromProto(result.query().meta().started_at()),
+                NProtoInterop::CastFromProto(result.query().meta().finished_at()));
         }
 
         {
@@ -620,7 +620,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     {
         constexpr auto tinyStats = "{\"Graph=0\":{}}";
 
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -647,17 +647,17 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetIssues(NYql::TIssues{MakeErrorIssue(TIssuesIds::BAD_REQUEST, "failed issue")})
-                                .SetTransientIssues(NYql::TIssues{MakeErrorIssue(TIssuesIds::BAD_REQUEST, "failed transient issue")})
-                                .SetStatistics(tinyStats)
-                                .SetPlan("test plan")
-                                .SetStatus(FederatedQuery::QueryMeta::FAILED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetIssues(NYql::TIssues{ MakeErrorIssue(TIssuesIds::BAD_REQUEST, "failed issue") })
+                               .SetTransientIssues(NYql::TIssues{ MakeErrorIssue(TIssuesIds::BAD_REQUEST, "failed transient issue") })
+                               .SetStatistics(tinyStats)
+                               .SetPlan("test plan")
+                               .SetStatus(FederatedQuery::QueryMeta::FAILED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -696,16 +696,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckNodesHealthCheck)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         {
             auto request = TNodesHealthCheckBuilder{}
-                .SetTenantName("Tenant")
-                .SetNodeId(100500)
-                .SetActiveWorkers(100600)
-                .SetInstanceId("SomeInstanceId")
-                .SetHostName("host")
-                .Build();
+                               .SetTenantName("Tenant")
+                               .SetNodeId(100500)
+                               .SetActiveWorkers(100600)
+                               .SetInstanceId("SomeInstanceId")
+                               .SetHostName("host")
+                               .Build();
             const auto [handler, event] = bootstrap.NodesHealthCheck(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             const auto& peers = event->Record.nodes();
@@ -714,12 +714,11 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(peers[0].instance_id(), "SomeInstanceId");
             UNIT_ASSERT_VALUES_EQUAL(peers[0].hostname(), "host");
         }
-
     }
 
     Y_UNIT_TEST(ShouldCheckResultSetMeta)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -745,7 +744,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         {
             const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultId(resId).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
-
         }
 
         {
@@ -753,14 +751,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetResultId(resId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetResultId(resId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -800,7 +798,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         {
             const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultId(resId).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
-
         }
 
         {
@@ -808,14 +805,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetResultId(resId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetResultId(resId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -838,7 +835,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckRemovingOldResultSet)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -864,7 +861,6 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         {
             const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultId(resId).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
-
         }
 
         {
@@ -872,14 +868,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetResultId(resId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetResultId(resId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -921,13 +917,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::RUNNING)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::RUNNING)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -948,16 +944,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckPrioritySelectionEntities)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         {
             const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
-
         }
 
         TString privateConnectionId;
         {
-            const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] =
+                bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             privateConnectionId = result.connection_id();
         }
@@ -973,11 +969,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(privateConnectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+            const auto [result, issues] = bootstrap.CreateBinding(
+                TCreateBindingBuilder{}.SetConnectionId(privateConnectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
         {
-            const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(publicConnectionId).SetName("test_binding_name_2").Build());
+            const auto [result, issues] =
+                bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(publicConnectionId).SetName("test_binding_name_2").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -998,27 +996,25 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(task.connection().size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(task.binding().size(), 2);
 
-            UNIT_ASSERT_UNEQUAL(task.connection(0).content().acl().visibility(),
-                                task.connection(1).content().acl().visibility());
+            UNIT_ASSERT_UNEQUAL(task.connection(0).content().acl().visibility(), task.connection(1).content().acl().visibility());
 
-            UNIT_ASSERT_UNEQUAL(task.binding(0).content().acl().visibility(),
-                                task.binding(1).content().acl().visibility());
+            UNIT_ASSERT_UNEQUAL(task.binding(0).content().acl().visibility(), task.binding(1).content().acl().visibility());
         }
     }
 
     Y_UNIT_TEST(ShouldSkipBindingIfDisabledConnection)
     {
         {
-            TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+            TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
             {
                 const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.Build());
                 UNIT_ASSERT_C(!issues, issues.ToString());
-
             }
             TString privateConnectionId;
             {
-                const auto [result, issues] = bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+                const auto [result, issues] =
+                    bootstrap.CreateConnection(TCreateConnectionBuilder{}.SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
                 UNIT_ASSERT_C(!issues, issues.ToString());
                 privateConnectionId = result.connection_id();
             }
@@ -1033,11 +1029,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 UNIT_ASSERT_C(!issues, issues.ToString());
             }
             {
-                const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(privateConnectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
+                const auto [result, issues] = bootstrap.CreateBinding(
+                    TCreateBindingBuilder{}.SetConnectionId(privateConnectionId).SetVisibility(FederatedQuery::Acl::PRIVATE).Build());
                 UNIT_ASSERT_C(!issues, issues.ToString());
             }
             {
-                const auto [result, issues] = bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(publicConnectionId).SetName("test_binding_name_2").Build());
+                const auto [result, issues] =
+                    bootstrap.CreateBinding(TCreateBindingBuilder{}.SetConnectionId(publicConnectionId).SetName("test_binding_name_2").Build());
                 UNIT_ASSERT_C(!issues, issues.ToString());
             }
         }
@@ -1045,7 +1043,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         {
             NConfig::TControlPlaneStorageConfig config;
             config.SetDisableCurrentIam(true);
-            TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+            TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
 
             TString queryId;
             {
@@ -1070,14 +1068,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 resultSet.emplace_back();
 
                 auto request = TPingTaskBuilder{}
-                                    .SetScope(TestScope)
-                                    .SetQueryId(queryId)
-                                    .SetOwner("owner")
-                                    .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                    .SetResultSetMetas(resultSet)
-                                    .SetPlan("test-plan")
-                                    .SetAst("test-ast")
-                                    .Build();
+                                   .SetScope(TestScope)
+                                   .SetQueryId(queryId)
+                                   .SetOwner("owner")
+                                   .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                                   .SetResultSetMetas(resultSet)
+                                   .SetPlan("test-plan")
+                                   .SetAst("test-ast")
+                                   .Build();
                 const auto [handler, event] = bootstrap.PingTask(std::move(request));
                 UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
             }
@@ -1102,7 +1100,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckResultSetLimit)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString queryId;
         TInstant deadline;
         const TString resId = "result_id00";
@@ -1129,9 +1127,9 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 auto& value = *resultSet.add_rows();
                 value.set_int64_value(i);
             }
-            const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).Build());
+            const auto [handler, event] =
+                bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
-
         }
 
         {
@@ -1139,14 +1137,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetResultId(resId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetResultId(resId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -1168,7 +1166,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckGetResultDataRequest)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
         TString queryId;
         TInstant deadline;
         const TString resId = "result_id00";
@@ -1195,9 +1193,9 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 auto& value = *resultSet.add_rows();
                 value.set_int64_value(i);
             }
-            const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).Build());
+            const auto [handler, event] =
+                bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
-
         }
 
         {
@@ -1205,14 +1203,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetResultId(resId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetResultId(resId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -1231,7 +1229,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldRetryQuery)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -1265,13 +1263,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetResignQuery(true)
-                                .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetResignQuery(true)
+                               .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -1290,7 +1288,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckAst)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -1317,23 +1315,21 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetPlan("test-plan")
-                                .SetAst("test-ast")
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetPlan("test-plan")
+                               .SetAst("test-ast")
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TDescribeQueryBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TDescribeQueryBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.DescribeQuery(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query().ast().data(), "test-ast");
@@ -1343,9 +1339,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
         TString jobId;
         {
-            auto request = TListJobsBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TListJobsBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.ListJobs(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job_size(), 1);
@@ -1353,9 +1347,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            auto request = TDescribeJobBuilder{}
-                                .SetJobId(jobId)
-                                .Build();
+            auto request = TDescribeJobBuilder{}.SetJobId(jobId).Build();
             const auto [result, issues] = bootstrap.DescribeJob(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job().ast().data(), "test-ast");
@@ -1365,7 +1357,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldCheckAstClear)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -1392,23 +1384,21 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetPlan("test-plan")
-                                .SetAst("test-ast")
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetPlan("test-plan")
+                               .SetAst("test-ast")
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TDescribeQueryBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TDescribeQueryBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.DescribeQuery(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query().ast().data(), "test-ast");
@@ -1436,9 +1426,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            auto request = TDescribeQueryBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TDescribeQueryBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.DescribeQuery(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query().ast().data(), "");
@@ -1451,7 +1439,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     {
         NConfig::TControlPlaneStorageConfig config{};
         *config.MutableAutomaticQueriesTtl() = "0s";
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
 
         TString queryId;
         TInstant deadline;
@@ -1479,13 +1467,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -1497,22 +1485,20 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 auto& value = *resultSet.add_rows();
                 value.set_int64_value(i);
             }
-            const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).SetDeadline(deadline).Build());
+            const auto [handler, event] =
+                bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).SetDeadline(deadline).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TListQueriesBuilder{}
-                                .Build();
+            auto request = TListQueriesBuilder{}.Build();
             const auto [result, issues] = bootstrap.ListQueries(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query_size(), 0);
         }
 
         {
-            auto request = TListJobsBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TListJobsBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.ListJobs(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job_size(), 0);
@@ -1525,7 +1511,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_LE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
+                UNIT_ASSERT_LE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1538,7 +1525,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_LE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
+                UNIT_ASSERT_LE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1551,7 +1539,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_LE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
+                UNIT_ASSERT_LE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL more than current time");
             }
         }
     }
@@ -1560,7 +1549,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     {
         NConfig::TControlPlaneStorageConfig config{};
         *config.MutableAutomaticQueriesTtl() = "0s";
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
 
         const TString resId = "result_id00";
         TString queryId;
@@ -1589,14 +1578,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .SetResultId(resId)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .SetResultId(resId)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -1607,13 +1596,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 auto& value = *resultSet.add_rows();
                 value.set_int64_value(i);
             }
-            const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).SetDeadline(deadline).Build());
+            const auto [handler, event] =
+                bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).SetDeadline(deadline).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TListQueriesBuilder{}
-                                .Build();
+            auto request = TListQueriesBuilder{}.Build();
             const auto [result, issues] = bootstrap.ListQueries(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query_size(), 1);
@@ -1621,9 +1610,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         }
 
         {
-            auto request = TListJobsBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TListJobsBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.ListJobs(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job_size(), 1);
@@ -1642,7 +1629,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false,
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1657,7 +1645,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false,
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1672,7 +1661,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
     }
@@ -1680,7 +1670,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     Y_UNIT_TEST(ShouldCheckChangeAutomaticTtl)
     {
         NConfig::TControlPlaneStorageConfig config{};
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
 
         TString queryId;
         TInstant deadline;
@@ -1708,29 +1698,26 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TListQueriesBuilder{}
-                                .Build();
+            auto request = TListQueriesBuilder{}.Build();
             const auto [result, issues] = bootstrap.ListQueries(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query_size(), 1);
         }
 
         {
-            auto request = TListJobsBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TListJobsBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.ListJobs(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job_size(), 1);
@@ -1743,7 +1730,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1756,7 +1744,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1769,7 +1758,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
 
@@ -1796,29 +1786,26 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TListQueriesBuilder{}
-                                .Build();
+            auto request = TListQueriesBuilder{}.Build();
             const auto [result, issues] = bootstrap.ListQueries(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query_size(), 1);
         }
 
         {
-            auto request = TListJobsBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TListJobsBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.ListJobs(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job_size(), 2);
@@ -1830,7 +1817,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false,
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1846,12 +1834,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 2);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false, *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), false,
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp());
             }
         }
 
         {
-            const auto [result, issues] = bootstrap.ModifyQuery(TModifyQueryBuilder{}.SetQueryId(queryId).SetAutomatic(true).SetName("test_query_name_3").Build());
+            const auto [result, issues] =
+                bootstrap.ModifyQuery(TModifyQueryBuilder{}.SetQueryId(queryId).SetAutomatic(true).SetName("test_query_name_3").Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
         }
 
@@ -1873,29 +1863,26 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
         {
-            auto request = TListQueriesBuilder{}
-                                .Build();
+            auto request = TListQueriesBuilder{}.Build();
             const auto [result, issues] = bootstrap.ListQueries(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.query_size(), 1);
         }
 
         {
-            auto request = TListJobsBuilder{}
-                                .SetQueryId(queryId)
-                                .Build();
+            auto request = TListJobsBuilder{}.SetQueryId(queryId).Build();
             const auto [result, issues] = bootstrap.ListJobs(std::move(request));
             UNIT_ASSERT_C(!issues, issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.job_size(), 3);
@@ -1908,7 +1895,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             if (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString(), queryId);
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
                 if (parser.TryNextRow()) {
                     UNIT_FAIL("Row count more than 1");
                 }
@@ -1922,7 +1910,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 3);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
 
@@ -1932,7 +1921,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             NYdb::TResultSetParser parser(*result);
             while (parser.TryNextRow()) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp().has_value(), true);
-                UNIT_ASSERT_GE_C(*parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
+                UNIT_ASSERT_GE_C(
+                    *parser.ColumnParser(EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp(), TInstant::Now(), "TTL less than current time");
             }
         }
     }
@@ -1941,7 +1931,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     {
         NConfig::TControlPlaneStorageConfig config{};
         *config.MutableResultSetsTtl() = "0s";
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
 
         TString queryId;
         TInstant deadline;
@@ -1968,13 +1958,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             resultSet.emplace_back();
 
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
-                                .SetResultSetMetas(resultSet)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetStatus(FederatedQuery::QueryMeta::COMPLETED)
+                               .SetResultSetMetas(resultSet)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -1986,7 +1976,8 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 auto& value = *resultSet.add_rows();
                 value.set_int64_value(i);
             }
-            const auto [handler, event] = bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).SetDeadline(deadline).Build());
+            const auto [handler, event] =
+                bootstrap.WriteResultData(TWriteResultDataBuilder{}.SetResultSet(resultSet).SetResultId(resId).SetDeadline(deadline).Build());
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
 
@@ -2024,7 +2015,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldSaveTopicConsumers)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -2049,13 +2040,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         Cerr << "Adding first batch of consumers" << Endl;
         {
             auto request = TPingTaskBuilder{}
-                .SetScope(TestScope)
-                .SetQueryId(queryId)
-                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                .AddCreatedConsumer("db_id", "/root", "topic", "consumer", "endpoint", true)
-                .AddCreatedConsumer("db_id", "/root", "topic", "consumer2", "endpoint", true)
-                .SetDeadline(deadline)
-                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .AddCreatedConsumer("db_id", "/root", "topic", "consumer", "endpoint", true)
+                               .AddCreatedConsumer("db_id", "/root", "topic", "consumer2", "endpoint", true)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -2064,13 +2055,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         Cerr << "Adding second batch of consumers" << Endl;
         {
             auto request = TPingTaskBuilder{}
-                .SetScope(TestScope)
-                .SetQueryId(queryId)
-                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                .AddCreatedConsumer("db_id", "/root", "topic", "consumer", "endpoint", true) // the same
-                .AddCreatedConsumer("db_id", "/root", "other_topic", "other_consumer", "endpoint", true) // new
-                .SetDeadline(deadline)
-                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .AddCreatedConsumer("db_id", "/root", "topic", "consumer", "endpoint", true)   // the same
+                               .AddCreatedConsumer("db_id", "/root", "other_topic", "other_consumer", "endpoint", true)   // new
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -2079,13 +2070,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
         Cerr << "Fail query" << Endl;
         {
             auto request = TPingTaskBuilder{}
-                .SetScope(TestScope)
-                .SetQueryId(queryId)
-                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                .SetResignQuery(true)
-                .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
-                .SetDeadline(deadline)
-                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetResignQuery(true)
+                               .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -2116,7 +2107,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldSaveDqGraphs)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -2138,16 +2129,16 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
         {
             auto request = TPingTaskBuilder{}
-                .SetScope(TestScope)
-                .SetQueryId(queryId)
-                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                .AddDqGraph("Plan1")
-                .AddDqGraph("Plan2")
-                .SetDqGraphIndex(1)
-                .SetResignQuery(true)
-                .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
-                .SetDeadline(deadline)
-                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .AddDqGraph("Plan1")
+                               .AddDqGraph("Plan2")
+                               .SetDqGraphIndex(1)
+                               .SetResignQuery(true)
+                               .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -2167,7 +2158,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldSaveResultSetMetas)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         TString queryId;
         TInstant deadline;
@@ -2199,14 +2190,14 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             metas.emplace_back(meta2);
 
             auto request = TPingTaskBuilder{}
-                .SetScope(TestScope)
-                .SetQueryId(queryId)
-                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                .SetResultSetMetas(metas)
-                .SetResignQuery(true)
-                .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
-                .SetDeadline(deadline)
-                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetResultSetMetas(metas)
+                               .SetResignQuery(true)
+                               .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
@@ -2230,7 +2221,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     {
         NConfig::TControlPlaneStorageConfig config;
         config.SetDisableCurrentIam(true);
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__, config};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
 
         {
             const auto [result, issues] = bootstrap.CreateQuery(TCreateQueryBuilder{}.Build());
@@ -2250,13 +2241,13 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
 
     Y_UNIT_TEST(ShouldReturnPartialBatchForGetTask)
     {
-        TTestBootstrap bootstrap{__PRETTY_FUNCTION__};
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__ };
 
         constexpr int COUNT = 2;
         TVector<TString> queryIds(COUNT);
         TInstant deadline;
 
-        for (auto& queryId: queryIds) {
+        for (auto& queryId : queryIds) {
             const auto [result, issues] = bootstrap.CreateQuery(TCreateQueryBuilder{}.Build());
             UNIT_ASSERT_C(!issues, issues.ToString());
             queryId = result.query_id();
@@ -2281,7 +2272,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
             UNIT_ASSERT_C(tasks.size() == 0, "Task should not be returned");
         }
 
-        for (auto& queryId: queryIds) {
+        for (auto& queryId : queryIds) {
             TVector<FederatedQuery::ResultSetMeta> resultSet;
             resultSet.emplace_back();
 
@@ -2294,18 +2285,17 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
                 }
             }
             auto request = TPingTaskBuilder{}
-                                .SetScope(TestScope)
-                                .SetQueryId(queryId)
-                                .SetOwner(TGetTaskBuilder::DefaultOwner())
-                                .SetResignQuery(true)
-                                .SetIssues(NYql::TIssues{{*topIssue}})
-                                .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
-                                .SetDeadline(deadline)
-                                .Build();
+                               .SetScope(TestScope)
+                               .SetQueryId(queryId)
+                               .SetOwner(TGetTaskBuilder::DefaultOwner())
+                               .SetResignQuery(true)
+                               .SetIssues(NYql::TIssues{ { *topIssue } })
+                               .SetStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE)
+                               .SetDeadline(deadline)
+                               .Build();
             const auto [handler, event] = bootstrap.PingTask(std::move(request));
             UNIT_ASSERT_C(!event->Issues, event->Issues.ToString());
         }
-
 
         {
             const auto [handler, event] = bootstrap.GetTask(TGetTaskBuilder{}.Build());
@@ -2320,4 +2310,4 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStoragePipeline) {
     }
 }
 
-} // NFq
+}   // namespace NFq

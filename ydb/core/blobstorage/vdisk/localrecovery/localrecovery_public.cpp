@@ -547,6 +547,7 @@ namespace NKikimr {
                             Config->GarbageThresholdToRunFullCompactionPerMille,
                             logFunc);
             }
+            LocRecCtx->RepairedHuge->StripeAllocatorEnabled = Config->UseHeapAllocator;
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
                 LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode,
                 LocRecCtx->PDiskCtx->Dsk->ChunkSize);
@@ -595,7 +596,8 @@ namespace NKikimr {
                     IsTinyDisk = m->PDiskParams->IsTinyDisk;
                 }
 
-                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
+                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config, m->ChunkNonces);
+                LocRecCtx->PDiskCtx->FormatContext = m->FormatContext;
 
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 
@@ -616,7 +618,11 @@ namespace NKikimr {
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
                         Config->HullCompLevel0MaxSstsAtOnce,
-                        Config->HullCompSortedPartsNum);
+                        Config->HullCompSortedPartsNum,
+                        AppData(ctx)->FeatureFlags.GetEnableVDiskFreshSpaceProjection()
+                            && Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
+                        LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        AppData(ctx)->FeatureFlags.GetEnableCollectByCompleteDeletionBlock());
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

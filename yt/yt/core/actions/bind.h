@@ -208,6 +208,12 @@ struct TFutureTraits<TFuture<T>>
     using TWrapped = TFuture<T>;
 };
 
+template <class T>
+struct TFutureTraits<TUniqueFuture<T>>
+{
+    using TUnderlying = T;
+    using TWrapped = TUniqueFuture<T>;
+};
 
 template <class TSignature>
 class TExtendedCallback;

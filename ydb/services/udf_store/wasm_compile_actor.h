@@ -2,6 +2,7 @@
 
 #include "events.h"
 #include "table_query.h"
+
 #include "wasm/manifest.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -10,41 +11,51 @@
 
 namespace NKikimr::NUdfStore {
 
-class TWasmCompileActor : public NActors::TActorBootstrapped<TWasmCompileActor> {
+class TWasmCompileActor: public NActors::TActorBootstrapped<TWasmCompileActor> {
 private:
     using TBase = NActors::TActorBootstrapped<TWasmCompileActor>;
 
     enum class EStep {
         ReadModuleSource,
+        EnsurePending,
         MarkCompiling,
         ReadModuleChunks,
         ReadLibraryArtifact,
         DeleteArtifactChunks,
         WriteArtifactChunk,
         UpsertModuleArtifact,
-        UpdateMetaReady,
-        UpdateMetaFailed,
+        VerifyStillCurrent,
+        DeleteStaleArtifactChunks,
+        DeleteStaleArtifacts,
+        ConfirmStillCurrent,
+        MarkArtifactFailed,
     };
 
     NActors::TActorId ReplyTo_;
-    TString Md5_;
+    TString Name_;
     TString Manifest_;
     TString CpuSpec_;
     TString ModulesTablePath_;
     TString ModuleChunksTablePath_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
+    //! Uid of every required library as of the snapshot this compile was
+    //! queued from: library artifacts are keyed by uid, and this actor never
+    //! reads the library rows itself.
+    THashMap<TString, TString> LibraryUids_;
 
     EStep Step_ = EStep::ReadModuleSource;
     NTableQuery::TModuleSourceRow ModuleSource_;
     NWasm::TWasmManifest ParsedManifest_;
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
+    TString PendingLibraryUid_;
     TString ModuleKind_;
     NTableQuery::TWasmArtifactRow ArtifactRow_;
     TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
     size_t NextChunkWriteIndex_ = 0;
     TString ErrorMessage_;
+    TVector<TString> SourceChunks_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
     void ReplyError(const TString& message);
@@ -61,24 +72,20 @@ private:
     void FailAndPersist(const TString& message);
 
 public:
-    TWasmCompileActor(
-        const NActors::TActorId& replyTo,
-        const TString& md5,
-        const TString& manifest,
-        const TString& cpuSpec,
-        const TString& modulesTablePath,
-        const TString& moduleChunksTablePath,
-        const TString& artifactTablePath,
-        const TString& artifactChunksTablePath)
+    TWasmCompileActor(const NActors::TActorId& replyTo, const TString& name, const TString& manifest, const TString& cpuSpec,
+        const TString& modulesTablePath, const TString& moduleChunksTablePath, const TString& artifactTablePath,
+        const TString& artifactChunksTablePath, THashMap<TString, TString> libraryUids)
         : ReplyTo_(replyTo)
-        , Md5_(md5)
+        , Name_(name)
         , Manifest_(manifest)
         , CpuSpec_(cpuSpec)
         , ModulesTablePath_(modulesTablePath)
         , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
-    {}
+        , LibraryUids_(std::move(libraryUids))
+    {
+    }
 
     void Bootstrap();
 
@@ -92,4 +99,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -27,12 +27,11 @@ private:
     const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
     const std::optional<ui64> PredefinedSize;
 
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs,
-        const ui64 size) const;
+    void ReportTracing(IDataSource& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 size) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
+    virtual ui64 GetProcessingDataSize(const IDataSource& source) const override;
 
     virtual TString DoDebugString() const override {
         std::vector<TString> columns;
@@ -48,20 +47,42 @@ public:
     class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
     private:
         using TBase = NGroupedMemoryManager::IAllocation;
-        std::weak_ptr<IDataSource> Source;
+        std::unique_ptr<TDataSourceLease> SourceLease;
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TasksGuard;
         const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
         const bool NeedNextStep;
-        const bool ScheduleContinuation;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
     public:
-        TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
-            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true,
-            const bool scheduleContinuation = true);
+        class TStartJob: public IAsyncJob {
+        private:
+            const ui64 Memory;
+            const TFetchingScriptCursor Step;
+            const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
+            const bool NeedNextStep;
+
+        public:
+            TStartJob(const ui64 memory, const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex,
+                const bool needNextStep)
+                : Memory(memory)
+                , Step(step)
+                , StageIndex(stageIndex)
+                , NeedNextStep(needNextStep)
+            {
+            }
+
+            ui64 GetMemory() const {
+                return Memory;
+            }
+
+            virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) override;
+        };
+
+        TFetchingStepAllocation(std::unique_ptr<TDataSourceLease> sourceLease, const ui64 mem, const TFetchingScriptCursor& step,
+            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep);
     };
 
     void AddAllocation(const TColumnsSetIds& ids, const EMemType memType) {
@@ -69,7 +90,7 @@ public:
             return;
         }
         for (auto&& i : ids.GetColumnIds()) {
-            AFL_VERIFY(Control[i].emplace(memType).second);
+            YDB_LOG_VERIFY(Control[i].emplace(memType).second);
         }
         Packs.emplace_back(ids, memType);
     }
@@ -102,19 +123,19 @@ private:
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
 
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs,
-        const ui64 bytesAssembled) const;
+    void ReportTracing(
+        IDataSource& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 bytesAssembled) const;
 
 public:
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual ui64 GetProcessingDataSize(const IDataSource& source) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
     {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
+        YDB_LOG_VERIFY(Columns);
+        YDB_LOG_VERIFY(Columns->GetColumnsCount());
     }
 };
 
@@ -123,7 +144,7 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& /*step*/) const override;
 
     TBuildStageResultStep()
         : TBase("BUILD_STAGE_RESULT")
@@ -141,16 +162,16 @@ private:
     }
 
 public:
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+    virtual ui64 GetProcessingDataSize(const IDataSource& source) const override;
 
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
     {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
+        YDB_LOG_VERIFY(Columns);
+        YDB_LOG_VERIFY(Columns->GetColumnsCount());
     }
 };
 
@@ -158,29 +179,28 @@ class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     YDB_READONLY_DEF(TColumnsSetIds, Columns);
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs,
-        const ui64 blobBytes, const ui64 rawBytes) const;
+    void ReportTracing(IDataSource& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 blobBytes,
+        const ui64 rawBytes) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns.DebugString() << ";";
     }
 
 public:
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+    virtual ui64 GetProcessingDataSize(const IDataSource& source) const override;
 
     TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
         , Columns(columns)
     {
-        AFL_VERIFY(Columns.GetColumnsCount());
+        YDB_LOG_VERIFY(Columns.GetColumnsCount());
     }
 };
 
-// Shared by simple/trivial DoStartReserveMemory: sync vs async path with matching scheduleContinuation.
-TConclusion<bool> StartProgramStepReserveMemory(
-    const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
+TExecutionResult StartProgramStepReserveMemory(
+    const IDataSource& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

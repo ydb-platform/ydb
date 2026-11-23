@@ -32,6 +32,14 @@ public:
     {
     }
 
+    bool IsSubDomainOutOfSpace() const {
+        return SubDomainOutOfSpace;
+    }
+
+    bool IsSubDomainSmallBlobsQuotaExceeded() const {
+        return SubDomainSmallBlobsQuotaExceeded;
+    }
+
     void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext& txc);
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
@@ -50,7 +58,9 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(NActors::TEvents::TEvPoison, Handle);
             default:
-                LOG_S_WARN("TSpaceWatcher.StateWork at " << " unhandled event type: " << ev->GetTypeName() << " event: " << ev->ToString());
+                YDB_LOG_WARN_COMP(TX_COLUMNSHARD, "TSpaceWatcher.StateWork at unhandled event",
+                    {"type", ev->GetTypeName()},
+                    {"event", ev->ToString()});
                 break;
         }
     }

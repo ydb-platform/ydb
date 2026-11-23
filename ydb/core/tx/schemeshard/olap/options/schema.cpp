@@ -4,11 +4,18 @@ namespace NKikimr::NSchemeShard {
 
 bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
     SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
+    if (schemaUpdate.GetTieringNeedActualization()) {
+        TieringNeedActualization = *schemaUpdate.GetTieringNeedActualization();
+    }
+
     if (!!schemaUpdate.GetScanReaderPolicyName()) {
         ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
     }
     if (schemaUpdate.GetDeduplicationEnabled()) {
         DeduplicationEnabled = *schemaUpdate.GetDeduplicationEnabled();
+    }
+    if (schemaUpdate.GetCacheBlobsAfterWrite()) {
+        CacheBlobsAfterWrite = *schemaUpdate.GetCacheBlobsAfterWrite();
     }
     if (schemaUpdate.GetCompactionPlannerConstructor().HasObject()) {
         CompactionPlannerConstructor = schemaUpdate.GetCompactionPlannerConstructor();
@@ -27,17 +34,24 @@ bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate
 
 void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     SchemeNeedActualization = tableSchema.GetOptions().GetSchemeNeedActualization();
+    if (tableSchema.GetOptions().HasTieringNeedActualization()) {
+        TieringNeedActualization = tableSchema.GetOptions().GetTieringNeedActualization();
+    }
+
     if (tableSchema.GetOptions().HasScanReaderPolicyName()) {
         ScanReaderPolicyName = tableSchema.GetOptions().GetScanReaderPolicyName();
     }
     if (tableSchema.GetOptions().HasDeduplicationEnabled()) {
         DeduplicationEnabled = tableSchema.GetOptions().GetDeduplicationEnabled();
     }
+    if (tableSchema.GetOptions().HasCacheBlobsAfterWrite()) {
+        CacheBlobsAfterWrite = tableSchema.GetOptions().GetCacheBlobsAfterWrite();
+    }
     if (tableSchema.GetOptions().HasCompactionPlannerConstructor()) {
-        AFL_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
+        YDB_LOG_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
     }
     if (tableSchema.GetOptions().HasMetadataManagerConstructor()) {
-        AFL_VERIFY(MetadataManagerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetMetadataManagerConstructor()));
+        YDB_LOG_VERIFY(MetadataManagerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetMetadataManagerConstructor()));
     }
     if (tableSchema.GetOptions().HasInsertOptions()) {
         const auto& options = tableSchema.GetOptions().GetInsertOptions();
@@ -52,11 +66,18 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
 
 void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
     tableSchema.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+    if (TieringNeedActualization) {
+        tableSchema.MutableOptions()->SetTieringNeedActualization(*TieringNeedActualization);
+    }
+
     if (ScanReaderPolicyName) {
         tableSchema.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
     }
     if (DeduplicationEnabled) {
         tableSchema.MutableOptions()->SetDeduplicationEnabled(*DeduplicationEnabled);
+    }
+    if (CacheBlobsAfterWrite) {
+        tableSchema.MutableOptions()->SetCacheBlobsAfterWrite(*CacheBlobsAfterWrite);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*tableSchema.MutableOptions()->MutableCompactionPlannerConstructor());

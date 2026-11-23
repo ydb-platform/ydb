@@ -84,22 +84,20 @@ class YdbMixedWorkload(WorkloadBase):
             '--len', '1000',
         ]
 
-    def __loop(self):
-        upload_commands = [self.get_bulk_upsert_cmd()]
-        upload_select_commands = [self.get_bulk_upsert_cmd(), self.get_select_cmd()]
-        upload_select_update_commands = [self.get_bulk_upsert_cmd(), self.get_select_cmd(), self.get_update_cmd()]
-
-        # init
-
-        self.cmd_run(
-            self.get_command_prefix(subcmds=['clean'])
-        )
-
+    def prepare(self):
         self.cmd_run(
             self.get_command_prefix(subcmds=['init']) + self.get_cols_count_command_params() + [
                 '--store', self.store_type,
             ]
         )
+
+    def clean(self):
+        self.cmd_run(self.get_command_prefix(subcmds=['clean']))
+
+    def __loop(self):
+        upload_commands = [self.get_bulk_upsert_cmd()]
+        upload_select_commands = [self.get_bulk_upsert_cmd(), self.get_select_cmd()]
+        upload_select_update_commands = [self.get_bulk_upsert_cmd(), self.get_select_cmd(), self.get_update_cmd()]
 
         with ThreadPoolExecutor() as executor:
             for command in upload_commands:
@@ -121,10 +119,6 @@ class YdbMixedWorkload(WorkloadBase):
                     self.cmd_run,
                     command
                 )
-
-        self.cmd_run(
-            self.get_command_prefix(subcmds=['clean'])
-        )
 
     def get_workload_thread_funcs(self):
         r = [self.__loop]

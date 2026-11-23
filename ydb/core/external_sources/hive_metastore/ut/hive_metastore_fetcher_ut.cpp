@@ -22,7 +22,8 @@ struct TTestBootstrap {
     TRuntimePtr Runtime;
 
     TTestBootstrap()
-        : Runtime(PrepareTestActorRuntime()) {
+        : Runtime(PrepareTestActorRuntime())
+    {
     }
 
 private:
@@ -34,7 +35,7 @@ private:
     }
 };
 
-} // namespace
+}   // namespace
 
 //////////////////////////////////////////////////////
 
@@ -154,4 +155,4 @@ Y_UNIT_TEST_SUITE(HiveMetastoreFetcher) {
     }
 }
 
-} // namespace NKikimr::NExternalSource
+}   // namespace NKikimr::NExternalSource

@@ -157,6 +157,13 @@ namespace NKikimr {
         class TSyncLog;
         using TSyncLogPtr = TIntrusivePtr<TSyncLog>;
 
+        struct TSyncLogDiskSpaceStat {
+            ui64 ChunkSizeBytes = 0;
+            ui64 ActiveChunkCount = 0;
+            ui64 UsedBytes = 0;
+            ui64 FreeBytes = 0;
+        };
+
         class TSyncLog : public TThrRefBase {
         public:
             ////////////////////////////////////////////////////////////////////////
@@ -235,6 +242,7 @@ namespace NKikimr {
             ui32 HowManyChunksAdds(const TMemRecLogSnapshotPtr &swapSnap) const;
             // returns how many chunks we use
             ui32 GetSizeInChunks() const;
+            TSyncLogDiskSpaceStat GetDiskSpaceStat() const;
             // returns lsn of last record stored in DiskRecLog or 0 if it's empty
             ui64 GetDiskLastLsn() const;
             // update index of DiskRecLog

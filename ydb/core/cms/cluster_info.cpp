@@ -42,14 +42,17 @@ bool IsSystemTablet(TTabletTypes::EType type) {
     case TTabletTypes::GraphShard:
     case TTabletTypes::BackupController:
     case TTabletTypes::DbsController:
+    case TTabletTypes::WasmCompileController:
         return true;
     // New tablet types are introduced by renaming one of these reserved
     // values. Keep them explicit so that such a change fails to compile here
     // until the new type is classified.
-    case TTabletTypes::Reserved47:
-    case TTabletTypes::Reserved48:
+    case TTabletTypes::CdcAggregator:
+        return false;
     case TTabletTypes::Reserved49:
     case TTabletTypes::Reserved50:
+    case TTabletTypes::Reserved51:
+    case TTabletTypes::Reserved52:
         return false;
     default:
         return false;
@@ -364,7 +367,8 @@ void TVDiskInfo::MigrateOldInfo(const TLockableItem &old)
 TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
                                                                    TDuration retryTime,
                                                                    TDuration duration,
-                                                                   const TString &requestId) const
+                                                                   const TString &requestId,
+                                                                   TDuration restartCooldown) const
 {
     if (IsDisabled) {
         return Disabled;
@@ -383,7 +387,7 @@ TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
             }
         }
 
-        if (now <= node->StartTime + Timeout) {
+        if (now <= node->StartTime + restartCooldown) {
             hasTimeout = true;
         }
     }
@@ -463,6 +467,7 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
 
 void TClusterInfo::ClearNode(ui32 nodeId)
 {
+    DDiskStateInfo.erase(nodeId);
     if (!HasNode(nodeId))
         return;
 
@@ -505,6 +510,9 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
 
     TTabletInfo &tablet = Tablets[info.GetTabletId()];
     tablet.TabletId = info.GetTabletId();
+    if (info.HasNbsDiskId()) {
+        tablet.NbsDiskId = info.GetNbsDiskId();
+    }
     tablet.Type = info.GetType();
     tablet.State = info.GetState();
     tablet.Leader = info.GetLeader();
@@ -721,13 +729,11 @@ static TServices MakeServices(const NKikimrCms::TAction &action) {
     return services;
 }
 
-void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 priority, const TString &requestId)
+void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, const TNodeLockContext &ctx)
 {
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         return;
     }
-
-    TNodeLockContext ctx(priority, requestId);
 
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
@@ -736,7 +742,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(node->NodeId, priority)) {
+                    if (!nodeGroup->IsNodeLocked(node->NodeId, ctx.Priority)) {
                         nodeGroup->LockNode(node->NodeId, ctx);
                     }
                 }
@@ -748,14 +754,14 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 
             if (HasPDisk(device)) {
                 auto pdisk = &PDiskRef(device);
                 for (auto &nodeGroup: NodeRef(pdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId, priority)) {
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId, ctx.Priority)) {
                         nodeGroup->LockNode(pdisk->NodeId, ctx);
                     }
                 }
             } else if (HasVDisk(device)) {
                 auto vdisk = &VDiskRef(device);
                 for (auto &nodeGroup: NodeRef(vdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId, priority)) {
+                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId, ctx.Priority)) {
                         nodeGroup->LockNode(vdisk->NodeId, ctx);
                     }
                 }
@@ -871,7 +877,10 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         }
     }
 
-    ApplyActionWithoutLog(permission.Action, permission.Priority, permission.RequestId);
+    TNodeLockContext lockCtx(permission.Priority, permission.RequestId);
+    lockCtx.PermissionId = permission.PermissionId;
+    lockCtx.Owner = permission.Owner;
+    ApplyActionWithoutLog(permission.Action, lockCtx);
 
     return locks;
 }
@@ -881,7 +890,7 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
     ui64 locks = 0;
     for (const auto &action : notification.Notification.GetActions()) {
         auto items = FindLockedItems(action, ctx);
-        ApplyActionWithoutLog(action, 0, notification.NotificationId);
+        ApplyActionWithoutLog(action, TNodeLockContext(0, notification.NotificationId));
 
         for (auto item : items) {
             if (ctx)
@@ -1006,7 +1015,7 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    const ui64 rGroupSize = IsBridgeMode ? info->RingGroups.size() : 1;
+    const ui64 rGroupSize = info->RingGroups.size();
     StateStorageRings.resize(rGroupSize);
 
     for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
@@ -1032,8 +1041,7 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                     continue;
                 }
                 ringInfo->AddNode(Nodes[nodeId]);
-                StateStorageReplicas.insert(nodeId);
-                StateStorageNodeToRingId[nodeId] = ringId;
+                StateStorageNodeToRings[nodeId][rGroupId] = ringId;
             }
 
             StateStorageRings[rGroupId].push_back(ringInfo);

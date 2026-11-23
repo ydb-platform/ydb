@@ -6,8 +6,6 @@ SRCS(
 PEERDIR(
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
@@ -18,4 +16,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     llvm16/ut
     benchmark
+    test_support
 )

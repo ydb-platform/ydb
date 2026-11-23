@@ -5,19 +5,23 @@
 namespace NKikimr::NConveyorComposite {
 
 TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
-    std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId)
+    std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId,
+    const TSchedulerQueryIdentity& identity)
     : ForwardSendDuration(forwardSendDuration)
     , Results(std::move(results))
     , WorkerIdx(workerIdx)
-    , WorkersPoolId(workersPoolId) {
-    AFL_VERIFY(Results.size());
+    , WorkersPoolId(workersPoolId)
+    , QueryIdentity(identity) {
+    YDB_LOG_VERIFY(Results.size());
 }
 
-TWorkerTaskResult::TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish)
+TWorkerTaskResult::TWorkerTaskResult(
+    const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish, std::function<void()> accounted)
     : TBase(context)
     , Start(start)
-    , Finish(finish) {
-    AFL_VERIFY(Start <= Finish);
+    , Finish(finish)
+    , Accounted(std::move(accounted)) {
+    YDB_LOG_VERIFY(Start <= Finish);
 }
 
 }   // namespace NKikimr::NConveyorComposite

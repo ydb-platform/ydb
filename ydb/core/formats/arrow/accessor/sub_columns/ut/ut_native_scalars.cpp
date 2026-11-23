@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
     // Drive the JSONPath pushdown projection (TJsonPathAccessor::VisitValues) for a key and render the
     // per-record string it yields ("<null>" for absent / non-projectable), joined for easy comparison.
     TString CollectPushdown(const std::shared_ptr<TSubColumnsArray>& arr, const std::string_view path) {
-        auto accResult = arr->GetPathAccessor(path, arr->GetRecordsCount());
+        auto accResult = arr->GetPathAccessor(ParseJsonPath(path).DetachResult(), arr->GetRecordsCount());
         UNIT_ASSERT_C(accResult.IsSuccess(), accResult.GetErrorMessage());
         auto acc = accResult.DetachResult();
         TStringBuilder out;
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
             UNIT_ASSERT(native->GetChunkedArray());   // read-back document reconstruction must not abort
             const auto assertExact = [&](const std::shared_ptr<TSubColumnsArray>& arr) {
                 auto it = arr->GetColumnsData().BuildIterator(0);
-                auto bj = ArrayElementToBinaryJson(it.GetArray(), it.GetLocalIndex(), EValueType::Double);
+            auto bj = it.GetValue().ToBinaryJson();
                 auto reader = NBinaryJson::TBinaryJsonReader::Make(bj);
                 UNIT_ASSERT_VALUES_EQUAL(reader->GetRootCursor().GetElement(0).GetNumber(), expected);
             };

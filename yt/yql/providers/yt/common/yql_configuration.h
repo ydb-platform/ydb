@@ -50,6 +50,7 @@ constexpr bool DEFAULT_KEY_FILTER_FOR_STARTS_WITH = true;
 constexpr ui64 DEFAULT_MAX_KEY_RANGE_COUNT = 1000ULL;
 
 constexpr bool DEFAULT_USE_NATIVE_DESC_SORT = false;
+constexpr bool DEFAULT_ALLOW_NATIVE_DESC_SORT = true;
 
 constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 
@@ -68,6 +69,7 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD = false;
 constexpr ui64 DEFAULT_JOIN_COMMON_FLAT_PAYLOAD_COLUMN_LIMIT = 1024;
 
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
+constexpr bool DEFAULT_PASS_OPT_LLVM_TO_DQ_CODECS = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
 const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
@@ -125,16 +127,24 @@ constexpr ui64 DEFAULT_LLVM_NODE_COUNT_LIMIT = 200000;
 constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
 constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
 
+constexpr bool DEFAULT_BYPASS_MERGE_WITH_INPUT_SETTINGS = false;
+
 constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
+constexpr bool DEFAULT_LATE_FUSE_OPERATIONS = false;
 constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapReduceMode::Disable;
+constexpr bool DEFAULT_BYPASS_IDENTITY_MAP_WITH_SYS_COLUMNS = false;
 
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 constexpr bool DEFAULT_USE_QL_FILTER = false;
+// Leave room below YT's MaxExpressionDepth because YQL and YT have independent release cycles.
+constexpr ui32 DEFAULT_QL_FILTER_DEPTH_LIMIT = 45;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
 constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = true;
+
+constexpr bool DEFAULT_ENABLE_PROGRESS_DATA_STATISTICS = false;
 
 constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
 
@@ -170,8 +180,6 @@ constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disab
 constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
 
 const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
-
-constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = true;
 
 constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
 

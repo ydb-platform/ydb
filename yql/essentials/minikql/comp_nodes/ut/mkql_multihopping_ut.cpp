@@ -11,7 +11,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_graph_saveload.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/comp_nodes/test_support/mkql_program_builder_test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -235,13 +235,14 @@ THolder<IComputationGraph> BuildGraph(
         farFutureSizeLimit == NYql::NHoppingWindow::TSettings{}.FarFutureSizeLimit ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(farFutureSizeLimit)),
         farFutureTimeLimitUs == NYql::NHoppingWindow::TSettings{}.FarFutureTimeLimit.MicroSeconds() ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&farFutureTimeLimitUs, sizeof(farFutureTimeLimitUs))),
         earlyPolicy == NYql::NHoppingWindow::TSettings{}.EarlyPolicy ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(earlyPolicy)),
-        latePolicy == NYql::NHoppingWindow::TSettings{}.LatePolicy ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(latePolicy))
+        latePolicy == NYql::NHoppingWindow::TSettings{}.LatePolicy ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(latePolicy)),
 #else
         {}, // SizeLimit
         {}, // TimeLimit
         {}, // EarlyPolicy
-        {}  // LatePolicy
+        {}, // LatePolicy
 #endif
+        /*checkMinWindowStart=*/false // CheckMinWindowStart
     );
 
     return setup.BuildGraph(pgmReturn, {streamNode});

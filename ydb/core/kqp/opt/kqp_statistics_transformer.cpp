@@ -36,13 +36,10 @@ static TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
 {
     auto result = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>();
     for (const auto& [name, s] : src->Data) {
-        TColumnStatistics cs;
-        cs.NumUniqueVals = s.NumUniqueVals;
-        cs.HyperLogLog = s.HyperLogLog;
-        cs.CountMinSketch = s.CountMinSketch;
-        cs.EqWidthHistogramEstimator = s.EqWidthHistogramEstimator;
-        cs.Type = s.Type;
-        result->Data[name] = std::move(cs);
+        result->Data[name] = TColumnStatistics(s);
+    }
+    for (const auto& [name, s] : src->MultiData) {
+        result->MultiData[name] = TMultiColumnStatistics(s);
     }
     return result;
 }
@@ -690,11 +687,11 @@ public:
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeInequalitySelectivity(member, value, false, OlapCompStrToEInequalityPredicate[compSign]);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
-                    resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
+                    resSelectivity = this->ComputeEqualitySelectivity(member, value);
                 } else if (compSign == "neq") {
-                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value, false);
+                    resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
                 } else if (RegexpSigns.contains(compSign)) {
                     return 0.5;
                 }

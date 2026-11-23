@@ -85,12 +85,16 @@ using TConstFrontQueryPtr = TIntrusivePtr<const TFrontQuery>;
 DECLARE_REFCOUNTED_STRUCT(TQuery)
 using TConstQueryPtr = TIntrusivePtr<const TQuery>;
 
+DECLARE_REFCOUNTED_STRUCT(TUnionAllQuery)
+
 struct IPrepareCallbacks;
 
 struct TExecutionStatistics;
 struct TQueryStatistics;
 
 struct TQueryOptions;
+
+struct TParsedSource;
 
 DECLARE_REFCOUNTED_STRUCT(IAggregateFunctionDescriptor)
 
@@ -178,7 +182,7 @@ using NTableClient::ESimpleLogicalValueType;
 
 namespace NAst {
 
-DECLARE_REFCOUNTED_STRUCT(TTableHint);
+using NQueryClient::TTableHint;
 
 } // namespace NAst
 

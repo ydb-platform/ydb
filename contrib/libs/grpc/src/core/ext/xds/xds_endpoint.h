@@ -41,7 +41,7 @@
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
-#include "src/core/lib/resolver/endpoint_addresses.h"
+#include "src/core/resolver/endpoint_addresses.h"
 
 namespace grpc_core {
 
@@ -63,6 +63,7 @@ struct XdsEndpointResource : public XdsResourceType::ResourceData {
     std::map<XdsLocalityName*, Locality, XdsLocalityName::Less> localities;
 
     bool operator==(const Priority& other) const;
+    bool operator!=(const Priority& other) const { return !(*this == other); }
     TString ToString() const;
   };
   using PriorityList = std::vector<Priority>;
@@ -71,7 +72,7 @@ struct XdsEndpointResource : public XdsResourceType::ResourceData {
   // 1. to initialize in the control plane combiner;
   // 2. to use in the data plane combiner.
   // So no additional synchronization is needed.
-  class DropConfig : public RefCounted<DropConfig> {
+  class DropConfig final : public RefCounted<DropConfig> {
    public:
     struct DropCategory {
       bool operator==(const DropCategory& other) const {
@@ -122,12 +123,15 @@ struct XdsEndpointResource : public XdsResourceType::ResourceData {
   RefCountedPtr<DropConfig> drop_config;
 
   bool operator==(const XdsEndpointResource& other) const {
-    return priorities == other.priorities && *drop_config == *other.drop_config;
+    if (priorities != other.priorities) return false;
+    if (drop_config == nullptr) return other.drop_config == nullptr;
+    if (other.drop_config == nullptr) return false;
+    return *drop_config == *other.drop_config;
   }
   TString ToString() const;
 };
 
-class XdsEndpointResourceType
+class XdsEndpointResourceType final
     : public XdsResourceTypeImpl<XdsEndpointResourceType, XdsEndpointResource> {
  public:
   y_absl::string_view type_url() const override {

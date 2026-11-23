@@ -340,7 +340,7 @@ namespace NYT::NYson {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NYTree::CExternallySerializable T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer)
+void Serialize(const T& value, IYsonConsumer* consumer)
 {
     using TSerializer = typename NYTree::TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
     auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
@@ -350,7 +350,7 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 template <NYTree::CExternallySerializable T>
 void Deserialize(
     T& value,
-    NYson::TYsonPullParserCursor* cursor,
+    TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
     std::optional<NYTree::EUnrecognizedStrategy> strategy)

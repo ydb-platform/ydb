@@ -1,0 +1,92 @@
+===== testcase =====
+full local layout
+A kept blob with all six main parts is complete and is skipped.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7), known_nodes=(0, 1, 2, 3, 4, 5), local_parts={5: (0,), 6: (1,), 7: (2,), 0: (3,), 1: (4,), 2: (5,)}, subgroup_order=(5, 6, 7, 0, 1, 2, 3, 4), part_count=6)
+  VDisk(index=0, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000107f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=1, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000087f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=2, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000047f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=3, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=4, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=5, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000807f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=6, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000407f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=7, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000207f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+
+blobsan block-4-2
+Exit Status: 0
+
+===== testcase =====
+incomplete local layout
+Four local parts are restorable but incomplete, so the kept blob is reported.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7), known_nodes=(0, 1, 2, 3, 4, 5), local_parts={5: (0,), 6: (1,), 7: (2,), 0: (3,)}, subgroup_order=(5, 6, 7, 0, 1, 2, 3, 4), part_count=6)
+  VDisk(index=0, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000107f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=1, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=2, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=3, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=4, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=5, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000807f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=6, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000407f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=7, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000207f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+
+blobsan block-4-2
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [5 6 7 0 1 2 3 4]
+	KeepMode#           keep
+	Layout#             {00000001 00000010 00000100 00001000 00010000 00100000}
+	LocalLayout#        {00000001 00000010 00000100 00001000 00000000 00000000}
+	OrigLocalLayout#    {00000001 00000010 00000100 00001000 00000000 00000000}
+	ReflectionLayout#   {00000001 00000010 00000100 00001000 00010000 00100000}
+	NumParts#           6
+	NumLocalParts#      4
+	NumReflectionParts# 6
+	NumNodes#           8
+	Nodes#              11111111
+	SeenDisks#          11111111
+	NumUnderBarrier#    8
+	UnderBarrierMask#   11111111
+	NumDiscard#         0
+	DiscardMask#        00000000
+	KeepMask#           11111111
+	DoNotKeepMask#      00000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+too few local parts
+Three local parts are not restorable and contribute to TrashSize instead.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7), known_nodes=(0, 1, 2, 3, 4, 5), local_parts={5: (0,), 6: (1,), 7: (2,)}, subgroup_order=(5, 6, 7, 0, 1, 2, 3, 4), part_count=6)
+  VDisk(index=0, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=1, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=2, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=3, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=4, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=5, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000807f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=6, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000407f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+  VDisk(index=7, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000207f)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x0ff))])
+
+blobsan block-4-2
+Exit Status: 0
+Stderr: TrashSize# 96
+
+===== testcase =====
+above barriers
+An incomplete blob above all barriers is skipped in default mode.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier=None, quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7), known_nodes=(0, 1, 2, 3, 4, 5), local_parts={5: (0,), 6: (1,), 7: (2,), 0: (3,)}, subgroup_order=(5, 6, 7, 0, 1, 2, 3, 4), part_count=6)
+  VDisk(index=0, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000107f)], barriers=[])
+  VDisk(index=1, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[])
+  VDisk(index=2, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[])
+  VDisk(index=3, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[])
+  VDisk(index=4, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000007f)], barriers=[])
+  VDisk(index=5, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000807f)], barriers=[])
+  VDisk(index=6, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000407f)], barriers=[])
+  VDisk(index=7, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000000000000207f)], barriers=[])
+
+blobsan block-4-2
+Exit Status: 0

@@ -13,7 +13,7 @@ private:
 
 public:
     void AddColumn(const ui32 columnId, const std::shared_ptr<IChunkedArray>& arr) {
-        AFL_VERIFY(ColumnsData.emplace(columnId, arr).second);
+        YDB_LOG_VERIFY(ColumnsData.emplace(columnId, arr).second);
     }
 
     bool HasColumn(const ui32 columnId) const {
@@ -22,21 +22,22 @@ public:
 
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = ColumnsData.find(columnId);
-        AFL_VERIFY(it != ColumnsData.end())("id", columnId);
+        YDB_LOG_VERIFY(it != ColumnsData.end(),
+            {"id", columnId});
         return it->second;
     }
 
     TPartialColumnsData ApplyFilter(const TColumnFilter& filter) const {
         TPartialColumnsData result;
         for (auto&& i : ColumnsData) {
-            AFL_VERIFY(result.ColumnsData.emplace(i.first, filter.Apply(i.second)).second);
+            YDB_LOG_VERIFY(result.ColumnsData.emplace(i.first, filter.Apply(i.second)).second);
         }
         return result;
     }
     TPartialColumnsData Slice(const ui32 offset, const ui32 count) const {
         TPartialColumnsData result;
         for (auto&& i : ColumnsData) {
-            AFL_VERIFY(result.ColumnsData.emplace(i.first, i.second->ISlice(offset, count)).second);
+            YDB_LOG_VERIFY(result.ColumnsData.emplace(i.first, i.second->ISlice(offset, count)).second);
         }
         return result;
     }
@@ -53,16 +54,16 @@ private:
     TString StoreOthersString;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& /*visitor*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
@@ -72,7 +73,7 @@ protected:
 
     virtual TLocalDataAddress DoGetLocalData(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TLocalDataAddress(nullptr, 0, 0);
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
@@ -129,19 +130,23 @@ public:
         return Settings;
     }
 
-    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(
+        const NSubColumns::TParsedJsonPath& parsedPath, const ui32 recordsCount) const;
 
     bool NeedFetch(const std::string_view colName) const {
-        if (auto idx = Header.GetColumnStats().GetKeyIndexOptional(colName)) {
-            return !PartialColumnsData.HasColumn(*idx);
-        } else if (auto idx = Header.GetOtherStats().GetKeyIndexOptional(colName)) {
-            return !OthersData;
+        auto pathResult = NSubColumns::ResolveBestPath(Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName));
+        YDB_LOG_VERIFY(pathResult.IsSuccess(),
+            {"column", colName},
+            {"error", pathResult.GetErrorMessage()});
+        const auto path = pathResult.DetachResult();
+        if (path && path->IsColumn) {
+            return !PartialColumnsData.HasColumn(path->Path.ColumnIndex);
         }
-        return false;
+        return path && !OthersData;
     }
 
-    void AddColumn(const TString& columnName, const std::shared_ptr<IChunkedArray>& arr) {
-        PartialColumnsData.AddColumn(Header.GetColumnStats().GetKeyIndexVerified(std::string_view(columnName.data(), columnName.size())), arr);
+    void AddColumn(const ui32 columnIndex, const std::shared_ptr<IChunkedArray>& arr) {
+        PartialColumnsData.AddColumn(columnIndex, arr);
     }
 
     bool HasOthers() const {
@@ -150,10 +155,6 @@ public:
 
     void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const std::shared_ptr<NArrow::TColumnFilter>& applyFilter,
         const bool deserialize);
-
-    bool IsOtherColumn(const TString& colName) const {
-        return !!Header.GetOtherStats().GetKeyIndexOptional(std::string_view(colName.data(), colName.size()));
-    }
 
     NSubColumns::TReadRange GetColumnReadRange(const ui32 colIndex) const {
         return Header.GetColumnReadRange(colIndex);

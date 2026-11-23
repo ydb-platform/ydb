@@ -2,13 +2,23 @@ package NYql.NYtflow.NProto;
 
 import "yt/yql/providers/ytflow/integration/proto/pq.proto";
 
-message TQYTSourceMessage {
+message TYtQueueSourceMessage {
    optional string Cluster = 1;
    optional string Path = 2;
    optional bytes RowType = 3;
+   optional string ConsumerPath = 4;
 }
 
-message TQYTSinkMessage {
+message TYtQueueSinkMessage {
+   optional string Cluster = 1;
+   optional string Path = 2;
+   optional bytes RowType = 3;
+   optional bool DoesExist = 5;
+   optional bool Truncate = 6;
+   optional string ProducerPath = 7;
+}
+
+message TYtSortedTableSinkMessage {
    optional string Cluster = 1;
    optional string Path = 2;
    optional bytes RowType = 3;

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    scoped_allocation_cache.h
     test_runtime.cpp
 )
 

@@ -75,6 +75,8 @@ class TPortionInfo {
 public:
     using TConstPtr = std::shared_ptr<const TPortionInfo>;
     using TPtr = std::shared_ptr<TPortionInfo>;
+    using TKey = NArrow::TSimpleRow;
+    using TKeyRef = NArrow::TSimpleRowRef;
     using TRuntimeFeatures = ui8;
     enum class ERuntimeFeature: TRuntimeFeatures {
         Optimized = 1 /* "optimized" */
@@ -144,9 +146,9 @@ public:
     };
 
     void FullValidation() const {
-        AFL_VERIFY(PathId);
-        AFL_VERIFY(PortionId);
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(PathId);
+        YDB_LOG_VERIFY(PortionId);
+        YDB_LOG_VERIFY(SchemaVersion);
         Meta.FullValidation();
     }
 
@@ -154,6 +156,7 @@ public:
 
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
+    virtual bool IsAborted() const = 0;
 
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
         return NPortion::TPortionInfoForCompaction(GetTotalBlobBytes(), GetMeta().IndexKeyStart(), GetMeta().IndexKeyEnd());
@@ -222,7 +225,7 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!HasRemoveSnapshot());
+        YDB_LOG_VERIFY(!HasRemoveSnapshot());
         RemoveSnapshot.Set(snap);
     }
 
@@ -387,7 +390,7 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
-        AFL_VERIFY(HasRemoveSnapshot());
+        YDB_LOG_VERIFY(HasRemoveSnapshot());
         return RemoveSnapshot.Get();
     }
 
@@ -404,7 +407,7 @@ public:
     }
 
     ui64 GetSchemaVersionVerified() const {
-        AFL_VERIFY(SchemaVersion);
+        YDB_LOG_VERIFY(SchemaVersion);
         return SchemaVersion;
     }
 
@@ -427,6 +430,14 @@ public:
         return Meta.IndexKeyEnd();
     }
 
+    NArrow::TSimpleRowRef IndexKeyStartRef() const {
+        return Meta.IndexKeyStartRef();
+    }
+
+    NArrow::TSimpleRowRef IndexKeyEndRef() const {
+        return Meta.IndexKeyEndRef();
+    }
+
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
 
@@ -446,6 +457,8 @@ public:
 
     ui64 GetColumnRawBytes() const;
     ui64 GetColumnBlobBytes() const;
+
+    bool HasBlobsInBlobStorage(const TIndexInfo& indexInfo) const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();

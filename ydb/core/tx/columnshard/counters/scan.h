@@ -1,7 +1,7 @@
 #pragma once
 #include "sub_columns.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
+#include <ydb/core/kqp/common/events/scan_stats.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
@@ -75,6 +75,8 @@ public:
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
         ProblemOnStart /*ProblemOnStart*/,
+        BrokenLock /* "BrokenLock" */,
+        Poisoned /* "Poisoned" */,
 
         COUNT
     };
@@ -95,12 +97,12 @@ public:
         }
 
         void Add(const EIntervalStatus status) const {
-            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            YDB_LOG_VERIFY((ui32)status < ValuesByStatus.size());
             ValuesByStatus[(ui32)status]->Add(1);
         }
 
         void Remove(const EIntervalStatus status) const {
-            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            YDB_LOG_VERIFY((ui32)status < ValuesByStatus.size());
             ValuesByStatus[(ui32)status]->Sub(1);
         }
     };
@@ -176,17 +178,17 @@ private:
 
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
-        AFL_VERIFY(SubColumnCounters);
+        YDB_LOG_VERIFY(SubColumnCounters);
         return SubColumnCounters;
     }
 
     const std::shared_ptr<TDuplicateFilteringCounters>& GetDuplicateFilteringCounters() const {
-        AFL_VERIFY(DuplicateFilteringCounters);
+        YDB_LOG_VERIFY(DuplicateFilteringCounters);
         return DuplicateFilteringCounters;
     }
 
     const std::shared_ptr<TSimpleDuplicateFilteringCounters>& GetSimpleDuplicateFilteringCounters() const {
-        AFL_VERIFY(SimpleDuplicateFilteringCounters);
+        YDB_LOG_VERIFY(SimpleDuplicateFilteringCounters);
         return SimpleDuplicateFilteringCounters;
     }
 
@@ -279,6 +281,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRawBytes;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRecords;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
+    NMonitoring::TDynamicCounters::TCounterPtr StartedSourceConflictingCount;
+    NMonitoring::TDynamicCounters::TCounterPtr StartedSourceNonconflictingCount;
     NMonitoring::THistogramPtr HistogramFilteredResultCount;
 
     TScanCounters(const TString& module = "Scan");
@@ -290,6 +294,15 @@ public:
         HistogramFilteredResultCount->Collect(filteredRecordsCount);
         if (!filteredRecordsCount) {
             ProcessedSourceEmptyCount->Add(1);
+        }
+    }
+
+    // Sources handed to the scan pipeline, whatever becomes of them afterwards
+    void OnSourceStartProcessing(const bool conflicting) const {
+        if (conflicting) {
+            StartedSourceConflictingCount->Add(1);
+        } else {
+            StartedSourceNonconflictingCount->Add(1);
         }
     }
 
@@ -321,7 +334,7 @@ public:
     }
 
     void OnScanFinished(const EStatusFinish status, const TDuration d) const {
-        AFL_VERIFY((ui32)status < ScanDurationByStatus.size());
+        YDB_LOG_VERIFY((ui32)status < ScanDurationByStatus.size());
         ScanDurationByStatus[(ui32)status]->Collect(d.MilliSeconds());
         ScansFinishedByStatus[(ui32)status]->Add(1);
     }
@@ -392,13 +405,13 @@ public:
     TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
         : Counter(counter)
     {
-        AFL_VERIFY(Counter);
+        YDB_LOG_VERIFY(Counter);
         Counter->Inc();
     }
 
     ~TCounterGuard() {
         if (Counter) {
-            AFL_VERIFY(Counter->Dec() >= 0);
+            YDB_LOG_VERIFY(Counter->Dec() >= 0);
         }
     }
 };
@@ -445,7 +458,7 @@ public:
     void OnSkipGraphNode(const ui32 nodeId) const {
         if (SkipNodesCount.size()) {
             auto it = SkipNodesCount.find(nodeId);
-            AFL_VERIFY(it != SkipNodesCount.end());
+            YDB_LOG_VERIFY(it != SkipNodesCount.end());
             it->second->Inc();
         }
     }
@@ -453,7 +466,7 @@ public:
     void OnExecuteGraphNode(const ui32 nodeId) const {
         if (ExecuteNodesCount.size()) {
             auto it = ExecuteNodesCount.find(nodeId);
-            AFL_VERIFY(it != ExecuteNodesCount.end());
+            YDB_LOG_VERIFY(it != ExecuteNodesCount.end());
             it->second->Inc();
         }
     }

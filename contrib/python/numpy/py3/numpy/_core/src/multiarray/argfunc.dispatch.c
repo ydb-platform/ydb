@@ -9,14 +9,6 @@
 
 #line 1
 /* -*- c -*- */
-/*@targets
- ** $maxopt baseline
- ** sse2 sse42 xop avx2 avx512_skx
- ** vsx2
- ** neon asimd
- ** vx vxe
- **/
-
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
 
 #include "contrib/python/numpy/py3/numpy/_core/src/common/simd/simd.h"
@@ -33,8 +25,8 @@
     // i.e avoid unroll by x4 should be numerically safe till 2048-bit SIMD width
     // or maybe expand the indices to 32|64-bit vectors(slower).
 #endif
-#line 32
-#line 37
+#line 24
+#line 29
 static inline npy_intp
 simd_argmax_u8(npyv_lanetype_u8 *ip, npy_intp len)
 {
@@ -116,7 +108,7 @@ simd_argmax_u8(npyv_lanetype_u8 *ip, npy_intp len)
     return ret_idx;
 }
 
-#line 37
+#line 29
 static inline npy_intp
 simd_argmin_u8(npyv_lanetype_u8 *ip, npy_intp len)
 {
@@ -199,8 +191,8 @@ simd_argmin_u8(npyv_lanetype_u8 *ip, npy_intp len)
 }
 
 
-#line 32
-#line 37
+#line 24
+#line 29
 static inline npy_intp
 simd_argmax_s8(npyv_lanetype_s8 *ip, npy_intp len)
 {
@@ -282,7 +274,7 @@ simd_argmax_s8(npyv_lanetype_s8 *ip, npy_intp len)
     return ret_idx;
 }
 
-#line 37
+#line 29
 static inline npy_intp
 simd_argmin_s8(npyv_lanetype_s8 *ip, npy_intp len)
 {
@@ -365,8 +357,8 @@ simd_argmin_s8(npyv_lanetype_s8 *ip, npy_intp len)
 }
 
 
-#line 32
-#line 37
+#line 24
+#line 29
 static inline npy_intp
 simd_argmax_u16(npyv_lanetype_u16 *ip, npy_intp len)
 {
@@ -448,7 +440,7 @@ simd_argmax_u16(npyv_lanetype_u16 *ip, npy_intp len)
     return ret_idx;
 }
 
-#line 37
+#line 29
 static inline npy_intp
 simd_argmin_u16(npyv_lanetype_u16 *ip, npy_intp len)
 {
@@ -531,8 +523,8 @@ simd_argmin_u16(npyv_lanetype_u16 *ip, npy_intp len)
 }
 
 
-#line 32
-#line 37
+#line 24
+#line 29
 static inline npy_intp
 simd_argmax_s16(npyv_lanetype_s16 *ip, npy_intp len)
 {
@@ -614,7 +606,7 @@ simd_argmax_s16(npyv_lanetype_s16 *ip, npy_intp len)
     return ret_idx;
 }
 
-#line 37
+#line 29
 static inline npy_intp
 simd_argmin_s16(npyv_lanetype_s16 *ip, npy_intp len)
 {
@@ -699,9 +691,9 @@ simd_argmin_s16(npyv_lanetype_s16 *ip, npy_intp len)
 
 #endif
 
-#line 129
+#line 121
 #if NPY_SIMD
-#line 136
+#line 128
 static inline npy_intp
 simd_argmax_u32(npyv_lanetype_u32 *ip, npy_intp len)
 {
@@ -839,7 +831,7 @@ scalar_loop:
     return ret_idx;
 }
 
-#line 136
+#line 128
 static inline npy_intp
 simd_argmin_u32(npyv_lanetype_u32 *ip, npy_intp len)
 {
@@ -979,9 +971,9 @@ scalar_loop:
 
 #endif // chk_simd
 
-#line 129
+#line 121
 #if NPY_SIMD
-#line 136
+#line 128
 static inline npy_intp
 simd_argmax_s32(npyv_lanetype_s32 *ip, npy_intp len)
 {
@@ -1119,7 +1111,7 @@ scalar_loop:
     return ret_idx;
 }
 
-#line 136
+#line 128
 static inline npy_intp
 simd_argmin_s32(npyv_lanetype_s32 *ip, npy_intp len)
 {
@@ -1259,9 +1251,9 @@ scalar_loop:
 
 #endif // chk_simd
 
-#line 129
+#line 121
 #if NPY_SIMD
-#line 136
+#line 128
 static inline npy_intp
 simd_argmax_u64(npyv_lanetype_u64 *ip, npy_intp len)
 {
@@ -1399,7 +1391,7 @@ scalar_loop:
     return ret_idx;
 }
 
-#line 136
+#line 128
 static inline npy_intp
 simd_argmin_u64(npyv_lanetype_u64 *ip, npy_intp len)
 {
@@ -1539,9 +1531,9 @@ scalar_loop:
 
 #endif // chk_simd
 
-#line 129
+#line 121
 #if NPY_SIMD
-#line 136
+#line 128
 static inline npy_intp
 simd_argmax_s64(npyv_lanetype_s64 *ip, npy_intp len)
 {
@@ -1679,7 +1671,7 @@ scalar_loop:
     return ret_idx;
 }
 
-#line 136
+#line 128
 static inline npy_intp
 simd_argmin_s64(npyv_lanetype_s64 *ip, npy_intp len)
 {
@@ -1819,9 +1811,9 @@ scalar_loop:
 
 #endif // chk_simd
 
-#line 129
+#line 121
 #if NPY_SIMD_F32
-#line 136
+#line 128
 static inline npy_intp
 simd_argmax_f32(npyv_lanetype_f32 *ip, npy_intp len)
 {
@@ -1959,7 +1951,7 @@ scalar_loop:
     return ret_idx;
 }
 
-#line 136
+#line 128
 static inline npy_intp
 simd_argmin_f32(npyv_lanetype_f32 *ip, npy_intp len)
 {
@@ -2099,9 +2091,9 @@ scalar_loop:
 
 #endif // chk_simd
 
-#line 129
+#line 121
 #if NPY_SIMD_F64
-#line 136
+#line 128
 static inline npy_intp
 simd_argmax_f64(npyv_lanetype_f64 *ip, npy_intp len)
 {
@@ -2239,7 +2231,7 @@ scalar_loop:
     return ret_idx;
 }
 
-#line 136
+#line 128
 static inline npy_intp
 simd_argmin_f64(npyv_lanetype_f64 *ip, npy_intp len)
 {
@@ -2380,10 +2372,10 @@ scalar_loop:
 #endif // chk_simd
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -2399,7 +2391,7 @@ scalar_loop:
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -2415,7 +2407,7 @@ scalar_loop:
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -2431,7 +2423,7 @@ scalar_loop:
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -2449,7 +2441,7 @@ scalar_loop:
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmax)
 (npy_ubyte *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2489,7 +2481,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmin)
 (npy_ubyte *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2530,10 +2522,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -2549,7 +2541,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -2565,7 +2557,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -2581,7 +2573,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -2599,7 +2591,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UBYTE_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmax)
 (npy_ushort *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2639,7 +2631,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmin)
 (npy_ushort *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2680,10 +2672,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -2699,7 +2691,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -2715,7 +2707,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -2731,7 +2723,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -2749,7 +2741,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(USHORT_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmax)
 (npy_uint *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2789,7 +2781,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmin)
 (npy_uint *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2830,10 +2822,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -2849,7 +2841,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -2865,7 +2857,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -2881,7 +2873,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -2899,7 +2891,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(UINT_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmax)
 (npy_ulong *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2939,7 +2931,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmin)
 (npy_ulong *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -2980,10 +2972,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -2999,7 +2991,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -3015,7 +3007,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -3031,7 +3023,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -3049,7 +3041,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONG_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmax)
 (npy_ulonglong *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3089,7 +3081,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmin)
 (npy_ulonglong *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3130,10 +3122,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -3149,7 +3141,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -3165,7 +3157,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -3181,7 +3173,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_BYTE == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -3199,7 +3191,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(ULONGLONG_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmax)
 (npy_byte *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3239,7 +3231,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmin)
 (npy_byte *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3280,10 +3272,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -3299,7 +3291,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -3315,7 +3307,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -3331,7 +3323,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_SHORT == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -3349,7 +3341,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(BYTE_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmax)
 (npy_short *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3389,7 +3381,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmin)
 (npy_short *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3430,10 +3422,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -3449,7 +3441,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -3465,7 +3457,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -3481,7 +3473,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_INT == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -3499,7 +3491,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(SHORT_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmax)
 (npy_int *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3539,7 +3531,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmin)
 (npy_int *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3580,10 +3572,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -3599,7 +3591,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -3615,7 +3607,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -3631,7 +3623,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONG == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -3649,7 +3641,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(INT_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmax)
 (npy_long *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3689,7 +3681,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmin)
 (npy_long *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3730,10 +3722,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_f8
@@ -3749,7 +3741,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_f16
@@ -3765,7 +3757,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_f32
@@ -3781,7 +3773,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGLONG == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_f64
@@ -3799,7 +3791,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONG_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmax)
 (npy_longlong *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3839,7 +3831,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmin)
 (npy_longlong *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3880,10 +3872,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_FLOAT == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_f8
@@ -3899,7 +3891,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_FLOAT == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_f16
@@ -3915,7 +3907,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_FLOAT == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_f32
@@ -3931,7 +3923,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_FLOAT == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_f64
@@ -3949,7 +3941,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGLONG_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmax)
 (npy_float *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -3989,7 +3981,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmin)
 (npy_float *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -4030,10 +4022,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_DOUBLE == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_f8
@@ -4049,7 +4041,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_DOUBLE == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_f16
@@ -4065,7 +4057,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_DOUBLE == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_f32
@@ -4081,7 +4073,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_DOUBLE == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_f64
@@ -4099,7 +4091,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmax)
 (npy_double *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -4139,7 +4131,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmin)
 (npy_double *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -4180,10 +4172,10 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmin)
 }
 
 
-#line 291
+#line 283
 #undef TO_SIMD_SFX
 #if 0
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGDOUBLE == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_f8
@@ -4199,7 +4191,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmin)
         #define TO_SIMD_SFX(X) X##_s8
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGDOUBLE == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_f16
@@ -4215,7 +4207,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmin)
         #define TO_SIMD_SFX(X) X##_s16
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGDOUBLE == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_f32
@@ -4231,7 +4223,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmin)
         #define TO_SIMD_SFX(X) X##_s32
     #endif
 
-#line 296
+#line 288
 #elif NPY_SIMD && NPY_BITSOF_LONGDOUBLE == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_f64
@@ -4249,7 +4241,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_argmin)
 
 #endif
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_argmax)
 (npy_longdouble *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {
@@ -4289,7 +4281,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_argmax)
     return 0;
 }
 
-#line 318
+#line 310
 NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(LONGDOUBLE_argmin)
 (npy_longdouble *ip, npy_intp n, npy_intp *mindx, PyArrayObject *NPY_UNUSED(aip))
 {

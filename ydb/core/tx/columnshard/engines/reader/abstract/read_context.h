@@ -73,7 +73,7 @@ private:
 
 public:
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
-        AFL_VERIFY(!!Resolver);
+        YDB_LOG_VERIFY(!!Resolver);
         return Resolver.get();
     }
 
@@ -84,7 +84,7 @@ public:
     template <class T>
     std::shared_ptr<const T> GetReadMetadataPtrVerifiedAs() const {
         auto result = dynamic_pointer_cast<const T>(ReadMetadata);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return result;
     }
 
@@ -160,7 +160,8 @@ public:
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
         const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
         const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-        const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
+        const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit, ui64 txId = 0,
+        const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt);
 };
 
 class IDataReader {
@@ -179,7 +180,7 @@ public:
     virtual ~IDataReader() = default;
 
     TConclusionStatus Start() {
-        AFL_VERIFY(!Started);
+        YDB_LOG_VERIFY(!Started);
         Started = true;
         return DoStart();
     }

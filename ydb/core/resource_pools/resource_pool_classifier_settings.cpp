@@ -1,10 +1,9 @@
 #include "resource_pool_classifier_settings.h"
 
-#include <util/string/builder.h>
-#include <util/string/cast.h>
-
 #include <ydb/library/aclib/aclib.h>
 
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NResourcePool {
 
@@ -27,4 +26,4 @@ std::optional<TString> TClassifierSettings::Validate() const {
     return std::nullopt;
 }
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

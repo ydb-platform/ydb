@@ -2,7 +2,7 @@ LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(2.2.6)
+VERSION(2.3.5)
 
 ADDINCL(
     GLOBAL contrib/python/numpy/include/numpy/core/include

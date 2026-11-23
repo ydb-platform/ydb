@@ -19,7 +19,8 @@ TExprNode::TPtr ExtractFormat(TExprNode::TListType& settings) {
     return {};
 }
 
-bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TStructExprType* outputType, TS3Configuration::TPtr configuration, TString& error) {
+bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TStructExprType* outputType, TS3Configuration::TPtr configuration,
+    TString& error) {
     const auto useblockSink = configuration->UseBlocksSink.Get();
     if (useblockSink && !*useblockSink) {
         return false;
@@ -47,13 +48,16 @@ bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TS
         }
         if (unpackedType->GetKind() != ETypeAnnotationKind::Data) {
             if (useblockSink) {
-                error = TStringBuilder() << "Field '" << item->GetName() << "' has type " << FormatType(item->GetItemType()) << ", it does not supported for block sink, allowed only data or optional of data types";
+                error = TStringBuilder() << "Field '" << item->GetName() << "' has type " << FormatType(item->GetItemType())
+                                         << ", it does not supported for block sink, allowed only data or optional of data types";
             }
             return false;
         }
-        if (std::shared_ptr<arrow::DataType> arrowType; !NDq::S3ConvertArrowOutputType(unpackedType->Cast<TDataExprType>()->GetSlot(), arrowType)) {
+        if (std::shared_ptr<arrow::DataType> arrowType;
+            !NDq::S3ConvertArrowOutputType(unpackedType->Cast<TDataExprType>()->GetSlot(), arrowType)) {
             if (useblockSink) {
-                error = TStringBuilder() << "Field '" << item->GetName() << "' has data type " << FormatType(unpackedType) << ", it does not supported for block sink";
+                error = TStringBuilder() << "Field '" << item->GetName() << "' has data type " << FormatType(unpackedType)
+                                         << ", it does not supported for block sink";
             }
             return false;
         }
@@ -67,4 +71,4 @@ bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TS
 #endif
 }
 
-}
+}   // namespace NYql

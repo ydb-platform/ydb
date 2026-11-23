@@ -2,18 +2,17 @@
 
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 
+#include <google/protobuf/text_format.h>
+#include <library/cpp/protobuf/util/pb_io.h>
+#include <util/stream/mem.h>
+#include <util/stream/str.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <library/cpp/protobuf/util/pb_io.h>
-#include <google/protobuf/text_format.h>
-
-#include <util/stream/mem.h>
-#include <util/stream/str.h>
-
 namespace NYql::NS3Details {
 
-static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS3::TRange::TPath>& children, TPathList& paths, TString& currentPath, size_t currentDepth, ui64& nextPathIndex) {
+static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS3::TRange::TPath>& children, TPathList& paths,
+    TString& currentPath, size_t currentDepth, ui64& nextPathIndex) {
     if (children.empty()) {
         return;
     }
@@ -26,14 +25,15 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
         if (path.GetRead()) {
             auto isDirectory = path.GetIsDirectory();
             auto readPath = isDirectory && path.GetName() != "/" ? currentPath + "/" : currentPath;
-            paths.emplace_back(TPath{readPath, path.GetSize(), path.GetIsDirectory(), nextPathIndex++});
+            paths.emplace_back(TPath{ readPath, path.GetSize(), path.GetIsDirectory(), nextPathIndex++ });
         }
         BuildPathsFromTree(path.GetChildren(), paths, currentPath, currentDepth + 1, nextPathIndex);
         currentPath.resize(prevSize);
     }
 }
 
-static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS3::TRange::TPath>& children, TPathList& paths, TString& currentPath, size_t currentDepth = 0) {
+static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS3::TRange::TPath>& children, TPathList& paths,
+    TString& currentPath, size_t currentDepth = 0) {
     ui64 nextPathIndex = 0;
     BuildPathsFromTree(children, paths, currentPath, currentDepth, nextPathIndex);
 }
@@ -91,4 +91,4 @@ void UnpackPathsList(TStringBuf packed, bool isTextEncoded, TPathList& paths) {
     BuildPathsFromTree(range.GetPaths(), paths, buf);
 }
 
-} // namespace NYql::NS3Details
+}   // namespace NYql::NS3Details

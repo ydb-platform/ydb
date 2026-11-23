@@ -209,6 +209,8 @@ public:
 public:
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> FilterFunction;
     std::function<bool(ui32, std::unique_ptr<IEventHandle>&, ISchedulerCookie*, TInstant)> FilterEnqueue;
+    // Invoked for every new node actor system, including after StopNode.
+    std::function<void(ui32, TActorSystemSetup*)> SetupNodeSubSystems;
     IOutputStream *LogStream = &Cerr;
     std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator
         = [](std::function<TActorId(ui32, ui32)> generateId, ui32 stateStorageNodeId) {
@@ -331,6 +333,9 @@ public:
             }
         }
 
+        if (SetupNodeSubSystems) {
+            SetupNodeSubSystems(nodeId, setup.Get());
+        }
         info.AppData = std::move(MakeAppData());
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
@@ -633,6 +638,10 @@ public:
     void RegisterService(const TActorId& serviceId, const TActorId& actorId) {
         const ui32 nodeId = actorId.NodeId(); // only at the node with the actor
         GetNode(nodeId)->ActorSystem->RegisterLocalService(serviceId, actorId);
+    }
+
+    void ReconnectNodes(ui32 nodeId, ui32 peerNodeId) {
+        InterconnectMock.Reconnect(nodeId, peerNodeId);
     }
 
     bool HasImmediateEvents() const {

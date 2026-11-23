@@ -14,7 +14,7 @@
 
 AWS_EXTERN_C_BEGIN
 
-/* This header does safe operations. Supressing the checks within these functions
+/* This header does safe operations. Suppressing the checks within these functions
  * avoids unnecessary CBMC assertions
  */
 #pragma CPROVER check push

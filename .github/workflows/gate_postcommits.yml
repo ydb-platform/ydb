@@ -22,10 +22,10 @@ jobs:
         
         if (( queue_size > ${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }} ));then
           echo "Close gate for postcommits"
-          query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
+          query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(any(.labels[].name; .=="postcommit")) | select((any(.labels[].name; startswith("pool:") and endswith("-postcommit"))) | not) | .id'
         else
           echo "Open gate for postcommits"
-          query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
+          query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(all(.labels[].name; .!="postcommit")) | .id'
         fi
         
         echo "Requesting a list of runners to update labels..."

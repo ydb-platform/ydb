@@ -8,11 +8,12 @@ using namespace NYdb;
 using namespace NYdb::NFederatedTopic;
 using namespace NYdb::NTopic;
 
-class TNativeFederatedTopicClient final : public IFederatedTopicClient {
+class TNativeFederatedTopicClient final: public IFederatedTopicClient {
 public:
     TNativeFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings)
         : FederatedClient(driver, settings)
-    {}
+    {
+    }
 
     NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() final {
         return FederatedClient.GetAllClusterInfo();
@@ -26,10 +27,10 @@ private:
     TFederatedTopicClient FederatedClient;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 IFederatedTopicClient::TPtr CreateExternalFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) {
     return MakeIntrusive<TNativeFederatedTopicClient>(driver, settings);
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -70,29 +70,32 @@ XSS_EXPORT_SYMBOL void keyvalue_partial_sort(T1 *key,
                                              bool descending = false);
 
 // sort an object
-template <typename T, typename Func>
-XSS_EXPORT_SYMBOL void object_qsort(T *arr, uint32_t arrsize, Func key_func)
+template <typename T, typename U, typename Func>
+XSS_EXPORT_SYMBOL void object_qsort(T *arr, U arrsize, Func key_func)
 {
-    /* (1) Create a vector a keys */
-    using return_type_of =
-            typename decltype(std::function {key_func})::result_type;
+    static_assert(std::is_integral<U>::value, "arrsize must be an integral type");
+    static_assert(sizeof(U) == sizeof(int32_t) || sizeof(U) == sizeof(int64_t),
+                  "arrsize must be 32 or 64 bits");
+    using return_type_of = typename decltype(std::function{key_func})::result_type;
+    static_assert(sizeof(return_type_of) == sizeof(int32_t) || sizeof(return_type_of) == sizeof(int64_t),
+                  "key_func return type must be 32 or 64 bits");
     std::vector<return_type_of> keys(arrsize);
-    for (size_t ii = 0; ii < arrsize; ++ii) {
+    for (U ii = 0; ii < arrsize; ++ii) {
         keys[ii] = key_func(arr[ii]);
     }
 
     /* (2) Call arg based on keys using the keyvalue sort */
-    std::vector<uint32_t> arg(arrsize);
+    std::vector<U> arg(arrsize);
     std::iota(arg.begin(), arg.end(), 0);
     x86simdsort::keyvalue_qsort(keys.data(), arg.data(), arrsize);
 
     /* (3) Permute obj array in-place */
     std::vector<bool> done(arrsize);
-    for (size_t i = 0; i < arrsize; ++i) {
+    for (U i = 0; i < arrsize; ++i) {
         if (done[i]) { continue; }
         done[i] = true;
-        size_t prev_j = i;
-        size_t j = arg[i];
+        U prev_j = i;
+        U j = arg[i];
         while (i != j) {
             std::swap(arr[prev_j], arr[j]);
             done[j] = true;

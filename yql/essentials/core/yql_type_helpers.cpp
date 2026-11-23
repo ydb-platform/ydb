@@ -2,7 +2,6 @@
 
 #include <util/string/builder.h>
 
-
 namespace NYql {
 
 TSet<TStringBuf> GetColumnsOfStructOrSequenceOfStruct(const TTypeAnnotationNode& type) {
@@ -42,7 +41,7 @@ bool SilentGetSequenceItemType(TPosition pos, const TTypeAnnotationNode& inputTy
         auto varType = itemType->Cast<TVariantExprType>()->GetUnderlyingType();
         TTypeAnnotationNode::TListType varItemTypes;
         if (varType->GetKind() == ETypeAnnotationKind::Struct) {
-            for (auto item: varType->Cast<TStructExprType>()->GetItems()) {
+            for (auto item : varType->Cast<TStructExprType>()->GetItems()) {
                 varItemTypes.push_back(item->GetItemType());
             }
         } else {
@@ -52,7 +51,7 @@ bool SilentGetSequenceItemType(TPosition pos, const TTypeAnnotationNode& inputTy
             error = TIssue(pos, TStringBuilder() << "Expected at least two items in Variant row type, but got: " << varItemTypes.size());
             return false;
         }
-        for (auto varItemType: varItemTypes) {
+        for (auto varItemType : varItemTypes) {
             if (varItemType->GetKind() != ETypeAnnotationKind::Struct) {
                 error = TIssue(pos, TStringBuilder() << "Expected Struct in Variant item type, but got: " << *varItemType);
                 return false;
@@ -70,7 +69,7 @@ bool SilentGetSequenceItemType(TPosition pos, const TTypeAnnotationNode& inputTy
     return true;
 }
 
-}
+} // namespace
 
 const TTypeAnnotationNode* GetSequenceItemType(NNodes::TExprBase listNode, bool allowMultiIO) {
     const TTypeAnnotationNode* itemType = nullptr;

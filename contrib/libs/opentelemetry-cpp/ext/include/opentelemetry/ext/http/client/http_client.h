@@ -5,12 +5,12 @@
 
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
@@ -112,9 +112,11 @@ struct cmp_ic
 {
   bool operator()(const std::string &s1, const std::string &s2) const
   {
-    return std::lexicographical_compare(
-        s1.begin(), s1.end(), s2.begin(), s2.end(),
-        [](char c1, char c2) { return ::tolower(c1) < ::tolower(c2); });
+    return std::lexicographical_compare(s1.begin(), s1.end(), s2.begin(), s2.end(),
+                                        [](char c1, char c2) {
+                                          return opentelemetry::common::detail::ToAsciiLower(c1) <
+                                                 opentelemetry::common::detail::ToAsciiLower(c2);
+                                        });
   }
 };
 using Headers = std::multimap<std::string, std::string, cmp_ic>;
@@ -148,7 +150,8 @@ struct HttpSslOptions
         ssl_cipher_suite(input_ssl_cipher_suite)
   {
     /* Use SSL if url starts with "https:" */
-    if (strncmp(url.data(), "https:", 6) == 0)
+    const nostd::string_view https_scheme{"https:"};
+    if (url.substr(0, https_scheme.size()) == https_scheme)
     {
       use_ssl = true;
     }

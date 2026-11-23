@@ -5,20 +5,18 @@
 #include "helpers.h"
 #include "partition_id.h"
 
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
-#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
-
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/inflight_limiter.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/util/ulid.h>
 
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
+
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -57,8 +55,9 @@ struct TTopicCounters {
 };
 
 
-class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor>
-                      , public NActors::IActorExceptionHandler {
+class TPartitionActor : public NPQ::TBaseActor<TPartitionActor>
+                      , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TPartitionActor>;
 private:
     static constexpr TDuration READ_TIMEOUT_DURATION = TDuration::Seconds(1);
 
@@ -89,6 +88,15 @@ public:
                             const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
+
+    NPQ::TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session},
+            {"tabletId", TabletID});
+    }
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -109,6 +117,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
@@ -137,6 +146,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
@@ -163,6 +173,7 @@ private:
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
+    void SendReadWindowExhausted(const TActorContext& ctx);
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial, ui64 cookie) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
@@ -215,6 +226,7 @@ private:
 
     ui64 WTime;
     bool InitDone;
+    std::deque<THolder<TEvPersQueue::TEvReplicationData>> PendingReplicationData;
     bool StartReading;
     bool AllPrepareInited;
     bool FirstInit;
@@ -227,6 +239,7 @@ private:
     NKikimrClient::TPersQueueRequest CurrentRequest;
 
     ui64 EndOffset;
+    TMaybe<ui64> RetainedStartOffset;
     ui64 SizeLag;
 
     TString ReadGuid; // empty if not reading
@@ -283,11 +296,13 @@ private:
 
     bool FirstRead;
     bool ReadingFinishedSent;
+    bool WindowExhaustedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;
+    inline bool IsPartitionExhausted() const;
 };
 
 

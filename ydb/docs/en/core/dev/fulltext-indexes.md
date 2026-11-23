@@ -1,6 +1,6 @@
 # Fulltext Indexes
 
-Fulltext indexes are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient text search within table columns. While traditional secondary indexes optimize searching by equality or range, fulltext indexes allow searching by words, phrases, and (with n-grams) by substrings.
+Fulltext indexes are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient text search within table columns. While traditional secondary indexes optimize searching by equality or range, fulltext indexes allow searching by words and (with n-grams) by substrings.
 
 For the general idea of fulltext search, see [Fulltext search](../concepts/query_execution/fulltext_search.md).
 
@@ -10,15 +10,14 @@ Fulltext indexes in {{ ydb-short-name }} are built by tokenizing text and creati
 
 * fast filtering with [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match)
 * relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) with [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) when using [fulltext_relevance](#relevance)
-* case normalization, stemming, and n-gram matching via index filters
+* case normalization, lemmatization, and n-gram matching via index filters
 
 The current implementation supports two indexes:
 
 * [fulltext_plain](#basic) — basic fulltext index
 * [fulltext_relevance](#relevance) — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring
 
-Additionally, a fulltext index can be **covering** (via `COVER`), meaning it includes a copy of extra columns from the base table.
-
+A fulltext index can be **covering**: `COVER` stores copies of additional columns in the index. A query can avoid reading the main table if all the columns it needs are in the index. To avoid these reads with `LIKE`, `ILIKE`, or `Wildcard`, include the text column in `COVER` too.
 
 ## Types of Fulltext Indexes {#types}
 
@@ -43,7 +42,7 @@ ALTER TABLE articles
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-Here `tokenizer=standard` splits text into words on whitespace and punctuation, and `use_filter_lowercase=true` normalizes all tokens to lowercase, making the search case-insensitive.
+Here `tokenizer=standard` splits text into words on whitespace and punctuation, and `use_filter_lowercase=true` normalizes all tokens to lowercase, making the search case-insensitive. Alternatively, use an [analyzer preset](../yql/reference/syntax/create_table/fulltext_index.md).
 
 Example query:
 
@@ -124,11 +123,15 @@ WHERE body LIKE "%learn%ing%"
 LIMIT 20;
 ```
 
-A `LIKE` / `ILIKE` query uses the same logic as `FulltextMatch(body, ..., "Wildcard" AS Mode)` and accesses the same n-gram index.
+`LIKE` is case-sensitive; `ILIKE` is not. To use `ILIKE` with a fulltext index, set `use_filter_lowercase=true` in the `WITH` clause when creating the index.
+
+A pattern can be a parameter or an expression; `ESCAPE` is supported. The index also supports equality and the `StartsWith` / `EndsWith` functions. See the [query examples](../yql/reference/syntax/select/fulltext_index.md#like-ilike).
+
+Short patterns work too, but may require reading the main table. See [Searching with short patterns](../yql/reference/syntax/select/fulltext_index.md#scan-fallback).
 
 ### Filtered fulltext index {#filtered}
 
-A filtered fulltext index enables fulltext search within each logical partition defined by filter columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others can be of any comparable type:
+A filtered fulltext index enables fulltext search within each logical partition defined by filter columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others must have types allowed in a primary key:
 
 ```yql
 ALTER TABLE articles
@@ -151,6 +154,14 @@ Multiple filter columns are supported. The equality predicates may appear in any
 
 ## Primary key types {#primary-key}
 
+{% if feature_flags.enable_fulltext_index_row_id == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_fulltext_index_row_id`](../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 Inside the inverted index, every indexed document is identified by a numeric document id (`doc_id`). How {{ ydb-short-name }} derives the `doc_id` depends on the base table's [primary key](../concepts/glossary.md#primary-key):
 
 * **Single integer primary key** (`Uint64`, `Int64`, `Uint32`, or `Int32`) — the primary key value is used directly as the `doc_id`. This is the most compact form, and no additional structures are created.
@@ -161,6 +172,8 @@ When you create a fulltext index on a table whose primary key is not a single in
 * adds the `__ydb_row_id` column to the table — existing rows are backfilled while the index is being built;
 * generates a `__ydb_row_id` value for every row where the column is omitted from `INSERT` / `UPSERT`;
 * creates a unique [secondary index](../concepts/glossary.md#secondary-index) named `__ydb_unique_row_id` over `__ydb_row_id`. At query time this index maps a matched `__ydb_row_id` back to the table's primary key before the row is read from the main table.
+
+The system column is omitted from `SELECT *`, but can be selected explicitly by name. Updating an existing row with `UPSERT` or `UPDATE` preserves its `__ydb_row_id`.
 
 If the table already has more than one fulltext index, they all **reuse** the same `__ydb_row_id` column and `__ydb_unique_row_id` index — these structures are created only once per table.
 
@@ -193,7 +206,7 @@ Functions and expressions for fulltext search:
 
 The optimizer doesn't select a fulltext index automatically, so you must specify it explicitly using `VIEW IndexName`.
 
-If the `VIEW` expression is not used, `FulltextMatch` / `FulltextScore` queries will fail.
+Without `VIEW`, `FulltextMatch` / `FulltextScore` queries fail, except for `FulltextScore` inside [`HybridRank`](hybrid-search.md).
 
 This limitation may be removed in future versions of {{ ydb-short-name }}.
 
@@ -201,7 +214,7 @@ This limitation may be removed in future versions of {{ ydb-short-name }}.
 
 ## Updating Fulltext Indexes {#update}
 
-Fulltext indexes are maintained automatically on data modifications. Tables with fulltext indexes support:
+Fulltext indexes are maintained automatically on data modifications. A query through a fulltext index sees rows inserted earlier in the same transaction, before commit. Tables with fulltext indexes support:
 
 * `INSERT`
 * `UPSERT`
@@ -222,7 +235,7 @@ ALTER TABLE articles DROP INDEX ft_index;
 * Fulltext index access must be specified explicitly using `VIEW IndexName`.
 * Only one text column can be indexed (per fulltext index). Use `COVER` for additional columns.
 * `FulltextMatch` / `FulltextScore` can't be used with `OR` or `NOT`. Combining them with other predicates via `AND` is supported.
-* A single read through `VIEW` supports only one fulltext predicate: multiple `FulltextScore` calls are not supported, and mixing `FulltextMatch` and `FulltextScore` in the same `WHERE` is not supported.
+* Multiple `FulltextMatch` predicates with default keyword settings can be combined with `AND`. A single read through `VIEW` cannot mix `FulltextMatch` and `FulltextScore` or use multiple distinct `FulltextScore` predicates.
 * For relevance access, you must include `FulltextScore(...) > 0` in `WHERE` (otherwise the query fails).
 * [Filtered fulltext indexes](#filtered): every filter column needs an equality predicate in `WHERE`.
-* [Filtered fulltext indexes](#filtered): filter columns must not be primary key columns.
+* [Filtered fulltext indexes](#filtered): filter columns can include part, but not all, of the primary key.

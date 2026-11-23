@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -8,11 +8,12 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 
 #include <library/cpp/lwtrace/all.h>
@@ -30,6 +31,7 @@ private:
     std::optional<TMonotonic> FinishInstant;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
     const ui64 PathId;
+    const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> SchedulerPool;
 
 public:
     virtual void PassAway() override;
@@ -45,15 +47,21 @@ public:
         ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
         const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-        std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0);
+        std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0,
+        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt);
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
-            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"scanId", ScanId},
+            {"txId", TxId},
+            {"scanGen", ScanGen},
+            {"taskIdentifier", ReadMetadataRange->GetScanIdentifier()});
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
@@ -63,7 +71,8 @@ private:
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
             default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+                YDB_LOG_VERIFY(false,
+                    {"unexpectedEvent", ev->GetTypeName()});
         }
     }
 
@@ -118,6 +127,7 @@ private:
     bool SendResult(bool pageFault, bool lastBatch, ui64 sourceId = 0);
 
     void SendScanError(const TString& reason);
+    void SendScanAborted();
 
     void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 
@@ -133,6 +143,8 @@ private:
 private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
+    // The KQP compute actor for a client scan; for an internal scan, the actor that asked for it -- the
+    // restore actor of a write, for instance. Both speak the TEvKqpCompute scan protocol.
     const TActorId ScanComputeActorId;
     const TActorId ScanDiagnosticsActorId;
     std::optional<TMonotonic> AckReceivedInstant;

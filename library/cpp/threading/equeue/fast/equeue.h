@@ -11,7 +11,7 @@
 #include <util/stream/str.h>
 
 #include <library/cpp/threading/bounded_queue/bounded_queue.h>
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 class TFastElasticQueue
     : public TThreadPoolBase
@@ -167,6 +167,6 @@ private:
     TVector<THolder<IThreadFactory::IThread>> Threads_;
 
     THolder<NThreading::TBoundedQueue<IObjectInQueue*>> Queue_;
-    NYT::NThreading::TEventCount Event_;
+    NYT::TEventCount Event_;
 };
 

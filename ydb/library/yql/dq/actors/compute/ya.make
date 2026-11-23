@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     dq_async_compute_actor.cpp
@@ -24,10 +24,10 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
+    ydb/library/yql/dq/comp_nodes/operator_memory_quota
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/runtime/streaming
-    ydb/library/yql/dq/tasks
     yql/essentials/minikql
     yql/essentials/minikql/comp_nodes
     yql/essentials/public/issue
@@ -35,8 +35,6 @@ PEERDIR(
     library/cpp/html/escape
     library/cpp/time_provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

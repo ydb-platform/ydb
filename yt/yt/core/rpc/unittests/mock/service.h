@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yt/core/rpc/service.h>
+#include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/bus/bus.h>
 
@@ -273,6 +274,12 @@ public:
         (override));
 
     MOCK_METHOD(
+        std::optional<TAttachmentsOutputStreamStatistics>,
+        GetResponseAttachmentsStreamStatistics,
+        (),
+        (override));
+
+    MOCK_METHOD(
         const NProto::TRequestHeader&,
         RequestHeader,
         (),
@@ -286,14 +293,26 @@ public:
 
     MOCK_METHOD(
         void,
-        SetRawRequestInfo,
-        (std::string info, bool incremental),
+        CommitRequestAnnotations,
+        (bool flush),
         (override));
 
     MOCK_METHOD(
         void,
-        SetRawResponseInfo,
-        (std::string info, bool incremental),
+        SuppressMissingRequestAnnotationCheck,
+        (),
+        (override));
+
+    MOCK_METHOD(
+        NLogging::TLoggingTagList*,
+        GetRequestAnnotations,
+        (),
+        (override));
+
+    MOCK_METHOD(
+        NLogging::TLoggingTagList*,
+        GetResponseAnnotations,
+        (),
         (override));
 
     MOCK_METHOD(

@@ -175,6 +175,10 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
     i64 consumptionStarts = 0;
     i64 consumptionStops = 0;
     for (const NKikimrKesus::TEvUpdateConsumptionState::TResourceInfo& resource : ev->Get()->Record.GetResourcesInfo()) {
+        if (resource.GetCloseSession()) {
+            QuoterResources.CloseSession(clientId, resource.GetResourceId());
+            continue;
+        }
         if (TQuoterSession* session = QuoterResources.FindSession(clientId, resource.GetResourceId())) {
             if (resource.GetConsumeResource()) {
                 ++consumptionStarts;

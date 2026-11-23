@@ -50,7 +50,7 @@ ISnapshotSchema::TPtr MakeSchemaWithBlobBloom() {
 
     auto indexInfoOpt = TIndexInfo::BuildFromProto(1, proto, storages, cache);
     UNIT_ASSERT(indexInfoOpt);
-    return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*indexInfoOpt)), TSnapshot(1, 1));
+    return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*indexInfoOpt)), TSnapshot(1, 1));
 }
 
 std::shared_ptr<arrow::RecordBatch> MakeBatch() {

@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mon/crossref.h>
+#include <ydb/core/mon/mon.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -43,13 +44,18 @@ public:
     {}
 
     void Bootstrap() {
+        const TString root = NActors::GetRelativeRoot(Ev->Get()->Request.GetPath());
+        TString nodeRoot = root;
+        if (!Ev->Get()->Request.GetHeader("X-Forwarded-From-Node").empty()) {
+            nodeRoot += "../../";
+        }
         std::vector<TString> urls;
         if (Info) {
             for (ui32 i = 0; i < Info->GetTotalVDisksNum(); ++i) {
                 const TActorId& serviceId = Info->GetActorId(i);
                 ui32 nodeId, pdiskId, vslotId;
                 std::tie(nodeId, pdiskId, vslotId) = DecomposeVDiskServiceId(serviceId);
-                urls.push_back(Sprintf("node/%u/actors/vdisks/vdisk%09" PRIu32 "_%09" PRIu32, nodeId, pdiskId, vslotId));
+                urls.push_back(nodeRoot + Sprintf("node/%u/actors/vdisks/vdisk%09" PRIu32 "_%09" PRIu32, nodeId, pdiskId, vslotId));
             }
         }
         const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
@@ -213,14 +219,14 @@ public:
                         DIV_CLASS("control-group") {
                             LABEL_CLASS_FOR("control-label", "inputBlob") { str << "Blob ID"; }
                             DIV_CLASS("controls") {
-                                str << "<input id=\"inputBlob\" name=\"blob\" type=\"text\"/>";
+                                str << "<input id=\"inputBlob\" name=\"blob\" type=\"text\" placeholder=\"[tablet:gen:step:channel:cookie:blobsize:0]\"/>";
                             }
                         }
                         str << "<input type=\"hidden\" name=\"groupId\" value=\"" << GroupId << "\">";
                         str << "<input type=\"hidden\" name=\"debugInfo\" value=\"" << 1 << "\">";
                         DIV_CLASS("control-group") {
                             DIV_CLASS("controls") {
-                                str << "<button type=\"submit\" formaction=\"/get_blob\" class=\"btn btn-default\">Query</button>";
+                                str << "<button type=\"submit\" formaction=\"" << root << "get_blob\" class=\"btn btn-default\">Query</button>";
                             }
                         }
                     }
@@ -236,13 +242,13 @@ public:
                         DIV_CLASS("control-group") {
                             LABEL_CLASS_FOR("control-label", "inputBlobCheck") { str << "Blob ID"; }
                             DIV_CLASS("controls") {
-                                str << "<input id=\"inputBlobCheck\" name=\"blob\" type=\"text\"/>";
+                                str << "<input id=\"inputBlobCheck\" name=\"blob\" type=\"text\" placeholder=\"[tablet:gen:step:channel:cookie:blobsize:0]\"/>";
                             }
                         }
                         str << "<input type=\"hidden\" name=\"groupId\" value=\"" << GroupId << "\">";
                         DIV_CLASS("control-group") {
                             DIV_CLASS("controls") {
-                                str << "<button type=\"submit\" formaction=\"/check_integrity\" class=\"btn btn-default\">Query</button>";
+                                str << "<button type=\"submit\" formaction=\"" << root << "check_integrity\" class=\"btn btn-default\">Query</button>";
                             }
                         }
                     }
@@ -258,25 +264,25 @@ public:
                         DIV_CLASS("control-group") {
                             LABEL_CLASS_FOR("control-label", "tabletId") { str << "Tablet ID"; }
                             DIV_CLASS("controls") {
-                                str << "<input id=\"tabletId\" name=\"tabletId\" type=\"integer\"/>";
+                                str << "<input id=\"tabletId\" name=\"tabletId\" type=\"integer\" placeholder=\"tablet\"/>";
                             }
                         }
                         DIV_CLASS("control-group") {
                             LABEL_CLASS_FOR("control-label", "from") { str << "From ID"; }
                             DIV_CLASS("controls") {
-                                str << "<input id=\"from\" name=\"from\" type=\"text\"/>";
+                                str << "<input id=\"from\" name=\"from\" type=\"text\" placeholder=\"[tablet:gen:step:channel:cookie:blobsize:0]\"/>";
                             }
                         }
                         DIV_CLASS("control-group") {
                             LABEL_CLASS_FOR("control-label", "to") { str << "To ID"; }
                             DIV_CLASS("controls") {
-                                str << "<input id=\"to\" name=\"to\" type=\"text\"/>";
+                                str << "<input id=\"to\" name=\"to\" type=\"text\" placeholder=\"[tablet:gen:step:channel:cookie:blobsize:0]\"/>";
                             }
                         }
                         str << "<input type=\"hidden\" name=\"groupId\" value=\"" << GroupId << "\">";
                         DIV_CLASS("control-group") {
                             DIV_CLASS("controls") {
-                                str << "<button type=\"submit\" formaction=\"/blob_range\" class=\"btn btn-default\">Query</button>";
+                                str << "<button type=\"submit\" formaction=\"" << root << "blob_range\" class=\"btn btn-default\">Query</button>";
                             }
                         }
                     }

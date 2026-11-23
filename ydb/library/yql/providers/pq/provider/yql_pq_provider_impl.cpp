@@ -6,4 +6,4 @@ TString MakeTopicDisplayName(TStringBuf cluster, TStringBuf path) {
     return TString::Join(cluster, ".`", path, "`");
 }
 
-} // namespace NYql
+}   // namespace NYql

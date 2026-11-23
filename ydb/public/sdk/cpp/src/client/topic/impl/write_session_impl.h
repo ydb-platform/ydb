@@ -443,9 +443,11 @@ private:
     void Connect(const TDuration& delay);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
+    void WriteToProcessorImpl(TClientMessage&& req, size_t requestMemoryUsage = 0); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
     void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnWriteRequestDone(size_t requestMemoryUsage);
+    bool TryIssueContinuationTokenImpl();
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);
@@ -461,6 +463,8 @@ private:
     uint64_t GetNextIdImpl(const std::optional<uint64_t>& seqNo);
     uint64_t GetSeqNoImpl(uint64_t id);
     uint64_t GetIdImpl(uint64_t seqNo);
+    void ScheduleSendImpl();
+    void PostSendTask();
     void SendImpl();
     void SendBatchBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
     void SendStandardBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
@@ -520,6 +524,8 @@ private:
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
+    // Queuing a protobuf can exceed the limit while a token is still outstanding.
+    bool ContinuationTokenIssued = false;
 
     TMessageBatch CurrentBatch;
 
@@ -534,6 +540,7 @@ private:
     bool Connected = false;
     bool Started = false;
     std::atomic<bool> SendImplScheduled = false;
+    IExecutor::TFunction PendingSendTask;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
     bool BatchingSupported = false;

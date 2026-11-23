@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     data_plane.cpp
@@ -9,7 +9,7 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/protos
 
     ydb/library/actors/core
-    ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/pq/proto
 
     yql/essentials/public/issue
 )

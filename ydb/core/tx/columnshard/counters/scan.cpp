@@ -77,6 +77,8 @@ TScanCounters::TScanCounters(const TString& module)
     , ProcessedSourceRawBytes(TBase::GetDeriviative("ProcessedSource/RawBytes"))
     , ProcessedSourceRecords(TBase::GetDeriviative("ProcessedSource/Records"))
     , ProcessedSourceEmptyCount(TBase::GetDeriviative("ProcessedSource/Empty/Count"))
+    , StartedSourceConflictingCount(TBase::GetDeriviative("StartedSource/Conflicting/Count"))
+    , StartedSourceNonconflictingCount(TBase::GetDeriviative("StartedSource/Nonconflicting/Count"))
     , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2)))
 {
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
@@ -122,7 +124,7 @@ TScanCounters::TScanCounters(const TString& module)
         ScanDurationByStatus[(ui32)i] =
             TBase::GetHistogram("ScanDuration/" + ::ToString(i) + "/Milliseconds", NMonitoring::ExponentialHistogram(18, 2, 1));
         ScansFinishedByStatus[(ui32)i] = TBase::GetDeriviative("ScansFinished/" + ::ToString(i));
-        AFL_VERIFY(idx == (ui32)i);
+        YDB_LOG_VERIFY(idx == (ui32)i);
         ++idx;
     }
 }

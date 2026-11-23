@@ -6,6 +6,7 @@
 #include <library/cpp/cgiparam/cgiparam.h>
 
 #include <atomic>
+#include <functional>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
@@ -23,6 +24,7 @@ public:
         bool RejectUploadParts;
         TString PartialReadPath;
         ui32 PartialReadFailures;
+        std::function<TString(TStringBuf method, TStringBuf path)> ErrorResponse;
 
         TSettings();
         explicit TSettings(ui16 port);

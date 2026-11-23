@@ -1,9 +1,7 @@
 UNITTEST()
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE)
     ENV(TIMEOUT=400)
@@ -24,7 +22,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk
     ydb/core/blobstorage/vdisk/common
     ydb/core/tx/scheme_board
-    ydb/core/testlib/default
+    ydb/library/actors/testlib
 )
 
 END()

@@ -1,0 +1,11 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    Rank(key) OVER w,
+    DenseRank(key) OVER w,
+    PercentRank(key) OVER w
+FROM
+    AS_TABLE([<|key: 1|>])
+WINDOW
+    w AS ()
+;

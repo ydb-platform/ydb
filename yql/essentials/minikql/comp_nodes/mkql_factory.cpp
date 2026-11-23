@@ -32,6 +32,7 @@
 #include "mkql_collect.h"
 #include "mkql_combine.h"
 #include "mkql_contains.h"
+#include "mkql_decimal_add_sub.h"
 #include "mkql_decimal_div.h"
 #include "mkql_decimal_mod.h"
 #include "mkql_decimal_mul.h"
@@ -292,6 +293,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"TimezoneId", &WrapTimezoneId},
         {"TimezoneName", &WrapTimezoneName},
         {"AddTimezone", &WrapAddTimezone},
+        {"DecimalIntegralAdd", &WrapDecimalIntegralAdd},
+        {"DecimalIntegralSub", &WrapDecimalIntegralSub},
         {"DecimalDiv", &WrapDecimalDiv},
         {"DecimalMod", &WrapDecimalMod},
         {"DecimalMul", &WrapDecimalMul},

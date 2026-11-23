@@ -28,7 +28,8 @@ public:
         size_t lookupKeyPrefix,
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
-        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) = 0;
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual void AddLookupTask(
         ui64 cookie,
@@ -72,7 +73,6 @@ struct TKqpBufferTableLookupSettings {
     TActorId SessionActorId;
     TIntrusivePtr<TKqpCounters> Counters;
 
-    NWilson::TTraceId ParentTraceId;
 
     TString Database;
     TString PoolId;

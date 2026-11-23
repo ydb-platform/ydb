@@ -1,5 +1,11 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(
+    ${ARCADIA_ROOT}/ydb/tests/fq/yt/kqp_yt/kqp_yt_file.py
+)
+
 TEST_SRCS(
     test.py
 )

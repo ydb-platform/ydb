@@ -4,6 +4,260 @@
 
 using namespace NSQLTranslationV1;
 
+Y_UNIT_TEST_SUITE(Symlink) {
+Y_UNIT_TEST(CreateSymlinkDoesntWorkOnOldLangVersion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    ExpectFailWithError("USE plato; CREATE SYMLINK link TO target;",
+                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n",
+                        settings);
+}
+
+Y_UNIT_TEST(DropSymlinkDoesntWorkOnOldLangVersion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    ExpectFailWithError("USE plato; DROP SYMLINK link;",
+                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n",
+                        settings);
+}
+
+Y_UNIT_TEST(SymlinkRequiresCluster) {
+    ExpectFailWithError("CREATE SYMLINK\n    link TO target;",
+                        "<main>:2:5: Error: No cluster name given and no default cluster is selected\n");
+    ExpectFailWithError("DROP SYMLINK\n    link;",
+                        "<main>:2:5: Error: No cluster name given and no default cluster is selected\n");
+}
+
+Y_UNIT_TEST(CreateSymlink) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; CREATE SYMLINK link TO target;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(CreateSymlinkIfNotExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; CREATE SYMLINK IF NOT EXISTS link TO target;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink_if_not_exists))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(DropSymlink) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; DROP SYMLINK link;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link"))) (Void) '('('mode 'drop_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(DropSymlinkIfExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; DROP SYMLINK IF EXISTS link;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link"))) (Void) '('('mode 'drop_symlink_if_exists))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(SymlinkReferenceForms) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        DECLARE $cluster AS String;
+        DECLARE $link AS String;
+        DECLARE $target AS String;
+        CREATE SYMLINK $link TO $target;
+        CREATE SYMLINK yt:$cluster.$link TO $target;
+        DROP SYMLINK plato.$link;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateSymlinkWithTablePathPrefix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        CREATE SYMLINK link TO target;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"/prefix/link")) '('target (String '"/prefix/target"))) (Void) '('('mode 'create_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(CreateSymlinkWithTablePathPrefixKeepsAbsolutePaths) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        CREATE SYMLINK `//home/link` TO `//home/target`;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"//home/link")) '('target (String '"//home/target"))) (Void) '('('mode 'create_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(DropSymlinkWithTablePathPrefix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        DROP SYMLINK link;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"/prefix/link"))) (Void) '('('mode 'drop_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(SymlinkParametersWithTablePathPrefix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        DECLARE $link AS String;
+        DECLARE $target AS String;
+        CREATE SYMLINK $link TO $target;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"__('('link (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$link"))))))__");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"__('('target (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$target"))))))__");
+        }
+    };
+
+    TWordCountHive elementStat = {"BuildTablePath", "Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["BuildTablePath"]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(SymlinkDoesNotAcceptAtPrefix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    const TVector<TString> queries = {
+        "USE plato; CREATE SYMLINK @link TO target;",
+        "USE plato; CREATE SYMLINK link TO @target;",
+        "USE plato; DROP SYMLINK @link;",
+    };
+
+    for (const auto& query : queries) {
+        const auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+
+Y_UNIT_TEST(CreateSymlinkUsesClusterFromLinkOrUse) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    const TVector<TString> queries = {
+        "USE plato; CREATE SYMLINK hahn.link TO target;",
+        "USE hahn; CREATE SYMLINK link TO target;",
+    };
+
+    for (const auto& query : queries) {
+        const auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive elementStat = {"Write!"};
+        const auto program = VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, program.find(R"__((DataSink '"yt" '"hahn"))__"), program);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+}
+
+Y_UNIT_TEST(CreateSymlinkTargetDoesNotAcceptCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    const TVector<TString> queries = {
+        "CREATE SYMLINK plato.link TO plato.target;",
+        "USE plato; CREATE SYMLINK link TO hahn.target;",
+        "CREATE SYMLINK plato.link TO mon.target;",
+    };
+
+    for (const auto& query : queries) {
+        const auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+} // Y_UNIT_TEST_SUITE(Symlink)
+
 Y_UNIT_TEST_SUITE(ExternalDataSource) {
 Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -467,7 +721,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )sql", "<main>:5:33: Error: SOURCE_TYPE requires key\n");
+            )sql", "<main>:3:58: Error: SOURCE_TYPE requires key\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -859,11 +1113,11 @@ Y_UNIT_TEST(TopicBadRequests) {
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
         )", /*expectOk=*/false,
-              {"3:68: Error: BAD_OPTION: unknown option for consumer"});
+              {"3:55: Error: BAD_OPTION: unknown option for consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
         )", /*expectOk=*/false,
-              {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
+              {"3:74: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metrics_level = "");
         )", /*expectOk=*/false,
@@ -891,7 +1145,7 @@ Y_UNIT_TEST(TopicBadRequests) {
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
         )", /*expectOk=*/false,
-              {"5:59: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
+              {"5:47: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (availability_period = 3600));
         )", /*expectOk=*/false,
@@ -980,6 +1234,13 @@ Y_UNIT_TEST(AlterResourcePool) {
     VerifyProgram(res, elementStat, verifyLine);
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(ResourcePoolSettingValuePosition) {
+    ExpectFailWithError("USE plato; CREATE RESOURCE POOL pool WITH (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
+    ExpectFailWithError("USE plato; ALTER RESOURCE POOL pool SET (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
 }
 
 Y_UNIT_TEST(DropResourcePool) {
@@ -1115,7 +1376,7 @@ Y_UNIT_TEST(CreateBackupCollectionWithBadArguments) {
                 CREATE BACKUP COLLECTION TestCollection WITH (
                     INT_SETTING=1
                 );
-            )sql", "<main>:4:21: Error: INT_SETTING value should be a string literal\n");
+            )sql", "<main>:4:33: Error: INT_SETTING value should be a string literal\n");
 }
 
 Y_UNIT_TEST(AlterBackupCollection) {
@@ -1254,6 +1515,13 @@ Y_UNIT_TEST(AlterResourcePoolClassifier) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(ResourcePoolClassifierSettingValuePosition) {
+    ExpectFailWithError("USE plato; CREATE RESOURCE POOL CLASSIFIER classifier WITH (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
+    ExpectFailWithError("USE plato; ALTER RESOURCE POOL CLASSIFIER classifier SET (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
+}
+
 Y_UNIT_TEST(DropResourcePoolClassifier) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -1387,7 +1655,147 @@ Y_UNIT_TEST(AtPoint) {
 }
 } // Y_UNIT_TEST_SUITE(Restore)
 
+Y_UNIT_TEST_SUITE(Analyze) {
+Y_UNIT_TEST(ValidSyntax) {
+    for (const TString sample : {"", " SAMPLE 0.05", " SAMPLE 5e-2", " SAMPLE 1", " SAMPLE 1.0", " SAMPLE (0.1 / 2)"}) {
+        for (const TString columns : {"", "(key)", "(key, value)"}) {
+            auto result = SqlToYql("ANALYZE plato.table1 " + columns + sample + ";");
+            UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+            UNIT_ASSERT_VALUES_EQUAL(result.Root->ToString().Contains("sampleRate"), !sample.empty());
+        }
+    }
+}
+
+Y_UNIT_TEST(ValidSyntaxWithParameter) {
+    for (const TString columns : {"", "(key)", "(key, value)"}) {
+        auto result = SqlToYql("$rate = 0.05; ANALYZE plato.table1 " + columns + " SAMPLE $rate;");
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        UNIT_ASSERT(result.Root->ToString().Contains("sampleRate"));
+    }
+}
+
+Y_UNIT_TEST(InvalidExpression) {
+    for (const TString rate : {"$rate", "key", "0.1 /", "0.1 0.2"}) {
+        auto result = SqlToYql("ANALYZE plato.table1 SAMPLE " + rate + ";");
+        UNIT_ASSERT_C(!result.IsOk(), rate);
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(Analyze)
+
+Y_UNIT_TEST_SUITE(ChecksumTable) {
+Y_UNIT_TEST(DefaultAndAlgorithms) {
+    for (const TString algorithm : {"CityHash64", "CityHash128", "Sha256"}) {
+        const auto result = SqlToYql("CHECKSUM TABLE plato.Input WITH (ALGORITHM = \"" + algorithm + "\");", 10, "kikimr");
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        const auto ast = GetPrettyPrint(result);
+        UNIT_ASSERT_STRING_CONTAINS(ast, "KiChecksumTable!");
+        UNIT_ASSERT(!ast.Contains("Read!"));
+        UNIT_ASSERT_STRING_CONTAINS(ast, algorithm);
+        UNIT_ASSERT(!ast.Contains("Aggregate"));
+    }
+    const auto result = SqlToYql("CHECKSUM TABLE plato.Input;", 10, "kikimr");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    UNIT_ASSERT(!GetPrettyPrint(result).Contains("CityHash64"));
+}
+
+Y_UNIT_TEST(AlgorithmValidationBelongsToProvider) {
+    for (const TString algorithm : {"Unknown", "sha256"}) {
+        const auto result = SqlToYql("CHECKSUM TABLE plato.Input WITH (ALGORITHM = '" + algorithm + "');", 10, "kikimr");
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), algorithm);
+    }
+}
+
+Y_UNIT_TEST(SystemColumnPrefixesArePassedToProvider) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id", "__internal_"};
+    const auto result = SqlToYqlWithMode("CHECKSUM TABLE plato.Input;", NSQLTranslation::ESqlMode::QUERY,
+                                         10, "kikimr", EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    const auto ast = GetPrettyPrint(result);
+    UNIT_ASSERT_STRING_CONTAINS(ast, "KiChecksumTable!");
+    UNIT_ASSERT_STRING_CONTAINS(ast, "__ydb_row_id");
+    UNIT_ASSERT_STRING_CONTAINS(ast, "__internal_");
+    UNIT_ASSERT(!ast.Contains("RemoveSystemMembers"));
+    UNIT_ASSERT(!ast.Contains("RemovePrefixMembers"));
+}
+
+Y_UNIT_TEST(ContextReadHintsArePreserved) {
+    const auto result = SqlToYql("PRAGMA DirectRead; CHECKSUM TABLE plato.Input;", 10, "kikimr");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    const auto ast = GetPrettyPrint(result);
+    UNIT_ASSERT_STRING_CONTAINS(ast, "KiChecksumTable!");
+    UNIT_ASSERT_STRING_CONTAINS(ast, "directread");
+}
+
+Y_UNIT_TEST(TableReferencesAndOptionCase) {
+    for (const TString query : {
+             "USE plato; CHECKSUM TABLE Input;",
+             "CHECKSUM TABLE plato.`path with spaces` WITH (algorithm = 'Sha256');",
+             "USE plato; DECLARE $table AS String; CHECKSUM TABLE $table WITH (aLgOrItHm = 'CityHash128',);",
+             "USE plato; PRAGMA TablePathPrefix = '/Root'; CHECKSUM TABLE my_table;"}) {
+        const auto result = SqlToYql(query, 10, "kikimr");
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    }
+    const auto result = SqlToYqlWithAnsiLexer("CHECKSUM TABLE plato.\"my table\" WITH (ALGORITHM = 'Sha256');", 10, "kikimr");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
+Y_UNIT_TEST(InvalidOptions) {
+    for (const auto& [options, error] : TVector<std::pair<TString, TString>>{
+             {"UNKNOWN = 'Sha256'", "Unknown CHECKSUM TABLE setting"},
+             {"ALGORITHM = 'Sha256', algorithm = 'CityHash64'", "Duplicate CHECKSUM TABLE setting"},
+             {"ALGORITHM = 1", "CHECKSUM TABLE ALGORITHM value should be a string literal"},
+             {"ALGORITHM = Sha256", "CHECKSUM TABLE ALGORITHM value should be a string literal"}}) {
+        const auto result = SqlToYql("CHECKSUM TABLE plato.Input WITH (" + options + ");");
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), error);
+    }
+    for (const TString options : {"ALGORITHM = $algorithm", "ALGORITHM = 'Sha' || '256'"}) {
+        const auto result = SqlToYql("$algorithm = 'Sha256'; CHECKSUM TABLE plato.Input WITH (" + options + ");");
+        UNIT_ASSERT(!result.IsOk());
+    }
+}
+
+Y_UNIT_TEST(ChecksumRemainsAnIdentifier) {
+    const auto result = SqlToYql("SELECT checksum AS checksum FROM plato.checksum;");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
+Y_UNIT_TEST(RejectsOtherProviders) {
+    for (const TString provider : {"yt", "solomon"}) {
+        const auto result = SqlToYql("CHECKSUM TABLE plato.Input;", 10, provider);
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "CHECKSUM TABLE");
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), provider);
+    }
+}
+
+Y_UNIT_TEST(RejectsViewAndSubqueryDefinitions) {
+    for (const auto mode : {NSQLTranslation::ESqlMode::LIMITED_VIEW, NSQLTranslation::ESqlMode::SUBQUERY}) {
+        const auto result = SqlToYqlWithMode("CHECKSUM TABLE plato.Input;", mode);
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "CHECKSUM TABLE statement is not supported");
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(ChecksumTable)
+
 Y_UNIT_TEST_SUITE(Transfer) {
+Y_UNIT_TEST(SettingsErrorPositions) {
+    const TString create = "USE plato; CREATE TRANSFER transfer FROM topic TO tab USING ($x) -> { RETURN $x; } WITH (\n";
+    ExpectFailWithError(create + "    UNKNOWN =\n        'value');",
+                        "<main>:2:5: Error: Unknown transfer setting: UNKNOWN\n");
+    ExpectFailWithError(create + "    STATE =\n        'paused');",
+                        "<main>:2:5: Error: STATE is not supported in CREATE\n");
+    ExpectFailWithError(create + "    METRICS_LEVEL = 'default',\n    METRICS_LEVEL = 'object');",
+                        "<main>:3:5: Error: Duplicate transfer setting: METRICS_LEVEL\n");
+    ExpectFailWithError(create + "    METRICS_LEVEL =\n        -1);",
+                        "<main>:3:9: Error: Invalid numeric value for metrics_value: negative numbers are not allowed\n");
+    ExpectFailWithError("USE plato; ALTER TRANSFER transfer SET (\n    CONSUMER =\n        'consumer');",
+                        "<main>:2:5: Error: CONSUMER is not supported in ALTER\n");
+}
 
 Y_UNIT_TEST(Lambda) {
     NYql::TAstParseResult res = SqlToYql(R"( use plato;
@@ -1814,7 +2222,7 @@ USE hahn;
         if (word == "__query_text") {
             UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
                                                   << R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") )#"
-                                                  << R"#('('"resource_pool" '"my_pool") '('"run" (Bool '"true")) '('"streaming_disposition" '('('"from_time" '"2025-05-04T11:30:34.336938Z"))))#");
+                                                  << R"#('('"resource_pool" (EvaluateExpr (String '"my_pool"))) '('"run" (EvaluateExpr (Bool '"true"))) '('"streaming_disposition" '('('"from_time" (EvaluateExpr (String '"2025-05-04T11:30:34.336938Z"))))))#");
         }
     };
 
@@ -1823,6 +2231,107 @@ USE hahn;
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["createObject"]);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["__query_text"]);
+}
+
+void TestStreamingQueryReadFrom(const TString& value) {
+    for (const bool alter : {false, true}) {
+        const TString query = TStringBuilder()
+                              << "USE plato; $timestamp = Timestamp(\"2025-05-04T11:30:34.336938Z\"); "
+                              << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
+                              << "READ_FROM = " << value << ")"
+                              << (alter ? ";" : " AS DO BEGIN USE plato; INSERT INTO Output SELECT * FROM Input; END DO;");
+        auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), query << "\n"
+                                        << Err2Str(res));
+        TWordCountHive elementStat = {"read_from", "EvaluateExpr"};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["read_from"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["EvaluateExpr"], 1);
+    }
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromEarliest) {
+    TestStreamingQueryReadFrom("EARLIEST");
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromLatest) {
+    TestStreamingQueryReadFrom("latest");
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromParenthesizedEarliest) {
+    TestStreamingQueryReadFrom("(EARLIEST)");
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromTimestamp) {
+    TestStreamingQueryReadFrom(R"sql(Timestamp("2025-05-04T11:30:34.336938Z"))sql");
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromNamedExpression) {
+    TestStreamingQueryReadFrom("$timestamp");
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromCurrentUtcTimestamp) {
+    TestStreamingQueryReadFrom("CurrentUtcTimestamp()");
+}
+
+Y_UNIT_TEST(StreamingQueryReadFromTimestampExpression) {
+    TestStreamingQueryReadFrom(R"sql(Unwrap($timestamp + Interval("PT1S")))sql");
+}
+
+Y_UNIT_TEST(StreamingQuerySettingExpressions) {
+    auto res = SqlToYql(NYql::TrimIndent(R"sql(
+        USE plato;
+        $pool = "my_" || "pool";
+        CREATE STREAMING QUERY MyQuery WITH (
+            RUN = NOT TRUE,
+            RESOURCE_POOL = $pool,
+            READ_FROM = CurrentUtcTimestamp()
+        ) AS DO BEGIN
+            USE plato;
+            INSERT INTO Output SELECT * FROM Input;
+        END DO;
+    )sql"));
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive elementStat = {"EvaluateExpr"};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["EvaluateExpr"], 3);
+}
+
+void TestStreamingQuerySettingsRejectSourceReferences(const TString& setting, const TString& error) {
+    for (const bool alter : {false, true}) {
+        const TString query = TStringBuilder()
+                              << "USE plato; "
+                              << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
+                              << setting << ")"
+                              << (alter ? ";" : " AS DO BEGIN USE plato; INSERT INTO Output SELECT * FROM Input; END DO;");
+        auto res = SqlToYql(query);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), error);
+    }
+}
+
+Y_UNIT_TEST(StreamingQuerySettingsRejectRunFlag) {
+    TestStreamingQuerySettingsRejectSourceReferences("RUN = t.flag", "Source does not allow column references");
+}
+
+Y_UNIT_TEST(StreamingQuerySettingsRejectRunFlagAndTrue) {
+    TestStreamingQuerySettingsRejectSourceReferences("RUN = flag AND TRUE", "Source does not allow column references");
+}
+
+Y_UNIT_TEST(StreamingQuerySettingsRejectReadFromColumn) {
+    TestStreamingQuerySettingsRejectSourceReferences("READ_FROM = Unwrap(t.ts + Interval(\"PT1S\"))", "Source does not allow column references");
+}
+
+Y_UNIT_TEST(StreamingQuerySettingsRejectStreamingDispositionColumn) {
+    TestStreamingQuerySettingsRejectSourceReferences("STREAMING_DISPOSITION = (FROM_TIME = t.ts)", "Source does not allow column references");
+}
+
+Y_UNIT_TEST(StreamingQuerySettingsRejectRunAggregation) {
+    TestStreamingQuerySettingsRejectSourceReferences("RUN = COUNT(*) > 0", "Aggregation is not allowed in this context");
+}
+
+Y_UNIT_TEST(StreamingQuerySettingsRejectStreamingDispositionAggregation) {
+    TestStreamingQuerySettingsRejectSourceReferences("STREAMING_DISPOSITION = (TIME_AGO = SUM(1))", "Aggregation is not allowed in this context");
 }
 
 Y_UNIT_TEST(CreateOrReplaceStreamingQuery) {
@@ -1992,7 +2501,7 @@ Y_UNIT_TEST(AlterStreamingQuerySetOptions) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"streaming_disposition" '('('"time_ago" '"PT1H"))) '('"wait_checkpoint" (Bool '"true"))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" (EvaluateExpr (String '"other_pool"))) '('"streaming_disposition" '('('"time_ago" (EvaluateExpr (String '"PT1H"))))) '('"wait_checkpoint" (EvaluateExpr (Bool '"true")))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, "alterObject");
         }
     };
@@ -2019,7 +2528,7 @@ Y_UNIT_TEST(AlterStreamingQuerySetBothOptionsAndQuery) {
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '" /* alter */ SELECT 42; ") '('"resource_pool" '"other_pool") '('"wait_checkpoint" (Bool '"true"))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '" /* alter */ SELECT 42; ") '('"resource_pool" (EvaluateExpr (String '"other_pool"))) '('"wait_checkpoint" (EvaluateExpr (Bool '"true")))))#");
         }
     };
 

@@ -12,6 +12,7 @@ SET(ORIG_SOURCES
     mkql_computation_node_graph_saveload.cpp
     mkql_computation_node_holders_codegen.cpp
     mkql_llvm_base.cpp
+    mkql_computation_node_codegen_common.cpp
 )
 
 PEERDIR(
@@ -30,8 +31,6 @@ PEERDIR(
     yql/essentials/utils
     library/cpp/threading/future
 )
-
-YQL_LAST_ABI_VERSION()
 
 ADDINCL(
     ${ORIG_SRC_DIR}

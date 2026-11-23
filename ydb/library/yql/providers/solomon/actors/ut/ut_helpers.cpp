@@ -3,9 +3,7 @@
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/retry/retry.h>
-
 #include <util/system/guard.h>
-
 
 namespace NYql::NDq {
 
@@ -13,10 +11,10 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme) {
+void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme, NUdf::TDataTypeId timestampType) {
     scheme.MutableTimestamp()->SetKey("ts");
     scheme.MutableTimestamp()->SetIndex(0);
-    scheme.MutableTimestamp()->SetDataTypeId(NUdf::TDataType<NUdf::TTimestamp>::Id);
+    scheme.MutableTimestamp()->SetDataTypeId(timestampType);
 
     NSo::NProto::TDqSolomonSchemeItem label;
     label.SetKey("label1");
@@ -32,34 +30,22 @@ void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme) {
     scheme.MutableSensors()->Add(std::move(sensor));
 }
 
-}
+}   // namespace
 
-void InitAsyncOutput(
-    TFakeCASetup& caSetup,
-    NSo::NProto::TDqSolomonShard&& settings,
-    i64 freeSpace)
+void InitAsyncOutput(TFakeCASetup& caSetup, NSo::NProto::TDqSolomonShard&& settings, i64 freeSpace)
 {
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     const THashMap<TString, TString> secureParams;
 
     caSetup.Execute([&](TFakeActor& actor) {
-        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(
-            std::move(settings),
-            0,
-            NYql::NDq::TCollectStatsLevel::None,
-            "TxId-42",
-            777,
-            secureParams,
-            &actor.GetAsyncOutputCallbacks(),
-            counters,
-            CreateStructuredTokenCredentialsFactory(),
-            freeSpace);
+        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(std::move(settings), 0, NYql::NDq::TCollectStatsLevel::None,
+            "TxId-42", 777, secureParams, &actor.GetAsyncOutputCallbacks(), counters, CreateStructuredTokenCredentialsFactory(), freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
 }
 
-NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
+NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud, NUdf::TDataTypeId timestampType) {
     NSo::NProto::TDqSolomonShard settings;
     settings.SetEndpoint(TString(getenv("SOLOMON_HTTP_ENDPOINT")));
     if (isCloud) {
@@ -75,14 +61,12 @@ NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
     settings.SetClusterType(isCloud ? NSo::NProto::ESolomonClusterType::CT_MONITORING : NSo::NProto::ESolomonClusterType::CT_SOLOMON);
     settings.SetUseSsl(false);
 
-    FillDqSolomonScheme(*settings.MutableScheme());
+    FillDqSolomonScheme(*settings.MutableScheme(), timestampType);
 
     return settings;
 }
 
-NUdf::TUnboxedValue CreateStruct(
-    NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    std::initializer_list<NUdf::TUnboxedValuePod> fields)
+NUdf::TUnboxedValue CreateStruct(NKikimr::NMiniKQL::THolderFactory& holderFactory, std::initializer_list<NUdf::TUnboxedValuePod> fields)
 {
     NUdf::TUnboxedValue* itemsPtr = nullptr;
     auto structValues = holderFactory.CreateDirectArrayHolder(fields.size(), itemsPtr);
@@ -98,4 +82,4 @@ int GetMetricsCount(TString metrics) {
     return json.GetArray().size();
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

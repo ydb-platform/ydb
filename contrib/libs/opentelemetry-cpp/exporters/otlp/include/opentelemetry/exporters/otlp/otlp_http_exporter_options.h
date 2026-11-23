@@ -47,7 +47,7 @@ struct OPENTELEMETRY_EXPORT OtlpHttpExporterOptions
   std::string url;
 
   /** HTTP content type. */
-  HttpRequestContentType content_type;
+  HttpRequestContentType content_type{HttpRequestContentType::kBinary};
 
   /**
     Json byte mapping.
@@ -55,32 +55,32 @@ struct OPENTELEMETRY_EXPORT OtlpHttpExporterOptions
     Used only for HttpRequestContentType::kJson.
     Convert bytes to hex / base64.
   */
-  JsonBytesMappingKind json_bytes_mapping;
+  JsonBytesMappingKind json_bytes_mapping{JsonBytesMappingKind::kHexId};
 
   /**
     Use json names (true) or protobuf field names (false) to set the json key.
   */
-  bool use_json_name;
+  bool use_json_name{false};
 
   /** Print debug messages. */
-  bool console_debug;
+  bool console_debug{false};
 
   /** Export timeout. */
-  std::chrono::system_clock::duration timeout;
+  std::chrono::system_clock::duration timeout{};
 
   /** Additional HTTP headers. */
   OtlpHeaders http_headers;
 
 #ifdef ENABLE_ASYNC_EXPORT
   /** Max number of concurrent requests. */
-  std::size_t max_concurrent_requests;
+  std::size_t max_concurrent_requests{64};
 
   /** Max number of requests per connection. */
-  std::size_t max_requests_per_connection;
+  std::size_t max_requests_per_connection{8};
 #endif
 
   /** True do disable SSL. */
-  bool ssl_insecure_skip_verify;
+  bool ssl_insecure_skip_verify{};
 
   /** CA CERT, path to a file. */
   std::string ssl_ca_cert_path;

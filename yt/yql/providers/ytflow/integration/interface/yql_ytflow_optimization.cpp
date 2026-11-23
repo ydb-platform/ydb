@@ -30,14 +30,6 @@ TExprNode::TPtr TEmptyYtflowOptimization::ApplyUnordered(
     AbortUnimplemented(__FUNCTION__);
 }
 
-TExprNode::TPtr TEmptyYtflowOptimization::ApplySort(
-    const TExprNode::TPtr& /*write*/,
-    const TExprNode::TPtr& /*sort*/,
-    TExprContext& /*ctx*/
-) {
-    AbortUnimplemented(__FUNCTION__);
-}
-
 TExprNode::TPtr TEmptyYtflowOptimization::TrimWriteContent(
     const TExprNode::TPtr& /*write*/,
     TExprContext& /*ctx*/

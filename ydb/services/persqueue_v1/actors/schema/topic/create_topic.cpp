@@ -20,10 +20,21 @@ public:
     void DoAction() {
         Become(&TCreateTopicActor::StateWork);
 
+        // The schema actor owns the rewritten copy; the inbound request stays intact.
+        auto request = *GetProtoRequest();
+        request.set_path(NormalizeTopicPath(request.path()));
+        for (auto& consumer : *request.mutable_consumers()) {
+            if (consumer.shared_consumer_type().dead_letter_policy().has_move_action()) {
+                auto* moveAction = consumer.mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_move_action();
+                if (!ResolveDeadLetterQueuePath(*moveAction->mutable_dead_letter_queue())) {
+                    return;
+                }
+            }
+        }
         Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Request = *GetProtoRequest(),
+            .Request = std::move(request),
             .UserToken = GetUserToken(),
         }));
     }

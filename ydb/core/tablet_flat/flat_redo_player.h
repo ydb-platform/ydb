@@ -2,10 +2,13 @@
 
 #include "flat_update_op.h"
 #include "flat_redo_layout.h"
+#include "flat_redo_observer.h"
 #include "flat_sausage_solid.h"
 #include "util_fmt_abort.h"
 #include "util_basics.h"
 #include "util_deref.h"
+
+#include <util/generic/scope.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -39,8 +42,17 @@ namespace NRedo {
     public:
         TPlayer(TBase &base) : Base(base) { }
 
-        void Replay(TArrayRef<const char> plain)
+        void Replay(TArrayRef<const char> plain, const TVector<NPageCollection::TMemGlob>& annex = {},
+                IRedoObserver* observer = nullptr)
         {
+            auto* previousObserver = std::exchange(Observer, observer);
+            // Base.DoAnnex may populate the container during replay.
+            const auto* previousAnnex = std::exchange(Annex, &annex);
+            Y_DEFER {
+                Observer = previousObserver;
+                Annex = previousAnnex;
+            };
+
             TReader iter(plain);
 
             while (auto chunk = iter.Next()) {
@@ -73,6 +85,7 @@ namespace NRedo {
                 case ERedo::Annex:
                     return DoAnnex(chunk);
                 case ERedo::UpdateTx:
+                case ERedo::UpdateTxSavepointSeqNum:
                     return DoUpdateTx(chunk);
                 case ERedo::RemoveTx:
                     return DoRemoveTx(chunk);
@@ -110,6 +123,7 @@ namespace NRedo {
                 case ERedo::RemoveTx:
                 case ERedo::CommitTx:
                 case ERedo::LockRowTx:
+                case ERedo::UpdateTxSavepointSeqNum:
                     // Not used in legacy log format
                     break;
             }
@@ -178,6 +192,9 @@ namespace NRedo {
                 buf += ReadOps(buf, chunk.end() - buf, ev->Ops);
 
                 Base.DoUpdate(ev->Table, ev->Rop, KeyVec, OpsVec, rowVersion);
+                if (Observer) {
+                    Observer->OnRedoUpdate(ev->Table, ev->Rop, KeyVec, OpsVec, *Annex, rowVersion, 0, 0);
+                }
             }
         }
 
@@ -188,13 +205,28 @@ namespace NRedo {
             if (Base.NeedIn(ev->Table)) {
                 const char *buf = chunk.begin() + sizeof(*ev);
 
-                auto *v = reinterpret_cast<const TEvUpdateTx*>(buf);
-                buf += sizeof(*v);
+                ui64 txId;
+                ui32 savepointSeqNum;
+                if (ev->Label.Event == ERedo::UpdateTxSavepointSeqNum) {
+                    auto *v = reinterpret_cast<const TEvUpdateTxSavepointSeqNum*>(buf);
+                    txId = v->TxId;
+                    savepointSeqNum = v->SavepointSeqNum;
+                    buf += sizeof(*v);
+                } else {
+                    auto *v = reinterpret_cast<const TEvUpdateTx*>(buf);
+                    txId = v->TxId;
+                    savepointSeqNum = 0;
+                    buf += sizeof(*v);
+                }
 
                 buf += ReadKey(buf, chunk.end() - buf, ev->Keys);
                 buf += ReadOps(buf, chunk.end() - buf, ev->Ops);
 
-                Base.DoUpdateTx(ev->Table, ev->Rop, KeyVec, OpsVec, v->TxId);
+                Base.DoUpdateTx(ev->Table, ev->Rop, KeyVec, OpsVec, txId, savepointSeqNum);
+                if (Observer) {
+                    Observer->OnRedoUpdate(ev->Table, ev->Rop, KeyVec, OpsVec, *Annex,
+                        TRowVersion::Min(), txId, savepointSeqNum);
+                }
             }
         }
 
@@ -206,6 +238,9 @@ namespace NRedo {
                 TRowVersion rowVersion(ev->RowVersionStep, ev->RowVersionTxId);
 
                 Base.DoCommitTx(ev->Table, ev->TxId, rowVersion);
+                if (Observer) {
+                    Observer->OnRedoCommit(ev->Table, ev->TxId, rowVersion);
+                }
             }
         }
 
@@ -215,6 +250,9 @@ namespace NRedo {
 
             if (Base.NeedIn(ev->Table)) {
                 Base.DoRemoveTx(ev->Table, ev->TxId);
+                if (Observer) {
+                    Observer->OnRedoRemove(ev->Table, ev->TxId);
+                }
             }
         }
 
@@ -239,6 +277,10 @@ namespace NRedo {
             buf += ReadOps(buf, chunk.end() - buf, op->Ops);
 
             Base.DoUpdate(op->OpHeader.RootId, ERowOp::Upsert, KeyVec, OpsVec, TRowVersion::Min());
+            if (Observer) {
+                Observer->OnRedoUpdate(op->OpHeader.RootId, ERowOp::Upsert, KeyVec, OpsVec, *Annex,
+                    TRowVersion::Min(), 0, 0);
+            }
         }
 
         void DoEraseLegacy(const TArrayRef<const char> chunk)
@@ -249,6 +291,10 @@ namespace NRedo {
             buf += ReadKey(buf, chunk.end() - buf, op->Keys);
 
             Base.DoUpdate(op->OpHeader.RootId, ERowOp::Erase, KeyVec, { }, TRowVersion::Min());
+            if (Observer) {
+                Observer->OnRedoUpdate(op->OpHeader.RootId, ERowOp::Erase, KeyVec, { }, *Annex,
+                    TRowVersion::Min(), 0, 0);
+            }
         }
 
         void DoFlushLegacy(const TArrayRef<const char> chunk)
@@ -310,6 +356,8 @@ namespace NRedo {
 
     private:
         TBase &Base;
+        IRedoObserver* Observer = nullptr;
+        const TVector<NPageCollection::TMemGlob>* Annex = nullptr;
         TVector<TRawTypeValue> KeyVec;
         TVector<TUpdateOp> OpsVec;
     };

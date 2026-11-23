@@ -676,6 +676,9 @@ class TDocument {
     friend class TParser;
 
     explicit TDocument(TString str, fy_document* doc = nullptr, fy_diag* diag = nullptr);
+    // The document's tokens point into *str: the document keeps it alive and a
+    // parser can hand the same buffer to every document it produces.
+    explicit TDocument(TSimpleSharedPtr<TString> str, fy_document* doc, fy_diag* diag);
     explicit TDocument(fy_document* doc = nullptr, fy_diag* diag = nullptr);
 
 public:
@@ -777,13 +780,14 @@ private:
 };
 
 class TParser {
-    TParser(TString rawStream, fy_parser* doc, fy_diag* diag);
+    TParser(TSimpleSharedPtr<TString> rawStream, fy_parser* doc, fy_diag* diag);
 public:
     static TParser Create(TString str);
 
     std::optional<TDocument> NextDocument();
 private:
-    TString RawDocumentStream_;
+    // shared with the documents produced by NextDocument(): their tokens point into it
+    TSimpleSharedPtr<TString> RawDocumentStream_;
     std::unique_ptr<fy_parser, void(*)(fy_parser*)> Parser_;
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> Diag_;
 };

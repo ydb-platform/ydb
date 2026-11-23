@@ -27,6 +27,7 @@ struct TJoinColumn {
     std::optional<TString> OriginalRelName{};
     std::optional<ui32> EquivalenceClass{};
     bool IsConstant = false;
+    bool EqualNulls = false;
 
     TJoinColumn() = default;
 
@@ -51,6 +52,10 @@ struct TJoinColumn {
 };
 
 bool operator<(const TJoinColumn& c1, const TJoinColumn& c2);
+
+inline bool IsEqualNullsKey(const TJoinColumn& lhs, const TJoinColumn& rhs) {
+    return lhs.EqualNulls || rhs.EqualNulls;
+}
 
 struct TOrdering {
     enum EType: uint32_t {

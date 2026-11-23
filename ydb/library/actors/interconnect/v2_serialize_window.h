@@ -1,75 +1,81 @@
 #pragma once
 
 #include <util/generic/algorithm.h>
+#include <util/system/types.h>
 
 namespace NActors {
 
-    // Main and XDC writes share one serialization budget. Adapt it after the batch's byte endpoints
-    // have completed, remembering short writes across retries on either socket.
+    // Per-socket cap on serialized-but-not-CQE'd bytes. The max is taken from the configured
+    // send-buffer bound; a short write trims that socket only, and a full write of the current
+    // target grows it back. Underfilled writes do not shrink. Main and XDC are independent so
+    // payload congestion cannot collapse command batching (and the reverse).
     class TSerializeWindow {
-        size_t Size;
-        bool WindowWasFull = false;
-        bool HadShortWrite = false;
-        bool BatchActive = false;
-        bool HasBatchEndpoints = false;
-        ui64 BatchMainEnd = 0;
-        ui64 BatchXdcEnd = 0;
+    public:
+        static constexpr size_t MaxMainWindowWithXdc = 64 * 1024;
 
-        void FinishBatch(size_t minSize, size_t maxSize) {
-            if (WindowWasFull && !HadShortWrite) {
-                Size = Min(Size + minSize, maxSize);
-            } else {
-                Size = Max(Size - minSize, minSize);
+    private:
+        struct TCap {
+            size_t Target = 0;
+            size_t MinSize = 0;
+            size_t MaxSize = 0;
+
+            TCap() = default;
+
+            TCap(size_t minSize, size_t maxSize)
+                : Target(Max(minSize, maxSize))
+                , MinSize(minSize)
+                , MaxSize(Max(minSize, maxSize))
+            {}
+
+            size_t Remaining(size_t unsent) const {
+                return unsent < Target ? Target - unsent : 0;
             }
-            BatchActive = false;
-            HasBatchEndpoints = false;
-        }
+
+            void OnWriteComplete(size_t num, size_t requested) {
+                if (num != requested) {
+                    Target = Max(Target - MinSize, MinSize);
+                } else if (requested >= Target) {
+                    Target = Min(Target + MinSize, MaxSize);
+                }
+            }
+        };
+
+        TCap Main;
+        TCap Xdc;
+        bool HasXdc = false;
 
     public:
-        explicit TSerializeWindow(size_t size = 0)
-            : Size(size)
+        TSerializeWindow() = default;
+
+        TSerializeWindow(size_t minSize, size_t maxSize, bool hasXdc = false)
+            : Main(minSize, hasXdc ? Min(maxSize, MaxMainWindowWithXdc) : maxSize)
+            , Xdc(minSize, maxSize)
+            , HasXdc(hasXdc)
         {}
 
+        size_t RemainingMain(size_t unsent) const {
+            return Main.Remaining(unsent);
+        }
+
+        size_t RemainingXdc(size_t unsent) const {
+            return HasXdc ? Xdc.Remaining(unsent) : 0;
+        }
+
+        size_t GetMainSize() const {
+            return Main.Target;
+        }
+
+        size_t GetXdcSize() const {
+            return HasXdc ? Xdc.Target : 0;
+        }
+
+        // Combined in-flight bound shown in session HTML.
         size_t GetSize() const {
-            return Size;
+            return GetMainSize() + GetXdcSize();
         }
 
-        // Legacy form retained for single-stream users and focused unit tests.
-        void BeginBatch(size_t unsentBytes) {
-            WindowWasFull = unsentBytes >= Size;
-            HadShortWrite = false;
-            BatchActive = true;
-            HasBatchEndpoints = false;
-        }
-
-        // Endpoint-based batches remain active until the corresponding bytes have actually completed
-        // on both streams. Socket-idle state no longer identifies the end of a batch once serialization
-        // is allowed to continue while a write is in flight.
-        void BeginBatch(size_t unsentBytes, ui64 mainEnd, ui64 xdcEnd) {
-            BeginBatch(unsentBytes);
-            HasBatchEndpoints = true;
-            BatchMainEnd = mainEnd;
-            BatchXdcEnd = xdcEnd;
-        }
-
-        bool IsBatchActive() const {
-            return BatchActive;
-        }
-
-        void CompleteWrite(size_t num, size_t requested, bool lastWrite, size_t minSize, size_t maxSize) {
-            HadShortWrite |= num != requested;
-            if (!lastWrite) {
-                return;
-            }
-            FinishBatch(minSize, maxSize);
-        }
-
-        void CompleteWrite(size_t num, size_t requested, ui64 committedMain, ui64 committedXdc,
-                size_t minSize, size_t maxSize) {
-            HadShortWrite |= num != requested;
-            if (!HasBatchEndpoints || (committedMain >= BatchMainEnd && committedXdc >= BatchXdcEnd)) {
-                FinishBatch(minSize, maxSize);
-            }
+        void CompleteWrite(size_t num, size_t requested, bool xdc) {
+            (xdc && HasXdc ? Xdc : Main).OnWriteComplete(num, requested);
         }
     };
 

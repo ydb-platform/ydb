@@ -1,0 +1,7 @@
+{
+    "test.test[Echo-Results]": [
+        {
+            "uri": "file://test.test_Echo-Results_/results.txt"
+        }
+    ]
+}

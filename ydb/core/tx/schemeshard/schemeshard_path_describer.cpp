@@ -11,6 +11,8 @@
 
 #include <util/stream/format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEMESHARD_DESCRIBE
+
 namespace {
 
 void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSchemeOp::TPartitionConfig& out) {
@@ -222,6 +224,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -252,6 +255,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -449,6 +453,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
     Self->DescribeTable(tableInfo, typeRegistry, returnConfig, entry);
     entry->SetName(pathEl->Name);
+    entry->SetPartitionCount(tableInfo.GetPartitions().size());
 
     if (returnBoundaries) {
         // split boundaries (split keys without shard's tablet-ids)
@@ -513,15 +518,13 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             progress->SetDataTotalSize(txState.DataTotalSize);
             progress->SetTxId(ui64(txId));
 
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add backup process info");
+            YDB_LOG_TRACE_CTX(ctx, "Add backup process info");
             break;
         }
 
         /* Get information about last completed backup */
         for (const auto& iter: tableInfo.BackupHistory) {
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add last backup info item to history");
+            YDB_LOG_TRACE_CTX(ctx, "Add last backup info item to history");
             auto protoResult = pathDescription->AddLastBackupResult();
             const auto& txId = iter.first;
             const auto& tInfoResult = iter.second;
@@ -703,13 +706,14 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
-            TTabletId TabletId;
-            const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
+                TTabletId TabletId;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
-            // it is sorted list of partitions by partition id
-            TVector<TPartitionDesc> descriptions; // index is pqId
-            descriptions.resize(pqGroupInfo->Partitions.size());
+            // Not indexed by PqId: ids may have gaps, so a vector of size NextPartitionId
+            // would be sparse. Reserve for the partitions we actually store and sort later.
+            TVector<TPartitionDesc> descriptions;
+            descriptions.reserve(pqGroupInfo->Partitions.size());
 
             for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
                 auto it = Self->ShardInfos.find(shardIdx);
@@ -731,12 +735,14 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     //   visible via AlterVersion <= committed
                     if (partition->CreateVersion <= pqGroupInfo->AlterVersion
                             || partition->AlterVersion <= pqGroupInfo->AlterVersion) {
-                        Y_VERIFY_S(partition->PqId < pqGroupInfo->NextPartitionId,
-                                   "Wrong pqId: " << partition->PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
-                        descriptions[partition->PqId] = {it->second.TabletID, partition.Get()};
+                        descriptions.push_back({it->second.TabletID, partition.Get()});
                     }
                 }
             }
+
+            Sort(descriptions, [](const TPartitionDesc& lhs, const TPartitionDesc& rhs) {
+                return lhs.Info->PqId < rhs.Info->PqId;
+            });
 
             for (const auto& desc : descriptions) {
                 if (desc.Info == nullptr || desc.Info->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
@@ -746,7 +752,6 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 auto& partition = *entry->AddPartitions();
 
                 Y_VERIFY_S(desc.TabletId, "Unassigned tabletId for partition: " << pqId);
-                Y_VERIFY_S(desc.Info, "Empty info for partition: " << pqId);
 
                 partition.SetPartitionId(pqId);
                 partition.SetTabletId(ui64(desc.TabletId));
@@ -1021,12 +1026,24 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDatabaseQuotas()->CopyFrom(*databaseQuotas);
     }
 
-    if (subDomainInfo->GetDiskQuotaExceeded()) {
+    // exhausted storage blocks user writes through the same flag as the exceeded disk quota
+    if (subDomainInfo->GetDiskQuotaExceeded() || subDomainInfo->GetStorageSpaceExhausted()) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
+    }
+
+    if (subDomainInfo->GetStorageSpaceExhausted()) {
+        entry->MutableDomainState()->SetStorageSpaceExhausted(true);
     }
 
     if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {
         entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
+    }
+
+    // Quotas of an external subdomain are enforced by its tenant schemeshard,
+    // the parent schemeshard only keeps a stub without the actual usage and state.
+    const auto tenantSchemeShardId = subDomainInfo->GetTenantSchemeShardID();
+    if (tenantSchemeShardId == InvalidTabletId || tenantSchemeShardId == Self->SelfTabletId()) {
+        subDomainInfo->FillDiskSpaceQuotaUsage(*entry->MutableDiskSpaceQuotaUsage());
     }
 
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
@@ -1250,6 +1267,9 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
     entry.SetName(pathEl->Name);
     *entry.MutableProperties() = streamingQueryInfo->Properties;
+    if (streamingQueryInfo->OperationOwnerActorId) {
+        ActorIdToProto(streamingQueryInfo->OperationOwnerActorId, entry.MutableOperationOwnerActorId());
+    }
 }
 
 void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1647,6 +1667,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            *entry.MutableHnswIndexDescription() = std::get<NKikimrSchemeOp::THnswIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -1683,6 +1706,15 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetName(name);
     pathId.ToProto(desc.MutablePathId());
     info->Serialize(desc);
+
+    if (const auto& shardIdx = info->AggregatorShardIdx; shardIdx != InvalidShardIdx) {
+        Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
+        const auto& shardInfo = ShardInfos.at(shardIdx);
+
+        if (shardInfo.TabletID != InvalidTabletId) {
+            desc.SetAggregatorTabletId(ui64(shardInfo.TabletID));
+        }
+    }
 
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);
@@ -1776,11 +1808,10 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     desc.SetVersion(info->AlterVersion);
 
     if (const auto& shardIdx = info->ControllerShardIdx; shardIdx != InvalidShardIdx) {
-        Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
-        const auto& shardInfo = ShardInfos.at(shardIdx);
-
-        if (shardInfo.TabletID != InvalidTabletId) {
-            desc.SetControllerId(ui64(shardInfo.TabletID));
+        // The controller shard may already be deleted if the replication is being dropped
+        const auto it = ShardInfos.find(shardIdx);
+        if (it != ShardInfos.end() && it->second.TabletID != InvalidTabletId) {
+            desc.SetControllerId(ui64(it->second.TabletID));
         }
     }
 }
@@ -1797,3 +1828,5 @@ void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name,
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

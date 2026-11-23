@@ -18,14 +18,8 @@ private:
     const TDuration WRITE_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
     const TDuration WRITE_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 
-    const TDuration CONSUMER_INIT_TIMEOUT_MAX = TDuration::Seconds(60);
-    const TDuration CONSUMER_INIT_TIMEOUT_START = TDuration::Seconds(5);
-
     const TDuration CONSUMER_INIT_INTERVAL_MAX = TDuration::Seconds(60);
     const TDuration CONSUMER_INIT_INTERVAL_START = TDuration::Seconds(1);
-
-    const TDuration READ_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
-    const TDuration READ_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
 
@@ -57,6 +51,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
+            HFuncTraced(TEvPQ::TEvPersistDone, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -70,6 +65,7 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -77,6 +73,7 @@ private:
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvReaderEventArrived, ProcessNextReaderEvent);
             HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
+            HFuncTraced(TEvPQ::TEvPersistDone, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -85,17 +82,11 @@ private:
 
 private:
     template<class TEvent>
-    void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) {
-        ctx.Schedule(timeout, std::make_unique<IEventHandle>(recipient, SelfId(), new TEvent()));
+    void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx, ui64 cookie = 0) {
+        ctx.Schedule(timeout, std::make_unique<IEventHandle>(recipient, SelfId(), new TEvent(), 0, cookie));
         timeout = Min(timeout * 2, maxTimeout);
     }
 
-    bool AddToWriteRequest(
-        NKikimrClient::TPersQueuePartitionRequest& request,
-        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
-        bool& incorrectRequest,
-        ui64& nextOffset
-    );
     void ProcessError(const TActorContext& ctx, const TString& msg);
     void ProcessError(const TActorContext& ctx, const TString& msg, const NKikimrClient::TResponse& response);
     void AfterSuccesWrite(const TActorContext& ctx);
@@ -112,9 +103,10 @@ private:
 
     bool TryRewindCommittedOffset(const TActorContext& ctx);
 
-    TString BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
+
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
@@ -133,10 +125,12 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void TryToSplitMerge(const TActorContext& ctx);
+    void TryToSendReplicationData(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -146,17 +140,16 @@ public:
     void RequestSourcePartitionStatus(TEvPQ::TEvRequestPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
-    void AddMessagesToQueue(
-        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
-    );
+    void AddMessagesToQueue(std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages);
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 
 private:
     const TActorId PartitionActor;
-    const NPersQueue::TTopicConverterPtr TopicConverter;
+    NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     const bool IsLocalDC;
     ui64 EndOffset;
+    ui64 ConfirmedEndOffset = 0;
     ui64 OffsetToRead;
     TMaybe<ui64> LastReadOffset;
     NKikimrPQ::TMirrorPartitionConfig Config;
@@ -170,15 +163,15 @@ private:
     TInstant WriteRequestTimestamp;
     TInstant LastRewindCommitTimestamp;
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
+    TActorId CredentialsInitializer;
+    ui64 CredentialsGeneration = 0;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;
     NYdb::NTopic::TPartitionSession::TPtr PartitionStream;
     THolder<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent> StreamStatus;
     TInstant LastInitStageTimestamp;
 
-    TDuration ConsumerInitTimeout = CONSUMER_INIT_TIMEOUT_START;
     TDuration ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
-    TDuration ReadRetryTimeout = READ_RETRY_TIMEOUT_START;
 
     TTabletCountersBase Counters;
 
@@ -197,6 +190,11 @@ private:
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
+
+    y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
+    y_absl::flat_hash_map<TString, ui64> ReplicatedOffsetsByConsumers;
+    TInstant LastReplicationDataTimestamp;
+    TMaybe<ui64> MirroredOffsetToSend;
 };
 
 bool AppendToWriteRequest(

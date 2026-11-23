@@ -33,7 +33,7 @@ class TestIamAuthGeneric(StreamingTestBase):
         secret_path: str,
         endpoint: Endpoint,
         shared_reading: bool = False,
-        service_account_id: str = FAKE_SERVICE_ACCOUNT_ID
+        service_account_id: str = FAKE_SERVICE_ACCOUNT_ID,
     ) -> None:
         """Create an External Data Source that authenticates via IAM."""
         kikimr.ydb_client.query(f"""
@@ -54,9 +54,15 @@ class TestIamAuthGeneric(StreamingTestBase):
         kikimr: Kikimr,
         table_name: str,
     ) -> None:
-        kikimr.ydb_client.query(f"CREATE TABLE `{table_name}` (a INT, b STRING, c Bool, d Timestamp, e Interval, PRIMARY KEY(a, b))")
-        kikimr.ydb_client.query(f"UPSERT INTO `{table_name}` (a, b, c, d, e) VALUES (1, 'abc', false, Timestamp('2025-08-21T11:22:33.456789Z'), Interval('PT1M'))")
-        kikimr.ydb_client.query(f"UPSERT INTO `{table_name}` (a, b, c, d, e) VALUES (2, 'abcdefghijklmnoprstuvwxyz', true, Timestamp('2025-08-21T22:33:44.567Z'), Interval('PT10S'))")
+        kikimr.ydb_client.query(
+            f"CREATE TABLE `{table_name}` (a INT, b STRING, c Bool, d Timestamp, e Interval, PRIMARY KEY(a, b))"
+        )
+        kikimr.ydb_client.query(
+            f"UPSERT INTO `{table_name}` (a, b, c, d, e) VALUES (1, 'abc', false, Timestamp('2025-08-21T11:22:33.456789Z'), Interval('PT1M'))"
+        )
+        kikimr.ydb_client.query(
+            f"UPSERT INTO `{table_name}` (a, b, c, d, e) VALUES (2, 'abcdefghijklmnoprstuvwxyz', true, Timestamp('2025-08-21T22:33:44.567Z'), Interval('PT10S'))"
+        )
 
     @pytest.mark.parametrize(
         "service_account_id", [FAKE_SERVICE_ACCOUNT_ID, "bad", "bad-token", "bad-skip-1", "bad-token-skip-1"]
@@ -109,7 +115,12 @@ class TestIamAuthGeneric(StreamingTestBase):
         # note: Interval type is currently not supported by fq connector and silently ignored
         expected = [
             {'a': 1, 'b': b'abc', 'c': False, 'd': datetime.datetime(2025, 8, 21, 11, 22, 33, 456789)},
-            {'a': 2, 'b': b'abcdefghijklmnoprstuvwxyz', 'c': True, 'd': datetime.datetime(2025, 8, 21, 22, 33, 44, 567000)},
+            {
+                'a': 2,
+                'b': b'abcdefghijklmnoprstuvwxyz',
+                'c': True,
+                'd': datetime.datetime(2025, 8, 21, 22, 33, 44, 567000),
+            },
         ]
         assert rows == expected
 

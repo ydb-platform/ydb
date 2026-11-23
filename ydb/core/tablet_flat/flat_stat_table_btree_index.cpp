@@ -9,8 +9,10 @@ namespace NKikimr::NTable {
 namespace {
 
 using TGroupId = NPage::TGroupId;
+using TRecIdx = NPage::TRecIdx;
 using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
+using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
 using TChild = TBtreeIndexNode::TChild;
 using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
@@ -25,21 +27,22 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         return meta.GetDataSize();
     }
 
-    TPageId pageId = meta.GetPageId();
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, pageId, {});
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
+        auto page = env->TryGetIndexPage(part, location, groupId);
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(rowId);
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
-            prevDataSize = node.GetShortChild(pos - 1).GetDataSize();
+            prevDataSize = node.GetPrevChildDataSize(pos);
         }
     }
 
@@ -60,7 +63,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         return meta.GetDataSize();
     }
 
-    TPageId pageId = meta.GetPageId();
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
     historicRowId = 0;
 
@@ -74,20 +77,20 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     };
     TCells key1{ key1Cells, 3 };
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, pageId, {});
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
+        auto page = env->TryGetIndexPage(part, location, groupId);
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(ESeek::Lower, key1, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
-            const auto& prevChild = node.GetShortChild(pos - 1);
-            prevDataSize = prevChild.GetDataSize();
-            historicRowId = prevChild.GetRowCount();
+            prevDataSize = node.GetPrevChildDataSize(pos);
+            historicRowId = node.GetChildRowCount(pos - 1);
         }
     }
 
@@ -118,53 +121,65 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
     }
 
     auto logAddingGroup = [&](TGroupId groupId){
-        LOG_BUILD_STATS("adding group " << groupId << " " << part->IndexPages.GetBTree(groupId).ToString());
+        LOG_BUILD_STATS("Adding group",
+            {"groupId", groupId},
+            {"indexPages", part->IndexPages.GetBTree(groupId).ToString()});
     };
 
     if (part->GroupsCount) { // main group
         TGroupId groupId{};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
-        
+
         for (const auto& slice : *part.Slices) {
             yieldHandler();
 
             stats.RowCount += slice.EndRowId() - slice.BeginRowId();
-            
+
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, ready);
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.BeginRowId()},
+                {"endRowId", slice.EndRowId()},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
 
             if (part->Small) {
                 AddBlobsSize(part.Part.Get(), stats.DataSize, part->Small.Get(), ELargeObj::Outer, slice.BeginRowId(), slice.EndRowId());
-                LOG_BUILD_STATS("added small blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+                LOG_BUILD_STATS("Added small blobs data size",
+                    {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
             }
             if (part->Large) {
                 AddBlobsSize(part.Part.Get(), stats.DataSize, part->Large.Get(), ELargeObj::Extern, slice.BeginRowId(), slice.EndRowId());
-                LOG_BUILD_STATS("added large blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+                LOG_BUILD_STATS("Added large blobs data size",
+                    {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
             }
         }
     }
 
     for (ui32 groupIndex : xrange<ui32>(1, part->GroupsCount)) {
         TGroupId groupId{groupIndex};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : *part.Slices) {
             yieldHandler();
-            
+
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, ready);
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.BeginRowId()},
+                {"endRowId", slice.EndRowId()},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
         }
     }
 
@@ -172,12 +187,12 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     if (part->HistoricGroupsCount) { // main historic group
         TGroupId groupId{0, true};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : *part.Slices) {
             yieldHandler();
-            
+
             TRowId beginRowId, endRowId;
             bool readySlice = true;
             ui64 beginDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, beginRowId, readySlice);
@@ -186,8 +201,12 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.BeginRowId()},
+                {"endRowId", slice.EndRowId()},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
             if (readySlice && endRowId > beginRowId) {
                 historicSlices.emplace_back(beginRowId, endRowId);
             }
@@ -196,19 +215,23 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     for (ui32 groupIndex : xrange<ui32>(1, part->HistoricGroupsCount)) {
         TGroupId groupId{groupIndex, true};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : historicSlices) {
             yieldHandler();
-            
+
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.first, env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.second, env, ready);
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            LOG_BUILD_STATS("added slice [" << slice.first << ", " << slice.second << ") data size "
-                << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+            LOG_BUILD_STATS("Added slice",
+                {"beginRowId", slice.first},
+                {"endRowId", slice.second},
+                {"beginDataSize", HumanReadableSize(beginDataSize, SF_BYTES)},
+                {"endDataSize", HumanReadableSize(endDataSize, SF_BYTES)},
+                {"dataSize", HumanReadableSize(stats.DataSize.Size, SF_BYTES)});
         }
     }
 
@@ -222,8 +245,11 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
 
     bool ready = true;
     for (const auto& part : subset.Flatten) {
-        LOG_BUILD_STATS("adding part " << part->Label.ToString() << " data size (" << HumanReadableSize(part->DataSize(), SF_BYTES) << " in total)");
-        stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        LOG_BUILD_STATS("Adding part",
+            {"label", part->Label.ToString()},
+            {"dataSize", HumanReadableSize(part->DataSize(), SF_BYTES)});
+
+        AddIndexSize(stats.IndexSize, *part);
         for (const auto& [_, bloom] : part->ByKeyPrefixes) {
             if (bloom) stats.ByKeyFilterSize += bloom->Raw.size();
         }
@@ -234,8 +260,8 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
         return false;
     }
 
-    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, 
-        stats.RowCount / histogramBucketsCount, stats.DataSize.Size / histogramBucketsCount, 
+    ready &= BuildStatsHistogramsBTreeIndex(subset, stats,
+        stats.RowCount / histogramBucketsCount, stats.DataSize.Size / histogramBucketsCount,
         env, yieldHandler, logPrefix);
 
     return ready;

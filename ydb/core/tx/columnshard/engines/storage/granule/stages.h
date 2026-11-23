@@ -35,7 +35,7 @@ private:
 
     TPortionDataAccessors& MutableConstructorVerified(const ui64 portionId) {
         auto it = Constructors.find(portionId);
-        AFL_VERIFY(it != Constructors.end());
+        YDB_LOG_VERIFY(it != Constructors.end());
         return it->second;
     }
 
@@ -54,7 +54,7 @@ public:
     }
 
     void Add(TColumnChunkLoadContextV2&& chunk) {
-        AFL_VERIFY(Constructors.emplace(chunk.GetPortionId(), chunk.CreateBuildInfo()).second);
+        YDB_LOG_VERIFY(Constructors.emplace(chunk.GetPortionId(), chunk.CreateBuildInfo()).second);
     }
 };
 
@@ -77,9 +77,9 @@ public:
         , Self(self)
         , VersionedIndex(versionedIndex)
     {
-        AFL_VERIFY(!!DsGroupSelector);
-        AFL_VERIFY(VersionedIndex);
-        AFL_VERIFY(Self);
+        YDB_LOG_VERIFY(!!DsGroupSelector);
+        YDB_LOG_VERIFY(VersionedIndex);
+        YDB_LOG_VERIFY(Self);
     }
 };
 
@@ -100,7 +100,27 @@ public:
         : TBase(name)
         , Self(self)
     {
-        AFL_VERIFY(Self);
+        YDB_LOG_VERIFY(Self);
+    }
+};
+
+class TGranuleOptimizerLoading: public ITxReader {
+private:
+    using TBase = ITxReader;
+    TGranuleMeta* Self = nullptr;
+
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
+        return true;
+    }
+
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override;
+
+public:
+    TGranuleOptimizerLoading(const TString& name, TGranuleMeta* self)
+        : TBase(name)
+        , Self(self)
+    {
+        YDB_LOG_VERIFY(Self);
     }
 };
 
@@ -123,10 +143,10 @@ public:
         , VersionedIndex(versionedIndex)
         , Context(context)
     {
-        AFL_VERIFY(!!DsGroupSelector);
-        AFL_VERIFY(VersionedIndex);
-        AFL_VERIFY(Self);
-        AFL_VERIFY(Context);
+        YDB_LOG_VERIFY(!!DsGroupSelector);
+        YDB_LOG_VERIFY(VersionedIndex);
+        YDB_LOG_VERIFY(Self);
+        YDB_LOG_VERIFY(Context);
     }
 };
 

@@ -13,7 +13,6 @@ import ydb.library.yql.providers.generic.connector.tests.common_test_cases.selec
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
-
 # Global collection of test cases dependent on environment
 tc_collection = Collection(
     Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EGenericDataSourceKind.POSTGRESQL])

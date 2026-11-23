@@ -7,7 +7,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -165,12 +165,12 @@ public:
         proto.SetRequestsFailed(suiteResults.RequestsFailed);
         proto.SetIops(suiteResults.RequestsCompleted / duration_s);
         proto.SetThroughputMbs(dataSizeMb / duration_s);
-        
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, 
-            "Tag# " << Tag << " Test final results: Status=" << static_cast<int>(suiteResults.Status) 
-            << " (0=OK, 1=FAILURE), RequestsCompleted=" << suiteResults.RequestsCompleted 
-            << ", RequestsFailed=" << suiteResults.RequestsFailed 
-            << ", BlocksRead=" << suiteResults.BlocksRead 
+
+        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST,
+            "Tag# " << Tag << " Test final results: Status=" << static_cast<int>(suiteResults.Status)
+            << " (0=OK, 1=FAILURE), RequestsCompleted=" << suiteResults.RequestsCompleted
+            << ", RequestsFailed=" << suiteResults.RequestsFailed
+            << ", BlocksRead=" << suiteResults.BlocksRead
             << ", BlocksWritten=" << suiteResults.BlocksWritten);
 
         if (suiteResults.BlocksRead) {

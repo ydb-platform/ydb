@@ -12,8 +12,10 @@ namespace NKikimr::NSchemeShard {
 class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
+    YDB_ACCESSOR_DEF(std::optional<bool>, TieringNeedActualization);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(std::optional<bool>, DeduplicationEnabled);
+    YDB_ACCESSOR_DEF(std::optional<bool>, CacheBlobsAfterWrite);
     YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
     YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
@@ -21,11 +23,18 @@ private:
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
+        if (alterRequest.GetOptions().HasTieringNeedActualization()) {
+            TieringNeedActualization = alterRequest.GetOptions().GetTieringNeedActualization();
+        }
+
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
             ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
         }
         if (alterRequest.GetOptions().HasDeduplicationEnabled()) {
             DeduplicationEnabled = alterRequest.GetOptions().GetDeduplicationEnabled();
+        }
+        if (alterRequest.GetOptions().HasCacheBlobsAfterWrite()) {
+            CacheBlobsAfterWrite = alterRequest.GetOptions().GetCacheBlobsAfterWrite();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -56,11 +65,18 @@ public:
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
         alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+        if (TieringNeedActualization) {
+            alterRequest.MutableOptions()->SetTieringNeedActualization(*TieringNeedActualization);
+        }
+
         if (ScanReaderPolicyName) {
             alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
         }
         if (DeduplicationEnabled) {
             alterRequest.MutableOptions()->SetDeduplicationEnabled(*DeduplicationEnabled);
+        }
+        if (CacheBlobsAfterWrite) {
+            alterRequest.MutableOptions()->SetCacheBlobsAfterWrite(*CacheBlobsAfterWrite);
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

@@ -1,3 +1,4 @@
+$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -9,17 +10,17 @@ SELECT
     o_totalprice,
     Sum(l_quantity)
 FROM
-    `/Root/customer` as customer
+    `customer` as customer
 ,
-    `/Root/orders` as orders
+    `orders` as orders
 ,
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 WHERE
     o_orderkey IN (
         SELECT
             l_orderkey
         FROM
-            `/Root/lineitem` as lineitem
+            `lineitem` as lineitem
         GROUP BY
             l_orderkey
         HAVING

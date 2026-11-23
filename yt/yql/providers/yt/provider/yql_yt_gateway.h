@@ -110,6 +110,7 @@ public:
         OPTION_FIELD(TString, UserName)
         OPTION_FIELD(TOperationProgressWriter, ProgressWriter)
         OPTION_FIELD(TYqlOperationOptions, OperationOptions)
+        OPTION_FIELD(TCredentials::TPtr, Credentials)
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
@@ -117,6 +118,7 @@ public:
         OPTION_FIELD_DEFAULT(TQContext, QContext, {})
         OPTION_FIELD_DEFAULT(IYtFullCapture::TPtr, FullCapture, nullptr)
         OPTION_FIELD(TSecureTmpStatePtr, UseSecureTmp)
+        OPTION_FIELD(TString, MrJobLabel)
     };
 
     //////////////////////////////////////////////////////////////
@@ -228,6 +230,8 @@ public:
             TYtTableMetaInfo::TPtr Meta;
             TYtTableStatInfo::TPtr Stat;
             bool WriteLock = false;
+            bool SymlinkLock = false;
+            bool ReferenceLock = false;
         };
         TVector<TTableData> Data;
     };
@@ -364,6 +368,7 @@ public:
         {
         }
 
+        OPTION_FIELD_DEFAULT(bool, SkipFmr, false)
         OPTION_FIELD(TUserDataTable, UserDataBlocks)
         OPTION_FIELD(TUdfModulesTable, UdfModules)
         OPTION_FIELD(IUdfResolver::TPtr, UdfResolver)
@@ -385,6 +390,7 @@ public:
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
+        bool FmrFallback = false;
         TString Data;
     };
 
@@ -415,9 +421,12 @@ public:
         OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
         OPTION_FIELD(TVector<TString>, LayersPaths)
+        OPTION_FIELD_DEFAULT(bool, SkipFmr, false)
     };
 
     struct TRunResult : public NCommon::TOperationResult {
+        // Ask the query thread to retry Run with SkipFmr enabled.
+        bool FmrFallback = false;
         // Return pair of table name, table stat for each output table
         TVector<std::pair<TString, TYtTableStatInfo::TPtr>> OutTableStats;
     };
@@ -482,6 +491,7 @@ public:
         {
         }
 
+        OPTION_FIELD_DEFAULT(bool, SkipFmr, false)
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYqlRowSpecInfo::TPtr, DestinationRowSpec)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
@@ -491,6 +501,7 @@ public:
     };
 
     struct TPublishResult : public NCommon::TOperationResult {
+        bool FmrFallback = false;
     };
 
     //////////////////////////////////////////////////////////////
@@ -526,10 +537,35 @@ public:
         }
 
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
-        OPTION_FIELD(TVector<TClusterAndPath>, Pathes)
+        OPTION_FIELD(TVector<TClusterAndPath>, Paths)
     };
 
     struct TDropTrackablesResult : public NCommon::TOperationResult {
+    };
+
+    //////////////////////////////////////////////////////////////
+
+    struct TUnlockTablesOptions : public TCommonOptions {
+        using TSelf = TUnlockTablesOptions;
+
+        struct TUnlockTable
+        {
+            TString Cluster;
+            TString Path;
+            ui32 Epoch;
+            bool Anonymous;
+        };
+
+        TUnlockTablesOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TVector<TUnlockTable>, Tables)
+    };
+
+    struct TUnlockTablesResult : public NCommon::TOperationResult {
     };
 
     //////////////////////////////////////////////////////////////
@@ -827,6 +863,8 @@ public:
     virtual NThreading::TFuture<TPublishResult> Publish(const TExprNode::TPtr& node, TExprContext& ctx, TPublishOptions&& options) = 0;
 
     virtual NThreading::TFuture<TCommitResult> Commit(TCommitOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) = 0;
 
     virtual NThreading::TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) = 0;
 

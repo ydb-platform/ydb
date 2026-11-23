@@ -1,14 +1,96 @@
 #include "datashard_impl.h"
+#include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
 #include "execution_unit_ctors.h"
 
-#include <ydb/library/aclib/user_context.h>
+#include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
+
+namespace {
+
+using TFamilyKey = std::pair<TString, ui32>;
+
+TFamilyKey FamilyKey(const TUserTable& table, ui32 id) {
+    if (const auto it = table.Families.find(id); it != table.Families.end()) {
+        const auto name = it->second.GetName();
+        // GetName() returns "default" for every unnamed family.
+        return name == "default" && id != 0 ? TFamilyKey{"", id} : TFamilyKey{name, 0};
+    }
+
+    Y_ENSURE(id == 0, "Unknown column family: " << id);
+    return {"default", 0};
+}
+
+struct TFamilySettings {
+    NTable::NPage::ECodec Codec = NTable::NPage::ECodec::Plain;
+    ui32 CodecLevel = 1;
+    NTable::NPage::ECacheMode CacheMode = NTable::NPage::ECacheMode::Regular;
+    TString DataPoolKind;
+
+    bool operator==(const TFamilySettings&) const = default;
+};
+
+TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
+    TMap<TFamilyKey, TFamilySettings> result;
+    result.emplace(TFamilyKey{"default", 0}, TFamilySettings{});
+
+    for (const auto& [id, family] : table.Families) {
+        const auto key = FamilyKey(table, id);
+        const auto& data = family.StorageConfig.GetData();
+        const TFamilySettings settings{
+            .Codec = family.Codec,
+            .CodecLevel = family.Codec == NTable::NPage::ECodec::ZSTD ? family.GetCodecLevel() : 1,
+            .CacheMode = family.CacheMode,
+            .DataPoolKind = data.GetAllowOtherKinds() ? TString{} : data.GetPreferredPoolKind(),
+        };
+
+        if (key == TFamilyKey{"default", 0}) {
+            result[key] = settings;
+        } else {
+            Y_ENSURE(result.emplace(key, settings).second, "Duplicate column family: " << key.first);
+        }
+    }
+
+    return result;
+}
+
+bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable) {
+    if (FamilySettings(oldTable) != FamilySettings(newTable)) {
+        return true;
+    }
+
+    for (const auto& [id, column] : newTable.Columns) {
+        auto it = oldTable.Columns.find(id);
+        if (column.IsBuildInProgress || it == oldTable.Columns.end() || it->second.IsBuildInProgress) {
+            continue;
+        }
+
+        if (FamilyKey(oldTable, it->second.Family) != FamilyKey(newTable, column.Family)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool HasNewVisibleColumns(const TUserTable& oldTable, const TUserTable& newTable) {
+    for (const auto& [tag, column] : newTable.Columns) {
+        const auto it = oldTable.Columns.find(tag);
+        if (!column.IsBuildInProgress && (it == oldTable.Columns.end() || it->second.IsBuildInProgress)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -120,11 +202,17 @@ public:
                   const TActorContext &ctx) override;
 
 private:
+    struct TCleanupContext {
+        ui64 TxId = 0;
+        TReplicationSourceOffsetsDb::TCleanupCursor Cursor;
+    };
+
+    TCleanupContext Cleanup;
 };
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
                                  TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
+    : TExecutionUnit(EExecutionUnitKind::AlterTable, true, dataShard, pipeline)
 {
 }
 
@@ -165,6 +253,45 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     auto oldInfo = DataShard.FindUserTable(tableId);
+    using TReplicationConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    if (alterTableTx.HasReplicationConfig()
+        && (alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+            || !oldInfo->IsReplicated())
+        && !oldInfo->IsIncrementalRestore()) {
+        if (oldInfo->IsReplicated()) {
+            // Persist NONE before deleting offsets, so delayed replication writes
+            // cannot recreate them. Keep the schema version until ALTER completes.
+            TUserTable::TPtr stopped = new TUserTable(*oldInfo);
+            stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
+            NKikimrSchemeOp::TTableDescription schema;
+            stopped->GetSchema(schema);
+            stopped->ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+            stopped->SetSchema(schema);
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistUserTable(db, tableId.LocalPathId, *stopped);
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.ReplaceUserTable(tableId, stopped, locksDb);
+            DataShard.ReplicatedTables.erase(tableId);
+            return EExecutionStatus::Reschedule;
+        }
+
+        // Clean offsets left by older versions before enabling replication.
+        if (Cleanup.TxId != op->GetTxId()) {
+            Cleanup = {.TxId = op->GetTxId()};
+        }
+
+        DataShard.ReplicatedTables.erase(tableId);
+        TReplicationSourceOffsetsDb rdb(txc);
+        switch (rdb.RemoveTableBatch(tableId, Cleanup.Cursor)) {
+        case TReplicationSourceOffsetsDb::ECleanupStatus::NotReady:
+            return EExecutionStatus::Restart;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::More:
+            return EExecutionStatus::Reschedule;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::Done:
+            Cleanup = {};
+            break;
+        }
+    }
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
@@ -173,47 +300,11 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 
-    bool schemaChanged = false;
-    if (alterTableTx.DropColumnsSize()) {
-        schemaChanged = true;
-    } else {
-        for (const auto& [tag, column] : newInfo->Columns) {
-            if (!oldInfo->Columns.contains(tag)) {
-                schemaChanged = true;
-                break;
-            }
-        }
-    }
-
+    const bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo)
+        || HasNewVisibleColumns(*oldInfo, *newInfo)
+        || HasNewVisibleColumns(*newInfo, *oldInfo);
     if (schemaChanged) {
-        NIceDb::TNiceDb db(txc.DB);
-
-        for (const auto& streamPathId : newInfo->GetSchemaChangesCdcStreams()) {
-            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcSchemaChange)
-                .WithOrder(DataShard.AllocateChangeRecordOrder(db))
-                .WithGroup(0)
-                .WithStep(op->GetStep())
-                .WithTxId(op->GetTxId())
-                .WithPathId(streamPathId)
-                .WithTableId(tableId)
-                .WithSchemaVersion(newInfo->GetTableSchemaVersion())
-                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build())
-                .Build();
-
-            const auto& record = *recordPtr;
-            DataShard.PersistChangeRecord(db, record);
-
-            op->ChangeRecords().push_back(IDataShardChangeCollector::TChange{
-                .Order = record.GetOrder(),
-                .Group = record.GetGroup(),
-                .Step = record.GetStep(),
-                .TxId = record.GetTxId(),
-                .PathId = record.GetPathId(),
-                .BodySize = 0,
-                .TableId = record.GetTableId(),
-                .SchemaVersion = record.GetSchemaVersion(),
-            });
-        }
+        PersistCdcSchemaChange(DataShard, txc, op, tableId, *newInfo);
     }
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
@@ -239,4 +330,3 @@ THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

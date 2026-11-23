@@ -7,7 +7,7 @@
 #include <library/cpp/yt/memory/ref_counted.h>
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NProfiling {
 
@@ -112,7 +112,7 @@ public:
     void SetEnabled(bool enabled);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     bool Enabled_ = true;
     TIntrusivePtr<TSensorBuffer> Buffer_;
 };

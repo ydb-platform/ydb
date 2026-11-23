@@ -20,6 +20,7 @@ private:
     NObjectClient::TTransactionId ParentTransactionId;
     std::optional<std::string> Medium;
     std::optional<int> ReplicationFactor;
+    NYTree::INodePtr Config;
 
     void DoExecute(ICommandContextPtr context) override;
 };

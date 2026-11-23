@@ -9,7 +9,7 @@
 
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 namespace NYT::NRpc {
 
@@ -129,7 +129,7 @@ private:
 
     TPeriodicExecutorPtr ExpirationExecutor_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     THashMap<std::string, TCachedChannelPtr> StrongChannelMap_;
     THashMap<std::string, TWeakPtr<TCachedChannel>> WeakChannelMap_;
 

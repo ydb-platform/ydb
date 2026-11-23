@@ -221,6 +221,13 @@ void TGetQueryCommand::Register(TRegistrar registrar)
             return command->Options.QueryTrackerStage;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<IMapNodePtr>(
+        "progress_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.ProgressOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetQueryCommand::DoExecute(ICommandContextPtr context)
@@ -461,8 +468,7 @@ void TGetQueryDeclaredParametersInfoCommand::Register(TRegistrar registrar)
         "engine",
         [] (TThis* command) -> auto& {
             return command->Options.Engine;
-        })
-        .Optional(/*init*/ false);
+        });
 
     registrar.ParameterWithUniversalAccessor<TYsonString>(
         "settings",

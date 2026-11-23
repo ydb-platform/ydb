@@ -43,6 +43,7 @@ public:
         TTabletId TenantSysViewProcessor = InvalidTabletId;
         TTabletId TenantStatisticsAggregator = InvalidTabletId;
         TTabletId TenantGraphShard = InvalidTabletId;
+        TTabletId TenantWasmCompileController = InvalidTabletId;
         TString TenantRootACL;
 
         TLink() = default;

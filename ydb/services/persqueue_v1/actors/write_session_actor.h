@@ -5,14 +5,13 @@
 #include "persqueue_utils.h"
 #include "write_request_info.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -30,10 +29,10 @@ inline TActorId GetPQWriteServiceActorID() {
 
 template <EProtocol Protocol>
 class TWriteSessionActor
-    : public NActors::TActorBootstrapped<TWriteSessionActor<Protocol>>
+    : public NPQ::TBaseActor<TWriteSessionActor<Protocol>>
     , private NPQ::TRlHelpers
-    , public NActors::IActorExceptionHandler
 {
+    using TBase = NPQ::TBaseActor<TWriteSessionActor<Protocol>>;
     using TSelf = TWriteSessionActor<Protocol>;
     using TClientMessage = std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteClientMessage,
                                               Topic::StreamWriteMessage::FromClient>;
@@ -83,6 +82,12 @@ public:
         return NKikimrServices::TActivity::FRONT_PQ_WRITE;
     }
 
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
+    }
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -111,6 +116,8 @@ private:
 
             HFunc(NPQ::TEvPartitionChooser::TEvChooseResult, Handle);
             HFunc(NPQ::TEvPartitionChooser::TEvChooseError, Handle);
+            HFunc(TEvWriteSessionsQuoter::TEvQuotaAcquired, Handle);
+            HFunc(TEvWriteSessionsQuoter::TEvQuotaDeclined, Handle);
 
         default:
             break;
@@ -169,7 +176,11 @@ private:
 
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 
+    void Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr& ev, const TActorContext& ctx);
+
 private:
+    void CreatePartitionChooser(const TActorContext& ctx);
     bool CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
     NWilson::TSpan GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const;
@@ -192,6 +203,7 @@ private:
         ES_CREATED = 1,
         ES_WAIT_SCHEME = 2,
         ES_WAIT_PARTITION = 3,
+        ES_WAIT_WRITE_SESSION_QUOTA = 4,
         ES_WAIT_WRITER_INIT = 7,
         ES_INITED = 8,
         ES_DYING = 9
@@ -210,6 +222,7 @@ private:
     ui64 PartitionTabletId;
     ui32 PreferedPartition;
     std::optional<ui32> ExpectedGeneration;
+    TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
     std::optional<ui64> InitialSeqNo;
 
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1

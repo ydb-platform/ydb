@@ -7,6 +7,8 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -31,7 +33,9 @@ public:
         }
 
         const auto& settings = request.GetSettings();
-        LOG_N("DoExecute " << request.ShortDebugString());
+        YDB_LOG_NOTICE_CTX(ctx, "TTxCreateSetColumnConstraint::DoExecute",
+            {"request", request.ShortDebugString()},
+        );
 
         if (Self->SetColumnConstraintOperations.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
@@ -66,6 +70,9 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId)) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for schema changes");
+        }
         auto subDomainInfo = domainPath.DomainInfo();
         const bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
 
@@ -159,3 +166,5 @@ ITransaction* TSchemeShard::CreateTxCreateSetColumnConstraint(TEvSetColumnConstr
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

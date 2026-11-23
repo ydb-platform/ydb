@@ -1,19 +1,23 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include "kqp_query_stats.h"
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -28,10 +32,6 @@
 #include <memory>
 
 namespace NKikimr {
-
-namespace NWorkloadManager {
-class IQueryClassifier;
-} // namespace NWorkloadManager
 
 namespace NKqp {
 
@@ -77,7 +77,13 @@ public:
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
+        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(
+            AppData()->FeatureFlags.GetDisablePgCompatibility()
+            && !(ev->Get()->IsInternalCall()
+                && ev->Get()->GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && IsAnalyzeRequest(ev->Get()->GetRequestType()))))
         , StartTime(TInstant::Now())
+        , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
         , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
@@ -110,9 +116,15 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
-            "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
-        if (KqpSessionSpan && AppData()) {
-            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+            QueryTraceSpanName(QueryAction), NWilson::EFlags::AUTO_END);
+        AddQueryTraceAttributes(KqpSessionSpan, QueryType, QueryAction,
+            Database ? Database : AppData()->TenantName, RequestEv->GetQuery());
+        AddQuerySessionTraceAttributes(KqpSessionSpan, sessionId,
+            RequestEv->HasTxControl() ? &RequestEv->GetTxControl() : nullptr);
+        KqpSessionSpan.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+        if (KqpSessionSpan) {
+            const auto fallback = FallbackQueryTraceName(QueryType, QueryAction);
+            TraceDescription = {fallback, fallback};
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             if (KqpSessionSpan) {
@@ -131,8 +143,12 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
-        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
-        QueryClassifier = RequestEv->GetWmQueryClassifier();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType())
+            || (RequestEv->IsInternalCall()
+                && RequestEv->GetRequestType() == NRequestTypes::ChecksumTable
+                && (QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_AST_DML));
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -147,6 +163,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
+    TMaybe<TRowVersion> ExternalMvccVersion;
     ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
@@ -155,7 +172,6 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
@@ -175,11 +191,13 @@ public:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
     bool IsWarmupCompilation_ = false;
+    const bool DisablePgCompatibility_;
 
     TInstant StartTime;
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TCurrentQueryStatsPublisher RuntimeStats;
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -192,6 +210,9 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    NWilson::TSpan AdmissionSpan;
+    NWilson::TSpan AcquireSnapshotSpan;
+    TQueryTraceDescription TraceDescription;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx
@@ -218,11 +239,7 @@ public:
 
     NYql::TIssues Issues;
 
-    TVector<TQueryAst> Statements;
-    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for all statements
-    ui32 CurrentStatementId = 0;
-    ui32 StatementResultIndex = 0;
-    ui32 StatementResultSize = 0;
+    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for the query
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
@@ -232,6 +249,10 @@ public:
     i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
+
+    bool GetDisablePgCompatibility() const {
+        return DisablePgCompatibility_;
+    }
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -257,6 +278,10 @@ public:
 
     const TString& GetQuery() const {
         return RequestEv->GetQuery();
+    }
+
+    bool UsedNewRbo() const {
+        return CompileResult && CompileResult->UsedNewRbo;
     }
 
     const TString& GetPreparedQuery() const {
@@ -419,7 +444,7 @@ public:
         }
     }
 
-    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+    void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
@@ -511,6 +536,12 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
+        YDB_LOG_ENSURE(UserRequestContext);
+        if (UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: held-open read locks would be
+            // broken by any concurrent write and abort the query.
+            return false;
+        }
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
@@ -523,7 +554,7 @@ public:
             return false;
         }
 
-        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        YDB_LOG_ENSURE(!TxCtx->TxManager->BrokenLocks());
         if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
@@ -590,28 +621,6 @@ public:
 
     NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
 
-    bool ProcessingLastStatement() const {
-        return CurrentStatementId + 1 >= Statements.size();
-    }
-
-    void PrepareCurrentStatement() {
-        QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
-        PreparedQuery = {};
-        CompileResult = {};
-        CurrentTx = 0;
-        TableVersions = {};
-        MaxReadType = ETableReadType::Other;
-        TopicOperations = {};
-        ReplayMessage = {};
-    }
-
-    void PrepareNextStatement() {
-        CurrentStatementId++;
-        StatementResultIndex += StatementResultSize;
-        StatementResultSize = 0;
-        PrepareCurrentStatement();
-    }
-
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
      bool EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response);
@@ -621,7 +630,6 @@ public:
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult);
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
-    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
 
     bool TryGetFromCache(
@@ -662,7 +670,10 @@ public:
     }
 
     bool GetCollectAffectedRows() const {
-        return RequestEv->GetCollectAffectedRows();
+        // Ignore the flag when stats are not collected at all: shards would
+        // pay the extra precharge/RowExists overhead for a discarded result.
+        return RequestEv->GetCollectAffectedRows()
+            && GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     }
 
     bool ReportStats() const {

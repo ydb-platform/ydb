@@ -22,7 +22,7 @@ void TMemoryLimiterActor::Bootstrap() {
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
         Counters.push_back(std::make_shared<TCounters>(Signals, Name + "_" + ToString(i)));
-        DefaultStages.push_back(std::make_shared<TStageFeatures>("GLOBAL", Config.GetMemoryLimit(), Config.GetHardMemoryLimit(), nullptr, Counters.back()->BuildStageCounters("general")));
+        DefaultStages.push_back(std::make_shared<TStageFeatures>("GLOBAL", Config.GetMemoryLimit(), Config.GetHardMemoryLimit(), nullptr, Counters.back()->BuildStageCounters("general"), Config.MakeUnrestrictedSoftBytes(Config.GetHardMemoryLimit())));
         Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Counters.back(), DefaultStages.back()));
     }
 
@@ -61,7 +61,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev)
     }
     LWPROBE(TaskUpdated, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(*index));
     Managers[*index]->AllocationUpdated(
-        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
+        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {
@@ -126,8 +126,9 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     const ui64 countBuckets = Config.GetCountBuckets() ? Config.GetCountBuckets() : 1;
     const ui64 hardLimitBytes = ev->Get()->LimitBytes * HardLimitMultiplier / countBuckets;
     const ui64 limitBytes = hardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient;
+    const auto unrestrictedSoft = Config.MakeUnrestrictedSoftBytes(hardLimitBytes);
     for (auto& manager: Managers) {
-        manager->UpdateMemoryLimits(limitBytes, hardLimitBytes);
+        manager->UpdateMemoryLimits(limitBytes, hardLimitBytes, unrestrictedSoft);
     }
 }
 
@@ -171,7 +172,7 @@ size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
 
 size_t TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
-    AFL_VERIFY(it != ProcessMapping.end());
+    YDB_LOG_VERIFY(it != ProcessMapping.end());
     size_t id = it->second.ManagerIndex;
     it->second.Counter--;
     if (it->second.Counter == 0) {

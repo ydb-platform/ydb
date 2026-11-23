@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 SRCS(
     row_ranges_public_include_ut.cpp
     row_ranges_ut.cpp

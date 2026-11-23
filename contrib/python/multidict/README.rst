@@ -59,10 +59,11 @@ Regular mutable (``MultiDict`` and ``CIMultiDict``) classes
 implement ``collections.abc.MutableMapping`` and allows them to change
 their own content.
 
-
 *Case insensitive* (``CIMultiDict`` and
 ``CIMultiDictProxy``) assume the *keys* are case
-insensitive, e.g.::
+insensitive, e.g.
+
+.. code-block:: python
 
    >>> dct = CIMultiDict(key='val')
    >>> 'Key' in dct

@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 
@@ -77,6 +77,11 @@ struct TColumnShardHashV1Params {
 struct TStageInfoMeta {
     const IKqpGateway::TPhysicalTxData& Tx;
 
+    // The physical plan protobuf numbers stages within each transaction independently, while TStageId::StageId is
+    // unique across the whole tasks graph. This is the StageId of the first stage of this stage's transaction, so
+    // `StageId - StageIdBase` is the index of the stage in Tx.Body.
+    ui64 StageIdBase = 0;
+
     enum ETasksType : ui8 {
         UNKNOWN_TASKS = 0,
         SOURCE_TASKS,
@@ -92,6 +97,7 @@ struct TStageInfoMeta {
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
     std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
+    bool IsCsWriteAffinity = false;
     std::unordered_map<TString, TActorId> ControlPlaneActors;
 
     TVector<bool> SkipNullKeys;
@@ -105,11 +111,12 @@ struct TStageInfoMeta {
     std::vector<TShardIdToInfoMap> PrunedPartitions;
     // Estimated row counts per table op (indexed as PrunedPartitions), from query optimizer statistics.
     std::vector<double> EstimatedRowsPerTableOp;
-    // Actual row counts per shard from SchemeShard, populated only for "heavy" reads.
-    THashMap<ui64 /* shardId */, ui64 /* rowCount */> PartitionRowCounts;
 
     // Used for single-partitioned stage and sequential inflight optimization.
     std::optional<TShardInfoWithId> VirtualPartition;
+
+    // This stage's share of the query-wide sampled shard concurrency budget.
+    ui32 SamplingMaxInFlightShards = 0;
 
     struct TIndexMeta {
         TTableId TableId;
@@ -154,9 +161,16 @@ struct TStageInfoMeta {
         return txBody->GetStages(idx);
     }
 
+    // Index of the stage in Tx.Body, see StageIdBase.
+    template <class TStageIdExt>
+    size_t GetStageIdx(const TStageIdExt& stageId) const {
+        YQL_ENSURE(stageId.StageId >= StageIdBase);
+        return stageId.StageId - StageIdBase;
+    }
+
     template <class TStageIdExt>
     const NKqpProto::TKqpPhyStage& GetStage(const TStageIdExt& stageId) const {
-        return GetStage(stageId.StageId);
+        return GetStage(GetStageIdx(stageId));
     }
 
     bool HasReads() const {
@@ -189,6 +203,21 @@ struct TStageInfoMeta {
         return TableKind == ETableKind::Olap;
     }
 
+    bool IsCsWriteAffinitySink() const {
+        return IsCsWriteAffinity;
+    }
+
+    TVector<ui64> GetColumnShardIds() const {
+        YQL_ENSURE(ColumnTableInfoPtr != nullptr,
+            "GetColumnShardIds: ColumnTableInfoPtr is nullptr");
+        const auto& sharding = ColumnTableInfoPtr->Description.GetSharding();
+        TVector<ui64> shardIds;
+        shardIds.reserve(sharding.ColumnShardsSize());
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            shardIds.push_back(sharding.GetColumnShards(si));
+        }
+        return shardIds;
+    }
 };
 
 // things which are common for all tasks in the graph.
@@ -201,6 +230,7 @@ struct TGraphMeta {
     ui32 LockNodeId = 0;
     NKqpProto::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
+    bool DisablePessimisticLocks = false;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
@@ -255,6 +285,10 @@ struct TGraphMeta {
 
     void SetLockMode(NKikimrDataEvents::ELockMode lockMode) {
         LockMode = lockMode;
+    }
+
+    void SetDisablePessimisticLocks(bool disablePessimisticLocks) {
+        DisablePessimisticLocks = disablePessimisticLocks;
     }
 
     void SetQuerySpanId(ui64 querySpanId) {
@@ -348,10 +382,10 @@ struct TTaskMeta {
         bool IsPrimary = false;
     };
 
-    struct TShardReadInfo {
+    struct TShardInfo {
         TShardKeyRanges Ranges;
         TVector<TColumn> Columns;
-        ui64 ShardId = 0; // in case of persistent scans
+        ui64 ShardId = 0;
     };
 
     struct TKqpOlapProgram {
@@ -366,6 +400,7 @@ struct TTaskMeta {
             Blocks
         };
         ui64 ItemsLimit = 0;
+        bool RequireSortedRead = false;
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
@@ -373,7 +408,8 @@ struct TTaskMeta {
     };
 
     TReadInfo ReadInfo;
-    TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
+    TMaybe<TVector<TShardInfo>> Reads; // if not set -> no reads
+    TMaybe<TVector<TShardInfo>> Writes; // if not set -> no writes
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 
@@ -417,10 +453,23 @@ public:
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 
+    // The physical plan protobuf numbers stages within each transaction independently, while TStageId::StageId is
+    // unique across the whole graph (see TStageInfoMeta::StageIdBase). Converts a transaction-local stage index
+    // (NKqpProto::TKqpPhyConnection::StageIndex and the like) into the graph-wide stage id.
+    NYql::NDq::TStageId MakeStageId(ui64 txIdx, ui64 stageIdx) const {
+        return NYql::NDq::TStageId(txIdx, StageIdBases.at(txIdx) + stageIdx);
+    }
+
+    // StageId of the first stage of each transaction, indexed by transaction index.
+    const TVector<ui64>& GetStageIdBases() const {
+        return StageIdBases;
+    }
+
     void FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
 private:
     void FillStages();
+    void AllocateSamplingShardBudget();
 
     // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
     // that fill tasks per node. Every task must already have ExpectedNodeId set (done by the placement pipeline).
@@ -497,6 +546,7 @@ private:
 
 private:
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
+    TVector<ui64> StageIdBases; // filled by FillStages()
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TKqpRequestCounters::TPtr Counters;

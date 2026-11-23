@@ -163,6 +163,10 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     auto oldResourceValues = ResourceValues;
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
+    if (!before.NamedResources.Empty() || !after.NamedResources.Empty()) {
+        NamedResourceValues.Subtract(before.NamedResources);
+        NamedResourceValues.Add(after.NamedResources);
+    }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     YDB_LOG_TRACE("TNodeInfo::UpdateResourceValues updated resource values",
         {"logPrefix", GetLogPrefix()},
@@ -289,7 +293,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
-    if (tablet.IsAliveOnLocal(Local)) {
+    if (tablet.IsPresentOnLocal(Local)) {
         return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
@@ -388,6 +392,32 @@ ui64 TNodeInfo::GetMaxCountForTabletType(TTabletTypes::EType tabletType) const {
     return maxCount;
 }
 
+void TNodeInfo::SetTabletAvailabilityRestriction(TTabletTypes::EType tabletType, ui64 maxCount) {
+    TabletAvailabilityRestrictions[tabletType] = maxCount;
+    auto it = TabletAvailability.find(tabletType);
+    if (it != TabletAvailability.end()) {
+        it->second.UpdateRestriction(maxCount);
+    }
+}
+
+bool TNodeInfo::ResetTabletAvailabilityRestriction(TTabletTypes::EType tabletType) {
+    auto itRestriction = TabletAvailabilityRestrictions.find(tabletType);
+    auto itAvailability = TabletAvailability.find(tabletType);
+    bool hasRealRestriction = itRestriction != TabletAvailabilityRestrictions.end()
+        && itRestriction->second != MAX_TABLET_COUNT_DEFAULT_VALUE;
+    if (hasRealRestriction || itAvailability == TabletAvailability.end()) {
+        if (itRestriction != TabletAvailabilityRestrictions.end()) {
+            TabletAvailabilityRestrictions.erase(itRestriction);
+        }
+        if (itAvailability != TabletAvailability.end()) {
+            itAvailability->second.RemoveRestriction();
+        }
+        return false;
+    }
+    SetTabletAvailabilityRestriction(tabletType, MAX_TABLET_COUNT_DEFAULT_VALUE);
+    return true;
+}
+
 bool TNodeInfo::IsOverloaded() const {
     auto maxValues = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
     auto normValues = NormalizeRawValues(GetResourceCurrentValues(), maxValues);
@@ -419,13 +449,15 @@ void TNodeInfo::DeregisterInDomains() {
     Hive.UpdateNodeSegments(this);
 }
 
-void TNodeInfo::Ping() {
+void TNodeInfo::Ping(bool sendSettings, bool sendCapabilities) {
     Y_ABORT_UNLESS((bool)Local);
     YDB_LOG_DEBUG("TNodeInfo::Ping queueing ping",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", Id},
-        {"local", Local});
-    Hive.QueuePing(Local);
+        {"local", Local},
+        {"sendSettings", sendSettings},
+        {"sendCapabilities", sendCapabilities});
+    Hive.QueuePing({.Local = Local, .SendSettings = sendSettings, .SendCapabilities = sendCapabilities});
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
@@ -436,7 +468,10 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
     Hive.SendReconnect(local);
 }
 
-void TNodeInfo::SetDown(bool down) {
+void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
+    if (Down != down) {
+        Hive.RecordNodeEvent(*this, down ? EHiveEventType::Down : EHiveEventType::Up, reason, std::move(details));
+    }
     Hive.UpdateCounterNodesDown(static_cast<i64>(down) - static_cast<i64>(Down));
     Down = down;
     if (Down) {
@@ -447,7 +482,11 @@ void TNodeInfo::SetDown(bool down) {
     }
 }
 
-void TNodeInfo::SetFreeze(bool freeze) {
+void TNodeInfo::SetFreeze(bool freeze, EHiveEventReason reason, TString details) {
+    if (Freeze != freeze) {
+        Hive.RecordNodeEvent(*this, freeze ? EHiveEventType::Frozen : EHiveEventType::Unfrozen, reason,
+            TStringBuilder() << details << (details.empty() ? "" : " ") << "tablets=" << (freeze ? GetTabletsTotal() : FrozenTablets.size()));
+    }
     Hive.UpdateCounterNodesFrozen(static_cast<i64>(freeze) - static_cast<i64>(Freeze));
     Freeze = freeze;
     if (Freeze) {
@@ -481,11 +520,17 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
     if (metrics.HasNetwork()) {
         std::get<NMetrics::EResource::Network>(ResourceMaximumValues) = metrics.GetNetwork();
     }
+    // node reports the complete set of its named resource capacities every time
+    NamedResourceMaximum.clear();
+    for (const auto& resource : metrics.GetNamedResources()) {
+        NamedResourceMaximum[resource.GetName()] = resource.GetValue();
+        Hive.RegisterNamedResource(resource.GetName());
+    }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
 
-double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty) const {
+double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty, bool includeNamed) const {
     // what it would like when tablet will run on this node?
     auto maximum = GetResourceMaximumValues();
     TResourceRawValues nodeValues = GetResourceCurrentValues();
@@ -496,7 +541,7 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     }
     tablet.FilterRawValues(nodeValues);
     tablet.FilterRawValues(tabletValues);
-    bool alreadyHere = tablet.IsAliveOnLocal(Local);
+    bool alreadyHere = tablet.IsPresentOnLocal(Local);
     auto current = alreadyHere ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
@@ -506,6 +551,9 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
             reserved += TTabletInfo::GetUsage(tabletValues, maximum);
         }
         usage = std::max(usage, reserved);
+    }
+    if (includeNamed) {
+        usage = std::max(usage, GetNamedUsageForTablet(tablet));
     }
     if (Hive.GetSpreadNeighbours() && usage < 1 && neighbourPenalty) {
         auto neighbours = GetTabletNeighboursCount(tablet);
@@ -518,12 +566,42 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     return usage;
 }
 
+double TNodeInfo::GetNamedUsageForTablet(const TTabletInfo& tablet) const {
+    const bool alreadyHere = tablet.IsPresentOnLocal(Local);
+    double usage = 0;
+    for (const auto& v : tablet.GetResourceValues().NamedResources) {
+        if (!Hive.GetNamedResourceSettings(v.Name).IsBalanced()) {
+            continue;
+        }
+        if (auto namedUsage = GetNamedResourceUsage(v.Name, alreadyHere ? 0 : v.Value)) {
+            usage = std::max(usage, *namedUsage);
+        }
+    }
+    return usage;
+}
+
 double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource) const {
     double usage = TTabletInfo::ExtractResourceUsage(normValues, resource);
     if (resource == EResourceToBalance::ComputeResources && AveragedNodeTotalUsage.IsValueStable()) {
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;
+}
+
+std::optional<ui64> TNodeInfo::GetNamedResourceMaximum(const TString& name) const {
+    auto it = NamedResourceMaximum.find(name);
+    if (it != NamedResourceMaximum.end()) {
+        return it->second;
+    }
+    return Hive.GetNamedResourceSettings(name).DefaultMaximum;
+}
+
+std::optional<double> TNodeInfo::GetNamedResourceUsage(const TString& name, ui64 extra) const {
+    auto maximum = GetNamedResourceMaximum(name);
+    if (!maximum) {
+        return std::nullopt;
+    }
+    return static_cast<double>(NamedResourceValues.GetValue(name) + extra) / std::max<ui64>(*maximum, 1);
 }
 
 double TNodeInfo::GetNodeUsage(EResourceToBalance resource) const {
@@ -639,6 +717,75 @@ void TNodeInfo::ActualizeNodeStatistics(TInstant now) {
 
 ui64 TNodeInfo::GetRestartsPerPeriod(TInstant barrier) const {
     return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
+}
+
+void TNodeInfo::SetLocation(const TNodeLocation& location, EHiveEventReason reason) {
+    // Location arrives both from Local (RegisterNode) and from NameService and the two may differ in minor details,
+    // so only a data center change is reported: that is what affects tablet placement
+    if (LocationAcquired && Location.GetDataCenterId() != location.GetDataCenterId()) {
+        Hive.RecordNodeEvent(*this, EHiveEventType::LocationChanged, reason,
+            TStringBuilder() << "from=" << GetLocationString(Location) << " to=" << GetLocationString(location));
+    }
+    Location = location;
+    LocationAcquired = true;
+}
+
+void TNodeInfo::CreateCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& hiveGroup) {
+    if (Counters) {
+        return;
+    }
+    Counters = std::make_unique<TCounters>();
+    TCounters& c = *Counters;
+    c.Parent = hiveGroup;
+    auto group = hiveGroup->GetSubgroup("peer_node_id", ToString(Id));
+    auto counter = [&group](const char* name, bool derivative = false) {
+        return group->GetCounter(name, derivative);
+    };
+    c.BalanceUsagePercent = counter("BalanceUsagePercent");
+    c.TabletsUsageCpuPercent = counter("TabletsUsageCpuPercent");
+    c.TabletsUsageMemPercent = counter("TabletsUsageMemPercent");
+    c.TabletsUsageNetPercent = counter("TabletsUsageNetPercent");
+    c.TabletsUsageCtr = counter("TabletsUsageCtr");
+    c.NodeUsageAvgComputeResourcesPercent = counter("NodeUsageAvgComputeResourcesPercent");
+    c.NodeUsageAvgCpuPercent = counter("NodeUsageAvgCpuPercent");
+    c.NodeUsageAvgMemPercent = counter("NodeUsageAvgMemPercent");
+    c.NodeUsageAvgNetPercent = counter("NodeUsageAvgNetPercent");
+    c.NodeUsageAvgCtr = counter("NodeUsageAvgCtr");
+    c.NodeTabletsRunning = counter("NodeTabletsRunning");
+    c.NodeTabletsStarting = counter("NodeTabletsStarting");
+    c.TabletsMovedToNode = counter("TabletsMovedToNode", true);
+    c.TabletsMovedFromNode = counter("TabletsMovedFromNode", true);
+}
+
+void TNodeInfo::DropCounters() {
+    if (Counters) {
+        Counters->Parent->RemoveSubgroup("peer_node_id", ToString(Id));
+        Counters.reset();
+    }
+}
+
+void TNodeInfo::UpdateCounters() {
+    if (!Counters) {
+        return;
+    }
+    using namespace NMetrics;
+    TCounters& c = *Counters;
+    const TResourceRawValues maximum = GetResourceMaximumValues();
+    // as THive::GetStats sees this node
+    const TResourceNormalizedValues normalizedResValues = NormalizeRawValues(ResourceValues, maximum);
+    c.BalanceUsagePercent->Set(GetNodeUsage(normalizedResValues) * 100);
+    c.TabletsUsageCpuPercent->Set(std::get<EResource::CPU>(normalizedResValues) * 100);
+    c.TabletsUsageMemPercent->Set(std::get<EResource::Memory>(normalizedResValues) * 100);
+    c.TabletsUsageNetPercent->Set(std::get<EResource::Network>(normalizedResValues) * 100);
+    c.TabletsUsageCtr->Set(std::get<EResource::Counter>(ResourceValues));
+    // as the balancer sees this node when it orders nodes and checks a move
+    c.NodeUsageAvgComputeResourcesPercent->Set(GetNodeUsage(EResourceToBalance::ComputeResources) * 100);
+    c.NodeUsageAvgCpuPercent->Set(GetNodeUsage(EResourceToBalance::CPU) * 100);
+    c.NodeUsageAvgMemPercent->Set(GetNodeUsage(EResourceToBalance::Memory) * 100);
+    c.NodeUsageAvgNetPercent->Set(GetNodeUsage(EResourceToBalance::Network) * 100);
+    c.NodeUsageAvgCtr->Set(std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()));
+    c.NodeTabletsRunning->Set(GetTabletsRunning());
+    c.NodeTabletsStarting->Set(GetTabletsScheduled());
 }
 
 TString TNodeInfo::GetLogPrefix() const {

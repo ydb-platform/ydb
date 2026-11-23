@@ -4,14 +4,12 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
-#include <util/generic/hash.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <contrib/libs/curl/include/curl/curl.h>
-
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/retry/retry_policy.h>
+#include <util/generic/hash.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <atomic>
 #include <functional>
@@ -20,19 +18,23 @@ namespace NYql {
 
 class THttpGatewayConfig;
 
-struct IHttpRequestContext : public TThrRefBase {
+struct IHttpRequestContext: public TThrRefBase {
     using TPtr = TIntrusivePtr<IHttpRequestContext>;
 
     virtual ~IHttpRequestContext() = default;
     virtual NDq::TWorkScope GetWorkScope() const = 0;
 };
 
-class TDefaultHttpRequestContext final : public IHttpRequestContext {
+class TDefaultHttpRequestContext final: public IHttpRequestContext {
 public:
     explicit TDefaultHttpRequestContext(NDq::TWorkScope scope)
-        : Scope(std::move(scope)) {}
+        : Scope(std::move(scope))
+    {
+    }
 
-    NDq::TWorkScope GetWorkScope() const override { return Scope; }
+    NDq::TWorkScope GetWorkScope() const override {
+        return Scope;
+    }
 
 private:
     const NDq::TWorkScope Scope;
@@ -48,11 +50,10 @@ public:
 
     // Makes http gateways.
     // Throws on error.
-    static TPtr Make(
-        const THttpGatewayConfig* httpGatewaysCfg = nullptr,
+    static TPtr Make(const THttpGatewayConfig* httpGatewaysCfg = nullptr,
         ::NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
-    class TContentBase : protected TString {
+    class TContentBase: protected TString {
     protected:
         TContentBase(TString&& data);
         TContentBase(const TString& data);
@@ -62,18 +63,23 @@ public:
 
         ~TContentBase();
         TString Extract();
-    public:
-        using TString::size;
-        using TString::data;
 
-        inline operator std::string_view() const { return { data(), size() }; }
+    public:
+        using TString::data;
+        using TString::size;
+
+        inline operator std::string_view() const {
+            return { data(), size() };
+        }
+
     private:
         TContentBase(const TContentBase&) = delete;
         TContentBase& operator=(const TContentBase&) = delete;
     };
 
-    class TContent : public TContentBase {
-    friend class TEasyCurl;
+    class TContent: public TContentBase {
+        friend class TEasyCurl;
+
     public:
         TContent(TString&& data, long httpResponseCode = 0LL, TString&& headers = {});
         TContent(const TString& data, long httpResponseCode = 0LL, const TString& headers = {});
@@ -82,56 +88,55 @@ public:
         TContent& operator=(TContent&& src) = default;
 
         using TContentBase::Extract;
+
     public:
         TString Headers;
         long HttpResponseCode;
     };
 
     using THeaders = THttpHeader;
+
     struct TResult {
-        TResult(TContent&& content) : Content(std::move(content)), CurlResponseCode(CURLE_OK) {}
-        TResult(CURLcode curlResponseCode, const TIssues& issues) : Content(""), CurlResponseCode(curlResponseCode), Issues(issues) {}
+        TResult(TContent&& content)
+            : Content(std::move(content))
+            , CurlResponseCode(CURLE_OK)
+        {
+        }
+
+        TResult(CURLcode curlResponseCode, const TIssues& issues)
+            : Content("")
+            , CurlResponseCode(curlResponseCode)
+            , Issues(issues)
+        {
+        }
+
         TContent Content;
         CURLcode CurlResponseCode;
         TIssues Issues;
     };
+
     using TOnResult = std::function<void(TResult&&)>;
 
-    virtual void Upload(
-        TString url,
-        THeaders headers,
-        TString body,
-        TOnResult callback,
-        bool put = false,
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+    virtual void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put = false,
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(), IHttpRequestContext::TPtr context = nullptr) = 0;
+
+    virtual void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
         IHttpRequestContext::TPtr context = nullptr) = 0;
 
-    virtual void Delete(
-        TString url,
-        THeaders headers,
-        TOnResult callback,
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
-        IHttpRequestContext::TPtr context = nullptr) = 0;
+    virtual void Download(TString url, THeaders headers, std::size_t offset, std::size_t sizeLimit, TOnResult callback, TString data = {},
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(), IHttpRequestContext::TPtr context = nullptr) = 0;
 
-    virtual void Download(
-        TString url,
-        THeaders headers,
-        std::size_t offset,
-        std::size_t sizeLimit,
-        TOnResult callback,
-        TString data = {},
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
-        IHttpRequestContext::TPtr context = nullptr) = 0;
-
-    class TCountedContent : public TContentBase {
+    class TCountedContent: public TContentBase {
     public:
-        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold);
+        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold);
         ~TCountedContent();
 
         TCountedContent(TCountedContent&&) = default;
         TCountedContent& operator=(TCountedContent&& src) = default;
 
         TString Extract();
+
     private:
         void BeforeRelease();
 
@@ -141,34 +146,23 @@ public:
         const size_t Threshold;
     };
 
-    using TOnDownloadStart = std::function<void(CURLcode, long)>; // http code.
+    using TOnDownloadStart = std::function<void(CURLcode, long)>;   // http code.
     using TOnNewDataPart = std::function<void(TCountedContent&&)>;
     using TOnDownloadFinish = std::function<void(CURLcode, TIssues)>;
     using TCancelHook = std::function<void(TIssue)>;
 
-    virtual TCancelHook Download(
-        TString url,
-        THeaders headers,
-        std::size_t offset,
-        std::size_t sizeLimit,
-        TOnDownloadStart onStart,
-        TOnNewDataPart onNewData,
-        TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
+    virtual TCancelHook Download(TString url, THeaders headers, std::size_t offset, std::size_t sizeLimit, TOnDownloadStart onStart,
+        TOnNewDataPart onNewData, TOnDownloadFinish onFinish, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
         IHttpRequestContext::TPtr context = nullptr) = 0;
-        
+
     virtual ui64 GetBuffersSizePerStream() = 0;
 
     virtual void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t> caps) = 0;
 
     static constexpr const char* DefaultPoolId = "default";
 
-    static THeaders MakeYcHeaders(
-        const TString& requestId,
-        const TString& token = {},
-        const TString& contentType = {},
-        const TString& userPwd = {},
-        const TString& awsSigV4 = {});
+    static THeaders MakeYcHeaders(const TString& requestId, const TString& token = {}, const TString& contentType = {},
+        const TString& userPwd = {}, const TString& awsSigV4 = {});
 };
 
-} // namespace NYql
+}   // namespace NYql

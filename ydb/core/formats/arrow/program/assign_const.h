@@ -8,7 +8,7 @@ private:
     using TBase = IResourceProcessor;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, ScalarConstant);
 
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual NJson::TJsonValue DoDebugJson() const override;
 
@@ -20,7 +20,7 @@ public:
     TConstProcessor(const std::shared_ptr<arrow::Scalar>& scalar, const ui32 columnId)
         : TBase(std::vector<TColumnChainInfo>(), std::vector<TColumnChainInfo>({ TColumnChainInfo(columnId) }), EProcessorType::Const)
         , ScalarConstant(scalar) {
-        AFL_VERIFY(ScalarConstant);
+        YDB_LOG_VERIFY(ScalarConstant);
     }
 };
 

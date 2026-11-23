@@ -1,10 +1,11 @@
 #include "client_impl.h"
 
 #include "config.h"
+#include "file_reader.h"
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
-#include "request_info.h"
+#include "request_tags.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
 #include "row_stream.h"
@@ -42,13 +43,18 @@
 
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
 #include <yt/yt/core/rpc/retrying_channel.h>
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
+
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -486,6 +492,7 @@ TFuture<void> TClient::ReshardTable(
     writer->WriteRowset(TRange(keys));
     req->Attachments() = writer->Finish();
 
+    ToProto(req->mutable_cumulative_data_weights(), options.CumulativeDataWeights);
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
@@ -512,6 +519,7 @@ TFuture<void> TClient::ReshardTable(
         req->set_slicing_accuracy(*options.SlicingAccuracy);
     }
 
+    ToProto(req->mutable_cumulative_data_weights(), options.CumulativeDataWeights);
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
@@ -769,6 +777,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
             auto& tabletInfo = tabletInfos.emplace_back();
             tabletInfo.TotalRowCount = protoTabletInfo.total_row_count();
             tabletInfo.TrimmedRowCount = protoTabletInfo.trimmed_row_count();
+            tabletInfo.FlushedRowCount = YT_OPTIONAL_FROM_PROTO(protoTabletInfo, flushed_row_count);
             tabletInfo.DelayedLocklessRowCount = protoTabletInfo.delayed_lockless_row_count();
             tabletInfo.BarrierTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.barrier_timestamp());
             tabletInfo.LastWriteTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.last_write_timestamp());
@@ -914,7 +923,7 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
-    SetWriteTableFragmentRequestInfo(req, cookie);
+    req->Annotate().With(MakeWriteTableFragmentRequestTags(cookie));
 
     auto schema = New<TTableSchema>();
     auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
@@ -954,12 +963,12 @@ IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
-    SetWriteFileFragmentRequestInfo(req, cookie);
+    req->Annotate().With(MakeWriteFileFragmentRequestTags(cookie));
 
     return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
 
-TFuture<IQueueRowsetPtr> TClient::PullQueue(
+TFuture<TPullQueueResult> TClient::PullQueue(
     const TRichYPath& queuePath,
     i64 offset,
     int partitionIndex,
@@ -986,15 +995,18 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
     req->set_use_native_tablet_node_api(options.UseNativeTabletNodeApi);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullQueuePtr& rsp) -> IQueueRowsetPtr {
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullQueuePtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
-        return CreateQueueRowset(rowset, rsp->start_offset());
+        return TPullQueueResult{
+            .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
+        };
     }));
 }
 
-TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
+TFuture<TPullQueueResult> TClient::PullQueueConsumer(
     const TRichYPath& consumerPath,
     const TRichYPath& queuePath,
     std::optional<i64> offset,
@@ -1026,11 +1038,14 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullQueueConsumerPtr& rsp) -> IQueueRowsetPtr {
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPullQueueConsumerPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
-        return CreateQueueRowset(rowset, rsp->start_offset());
+        return TPullQueueResult{
+            .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
+        };
     }));
 }
 
@@ -2016,18 +2031,61 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
 }
 
 TFuture<TFilePartitions> TClient::PartitionFile(
-    const NYPath::TYPath& /*path*/,
-    const std::vector<TFileReadRange>& /*ranges*/,
-    const TPartitionFileOptions& /*options*/)
+    const NYPath::TYPath& path,
+    const std::vector<TFileReadRange>& ranges,
+    const TPartitionFileOptions& options)
 {
-    THROW_ERROR_EXCEPTION("PartitionFile is not implemented yet");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PartitionFile();
+    SetTimeoutOptions(*req, options);
+
+    req->set_path(path);
+    for (const auto& range : ranges) {
+        auto* protoRange = req->add_ranges();
+        protoRange->set_begin(range.Begin);
+        if (range.End) {
+            protoRange->set_end(*range.End);
+        }
+    }
+
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
+    req->set_fetch_cookie_node_descriptors(options.FetchCookieNodeDescriptors);
+
+    ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
+    req->Annotate().With(MakePartitionFileRequestTags(*req));
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionFilePtr& rsp) {
+        return FromProto<TFilePartitions>(*rsp);
+    }));
 }
 
 TFuture<IFileReaderPtr> TClient::CreateFilePartitionReader(
-    const TFilePartitionCookiePtr& /*cookie*/,
-    const TReadFilePartitionOptions& /*options*/)
+    const TFilePartitionCookiePtr& cookie,
+    const TReadFilePartitionOptions& options)
 {
-    THROW_ERROR_EXCEPTION("CreateFilePartitionReader is not implemented yet");
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
+
+    auto req = proxy.ReadFilePartition();
+    InitStreamingRequest(*req);
+
+    req->set_cookie(ToProto(ConvertToYsonString(cookie)));
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+
+    req->Annotate().With(MakeReadFilePartitionRequestTags(*req));
+
+    return NRpcProxy::CreateFilePartitionReader(std::move(req));
 }
 
 TFuture<TClusterMeta> TClient::GetClusterMeta(
@@ -2151,7 +2209,7 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
-    SetPartitionTablesRequestInfo(req, paths, *req);
+    req->Annotate().With(MakePartitionTablesRequestTags(paths, *req));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
@@ -2171,7 +2229,7 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
 
     FillRequest(req.Get(), cookie, /*format*/ std::nullopt, options);
 
-    SetReadTablePartitionRequestInfo(req, *req);
+    req->Annotate().With(MakeReadTablePartitionRequestTags(*req));
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
@@ -2193,27 +2251,52 @@ class TDeserializingRowStream
     : public IFormattedTableReader
 {
 public:
-    explicit TDeserializingRowStream(IAsyncZeroCopyInputStreamPtr stream, bool isStreamWithStatistics = false)
+    TDeserializingRowStream(
+        IAsyncZeroCopyInputStreamPtr stream,
+        const NProfiling::TWallTimer& totalTimer,
+        bool isStreamWithStatistics)
         : Underlying_(std::move(stream))
+        , TotalTimer_(totalTimer)
         , IsStreamWithStatistics_(isStreamWithStatistics)
     { }
 
     TFuture<TSharedRef> Read() override
     {
-        return Underlying_->Read().Apply(BIND([=, isStreamWithStatistics = IsStreamWithStatistics_] (const TSharedRef& block) {
+        return Underlying_->Read().Apply(BIND([this, this_ = MakeStrong(this)] (const TSharedRef& block) {
             if (block.Empty()) {
                 return TSharedRef();
             }
 
             NProto::TRowsetDescriptor descriptor;
             NProto::TRowsetStatistics statistics;
-            return DeserializeRowStreamBlockEnvelope(block, &descriptor, isStreamWithStatistics ? &statistics : nullptr);
+            auto payloadRef = DeserializeRowStreamBlockEnvelope(block, &descriptor, IsStreamWithStatistics_ ? &statistics : nullptr);
+            if (statistics.has_timing_statistics()) {
+                auto guard = Guard(StatisticsLock_);
+                RemoteTimingStatistics_ = FromProto<TRemoteTableReaderTimingStatistics>(statistics.timing_statistics());
+            }
+            return payloadRef;
         }));
+    }
+
+    TTableReaderTimingStatistics GetTimingStatistics() const override
+    {
+        // The client does not parse rows here, so only the total time and the proxy-side part are meaningful.
+        TTableReaderTimingStatistics statistics{
+            .TotalTime = TotalTimer_.GetElapsedTime(),
+        };
+
+        auto guard = Guard(StatisticsLock_);
+        statistics.Remote = RemoteTimingStatistics_;
+        return statistics;
     }
 
 private:
     const IAsyncZeroCopyInputStreamPtr Underlying_;
+    const NProfiling::TWallTimer TotalTimer_;
     const bool IsStreamWithStatistics_;
+
+    YT_DECLARE_SPIN_LOCK(mutable TSpinLock, StatisticsLock_);
+    std::optional<TRemoteTableReaderTimingStatistics> RemoteTimingStatistics_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TDeserializingRowStream);
@@ -2223,6 +2306,8 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
     const TYsonString& format,
     const TTableReaderOptions& options)
 {
+    NProfiling::TWallTimer totalTimer;
+
     auto proxy = CreateApiServiceProxy();
     PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTable();
@@ -2230,18 +2315,18 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
-    SetReadTableRequestInfo(req, path, *req);
+    req->Annotate().With(MakeReadTableRequestTags(path, *req));
 
     return CreateRpcClientInputStream(std::move(req))
-        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
-            return inputStream->Read().Apply(BIND([inputStream] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
+        .AsUnique().Apply(BIND([totalTimer] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return inputStream->Read().Apply(BIND([inputStream, totalTimer] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
                 // Read and deserialize meta from ApiService for protocol consistency, won't be used.
                 NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
                 if (!TryDeserializeProto(&meta, metaRef)) {
                     THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
                 }
 
-                return New<TDeserializingRowStream>(std::move(inputStream), /*isStreamWithStatistics*/ true);
+                return New<TDeserializingRowStream>(std::move(inputStream), totalTimer, /*isStreamWithStatistics*/ true);
             }));
         }));
 }
@@ -2253,6 +2338,8 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
 {
     YT_VERIFY(cookie);
 
+    NProfiling::TWallTimer totalTimer;
+
     auto proxy = CreateApiServiceProxy();
     PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTablePartition();
@@ -2260,18 +2347,18 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
 
     FillRequest(req.Get(), cookie, format, options);
 
-    SetReadTablePartitionRequestInfo(req, *req);
+    req->Annotate().With(MakeReadTablePartitionRequestTags(*req));
 
     return CreateRpcClientInputStream(std::move(req))
-        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
-            return inputStream->Read().Apply(BIND([inputStream] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
+        .AsUnique().Apply(BIND([totalTimer] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return inputStream->Read().Apply(BIND([inputStream, totalTimer] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
                 // Read and deserialize meta from ApiService for protocol consistency, won't be used.
                 NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
                 if (!TryDeserializeProto(&meta, metaRef)) {
                     THROW_ERROR_EXCEPTION("Failed to deserialize partition table reader meta information");
                 }
 
-                return New<TDeserializingRowStream>(std::move(inputStream));
+                return New<TDeserializingRowStream>(std::move(inputStream), totalTimer, /*isStreamWithStatistics*/ false);
             }));
         }));
 }
@@ -2520,6 +2607,8 @@ NProto::EMaintenanceComponent ConvertMaintenanceComponentToProto(EMaintenanceCom
             return NProto::EMaintenanceComponent::MC_RPC_PROXY;
         case EMaintenanceComponent::Host:
             return NProto::EMaintenanceComponent::MC_HOST;
+        case EMaintenanceComponent::ChunkLocation:
+            return NProto::EMaintenanceComponent::MC_CHUNK_LOCATION;
         default:
             THROW_ERROR_EXCEPTION("Invalid maintenance component %Qlv", component);
     }
@@ -2810,6 +2899,9 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
             protoAccessControlObjects->add_items(aco);
         }
     }
+    if (options.MutationId) {
+        ToProto(req->mutable_mutating_options(), options);
+    }
 
     for (const auto& file : options.Files) {
         auto* protoFile = req->add_files();
@@ -2934,6 +3026,9 @@ TFuture<TQuery> TClient::GetQuery(
     }
     if (options.Timestamp) {
         req->set_timestamp(ToProto(options.Timestamp));
+    }
+    if (options.ProgressOptions) {
+        req->set_progress_options(ToProto(ConvertToYsonString(options.ProgressOptions)));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryPtr& rsp) {
@@ -3174,19 +3269,7 @@ TFuture<TGetPipelineDynamicSpecResult> TClient::GetPipelineDynamicSpec(
     const NYPath::TYPath& pipelinePath,
     const TGetPipelineDynamicSpecOptions& options)
 {
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.GetPipelineDynamicSpec();
-    SetTimeoutOptions(*req, options);
-
-    req->set_pipeline_path(pipelinePath);
-
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineDynamicSpecPtr& rsp) {
-        return TGetPipelineDynamicSpecResult{
-            .Version = FromProto<NFlow::TVersion>(rsp->version()),
-            .Spec = TYsonString(rsp->spec()),
-        };
-    }));
+    return IFlowClient::GetPipelineDynamicSpec(pipelinePath, options);
 }
 
 TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(
@@ -3343,12 +3426,17 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     if (options.Schema) {
         ToProto(req->mutable_schema(), options.Schema);
     }
-    if (options.PushConfig) {
-        req->set_push_config(ToProto(*options.PushConfig));
+    if (options.Config) {
+        req->set_config(ToProto(*options.Config));
+    }
+    if (options.Codec != NCompression::ECodec::None) {
+        req->set_codec(ToProto(options.Codec));
     }
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
-        return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
+    return req->Invoke().Apply(BIND([codec = options.Codec] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
+        auto signedHandle = ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
+        ValidateShuffleHandleCodec(signedHandle, codec);
+        return signedHandle;
     }));
 }
 
@@ -3356,7 +3444,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
     std::optional<TIndexRange> logicalWriterIndexRange,
-    const TShuffleReaderOptions& options)
+    const TShuffleReaderOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();
 
@@ -3365,9 +3453,6 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 
     req->set_signed_shuffle_handle(ToProto(ConvertToYsonString(signedShuffleHandle)));
     req->set_partition_index(partitionIndex);
-    if (options.Config) {
-        req->set_reader_config(ToProto(ConvertToYsonString(options.Config)));
-    }
     if (logicalWriterIndexRange) {
         auto* logicalWriterIndexRangeProto = req->mutable_writer_index_range();
         logicalWriterIndexRangeProto->set_begin(logicalWriterIndexRange->first);
@@ -3392,9 +3477,6 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
 
     req->set_signed_shuffle_handle(ToProto(ConvertToYsonString(signedShuffleHandle)));
     req->set_partition_column(ToProto(partitionColumn));
-    if (options.Config) {
-        req->set_writer_config(ToProto(ConvertToYsonString(options.Config)));
-    }
     if (logicalWriterIndex) {
         req->set_writer_index(*logicalWriterIndex);
     }

@@ -10,7 +10,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -159,7 +159,7 @@ private:
             request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = std::move(path);
+            entry.Path = ::NKikimr::SplitPath(Request->NormalizePath(table));
             if (entry.Path.empty()) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
@@ -467,10 +467,18 @@ private:
         ReplyWithError(status, issues, ctx);
     }
 
+    void Handle(NKqp::TEvKqpCompute::TEvScanWarning::TPtr& ev, const TActorContext& ctx) {
+        YDB_LOG_WARN_CTX(ctx, "ReadColumns got system view scan warning",
+            {"actorId", SelfId()},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
+        Request->RaiseIssues(ev->Get()->Issues);
+    }
+
     STFUNC(StateSysViewScan) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqpCompute::TEvScanData, Handle);
             HFunc(NKqp::TEvKqpCompute::TEvScanError, Handle);
+            HFunc(NKqp::TEvKqpCompute::TEvScanWarning, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
 
             default:

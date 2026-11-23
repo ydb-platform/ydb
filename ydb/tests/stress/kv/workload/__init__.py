@@ -53,32 +53,37 @@ class YdbKvWorkload(WorkloadBase):
         subprocess.run(cmd, check=True, text=True)
         print(f"End at {time.time()}")
 
+    def _init_args(self):
+        return [
+            'init',
+            "--min-partitions", "1",
+            "--partition-size", "10",
+            "--auto-partition", "0",
+            "--init-upserts", "0",
+            "--cols", "5",
+            "--int-cols", "2",
+            "--key-cols", "3",
+        ]
+
+    def _run_args(self):
+        return [
+            "run", "mixed",
+            "--seconds", self.duration,
+            "--threads", "10",
+            "--cols", "5",
+            "--len", "200",
+            "--int-cols", "2",
+            "--key-cols", "3",
+        ]
+
+    def prepare(self):
+        self.cmd_run(self.get_command_prefix(subcmds=self._init_args()))
+
+    def clean(self):
+        self.cmd_run(self.get_command_prefix(subcmds=['clean']))
+
     def __loop(self):
-        # init
-        self.cmd_run(
-            self.get_command_prefix(subcmds=['init',
-                                             "--min-partitions", "1",
-                                             "--partition-size", "10",
-                                             "--auto-partition", "0",
-                                             "--init-upserts", "0",
-                                             "--cols", "5",
-                                             "--int-cols", "2",
-                                             "--key-cols", "3"])
-        )
-        # run
-        self.cmd_run(
-            self.get_command_prefix(subcmds=["run", "mixed",
-                                             "--seconds", self.duration,
-                                             "--threads", "10",
-                                             "--cols", "5",
-                                             "--len", "200",
-                                             "--int-cols", "2",
-                                             "--key-cols", "3"])
-        )
-        # clean
-        self.cmd_run(
-            self.get_command_prefix(subcmds=['clean'])
-        )
+        self.cmd_run(self.get_command_prefix(subcmds=self._run_args()))
 
     def get_workload_thread_funcs(self):
         r = [self.__loop]

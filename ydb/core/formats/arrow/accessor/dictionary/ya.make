@@ -1,7 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/accessor/common
     ydb/core/formats/arrow/filter
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos

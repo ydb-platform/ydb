@@ -13,7 +13,7 @@ Then it copies all necessary *.c and *.h files to postgresql/ directory, automat
 
 How to upgrade to newer PostgreSQL:
 
-1. Make sure you have folloing packages installed (assuming you have Ubuntu Linux):
+1. Make sure you have following packages installed (assuming you have Ubuntu Linux):
 
 libicu-dev
 icu-devtools
@@ -32,7 +32,7 @@ zlib1g-dev
 
   In file local_changes.patch you will get all changes applied to postgresql/ directory which are not part of automated patching by copy_src.sh
 
-3. Cleanup repositry:
+3. Cleanup repository:
 
    arc checkout .
 

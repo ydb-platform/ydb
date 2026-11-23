@@ -37,13 +37,13 @@ void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
     YDB_LOG_DEBUG("",
         {"event", "fetched"},
         {"intervalIdx", IntervalIdx});
-    AFL_VERIFY(ReadySourcesCount.Inc() <= WaitSourcesCount);
+    YDB_LOG_VERIFY(ReadySourcesCount.Inc() <= WaitSourcesCount);
     ConstructResult();
 }
 
 TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-    const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-    const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
+    const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources,
+    const std::shared_ptr<TSpecialReadContext>& context, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
     : MergingContext(std::make_shared<TMergingContext>(start, finish, intervalIdx, includeFinish, includeStart, isExclusiveInterval))
     , Context(context)
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
@@ -52,7 +52,7 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     , IntervalGroupGuard(Context->GetProcessScopeGuard()->BuildGroupGuard())
     , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard())
 {
-    AFL_VERIFY(Sources.size());
+    YDB_LOG_VERIFY(Sources.size());
     for (auto&& [_, i] : Sources) {
         if (!i->IsDataReady()) {
             ++WaitSourcesCount;
@@ -62,19 +62,14 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
                 {"intervalIdx", IntervalIdx},
                 {"intervalId", GetIntervalId()});
         }
-        YDB_LOG_DEBUG("",
-            {"event", "register_source"},
-            {"intervalIdx", IntervalIdx},
-            {"intervalId", GetIntervalId()});
-        i->RegisterInterval(*this, i);
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitResources);
     ConstructResult();
 }
 
 void TFetchingInterval::SetMerger(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger) {
-    AFL_VERIFY(!Merger);
-    AFL_VERIFY(AtomicCas(&PartSendingWait, 1, 0));
+    YDB_LOG_VERIFY(!Merger);
+    YDB_LOG_VERIFY(AtomicCas(&PartSendingWait, 1, 0));
     if (merger) {
         IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitPartialReply);
     }
@@ -86,9 +81,9 @@ bool TFetchingInterval::HasMerger() const {
 }
 
 void TFetchingInterval::OnPartSendingComplete() {
-    AFL_VERIFY(Merger);
-    AFL_VERIFY(AtomicCas(&PartSendingWait, 0, 1));
-    AFL_VERIFY(AtomicGet(SourcesFinalized) == 1);
+    YDB_LOG_VERIFY(Merger);
+    YDB_LOG_VERIFY(AtomicCas(&PartSendingWait, 0, 1));
+    YDB_LOG_VERIFY(AtomicGet(SourcesFinalized) == 1);
     if (Context->IsAborted()) {
         return;
     }

@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
@@ -38,7 +38,7 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         const NWilson::TTraceId& traceId,
         TCallContextPtr callContext,
-        TBlockRange64 vchunkRange);
+        TBlockRange16 vchunkRange);
 
     // Respond via WriteClient to VChunk.
     void Reply(
@@ -54,7 +54,7 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
     NWilson::TSpan& GetSpan();
     TBlockRange64 GetRange() const;
-    TBlockRange64 GetVChunkRange() const;
+    TBlockRange16 GetVChunkRange() const;
     void SetPBufferKey(TPBufferKey pBufferKey);
     TPBufferKey GetPBufferKey() const;
     TGuardedSgList& GetSgList();
@@ -65,7 +65,7 @@ private:
     TGuardedSgList SgList;
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
-    TBlockRange64 VChunkRange;
+    TBlockRange16 VChunkRange;
     TPBufferKey PBufferKey;
 
     NThreading::TPromise<TWriteBlocksLocalResponse> Promise;

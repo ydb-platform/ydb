@@ -2,6 +2,8 @@
 #include "tabletid.h"
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <util/digest/city.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>
@@ -50,6 +52,14 @@ ui64 TEvStateStorage::TSignature::GetReplicaSignature(const TActorId &replicaId)
 
 void TEvStateStorage::TSignature::SetReplicaSignature(const TActorId &replicaId, ui64 signature) {
     ReplicasSignature[replicaId] = signature;
+}
+
+ui64 GetSchemeBoardSelectionKey(TStringBuf path) {
+    return CityHash64(path);
+}
+
+ui64 GetSchemeBoardSelectionKey(const TPathId& pathId) {
+    return pathId.Hash();
 }
 
 void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {

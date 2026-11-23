@@ -28,6 +28,27 @@ configurations.testImplementation {
 configurations.testRuntimeOnly {
     isTransitive = false
 }
+{#-
+    isTransitive on the declarable configurations above does not affect resolution:
+    Gradle resolves compileClasspath/runtimeClasspath, follows the POMs of the
+    declared modules and lets their BOMs raise versions above the ones chosen by ya.
+    The dependencies blocks already declare the full closure computed by ya, so with
+    non_transitive_classpath the resolvable configurations take exactly that closure.
+#}
+{%- if non_transitive_classpath %}
+configurations.compileClasspath {
+    isTransitive = false
+}
+configurations.runtimeClasspath {
+    isTransitive = false
+}
+configurations.testCompileClasspath {
+    isTransitive = false
+}
+configurations.testRuntimeClasspath {
+    isTransitive = false
+}
+{%- endif %}
 
 {%- if named_tests -%}
 {%-     for extra_target in ordered_extra_targets -%}
@@ -63,6 +84,14 @@ val {{ testname }}Implementation by configurations.getting {
 configurations.named(sourceSets["{{ testname }}"].runtimeOnlyConfigurationName) {
     isTransitive = false
 }
+{%-             if non_transitive_classpath %}
+configurations.named(sourceSets["{{ testname }}"].compileClasspathConfigurationName) {
+    isTransitive = false
+}
+configurations.named(sourceSets["{{ testname }}"].runtimeClasspathConfigurationName) {
+    isTransitive = false
+}
+{%-             endif -%}
 {%-         endif -%}
 {%-     endfor -%}
 

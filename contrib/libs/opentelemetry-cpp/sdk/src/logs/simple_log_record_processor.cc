@@ -7,7 +7,6 @@
 #include <mutex>
 #include <utility>
 
-#include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/sdk/common/exporter_utils.h"
 #include "opentelemetry/sdk/logs/exporter.h"
@@ -44,7 +43,7 @@ void SimpleLogRecordProcessor::OnEmit(std::unique_ptr<Recordable> &&record) noex
   auto log_record = std::move(record);
   nostd::span<std::unique_ptr<Recordable>> batch(&log_record, 1);
   // Get lock to ensure Export() is never called concurrently
-  const std::lock_guard<opentelemetry::common::SpinLockMutex> locked(lock_);
+  const std::lock_guard<std::mutex> locked(lock_);
 
   if (exporter_->Export(batch) != sdk::common::ExportResult::kSuccess)
   {

@@ -13,7 +13,7 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         ui32 idx = 0;
         std::vector<ui32> indexesToRemove;
         for (auto&& i : records.GetColumns()) {
-            AFL_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
+            YDB_LOG_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
                 builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
                     Stats.GetValueType(idx));
@@ -39,7 +39,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
         ui32 idx = 0;
         std::vector<ui32> indexesToRemove;
         for (auto&& i : records->GetColumns()) {
-            AFL_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
+            YDB_LOG_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
                 builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
                     Stats.GetValueType(idx));
@@ -62,33 +62,40 @@ void TColumnsData::TIterator::InitArrays() {
             FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
             ChunkAddress = std::nullopt;
         }
-        const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
-        ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        CurrentArrayData = ChunkAddress->GetArray().get();
-        // Dictionary columns materialize (decode) to a dense array, so they are
-        // read exactly like a plain Array here.
-        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
-            FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
-            if (CurrentArrayData->IsNull(localIndex)) {
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
+            CurrentData = static_cast<const TDictionaryArray*>(FullArrayAddress->GetArray().get());
+            if (IsCurrentNull()) {
+                Next();
+            }
+            break;
+        }
+        ChunkAddress = GlobalChunkedArray->GetChunk(ChunkAddress, CurrentIndex);
+        const ui32 localIndex = ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
+        CurrentData = ChunkAddress->GetArray().get();
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+            if (IsCurrentNull()) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-            AFL_VERIFY(localIndex < CurrentArrayData->length())
-                ("localIndex", localIndex)
-                ("CurrentArray->length()", CurrentArrayData->length())
-                ("CurrentArray", CurrentArrayData->ToString());
-            if (CurrentArrayData->IsNull(localIndex) &&
+            YDB_LOG_VERIFY(localIndex < ChunkAddress->GetArray()->length(),
+                {"localIndex", localIndex},
+                {"currentArrayLength", ChunkAddress->GetArray()->length()},
+                {"currentArray", ChunkAddress->GetArray()->ToString()});
+            if (ChunkAddress->GetArray()->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
             } else {
                 break;
             }
         } else {
-            AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
+            YDB_LOG_VERIFY(false,
+                {"type", FullArrayAddress->GetArray()->GetType()});
         }
     }
-    AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
+    YDB_LOG_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount(),
+        {"index", CurrentIndex},
+        {"count", GlobalChunkedArray->GetRecordsCount()});
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

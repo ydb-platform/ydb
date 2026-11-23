@@ -162,31 +162,28 @@ public:
     {}
 
     bool Inc() {
-        i64 newVal;
-        i64 prev;
+        i64 prev = CurInFlightReqs_.load();
         do {
-            prev = AtomicGet(CurInFlightReqs_);
             Y_ABORT_UNLESS(prev >= 0);
             if (Limit_ && prev > Limit_) {
                 return false;
             }
-            newVal = prev + 1;
-        } while (!AtomicCas(&CurInFlightReqs_, newVal, prev));
+        } while (!CurInFlightReqs_.compare_exchange_weak(prev, prev + 1));
         return true;
     }
 
     void Dec() {
-        i64 newVal = AtomicDecrement(CurInFlightReqs_);
+        i64 newVal = --CurInFlightReqs_;
         Y_ABORT_UNLESS(newVal >= 0);
     }
 
     i64 GetCurrentInFlight() const {
-        return AtomicGet(CurInFlightReqs_);
+        return CurInFlightReqs_.load();
     }
 
 private:
     const TLimit Limit_;
-    TAtomic CurInFlightReqs_ = 0;
+    std::atomic<i64> CurInFlightReqs_ = 0;
 };
 
 using TGlobalLimiter = TInFlightLimiterImpl<i64>;
@@ -255,7 +252,7 @@ public:
 
         void Release() {
             if (Owner) {
-                AtomicDecrement(Owner->GuardCount_);
+                --Owner->GuardCount_;
                 Owner = nullptr;
             }
         }
@@ -287,9 +284,9 @@ public:
     virtual void DecRequest();
 
     TShutdownGuard ProtectShutdown() noexcept {
-        AtomicIncrement(GuardCount_);
+        ++GuardCount_;
         if (IsShuttingDown()) {
-            AtomicDecrement(GuardCount_);
+            --GuardCount_;
             return { };
         }
 
@@ -297,7 +294,7 @@ public:
     }
 
     bool IsUnsafeToShutdown() const override {
-        return AtomicGet(GuardCount_) > 0;
+        return GuardCount_.load() > 0;
     }
 
     void SetServerOptions(const TServerOptions& options) override {
@@ -312,7 +309,7 @@ public:
 
     //! Check if the server is going to shut down.
     bool IsShuttingDown() const {
-       return AtomicGet(ShuttingDown_);
+       return ShuttingDown_.load();
     }
 
     bool SslServer() const {
@@ -339,8 +336,8 @@ public:
     }
 
 private:
-    TAtomic ShuttingDown_ = 0;
-    TAtomic GuardCount_ = 0;
+    std::atomic<bool> ShuttingDown_ = false;
+    std::atomic<i64> GuardCount_ = 0;
 
     bool SslServer_ = false;
     bool NeedAuth_ = false;
@@ -386,10 +383,19 @@ public:
     // Send stop to registred services and call Shutdown on grpc server
     // This method MUST be called before destroying TGRpcServer
     void Stop();
+    // Like Stop(), but completion queues keep polling, so requests that outlive
+    // GRpcShutdownDeadline can still finish their grpc calls. Call Stop() once RequestsInProgress() is 0.
+    void StopAcceptingRequests();
     ui16 GetPort() const;
     TString GetHost() const;
 
     const TVector<IGRpcServicePtr>& GetServices() const;
+
+    // Total number of request contexts registered in the services. When it is
+    // zero after Stop(), no request context can dereference this server
+    // anymore: DeregisterRequestCtx() is the last touch of the server in a
+    // request context lifecycle.
+    size_t RequestsInProgress() const;
 
 private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
@@ -402,6 +408,9 @@ private:
 
     TVector<IGRpcServicePtr> Services_;
     TGlobalLimiter Limiter_;
+
+    std::atomic<bool> Stopped_{ false };
+    std::atomic<bool> CompletionQueuesStopped_{ false };
 };
 
 } // namespace NYdbGrpc

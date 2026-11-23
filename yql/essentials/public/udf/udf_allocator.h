@@ -11,15 +11,8 @@ extern "C" void* UdfArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 extern "C" void UdfArrowFree(const void* mem, ui64 size);
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
 extern "C" void* UdfAllocateWithSize(ui64 size);
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size);
-extern "C" [[deprecated("Use UdfAllocateWithSize() instead")]] void* UdfAllocate(ui64 size);
-extern "C" [[deprecated("Use UdfFreeWithSize() instead")]] void UdfFree(const void* mem);
-#else
-extern "C" void* UdfAllocate(ui64 size);
-extern "C" void UdfFree(const void* mem);
-#endif
 
 namespace NYql::NUdf {
 
@@ -53,43 +46,24 @@ struct TStdAllocatorForUdf {
 
     static pointer allocate(size_type n, const void* = nullptr) // NOLINT(readability-identifier-naming)
     {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         return static_cast<pointer>(UdfAllocateWithSize(n * sizeof(value_type)));
-#else
-        return static_cast<pointer>(UdfAllocate(n * sizeof(value_type)));
-#endif
     }
 
     static void deallocate(const_pointer p, size_type n) noexcept // NOLINT(readability-identifier-naming)
     {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-        (void)(n);
         UdfFreeWithSize(static_cast<const void*>(p), n * sizeof(value_type));
-#else
-        (void)(n);
-        UdfFree(static_cast<const void*>(p));
-#endif
     }
 };
 
 struct TWithUdfAllocator {
     void* operator new(size_t sz) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         return UdfAllocateWithSize(sz);
-#else
-        return UdfAllocate(sz);
-#endif
     }
 
     void* operator new[](size_t sz) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         return UdfAllocateWithSize(sz);
-#else
-        return UdfAllocate(sz);
-#endif
     }
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
     void operator delete(void* mem, std::size_t sz) noexcept {
         UdfFreeWithSize(mem, sz);
     }
@@ -97,15 +71,6 @@ struct TWithUdfAllocator {
     void operator delete[](void* mem, std::size_t sz) noexcept {
         UdfFreeWithSize(mem, sz);
     }
-#else
-    void operator delete(void* mem) noexcept {
-        UdfFree(mem);
-    }
-
-    void operator delete[](void* mem) noexcept {
-        UdfFree(mem);
-    }
-#endif
 };
 
 } // namespace NYql::NUdf

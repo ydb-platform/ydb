@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/phoenix/type_decl.h>
+
 #include <yt/yt/core/yson/public.h>
 
 #include <library/cpp/yt/misc/hash.h>
@@ -20,6 +22,10 @@ struct TAuthenticationIdentity
     // TODO(babenko): consider wrapping with std::optional
     std::string User;
     std::string UserTag;
+
+    using TSaveContext = TStreamSaveContext;
+    using TLoadContext = TStreamLoadContext;
+    PHOENIX_DECLARE_TYPE(TAuthenticationIdentity, 0x9b0a005e);
 };
 
 //! Returns the current identity.

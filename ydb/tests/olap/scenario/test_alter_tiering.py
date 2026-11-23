@@ -21,6 +21,7 @@ from helpers.table_helper import AlterTable, ResetSetting, AlterTableStore
 
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
@@ -114,14 +115,14 @@ class S3:
 
         self.create_bucket(bucket_config)
 
-    def count_objects(self, bucket_config: ObjectStorageParams):
+    def has_objects(self, bucket_config: ObjectStorageParams) -> bool:
         s3 = self._make_s3_resource(
             bucket_config.access_key,
             bucket_config.secret_key,
             bucket_config.endpoint,
         )
         bucket = s3.Bucket(bucket_config.bucket)
-        return sum(1 for _ in bucket.objects.all())
+        return any(bucket.objects.page_size(1))
 
 
 class TieringTestBase(BaseTestSet):
@@ -215,7 +216,7 @@ class TieringTestBase(BaseTestSet):
         sth = ScenarioTestHelper(ctx)
 
         # NOTE: evicted data is not erased when the colummnstore is deleted
-        # assert all(s3.count_objects(bucket) == 0 for bucket in s3_configs)
+        # assert not any(s3.has_objects(bucket) for bucket in s3_configs)
 
         for source in self.sources:
             sth.execute_scheme_query(DropExternalDataSource(source))
@@ -415,9 +416,15 @@ class TestAlterTiering(TieringTestBase):
             )
             threads.append(TestThread(target=self._loop_scan, args=[ctx, table, self.test_duration]))
 
-        threads.start_and_wait_all()
-
-        assert any(self.s3.count_objects(bucket) != 0 for bucket in self.s3_configs)
+        threads.start_all()
+        try:
+            # RESET TTL can bring the data back and leave both buckets empty by the time the workers finish.
+            assert wait_for(
+                lambda: any(self.s3.has_objects(bucket) for bucket in self.s3_configs),
+                timeout_seconds=self.test_duration.total_seconds(),
+            ), 'No evicted objects observed in either S3 bucket during the workload'
+        finally:
+            threads.join_all()
 
         for table in self.tables:
             sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)

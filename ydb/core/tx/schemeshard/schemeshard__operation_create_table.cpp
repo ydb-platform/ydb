@@ -9,6 +9,11 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 
+#include <util/generic/algorithm.h>
+#include <util/generic/is_in.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -91,14 +96,19 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     partitions.emplace_back(InvalidShardIdx, TString());
 
     // Check that range ends are sorted in ascending order
-    TVector<TCell> prevKey(keyColTypeIds.size()); // Start from (NULL, NULL, .., NULL)
+    // Start from (NULL, NULL, .., NULL)
+    // The parsed cells point directly into the source buffers
+    // (partitions elements), which are alive and unmodified for the
+    // whole scope of this check.
+    TVector<TCell> prevKey(keyColTypeIds.size());
+    TVector<TCell> key;
     for (ui32 i = 0; i < partitions.size(); ++i) {
-        TSerializedCellVec key(partitions[i].EndOfRange);
-        if (CompareBorders<true, true>(prevKey, key.GetCells(), true, true, keyColTypeIds) >= 0) {
+        Y_ENSURE(TSerializedCellVec::TryParseCells(partitions[i].EndOfRange, key));
+        if (CompareBorders<true, true>(prevKey, key, true, true, keyColTypeIds) >= 0) {
             errStr = Sprintf("Partition ranges are not sorted at index %u", i);
             return false;
         }
-        prevKey.assign(key.GetCells().begin(), key.GetCells().end());
+        prevKey.swap(key);
     }
 
     return true;
@@ -182,41 +192,29 @@ std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, c
 }
 
 class TConfigureParts: public TSubOperationState {
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateTable TConfigureParts"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << " at tabletId# " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvProposeTransactionResult"
-                                << " message: " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
          return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                   << " at tabletId# " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTable);
@@ -232,11 +230,10 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                        << " Propose modify scheme on datashard"
-                        << " datashardId: " << datashardId
-                        << " seqNo: " << seqNo);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState: Propose modify scheme on datashard",
+                {"datashardId", datashardId},
+                {"seqNo", seqNo},
+            );
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
             auto tableDesc = tx.MutableCreateTable();
@@ -248,11 +245,10 @@ public:
                 event->Record.SetSubDomainPathId(subDomainPathId);
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " Propose modify scheme on datashard"
-                                    << " datashardId: " << datashardId
-                                    << " message: " << event->Record.ShortDebugString());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState: Propose modify scheme on datashard",
+                {"datashardId", datashardId},
+                {"message", event->Record.ShortDebugString()},
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
@@ -263,33 +259,25 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateTable TPropose"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvSchemaChanged"
-                     << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                     << " triggered early"
-                     << ", message: " << evRecord.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvSchemaChanged triggered early",
+            {"message", evRecord.ShortDebugString()},
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -297,12 +285,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvOperationPlan"
-                     << " at tablet: " << ssId
-                     << ", stepId: " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTable);
@@ -315,7 +301,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TTableInfo::TPtr table = context.SS->Tables[pathId];
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
@@ -356,11 +342,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -379,7 +361,10 @@ public:
 };
 
 class TCreateTable: public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateTable"; }
+
     bool AllowShadowData = false;
+    bool AllowPgForBackup = false;
     THashSet<TString> LocalSequences;
 
     static TTxState::ETxState NextState() {
@@ -427,6 +412,10 @@ public:
         AllowShadowData = true;
     }
 
+    void SetAllowPgForBackup(bool allowPgForBackup) {
+        AllowPgForBackup = allowPgForBackup;
+    }
+
     void SetLocalSequences(const THashSet<TString>& localSequences) {
         LocalSequences = localSequences;
     }
@@ -435,7 +424,7 @@ public:
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -444,18 +433,14 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = schema.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTable Propose"
-                        << ", path: " << parentPathStr << "/" << name
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TCreateTable Propose"
-                        << ", path: " << parentPathStr << "/" << name
-                        << ", opId: " << OperationId
-                        << ", schema: " << schema.ShortDebugString()
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"schema", schema.ShortDebugString()},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -580,9 +565,7 @@ public:
         }
 
         if (parentPath.Base()->IsTableIndex()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Creating private table for table index"
-                         << ", opId: " << OperationId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Creating private table for table index");
 
             if (schema.HasTTLSettings()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "TTL on index table is not supported");
@@ -632,8 +615,13 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        const bool disablePgCompatibility = !AllowPgForBackup && AppData()->FeatureFlags.GetDisablePgCompatibility();
+        const bool checkIndexPgCompatibility = disablePgCompatibility && parentPath.Base()->IsTableIndex()
+            && (Transaction.GetInternal() || (context.IsAllowedPrivateTables
+                && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable));
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+            .DisablePgCompatibility = disablePgCompatibility && !checkIndexPgCompatibility,
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
             .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -654,6 +642,26 @@ public:
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
+        }
+
+        if (checkIndexPgCompatibility) {
+            const auto& indexInfo = *context.SS->Indexes.at(parentPath.Base()->PathId);
+            const auto& index = indexInfo.AlterData ? *indexInfo.AlterData : indexInfo;
+            const auto& baseTable = *context.SS->Tables.at(parentPath.Parent().Base()->PathId);
+            for (const auto& [_, column] : alterData->Columns) {
+                if (column.PType.GetTypeId() != NScheme::NTypeIds::Pg) {
+                    continue;
+                }
+                const bool inheritedKey = AnyOf(baseTable.KeyColumnIds, [&](ui32 keyId) {
+                    const auto& key = baseTable.Columns.at(keyId);
+                    return key.Name == column.Name && key.PType == column.PType && key.PTypeMod == column.PTypeMod;
+                });
+                if (!inheritedKey || IsIn(index.IndexKeys, column.Name) || IsIn(index.IndexDataColumns, column.Name)) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "PostgreSQL compatibility is disabled for index column '" << column.Name << "'");
+                    return result;
+                }
+            }
         }
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
@@ -743,9 +751,8 @@ public:
             newTable->SetIncrementalRestoreTable();
         }
 
-        context.SS->Tables[newTable->PathId] = tableInfo;
+        context.SS->Tables.Set(newTable->PathId, tableInfo);
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
-        context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");
 
         if ((parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) && parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
@@ -797,29 +804,26 @@ public:
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
-        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TCreateTable Propose creating new table"
-                << " opId# " << OperationId
-                << " path# " << dstPath.PathString()
-                << " pathId# " << newTable->PathId
-                << " schemeshard# " << ssId
-                << " tx# " << Transaction.DebugString()
-                );
+        YDB_LOG_TRACE_CTX(context.Ctx, "TCreateTable Propose creating new table",
+            {"path", dstPath.PathString()},
+            {"pathId", newTable->PathId},
+            {"tx", Transaction.DebugString()},
+        );
 
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -856,9 +860,11 @@ bool SetName<TTag>(
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, bool allowPgForBackup) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetLocalSequences(localSequences);
+    auto* table = static_cast<TCreateTable*>(obj.Get());
+    table->SetLocalSequences(localSequences);
+    table->SetAllowPgForBackup(allowPgForBackup);
     return obj;
 }
 
@@ -883,3 +889,5 @@ ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxStat
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

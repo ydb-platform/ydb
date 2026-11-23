@@ -95,7 +95,7 @@ protected:
 
     struct TInvocationOrder
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
         std::vector<int> InvokerIndexes_;
     } InvocationOrder_;
 
@@ -427,7 +427,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, CpuTimeAccountingBetweenContextSwitche
     auto threadPool = CreateThreadPool(2, "ThreadPool");
     auto invokerPool = CreateInvokerPool(threadPool->GetInvoker(), 2);
 
-    NThreading::TEvent started;
+    TEvent started;
 
     // Start busy loop in the first thread via first fair share invoker.
     auto future = BIND([this, &started] {
@@ -471,7 +471,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitTimeEstimateEmptyPool)
 TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitTimeEstimateStuckAction)
 {
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
-    NThreading::TEvent event;
+    TEvent event;
 
     auto action = BIND([&event]{
         event.Wait();
@@ -495,7 +495,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitTimeEstimateRelevancyDecay
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
     // Make aggregator very forgetful.
     invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Zero());
-    NThreading::TEvent event;
+    TEvent event;
 
     auto action = BIND([&event]{
         event.Wait();
@@ -526,7 +526,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitTimeEstimateSeveralActions
     // Make aggregator never forget a sample.
     invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Max());
 
-    std::vector<NThreading::TEvent> leashes(ActionCount);
+    std::vector<TEvent> leashes(ActionCount);
     std::vector<TFuture<void>> actions;
 
     for (int idx = 0; idx < ActionCount; ++idx) {
@@ -575,7 +575,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOt
     // Make aggregator never forget a sample.
     invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Max());
 
-    std::vector<NThreading::TEvent> leashes(2);
+    std::vector<TEvent> leashes(2);
     std::vector<TFuture<void>> actions;
 
     for (int idx = 0; idx < 2; ++idx) {
@@ -591,7 +591,7 @@ TEST_F(TProfiledFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOt
         .Run());
     }
 
-    NThreading::TEvent secondaryLeash;
+    TEvent secondaryLeash;
     auto secondaryAction = BIND([&executionOrderEnforcer, &secondaryLeash] {
         executionOrderEnforcer(1);
         secondaryLeash.Wait();
@@ -813,22 +813,22 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool1)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool1)
 {
     TestProfiler(1);
 }
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool2)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool2)
 {
     TestProfiler(2);
 }
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool4)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool4)
 {
     TestProfiler(4);
 }
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestProfilerGenericFairShareInvokerPool10)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, ProfilerGenericFairShareInvokerPool10)
 {
     TestProfiler(10);
 }
@@ -842,7 +842,7 @@ DEFINE_ENUM(EInvokerBuckets,
     ((Watermelon)           (4))
 );
 
-TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestEnumIndexedProfilerGenericFairShareInvokerPool)
+TEST_F(TProfiledFairShareInvokerPoolProfilingTest, EnumIndexedProfilerGenericFairShareInvokerPool)
 {
     auto registry = New<TSolomonRegistry>();
     auto invokerPool = CreateEnumIndexedProfiledFairShareInvokerPool<EInvokerBuckets>(

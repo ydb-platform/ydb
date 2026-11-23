@@ -1,3 +1,5 @@
+#include <ydb/core/base/hive.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -5,6 +7,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 
@@ -84,6 +87,41 @@ void VerifyPrivateTableDescriptionAndRestartSchemeShard(
         << Endl;
 
     TestDescribeResult(describeResult, validTableChecks);
+}
+
+/**
+ * Verify that an index was altered together with its impl tables: the index has the expected
+ * schema version and kept its state, and it lists the current schema version of each of its impl
+ * tables, which readers load expecting the version listed there.
+ *
+ * @param[in] runtime The test runtime
+ * @param[in] indexPath The path of the index to verify
+ * @param[in] expectedVersion The schema version the index must have
+ * @param[in] expectedState The state the index must have kept
+ */
+void VerifyIndexListsImplTableVersions(
+    TTestBasicRuntime& runtime,
+    const TString& indexPath,
+    ui64 expectedVersion,
+    NKikimrSchemeOp::EIndexState expectedState = NKikimrSchemeOp::EIndexStateReady
+) {
+    const auto indexDescription = DescribePrivatePath(runtime, indexPath);
+    TestDescribeResult(indexDescription, {
+        NLs::PathExist,
+        NLs::IndexState(expectedState),
+    });
+    UNIT_ASSERT_VALUES_EQUAL(indexDescription.GetPathDescription().GetTableIndex().GetSchemaVersion(), expectedVersion);
+
+    const auto& implTables = indexDescription.GetPathDescription().GetChildren();
+    UNIT_ASSERT_C(!implTables.empty(), indexPath);
+    for (const auto& implTable : implTables) {
+        const TString implTablePath = indexPath + "/" + implTable.GetName();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            implTable.GetVersion().GetTableSchemaVersion(),
+            DescribePrivatePath(runtime, implTablePath).GetPathDescription().GetTable().GetTableSchemaVersion(),
+            implTablePath
+        );
+    }
 }
 
 } // namespace <anonymous>
@@ -999,6 +1037,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, txId);
 
+        // The index was altered together with its impl table. Checked before the restarts below,
+        // which would rebuild a stale listing of the impl tables of the index.
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/Table/UserDefinedIndex", 2);
+
         auto checkLevel = [metricsLevel](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             const auto& tableDescription = record.GetPathDescription().GetTable();
 
@@ -1096,6 +1138,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/Table/UserDefinedIndex", 2);
+
         VerifyPrivateTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/Table/UserDefinedIndex/indexImplTable",
@@ -1160,6 +1204,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/Table/UserDefinedIndex", 2);
+
         VerifyPrivateTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/Table/UserDefinedIndex/indexImplTable",
@@ -1183,7 +1229,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     /**
      * Verify that ALTER TABLE, which explicitly removes the detailed metrics settings
      * from a table with a global secondary index, also clears the settings on the
-     * index impl table.
+     * index impl table, and that the index keeps its state.
      */
     Y_UNIT_TEST(AlterTableClearingDetailedMetricsSettingsClearsIndexImplTable) {
         TTestBasicRuntime runtime;
@@ -1202,6 +1248,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
             IndexDescription {
               Name: "UserDefinedIndex"
               KeyColumnNames: ["indexed"]
+              State: EIndexStateNotReady
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -1224,6 +1271,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        // Both alters altered the index together with its impl table, and it stayed NotReady
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/Table/UserDefinedIndex", 3,
+            NKikimrSchemeOp::EIndexStateNotReady);
 
         auto checkNoSettings = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
@@ -1561,6 +1612,459 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
             "/MyRoot/vectors/idx_vector/indexImplPostingTable",
             { NLs::PathExist, checkLevel }
         );
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings on a table with a built vector
+     * index alters the index together with ALL its impl tables, while the build tables, which
+     * the index build drops at its end, are still among the children of the index.
+     */
+    Y_UNIT_TEST(AlterBuiltVectorIndexedTableAltersIndexWithImplTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["id"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep the dropped build tables among the children of the index
+        TBlockEvents<TEvHive::TEvDeleteTablet> blockedShardDeletion(runtime);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
+            "idx_vector", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        env.TestWaitNotification(runtime, txId);
+        runtime.WaitFor("build table shard deletion", [&]{ return !blockedShardDeletion.empty(); });
+
+        const ui64 indexVersion = DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector")
+            .GetPathDescription().GetTableIndex().GetSchemaVersion();
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/vectors/idx_vector", indexVersion + 1);
+
+        auto checkLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_EQUAL(
+                record.GetPathDescription().GetTable().GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+            );
+        };
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"), {
+            NLs::PathExist,
+            checkLevel,
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"), {
+            NLs::PathExist,
+            checkLevel,
+        });
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings is rejected as a whole, so the
+     * client retries it, while an impl table of an index is locked (here by the initial scan of
+     * a changefeed), which would fail its alter, rather than aborting Scheme Shard.
+     */
+    Y_UNIT_TEST(AlterTableRejectsIndexWithLockedImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedsOnIndexTables(true)
+            .EnableChangefeedInitialScan(true));
+        // Keep the initial scan, and with it the lock of the impl table, from finishing
+        runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/UserDefinedIndex", R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 indexVersion = DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex")
+            .GetPathDescription().GetTableIndex().GetSchemaVersion();
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )", {NKikimrScheme::StatusMultipleModifications});
+
+        // Neither the base table, nor the index, nor its impl table were altered
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/Table/UserDefinedIndex", indexVersion);
+
+        auto checkNoLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+        };
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, checkNoLevel});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable"), {
+            NLs::PathExist,
+            checkNoLevel,
+        });
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings is rejected as a whole while an
+     * impl table of an index is under another operation, and succeeds once the client retries
+     * it after that operation completes.
+     */
+    Y_UNIT_TEST(AlterTableRejectsIndexImplTableUnderOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString metricsAlter = R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )";
+
+        AsyncAlterTable(runtime, ++txId, "/MyRoot/Table/UserDefinedIndex", R"(
+            Name: "indexImplTable"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                }
+            }
+        )");
+        AsyncAlterTable(runtime, ++txId, "/MyRoot", metricsAlter);
+        TestModificationResult(runtime, txId - 1, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
+        env.TestWaitNotification(runtime, {txId - 1, txId});
+
+        auto checkNoLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+        };
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, checkNoLevel});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable"), {
+            NLs::PathExist,
+            checkNoLevel,
+        });
+
+        // The retry succeeds and alters the index together with its impl table
+        const ui64 indexVersion = DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex")
+            .GetPathDescription().GetTableIndex().GetSchemaVersion();
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", metricsAlter);
+        env.TestWaitNotification(runtime, txId);
+
+        VerifyIndexListsImplTableVersions(runtime, "/MyRoot/Table/UserDefinedIndex", indexVersion + 1);
+
+        auto checkLevel = [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_EQUAL(
+                record.GetPathDescription().GetTable().GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+            );
+        };
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, checkLevel});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex/indexImplTable"), {
+            NLs::PathExist,
+            checkLevel,
+        });
+    }
+
+    /**
+     * Run ALTER TABLE with the detailed metrics settings on a table with two global secondary
+     * indexes under the given in-flight limits, and verify that it either is rejected as a whole,
+     * altering nothing, or alters the base table, both indexes and their impl tables.
+     *
+     * @param[in] inFlightLimits The in-flight limits of the Scheme Shard, by tx type counter
+     * @param[in] expectedStatus The expected status of the alter
+     */
+    void AlterTableWithTwoIndexesUnderInFlightLimits(
+        const TVector<std::pair<ESimpleCounters, ui32>>& inFlightLimits,
+        NKikimrScheme::EStatus expectedStatus
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed1" Type: "Uint64" }
+              Columns { Name: "indexed2" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index1"
+              KeyColumnNames: ["indexed1"]
+            }
+            IndexDescription {
+              Name: "Index2"
+              KeyColumnNames: ["indexed2"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The limits are applied on the Scheme Shard start
+        for (const auto& [counter, limit] : inFlightLimits) {
+            auto* inFlightCounter = runtime.GetAppData().SchemeShardConfig.AddInFlightCounterConfig();
+            inFlightCounter->SetType(counter);
+            inFlightCounter->SetInFlightLimit(limit);
+        }
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        const TVector<TString> indexPaths = {"/MyRoot/Table/Index1", "/MyRoot/Table/Index2"};
+        TVector<ui64> indexVersions;
+        for (const auto& indexPath : indexPaths) {
+            indexVersions.push_back(DescribePrivatePath(runtime, indexPath)
+                .GetPathDescription().GetTableIndex().GetSchemaVersion());
+        }
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )", {expectedStatus});
+        env.TestWaitNotification(runtime, txId);
+
+        const bool altered = expectedStatus == NKikimrScheme::StatusAccepted;
+        auto checkLevel = [altered](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& tableDescription = record.GetPathDescription().GetTable();
+            if (!altered) {
+                UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
+                return;
+            }
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+            );
+        };
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, checkLevel});
+        for (size_t i = 0; i < indexPaths.size(); ++i) {
+            VerifyIndexListsImplTableVersions(runtime, indexPaths[i], indexVersions[i] + (altered ? 1 : 0));
+            TestDescribeResult(DescribePrivatePath(runtime, indexPaths[i] + "/indexImplTable"), {
+                NLs::PathExist,
+                checkLevel,
+            });
+        }
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings is rejected as a whole, rather
+     * than aborting the Scheme Shard, when the index alters it adds exceed the in-flight limit of
+     * index alters, which the alter of a single index fits into.
+     */
+    Y_UNIT_TEST(AlterTableRejectsIndexAltersOverInFlightLimit) {
+        AlterTableWithTwoIndexesUnderInFlightLimits({
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex, 1},
+        }, NKikimrScheme::StatusResourceExhausted);
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings is rejected as a whole, rather
+     * than aborting the Scheme Shard, when the impl table alters it adds exceed the in-flight limit
+     * of table alters, which the base table alter fits into.
+     */
+    Y_UNIT_TEST(AlterTableRejectsImplTableAltersOverInFlightLimit) {
+        AlterTableWithTwoIndexesUnderInFlightLimits({
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTable, 2},
+        }, NKikimrScheme::StatusResourceExhausted);
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings succeeds when the in-flight
+     * limits fit all the alters it adds.
+     */
+    Y_UNIT_TEST(AlterTableIndexAltersWithinInFlightLimits) {
+        AlterTableWithTwoIndexesUnderInFlightLimits({
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex, 2},
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTable, 3},
+        }, NKikimrScheme::StatusAccepted);
+    }
+
+    /**
+     * Create the indexed table /MyRoot/Tenant/Table in a subdomain and upgrade the subdomain
+     * to an external one, which migrates the table and its index to a tenant Scheme Shard.
+     *
+     * @param[in] runtime The test runtime
+     * @param[in] env The test environment
+     * @param[in,out] txId The last used transaction ID
+     *
+     * @return The tablet ID of the tenant Scheme Shard
+     */
+    ui64 CreateMigratedIndexedTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+        )");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndex"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "Tenant");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomainDecision(runtime, ++txId, "/MyRoot", "Tenant", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        return tenantSchemeShard;
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings on an indexed table migrated
+     * to a tenant Scheme Shard skips the index, which only the Scheme Shard that created it may
+     * alter, together with its impl table, rather than aborting the tenant Scheme Shard.
+     */
+    Y_UNIT_TEST(AlterMigratedTableSkipsIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        const ui64 tenantSchemeShard = CreateMigratedIndexedTable(runtime, env, txId);
+
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table"), {
+            NLs::PathExist,
+            [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                UNIT_ASSERT_EQUAL(
+                    record.GetPathDescription().GetTable().GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+                );
+            },
+        });
+
+        TestDescribeResult(
+            DescribePrivatePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table/UserDefinedIndex/indexImplTable"),
+            {
+                NLs::PathExist,
+                [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    UNIT_ASSERT(!record.GetPathDescription().GetTable().HasDetailedMetricsSettings());
+                },
+            }
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings, sent to the root Scheme Shard
+     * for an indexed table migrated to a tenant Scheme Shard, is redirected to the tenant.
+     * The root Scheme Shard keeps the migrated paths, index and impl table included, in the
+     * Migrated state, and must not abort on it.
+     */
+    Y_UNIT_TEST(AlterMigratedTableAtRootSchemeShardRedirects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        CreateMigratedIndexedTable(runtime, env, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )", {NKikimrScheme::StatusRedirectDomain});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+        });
     }
 
     /**

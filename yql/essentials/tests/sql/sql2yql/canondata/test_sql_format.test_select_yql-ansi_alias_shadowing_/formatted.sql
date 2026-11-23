@@ -1,0 +1,94 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiOptionalAs;
+PRAGMA WarnOnAnsiAliasShadowing;
+
+SELECT
+    1 a
+;
+
+SELECT
+    2 a
+FROM (
+    SELECT
+        3 a
+);
+
+SELECT
+    4 a,
+    5 b
+FROM (
+    SELECT
+        6 a
+);
+
+SELECT
+    7 a,
+    8 b,
+    9 c
+FROM (
+    SELECT
+        10 a
+)
+JOIN (
+    SELECT
+        11 b
+)
+ON
+    a == b
+;
+
+SELECT
+    (
+        SELECT
+            12 a
+    )
+FROM (
+    SELECT
+        13 a
+);
+
+SELECT
+    (
+        14 IN (
+            SELECT
+                15 a
+        )
+    )
+FROM (
+    SELECT
+        16 a
+);
+
+SELECT
+    (
+        EXISTS (
+            SELECT
+                17 a
+        )
+    )
+FROM (
+    SELECT
+        18 a
+);
+
+SELECT
+    *
+FROM (
+    SELECT
+        19 a
+)
+WHERE
+    EXISTS (
+        SELECT
+            20 a
+    )
+;
+
+SELECT
+    21 a,
+    22 AS b
+FROM (
+    SELECT
+        23 a,
+        24 b
+);

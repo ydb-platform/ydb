@@ -8,7 +8,7 @@ class IRunnable: public virtual TThrRefBase {
 public:
     using TPtr = THolder<IRunnable>;
 
-    virtual ~IRunnable() = default;
+    ~IRunnable() override = default;
 
     virtual void Start() = 0;
 

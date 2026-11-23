@@ -14,6 +14,8 @@
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
+#include <library/cpp/yt/misc/immortal.h>
+
 #include <stack>
 
 namespace NYT {
@@ -98,9 +100,10 @@ private:
     };
 };
 
-IInvokerPtr GetSyncInvoker()
+const IInvokerPtr& GetSyncInvoker()
 {
-    return LeakyRefCountedSingleton<TSyncInvoker>();
+    static const TImmortal<IInvokerPtr> Invoker(LeakyRefCountedSingleton<TSyncInvoker>());
+    return *Invoker;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,12 +142,13 @@ public:
     { }
 };
 
-IInvokerPtr GetNullInvoker()
+const IInvokerPtr& GetNullInvoker()
 {
-    return LeakyRefCountedSingleton<TNullInvoker>();
+    static const TImmortal<IInvokerPtr> Invoker(LeakyRefCountedSingleton<TNullInvoker>());
+    return *Invoker;
 }
 
-IInvokerPtr GetFinalizerInvoker()
+const IInvokerPtr& GetFinalizerInvoker()
 {
     return NConcurrency::GetFinalizerInvoker();
 }

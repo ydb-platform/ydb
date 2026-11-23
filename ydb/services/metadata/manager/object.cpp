@@ -4,7 +4,7 @@ namespace NKikimr::NMetadata::NModifications {
 
 namespace {
 
-class TDefaultColumnValuesMerger : public IColumnValuesMerger {
+class TDefaultColumnValuesMerger: public IColumnValuesMerger {
 public:
     virtual TConclusionStatus Merge(Ydb::Value& value, const Ydb::Value& patch) const override {
         value = patch;
@@ -12,7 +12,7 @@ public:
     }
 };
 
-}
+}   // namespace
 
 IColumnValuesMerger::TPtr TBaseObject::BuildMerger(const TString& columnName) const {
     Y_UNUSED(columnName);
@@ -52,4 +52,4 @@ Ydb::Table::CreateTableRequest TBaseObject::AddHistoryTableScheme(const Ydb::Tab
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

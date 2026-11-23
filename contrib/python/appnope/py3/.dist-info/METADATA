@@ -1,24 +1,24 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.5
 Name: appnope
-Version: 0.1.4
+Version: 1.0.0
 Summary: Disable App Nap on macOS >= 10.9
-Home-page: http://github.com/minrk/appnope
-Author: Min Ragan-Kelley
-Author-email: benjaminrk@gmail.com
-License: BSD
-Classifier: License :: OSI Approved :: BSD License
-Classifier: Operating System :: MacOS :: MacOS X
-Classifier: Programming Language :: Python :: 3
-Requires-Python: >=3.6
-Description-Content-Type: text/markdown
+Project-URL: Source, https://github.com/minrk/appnope
+Author-email: Min Ragan-Kelley <benjaminrk@gmail.com>
+License-Expression: BSD-2-Clause
 License-File: LICENSE
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: MacOS
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
 
 # `appnope`
 
 Simple package for disabling App Nap on macOS >= 10.9,
 which can be problematic.
 
-To disable App Nap:
+To disable App Nap for the current process:
 
 ```python
 import appnope

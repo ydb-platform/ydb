@@ -39,6 +39,14 @@ public:
             "USE_METADATA_CREDENTIALS",
             "SA_KEY_FILE",
             "YDB_OAUTH2_KEY_FILE",
+            "YDB_OIDC_CONFIG",
+            "YDB_OIDC_ISSUER",
+            "YDB_OIDC_FLOW",
+            "YDB_OIDC_CLIENT_ID",
+            "YDB_OIDC_CLIENT_SECRET",
+            "YDB_OIDC_ACCESS_TOKEN",
+            "YDB_OIDC_SCOPE",
+            "YDB_OIDC_CACHE_PATH",
             "YDB_CA_FILE",
             "YDB_CLIENT_CERT_FILE",
             "YDB_CLIENT_CERT_KEY_FILE",
@@ -83,13 +91,13 @@ public:
     std::unique_ptr<TTempDir> TempHomeDir;
 };
 
-TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode)
+TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode, TString* stderrOutput)
 {
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
 
     if (autoAddEndpointAndDatabase) {
         command << "-e" << ("grpc://" + GetYdbEndpoint());
-        command << "-d" << ("/" + GetYdbDatabase());
+        command << "-d" << GetYdbDatabase();
     }
 
     for (auto& arg : args1) {
@@ -111,6 +119,9 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
             "stderr: " << Endl << command.GetError() << Endl;
     }
 
+    if (stderrOutput) {
+        *stderrOutput = command.GetError();
+    }
     return command.GetOutput();
 }
 
@@ -124,7 +135,7 @@ TString RunYdbWithInput(const TList<TString>& args1, const TList<TString>& args2
 
     if (autoAddEndpointAndDatabase) {
         command << "-e" << ("grpc://" + GetYdbEndpoint());
-        command << "-d" << ("/" + GetYdbDatabase());
+        command << "-d" << GetYdbDatabase();
     }
 
     for (auto& arg : args1) {

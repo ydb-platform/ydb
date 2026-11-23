@@ -1,3 +1,4 @@
+#include <ydb/core/base/appdata.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -146,7 +147,7 @@ protected:
                            , NKikimrServices::KQP_EXECUTER
                            , NKikimrServices::KQP_SESSION}, NActors::NLog::PRI_DEBUG);
 
-        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);   
+        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);
 
         auto partsCount = 5u;
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
@@ -191,7 +192,9 @@ protected:
         return response;
     }
 
-    void TestTopicPaths(const TString& path1, const TString& path2) {
+    void TestTopicPaths(const TString& path1, const TString& path2,
+                       Ydb::StatusIds::StatusCode firstStatus = Ydb::StatusIds::SUCCESS,
+                       Ydb::StatusIds::StatusCode secondStatus = Ydb::StatusIds::BAD_REQUEST) {
         const auto PARTITION_ID = 1;
         const auto BEGIN = 4;
         const auto END = 7;
@@ -203,7 +206,12 @@ protected:
                 }}
             }}
         });
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), firstStatus);
+
+        if (firstStatus != Ydb::StatusIds::SUCCESS) {
+            // A failed offset update aborts the transaction.
+            tx = BeginTransaction(*session);
+        }
 
         response = Call_UpdateOffsetsInTransaction({
             TTopic{.Path=path2, .Partitions={
@@ -212,9 +220,26 @@ protected:
                 }}
             }}
         });
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), secondStatus);
     }
 };
+
+Y_UNIT_TEST_F(ClientModificationsTransactionalOffsets, TUpdateOffsetsInTransactionFixture) {
+    const TVector<TTopic> topics = {
+        TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
+            TPartition{.Id=1, .Offsets={TOffsetRange{.Begin=0, .End=1}}}
+        }}
+    };
+
+    server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(false);
+    auto response = Call_UpdateOffsetsInTransaction(topics);
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::PRECONDITION_FAILED);
+    UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Consumer offset commits are disabled");
+
+    server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(true);
+    response = Call_UpdateOffsetsInTransaction(topics);
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+}
 
 Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TUpdateOffsetsInTransactionFixture) {
     Ydb::Topic::UpdateOffsetsInTransactionResponse response = Call_UpdateOffsetsInTransaction({
@@ -330,6 +355,13 @@ Y_UNIT_TEST_F(UseDoubleSlashInTopicPath, TUpdateOffsetsInTransactionFixture) {
 
 Y_UNIT_TEST_F(RelativePath, TUpdateOffsetsInTransactionFixture) {
     TestTopicPaths("PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
+}
+
+Y_UNIT_TEST_F(FullPathWithoutLeadingSlash, TUpdateOffsetsInTransactionFixture) {
+        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
+    // The slashless path addresses /Root/Root/PQ/..., not the existing /Root/PQ/... topic.
+    TestTopicPaths("Root/PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1",
+                   Ydb::StatusIds::SCHEME_ERROR, Ydb::StatusIds::SUCCESS);
 }
 
 Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {

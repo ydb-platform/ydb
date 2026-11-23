@@ -286,6 +286,7 @@ namespace NKikimr::NAutoConfigInitializer {
                 executor->SetSpinThreshold(0);
                 executor->SetHasSharedThread(hasSharedThread);
                 executor->SetAllThreadsAreShared(useUnitedPool);
+                executor->SetEnableWaker(config->GetUseWaker());
             };
 
             assignPool(systemExecutor, "System", 30, cpuCount >= 3);
@@ -387,6 +388,7 @@ namespace NKikimr::NAutoConfigInitializer {
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
             executor->SetAllThreadsAreShared(useUnitedPool);
+            executor->SetEnableWaker(config->GetUseWaker());
 
             if (names[poolIdx] == TASPools::CommonPoolName) {
                 executor->SetSpinThreshold(0);

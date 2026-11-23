@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     add_consumer.cpp
@@ -31,6 +31,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/persqueue/topic_parser
 )
 
 END()

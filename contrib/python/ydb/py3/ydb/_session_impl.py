@@ -353,6 +353,7 @@ def read_table_request_factory(
     ordered=False,
     row_limit=None,
     use_snapshot=None,
+    return_not_null_data_as_optional=None,
 ):
     request = _apis.ydb_table.ReadTableRequest()
     request.path = path
@@ -383,6 +384,14 @@ def read_table_request_factory(
                 request.use_snapshot = _apis.FeatureFlag.DISABLED
         else:
             request.use_snapshot = use_snapshot
+    if return_not_null_data_as_optional is not None:
+        if isinstance(return_not_null_data_as_optional, bool):
+            if return_not_null_data_as_optional:
+                request.return_not_null_data_as_optional = _apis.FeatureFlag.ENABLED
+            else:
+                request.return_not_null_data_as_optional = _apis.FeatureFlag.DISABLED
+        else:
+            request.return_not_null_data_as_optional = return_not_null_data_as_optional
     return session_state.attach_request(request)
 
 
@@ -391,6 +400,20 @@ def bulk_upsert_request_factory(table, rows, column_types):
     request.table = table
     request.rows.MergeFrom(convert.to_typed_value_from_native(types.ListType(column_types).proto, rows))
     return request
+
+
+def read_rows_request_factory(table_path, keys, key_types, columns=None):
+    request = _apis.ydb_table.ReadRowsRequest()
+    request.path = table_path
+    request.keys.MergeFrom(convert.to_typed_value_from_native(types.ListType(key_types).proto, keys))
+    if columns:
+        request.columns.extend(list(columns))
+    return request
+
+
+def wrap_read_rows_response(rpc_state, response_pb, table_client_settings=None):
+    issues._process_response(response_pb)
+    return convert.ResultSet.from_message(response_pb.result_set, table_client_settings)
 
 
 def wrap_read_table_response(response):

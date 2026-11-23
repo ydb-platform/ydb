@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+import contextlib
 import functools
+import json
 import logging
 import os
 import re
@@ -32,26 +34,10 @@ CLUSTER_CONFIG = dict(
     nodes=1,
     enable_metering=True,
     additional_log_configs={
-        'TX_PROXY': LogLevels.DEBUG,
-        'KQP_PROXY': LogLevels.DEBUG,
-        'KQP_WORKER': LogLevels.DEBUG,
-        'KQP_GATEWAY': LogLevels.DEBUG,
-        'GRPC_PROXY': LogLevels.TRACE,
-        'KQP_YQL': LogLevels.DEBUG,
-        'TX_DATASHARD': LogLevels.DEBUG,
         'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
-        'SCHEMESHARD_DESCRIBE': LogLevels.DEBUG,
-
-        'SCHEME_BOARD_POPULATOR': LogLevels.DEBUG,
-
         'SCHEME_BOARD_REPLICA': LogLevels.ERROR,
         'SCHEME_BOARD_SUBSCRIBER': LogLevels.ERROR,
         'TX_PROXY_SCHEME_CACHE': LogLevels.ERROR,
-
-        'CMS': LogLevels.DEBUG,
-        'CMS_TENANTS': LogLevels.DEBUG,
-        'DISCOVERY': LogLevels.TRACE,
-        'GRPC_SERVER': LogLevels.DEBUG
     },
     extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
     datashard_config={
@@ -60,7 +46,13 @@ CLUSTER_CONFIG = dict(
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
-        'max_read_staleness_ms': 200
+        'max_read_staleness_ms': 200,
+        # Base reports need the generation from an executor report, which can
+        # arrive before table metadata is ready during startup.
+        'statistics': {
+            'report_base_statistics_period_ms': 1000,
+            'report_executor_statistics_period_ms': 1000,
+        },
     },
     table_service_config={
     },
@@ -100,20 +92,16 @@ def test_fixtures(ydb_hostel_db, ydb_serverless_db):
     )
 
 
-def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
+def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_client):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
     )
 
     database = ydb_serverless_db
 
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
     logger.info(" database is %s", database)
 
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
@@ -155,20 +143,16 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
         pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
 
-def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_file_path, ydb_private_client):
+def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, metering_file_path, ydb_private_client, ydb_client, request):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
     )
 
     database = ydb_serverless_db
 
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
     logger.info(" database is %s", database)
 
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
@@ -202,15 +186,33 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
 
         pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
-        ydb_private_client.add_config_item("FeatureFlags { AllowServerlessStorageBillingForSchemeShard: true }")
-        while True:
+        metering_start = os.path.getsize(metering_file_path)
+        response = ydb_private_client.add_config_item("FeatureFlags { AllowServerlessStorageBillingForSchemeShard: true }")
+
+        def remove_billing_config():
+            for item_id in response.ConfigureResponse.AddedItemIds:
+                ydb_private_client.console_request(
+                    "ConfigureRequest { Actions { RemoveConfigItem { ConfigItemId { "
+                    f"Id: {item_id} Generation: 1"
+                    " } } } }"
+                )
+
+        request.addfinalizer(remove_billing_config)
+
+        # Billing initializes on a minute boundary and needs two more boundaries to emit a record.
+        billing_deadline = time.monotonic() + 240
+        while time.monotonic() < billing_deadline:
             with open(metering_file_path, 'r') as metering_file:
-                lines = metering_file.readlines()
-                if lines:
-                    logger.info(" metering has data %s", lines[-1])
-                    break
-                logger.info(" wait data in metering file %s", metering_file_path)
-                time.sleep(15)
+                metering_file.seek(metering_start)
+                records = [json.loads(line) for line in metering_file if line.endswith('\n')]
+            bills = [record for record in records if record.get('schema') == 'ydb.serverless.v1' and record.get('resource_id') == database]
+            if bills:
+                logger.info(" metering has data for %s: %s", database, bills[-1])
+                break
+            logger.info(" wait data in metering file %s for %s", metering_file_path, database)
+            time.sleep(15)
+        else:
+            pytest.fail(f"No fresh storage bill for {database} within 240 seconds")
 
         def drop_table(session, path):
             session.drop_table(
@@ -220,20 +222,16 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
         pool.retry_operation_sync(drop_table, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
 
-def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_endpoint):
+def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_client):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_quoted_serverless_db, ydb_hostel_db
     )
 
     database = ydb_quoted_serverless_db
 
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
     logger.info(" database is %s", database)
 
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
@@ -260,7 +258,7 @@ def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_e
             assert "exceeded a limit" in str(excinfo.value)
 
 
-def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, ydb_cluster):
+def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_cluster, ydb_client):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_serverless_db, ydb_hostel_db
     )
@@ -276,13 +274,9 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
     status = ydb_cluster.get_database_status(database)
     assert len(status.schema_operation_quotas.leaky_bucket_quotas) == 2
 
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
     logger.info(" database is %s", database)
 
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
@@ -309,20 +303,20 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
             assert "exceeded a limit" in str(excinfo.value)
 
 
-def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db, ydb_endpoint, ydb_cluster):
+def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db, ydb_cluster, caplog, ydb_client, request):
+    row_count = 1000
+    batch_size = 100
+    payload_size = 71680
+
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_disk_quoted_serverless_db, ydb_hostel_db
     )
 
     database = ydb_disk_quoted_serverless_db
 
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
     logger.info(" database is %s", database)
 
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     def create_table(session, path):
@@ -337,6 +331,21 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         )
 
     sessions = []
+    created_sessions = []
+
+    def close_session(session):
+        if session.session_id:
+            try:
+                session.delete()
+            except ydb.BadSession:
+                pass
+
+    def close_sessions():
+        with contextlib.ExitStack() as cleanup:
+            for session in created_sessions:
+                cleanup.callback(close_session, session)
+
+    request.addfinalizer(close_sessions)
 
     class SessionHolder(object):
         def __init__(self, session):
@@ -348,8 +357,6 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         def __exit__(self, exc_type=None, exc_value=None, exc_traceback=None):
             if exc_type is None and exc_value is None:
                 sessions.append(self.session)
-            else:
-                self.session.reset()
 
     @gen.coroutine
     def async_session():
@@ -357,6 +364,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
             session = sessions.pop()
         else:
             session = yield driver.table_client.session().async_create()
+            created_sessions.append(session)
         raise gen.Return(SessionHolder(session))
 
     def restart_coro_on_bad_session(func):
@@ -416,20 +424,34 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
                     commit_tx=True,
                 )
 
+    @restart_coro_on_bad_session
     @gen.coroutine
     def async_write_keys(path, start, cnt):
-        futures = []
-        for i in range(start, start + cnt):
-            futures.append(async_write_key(path, i, 'a' * 71680))
-        waiter = gen.WaitIterator(*futures)
-        while not waiter.done():
-            yield waiter.next()
+        try:
+            with (yield async_session()) as session:
+                query = yield session.async_prepare('''\
+                    DECLARE $rows AS List<Struct<id: Uint64, value_string: Utf8>>;
+
+                    UPSERT INTO `{path}` SELECT id, value_string FROM AS_TABLE($rows);
+                '''.format(path=path))
+                with session.transaction(ydb.SerializableReadWrite()) as tx:
+                    yield tx.async_execute(
+                        query,
+                        parameters={
+                            '$rows': [
+                                {'id': key, 'value_string': 'a' * payload_size}
+                                for key in range(start, start + cnt)
+                            ],
+                        },
+                        commit_tx=True,
+                    )
+        except ydb.Unavailable as e:
+            if not is_disk_space_quota_exceeded_exception(e):
+                raise
 
     @gen.coroutine
     def async_erase_keys(path, start, cnt):
-        futures = []
-        for i in range(start, start + cnt):
-            futures.append(async_erase_key(path, i))
+        futures = [async_erase_key(path, key) for key in range(start, start + cnt)]
         waiter = gen.WaitIterator(*futures)
         while not waiter.done():
             yield waiter.next()
@@ -453,8 +475,11 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         path = os.path.join(database, "dirA0", "table")
         pool.retry_operation_sync(create_table, None, path)
 
-        for start in range(0, 1000, 100):
-            IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
+        # Keep each transaction below 7 MiB while attempting more than the 64 MiB quota.
+        # Avoid formatting every large request payload as protobuf text.
+        with caplog.at_level(logging.INFO, logger="ydb.connection"):
+            for start in range(0, row_count, batch_size):
+                IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=batch_size))
 
         for _ in range(60):
             time.sleep(1)
@@ -472,8 +497,15 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         with pytest.raises(ydb.Unavailable, match=RE_DISK_SPACE_QUOTA_EXCEEDED):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
-        for start in range(0, 1000, 100):
-            IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=100))
+        # Preserve point deletes for the disk-space reclamation check.
+        with caplog.at_level(logging.INFO, logger="ydb.connection"):
+            for start in range(0, row_count, batch_size):
+                IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=batch_size))
+
+        def count_rows(session):
+            return session.transaction().execute(f"SELECT COUNT(*) AS row_count FROM `{path}`;", commit_tx=True)
+
+        assert pool.retry_operation_sync(count_rows)[0].rows[0].row_count == 0
 
         for _ in range(60):
             time.sleep(1)
@@ -489,20 +521,16 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
 
 
-def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_serverless_db, ydb_endpoint, ydb_cluster):
+def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_serverless_db, ydb_cluster, caplog, ydb_client):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_disk_small_quoted_serverless_db, ydb_hostel_db
     )
 
     database = ydb_disk_small_quoted_serverless_db
 
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        database
-    )
     logger.info(" database is %s", database)
 
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     def create_table(session, path):
@@ -526,10 +554,14 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
 
     class BulkUpsertRow(object):
         __slots__ = ('ts', 'value_string')
+        _payload_size = 1024
+        _letter_translation = (string.ascii_lowercase * 10)[:256].encode('ascii')
 
         def __init__(self, ts):
             self.ts = ts
-            self.value_string = ''.join(random.choices(string.ascii_lowercase, k=1024))
+            # Generate fresh lowercase payloads in bulk instead of choosing each character in Python.
+            data = random.getrandbits(8 * self._payload_size).to_bytes(self._payload_size, 'little')
+            self.value_string = data.translate(self._letter_translation).decode('ascii')
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
     with ydb.QuerySessionPool(driver) as qpool:
@@ -541,19 +573,23 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
         column_types = ydb.BulkUpsertColumns() \
             .add_column('ts', ydb.OptionalType(ydb.PrimitiveType.Timestamp)) \
             .add_column('value_string', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        now = datetime.datetime.now()
-        for i in range(1000):
-            bulk_size = 1000  # rows
-            rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
-            try:
-                driver.table_client.bulk_upsert(path, rows, column_types)
-            except ydb.issues.Unavailable:
-                described = ydb_cluster.client.describe(database, '')
-                logger.debug('database state when oveloaded: %s', described)
-                assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
-                break
-        else:
-            assert False, 'database did not move into Overloaded state'
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        # Avoid formatting every large request payload as protobuf text.
+        with caplog.at_level(logging.INFO, logger="ydb.connection"):
+            for i in range(1000):
+                bulk_size = 1000  # rows
+                rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
+                try:
+                    driver.table_client.bulk_upsert(path, rows, column_types)
+                except ydb.issues.Unavailable:
+                    described = ydb_cluster.client.describe(database, '')
+                    logger.debug('database state when oveloaded: %s', described)
+                    assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
+                    logger.info("Column disk quota reached after %d successful batches", i)
+                    break
+            else:
+                assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
         with pytest.raises(ydb.issues.Unavailable, match=r'.*Column shard.*is overloaded.*'):
@@ -602,13 +638,8 @@ def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
 
 
-def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
-    driver_config = ydb.DriverConfig(
-        ydb_endpoint,
-        ydb_serverless_db
-    )
-
-    driver = ydb.Driver(driver_config)
+def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, ydb_client):
+    driver = ydb_client(ydb_serverless_db)
     driver.wait(120)
 
     serverless_inner_path = os.path.join(ydb_serverless_db, "dirA0")
@@ -687,7 +718,7 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
     assert_that(serverless_db_exclusive_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
 
 
-def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
+def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_cluster, ydb_client):
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
@@ -695,8 +726,7 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
     )
 
     database = ydb_serverless_db_with_exclusive_nodes
-    driver_config = ydb.DriverConfig(ydb_endpoint, database)
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
     dir_path = os.path.join(database, "dir")
@@ -727,7 +757,7 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
         pool.retry_operation_sync(drop_table, None, table_path)
 
 
-def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
+def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_cluster, ydb_client):
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
@@ -735,53 +765,55 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
     )
 
     database = ydb_serverless_db_with_exclusive_nodes
-    driver_config = ydb.DriverConfig(ydb_endpoint, database)
-    driver = ydb.Driver(driver_config)
+    driver = ydb_client(database)
     driver.wait(120)
 
-    session = driver.table_client.session().create()
-    path = os.path.join(database, "seamless_migration_table")
-    session.create_table(
-        path,
-        ydb.TableDescription()
-        .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
-        .with_primary_key("id")
-    )
+    with contextlib.ExitStack() as cleanup:
+        session = driver.table_client.session().create()
+        cleanup.callback(session.delete)
+        path = os.path.join(database, "seamless_migration_table")
+        session.create_table(
+            path,
+            ydb.TableDescription()
+            .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
+            .with_primary_key("id")
+        )
 
-    session.transaction().execute(
-        f"UPSERT INTO `{path}` (id) VALUES (1), (2), (3);",
-        commit_tx=True
-    )
+        session.transaction().execute(
+            f"UPSERT INTO `{path}` (id) VALUES (1), (2), (3);",
+            commit_tx=True
+        )
 
-    alter_database_serverless_compute_resources_mode(
-        ydb_cluster,
-        ydb_serverless_db_with_exclusive_nodes,
-        "EServerlessComputeResourcesModeExclusive"
-    )
+        alter_database_serverless_compute_resources_mode(
+            ydb_cluster,
+            ydb_serverless_db_with_exclusive_nodes,
+            "EServerlessComputeResourcesModeExclusive"
+        )
 
-    # Old session keeps work fine with old connections to shared nodes
-    session.transaction().execute(
-        f"UPSERT INTO `{path}` (id) VALUES (4), (5), (6);",
-        commit_tx=True
-    )
+        # Old session keeps work fine with old connections to shared nodes
+        session.transaction().execute(
+            f"UPSERT INTO `{path}` (id) VALUES (4), (5), (6);",
+            commit_tx=True
+        )
 
-    # Force rediscovery
-    newDriver = ydb.Driver(driver_config)
-    newDriver.wait(120)
-    session._driver = newDriver
+        # Force rediscovery
+        newDriver = ydb_client(database)
+        newDriver.wait(120)
+        session._driver = newDriver
 
-    # Old session works fine with new connections to exclusive nodes
-    session.transaction().execute(
-        f"UPSERT INTO `{path}` (id) VALUES (7), (8), (9);",
-        commit_tx=True
-    )
+        # Old session works fine with new connections to exclusive nodes
+        session.transaction().execute(
+            f"UPSERT INTO `{path}` (id) VALUES (7), (8), (9);",
+            commit_tx=True
+        )
 
-    # New session works fine
-    newSession = newDriver.table_client.session().create()
-    newSession.transaction().execute(
-        f"UPSERT INTO `{path}` (id) VALUES (10), (11), (12);",
-        commit_tx=True
-    )
+        # New session works fine
+        newSession = newDriver.table_client.session().create()
+        cleanup.callback(newSession.delete)
+        newSession.transaction().execute(
+            f"UPSERT INTO `{path}` (id) VALUES (10), (11), (12);",
+            commit_tx=True
+        )
 
 
 def get_effective_permission_names(scheme_client, path, subject):
@@ -793,17 +825,29 @@ def get_effective_permission_names(scheme_client, path, subject):
     return names
 
 
-def test_connect_permission_not_inherited_in_serverless(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, ydb_root):
+def test_connect_permission_not_inherited_in_serverless(ydb_hostel_db, ydb_serverless_db, ydb_root, ydb_client, request):
     connect_permission = 'ydb.database.connect'
     inheritable_permission = 'ydb.generic.read'
 
-    root_domain_driver = ydb.Driver(ydb.DriverConfig(ydb_endpoint, database=ydb_root))
+    root_domain_driver = ydb_client(ydb_root)
     root_domain_driver.wait(120)
     root_domain_sc = root_domain_driver.scheme_client
 
-    serverless_subdomain_driver = ydb.Driver(ydb.DriverConfig(ydb_endpoint, database=ydb_serverless_db))
+    serverless_subdomain_driver = ydb_client(ydb_serverless_db)
     serverless_subdomain_driver.wait(120)
     serverless_subdomain_sc = serverless_subdomain_driver.scheme_client
+
+    original_permissions = get_effective_permission_names(root_domain_sc, ydb_root, 'user1')
+    added_permissions = {connect_permission, inheritable_permission} - original_permissions
+
+    def restore_root_permissions():
+        if added_permissions:
+            root_domain_sc.modify_permissions(
+                ydb_root,
+                ydb.ModifyPermissionsSettings().revoke_permissions('user1', added_permissions)
+            )
+
+    request.addfinalizer(restore_root_permissions)
 
     root_domain_sc.modify_permissions(
         ydb_root,

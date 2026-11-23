@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/string.h>
 #include <util/datetime/base.h>
+#include <util/generic/string.h>
 #include <util/system/spinlock.h>
 
 namespace NFq {
@@ -33,18 +33,17 @@ struct TTtlCacheSettings {
     }
 };
 
-template<typename TKey, typename TValue, template <typename... Args> class TContainer = THashMap>
+template <typename TKey, typename TValue, template <typename... Args> class TContainer = THashMap>
 class TTtlCache {
 public:
     TTtlCache(const TTtlCacheSettings& config = TTtlCacheSettings())
         : Config(config)
-    { }
+    {
+    }
 
     void Put(const TKey& key, const TMaybe<TValue>& value) {
         const auto now = TInstant::Now();
-        auto* queue = value.Empty()
-            ? &ErrorQueue
-            : &OkQueue;
+        auto* queue = value.Empty() ? &ErrorQueue : &OkQueue;
         TGuard<TAdaptiveLock> lock(AdaptiveLock);
         auto [it, inserted] = Data.try_emplace(key, value, queue->end(), queue);
         if (inserted) {
@@ -85,7 +84,7 @@ public:
 private:
     void DropOld(const TGuard<TAdaptiveLock>&, TInstant now) {
         auto cleanUp = [&](TList<TKeyAndTime>& queue, const TDuration& ttl) {
-            for (auto it = queue.begin(); it != queue.end() && (it->LastAccess <= now - ttl || Data.size() > Config.MaxSize) ; ) {
+            for (auto it = queue.begin(); it != queue.end() && (it->LastAccess <= now - ttl || Data.size() > Config.MaxSize);) {
                 Data.erase(it->Key);
                 it = queue.erase(it);
             }
@@ -101,6 +100,7 @@ private:
         TKey Key;
         TInstant LastAccess;
     };
+
     TList<TKeyAndTime> OkQueue;
     TList<TKeyAndTime> ErrorQueue;
 
@@ -109,9 +109,10 @@ private:
         typename TList<TKeyAndTime>::iterator Position;
         TList<TKeyAndTime>* Queue;
     };
+
     TContainer<TKey, TCacheObject> Data;
 
     TTtlCacheSettings Config;
 };
 
-} // namespace NFq
+}   // namespace NFq

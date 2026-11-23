@@ -1,21 +1,20 @@
 #pragma once
 
-#include <ydb/core/kqp/common/simple/helpers.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
-#include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/services/workload_manager/common/resolver.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
-#include <ydb/library/aclib/aclib.h>
-
 
 namespace NKikimr {
 struct TAppData;
-}  // namespace NKikimr
+}   // namespace NKikimr
 
 namespace NKikimr::NKqp {
 struct TUserRequestContext;
-}  // namespace NKikimr::NKqp
+class TPreparedQueryHolder;
+}   // namespace NKikimr::NKqp
 
 namespace NKikimr::NWorkloadManager {
 
@@ -39,10 +38,10 @@ using TResourcePoolMapPtr = std::shared_ptr<const TResourcePoolMap>;
 class IQueryClassifier {
 public:
     enum class EState {
-        None,               // Initial state, no classification performed
-        PreCompileDone,     // Classified without query plan, final result available
-        WaitCompile,        // Awaiting query plan for final classification
-        PostCompileDone,    // Classified with query plan, final result available
+        None,   // Initial state, no classification performed
+        PreCompileDone,   // Classified without query plan, final result available
+        WaitCompile,   // Awaiting query plan for final classification
+        PostCompileDone,   // Classified with query plan, final result available
     };
 
     struct TResolvedPoolId {
@@ -79,24 +78,18 @@ public:
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
-    virtual TPostCompileClassifyResult PostCompileClassify(const NKqp::TPreparedQueryHolder& preparedQuery, const NKqp::TUserRequestContext& userRequestContext) = 0;
+    virtual TPostCompileClassifyResult PostCompileClassify(
+        const NKqp::TPreparedQueryHolder& preparedQuery, const NKqp::TUserRequestContext& userRequestContext) = 0;
 
     /// Get the current classification state
     [[nodiscard]]
     virtual EState GetState() const = 0;
 };
 
-std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
-                                                        TClassifierConfigsView classifierView,
-                                                        const TString& databaseId,
-                                                        TClassifyContext context,
-                                                        std::optional<TString> resourcePoolForSharedReading);
+std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap, TClassifierConfigsView classifierView,
+    const TString& databaseId, TClassifyContext context, std::optional<TString> resourcePoolForSharedReading);
 
-std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
-                                                        TClassifierConfigsView classifierView,
-                                                        const TString& databaseId,
-                                                        TClassifyContext context,
-                                                        const TAppData& appData);
+std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap, TClassifierConfigsView classifierView,
+    const TString& databaseId, TClassifyContext context, const TAppData& appData);
 
-
-} // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

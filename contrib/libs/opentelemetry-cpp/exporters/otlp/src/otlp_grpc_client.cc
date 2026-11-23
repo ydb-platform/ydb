@@ -7,9 +7,11 @@
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/support/channel_arguments.h>
-#include <stdint.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -17,6 +19,7 @@
 #include <utility>
 
 #include "opentelemetry/ext/http/common/url_parser.h"
+#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
 
 // clang-format off
@@ -31,14 +34,11 @@
 // clang-format on
 
 #ifdef ENABLE_ASYNC_EXPORT
-#  include <algorithm>
 #  include <condition_variable>
-#  include <cstdio>
 #  include <mutex>
 #  include <unordered_set>
 
 #  include "opentelemetry/common/timestamp.h"
-#  include "opentelemetry/nostd/string_view.h"
 #endif /* ENABLE_ASYNC_EXPORT */
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -361,13 +361,10 @@ std::shared_ptr<grpc::Channel> OtlpGrpcClient::MakeChannel(const OtlpGrpcClientO
     grpc::SslCredentialsOptions ssl_opts;
     ssl_opts.pem_root_certs = GetFileContentsOrInMemoryContents(
         options.ssl_credentials_cacert_path, options.ssl_credentials_cacert_as_string);
-#ifdef ENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW
     ssl_opts.pem_private_key = GetFileContentsOrInMemoryContents(options.ssl_client_key_path,
                                                                  options.ssl_client_key_string);
     ssl_opts.pem_cert_chain  = GetFileContentsOrInMemoryContents(options.ssl_client_cert_path,
                                                                  options.ssl_client_cert_string);
-
-#endif
     channel =
         grpc::CreateCustomChannel(grpc_target, grpc::SslCredentials(ssl_opts), grpc_arguments);
   }
@@ -414,7 +411,6 @@ void OtlpGrpcClient::PopulateChannelArguments(const OtlpGrpcClientOptions &optio
     grpc_arguments.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
   }
 
-#ifdef ENABLE_OTLP_RETRY_PREVIEW
   if (options.retry_policy_max_attempts > 0U &&
       options.retry_policy_initial_backoff > std::chrono::duration<float>::zero() &&
       options.retry_policy_max_backoff > std::chrono::duration<float>::zero() &&
@@ -453,7 +449,6 @@ void OtlpGrpcClient::PopulateChannelArguments(const OtlpGrpcClientOptions &optio
 
     grpc_arguments.SetServiceConfigJSON(TString{service_config});
   }
-#endif  // ENABLE_OTLP_RETRY_PREVIEW
 }
 
 std::unique_ptr<grpc::ClientContext> OtlpGrpcClient::MakeClientContext(
@@ -757,20 +752,20 @@ bool OtlpGrpcClient::ForceFlush(
   while (timeout_steady > std::chrono::steady_clock::duration::zero() &&
          request_counter > async_data_->finished_request_counter.load(std::memory_order_acquire))
   {
-    // When changes of running_sessions_ and notify_one/notify_all happen between predicate
-    // checking and waiting, we should not wait forever.We should cleanup gc sessions here as soon
-    // as possible to call FinishSession() and cleanup resources.
+    // A completion can land between the loop condition and the wait, so the wait is bounded and the
+    // condition re-read on every wakeup. Never wait past the caller's deadline.
+    const std::chrono::steady_clock::duration wait_interval =
+        (std::min)(std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                       async_data_->export_timeout),
+                   timeout_steady);
+
     std::chrono::steady_clock::time_point start_timepoint = std::chrono::steady_clock::now();
-    if (std::cv_status::timeout !=
-        async_data_->session_waker.wait_for(lock, async_data_->export_timeout))
-    {
-      break;
-    }
+    async_data_->session_waker.wait_for(lock, wait_interval);
 
     timeout_steady -= std::chrono::steady_clock::now() - start_timepoint;
   }
 
-  return timeout_steady > std::chrono::steady_clock::duration::zero();
+  return request_counter <= async_data_->finished_request_counter.load(std::memory_order_acquire);
 #else
   return true;
 #endif

@@ -1,5 +1,7 @@
 #include "remove.h"
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -17,6 +19,15 @@ void IBlobsDeclareRemovingAction::DeclareRemove(const TTabletId tabletId, const 
 
 void IBlobsDeclareRemovingAction::DeclareSelfRemove(const TUnifiedBlobId& blobId) {
     DeclareRemove(SelfTabletId, blobId);
+}
+
+void IBlobsDeclareRemovingAction::OnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) {
+    if (blobsWroteSuccessfully) {
+        for (auto&& [blobId, _] : DeclaredBlobs) {
+            NBlobCache::ForgetBlob(blobId);
+        }
+    }
+    return DoOnCompleteTxAfterRemoving(blobsWroteSuccessfully);
 }
 
 }   // namespace NKikimr::NOlap

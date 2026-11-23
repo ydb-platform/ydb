@@ -9,12 +9,45 @@
 
 namespace NKikimr::NArrow::NSSA {
 
+TConclusion<std::shared_ptr<IFetchLogic>> IDataSource::StartFetchHeader(
+    const TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+    auto applied = DoApplyPendingFetcher(context, fetchContext.GetColumnId());
+    if (applied.IsFail()) {
+        return applied;
+    }
+    if (context.GetResources().GetAccessorOptional(fetchContext.GetColumnId())) {
+        return std::shared_ptr<IFetchLogic>();
+    }
+    return DoStartFetchHeader(context, fetchContext);
+}
+
+TConclusion<std::shared_ptr<IFetchLogic>> IDataSource::StartFetchData(const TProcessorContext& context, const TDataAddress& addr) {
+    auto applied = DoApplyPendingFetcher(context, addr.GetColumnId());
+    if (applied.IsFail()) {
+        return applied;
+    }
+    auto acc = context.GetResources().GetAccessorOptional(addr.GetColumnId());
+    THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName> subColumnsToFetch;
+    for (auto&& sc : addr.GetSubColumnNames(true)) {
+        if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
+            if (!sc && acc) {
+                context.MutableResources().Remove(addr.GetColumnId());
+            }
+            subColumnsToFetch.emplace(sc);
+        }
+    }
+    if (subColumnsToFetch.empty()) {
+        return std::shared_ptr<IFetchLogic>();
+    }
+    return DoStartFetchData(context, addr.SelectSubColumns(subColumnsToFetch));
+}
+
 TConclusionStatus TSimpleDataSource::DoAssembleAccessor(
     const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     auto itBlob = Blobs.find(TBlobAddress(columnId, subColumnName));
-    AFL_VERIFY(itBlob != Blobs.end());
+    YDB_LOG_VERIFY(itBlob != Blobs.end());
     auto it = Info.find(columnId);
-    AFL_VERIFY(it != Info.end());
+    YDB_LOG_VERIFY(it != Info.end());
     const auto cData = it->second;
     Info.erase(it);
     if (itBlob->second.empty()) {
@@ -31,11 +64,11 @@ void TSimpleDataSource::AddBlob(const ui32 columnId, const TString& subColumnNam
     if (!data->length()) {
         Blobs.emplace(TBlobAddress(columnId, subColumnName), "");
         NAccessor::TChunkConstructionData cData(1, nullptr, data->type(), std::make_shared<NSerialization::TNativeSerializer>());
-        AFL_VERIFY(Info.emplace(columnId, cData).second);
+        YDB_LOG_VERIFY(Info.emplace(columnId, cData).second);
         return;
     }
     NAccessor::TChunkConstructionData cData(data->length(), nullptr, data->type(), std::make_shared<NSerialization::TNativeSerializer>());
-    AFL_VERIFY(Info.emplace(columnId, cData).second);
+    YDB_LOG_VERIFY(Info.emplace(columnId, cData).second);
     Blobs.emplace(TBlobAddress(columnId, subColumnName),
         NAccessor::NPlain::TConstructor().SerializeToBlobAndMeta(std::make_shared<NAccessor::TTrivialArray>(data), cData).Blob);
 }

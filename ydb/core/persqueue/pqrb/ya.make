@@ -19,11 +19,15 @@ GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 
 PEERDIR(
     contrib/libs/fmt
+    library/cpp/cgiparam
     library/cpp/containers/absl
+    library/cpp/html/pcdata
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/metrics
 )
 
 END()

@@ -28,16 +28,17 @@ enum class ENodeState : ui8 {
 class TTableHistogramBuilderBtreeIndex {
     struct TNodeState {
         const TPart* Part;
-        TPageId PageId;
+        TPageRef Ref;
         ui32 Level;
         TRowId BeginRowId, EndRowId;
         ui64 BeginDataSize, EndDataSize;
         TCellsIterable BeginKey, EndKey;
         ENodeState State = ENodeState::Initial;
 
-        TNodeState(const TPart* part, TPageId pageId, ui32 level, TRowId beginRowId, TRowId endRowId, TRowId beginDataSize, TRowId endDataSize, TCellsIterable beginKey, TCellsIterable endKey)
+        TNodeState(const TPart* part, TPageRef ref, ui32 level, TRowId beginRowId, TRowId endRowId,
+                   TRowId beginDataSize, TRowId endDataSize, TCellsIterable beginKey, TCellsIterable endKey)
             : Part(part)
-            , PageId(pageId)
+            , Ref(std::move(ref))
             , Level(level)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
@@ -49,9 +50,17 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
         TString ToString(const TKeyCellDefaults &keyDefaults) const {
-            return TStringBuilder() 
+            NPage::TPageOffset offset = std::visit([](const auto& val) -> NPage::TPageOffset {
+                using T = std::decay_t<decltype(val)>;
+                if constexpr (std::is_same_v<T, TPageId>) {
+                    return NPage::TPageOffset::FromPageIndex(val);
+                } else {
+                    return val.Offset;
+                }
+            }, Ref);
+            return TStringBuilder()
                 << "Part: " << Part->Label.ToString()
-                << " PageId: " << PageId
+                << " Offset: " << offset
                 << " Level: " << Level
                 << " BeginRowId: " << BeginRowId
                 << " EndRowId: " << EndRowId
@@ -90,7 +99,7 @@ class TTableHistogramBuilderBtreeIndex {
                 openedDataSize += GetDataSize();
                 return true;
             }
-            return false;            
+            return false;
         }
 
         bool Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) {
@@ -163,7 +172,7 @@ class TTableHistogramBuilderBtreeIndex {
             // - ...
             // - Key = {}, IsBegin = false
 
-            // end goes before begin in order to 
+            // end goes before begin in order to
             // close previous node before open the next one
 
             if (a.GetKey() && b.GetKey()) { // compare by keys
@@ -227,12 +236,16 @@ public:
     bool Build(TStats& stats) {
         bool ready = true;
 
-        LOG_BUILD_STATS("building histogram with row resolution " << RowCountResolution << ", data size resolution " << HumanReadableSize(DataSizeResolution, SF_BYTES));
+        LOG_BUILD_STATS("Building histogram",
+            {"rowResolution", RowCountResolution},
+            {"dataSizeResolution", HumanReadableSize(DataSizeResolution, SF_BYTES)});
 
         for (auto index : xrange(Subset.Flatten.size())) {
             auto& part = Subset.Flatten[index];
             if (part.Slices) {
-                LOG_BUILD_STATS("slicing part " << part->Label << ": " << NFmt::Do(*part.Slices, KeyDefaults));
+                LOG_BUILD_STATS("Slicing part",
+                    {"label", part->Label},
+                    {"slices", NFmt::Do(*part.Slices, KeyDefaults)});
             }
             auto& meta = part->IndexPages.GetBTree({});
             TCellsIterable beginKey = EmptyKey;
@@ -243,8 +256,10 @@ public:
             if (part.Slices && part.Slices->back().LastKey.GetCells()) {
                 endKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->back().LastKey);
             }
-            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetTotalDataSize(), beginKey, endKey);
-            ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
+            auto rootLoc = part->IndexPages.GetRootLocation(part.Part.Get(), {});
+            LoadedStateNodes.emplace_back(part.Part.Get(), TPageRef(rootLoc), meta.LevelCount(), 0, meta.GetRowCount(), 0,
+                                          meta.GetTotalDataSize(), beginKey, endKey);
+            if (part.Slices) ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
 
         if (!ready) {
@@ -266,16 +281,18 @@ private:
 
         // TODO: avoid binary search for each call (we may intersect slices with nodes in linear time actually)
         auto it = slices.LookupBackward(slices.end(), node.EndRowId - 1);
-        
+
         if (it == slices.end() || node.EndRowId <= it->BeginRowId() || it->EndRowId() <= node.BeginRowId) {
             // skip the node
-            LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip");
+            LOG_BUILD_STATS("Slicing node skip",
+                {"node", node.ToString(KeyDefaults)});
             return true;
         }
 
         if (it->BeginRowId() <= node.BeginRowId && node.EndRowId <= it->EndRowId()) {
             // take the node
-            LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take");
+            LOG_BUILD_STATS("Slicing node take",
+                {"node", node.ToString(KeyDefaults)});
             AddFutureEvents(node);
             return true;
         }
@@ -286,20 +303,23 @@ private:
             // can't split, decide by node.EndRowId - 1
             // TODO: decide by non-empty slice and node intersection, but this requires size calculation changes too
             if (it->Has(node.EndRowId - 1)) {
-                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take leaf");
+                LOG_BUILD_STATS("Slicing node take leaf",
+                    {"node", node.ToString(KeyDefaults)});
                 // the slice may start after node begin, shift the node begin to make it more sensible
                 node.BeginRowId = it->BeginRowId();
                 node.BeginKey = MakeCellsIterableKey(node.Part, it->FirstKey);
                 AddFutureEvents(node);
             } else {
-                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip leaf");
+                LOG_BUILD_STATS("Slicing node skip leaf",
+                    {"node", node.ToString(KeyDefaults)});
             }
             return true;
         }
 
         bool ready = true;
 
-        LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => split");
+        LOG_BUILD_STATS("Slicing node split",
+            {"node", node.ToString(KeyDefaults)});
         const auto addNode = [&](TNodeState& child) {
             ready &= SlicePart(slices, child);
         };
@@ -333,29 +353,30 @@ private:
 
         // will additionally save list of all nodes that start at current key pointer:
         TVector<TNodeState*> currentKeyPointerOpens;
-        
+
         while (FutureEvents && (nextHistogramRowCount != Max<ui64>() || nextHistogramDataSize != Max<ui64>())) {
             YieldHandler();
 
             auto currentKeyPointer = FutureEvents.top();
             currentKeyPointerOpens.clear();
 
-            LOG_BUILD_STATS("iterating"
-                << " stats.RowCountHistogram: " << stats.RowCountHistogram.size()
-                << " stats.DataSizeHistogram: " << stats.DataSizeHistogram.size()
-                << " nextHistogramRowCount: " << nextHistogramRowCount
-                << " nextHistogramDataSize: " << nextHistogramDataSize
-                << " closedRowCount: " << closedRowCount
-                << " closedDataSize: " << closedDataSize
-                << " openedRowCount: " << openedRowCount
-                << " openedDataSize: " << openedDataSize
-                << " openedSortedByRowCount: " << openedSortedByRowCount.size()
-                << " openedSortedByDataSize: " << openedSortedByDataSize.size()
-                << " FutureEvents: " << FutureEvents.size()
-                << " currentKeyPointer: " << currentKeyPointer.ToString(KeyDefaults));
+            LOG_BUILD_STATS("Iterating",
+                {"statsRowCountHistogram", stats.RowCountHistogram.size()},
+                {"statsDataSizeHistogram", stats.DataSizeHistogram.size()},
+                {"nextHistogramRowCount", nextHistogramRowCount},
+                {"nextHistogramDataSize", nextHistogramDataSize},
+                {"closedRowCount", closedRowCount},
+                {"closedDataSize", closedDataSize},
+                {"openedRowCount", openedRowCount},
+                {"openedDataSize", openedDataSize},
+                {"openedSortedByRowCount", openedSortedByRowCount.size()},
+                {"openedSortedByDataSize", openedSortedByDataSize.size()},
+                {"futureEvents", FutureEvents.size()},
+                {"currentKeyPointer", currentKeyPointer.ToString(KeyDefaults)});
 
             auto processEvent = [&](const TEvent& event) {
-                LOG_BUILD_STATS("processing event " << event.ToString(KeyDefaults));
+                LOG_BUILD_STATS("Processing",
+                    {"event", event.ToString(KeyDefaults)});
                 Y_DEBUG_ABORT_UNLESS(NodeEventKeyGreater.Compare(event, currentKeyPointer) <= 0, "Can't process future events");
                 if (event.IsBegin) {
                     if (event.Node->Open(openedRowCount, openedDataSize)) {
@@ -381,7 +402,9 @@ private:
                 // TODO: skip all closed nodes and don't process them here
                 // TODO: don't compare each node key and replace it with parentNode.Seek(currentKeyPointer)
                 auto cmp = NodeEventKeyGreater.Compare(event, currentKeyPointer);
-                LOG_BUILD_STATS("adding event " << (i32)cmp << " " << event.ToString(KeyDefaults));
+                LOG_BUILD_STATS("Adding event",
+                    {"cmp", (i32)cmp},
+                    {"event", event.ToString(KeyDefaults)});
                 if (cmp <= 0) { // event happened
                     processEvent(event);
                     if (cmp == 0) {
@@ -405,11 +428,11 @@ private:
                 auto node = openedSortedByRowCount.top();
                 openedSortedByRowCount.pop();
 
-                LOG_BUILD_STATS("loading node by row count trigger"
-                    << node->ToString(KeyDefaults)
-                    << " closedRowCount: " << closedRowCount
-                    << " openedRowCount: " << openedRowCount
-                    << " nextHistogramRowCount: " << nextHistogramRowCount);
+                LOG_BUILD_STATS("Loading node by row count trigger",
+                    {"node", node->ToString(KeyDefaults)},
+                    {"closedRowCount", closedRowCount},
+                    {"openedRowCount", openedRowCount},
+                    {"nextHistogramRowCount", nextHistogramRowCount});
 
                 // may have already closed or ignored nodes in the heap, just skip them
                 // leaf nodes will be closed later
@@ -423,11 +446,11 @@ private:
                 auto node = openedSortedByDataSize.top();
                 openedSortedByDataSize.pop();
 
-                LOG_BUILD_STATS("loading node by data size trigger"
-                    << node->ToString(KeyDefaults)
-                    << " closedDataSize: " << closedDataSize
-                    << " openedDataSize: " << openedDataSize
-                    << " nextHistogramDataSize: " << nextHistogramDataSize);
+                LOG_BUILD_STATS("Loading node by data size trigger",
+                    {"node", node->ToString(KeyDefaults)},
+                    {"closedDataSize", closedDataSize},
+                    {"openedDataSize", openedDataSize},
+                    {"nextHistogramDataSize", nextHistogramDataSize});
 
                 // may have already closed or ignored nodes in the heap, just skip them
                 // leaf nodes will be closed later
@@ -438,19 +461,19 @@ private:
                 }
             }
 
-            LOG_BUILD_STATS("checking"
-                << " stats.RowCountHistogram: " << stats.RowCountHistogram.size()
-                << " stats.DataSizeHistogram: " << stats.DataSizeHistogram.size()
-                << " nextHistogramRowCount: " << nextHistogramRowCount
-                << " nextHistogramDataSize: " << nextHistogramDataSize
-                << " closedRowCount: " << closedRowCount
-                << " closedDataSize: " << closedDataSize
-                << " openedRowCount: " << openedRowCount
-                << " openedDataSize: " << openedDataSize
-                << " openedSortedByRowCount: " << openedSortedByRowCount.size()
-                << " openedSortedByDataSize: " << openedSortedByDataSize.size()
-                << " FutureEvents: " << FutureEvents.size()
-                << " currentKeyPointer: " << currentKeyPointer.ToString(KeyDefaults));
+            LOG_BUILD_STATS("Checking",
+                {"statsRowCountHistogram", stats.RowCountHistogram.size()},
+                {"statsDataSizeHistogram", stats.DataSizeHistogram.size()},
+                {"nextHistogramRowCount", nextHistogramRowCount},
+                {"nextHistogramDataSize", nextHistogramDataSize},
+                {"closedRowCount", closedRowCount},
+                {"closedDataSize", closedDataSize},
+                {"openedRowCount", openedRowCount},
+                {"openedDataSize", openedDataSize},
+                {"openedSortedByRowCount", openedSortedByRowCount.size()},
+                {"openedSortedByDataSize", openedSortedByDataSize.size()},
+                {"futureEvents", FutureEvents.size()},
+                {"currentKeyPointer", currentKeyPointer.ToString(KeyDefaults)});
 
             // add current key pointer to a histogram if we either:
             // - failed to split opened nodes and may exceed a next histogram bucket value (plus its gaps)
@@ -502,18 +525,18 @@ private:
             }
         }
 
-        LOG_BUILD_STATS("finished"
-            << " stats.RowCountHistogram: " << stats.RowCountHistogram.size()
-            << " stats.DataSizeHistogram: " << stats.DataSizeHistogram.size()
-            << " nextHistogramRowCount: " << nextHistogramRowCount
-            << " nextHistogramDataSize: " << nextHistogramDataSize
-            << " closedRowCount: " << closedRowCount
-            << " closedDataSize: " << closedDataSize
-            << " openedRowCount: " << openedRowCount
-            << " openedDataSize: " << openedDataSize
-            << " openedSortedByRowCount: " << openedSortedByRowCount.size()
-            << " openedSortedByDataSize: " << openedSortedByDataSize.size()
-            << " FutureEvents: " << FutureEvents.size());
+        LOG_BUILD_STATS("Finished",
+            {"statsRowCountHistogram", stats.RowCountHistogram.size()},
+            {"statsDataSizeHistogram", stats.DataSizeHistogram.size()},
+            {"nextHistogramRowCount", nextHistogramRowCount},
+            {"nextHistogramDataSize", nextHistogramDataSize},
+            {"closedRowCount", closedRowCount},
+            {"closedDataSize", closedDataSize},
+            {"openedRowCount", openedRowCount},
+            {"openedDataSize", openedDataSize},
+            {"openedSortedByRowCount", openedSortedByRowCount.size()},
+            {"openedSortedByDataSize", openedSortedByDataSize.size()},
+            {"futureEvents", FutureEvents.size()});
 
         return true;
     }
@@ -538,28 +561,35 @@ private:
         histogram.push_back({serializedKey, value});
     }
 
+    static TNodeState BuildChildState(const TNodeState& parent, const TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel, TColumns colsKeyData) {
+        return TNodeState(parent.Part, node.GetChild(pos, isLeafLevel), parent.Level - 1,
+            pos ? node.GetChildRowCount(pos - 1) : parent.BeginRowId,
+            node.GetChildRowCount(pos),
+            pos ? node.GetChildTotalDataSize(pos - 1) : parent.BeginDataSize,
+            node.GetChildTotalDataSize(pos),
+            pos ? node.GetKeyCellsIterable(pos - 1, colsKeyData) : parent.BeginKey,
+            pos < node.GetKeysCount() ? node.GetKeyCellsIterable(pos, colsKeyData) : parent.EndKey);
+    }
+
     bool TryLoadNode(const TNodeState& parent, const auto& addNode) {
         Y_ENSURE(parent.Level);
 
-        auto page = Env->TryGetPage(parent.Part, parent.PageId, {});
+        auto location = ResolveIndexPageLocation(parent.Part, parent.Ref, {});
+        auto page = Env->TryGetIndexPage(parent.Part, location, {});
         if (!page) {
             return false;
         }
 
-        LoadedBTreeNodes.emplace_back(*page);
+        bool v2Format = parent.Part->IndexPages.GetBTree({}).HasRootV2();
+        LoadedBTreeNodes.emplace_back(*page, v2Format);
         auto &bTreeNode = LoadedBTreeNodes.back();
         auto& groupInfo = parent.Part->Scheme->GetLayout({});
 
+        bool isLeafLevel = (parent.Level == 1);
+
         for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
-            auto& child = bTreeNode.GetChild(pos);
-
-            LoadedStateNodes.emplace_back(parent.Part, child.GetPageId(), parent.Level - 1,
-                pos ? bTreeNode.GetChild(pos - 1).GetRowCount() : parent.BeginRowId, child.GetRowCount(),
-                pos ? bTreeNode.GetChild(pos - 1).GetTotalDataSize() : parent.BeginDataSize, child.GetTotalDataSize(),
-                pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : parent.BeginKey,
-                pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : parent.EndKey);
-
-            addNode(LoadedStateNodes.back());
+            auto& child = LoadedStateNodes.emplace_back(BuildChildState(parent, bTreeNode, pos, isLeafLevel, groupInfo.ColsKeyData));
+            addNode(child);
         }
 
         return true;
@@ -567,7 +597,9 @@ private:
 
     void AddFutureEvents(TNodeState& node) {
         auto cmp = NodeEventKeyGreater.Compare(TEvent{&node, true}, TEvent{&node, false});
-        LOG_BUILD_STATS("adding node future events " << (i32)cmp << " " << node.ToString(KeyDefaults));
+        LOG_BUILD_STATS("Adding node future events",
+            {"cmp", (i32)cmp},
+            {"node", node.ToString(KeyDefaults)});
         if (node.GetRowCount() > 1) {
             Y_DEBUG_ABORT_UNLESS(cmp < 0);
         }
@@ -575,17 +607,18 @@ private:
         FutureEvents.push(TEvent{&node, true});
         FutureEvents.push(TEvent{&node, false});
     }
-    
+
 private:
     TCellsIterable MakeCellsIterableKey(const TPart* part, TSerializedCellVec serializedKey) {
         // Note: this method is only called for root nodes and don't worth optimizing
         // so let's simply create a new fake b-tree index node with a given key
+        // writeV2=false is fine: key encoding is same in V1/V2, children are dummy
         NPage::TBtreeIndexNodeWriter writer(part->Scheme, {});
         writer.AddChild({1, 1, 1, 0, 0});
         writer.AddKey(serializedKey.GetCells());
         writer.AddChild({2, 2, 2, 0, 0});
         TSharedData serializedNode = writer.Finish();
-        LoadedBTreeNodes.emplace_back(serializedNode);
+        LoadedBTreeNodes.emplace_back(serializedNode, /*v2Format=*/false);
         return LoadedBTreeNodes.back().GetKeyCellsIterable(0, part->Scheme->GetLayout({}).ColsKeyData);
     }
 
@@ -596,7 +629,7 @@ private:
         auto left = left_.Iter(), right = right_.Iter();
         size_t end = Max(left.Count(), right.Count());
         Y_ENSURE(end <= keyDefaults.Size(), "Key schema is smaller than compared keys");
-        
+
         for (size_t pos = 0; pos < end; ++pos) {
             const auto& leftCell = pos < left.Count() ? left.Next() : keyDefaults.Defs[pos];
             const auto& rightCell = pos < right.Count() ? right.Next() : keyDefaults.Defs[pos];
@@ -624,8 +657,8 @@ private:
 
 }
 
-bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, 
-    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix) 
+bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env,
+    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix)
 {
     TTableHistogramBuilderBtreeIndex builder(subset, rowCountResolution, dataSizeResolution, env, yieldHandler, logPrefix);
 

@@ -13,21 +13,22 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
     const NCommon::TReplaceKeyAdapter Start;
     const NCommon::TReplaceKeyAdapter Finish;
+    const std::shared_ptr<ISnapshotSchema> SourceSchema;
 
-    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual bool NeedPortionData() const override {
         return false;
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
-        return false;
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
+    // sorted scans require every implementation to emit rows ordered by the sys view PK
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
 
     virtual void DoAssembleColumns(const std::shared_ptr<NReader::NCommon::TColumnsSet>& columns, const bool /*sequential*/) override {
@@ -45,9 +46,9 @@ private:
         }
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingColumns(
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
@@ -60,17 +61,26 @@ private:
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return Finish.GetValue();
-        } else {
-            return Start.GetValue();
-        }
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return SourceSchema;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
+        return SourceSchema;
+    }
+
+    // Start/Finish already follow scan direction (the constructor swaps them for DESC)
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
+        return Start.GetValue();
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        return Finish.GetValue();
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
         NBlobOperations::NRead::TCompositeReadBlobs&& /*blobsOriginal*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return THashMap<TChunkAddress, TString>();
     }
 
@@ -95,7 +105,7 @@ private:
     }
 
     virtual NColumnShard::TInternalPathId GetPathId() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 
@@ -114,7 +124,7 @@ private:
     }
 
     virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
+        YDB_LOG_VERIFY(!UsedRawBytes);
         UsedRawBytes = 0;
     }
 
@@ -127,7 +137,7 @@ private:
     }
 
     virtual bool DoAddTxConflict() override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
@@ -144,7 +154,7 @@ protected:
     virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
         const ui32 recordsCount = GetRecordsCount();
-        AFL_VERIFY(!subColumnName);
+        YDB_LOG_VERIFY(!subColumnName);
         if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
             columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
             context.MutableResources().AddVerified(columnId,
@@ -165,10 +175,12 @@ public:
     TSourceData(const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false, sourceIdx)
+        : TBase(EType::SimpleSysInfo, sourceIdx, context, /*isConflicting*/ false, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false,
+              sourceIdx)
         , TabletId(tabletId)
-        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())
+        , Start(std::move(start), context->GetReadMetadata()->IsDescSorted())
+        , Finish(std::move(finish), context->GetReadMetadata()->IsDescSorted())
+        , SourceSchema(context->GetReadMetadata()->GetResultSchema())
     {
     }
 };
@@ -179,7 +191,6 @@ private:
 
 public:
     virtual NColumnShard::TInternalPathId GetPathId() const override {
-        AFL_VERIFY(false);
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 

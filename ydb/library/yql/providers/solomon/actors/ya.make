@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     dq_solomon_actors_util.cpp
@@ -25,8 +25,6 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

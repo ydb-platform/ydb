@@ -83,7 +83,6 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
 constexpr auto SimpleWideSortWithSpillingQuery = R"(
         --!syntax_v1
         PRAGMA ydb.EnableSpillingNodes="WideSort";
-        PRAGMA ydb.WindowFunctionsV2 = "true";
         SELECT Key, Value,
             ROW_NUMBER() OVER (PARTITION BY Key ORDER BY Value) as rn
         FROM `/Root/KeyValue`
@@ -133,10 +132,12 @@ Y_UNIT_TEST(SpillingPragmaParseError) {
     UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
 }
 
-Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
+Y_UNIT_TEST_QUAD(SpillingInRuntimeNodes, EnabledSpilling, EnableComputeSchedulerMemory) {
     double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
+    auto appCfg = AppCfgLowComputeLimits(reasonableTreshold);
+    appCfg.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
+    TKikimrRunner kikimr(appCfg);
 
     auto db = kikimr.GetQueryClient();
 
@@ -161,9 +162,11 @@ Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
     }
 }
 
-Y_UNIT_TEST(HandleErrorsCorrectly) {
+Y_UNIT_TEST_TWIN(HandleErrorsCorrectly, EnableComputeSchedulerMemory) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(0.01, true, true));
+    auto appCfg = AppCfgLowComputeLimits(0.01, true, true);
+    appCfg.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
+    TKikimrRunner kikimr(appCfg);
 
     auto db = kikimr.GetQueryClient();
 
@@ -300,7 +303,9 @@ Y_UNIT_TEST(SelfJoin) {
 
 Y_UNIT_TEST(WideSortSpillingPragmaParsed) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfg());
+    auto appCfg = AppCfg();
+    appCfg.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+    TKikimrRunner kikimr(appCfg);
 
     auto db = kikimr.GetQueryClient();
 
@@ -328,10 +333,13 @@ Y_UNIT_TEST(WideSortSpillingPragmaParseError) {
     UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
 }
 
-Y_UNIT_TEST_TWIN(WideSortSpillingInRuntimeNodes, EnabledSpilling) {
+Y_UNIT_TEST_QUAD(WideSortSpillingInRuntimeNodes, EnabledSpilling, EnableComputeSchedulerMemory) {
     double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
+    auto appCfg = AppCfgLowComputeLimits(reasonableTreshold);
+    appCfg.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+    appCfg.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
+    TKikimrRunner kikimr(appCfg);
 
     auto db = kikimr.GetQueryClient();
 

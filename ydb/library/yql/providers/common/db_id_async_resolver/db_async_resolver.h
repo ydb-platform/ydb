@@ -27,7 +27,8 @@ struct TDatabaseAuth {
     NYql::EGenericProtocol Protocol = NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED;
 
     bool operator==(const TDatabaseAuth& other) const {
-        return std::tie(StructuredToken, AddBearerToToken, UseTls, Protocol) == std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls, Protocol);
+        return std::tie(StructuredToken, AddBearerToToken, UseTls, Protocol) ==
+               std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls, Protocol);
     }
 
     bool operator!=(const TDatabaseAuth& other) const {
@@ -36,7 +37,6 @@ struct TDatabaseAuth {
 };
 
 struct TDatabaseResolverResponse {
-
     struct TDatabaseDescription {
         TString Endpoint;
         TString Host;
@@ -45,10 +45,7 @@ struct TDatabaseResolverResponse {
         bool Secure = false;
 
         TString ToDebugString() const {
-            return TStringBuilder() << "endpoint=" << Endpoint
-                                    << ", host=" << Host
-                                    << ", port=" << Port
-                                    << ", database=" << Database
+            return TStringBuilder() << "endpoint=" << Endpoint << ", host=" << Host << ", port=" << Port << ", database=" << Database
                                     << ", secure=" << ToString(Secure);
         };
     };
@@ -58,13 +55,12 @@ struct TDatabaseResolverResponse {
 
     TDatabaseResolverResponse() = default;
 
-    TDatabaseResolverResponse(
-        TDatabaseDescriptionMap&& databaseDescriptionMap,
-        bool success = false,
-        const NYql::TIssues& issues = {})
+    TDatabaseResolverResponse(TDatabaseDescriptionMap&& databaseDescriptionMap, bool success = false, const NYql::TIssues& issues = {})
         : DatabaseDescriptionMap(std::move(databaseDescriptionMap))
         , Success(success)
-        , Issues(issues) {}
+        , Issues(issues)
+    {
+    }
 
     TDatabaseDescriptionMap DatabaseDescriptionMap;
     bool Success = false;
@@ -82,4 +78,4 @@ public:
     virtual ~IDatabaseAsyncResolver() = default;
 };
 
-} // NYql
+}   // namespace NYql

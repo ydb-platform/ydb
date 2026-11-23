@@ -40,6 +40,135 @@ namespace NKikimr {
             UNIT_ASSERT_EQUAL(state.GetGlobalColor(), TSpaceColor::ORANGE);
         }
 
+        Y_UNIT_TEST(AsynchronousObservationsOnlyWorsenColor) {
+            TOutOfSpaceState state(1, 0);
+            const auto valid = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid);
+
+            state.ObserveLocalChunk(valid | NKikimrBlobStorage::StatusDiskSpaceOrange);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::ORANGE);
+
+            state.ObserveLocalChunk(valid | NKikimrBlobStorage::StatusDiskSpaceYellowStop);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::ORANGE);
+
+            state.ObserveLocalChunk(valid | NKikimrBlobStorage::StatusDiskSpaceRed);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::RED);
+        }
+
+        Y_UNIT_TEST(AuthoritativeUpdateMayImproveColor) {
+            TOutOfSpaceState state(1, 0);
+            const auto valid = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid);
+
+            state.ObserveLocalChunk(valid | NKikimrBlobStorage::StatusDiskSpaceRed);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::RED);
+
+            state.UpdateLocalChunk(valid | NKikimrBlobStorage::StatusDiskSpaceYellowStop);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::YELLOW);
+
+            state.UpdateLocalChunk(valid);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::GREEN);
+        }
+
+        Y_UNIT_TEST(StaleAuthoritativeUpdateDoesNotImproveColor) {
+            TOutOfSpaceState state(1, 0);
+            const auto valid = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid);
+            const ui64 pollGeneration = state.GetLocalSpaceObservationGeneration();
+
+            state.ObserveLocalChunk(valid | NKikimrBlobStorage::StatusDiskSpaceOrange);
+            state.UpdateLocalChunk(valid, pollGeneration);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::ORANGE);
+
+            const ui64 nextPollGeneration = state.GetLocalSpaceObservationGeneration();
+            state.UpdateLocalChunk(valid, nextPollGeneration);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::GREEN);
+        }
+
+        Y_UNIT_TEST(IdenticalObservationDoesNotInvalidatePoll) {
+            TOutOfSpaceState state(1, 0);
+            const auto orange = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid
+                | NKikimrBlobStorage::StatusDiskSpaceOrange);
+            const auto green = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid);
+
+            state.ObserveLocalChunk(orange);
+            const ui64 pollGeneration = state.GetLocalSpaceObservationGeneration();
+            state.ObserveLocalChunk(orange);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetLocalSpaceObservationGeneration(), pollGeneration);
+            state.UpdateLocalChunk(green, pollGeneration);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::GREEN);
+        }
+
+        Y_UNIT_TEST(ImprovingObservationDoesNotInvalidatePoll) {
+            TOutOfSpaceState state(1, 0);
+            const auto orange = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid
+                | NKikimrBlobStorage::StatusDiskSpaceOrange);
+            const auto green = NPDisk::TStatusFlags(NKikimrBlobStorage::StatusIsValid);
+
+            state.ObserveLocalChunk(orange);
+            const ui64 pollGeneration = state.GetLocalSpaceObservationGeneration();
+            state.ObserveLocalChunk(green);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetLocalSpaceObservationGeneration(), pollGeneration);
+            state.UpdateLocalChunk(green, pollGeneration);
+            UNIT_ASSERT_EQUAL(state.GetLocalColor(), TSpaceColor::GREEN);
+        }
+
+        Y_UNIT_TEST(StaleHeadroomPollDoesNotImprove) {
+            TOutOfSpaceState state(1, 0);
+            TSpaceHeadroom wide{true, 10, 20, 30, 40};
+            state.UpdateSpaceHeadroom(wide);
+            const ui64 gen = state.GetLocalSpaceObservationGeneration();
+
+            TSpaceHeadroom tight{true, 1, 2, 3, 4};
+            state.ObserveSpaceHeadroom(tight);
+            UNIT_ASSERT(state.GetLocalSpaceObservationGeneration() > gen);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 1);
+
+            state.UpdateSpaceHeadroom(wide, gen);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 1);
+
+            state.UpdateSpaceHeadroom(wide, state.GetLocalSpaceObservationGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 10);
+        }
+
+        // A reply that improves on a stale, pessimistic cache is still news about
+        // spending the poll's snapshot predates. Comparing it against the cache alone
+        // drops it, and the poll then hands back a budget that is already spent.
+        Y_UNIT_TEST(PollDoesNotUndoSpendingObservedWhileItWasOut) {
+            TOutOfSpaceState state(1, 0);
+            state.UpdateSpaceHeadroom(TSpaceHeadroom{true, 10, 10, 10, 10});
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 10);
+
+            // Reclamation frees space and the poll samples 100 chunks of headroom.
+            const ui64 pollGeneration = state.StartSpacePoll();
+
+            // Before that answer arrives a reservation spends 10 and its reply reports 90.
+            // Being better than the cached 10, it moves neither the cache nor the
+            // generation -- but it still has to be remembered.
+            state.ObserveSpaceHeadroom(TSpaceHeadroom{true, 90, 90, 90, 90});
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 10);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetLocalSpaceObservationGeneration(), pollGeneration);
+
+            state.UpdateSpaceHeadroom(TSpaceHeadroom{true, 100, 100, 100, 100}, pollGeneration);
+
+            // Recovery above the old value is visible, the 10 spent chunks are not given back.
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 90);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToOrange, 90);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToRed, 90);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToBlack, 90);
+        }
+
+        // The record is kept per poll: what was observed before the poll was sent is
+        // already covered by the snapshot PDisk took, so it must not hold recovery back.
+        Y_UNIT_TEST(ObservationsBeforeThePollDoNotHoldItBack) {
+            TOutOfSpaceState state(1, 0);
+
+            state.ObserveSpaceHeadroom(TSpaceHeadroom{true, 5, 5, 5, 5});
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 5);
+
+            const ui64 pollGeneration = state.StartSpacePoll();
+            state.UpdateSpaceHeadroom(TSpaceHeadroom{true, 100, 100, 100, 100}, pollGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(state.GetSpaceHeadroom().ToPreOrange, 100);
+        }
+
         Y_UNIT_TEST(ToWhiteboardFlag) {
             using EFlag = NKikimrWhiteboard::EFlag;
 

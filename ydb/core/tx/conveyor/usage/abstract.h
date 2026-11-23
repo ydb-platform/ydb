@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <memory>
 #include <ydb/library/signals/owner.h>
 
@@ -80,6 +81,16 @@ public:
     virtual ~ITask() = default;
 
     virtual TString GetTaskClassIdentifier() const = 0;
+
+    // Test/observability hook: composite conveyor calls this with the assigned worker index.
+    virtual void OnAssignedToWorker(const ui64 /*workerIdx*/) {
+    }
+
+    // Optional test barrier: returns a callback that does not keep this task alive.
+    // Invoked after TotalCPU is updated on the distributor.
+    virtual std::function<void()> MakeAccountedCallback() const {
+        return {};
+    }
 
     void OnCannotExecute(const TString& reason) {
         return DoOnCannotExecute(reason);

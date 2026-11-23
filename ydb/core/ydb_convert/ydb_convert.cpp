@@ -972,6 +972,19 @@ TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
     return it->second;
 }
 
+// TODO: Remove this workaround after revisiting revoke semantics.
+// SQL/Scheme do not expose inheritance; matching it can leave older grants untouched.
+// Consider removing Allow ACEs by subject and exact mask, regardless of inheritance.
+// Decide whether Viewer follows this rule or retains explicit inheritance matching.
+void RevokeYdbPermission(const TString& name, const TString& sid, NACLib::TDiffACL& acl) {
+    const auto attrs = ConvertYdbPermissionNameToACLAttrs(name);
+    acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, attrs.InheritanceType);
+    if (attrs.AccessMask == NACLib::EAccessRights::ConnectDatabase) {
+        // CONNECT grants created before inheritance support must also be revoked.
+        acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, NACLib::EInheritanceType::InheritNone);
+    }
+}
+
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
     static const TVector<std::pair<ui32, TString>> maskByPower = CalcMaskByPower();
     TVector<TString> result;
@@ -1268,7 +1281,8 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
     EXTRACT_VAL(Interval64, int64, i64);
     case NScheme::NTypeIds::Json :
     case NScheme::NTypeIds::Utf8 : {
-            TString v = val.Gettext_value();
+            // the cell must point into the proto value, not into a local copy of it
+            const TString& v = val.Gettext_value();
             c = TCell(v.data(), v.size());
             break;
         }
@@ -1294,7 +1308,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         break;
     }
     case NScheme::NTypeIds::Yson : {
-            TString v = val.Getbytes_value();
+            const TString& v = val.Getbytes_value();
             c = TCell(v.data(), v.size());
             break;
         }
@@ -1501,6 +1515,9 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
 
     NACLib::TDiffACL diffACL;
     diffACL.ClearAccess();
+    // A present input describes the complete ACL state. Treat an omitted field as
+    // false and apply it explicitly.
+    diffACL.SetInterruptInheritance(in->interrupt_inheritance());
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
@@ -1532,6 +1549,16 @@ void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
         errStr = descr; \
         return false; \
     }
+
+bool TupleContainsPgType(const Ydb::Type& type) {
+    for (const auto& element : type.tuple_type().elements()) {
+        const auto& item = element.has_optional_type() ? element.optional_type().item() : element;
+        if (item.has_pg_type()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // NOTE: TCell's can reference memory from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,

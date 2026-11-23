@@ -74,7 +74,7 @@ public:
         const TSelectRowsOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueue, (
+    MOCK_METHOD(TFuture<TPullQueueResult>, PullQueue, (
         const NYPath::TRichYPath& queuePath,
         i64 offset,
         int partitionIndex,
@@ -82,7 +82,7 @@ public:
         const TPullQueueOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
+    MOCK_METHOD(TFuture<TPullQueueResult>, PullQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,

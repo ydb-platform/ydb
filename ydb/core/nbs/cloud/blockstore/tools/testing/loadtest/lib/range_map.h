@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>

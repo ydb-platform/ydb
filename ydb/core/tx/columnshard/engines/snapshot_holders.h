@@ -33,9 +33,9 @@ public:
         : MinSnapshotForNewReads(std::move(minSnapshotForNewReads))
         , TxInFlight(std::move(txInFlight))
     {
-        AFL_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
+        YDB_LOG_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
         if (!TxInFlight.empty()) {
-            AFL_VERIFY(TxInFlight.back() < MinSnapshotForNewReads);
+            YDB_LOG_VERIFY(TxInFlight.back() < MinSnapshotForNewReads);
         }
     }
 
@@ -103,21 +103,29 @@ public:
     }
 };
 
+// Snapshots of the scans running on this tablet
+struct TLocalActiveSnapshots {
+    std::vector<TSnapshot> ForAllTables;
+    THashMap<TInternalPathId, std::vector<TSnapshot>> ByPathId;
+};
+
 class TRegistrySnapshotHolders: public ISnapshotHolders {
 private:
     const TSnapshot MinSnapshotForNewReads;
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
     const ui64 SchemeShardId;
     const IPathIdTranslator& PathIdTranslator;
+    const TLocalActiveSnapshots LocalActiveSnapshots;
     mutable THashMap<TInternalPathId, TSnapshotHoldersPerTable> HoldersByPathId;
 
 private:
-    TSnapshotHoldersPerTable BuildHoldersForTable(const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const;
+    TSnapshotHoldersPerTable BuildHoldersForTable(
+        const TInternalPathId pathId, const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const;
     const TSnapshotHoldersPerTable& GetHoldersByPathId(const TInternalPathId pathId) const;
 
 public:
     TRegistrySnapshotHolders(const TSnapshot minSnapshotForNewReads, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
-        const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator);
+        const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator, TLocalActiveSnapshots localActiveSnapshots = {});
 
     TSnapshot GetMinSnapshotForNewReads() const override {
         return MinSnapshotForNewReads;

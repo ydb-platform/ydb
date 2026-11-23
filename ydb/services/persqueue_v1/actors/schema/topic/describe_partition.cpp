@@ -67,7 +67,7 @@ public:
         LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
-                .Path = GetProtoRequest()->path(),
+                .Path = NormalizeTopicPath(GetProtoRequest()->path()),
                 .Database = GetDatabase(),
                 .UserToken = GetUserToken(),
                 .AccessRights = {NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow},
@@ -92,7 +92,8 @@ private:
         auto* p = FindIfPtr(ev->Get()->TopicInfo.Info->Description.GetPartitions(), [partitionId](const auto& part) {
             return part.GetPartitionId() == partitionId;
         });
-        AFL_ENSURE(p)("partitionId", partitionId);
+        YDB_LOG_ENSURE(p,
+            {"partitionId", partitionId});
 
         auto& partition = *result.mutable_partition();
         partition.set_partition_id(p->GetPartitionId());

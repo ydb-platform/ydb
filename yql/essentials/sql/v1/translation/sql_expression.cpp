@@ -337,7 +337,7 @@ TSQLStatus ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const
         return std::unexpected(status.error());
     }
 
-    for (auto b : node.GetBlock2()) {
+    for (const auto& b : node.GetBlock2()) {
         sqlExpr.Token(b.GetToken1());
         if (auto status = Expr(sqlExpr, exprNodes, b.GetRule_expr2()); !status) {
             return std::unexpected(status.error());
@@ -520,7 +520,7 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             break;
         }
         case TRule_literal_value::kAltLiteralValue10: {
-            result.Expr = BuildEmptyAction(Ctx_.Pos());
+            result.Expr = BuildEmptyAction(Ctx_.Position(node));
             break;
         }
         case TRule_literal_value::ALT_NOT_SET:
@@ -1151,7 +1151,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
 
         TNodePtr id;
         if (IsYqlSelectProduced_) {
-            id = BuildYqlColumnRef(Ctx_.Pos());
+            id = BuildYqlColumnRef(Ctx_.Pos(), columnOrType);
         } else if (columnOrType) {
             id = BuildColumnOrType(Ctx_.Pos());
         } else {
@@ -1195,13 +1195,13 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                     call.InitExpr(lastExpr);
                 }
 
-                bool initRet = call.Init(b.GetAlt2().GetRule_invoke_expr1());
+                TSQLStatus initRet = call.Init(b.GetAlt2().GetRule_invoke_expr1());
                 if (initRet) {
                     call.IncCounters();
                 }
 
                 if (!initRet) {
-                    return std::unexpected(ESQLError::Basic);
+                    return std::unexpected(initRet.error());
                 }
 
                 if (auto result = call.BuildCall()) {
@@ -1249,8 +1249,34 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                     case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
                         YQL_ENSURE(false, "Unreachable");
                 }
-
-                if (lastExpr) {
+                if (IsYqlSelectProduced_ && isColumnRef && isFirstElem &&
+                    (!YqlSelectSourceAliases_ || !YqlSelectSourceAliases_->contains(name))) {
+                    const auto& member = ids.back();
+                    TNodePtr key = member.Expr
+                                       ? new TCallNodeImpl(pos, "EvaluateAtom", {member.Expr})
+                                       : BuildQuotedAtom(pos, member.Name);
+                    TVector<TNodePtr> options;
+                    if (Ctx_.PragmaYsonAutoConvert) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_auto_convert"));
+                    }
+                    if (Ctx_.PragmaYsonStrict) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_strict"));
+                    }
+                    if (Ctx_.PragmaYsonFast) {
+                        options.push_back(BuildQuotedAtom(pos, "yson_fast"));
+                    }
+                    TVector<TNodePtr> args = {new TCallNodeImpl(pos, "Void", {}), BuildQuotedAtom(pos, name), key,
+                                              BuildQuote(pos, BuildList(pos, std::move(options)))};
+                    const bool shortAccess = suffix.GetBlock1().size() == 1 ||
+                                             suffix.GetBlock1()[1].GetBlock1().Alt_case() == TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1;
+                    if (member.Expr && shortAccess && !YqlSelectIsJoin_) {
+                        // Legacy TColumnNode keeps ColumnExpr_ for x.$a on a single source,
+                        // but TJoinBase::AddColumn resets it. Preserve the same base column.
+                        args.push_back(key);
+                    }
+                    lastExpr = new TCallNodeImpl(pos, "YqlColumnOrAccess", args);
+                    ids.clear();
+                } else if (lastExpr) {
                     lastExpr = BuildAccess(pos, ids, /*isLookup=*/false);
                     ids.clear();
                 }

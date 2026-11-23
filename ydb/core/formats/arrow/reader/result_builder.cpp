@@ -10,7 +10,7 @@
 namespace NKikimr::NArrow::NMerger {
 
 void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const  {
-    AFL_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
+    YDB_LOG_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
 }
 
 void TRecordBatchBuilder::AddRecord(const TBatchIterator& cursor) {
@@ -22,7 +22,9 @@ void TRecordBatchBuilder::SkipRecord(const TBatchIterator& /*cursor*/) {
 
 void TRecordBatchBuilder::AddRecord(const TCursor& position) {
     //    AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
-    //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    //    YDB_LOG_TRACE("",
+    //          {"event", "record_add_on_read"},
+    //          {"record", position.DebugJson()});
     position.AppendPositionTo(Builders, MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }
@@ -30,7 +32,9 @@ void TRecordBatchBuilder::AddRecord(const TCursor& position) {
 void TRecordBatchBuilder::AddRecord(const TRWSortableBatchPosition& position) {
     AFL_VERIFY_DEBUG(position.GetData().GetColumns().size() == Builders.size());
     AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
-    //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    //    YDB_LOG_TRACE("",
+    //          {"event", "record_add_on_read"},
+    //          {"record", position.DebugJson()});
     position.GetData().AppendPositionTo(Builders, position.GetPosition(), MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }
@@ -54,7 +58,7 @@ bool TRecordBatchBuilder::IsSameFieldsSequence(
 TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields,
     const std::optional<ui32> rowsCountExpectation /*= {}*/, const THashMap<std::string, ui64>& fieldDataSizePreallocated /*= {}*/)
     : Fields(fields) {
-    AFL_VERIFY(Fields.size());
+    YDB_LOG_VERIFY(Fields.size());
     for (auto&& f : fields) {
         Builders.emplace_back(NArrow::MakeBuilder(f));
         auto it = fieldDataSizePreallocated.find(f->name());
@@ -65,7 +69,7 @@ TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow
             NArrow::TStatusValidator::Validate(Builders.back()->Reserve(*rowsCountExpectation));
         }
     }
-    AFL_VERIFY(Fields.size() == Builders.size());
+    YDB_LOG_VERIFY(Fields.size() == Builders.size());
 }
 
 std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {

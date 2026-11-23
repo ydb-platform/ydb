@@ -1,13 +1,219 @@
 #include "controller_impl.h"
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
+
+namespace {
+
+bool HasRelevantTransferConfigChanges(
+        const NKikimrReplication::TReplicationConfig& current,
+        const NKikimrReplication::TReplicationConfig& next)
+{
+    if (!current.HasTransferSpecific()) {
+        return false;
+    }
+
+    const auto& currentSpecific = current.GetTransferSpecific();
+    const auto& nextSpecific = next.GetTransferSpecific();
+    return currentSpecific.GetTarget().GetTransformLambda() != nextSpecific.GetTarget().GetTransformLambda()
+        || currentSpecific.GetTarget().GetDirectoryPath() != nextSpecific.GetTarget().GetDirectoryPath()
+        || currentSpecific.GetBatching().GetBatchSizeBytes() != nextSpecific.GetBatching().GetBatchSizeBytes()
+        || currentSpecific.GetBatching().GetFlushIntervalMilliSeconds()
+            != nextSpecific.GetBatching().GetFlushIntervalMilliSeconds();
+}
+
+bool RetryPausedBootstrap(
+        TReplication& replication,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx)
+{
+    if (replication.GetConfig().GetInitialScan()
+        || replication.GetDesiredState() != TReplication::EState::Paused
+        || replication.GetState() != TReplication::EState::Error)
+    {
+        return false;
+    }
+
+    // Restrict config-only recovery to source preparation. An ordinary PAUSE
+    // can retain attached destinations and unrelated errors that must survive.
+    for (const auto* target : replication.GetTargets()) {
+        const bool creating = target->GetDstState() == TReplication::EDstState::Creating
+            && !target->GetDstPathId();
+        const bool waitingImport = target->GetDstState() == TReplication::EDstState::WaitingImport;
+        if ((!creating && !waitingImport) || !target->GetWorkers().empty())
+        {
+            return false;
+        }
+    }
+
+    // A public config ALTER is an explicit retry even if the credential
+    // reference is unchanged (its secret or source ACL may be fixed).
+    // Persist the reset before Progress can start a replacement creator.
+    replication.SetState(TReplication::EState::Paused);
+    for (auto* target : replication.GetTargets()) {
+        if (target->GetStreamState() != TReplication::EStreamState::Error) {
+            continue;
+        }
+
+        target->Shutdown(ctx);
+        target->SetStreamState(TReplication::EStreamState::Creating);
+        target->SetIssue({});
+        db.Table<TControllerSchema::SrcStreams>().Key(replication.GetId(), target->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::SrcStreams::State>(target->GetStreamState()));
+        db.Table<TControllerSchema::Targets>().Key(replication.GetId(), target->GetId()).Update(
+            NIceDb::TUpdate<TControllerSchema::Targets::Issue>(target->GetIssue()));
+    }
+
+    return true;
+}
+
+} // anonymous namespace
 
 class TController::TTxAlterReplication: public TTxBase {
     TEvController::TEvAlterReplication::TPtr Ev;
     THolder<TEvController::TEvAlterReplicationResult> Result;
     TReplication::TPtr Replication;
+    bool ResetFailedSchemaBarriers = false;
+    TVector<std::pair<ui64, ui64>> AlterersToStop;
+    THashSet<TWorkerId> BarrierWorkersToRestart;
+
+    static bool ShouldCancelBarrier(const TSchemaBarrier& barrier, bool targetUnavailable) {
+        return barrier.Phase == ESchemaBarrierPhase::Error
+            || (barrier.Phase == ESchemaBarrierPhase::Collecting && targetUnavailable);
+    }
+
+    static bool NeedsTargetRecovery(const TSchemaBarrier& barrier, bool targetWasError) {
+        return targetWasError
+            && barrier.Phase != ESchemaBarrierPhase::Collecting
+            && barrier.IsActive();
+    }
+
+    bool NeedsWorkerRestart(const TSchemaBarrier& barrier, const TWorkerId& id, bool targetWasError) const {
+        // Completion only covers the schema handshake. A Verifying barrier
+        // still needs a fresh heartbeat from every worker before it can end.
+        if (barrier.Phase != ESchemaBarrierPhase::Verifying && barrier.CompletedWorkers.contains(id)) {
+            return false;
+        }
+
+        const auto worker = Self->Workers.find(id);
+        return targetWasError || worker == Self->Workers.end() || !worker->second.HasSession();
+    }
+
+    void RetainBarrierForRecovery(
+            const std::pair<ui64, ui64>& key,
+            TSchemaBarrier& barrier,
+            TReplication::ITarget* target,
+            NIceDb::TNiceDb& db)
+    {
+        const bool targetWasError = target && target->GetDstState() == TReplication::EDstState::Error;
+        if (NeedsTargetRecovery(barrier, targetWasError)) {
+            // The DDL may already be committed, so this barrier must survive
+            // the lifecycle request. Let its unfinished workers recover.
+            target->SetDstState(TReplication::EDstState::Ready);
+            db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+        }
+
+        // A failure in any target can stop workers across the replication.
+        // Leave still-attached healthy workers running.
+        for (const auto& workerId : barrier.ExpectedWorkers) {
+            if (NeedsWorkerRestart(barrier, workerId, targetWasError)) {
+                BarrierWorkersToRestart.insert(workerId);
+            }
+        }
+    }
+
+    void CancelBarrier(
+            const std::pair<ui64, ui64>& key,
+            const TSchemaBarrier& barrier,
+            const TReplication::ITarget* target,
+            NIceDb::TNiceDb& db)
+    {
+        for (const auto& workerId : barrier.ExpectedWorkers) {
+            db.Table<Schema::SchemaBarrierWorkers>()
+                .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
+        }
+        Self->StopSchemaChangeTargetFlush(key);
+
+        if (Self->SchemaChangeDstAlterers.contains(key)) {
+            AlterersToStop.push_back(key);
+        }
+
+        if (target) {
+            db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
+                NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
+                NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
+        }
+    }
+
+    void RecoverFailedSchemaBarriers(NIceDb::TNiceDb& db) {
+        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+            const auto key = it->first;
+            if (key.first != Replication->GetId()) {
+                ++it;
+                continue;
+            }
+
+            auto* target = Replication->FindTarget(key.second);
+            const bool targetUnavailable = !target || target->GetDstState() == TReplication::EDstState::Error;
+            if (!ShouldCancelBarrier(it->second, targetUnavailable)) {
+                RetainBarrierForRecovery(key, it->second, target, db);
+                ++it;
+                continue;
+            }
+
+            // No destination DDL has started in Collecting, so a stranded
+            // barrier can be cancelled safely. Error barriers are reset by
+            // the explicit lifecycle request as well.
+            CancelBarrier(key, it->second, target, db);
+            it = Self->SchemaBarriers.erase(it);
+        }
+
+        // Verification waits for every replication worker, not only members
+        // of the target whose schema changed. Recover failed siblings even
+        // before DDL finishes, since no later lifecycle request may revisit
+        // recovery when this barrier enters Verifying.
+        const bool globalConsistency = Replication->GetConfig().GetConsistencySettings().GetLevelCase()
+            == NKikimrReplication::TConsistencySettings::kGlobal;
+        if (!globalConsistency) {
+            return;
+        }
+
+        const bool needsGlobalVerification = AnyOf(Self->SchemaBarriers, [this](const auto& item) {
+            return item.first.first == Replication->GetId() && item.second.IsInProgress();
+        });
+        if (!needsGlobalVerification) {
+            return;
+        }
+
+        THashSet<ui64> targetsToRecover;
+        for (const auto& [workerId, _] : Self->Workers) {
+            if (workerId.ReplicationId() != Replication->GetId()) {
+                continue;
+            }
+
+            auto* target = Replication->FindTarget(workerId.TargetId());
+            if (target && target->GetDstState() == TReplication::EDstState::Error) {
+                // A heartbeat newer than the schema can still be too old to
+                // retire a snapshotted write ID. DDL completion also resets
+                // heartbeats, so keep every failed sibling recoverable.
+                targetsToRecover.insert(workerId.TargetId());
+                BarrierWorkersToRestart.insert(workerId);
+            }
+        }
+
+        for (const auto targetId : targetsToRecover) {
+            auto* target = Replication->FindTarget(targetId);
+            target->SetDstState(TReplication::EDstState::Ready);
+            db.Table<Schema::Targets>().Key(Replication->GetId(), targetId).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+        }
+    }
 
 public:
     explicit TTxAlterReplication(TController* self, TEvController::TEvAlterReplication::TPtr& ev)
@@ -41,23 +247,12 @@ public:
             return true;
         }
 
-        bool alter = false;
-
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
+        bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
 
-        if (oldConfig.HasTransferSpecific()) {
-            auto& oldSpecific = oldConfig.GetTransferSpecific();
-            auto& newSpecific = newConfig.GetTransferSpecific();
-
-            alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
-                || oldSpecific.GetTarget().GetDirectoryPath() != newSpecific.GetTarget().GetDirectoryPath()
-                || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
-                || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
-        }
-
-        auto desiredState = Replication->GetState();
-        if (record.HasSwitchState()) {
+        auto desiredState = Replication->GetDesiredState();
+        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
@@ -78,6 +273,7 @@ public:
 
         if (alter && Replication->GetState() == TReplication::EState::Error) {
             Replication->SetState(TReplication::EState::Ready);
+            ResetFailedSchemaBarriers = true;
             if (desiredState == TReplication::EState::Error) {
                 desiredState = TReplication::EState::Ready;
             }
@@ -92,42 +288,109 @@ public:
         }
 
         Replication->SetConfig(std::move(newConfig));
-        Replication->ResetCredentials(ctx);
 
         if (record.HasLocation()) {
             Replication->SetLocation(record.GetLocation());
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
+            issue.clear();
+        }
+        if (ResetFailedSchemaBarriers) {
+            RecoverFailedSchemaBarriers(db);
+        }
+
+        if (alter && desiredState == TReplication::EState::Done) {
+            for (const auto& [key, build] : Self->IndexBuilds) {
+                if (key.first != Replication->GetId() || build.GetPhase() != NKikimrReplication::TIndexBuildState::CANCELLING) {
+                    continue;
+                }
+
+                auto* target = Replication->FindTarget(key.second);
+                if (target && target->GetDstState() == TReplication::EDstState::Error) {
+                    // An explicit DONE retry must also recover a cancellation
+                    // interrupted by a worker or destination DDL error.
+                    target->SetDstState(TReplication::EDstState::Paused);
+                    target->SetIssue({});
+                    db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                        NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                        NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
+                    );
+                }
+            }
+        }
+
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
             NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
             NIceDb::TUpdate<Schema::Replications::Issue>(issue)
         );
 
         if (!alter) {
+            if (!Self->DeferredAlters.contains(Replication->GetId())) {
+                Replication->ResetCredentials(ctx);
+            }
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
         }
 
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
+        const bool recoverReady = ResetFailedSchemaBarriers && desiredState == TReplication::EState::Ready;
+        if (!recoverReady && Self->HasPendingAlter(Replication->GetId())) {
+            Self->DeferredAlters.insert(Replication->GetId());
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::DeferredAlter>(true));
+            YDB_LOG_NOTICE_CTX(ctx, "Defer replication alter until schema barriers complete",
+                {"rid", Replication->GetId()});
+            if (BarrierWorkersToRestart.empty()) {
+                Replication.Reset();
+            }
+            return true;
+        }
+
+        Replication->ResetCredentials(ctx);
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
                 continue;
             }
 
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Paused) {
+                continue;
+            }
+
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Ready) {
+                // Import replaces the placeholder, so resolve its new path id on attachment.
+                target->SetDstPathId({});
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
+                    NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
+            }
+
             target->Shutdown(ctx);
             target->SetDstState(TReplication::EDstState::Alter);
             if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
                 target->SetStreamState(TReplication::EStreamState::Creating);
+                db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
             }
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
             );
 
             alter = true;
+        }
+
+        if (Replication->CheckAlterDone()) {
+            Replication->SetState(desiredState);
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(desiredState)
+            );
         }
 
         if (alter) {
@@ -145,6 +408,10 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
+        for (const auto& key : AlterersToStop) {
+            Self->StopSchemaChangeDstAlter(key, ctx);
+        }
+
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
         }
@@ -152,12 +419,97 @@ public:
         if (Replication) {
             Replication->Progress(ctx);
         }
+
+        Self->RunTxIndexBuild(ctx);
+
+        for (const auto& id : BarrierWorkersToRestart) {
+            const auto it = Self->Workers.find(id);
+            if (it == Self->Workers.end()) {
+                continue;
+            }
+            if (it->second.HasSession()) {
+                Self->StopQueue.emplace(id, it->second.GetSession());
+            } else {
+                Self->BootQueue.insert(id);
+            }
+        }
+
+        if (BarrierWorkersToRestart) {
+            Self->ScheduleProcessQueues();
+        }
     }
 
 }; // TTxAlterReplication
 
 void TController::RunTxAlterReplication(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxAlterReplication(this, ev), ctx);
+}
+
+class TController::TTxResumeDeferredAlter: public TTxBase {
+    TEvPrivate::TEvResumeDeferredAlter::TPtr Event;
+    TReplication::TPtr Replication;
+
+public:
+    TTxResumeDeferredAlter(TController* self, TEvPrivate::TEvResumeDeferredAlter::TPtr& ev)
+        : TTxBase("TxResumeDeferredAlter", self)
+        , Event(ev)
+    {}
+
+    TTxType GetTxType() const override {
+        return TXTYPE_ALTER_REPLICATION;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        const auto replicationId = Event->Get()->ReplicationId;
+        if (!Self->DeferredAlters.contains(replicationId) || Self->HasPendingAlter(replicationId)) {
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->DeferredAlters.erase(replicationId);
+        Replication = Self->Find(replicationId);
+        if (!Replication) {
+            return true;
+        }
+
+        Replication->ResetCredentials(ctx);
+        db.Table<Schema::Replications>().Key(replicationId).Update(
+            NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false));
+
+        for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
+            auto* target = Replication->FindTarget(tid);
+            if (!target) {
+                continue;
+            }
+            target->Shutdown(ctx);
+            target->SetDstState(TReplication::EDstState::Alter);
+            if (target->GetStreamState() == TReplication::EStreamState::Error
+                && Replication->GetDesiredState() == TReplication::EState::Ready)
+            {
+                target->SetStreamState(TReplication::EStreamState::Creating);
+                db.Table<Schema::SrcStreams>().Key(replicationId, tid).Update(
+                    NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+            }
+            db.Table<Schema::Targets>().Key(replicationId, tid).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (Replication) {
+            Replication->Progress(ctx);
+        }
+    }
+};
+
+void TController::Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx) {
+    RunTxResumeDeferredAlter(ev, ctx);
+}
+
+void TController::RunTxResumeDeferredAlter(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxResumeDeferredAlter(this, ev), ctx);
 }
 
 }

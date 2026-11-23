@@ -362,3 +362,22 @@ class KikimrSqsTopicTestBase(object):
         assert_that(messages, not_none())
         assert_that(messages, has_length(1))
         return messages[0]['MessageAttributes'][attribute_name]
+
+    def _receive_messages(self, expected_count, wait_time_seconds=20):
+        # ReceiveMessage may return fewer than MaxNumberOfMessages as soon as
+        # any message is visible (including after DelaySeconds). Keep polling
+        # until the expected count is collected or the wait budget expires.
+        messages = []
+        deadline = time.time() + wait_time_seconds
+        while len(messages) < expected_count:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            response = self._boto_client.receive_message(
+                QueueUrl=self._queue_url,
+                WaitTimeSeconds=min(20, max(1, int(remaining))),
+                MaxNumberOfMessages=min(10, expected_count - len(messages)),
+            )
+            messages.extend(response.get('Messages') or [])
+        assert_that(messages, has_length(expected_count))
+        return messages

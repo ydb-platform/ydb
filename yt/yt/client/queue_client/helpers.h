@@ -1,5 +1,7 @@
-#include <yt/yt/client/api/public.h>
+#pragma once
+
 #include <yt/yt/client/api/client_common.h>
+#include <yt/yt/client/api/public.h>
 
 namespace NYT::NQueueClient {
 

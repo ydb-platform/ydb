@@ -5,7 +5,8 @@ namespace NKikimr::NSchemeShard {
 bool IsSupportedIndex(TPathId pathId, const TSchemeShard* ss) {
     auto indexInfo = ss->Indexes.at(pathId);
     return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
-            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree ||
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
 }
 
 bool IsSupportedIndex(TPathId pathId, const TOperationContext& context) {
@@ -125,7 +126,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     auto& collectionPaths = paths[targetPath];
     collectionPaths.emplace(targetDir);
@@ -237,7 +238,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRestoreRequiredPaths(
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     auto& collectionPaths = paths[tx.GetWorkingDir()];
 

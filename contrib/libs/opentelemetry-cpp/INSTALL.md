@@ -104,10 +104,10 @@ If building and installing Protobuf and gRPC manually with cmake the
    - `-DBUILD_SHARED_LIBS=ON` : To build shared libraries for the targets.
       Please refer to note [below](#building-shared-libs-for-windows) for
       Windows DLL support.
-   - `-DWITH_OTLP_GRPC=ON` : To enable building OTLP GRPC exporter.
-   - `-DWITH_OTLP_HTTP=ON` : To enable building OTLP HTTP exporter.
-   - `-DWITH_PROMETHEUS=ON` : To enable building prometheus exporter.
-   - `-DOPENTELEMETRY_INSTALL=ON`: To install `otel-cpp` library needed
+   - `-DOTELCPP_WITH_OTLP_GRPC=ON` : To enable building OTLP GRPC exporter.
+   - `-DOTELCPP_WITH_OTLP_HTTP=ON` : To enable building OTLP HTTP exporter.
+   - `-DOTELCPP_WITH_PROMETHEUS=ON` : To enable building prometheus exporter.
+   - `-DOTELCPP_INSTALL=ON`: To install `otel-cpp` library needed
       for external code linking.
 
 3. Once the build configuration is created, build the CMake targets - this
@@ -159,19 +159,21 @@ There are two approaches to incoporate `opentelemetry-cpp` into
 1. Build and install `opentelemetry-cpp` then use `find_package`
  to import its targets
 
-   ```cmake
-   # Find all installed components and link all imported targets
-   find_package(opentelemetry-cpp CONFIG REQUIRED)
-   ...
-   target_include_directories(foo PRIVATE ${OPENTELEMETRY_CPP_INCLUDE_DIRS})
-   target_link_libraries(foo PRIVATE ${OPENTELEMETRY_CPP_LIBRARIES})
-   ```
+   Example instrumentation library (using only the OTel C++ API)
 
    ```cmake
-   # Find a specific component and link its imported target(s)
-   find_package(opentelemetry-cpp CONFIG REQUIRED COMPONENTS api)
+   find_package(opentelemetry-cpp CONFIG REQUIRED)
    ...
-   target_link_libraries(foo PRIVATE opentelemetry-cpp::api)
+   # Link just the API header only interface target
+   target_link_libraries(foo_lib PRIVATE opentelemetry-cpp::api)
+   ```
+
+   Example application (using the OTel C++ SDK and exporters)
+
+   ```cmake
+   find_package(opentelemetry-cpp CONFIG REQUIRED)
+   ...
+   target_link_libraries(foo_app PRIVATE opentelemetry-cpp::trace opentelemetry-cpp::ostream_span_exporter)
    ```
 
 2. Use CMake's [FetchContent](https://cmake.org/cmake/help/latest/module/FetchContent.html)
@@ -192,7 +194,7 @@ There are two approaches to incoporate `opentelemetry-cpp` into
    FetchContent_Declare(
    opentelemetry-cpp
    GIT_REPOSITORY https://github.com/open-telemetry/opentelemetry-cpp.git
-   GIT_TAG        v1.20.0)
+   GIT_TAG        <release tag or SHA>)
    FetchContent_MakeAvailable(opentelemetry-cpp)
    ...
    target_link_libraries(foo PRIVATE opentelemetry-cpp::api)
@@ -242,6 +244,13 @@ build configuration.
 |                            | opentelemetry-cpp::trace                                                                         |
 |                            | opentelemetry-cpp::metrics                                                                       |
 |                            | opentelemetry-cpp::logs                                                                          |
+|                            | opentelemetry-cpp::configuration_core              (EXPERIMENTAL: Model, Builder and Interfaces) |
+|                            | opentelemetry-cpp::configuration_trace_builders    (EXPERIMENTAL: Trace SDK default builders)    |
+|                            | opentelemetry-cpp::configuration_metrics_builders  (EXPERIMENTAL: Metrics SDK default builders)  |
+|                            | opentelemetry-cpp::configuration_logs_builders     (EXPERIMENTAL: Logs SDK default builders)     |
+|                            | opentelemetry-cpp::configuration_registry_factory  (EXPERIMENTAL: Built-in registry creator)     |
+| **configuration**          | opentelemetry-cpp::configuration_yaml              (EXPERIMENTAL: YAML configuration)            |
+|                            | opentelemetry-cpp::configuration                   (EXPERIMENTAL: All config targets interface)  |
 | **ext_common**             | opentelemetry-cpp::ext                                                                           |
 | **ext_http_curl**          | opentelemetry-cpp::http_client_curl                                                              |
 | **ext_dll**                | opentelemetry-cpp::opentelemetry_cpp                                                             |
@@ -250,7 +259,8 @@ build configuration.
 | **exporters_ostream**      | opentelemetry-cpp::ostream_log_record_exporter                                                   |
 |                            | opentelemetry-cpp::ostream_metrics_exporter                                                      |
 |                            | opentelemetry-cpp::ostream_span_exporter                                                         |
-| **exporters_otlp_common**  | opentelemetry-cpp::proto                                                                         |
+| **exporters_otlp_common**  | opentelemetry-cpp::otlp_common                                                                   |
+|                            | opentelemetry-cpp::proto                                                                         |
 |                            | opentelemetry-cpp::otlp_recordable                                                               |
 | **exporters_otlp_file**    | opentelemetry-cpp::otlp_file_client                                                              |
 |                            | opentelemetry-cpp::otlp_file_exporter                                                            |
@@ -376,12 +386,12 @@ and user may have to customize it further before using it as distribution.
 - Windows : NuGet, zip
 
 This requires platform specific package generators already installed. The package
-generation can subsequently be enabled by using BUILD_PACKAGE option during cmake
-configuration
+generation can subsequently be enabled by using OTELCPP_BUILD_PACKAGE option
+during cmake configuration
 
    ```console
    $ cd opentelemetry-cpp
-   $ mkdir build && cd build && cmake -DBUILD_PACKAGE=ON ..
+   $ mkdir build && cd build && cmake -DOTELCPP_BUILD_PACKAGE=ON ..
 
    -- Package name: opentelemetry-cpp-1.8.1-ubuntu-20.04-x86_64.deb
    -- Configuring done

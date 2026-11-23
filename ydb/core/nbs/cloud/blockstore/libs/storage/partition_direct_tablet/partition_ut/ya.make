@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(ram:32 cpu:2)
+REQUIREMENTS(ram:32 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    bsc_proxy_ut.cpp
     part_database_ut.cpp
     partition_direct_ut.cpp
 )

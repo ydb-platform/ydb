@@ -9,9 +9,10 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalOpBuilder {
 public:
-    TPhysicalOpBuilder(TExprContext& ctx, TPositionHandle pos)
+    TPhysicalOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
         : Ctx(ctx)
-        , Pos(pos) {
+        , Pos(pos)
+        , Names(names) {
     }
 
     TPhysicalOpBuilder() = delete;
@@ -24,30 +25,45 @@ public:
 protected:
     TExprContext& Ctx;
     TPositionHandle Pos;
+    const TPhysicalNames& Names;
 };
 
 class TPhysicalNullaryOpBuilder: public TPhysicalOpBuilder {
 public:
-    TPhysicalNullaryOpBuilder(TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalOpBuilder(ctx, pos) {
+    TPhysicalNullaryOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp() = 0;
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp() = 0;
 };
 
 class TPhysicalUnaryOpBuilder: public TPhysicalOpBuilder {
 public:
-    TPhysicalUnaryOpBuilder(TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalOpBuilder(ctx, pos) {
+    TPhysicalUnaryOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
     virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) = 0;
 };
 
+/**
+ * Operators that are wide internally (WideMap, WideFilter, WideSort) and can therefore
+ * take and hand back a wide stage body directly, with no NarrowMap/ExpandMap round trip
+ * against their neighbours. See NPhysicalConvertionUtils::TStageBody.
+ */
+class TPhysicalWideUnaryOpBuilder: public TPhysicalOpBuilder {
+public:
+    TPhysicalWideUnaryOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
+    }
+
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) = 0;
+};
+
 class TPhysicalBinaryOpBuilder: public TPhysicalOpBuilder {
 public:
-    TPhysicalBinaryOpBuilder(TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalOpBuilder(ctx, pos) {
+    TPhysicalBinaryOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
     virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) = 0;
@@ -55,8 +71,8 @@ public:
 
 class TPhysicalVariadicOpBuilder: public TPhysicalOpBuilder {
 public:
-    TPhysicalVariadicOpBuilder(TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalOpBuilder(ctx, pos) {
+    TPhysicalVariadicOpBuilder(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
     virtual TExprNode::TPtr BuildPhysicalOp(const TVector<TExprNode::TPtr>& inputs) = 0;
@@ -64,23 +80,23 @@ public:
 
 class TPhysicalBinaryOpBuilderWithParams: public TPhysicalOpBuilder {
 public:
-    TPhysicalBinaryOpBuilderWithParams(TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalOpBuilder(ctx, pos) {
+    TPhysicalBinaryOpBuilderWithParams(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) = 0;
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) = 0;
 };
 
 class TPhysicalUnaryOpBuilderWithMemLimit: public TPhysicalOpBuilder {
 public:
-    TPhysicalUnaryOpBuilderWithMemLimit(TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalOpBuilder(ctx, pos) {
+    TPhysicalUnaryOpBuilderWithMemLimit(TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalOpBuilder(ctx, pos, names) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) = 0;
+    virtual NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input, std::optional<i64> memLimit) = 0;
 };
 
 template <typename TPhysicalBuilder, typename TOperator, typename... Args>
-TExprNode::TPtr Build(TIntrusivePtr<TOperator> op, TExprContext& ctx, TPositionHandle pos, Args... args) {
-    return TPhysicalBuilder(op, ctx, pos).BuildPhysicalOp(args...);
+auto Build(TOperator& op, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names, Args&&... args) {
+    return TPhysicalBuilder(op, ctx, pos, names).BuildPhysicalOp(std::forward<Args>(args)...);
 }

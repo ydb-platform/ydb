@@ -22,6 +22,7 @@ TString MakeListJoinCoreKeyName(size_t index) {
 }
 
 TExprNode::TPtr BuildStrictCastWrapper(const TPositionHandle& pos, const TTypeAnnotationNode* targetType, const TExprNode::TPtr& keyComponent, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(pos)
         .Lambda()
             .Param("row")
@@ -34,9 +35,11 @@ TExprNode::TPtr BuildStrictCastWrapper(const TPositionHandle& pos, const TTypeAn
                 .Add(1, ExpandType(pos, *ctx.MakeType<TOptionalExprType>(targetType), ctx))
             .Seal()
         .Seal().Build();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildNthKeyComponentWrapper(const TPositionHandle& pos, const TExprNode::TPtr& keyExtractor, size_t index, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(pos)
         .Lambda()
             .Param("row")
@@ -47,15 +50,18 @@ TExprNode::TPtr BuildNthKeyComponentWrapper(const TPositionHandle& pos, const TE
                 .Atom(1, ToString(index))
             .Seal()
         .Seal().Build();
+    // clang-format on
 }
 
 TExprNodeBuilder& AppendKeyComponent(TExprNodeBuilder& parent, size_t index, const TStringBuf keyName, const TExprNode::TPtr& keyExtractor) {
+    // clang-format off
     return parent.List(index)
         .Atom(0, keyName)
         .Apply(1, keyExtractor)
             .With(0, "row")
         .Seal()
     .Seal();
+    // clang-format on
 }
 
 TExprNode::TPtr PrepareSqlCombineInputSource(const TExprNode& combineInput, ui32 tableIndex, TStringBuf inputPrefix, const TTypeAnnotationNode* commonKeyType, TPositionHandle pos, TExprContext& ctx) {
@@ -100,6 +106,7 @@ TExprNode::TPtr PrepareSqlCombineInputSource(const TExprNode& combineInput, ui32
         }
     }
 
+    // clang-format off
     return ctx.Builder(pos)
         .Callable("FlatMap")
             .Add(0, combineInput.HeadPtr())
@@ -141,9 +148,11 @@ TExprNode::TPtr PrepareSqlCombineInputSource(const TExprNode& combineInput, ui32
                 .Seal()
             .Seal()
         .Seal().Build();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildPrefixedKeyExtractor(const TPositionHandle& pos, TStringBuf inputPrefix, const TExprNode::TPtr& keyExtract, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(pos)
         .Lambda()
             .Param("row")
@@ -158,6 +167,7 @@ TExprNode::TPtr BuildPrefixedKeyExtractor(const TPositionHandle& pos, TStringBuf
                 .Done()
             .Seal()
         .Seal().Build();
+    // clang-format on
 }
 
 TPresortTraits BuildSqlCombinePresortTraits(const TExprNode& combineInput, TStringBuf inputPrefix, TPositionHandle pos, TExprContext& ctx) {
@@ -177,6 +187,7 @@ TPresortTraits BuildSqlCombinePresortTraits(const TExprNode& combineInput, TStri
     }
 
     if (!isMulti) {
+        // clang-format off
         traits.Keys.push_back(ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -186,11 +197,13 @@ TPresortTraits BuildSqlCombinePresortTraits(const TExprNode& combineInput, TStri
                     .Seal();
                 })
             .Seal().Build());
+        // clang-format on
         traits.Dirs.emplace_back(presortDir);
         return traits;
     }
 
     for (ui32 i = 0; i < presortSize; i++) {
+        // clang-format off
         traits.Keys.push_back(ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -200,6 +213,7 @@ TPresortTraits BuildSqlCombinePresortTraits(const TExprNode& combineInput, TStri
                     .Seal();
                 })
             .Seal().Build());
+        // clang-format on
         traits.Dirs.push_back(presortDir->ChildPtr(i));
     }
     return traits;
@@ -210,6 +224,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> BuildSortKeySelectorAndDirection(con
         const auto noPresort = ctx.NewCallable(pos, "Void", {});
         return {noPresort, noPresort};
     }
+    // clang-format off
     const auto presortKeySelector = ctx.Builder(pos)
         .Lambda()
             .Param("row")
@@ -233,6 +248,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> BuildSortKeySelectorAndDirection(con
                 return list.Seal();
             })
         .Seal().Build();
+    // clang-format on
     TExprNode::TListType dirList;
     dirList.push_back(ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true")}));
     for (auto& d : leftPresort.Dirs) {
@@ -247,6 +263,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> BuildSortKeySelectorAndDirection(con
 
 TExprNode::TPtr BuildPartitionKeySelector(const TPositionHandle& pos, const TTypeAnnotationNode* keyType, TExprContext& ctx) {
     if (keyType->GetKind() != ETypeAnnotationKind::Tuple) {
+        // clang-format off
         return ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -255,7 +272,9 @@ TExprNode::TPtr BuildPartitionKeySelector(const TPositionHandle& pos, const TTyp
                     .Atom(1, MakeListJoinCoreKeyName(0))
                 .Seal()
             .Seal().Build();
+        // clang-format on
     }
+    // clang-format off
     return ctx.Builder(pos)
         .Lambda()
             .Param("row")
@@ -271,6 +290,7 @@ TExprNode::TPtr BuildPartitionKeySelector(const TPositionHandle& pos, const TTyp
                 })
             .Seal()
         .Seal().Build();
+    // clang-format on
 }
 
 } // namespace
@@ -286,21 +306,24 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
 
     const auto commonKeyType = usingLambda.Head().Head().GetTypeAnn();
 
-    const auto leftTagged = PrepareSqlCombineInputSource(leftCombineInput, 0, YqlListJoinCoreLeftInputPrefix,  commonKeyType, pos, ctx);
+    const auto leftTagged = PrepareSqlCombineInputSource(leftCombineInput, 0, YqlListJoinCoreLeftInputPrefix, commonKeyType, pos, ctx);
     const auto rightTagged = PrepareSqlCombineInputSource(rightCombineInput, 1, YqlListJoinCoreRightInputPrefix, commonKeyType, pos, ctx);
 
+    // clang-format off
     auto merged = ctx.Builder(pos)
         .Callable("UnionAll")
             .Add(0, leftTagged)
             .Add(1, rightTagged)
         .Seal().Build();
+    // clang-format on
 
-    auto leftPresort = BuildSqlCombinePresortTraits(leftCombineInput,  YqlListJoinCoreLeftInputPrefix,  pos, ctx);
+    auto leftPresort = BuildSqlCombinePresortTraits(leftCombineInput, YqlListJoinCoreLeftInputPrefix, pos, ctx);
     auto rightPresort = BuildSqlCombinePresortTraits(rightCombineInput, YqlListJoinCoreRightInputPrefix, pos, ctx);
     auto [presortKeySelector, presortDirection] = BuildSortKeySelectorAndDirection(pos, std::move(leftPresort), std::move(rightPresort), ctx);
 
     auto partitionKeySelector = BuildPartitionKeySelector(pos, commonKeyType, ctx);
 
+    // clang-format off
     auto groupSwitch = ctx.Builder(pos)
         .Lambda()
             .Param("key")
@@ -315,11 +338,13 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
                 .Add(3, partitionKeySelector)
             .Seal()
         .Seal().Build();
+    // clang-format on
 
     const auto& leftArgMapLambda = leftCombineInput.ChildPtr(TCoSqlCombineInput::idx_ArgMapLambda);
     const auto& rightArgMapLambda = rightCombineInput.ChildPtr(TCoSqlCombineInput::idx_ArgMapLambda);
     const auto& leftInputItemType = *leftArgMapLambda->Head().Head().GetTypeAnn();
     const auto& rightInputItemType = *rightArgMapLambda->Head().Head().GetTypeAnn();
+    // clang-format off
     auto chopperHandler = ctx.Builder(pos)
         .Lambda()
             .Param("key")
@@ -350,7 +375,9 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
                 .Seal()
             .Seal()
         .Seal().Build();
+    // clang-format on
 
+    // clang-format off
     return ctx.Builder(pos)
         .Callable("LPartitionsByKeys")
             .Add(0, std::move(merged))
@@ -367,6 +394,7 @@ TExprNode::TPtr ExpandSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx,
                 .Seal()
             .Seal()
         .Seal().Build();
+    // clang-format on
 }
 
 } // namespace NYql

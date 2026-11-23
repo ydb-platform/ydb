@@ -5,6 +5,10 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/cast.h>
+#include <util/folder/path.h>
+#include <util/system/event.h>
+
+#include <atomic>
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
 #include <util/stream/tee.h>
@@ -13,6 +17,16 @@
 #include <util/random/random.h>
 
 Y_UNIT_TEST_SUITE(THttpServerTest) {
+    Y_UNIT_TEST(FailLogDataPreservesLegacyAggregateInitialization) {
+        const THttpServer::ICallBack::TFailLogData data = {-1, TString("/legacy")};
+        UNIT_ASSERT_VALUES_EQUAL(data.failstate, -1);
+        UNIT_ASSERT_VALUES_EQUAL(data.url, "/legacy");
+        UNIT_ASSERT_VALUES_EQUAL(data.responseCode, 503);
+        UNIT_ASSERT(data.requestPath.empty());
+        UNIT_ASSERT(data.requestHeaders == nullptr);
+        UNIT_ASSERT(data.requestTarget.empty());
+    }
+
     class TEchoServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
         public:
@@ -421,6 +435,42 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
             }
         }
+        server.Stop();
+    }
+
+    Y_UNIT_TEST(ProtocolRejectionInFailQueueNotifiesActualStatus) {
+        class TObservedServer: public TEchoServer {
+        public:
+            TObservedServer() : TEchoServer("unused") {}
+            void OnFailRequestEx(const TFailLogData& data) override {
+                Code = data.responseCode;
+                Path = data.requestPath;
+                Target = data.requestTarget;
+                HasHost = data.requestHeaders && data.requestHeaders->FindHeader("Host");
+                Observed.Signal();
+            }
+            unsigned Code = 0;
+            TString Path;
+            TString Target;
+            bool HasHost = false;
+            TManualEvent Observed;
+        } callbacks;
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        using TWorkers = TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
+        THttpServer::TMtpQueueRef workers = new TWorkers(&callbacks, SystemThreadFactory());
+        THttpServer::TMtpQueueRef failWorkers = new TThreadPool(SystemThreadFactory());
+        THttpServer server(&callbacks, workers, failWorkers, THttpServer::TOptions(port));
+        static_cast<TFailingMtpQueue*>(workers.Get())->SetFailOnAdd();
+        UNIT_ASSERT(server.Start());
+        TTestRequest request(port);
+        request.Type = "OPTIONS";
+        request.Execute();
+        UNIT_ASSERT(callbacks.Observed.WaitT(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.Code, 405);
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.Path, "/");
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.Target, "/");
+        UNIT_ASSERT(callbacks.HasHost);
         server.Stop();
     }
 
@@ -1125,4 +1175,104 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         UNIT_ASSERT_STRINGS_EQUAL(server.InputCopy.Str(), TStringBuilder() << "GET / HTTP/1.1\r\nHost: localhost:" << port << "\r\nConnection: Keep-Alive\r\n\r\n");
         UNIT_ASSERT_STRINGS_EQUAL(server.OutputCopy.Str(), TStringBuilder() << "HTTP/1.1 200 Ok\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
     }
+
+#ifdef _linux_
+    // The public server API deliberately does not expose listening descriptors.
+    static SOCKET FindListenSocket(ui16 port) {
+        TVector<TString> names;
+        TFsPath("/proc/self/fd").ListNames(names);
+        for (const auto& name : names) {
+            SOCKET socket = INVALID_SOCKET;
+            if (!TryFromString(name, socket)) {
+                continue;
+            }
+            int listening = 0;
+            socklen_t size = sizeof(listening);
+            if (getsockopt(socket, SOL_SOCKET, SO_ACCEPTCONN, &listening, &size) != 0 || !listening) {
+                continue;
+            }
+            sockaddr_in address{};
+            size = sizeof(address);
+            if (getsockname(socket, reinterpret_cast<sockaddr*>(&address), &size) == 0 &&
+                address.sin_family == AF_INET && InetToHost(address.sin_port) == port)
+            {
+                return socket;
+            }
+        }
+        return INVALID_SOCKET;
+    }
+
+    // Existing yexception handlers must keep receiving errors, including their
+    // active exception context, while new consumers can recover the accept code.
+    static void CheckAcceptError(bool oneShot, size_t listenerThreads) {
+        class TCallback: public TEchoServer {
+        public:
+            TCallback()
+                : TEchoServer("ok")
+            {
+            }
+
+            void OnAcceptException(int errorCode) override {
+                if (errorCode != EINVAL) {
+                    ++MissingCode;
+                }
+                ++AcceptCalls;
+                THttpServer::ICallBack::OnAcceptException(errorCode);
+            }
+
+            void OnException() override {
+                try {
+                    throw;
+                } catch (const yexception& error) {
+                    if (!TStringBuf(error.what()).Contains("accept:")) {
+                        ++MissingContext;
+                    }
+                } catch (...) {
+                    ++MissingContext;
+                }
+                if (++Calls >= 2) {
+                    Repeated.Signal();
+                }
+            }
+
+            std::atomic<size_t> MissingCode = 0;
+            std::atomic<size_t> MissingContext = 0;
+            std::atomic<size_t> AcceptCalls = 0;
+            std::atomic<size_t> Calls = 0;
+            TManualEvent Repeated;
+        } callback;
+
+        TPortManager ports;
+        const ui16 port = ports.GetPort();
+        THttpServer::TOptions options;
+        options.AddBindAddress("127.0.0.1", port);
+        options.OneShotPoll = oneShot;
+        options.nListenerThreads = listenerThreads;
+        THttpServer server(&callback, options);
+        UNIT_ASSERT(server.Start());
+        const SOCKET listener = FindListenSocket(port);
+        UNIT_ASSERT_VALUES_UNEQUAL(listener, INVALID_SOCKET);
+        // Preserve the fd and poll registration but remove the LISTEN state.
+        UNIT_ASSERT_VALUES_EQUAL(shutdown(listener, SHUT_RDWR), 0);
+        const bool repeated = callback.Repeated.WaitT(TDuration::Seconds(5));
+        server.Stop();
+        UNIT_ASSERT_C(repeated, "The legacy callback retry policy must remain unchanged");
+        UNIT_ASSERT_VALUES_EQUAL(callback.MissingCode.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(callback.MissingContext.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(callback.AcceptCalls.load(), callback.Calls.load());
+    }
+
+    Y_UNIT_TEST(AcceptErrorCodeLevelTriggered) {
+        CheckAcceptError(false, 1);
+    }
+
+    Y_UNIT_TEST(AcceptErrorCodeOneShot) {
+        CheckAcceptError(true, 1);
+    }
+
+    Y_UNIT_TEST(AcceptErrorCodeMultipleListeners) {
+        CheckAcceptError(true, 2);
+    }
+#endif
+
 }

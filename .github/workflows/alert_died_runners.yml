@@ -1,10 +1,8 @@
 name: Alert Died Runners
 
 on:
-  schedule:
-    # Run every 2 hours
-    - cron: '0 */2 * * *'
-  # Can also be triggered manually
+  # schedule is off: every 2h this took an analytic-node runner.
+  # Re-enable when the pool is calm.
   workflow_dispatch:
 
 jobs:

@@ -22,9 +22,14 @@ Any command can be run from the command line with the `--help` option to get hel
 
 | Command / subcommand | Brief description |
 | --- | --- |
+| [admin cluster bridge convert](../commands/bridge/convert.md) | Converting an ordinary [cluster](../../../concepts/glossary.md#cluster) to a single-pile [bridge](../../../concepts/bridge.md) |
+| [admin cluster bridge destroy-pile](../commands/bridge/destroy-pile.md) | Deleting a disconnected [pile](../../../concepts/glossary.md#pile)'s storage and data |
 | [admin cluster bridge failover](../commands/bridge/failover.md) | Emergency switchover when [pile](../../../concepts/glossary.md#pile) is unavailable |
+| [admin cluster bridge join-pile (rejoin)](../commands/bridge/rejoin.md) | Joining a provisioned [pile](../../../concepts/glossary.md#pile) or returning it after maintenance |
 | [admin cluster bridge list](../commands/bridge/list.md) | List state of each [pile](../../../concepts/glossary.md#pile) in [bridge mode](../../../concepts/bridge.md) |
-| [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Returning [pile](../../../concepts/glossary.md#pile) to the [cluster](../../../concepts/glossary.md#cluster) after maintenance or recovery |
+| [admin cluster bridge provision-pile](../commands/bridge/provision-pile.md) | Preparing storage for a new [pile](../../../concepts/glossary.md#pile) |
+| [admin cluster bridge rollback](../commands/bridge/rollback.md) | Returning a converted [cluster](../../../concepts/glossary.md#cluster) from bridge mode to ordinary mode |
+| [admin cluster bridge set-database-mode](../commands/bridge/set-database-mode.md) | Switching a [database](../../../concepts/glossary.md#database) between bridged and ordinary storage |
 | [admin cluster bridge switchover](../commands/bridge/switchover.md) | Planned `PRIMARY` [pile](../../../concepts/glossary.md#pile) change |
 | [admin cluster bridge takedown](../commands/bridge/takedown.md) | Taking [pile](../../../concepts/glossary.md#pile) out of the [cluster](../../../concepts/glossary.md#cluster) for maintenance |
 | [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Getting the current dynamic configuration of the [cluster](../../../concepts/glossary.md#cluster) |
@@ -148,7 +153,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Submitting orders with the same products in the `Stock` workload |
 | [workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Selecting orders for a random customer in the `Stock` workload |
 | [workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Selecting orders for the 10,000th customer in the `Stock` workload |
-| [workload stock clean](../commands/workload/stock.md#clean) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Stock` workload initialization |
+| workload stock clean | Deleting [tables](../../../concepts/glossary.md#table) created during the `Stock` workload initialization |
 | [workload topic init](../workload-topic.md#init) | Creating and initializing a [topic](../../../concepts/glossary.md#topic) for the `Topic` workload |
 | [workload topic run full](../workload-topic.md#run-full) | Performing a full load on a [topic](../../../concepts/glossary.md#topic) with simultaneous message reading and writing in the `Topic` workload |
 | [workload topic run read](../workload-topic.md#run-read) | Performing a load for reading messages from a [topic](../../../concepts/glossary.md#topic) in the `Topic` workload |

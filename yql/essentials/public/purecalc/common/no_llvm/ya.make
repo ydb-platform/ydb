@@ -2,6 +2,8 @@ LIBRARY()
 
 INCLUDE(../ya.make.inc)
 
+YQL_LAST_ABI_VERSION()
+
 PEERDIR(
     yt/yql/providers/yt/codec/codegen/no_llvm
     yql/essentials/providers/config

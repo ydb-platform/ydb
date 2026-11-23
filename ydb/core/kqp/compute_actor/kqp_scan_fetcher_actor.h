@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/kqp/tracing/kqp_scan_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_events.h"
 #include "kqp_compute_state.h"
@@ -51,7 +53,8 @@ private:
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
     const NMiniKQL::TScanDataMetaFull ScanDataMeta;
     const NYql::NDq::TComputeRuntimeSettings RuntimeSettings;
-    const TString Database;
+    const TString DatabasePath;
+    const std::optional<NScheduler::NHdrf::TFullPoolId> SchedulerPool;
     const NYql::NDq::TTxId TxId;
     const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
@@ -66,7 +69,8 @@ public:
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,
         std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
-        const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
+        const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& databasePath,
+        const std::optional<NScheduler::NHdrf::TFullPoolId>& schedulerPool,
         const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
         TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
         bool useBatchPool = false);
@@ -98,7 +102,8 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
-                    AFL_VERIFY_DEBUG(false)("event_type", ev->GetTypeName());
+                    YDB_LOG_VERIFY_DEBUG(false,
+                        {"eventType", ev->GetTypeName()});
                     StopOnError("unexpected message on data fetching: " + ev->GetTypeName());
             }
         } catch (...) {
@@ -118,12 +123,12 @@ private:
 
     std::vector<NActors::TActorId> ComputeActorIds;
 
-    void StopOnError(const TString& errorMessage) const;
+    void StopOnError(const TString& errorMessage);
     bool SendGlobalFail(
-        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
+        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message);
 
     bool SendGlobalFail(
-        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
+        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
     bool SendScanFinished();
 
@@ -175,6 +180,7 @@ private:
 
 private:
     void PassAway() override {
+        EndQueryTraceSpan(ScanSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
@@ -193,6 +199,7 @@ private:
     static inline TAtomicCounter ScanIdCounter = 0;
     const ui64 ScanId = ScanIdCounter.Inc();
 
+    NWilson::TSpan ScanSpan;
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
     const NKqp::ETableKind TableKind = NKqp::ETableKind::Unknown;

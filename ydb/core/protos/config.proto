@@ -96,7 +96,7 @@ message TActorSystemConfig {
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
         optional uint32 HarmonizerNeedyCpuWindowSeconds = 26 [default = 1]; // Supported for BASIC executors, range is [1, 32]
-        optional bool EnableWaker = 27 [default = false]; // Experimental, non-shared BASIC executors only
+        optional bool EnableWaker = 27 [default = false]; // Experimental, BASIC executors only
 
         optional bool HasSharedThread = 18;
         optional bool AllThreadsAreShared = 24;
@@ -142,9 +142,13 @@ message TActorSystemConfig {
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
-    optional bool UseSharedThreads = 18;
-    optional bool UseUnitedPool = 22;
+    optional bool UseSharedThreads = 18 [default = true];
+    optional bool UseUnitedPool = 22 [default = true];
     optional bool UseRingQueue = 19 [default = true];
+    optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
+
+    // Maximum idle coroutine allocation bytes per actor-system worker. Zero disables caching.
+    optional uint64 AsyncFrameCacheSizeBytes = 26 [default = 4194304];
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -379,8 +383,17 @@ message TBlobStorageConfig {
 
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
 
+    // limit of bridge syncer reads per node, 0 means no limit; TBscConfig.BridgeSyncTotalRateBytesPerSecond limits the
+    // whole cluster, and the lower of the two applies
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
     optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+
+    // How many leading VDisks (order number 0 .. N-1) may use the stripe heap. Unset means 0. A storage-pool value
+    // (TStoragePoolSettings) overrides this. Applied when a VDisk starts; running VDisks are not restarted.
+    optional uint32 VDiskHeapAllocatorNumLeadingDisks = 15;
+
+    // Persistent per-pile allocation rules. At most one rule may match a (pile, pool kind) or static group.
+    repeated NKikimrBlobStorage.TStoragePoolPileOverride StoragePoolPileOverrides = 16;
 }
 
 message TSelfManagementConfig {
@@ -556,8 +569,21 @@ message TInterconnectConfig {
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
     optional bool EnableRdmaSendReceive = 69 [default = false];
+    optional string RdmaQpCachePoolName = 71; // Specify name of pool for qp creation/destruction
+    optional uint32 RdmaQpPoolSize = 72 [default = 1024];
+    // Prefer the RDMA context whose GID corresponds to this local IP address.
+    // Falls back to the local TCP interconnect address when no matching context is found.
+    optional string RdmaAddress = 73;
+    // Prefer the first address of this network interface that has a matching RDMA context.
+    // RdmaAddress has priority. Falls back to the local TCP interconnect address when no match is found.
+    optional string RdmaInterface = 74;
 
     message TV2Config {
+        // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config
+        // that is applied online: it is picked up from a cluster config update without restarting the node
+        // (see TInterconnectConfigurator), and affects new handshakes only -- sessions already established
+        // keep the version they negotiated. It has no effect unless the node was started with Threads > 0.
+        // Every other field here is read once, at startup, and needs a restart to change.
         optional bool Enable = 1 [default = false];
         optional bool ChecksumEvents = 2 [default = false];
 
@@ -568,8 +594,11 @@ message TInterconnectConfig {
         // If set, this enables event preserialization in IC actor system pool.
         optional bool EnablePreserializeEvents = 4 [default = false];
 
-        // Number of worker threads of ICv2 thread pool (not counting uring internal ones).
-        optional uint32 Threads = 5 [default = 4];
+        // Number of worker threads of ICv2 thread pool (not counting uring internal ones). Zero -- the
+        // default -- means the v2 engine is not started at all on this node and v2 can never be negotiated,
+        // regardless of Enable. Changing it requires a restart, so a cluster that intends to switch to v2
+        // online is first rolled out with Threads set, and then flips Enable through a config update.
+        optional uint32 Threads = 5 [default = 0];
 
         // io_uring rings per v2 shard worker (each ring may own a SQPOLL thread). Default 1 preserves legacy
         // 1:1 ring/worker topology. Raise this when poller-bound; raise Threads when serializer-bound.
@@ -802,7 +831,7 @@ message TConveyorConfig {
 message TCompositeConveyorConfig {
     message TCategory {
         optional string Name = 1;
-        optional uint64 QueueSizeLimit = 2;
+        optional uint64 QueueSizeLimit = 2; // Currently unused.
     }
 
     message TWorkerPoolCategoryLink {
@@ -810,12 +839,25 @@ message TCompositeConveyorConfig {
         optional double Weight = 2;
     }
 
+    message THeavyLimit {
+        optional uint64 CpuLimitUs = 1;
+        optional uint32 ThreadLimit = 2;
+    }
+
     message TWorkersPool {
+        enum ESchedulingMode {
+            NonSchedulable = 0;
+            Schedulable = 1;
+            All = 2;
+        }
+
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
+        repeated THeavyLimit HeavyLimits = 6;
+        optional ESchedulingMode SchedulingMode = 7 [default = NonSchedulable];
     }
 
     optional bool Enabled = 1 [default = true];
@@ -839,6 +881,8 @@ message TGroupedMemoryLimiterConfig {
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
     optional uint64 CountBuckets = 4;
+    optional double UnrestrictedSoftLimitCoefficient = 5;
+    optional uint32 MaxUnrestrictedGroupsPerScope = 6 [default = 1];
 }
 
 message TExternalIndexConfig {
@@ -1706,6 +1750,16 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 EnableSplitMergeFairScheduling = 20 [(ControlOptions) = {
+            Description: "Enables cross-table fair (round-robin) scheduling of deferred split/merge operations on slot-free. Requires the EnableSplitMergeDemandTracking feature flag. Off falls back to stats-arrival order.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MergeBySizeEnabled = 21 [(ControlOptions) = {
+            Description: "Enables merge by size",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TTCMallocControls {
@@ -1728,10 +1782,10 @@ message TImmediateControlsConfig {
             MaxValue: 137438953472,
             DefaultValue: 536870912 }];
         optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
-            Description: "Page Cache Release Rate.",
+            Description: "Page Cache Release Rate. A smaller request is served by the huge page cache alone.",
             MinValue: 0,
-            MaxValue: 134217728,
-            DefaultValue: 8388608 }];
+            MaxValue: 1073741824,
+            DefaultValue: 134217728 }];
         optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
             Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
             MinValue: 0,
@@ -2039,6 +2093,20 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 EnableVDiskSectorPreparation = 57 [(ControlOptions) = {
+            Description: "VDisk builds and checks PDisk data sectors itself, so PDisk threads do not copy, encrypt or hash the data; the on-disk format is unchanged, so it can be switched either way at any time",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -2165,6 +2233,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+
+        optional uint64 BridgeStandbyMaxBytesInFlight = 19 [(ControlOptions) = {
+            Description: "Memory the writes to HOT_STANDBY Bridge piles may hold on a node, bytes; the writes beyond it are dropped and recovered when the pile rejoins (0 drops every such write)",
+            MinValue: 0,
+            MaxValue: 68719476736,
+            DefaultValue: 268435456 }];
     }
 
     message TBlobDepotControls {
@@ -2247,6 +2321,37 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
+        optional uint64 CompactionAdmissionColor = 10 [(ControlOptions) = {
+            Description: "Worst effective space color (TPDiskSpaceColor value) of the shared pool and dynamic owners at which PDisk starts to admit "
+                         "level compactions one at a time (EnableVDiskPlannedCompaction). It stops one color below. "
+                         "0 admits them one at a time always",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 20 }];
+        optional uint64 SystemReserveChunks = 11 [(ControlOptions) = {
+            Description: "Chunks kept below each owner's RED boundary for SYSTEM data and the VDisk metadata it needs. "
+                         "USER and recovery allocations cannot spend this reserve; SYSTEM and maintenance (compaction, "
+                         "garbage collection) are not limited by it. 0 disables the policy",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
+        optional uint64 MaintenanceReserveChunks = 12 [(ControlOptions) = {
+            Description: "Additional chunks withheld from USER allocations only, as workspace for recovery and maintenance. "
+                         "Effective when SystemReserveChunks is nonzero; only actual chunk releases replenish headroom",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
+        optional uint64 IdleDeviceProbeIntervalSeconds = 13 [(ControlOptions) = {
+            Description: "Issue a one-sector PDisk health read after this many seconds without successful physical I/O. "
+                         "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0 }];
+        optional uint64 UseFixedVDiskSlotSize = 14 [(ControlOptions) = {
+            Description: "Use infer_pdisk_slot_count_settings.unit_size as PDiskConfig.ExpectedSlotSize setting",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2325,6 +2430,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0
+        }];
+        optional uint64 RequestsInFlightLimit = 6 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous KeyValue data requests per tablet",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 10000
         }];
     }
 
@@ -2491,6 +2602,18 @@ message TImmediateControlsConfig {
                 MaxValue: 1,
                 DefaultValue: 1 }];
 
+            optional uint64 EnableKesusExport = 11 [(ControlOptions) = {
+                Description: "Enable Kesus export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 0 }];
+
+            optional uint64 EnableKesusImport = 12 [(ControlOptions) = {
+                Description: "Enable Kesus import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 0 }];
+
         }
 
         optional TBackupToS3Controls S3Controls = 1;
@@ -2560,6 +2683,15 @@ message TImmediateControlsConfig {
             DefaultValue: 10 }];
     }
     optional TRetroTracingControls RetroTracingControls = 23;
+
+    message TViewerControls {
+        optional uint64 LimitTraceVerbosity = 1 [(ControlOptions) = {
+            Description: "Limit viewer trace verbosity to dynamic nodes only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+    }
+    optional TViewerControls ViewerControls = 24;
 };
 
 message TMeteringConfig {
@@ -2712,6 +2844,18 @@ message THiveConfig {
         HIVE_BOOT_STRATEGY_FAST = 1 [(EnumDescription) = "when the per-node startup limit is reached on one node, continue starting tablets on other nodes"];
     }
 
+    enum ECountersExportMode {
+        COUNTERS_EXPORT_MODE_BASIC = 0 [(EnumDescription) = "only the basic Hive counters"];
+        COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS = 10 [(EnumDescription) = "also per-resource balancing counters (BalanceScatterCpu, BalancerExecuted by balancer type etc.)"];
+        COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS = 20 [(EnumDescription) = "also node usage counters in Locals of this Hive, each node exports its own"];
+        COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
+    }
+
+    enum EBridgeTabletPlacement {
+        PRIMARY_PILE_ONLY = 0 [(EnumDescription) = "tablets run only in the primary pile (followers that must be present in all data centers still run in all synchronized piles)"];
+        ALL_SYNCHRONIZED_PILES = 1 [(EnumDescription) = "tablets run in any synchronized pile"];
+    }
+
     message TBootPriority {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
         optional double Priority = 2;
@@ -2822,6 +2966,26 @@ message THiveConfig {
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
     optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
     optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
+    optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history, values above 5000 are capped."];
+    optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history, values above 5000 are capped."];
+
+    message TNamedResourceSettings {
+        enum EBalanceMode {
+            NO_BALANCE = 0; // observe only: values are stored and shown, but never trigger tablet moves
+            SATURATION = 1; // balance when some node exceeds its maximum while another one has spare capacity
+            SCATTER = 2; // balance by spread of normalized usage between nodes, like the built-in resources
+        }
+
+        optional string Name = 1 [(ParamDescription) = "Resource name, or a prefix ending with '*'. Exact match wins over prefix, longer prefix wins over shorter."];
+        optional EBalanceMode BalanceMode = 2 [(ParamDescription) = "How the resource is balanced."];
+        optional double MinScatterToBalance = 3 [default = 0.5, (ParamDescription) = "Scatter threshold for SCATTER balance mode, as a normalized fraction."];
+        optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
+    }
+    repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
+
+    optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
+    optional EBridgeTabletPlacement BridgeTabletPlacement = 99 [default = PRIMARY_PILE_ONLY, (ParamDescription) = "In bridge mode, which piles tablets may run in. Tablets in piles no longer allowed are moved away."];
+    optional bool TrackResourceBrokerUsage = 100 [default = true, (ParamDescription) = "Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported."];
 }
 
 message THealthCheckConfig {
@@ -2838,6 +3002,10 @@ message THealthCheckConfig {
 
 message TBlobCacheConfig {
     optional uint64 MaxSizeBytes = 1 [default = 1073741824];
+    optional uint64 MaxInFlightBytes = 2 [default = 262144000];
+    optional uint64 MaxRequestBytes = 3 [default = 8388608];
+    optional uint64 ReadDeadlineMs = 4 [default = 30000];
+    optional uint64 WriteProtectDurationMs = 5 [default = 3600000];
 }
 
 message TColumnShardConfig {
@@ -2986,6 +3154,27 @@ message TColumnShardConfig {
     }
 
     optional TFlowControlConfig FlowControl = 74;
+    // Actor-system pool for ordinary scans: "User" or "Batch". Unset follows the scan actor (ANALYZE stays on Batch).
+    optional string ScanDefaultPool = 75;
+    // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
+    optional string CompactionDefaultPool = 76;
+    optional bool EnableWeightedDataChannelSelection = 77 [default = false];
+
+    message TCutHistoryConfig {
+        optional uint32 ScanBatchSize = 2 [default = 32];
+        optional uint64 ScanMemoryLimitBytes = 3 [default = 8388608];
+        optional uint32 ContinuationDelayMs = 4 [default = 1];
+        optional uint32 ContinuationJitterMs = 5 [default = 1];
+    }
+
+    optional TCutHistoryConfig CutHistory = 78;
+
+    message TBackupSettings {
+        optional uint32 ExportOperationTimeoutSeconds = 1 [default = 172800]; // 2 days
+        optional uint32 ImportOperationTimeoutSeconds = 2 [default = 172800]; // 2 days
+    }
+
+    optional TBackupSettings BackupSettings = 79;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -3385,7 +3574,11 @@ message TBridgeConfig {
     message TPile {
         optional string Name = 1; // name (to be matched with node's BridgePileName)
     }
-    repeated TPile Piles = 1; // order of realms must not change during config updates
+    // Preserve the legacy order until the cluster has a persisted pile registry. Once the registry is present,
+    // pile identities are resolved by name and this local list may be reordered.
+    repeated TPile Piles = 1;
+    // Opt in to ordinary mirror-3-dc pools alongside bridged pools. Activation is irreversible.
+    optional bool EnableNonUniformStorage = 2 [default = false];
 }
 
 message TLabel {
@@ -3393,10 +3586,16 @@ message TLabel {
     optional string Value = 2;
 }
 
+message TGeneralCacheConsumer {
+    optional string Name = 1;
+    optional uint32 Weight = 2 [default = 1];
+}
+
 message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
     optional uint64 DirectInflightSourceLimit = 2;
     optional uint64 DirectInflightGlobalLimit = 3;
+    repeated TGeneralCacheConsumer Consumers = 4;
 }
 
 message TStatisticsConfig {
@@ -3423,7 +3622,11 @@ message TStatisticsConfig {
 
     // Column tables smaller than or equal to this size are scanned as a whole table
     // rather than per shard. 0 disables the optimization (always per-shard).
-    optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+    optional uint64 AnalyzeColumnTableWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+
+    // Row tables: whole-table scan if size is known and <= this. Else one PK range
+    // per DataShard, merged down to ceil(tableBytes / this). 0: always split.
+    optional uint64 AnalyzeRowTableWholeTableScanMaxBytes = 14 [default = 10737418240]; // 10 GiB
 
     // Auto-collect PK equi-height histogram on ANALYZE. Declared stats ignore this.
     optional bool AnalyzeCollectPrimaryKeyHistogram = 10 [default = false];
@@ -3462,6 +3665,7 @@ message TSystemTabletBackupConfig {
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
     optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
     optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
+    optional uint64 MaxGlobalBackupsLimit = 10 [default = 50];
 }
 
 message TClusterDiagnosticsConfig {
@@ -3477,6 +3681,9 @@ message TNbsConfig {
     optional bool Enabled = 1;
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
     optional TNbsFrontendConfig NbsFrontendConfig = 3;
+    // Startup-only level for NBS2 console logs.
+    // 0=EMERG, 1=ALERT, 2=CRIT, 3=ERROR, 4=WARN, 5=NOTICE, 6=INFO, 7=DEBUG, 8=TRACE.
+    optional uint32 ConsoleLogLevel = 4 [default = 5];
 }
 
 message TTliConfig {
@@ -3497,6 +3704,44 @@ message TUdfStoreConfig {
     optional string UnsafeNativeUdfDir = 4;
     optional bool EnableWasmUdf = 5 [default = false];
     optional string WasmCpuSpecOverride = 6;
+
+    // AOT compiles are always orchestrated by the per-tenant
+    // WasmCompileController tablet. Whether a database has one at all is
+    // FeatureFlags.EnableWasmCompileController.
+    reserved 7;
+    optional uint32 WasmCompileMaxPerDinode = 8 [default = 1];
+    optional uint32 WasmCompileMaxPerCpuSpec = 9 [default = 1];
+    // 0 means no tenant-wide ceiling: different cpu_spec produce different
+    // artifacts and have no reason to serialize against each other.
+    optional uint32 WasmCompileMaxPerTenant = 10 [default = 1];
+    optional uint32 WasmCompileAssignmentTimeoutSeconds = 11 [default = 900];
+    optional uint32 WasmCompileHeartbeatTimeoutSeconds = 12 [default = 60];
+    optional uint32 WasmMaxCompileAttempts = 13 [default = 3];
+    // How long an assignment is protected from being reclaimed as "not claimed
+    // by the worker": a heartbeat already on the wire when it was issued cannot
+    // possibly mention it yet.
+    optional uint32 WasmCompileAssignGraceSeconds = 14 [default = 30];
+    // How often the controller re-reads artifacts/{cpu_spec} of every platform
+    // it knows. Each pass is a full scan, so this is the leader's main load knob.
+    optional uint32 WasmCompileReconcileIntervalSeconds = 15 [default = 30];
+    // When a node that stopped registering is forgotten, together with the
+    // platform it was the last representative of.
+    optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
+}
+
+// Local path-prefix aliases. Rules are ordered and take effect on node restart.
+message TPathRewriteConfig {
+    message TRule {
+        // Nonempty absolute prefixes; trailing Src slashes are ignored.
+        // First path-component match wins. Rewritten paths collapse repeated '/'
+        // and drop trailing '/' except for the root path.
+        optional string Src = 1;
+        optional string Dst = 2;
+    }
+
+    // First matching prefix wins; results are not rematched.
+    // Relative and unmatched inputs remain unchanged.
+    repeated TRule Rules = 1;
 }
 
 message TAppConfig {
@@ -3553,7 +3798,6 @@ message TAppConfig {
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
-    optional TTracingConfig UserFacingTracingConfig = 123;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
     optional THttpProxyConfig PublicHttpConfig = 57;
     optional TMetadataProviderConfig MetadataProviderConfig = 59;
@@ -3623,6 +3867,7 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
+    optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
 }
 
 message TYdbVersion {

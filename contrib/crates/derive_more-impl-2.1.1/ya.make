@@ -1,0 +1,153 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE_PROC_MACRO(derive_more_impl)
+
+CRATE_VERSION(2.1.1)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(2.1.1)
+LICENSE("MIT")
+
+CRATE_SOURCES(
+    src/as/mod.rs
+    src/as/mut.rs
+    src/as/ref.rs
+    src/cmp/eq.rs
+    src/cmp/mod.rs
+    src/cmp/partial_eq.rs
+    src/constructor.rs
+    src/deref.rs
+    src/deref_mut.rs
+    src/error.rs
+    src/fmt/debug.rs
+    src/fmt/display.rs
+    src/fmt/mod.rs
+    src/fmt/parsing.rs
+    src/from.rs
+    src/from_str.rs
+    src/index.rs
+    src/index_mut.rs
+    src/into.rs
+    src/into_iterator.rs
+    src/is_variant.rs
+    src/not_like.rs
+    src/ops/add.rs
+    src/ops/add_assign.rs
+    src/ops/mod.rs
+    src/ops/mul.rs
+    src/ops/mul_assign.rs
+    src/parsing.rs
+    src/sum_like.rs
+    src/try_from.rs
+    src/try_into.rs
+    src/try_unwrap.rs
+    src/unwrap.rs
+    src/utils.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE
+    README.md
+    doc/add.md
+    doc/add_assign.md
+    doc/as_mut.md
+    doc/as_ref.md
+    doc/constructor.md
+    doc/debug.md
+    doc/deref.md
+    doc/deref_mut.md
+    doc/display.md
+    doc/eq.md
+    doc/error.md
+    doc/from.md
+    doc/from_str.md
+    doc/index.md
+    doc/index_mut.md
+    doc/into.md
+    doc/into_iterator.md
+    doc/is_variant.md
+    doc/mul.md
+    doc/mul_assign.md
+    doc/not.md
+    doc/sum.md
+    doc/try_from.md
+    doc/try_into.md
+    doc/try_unwrap.md
+    doc/unwrap.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+
+CRATE_FEATURES(
+    add
+    add_assign
+    default
+)
+PEERDIR(
+    contrib/crates/proc-macro2-1.0.107
+    contrib/crates/quote-1.0.47
+    contrib/crates/syn-2.0.119
+)
+
+CRATE_FEATURES(
+    constructor
+    debug
+    display
+    from
+    into
+    try_into
+)
+
+PEERDIR(
+    contrib/crates/convert_case-0.10.0
+    contrib/crates/unicode-xid-0.2.6
+)
+
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/as/mod.rs
+    src/as/mut.rs
+    src/as/ref.rs
+    src/cmp/eq.rs
+    src/cmp/mod.rs
+    src/cmp/partial_eq.rs
+    src/constructor.rs
+    src/deref.rs
+    src/deref_mut.rs
+    src/error.rs
+    src/fmt/debug.rs
+    src/fmt/display.rs
+    src/fmt/mod.rs
+    src/fmt/parsing.rs
+    src/from.rs
+    src/from_str.rs
+    src/index.rs
+    src/index_mut.rs
+    src/into.rs
+    src/into_iterator.rs
+    src/is_variant.rs
+    src/lib.rs
+    src/not_like.rs
+    src/ops/add.rs
+    src/ops/add_assign.rs
+    src/ops/mod.rs
+    src/ops/mul.rs
+    src/ops/mul_assign.rs
+    src/parsing.rs
+    src/sum_like.rs
+    src/try_from.rs
+    src/try_into.rs
+    src/try_unwrap.rs
+    src/unwrap.rs
+    src/utils.rs
+)
+
+END()

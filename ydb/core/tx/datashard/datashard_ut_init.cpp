@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -13,6 +14,7 @@
 
 namespace NKikimr {
 
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 using NClient::TValue;
@@ -67,6 +69,42 @@ TString GetTablePath(TTestActorRuntime &runtime,
     Y_PROTOBUF_SUPPRESS_NODISCARD desc.ParseFromArray(schema.data(), schema.size());
 
     return desc.GetPath();
+}
+
+// The test runtime sets up the leader Tablet Counters Aggregator only, and
+// events sent to an absent service never reach the observers.
+void SetupFollowerCountersAggregator(TTestActorRuntime &runtime) {
+    runtime.RegisterService(MakeTabletCountersAggregatorID(runtime.GetNodeId(0), true),
+        runtime.Register(CreateTabletCountersAggregator(true)));
+}
+
+// How many periodic scheme syncs the follower of the tablet has completed.
+ui64 GetFollowerSchemeSyncCount(TTestActorRuntime &runtime, ui64 tabletId) {
+    auto sender = runtime.AllocateEdgeActor();
+    auto pipeConfig = GetPipeConfigWithRetries();
+    pipeConfig.ForceFollower = true;
+    runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters(), 0, pipeConfig);
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender);
+    for (const auto &counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+        if (counter.GetName() == "DataShard/TxSyncSchemeOnFollower/RoCompleted") {
+            return counter.GetValue();
+        }
+    }
+    UNIT_FAIL("DataShard/TxSyncSchemeOnFollower/RoCompleted counter not found");
+    return 0;
+}
+
+// The latest report of the table from its leader or from its follower, if any.
+const TReportedTableInfo* FindLastReport(const TVector<TReportedTableInfo> &reported,
+                                         const TString &tablePath,
+                                         bool follower)
+{
+    for (auto it = reported.rbegin(); it != reported.rend(); ++it) {
+        if (it->TablePath == tablePath && (it->FollowerId != 0) == follower) {
+            return &*it;
+        }
+    }
+    return nullptr;
 }
 
 }
@@ -451,6 +489,504 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT(!reported.empty());
         UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    // Followers never watch the subdomain: the database default reaches them
+    // only through the Sys row persisted by the leader, which a follower
+    // reloads when it syncs its scheme.
+    Y_UNIT_TEST(TestSetTableInfoFollowerUsesSubDomainMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // A stale read of a single shard table is served by the follower
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoFollowerSeesSubDomainMetricsLevelChange) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(level);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        // Creating a table changes /Root, which republishes the subdomain
+        // description with the new database default
+        level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        const auto *leaderReport = FindLastReport(reported, "/Root/table-1", false);
+        UNIT_ASSERT_C(leaderReport, "expected a report from the leader");
+        UNIT_ASSERT_VALUES_EQUAL(leaderReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        // The follower picks up the persisted level on its next scheme sync
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+    }
+
+    // A follower serving no requests syncs its scheme periodically, so it
+    // reports its table and follows level changes without a single read.
+    Y_UNIT_TEST(TestSetTableInfoIdleFollowerUsesSubDomainMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(level);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // A sync that has to wait is reported on the tick after it
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+    }
+
+    // A per-table METRICS_LEVEL change rewrites the table's UserTables row but
+    // leaves the local schema intact, so only a data update reaches the follower.
+    Y_UNIT_TEST(TestSetTableInfoIdleFollowerSeesTableMetricsLevelChange) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+        const ui64 prevSchemaVersion = followerReport->SchemaVersion;
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        // The aggregator drops reports with a stale SchemaVersion, so the
+        // follower must report the same version as the leader
+        const auto *leaderReport = FindLastReport(reported, "/Root/table-1", false);
+        UNIT_ASSERT_C(leaderReport, "expected a report from the leader");
+        UNIT_ASSERT_GT(followerReport->SchemaVersion, prevSchemaVersion);
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->SchemaVersion, leaderReport->SchemaVersion);
+    }
+
+    // The periodic sync runs only after the leader's changes reach the follower,
+    // so a follower of an idle leader stops paying for it.
+    Y_UNIT_TEST(TestIdleFollowerSyncsSchemeOnlyAfterLeaderChanges) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        // The leader keeps persisting its low watermark for KeepSnapshotTimeout
+        // after its last write. The default of 5 minutes is never reached by
+        // the simulated clock starting at zero, so pin it to really settle down
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetKeepSnapshotTimeout(TDuration::Seconds(1))
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        // Let the follower sync the initial state and the leader advance its
+        // low watermark, which happens once per 15s snapshot cleanup period
+        SimulateSleep(server, TDuration::Seconds(35));
+
+        const ui64 settled = GetFollowerSchemeSyncCount(runtime, shard);
+        UNIT_ASSERT_GT(settled, 0u);
+
+        // Longer than a snapshot cleanup period
+        SimulateSleep(server, TDuration::Seconds(20));
+        UNIT_ASSERT_VALUES_EQUAL(GetFollowerSchemeSyncCount(runtime, shard), settled);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT_GT(GetFollowerSchemeSyncCount(runtime, shard), settled);
+    }
+
+    // Without detailed metrics a follower syncs its scheme for requests only
+    Y_UNIT_TEST(TestIdleFollowerSkipsSchemeSyncWithoutFeatureFlag) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        // EnableDataShardDetailedMetrics defaults to false
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+
+        SimulateSleep(server, TDuration::Seconds(11));
+        UNIT_ASSERT_VALUES_EQUAL(GetFollowerSchemeSyncCount(runtime, shard), 0u);
+    }
+
+    // Followers run periodic tasks only with EnableFollowerStats on, so they
+    // neither sync their scheme periodically nor report their tables
+    Y_UNIT_TEST(TestSetTableInfoNotSentByFollowerWithoutFollowerStats) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true)
+            .SetEnableFollowerStats(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // The request syncs the scheme of the follower, which still has
+        // no periodic tasks to report it
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        UNIT_ASSERT_C(FindLastReport(reported, "/Root/table-1", false), "expected a report from the leader");
+        UNIT_ASSERT_C(!FindLastReport(reported, "/Root/table-1", true), "expected no report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(GetFollowerSchemeSyncCount(runtime, shard), 0u);
+    }
+
+    // A restarted follower starts over with a fresh state, which comes without
+    // follower update notifications, so it syncs its scheme on activation
+    Y_UNIT_TEST(TestSetTableInfoRestartedIdleFollowerUsesSubDomainMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        // Keep the leader from learning anything new, so it stays idle
+        patcher.Remove();
+        auto blocker = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                ev.Reset();
+            });
+
+        SendViaPipeCache(runtime, shard, sender,
+            std::make_unique<TEvents::TEvPoison>(),
+            { .Follower = true });
+
+        // Let the old follower die before collecting reports of the new one
+        SimulateSleep(server, TDuration::Seconds(1));
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the restarted follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    // A leader reboot reactivates its followers, which start over with a
+    // fresh state and must keep reporting their tables
+    Y_UNIT_TEST(TestSetTableInfoIdleFollowerSurvivesLeaderReboot) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        // The rebooted leader knows the database default from its local database only
+        patcher.Remove();
+        auto blocker = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                ev.Reset();
+            });
+
+        RebootTablet(runtime, shard, sender);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *leaderReport = FindLastReport(reported, "/Root/table-1", false);
+        UNIT_ASSERT_C(leaderReport, "expected a report from the leader");
+        UNIT_ASSERT_VALUES_EQUAL(leaderReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoReportedByEveryIdleFollower) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(2));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        THashSet<ui32> followerIds;
+        for (const auto &info : reported) {
+            if (info.TablePath == "/Root/table-1" && info.FollowerId != 0) {
+                followerIds.insert(info.FollowerId);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(followerIds.size(), 2u);
     }
 }
 

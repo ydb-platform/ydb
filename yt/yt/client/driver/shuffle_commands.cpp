@@ -46,16 +46,28 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
             return command->Options.UsePushBasedShuffle;
         })
         .Default(false);
+    registrar.Parameter("config", &TThis::Config)
+        .Default();
     registrar.ParameterWithUniversalAccessor<TTableSchemaPtr>(
         "schema",
         [] (TThis* command) -> auto& {
             return command->Options.Schema;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<NCompression::ECodec>(
+        "codec",
+        [] (TThis* command) -> auto& {
+            return command->Options.Codec;
+        })
+        .Default(NCompression::ECodec::None);
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
 {
+    if (Config) {
+        Options.Config = ConvertToYsonString(Config);
+    }
+
     auto client = context->GetClient();
     auto asyncResult = client->StartShuffle(Account, PartitionCount, ParentTransactionId, Options);
     auto signedShuffleHandle = WaitFor(asyncResult).ValueOrThrow();

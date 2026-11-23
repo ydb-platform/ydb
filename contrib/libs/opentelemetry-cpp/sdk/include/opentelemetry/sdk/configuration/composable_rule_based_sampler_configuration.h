@@ -21,7 +21,7 @@ class ComposableRuleBasedSamplerConfiguration : public ComposableSamplerConfigur
 public:
   ComposableRuleBasedSamplerConfiguration() = default;
   std::vector<std::unique_ptr<ComposableRuleBasedSamplerRuleConfiguration>> rules;
-  void Accept(SamplerConfigurationVisitor *visitor) const override;
+  void Accept(ComposableSamplerConfigurationVisitor *visitor) const override;
 };
 
 }  // namespace configuration

@@ -5,7 +5,11 @@
 #include <util/stream/output.h>
 
 namespace NSc {
-    struct TValue::TScCore : TAtomicRefCount<TScCore, TDestructor>, TNonCopyable {
+    struct TScCoreDestructor {
+        static void Destroy(TValue::TScCore* core) noexcept;
+    };
+
+    struct TValue::TScCore : TAtomicRefCount<TScCore, TScCoreDestructor>, TNonCopyable {
         TPoolPtr Pool;
         double FloatNumber = 0;
         i64 IntNumber = 0;
@@ -338,6 +342,13 @@ namespace NSc {
             return v;
         }
     };
+
+    inline void TScCoreDestructor::Destroy(TValue::TScCore* core) noexcept {
+        // TScCore is allocated inside its own Pool. Keep that pool alive until
+        // the whole object destructor, including base destructors, has returned.
+        const TValue::TPoolPtr poolGuard = core->Pool;
+        core->~TScCore();
+    }
 
     TValue::TScCore* TValue::NewCore(TPoolPtr& p) {
         return new (p->Pool.Allocate<TScCore>()) TScCore(p);

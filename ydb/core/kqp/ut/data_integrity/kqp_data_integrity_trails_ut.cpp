@@ -14,12 +14,19 @@ namespace {
         const TString& str,
         const TVector<std::pair<TString, ui64>>& regexToMatchCount)
     {
+        // Split whole log on separate rows. Use rule that each row starts by prefix like "YYYY-MM-DDTHH:MM:SS.XXXXXXZ node 1:"
+        auto logRows = SplitString(str, "Z node 1 :");
+
         for (auto& [regexString, expectedMatchCount]: regexToMatchCount) {
             std::regex expression(regexString.c_str());
+            unsigned matchCount = 0;
 
-            auto matchCount = std::distance(
-                std::sregex_iterator(str.begin(), str.end(), expression),
-                std::sregex_iterator());
+            for(auto& row: logRows) {
+                auto rowMatchCount = std::distance(
+                    std::sregex_iterator(row.begin(), row.end(), expression),
+                    std::sregex_iterator());
+                matchCount += rowMatchCount;
+            }
 
             UNIT_ASSERT_VALUES_EQUAL(expectedMatchCount, matchCount);
         }
@@ -33,7 +40,7 @@ namespace {
 
         // [\\w]+\\.[A-Za-z]+:[0-9]+ match filename and line number
         builder << "DATA_INTEGRITY " << logLevel
-                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: Component: " << component;
+                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: .*component=" << component;
         return builder;
     }
 
@@ -41,10 +48,10 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_TWIN(Upsert, LogEnabled) {
-        TStringStream ss;
+        TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.LogStream = &ss;
+            serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
 
             if (LogEnabled) {
@@ -72,21 +79,21 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             // check grpc logs
             {ConstructRegexToCheckLogs("TRACE", "Grpc"), LogEnabled ? 2 : 0},
             // check datashard logs
-            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 2 : 0},
+            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 4 : 0},
             // check write actor logs
             {ConstructRegexToCheckLogs("INFO", "WriteActor"),
              LogEnabled ? 1 : 0},
         };
 
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        CheckRegexMatch(ss.Snapshot(), regexToMatchCount);
     }
 
     Y_UNIT_TEST_TWIN(UpsertEvWriteQueryService, isOlap) {
-        TStringStream ss;
+        TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
-            serverSettings.LogStream = &ss;
+            serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
 
@@ -122,7 +129,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             regexToMatchCount = {
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
+                {ConstructRegexToCheckLogs("INFO", "DataShard"), 4},
                 // check write actor logs
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 1},
             };
@@ -131,19 +138,19 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "Executer"), 1}};
+                {ConstructRegexToCheckLogs("INFO", "Executer"), 3}};
 
             // ColumnShard doesn't have integrity logs.
         }
 
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        CheckRegexMatch(ss.Snapshot(), regexToMatchCount);
     }
 
     Y_UNIT_TEST(Ddl) {
-        TStringStream ss;
+        TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.LogStream = &ss;
+            serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
             auto db = kikimr.GetTableClient();
@@ -168,14 +175,14 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             {ConstructRegexToCheckLogs("INFO", "DataShard"), 0},
         };
 
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        CheckRegexMatch(ss.Snapshot(), regexToMatchCount);
     }
 
     Y_UNIT_TEST(Select) {
-        TStringStream ss;
+        TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.LogStream = &ss;
+            serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
             auto db = kikimr.GetTableClient();
@@ -202,14 +209,14 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             {ConstructRegexToCheckLogs("INFO", "DataShard"), 0},
         };
 
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        CheckRegexMatch(ss.Snapshot(), regexToMatchCount);
     }
 
     Y_UNIT_TEST(BrokenReadLock) {
-        TStringStream ss;
+        TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.LogStream = &ss;
+            serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
             auto db = kikimr.GetTableClient();
@@ -248,21 +255,21 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
         }
 
-        auto logRows = SplitString(ss.Str(), "DATA_INTEGRITY");
+        auto logRows = SplitString(ss.Snapshot(), "DATA_INTEGRITY");
         std::string readLock;
         std::string brokenLock;
         for (const auto& row : logRows) {
             // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer, Type: InputActorResult")) {
-                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
+            if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
+                std::regex lockIdRegex(R"(lockId=\s*(\d+))");
                 std::smatch lockIdMatch;
-                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
+                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) && lockIdMatch.size() == 2, "failed to extract read lock id");
                 readLock = lockIdMatch[1].str();
             }
 
             // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard, Type: Locks")) {
-                std::regex lockIdRegex(R"(BrokenLocks:\s*\[(\d+)\s*\])");
+            if (row.Contains("component=DataShard") && row.Contains("type=Locks")) {
+                std::regex lockIdRegex(R"(brokenLock=(\d+)\b)");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();
@@ -273,10 +280,10 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     }
 
     Y_UNIT_TEST(BrokenReadLockAbortedTx) {
-        TStringStream ss;
+        TCapturedLog ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.LogStream = &ss;
+            serverSettings.LogCapture = ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
             auto db = kikimr.GetTableClient();
@@ -321,17 +328,17 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         }
 
         // Verify that the abort was logged correctly
-        auto logRows = SplitString(ss.Str(), "DATA_INTEGRITY");
+        auto logRows = SplitString(ss.Snapshot(), "DATA_INTEGRITY");
         bool foundAbortLog = false;
         bool foundInputActorResult = false;
         for (const auto& row : logRows) {
             // Check for InputActorResult log (tx1's read acquiring a lock)
-            if (row.Contains("Component: Executer, Type: InputActorResult")) {
+            if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
                 foundInputActorResult = true;
             }
 
             // Check for the abort response log
-            if (row.Contains("Status: ABORTED") && row.Contains("Transaction locks invalidated")) {
+            if (row.Contains("status=ABORTED") && row.Contains("Transaction locks invalidated")) {
                 foundAbortLog = true;
             }
         }

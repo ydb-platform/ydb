@@ -52,12 +52,12 @@ void LogRequestError(
     const TString& message,
     const TString& attemptDescription)
 {
-    YT_LOG_ERROR("RSP %v - %v - %v - %v - X-YT-Parameters: %v",
-        requestId,
-        header.GetUrl(),
-        message,
-        attemptDescription,
-        NodeToYsonString(header.GetParameters()));
+    YT_TLOG_ERROR("Request attempt failed")
+        .With("RequestId", requestId)
+        .With("Url", header.GetUrl())
+        .With("Error", message)
+        .With("Attempt", attemptDescription)
+        .With("Parameters", NodeToYsonString(header.GetParameters()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -19,15 +19,11 @@ class TReadContext;
 
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
-public:
-    using ESorting = ERequestSorting;
-
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
-    YDB_ACCESSOR_DEF(bool, FakeSort);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
-    const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
+    const ERequestSorting RequestSorting = ERequestSorting::ASC;   // order inside the returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
@@ -58,13 +54,19 @@ public:
         return TabletId;
     }
 
+    // The transaction has written something and its lock is broken, so it can no longer commit,
+    // and it does not make sense to execute scans for it too.
+    virtual bool HasWritesAndBroken() const {
+        return false;
+    }
+
     bool NeedToDetectConflicts() const {
         // do not detect conflicts for snapshot isolated transactions or txs with no lock
         return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
     }
 
     void SetRequestedLimit(const ui64 value) {
-        AFL_VERIFY(!RequestedLimit);
+        YDB_LOG_VERIFY(!RequestedLimit);
         if (value == 0 || value >= Max<i64>()) {
             return;
         }
@@ -118,12 +120,12 @@ public:
     }
 
     const TVersionedIndex& GetIndexVersions() const {
-        AFL_VERIFY(IndexVersionsPointer);
+        YDB_LOG_VERIFY(IndexVersionsPointer);
         return *IndexVersionsPointer;
     }
 
     const std::shared_ptr<const TVersionedIndex>& GetIndexVersionsPtr() const {
-        AFL_VERIFY(IndexVersionsPointer);
+        YDB_LOG_VERIFY(IndexVersionsPointer);
         return IndexVersionsPointer;
     }
 
@@ -132,7 +134,7 @@ public:
     }
 
     void SetPKRangesFilter(const std::shared_ptr<TPKRangesFilter>& value) {
-        AFL_VERIFY(value);
+        YDB_LOG_VERIFY(value);
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
         if (ResultIndexSchema) {
@@ -158,7 +160,7 @@ public:
     }
 
     ISnapshotSchema::TPtr GetResultSchema() const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }
 
@@ -173,7 +175,7 @@ public:
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         if (version && version < RequestSnapshot) {
             return GetIndexVersions().GetSchemaVerified(*version)->GetIndexInfo();
         }
@@ -181,14 +183,14 @@ public:
     }
 
     void InitShardingInfo(const std::shared_ptr<ITableMetadataAccessor>& metadataAccessor) {
-        AFL_VERIFY(!RequestShardingInfo);
+        YDB_LOG_VERIFY(!RequestShardingInfo);
         RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
-    TReadMetadataBase(const std::shared_ptr<const TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor,
-        const ui64 tabletId)
-        : Sorting(sorting)
+    TReadMetadataBase(const std::shared_ptr<const TVersionedIndex> index, const ERequestSorting requestSorting,
+        const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot,
+        const std::shared_ptr<IScanCursor>& scanCursor, const ui64 tabletId)
+        : RequestSorting(requestSorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
@@ -196,29 +198,34 @@ public:
         , TabletId(tabletId)
         , ResultIndexSchema(schema)
     {
-        AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
-                                                                "tablet_id", TabletId);
+        YDB_LOG_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId),
+            {"cursor", ScanCursor->GetTabletId()},
+            {"tabletId", TabletId});
     }
 
     virtual ~TReadMetadataBase() = default;
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-                                << " " << Sorting << " sorted";
+                                << " " << RequestSorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
 
+    ERequestSorting GetRequestSorting() const {
+        return RequestSorting;
+    }
+
     bool IsAscSorted() const {
-        return Sorting == ESorting::ASC;
+        return RequestSorting == ERequestSorting::ASC;
     }
 
     bool IsDescSorted() const {
-        return Sorting == ESorting::DESC;
+        return RequestSorting == ERequestSorting::DESC;
     }
 
     bool IsSorted() const {
@@ -237,7 +244,7 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
-        AFL_VERIFY(ResultIndexSchema);
+        YDB_LOG_VERIFY(ResultIndexSchema);
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 

@@ -414,7 +414,8 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
     Y_UNIT_TEST(SharedPoolWithMultiplePools) {
         std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
-            .Threads = 3
+            .Threads = 3,
+            .United = false,
         }, std::vector<TPoolShortInfo>{
             TPoolShortInfo{
                 .PoolId = 0,
@@ -438,6 +439,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolName = "Pool2",
             }
         });
+        UNIT_ASSERT(!sharedPool->IsUnited());
 
         std::vector<std::unique_ptr<TBasicExecutorPool>> pools;
         for (ui32 i = 0; i < 3; ++i) {
@@ -519,7 +521,8 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
     Y_UNIT_TEST(ForeignSlotsLimitation) {
         std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
-            .Threads = 5
+            .Threads = 5,
+            .United = false,
         }, std::vector<TPoolShortInfo>{
             TPoolShortInfo{
                 .PoolId = 0,
@@ -557,6 +560,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolName = "TaskPool4",
             }
         });
+        UNIT_ASSERT(!sharedPool->IsUnited());
 
         std::vector<std::unique_ptr<TBasicExecutorPool>> pools;
         for (ui32 i = 0; i < 5; ++i) {
@@ -603,7 +607,14 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[1], 0), mailboxes[3]);
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[2]);
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[2]);
-        // worker 0 can't take task from pool 4, because it has only 1 foreign slot and it already acquired by worker 1
+        // worker 0 can't take a task from pool 3 because its only foreign slot is held by worker 1, so it takes work from pool 4
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[4]);
+
+        {
+            TThreadContextGuard guard(emulator.GetContext(workers[0]));
+            sharedPool->SwitchToPool(0, 0);
+        }
+        // worker 2 can acquire pool 4 after worker 0 returns its foreign lease
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[2], 0), mailboxes[4]);
     }
 }

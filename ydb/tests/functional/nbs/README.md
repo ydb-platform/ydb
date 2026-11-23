@@ -48,15 +48,25 @@ From `ydb_main`, no `-j`, no force rebuild:
 ./ya make --build relwithdebinfo -tA ydb/tests/functional/nbs -F *test-filter*
 ```
 
-`ya.make` today: `PY3TEST()`, `SIZE(MEDIUM)`, `REQUIREMENTS(cpu:4)` +
-`REQUIREMENTS(ram:16)`, `DEPENDS(ydb/apps/dstool)`,
-`PEERDIR(ydb/tests/library)`. No `FORK_SUBTESTS`, no `SPLIT_FACTOR`.
+The `F6_classic_nbs_grpc` target checks Ping, MountVolume, UnmountVolume and
+ReadBlocks/WriteBlocks through the classic wire API against a real partition:
 
-As the suite grows, add `FORK_SUBTESTS()` and `SPLIT_FACTOR` so cases do not
-share a process after a killed node. F1–F5 use `SIZE(LARGE)` with
-`TIMEOUT(600)` as the chunk budget. Fail-fast is the per-call 60s
-dstool/ydbd/vhost timeout plus `PYTEST_TIMEOUT=60` (test function only);
-a hung case fails in a minute, not the whole chunk.
+```bash
+set -o pipefail
+./ya test -A ydb/tests/functional/nbs/F6_classic_nbs_grpc 2>&1 | tail -n 100
+```
+
+It uses one frontend-enabled cluster per suite and one disk at a time, with
+explicit sessions and no I/O retries. Other suites explicitly disable the
+single-disk frontend and keep their existing vhost/load-actor paths.
+
+`ya.make` today: `PY3TEST()`, `SIZE(MEDIUM)`, `REQUIREMENTS(cpu:4)` +
+`REQUIREMENTS(ram:16)`, `FORK_SUBTESTS()`, `SPLIT_FACTOR(3)`,
+`DEPENDS(ydb/apps/dstool)`, `PEERDIR(ydb/tests/library)`.
+
+F1–F5 use `SIZE(LARGE)` with `TIMEOUT(600)` as the chunk budget. Fail-fast
+is the per-call 60s dstool/ydbd/vhost timeout plus `PYTEST_TIMEOUT=60`
+(test function only); a hung case fails in a minute, not the whole chunk.
 
 A host-loss case must drive IO while waiting for Offline: `TOracle::Think`
 demotes a host from consecutive request failures, and `OnDDiskDisconnected`

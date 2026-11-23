@@ -7,6 +7,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
@@ -174,15 +176,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         ++shardsToCreate;
     }
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TCreateTableIndex construct operation "
-                    << " table path: " << baseTablePath.PathString()
-                    << " domain path id: " << baseTablePath.GetPathIdForDomain()
-                    << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
-                    << " shardsToCreate: " << shardsToCreate
-                    << " shardsPerPath: " << totalCounts.ShardsPerPath
-                    << " GetShardsInside: " << domainInfo->GetShardsInside()
-                    << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
+    YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateTableIndex construct operation",
+        {"tablePath", baseTablePath.PathString()},
+        {"subdomainPathId", baseTablePath.GetPathIdForDomain()},
+        {"subdomainPath", TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()},
+        {"shardsToCreate", shardsToCreate},
+        {"shardsPerPath", totalCounts.ShardsPerPath},
+        {"shardsInside", domainInfo->GetShardsInside()},
+        {"maxShards", domainInfo->GetSchemeLimits().MaxShards},
+    );
 
     if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
@@ -210,7 +212,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     THashMap<TString, TTableColumns> indexes;
 
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
-    for (auto& indexDescription: indexedTable.GetIndexDescription()) {
+    for (auto& indexDescription: *indexedTable.MutableIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
         const auto indexType = GetIndexType(indexDescription);
 
@@ -245,12 +247,27 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
                 }
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                        "HNSW index support is disabled (EnableHnswIndex)")};
+                }
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                        "HNSW index implementation is not available yet (SQL support)")};
+                }
                 TString msg;
-                if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                auto& treeSettings = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                    ? *indexDescription.MutableHnswIndexDescription()->MutableSettings()
+                    : *indexDescription.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+                const bool valid = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                    ? NKikimr::NKMeans::AutoSelectHnswSettings(treeSettings, 0, msg)
+                    : NKikimr::NKMeans::ValidateSettingsPartial(treeSettings, msg);
+                if (!valid) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
                 }
-                if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings().settings())) {
+                if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(treeSettings.settings())) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed,
                         "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified")};
                 }
@@ -424,6 +441,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 *implTableDesc.MutableDetailedMetricsSettings() = baseTableDescription.GetDetailedMetricsSettings();
             }
 
+            // A replicated base table keeps its impl tables read-only as well: they are replicated as
+            // separate targets, so the destination must not write them on its own. Async indexes are
+            // the exception: the destination maintains them from the base table changes.
+            if (baseTableDescription.HasReplicationConfig()
+                    && baseTableDescription.GetReplicationConfig().GetMode()
+                        == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                    && GetIndexType(indexDescription) != NKikimrSchemeOp::EIndexTypeGlobalAsync)
+            {
+                implTableDesc.MutableReplicationConfig()->CopyFrom(baseTableDescription.GetReplicationConfig());
+            }
+
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -453,7 +481,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc, uniqueKeySize)));
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
                 NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
@@ -464,7 +493,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                     }
                 }
-                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                // HNSW ranks candidates using the posting-table embedding.
+                if (GetIndexType(indexDescription) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                    const auto indexColumns = NTableIndex::ExtractInfo(indexDescription);
+                    Y_ENSURE(!indexColumns.KeyColumns.empty());
+                    indexDataColumns.insert(indexColumns.KeyColumns.back());
+                }
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
                 if (prefixVectorIndex) {
@@ -524,7 +559,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
                 if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                     const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
                     result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc, prefixColumns)));
                 }
                 break;
@@ -553,7 +588,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames());
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
                     indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType, prefixColumns)));
-                result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
+                result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
                 result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc, prefixColumns)));
                 break;
@@ -581,3 +616,5 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

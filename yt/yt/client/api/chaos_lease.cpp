@@ -43,7 +43,7 @@ private:
 
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TPromise<void> AbortPromise_;
 
     TSingleShotCallbackList<TAbortedHandlerSignature> Aborted_;
@@ -83,10 +83,11 @@ TDuration TChaosLease::GetTimeout() const
 
 TFuture<void> TChaosLease::Ping(const TPrerequisitePingOptions& /*options*/)
 {
-    return Client_->PingChaosLease(GetId(), TChaosLeasePingOptions{
+    auto pingOptions = TChaosLeasePingOptions{
         .PingAncestors = PingAncestors_,
-    }).Apply(
-        BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
+    };
+    return Client_->PingChaosLease(GetId(), pingOptions)
+        .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
             if (resultOrError.IsOK()) {
                 YT_TLOG_DEBUG("Chaos lease pinged");
             } else if (resultOrError.FindMatching(NYTree::EErrorCode::ResolveError) ||
@@ -117,6 +118,7 @@ TFuture<void> TChaosLease::Ping(const TPrerequisitePingOptions& /*options*/)
 
 TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
 {
+    TFuture<void> futureAbort;
     {
         auto guard = Guard(SpinLock_);
         if (AbortPromise_) {
@@ -124,14 +126,15 @@ TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
         }
 
         AbortPromise_ = NewPromise<void>();
+        futureAbort = AbortPromise_.ToFuture();
     }
 
     auto chaosLeasePath = FromObjectId(GetId());
     auto removeOptions = TRemoveNodeOptions{
         .Force = options.Force,
     };
-    return Client_->RemoveNode(chaosLeasePath, removeOptions)
-        .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& rspOrError) {
+    Client_->RemoveNode(chaosLeasePath, removeOptions)
+        .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& rspOrError) {
                 {
                     auto guard = Guard(SpinLock_);
 
@@ -164,6 +167,8 @@ TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
                     abortPromise.Set(std::move(abortError));
                 }
         }));
+
+    return futureAbort;
 }
 
 void TChaosLease::SubscribeAborted(const TAbortedHandler& handler)

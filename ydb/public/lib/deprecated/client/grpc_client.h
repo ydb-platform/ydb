@@ -38,6 +38,7 @@ namespace NKikimr {
             TGRpcClient(const TGRpcClientConfig& config);
             ~TGRpcClient();
             const TGRpcClientConfig& GetConfig() const;
+            void SetAuthToken(const TString& token);
             grpc_connectivity_state GetNetworkStatus() const;
 
             // MiniKQL request, TResponseCallback callback (const NKikimrClient::DML& request)

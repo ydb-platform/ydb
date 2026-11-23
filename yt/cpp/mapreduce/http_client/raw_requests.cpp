@@ -117,7 +117,12 @@ TOperationAttributes ParseOperationAttributes(const TNode& node)
             buildTime = TInstant::ParseIso8601(buildTimeNode->AsString());
         }
         TJobStatistics jobStatistics;
-        if (auto jobStatisticsNode = progressMap.FindPtr("job_statistics")) {
+        // The controller may publish empty v2 after a statistics merge failure.
+        if (auto jobStatisticsNode = progressMap.FindPtr("job_statistics_v2");
+            jobStatisticsNode && !jobStatisticsNode->AsMap().empty())
+        {
+            jobStatistics = TJobStatistics(*jobStatisticsNode);
+        } else if (auto jobStatisticsNode = progressMap.FindPtr("job_statistics")) {
             jobStatistics = TJobStatistics(*jobStatisticsNode);
         }
         TJobCounters jobCounters;

@@ -1,9 +1,8 @@
 #include <ydb/core/fq/libs/compute/common/config.h>
 
-#include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <google/protobuf/text_format.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 Y_UNIT_TEST_SUITE(Config) {
     Y_UNIT_TEST(IncludeScope) {

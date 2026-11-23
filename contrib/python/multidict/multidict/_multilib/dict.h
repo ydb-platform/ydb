@@ -16,23 +16,29 @@ extern "C" {
 typedef struct {
     PyObject_HEAD
 #ifndef MANAGED_WEAKREFS
-    PyObject *weaklist;
+    PyObject* weaklist;
 #endif
-    mod_state *state;
+    mod_state* state;
     Py_ssize_t used;
 
     uint64_t version;
     bool is_ci;
 
-    htkeys_t *keys;
+    htkeys_t* keys;
+
+#ifdef Py_GIL_DISABLED
+    Py_ssize_t num_active_readers;
+
+    htkeys_t* retired;
+#endif
 } MultiDictObject;
 
 typedef struct {
     PyObject_HEAD
 #ifndef MANAGED_WEAKREFS
-    PyObject *weaklist;
+    PyObject* weaklist;
 #endif
-    MultiDictObject *md;
+    MultiDictObject* md;
 } MultiDictProxyObject;
 
 #ifdef __cplusplus

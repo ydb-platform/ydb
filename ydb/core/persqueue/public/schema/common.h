@@ -61,6 +61,7 @@ ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration);
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration);
 std::expected<i32, TString> CheckRetentionPeriod(i64 seconds);
+TResult ValidateTopicPartitionCount(i64 count, TStringBuf what);
 std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeriod(
     const google::protobuf::Duration& duration,
     std::string_view consumerName
@@ -78,6 +79,13 @@ TResult ProcessTopicAttributes(
     const EOperation operation,
     const bool topicsAreFirstClassCitizen,
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings // out parameter
+);
+
+// Apply after rebuilding consumers. An absent attribute preserves existing types;
+// an empty value removes the replication consumer designation.
+TResult ApplyReplicationConsumerAttribute(
+    const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes,
+    NKikimrPQ::TPQTabletConfig& config
 );
 
 TResult AddConsumer(

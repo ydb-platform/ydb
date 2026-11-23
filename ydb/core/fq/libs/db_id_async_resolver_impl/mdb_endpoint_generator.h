@@ -4,7 +4,7 @@
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 
 namespace NFq {
-    NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorLegacy();
-    NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorGeneric(bool transformHost);
-    NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorNoop();
-}
+NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorLegacy();
+NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorGeneric(bool transformHost);
+NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorNoop();
+}   // namespace NFq

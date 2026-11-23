@@ -1,0 +1,10 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run contexts_difference tool",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/yandex_specific/autocheck/contexts_difference/resources.json"
+        }
+    }
+}

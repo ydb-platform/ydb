@@ -18,4 +18,4 @@ TCountersDesc TCountersDesc::CopyWithNewMkqlCountersName(const TString& mkqlCoun
     return result;
 }
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

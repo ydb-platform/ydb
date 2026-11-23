@@ -417,20 +417,12 @@ struct MainTestCase {
         Y_UNREACHABLE();
     }
 
-    auto ExecuteTableQuery(const std::string& query) {
-        return ExecuteQuery(Sprintf(query.data(), TableName.data()));
-    }
-
     auto ExecuteSourceTableQuery(const std::string& query) {
         return ExecuteQuery(Sprintf(query.data(), SourceTableName.data()));
     }
 
     void Grant(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
         ChangePermissions("GRANT", "TO", object, username, permissions);
-    }
-
-    void Revoke(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
-        ChangePermissions("REVOKE", "FROM", object, username, permissions);
     }
 
     void ChangePermissions(const std::string& statement, const std::string& statementClause, const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
@@ -526,13 +518,6 @@ struct MainTestCase {
         ExecuteDDL(Sprintf(R"(
             ALTER TOPIC `%s`
             ADD CONSUMER `%s`;
-        )", TopicName.data(), consumerName.data()));
-    }
-
-    void DropConsumer(const std::string& consumerName) {
-        ExecuteDDL(Sprintf(R"(
-            ALTER TOPIC `%s`
-            DROP CONSUMER `%s`;
         )", TopicName.data(), consumerName.data()));
     }
 
@@ -852,16 +837,10 @@ struct MainTestCase {
         return result;
     }
 
-    void CreateUser(const std::string& username, const std::optional<std::string> password = std::nullopt) {
-        if (password) {
-            ExecuteDDL(Sprintf(R"(
-                CREATE USER %s PASSWORD '%s'
-            )", username.data(), password.value().data()));
-        } else {
-            ExecuteDDL(Sprintf(R"(
-                CREATE USER %s
-            )", username.data()));
-        }
+    void CreateUser(const std::string& username) {
+        ExecuteDDL(Sprintf(R"(
+            CREATE USER %s
+        )", username.data()));
     }
 
     void Write(const TMessage& message) {

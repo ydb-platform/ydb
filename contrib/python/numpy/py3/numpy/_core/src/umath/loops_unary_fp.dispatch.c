@@ -8,13 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline
- ** sse2 sse41
- ** vsx2
- ** neon asimd
- ** vx vxe
- **/
 /**
  * Force use SSE only on x86, even if AVX2 or AVX512F are enabled
  * through the baseline, since scatter(AVX512F) and gather very costly
@@ -103,10 +96,10 @@ NPY_FINLINE double c_square_f64(double a)
 #define CONTIG  0
 #define NCONTIG 1
 
-#line 101
+#line 94
 #if NPY_SIMD_F32
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_rint_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -118,7 +111,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -128,7 +121,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_rint_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -138,7 +131,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_rint_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -148,7 +141,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_rint_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -158,7 +151,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_rint_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -167,7 +160,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -176,7 +169,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -185,7 +178,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -237,7 +230,7 @@ static void simd_FLOAT_rint_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_rint_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -249,7 +242,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -259,7 +252,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_rint_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -269,7 +262,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_rint_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -279,7 +272,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_rint_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -289,7 +282,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_rint_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -298,7 +291,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -307,7 +300,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -316,7 +309,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -368,7 +361,7 @@ static void simd_FLOAT_rint_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_rint_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -380,7 +373,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -390,7 +383,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_rint_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -400,7 +393,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_rint_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -410,7 +403,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_rint_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -420,7 +413,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_rint_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -429,7 +422,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -438,7 +431,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -447,7 +440,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -499,7 +492,7 @@ static void simd_FLOAT_rint_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_rint_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -511,7 +504,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -521,7 +514,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_rint_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -531,7 +524,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_rint_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -541,7 +534,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_rint_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -551,7 +544,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_rint_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -560,7 +553,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -569,7 +562,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -578,7 +571,7 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -631,8 +624,8 @@ static void simd_FLOAT_rint_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_floor_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -644,7 +637,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -654,7 +647,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_floor_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -664,7 +657,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_floor_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -674,7 +667,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_floor_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -684,7 +677,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_floor_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -693,7 +686,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -702,7 +695,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -711,7 +704,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -763,7 +756,7 @@ static void simd_FLOAT_floor_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_floor_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -775,7 +768,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -785,7 +778,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_floor_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -795,7 +788,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_floor_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -805,7 +798,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_floor_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -815,7 +808,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_floor_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -824,7 +817,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -833,7 +826,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -842,7 +835,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -894,7 +887,7 @@ static void simd_FLOAT_floor_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_floor_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -906,7 +899,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -916,7 +909,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_floor_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -926,7 +919,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_floor_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -936,7 +929,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_floor_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -946,7 +939,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_floor_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -955,7 +948,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -964,7 +957,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -973,7 +966,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1025,7 +1018,7 @@ static void simd_FLOAT_floor_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_floor_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1037,7 +1030,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1047,7 +1040,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_floor_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1057,7 +1050,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_floor_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1067,7 +1060,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_floor_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1077,7 +1070,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_floor_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1086,7 +1079,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1095,7 +1088,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1104,7 +1097,7 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1157,8 +1150,8 @@ static void simd_FLOAT_floor_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_ceil_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1170,7 +1163,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1180,7 +1173,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_ceil_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1190,7 +1183,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_ceil_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1200,7 +1193,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_ceil_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1210,7 +1203,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_ceil_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1219,7 +1212,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1228,7 +1221,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1237,7 +1230,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1289,7 +1282,7 @@ static void simd_FLOAT_ceil_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_ceil_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1301,7 +1294,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1311,7 +1304,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_ceil_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1321,7 +1314,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_ceil_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1331,7 +1324,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_ceil_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1341,7 +1334,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_ceil_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1350,7 +1343,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1359,7 +1352,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1368,7 +1361,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1420,7 +1413,7 @@ static void simd_FLOAT_ceil_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_ceil_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1432,7 +1425,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1442,7 +1435,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_ceil_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1452,7 +1445,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_ceil_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1462,7 +1455,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_ceil_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1472,7 +1465,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_ceil_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1481,7 +1474,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1490,7 +1483,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1499,7 +1492,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1551,7 +1544,7 @@ static void simd_FLOAT_ceil_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_ceil_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1563,7 +1556,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1573,7 +1566,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_ceil_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1583,7 +1576,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_ceil_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1593,7 +1586,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_ceil_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1603,7 +1596,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_ceil_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1612,7 +1605,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1621,7 +1614,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1630,7 +1623,7 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1683,8 +1676,8 @@ static void simd_FLOAT_ceil_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_trunc_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1696,7 +1689,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1706,7 +1699,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_trunc_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1716,7 +1709,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_trunc_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1726,7 +1719,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_trunc_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1736,7 +1729,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_trunc_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1745,7 +1738,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1754,7 +1747,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1763,7 +1756,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1815,7 +1808,7 @@ static void simd_FLOAT_trunc_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_trunc_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1827,7 +1820,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1837,7 +1830,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_trunc_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1847,7 +1840,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_trunc_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1857,7 +1850,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_trunc_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1867,7 +1860,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_trunc_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -1876,7 +1869,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -1885,7 +1878,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -1894,7 +1887,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -1946,7 +1939,7 @@ static void simd_FLOAT_trunc_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_trunc_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -1958,7 +1951,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -1968,7 +1961,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_trunc_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -1978,7 +1971,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_trunc_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -1988,7 +1981,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_trunc_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -1998,7 +1991,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_trunc_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2007,7 +2000,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2016,7 +2009,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2025,7 +2018,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2077,7 +2070,7 @@ static void simd_FLOAT_trunc_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_trunc_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2089,7 +2082,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2099,7 +2092,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_trunc_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2109,7 +2102,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_trunc_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2119,7 +2112,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_trunc_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2129,7 +2122,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_trunc_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2138,7 +2131,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2147,7 +2140,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2156,7 +2149,7 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2209,8 +2202,8 @@ static void simd_FLOAT_trunc_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_sqrt_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2222,7 +2215,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2232,7 +2225,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_sqrt_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2242,7 +2235,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_sqrt_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2252,7 +2245,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_sqrt_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2262,7 +2255,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_sqrt_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2271,7 +2264,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2280,7 +2273,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2289,7 +2282,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2341,7 +2334,7 @@ static void simd_FLOAT_sqrt_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_sqrt_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2353,7 +2346,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2363,7 +2356,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_sqrt_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2373,7 +2366,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_sqrt_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2383,7 +2376,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_sqrt_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2393,7 +2386,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_sqrt_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2402,7 +2395,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2411,7 +2404,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2420,7 +2413,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2472,7 +2465,7 @@ static void simd_FLOAT_sqrt_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_sqrt_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2484,7 +2477,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2494,7 +2487,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_sqrt_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2504,7 +2497,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_sqrt_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2514,7 +2507,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_sqrt_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2524,7 +2517,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_sqrt_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2533,7 +2526,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2542,7 +2535,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2551,7 +2544,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2603,7 +2596,7 @@ static void simd_FLOAT_sqrt_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2615,7 +2608,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2625,7 +2618,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_sqrt_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2635,7 +2628,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_sqrt_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2645,7 +2638,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_sqrt_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2655,7 +2648,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_sqrt_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2664,7 +2657,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2673,7 +2666,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2682,7 +2675,7 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2735,8 +2728,8 @@ static void simd_FLOAT_sqrt_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_absolute_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2748,7 +2741,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2758,7 +2751,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_abs_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2768,7 +2761,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_abs_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2778,7 +2771,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_abs_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2788,7 +2781,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_abs_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2797,7 +2790,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2806,7 +2799,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2815,7 +2808,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2867,7 +2860,7 @@ static void simd_FLOAT_absolute_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_absolute_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -2879,7 +2872,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -2889,7 +2882,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_abs_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -2899,7 +2892,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_abs_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -2909,7 +2902,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_abs_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -2919,7 +2912,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_abs_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -2928,7 +2921,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -2937,7 +2930,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -2946,7 +2939,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -2998,7 +2991,7 @@ static void simd_FLOAT_absolute_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_absolute_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3010,7 +3003,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3020,7 +3013,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_abs_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3030,7 +3023,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_abs_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3040,7 +3033,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_abs_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3050,7 +3043,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_abs_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3059,7 +3052,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3068,7 +3061,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3077,7 +3070,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3129,7 +3122,7 @@ static void simd_FLOAT_absolute_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_absolute_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3141,7 +3134,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3151,7 +3144,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_abs_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3161,7 +3154,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_abs_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3171,7 +3164,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_abs_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3181,7 +3174,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_abs_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3190,7 +3183,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3199,7 +3192,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3208,7 +3201,7 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3261,8 +3254,8 @@ static void simd_FLOAT_absolute_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_square_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3274,7 +3267,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3284,7 +3277,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_square_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3294,7 +3287,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_square_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3304,7 +3297,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_square_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3314,7 +3307,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_square_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3323,7 +3316,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3332,7 +3325,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3341,7 +3334,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3393,7 +3386,7 @@ static void simd_FLOAT_square_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_square_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3405,7 +3398,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3415,7 +3408,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_square_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3425,7 +3418,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_square_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3435,7 +3428,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_square_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3445,7 +3438,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_square_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3454,7 +3447,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3463,7 +3456,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3472,7 +3465,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3524,7 +3517,7 @@ static void simd_FLOAT_square_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_square_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3536,7 +3529,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3546,7 +3539,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_square_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3556,7 +3549,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_square_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3566,7 +3559,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_square_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3576,7 +3569,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_square_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3585,7 +3578,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3594,7 +3587,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3603,7 +3596,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3655,7 +3648,7 @@ static void simd_FLOAT_square_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_square_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3667,7 +3660,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3677,7 +3670,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_square_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3687,7 +3680,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_square_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3697,7 +3690,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_square_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3707,7 +3700,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_square_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3716,7 +3709,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3725,7 +3718,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3734,7 +3727,7 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3787,8 +3780,8 @@ static void simd_FLOAT_square_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_FLOAT_reciprocal_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3800,7 +3793,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3810,7 +3803,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_recip_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3820,7 +3813,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_recip_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3830,7 +3823,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_recip_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3840,7 +3833,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_recip_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3849,7 +3842,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3858,7 +3851,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3867,7 +3860,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -3919,7 +3912,7 @@ static void simd_FLOAT_reciprocal_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -3931,7 +3924,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -3941,7 +3934,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             npyv_f32 v_unary0 = npyv_recip_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -3951,7 +3944,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             npyv_f32 v_unary1 = npyv_recip_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -3961,7 +3954,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             npyv_f32 v_unary2 = npyv_recip_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -3971,7 +3964,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             npyv_f32 v_unary3 = npyv_recip_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -3980,7 +3973,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -3989,7 +3982,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -3998,7 +3991,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -4050,7 +4043,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4062,7 +4055,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -4072,7 +4065,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_recip_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -4082,7 +4075,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_recip_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -4092,7 +4085,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_recip_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -4102,7 +4095,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_recip_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -4111,7 +4104,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -4120,7 +4113,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -4129,7 +4122,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -4181,7 +4174,7 @@ static void simd_FLOAT_reciprocal_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4193,7 +4186,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f32 v_src0 = npyv_load_f32(src + vstep*0);
@@ -4203,7 +4196,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             npyv_f32 v_unary0 = npyv_recip_f32(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f32 v_src1 = npyv_load_f32(src + vstep*1);
@@ -4213,7 +4206,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             npyv_f32 v_unary1 = npyv_recip_f32(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f32 v_src2 = npyv_load_f32(src + vstep*2);
@@ -4223,7 +4216,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             npyv_f32 v_unary2 = npyv_recip_f32(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f32 v_src3 = npyv_load_f32(src + vstep*3);
@@ -4233,7 +4226,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             npyv_f32 v_unary3 = npyv_recip_f32(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*0, v_unary0);
@@ -4242,7 +4235,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*1, v_unary1);
@@ -4251,7 +4244,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*2, v_unary2);
@@ -4260,7 +4253,7 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f32(dst + vstep*3, v_unary3);
@@ -4315,10 +4308,10 @@ static void simd_FLOAT_reciprocal_NCONTIG_NCONTIG
 
 #endif // NPY_SIMD_F32
 
-#line 101
+#line 94
 #if NPY_SIMD_F64
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_rint_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4330,7 +4323,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -4340,7 +4333,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_rint_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -4350,7 +4343,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_rint_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -4360,7 +4353,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_rint_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -4370,7 +4363,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_rint_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -4379,7 +4372,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -4388,7 +4381,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -4397,7 +4390,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -4449,7 +4442,7 @@ static void simd_DOUBLE_rint_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_rint_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4461,7 +4454,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -4471,7 +4464,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_rint_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -4481,7 +4474,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_rint_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -4491,7 +4484,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_rint_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -4501,7 +4494,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_rint_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -4510,7 +4503,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -4519,7 +4512,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -4528,7 +4521,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -4580,7 +4573,7 @@ static void simd_DOUBLE_rint_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_rint_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4592,7 +4585,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -4602,7 +4595,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_rint_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -4612,7 +4605,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_rint_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -4622,7 +4615,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_rint_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -4632,7 +4625,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_rint_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -4641,7 +4634,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -4650,7 +4643,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -4659,7 +4652,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -4711,7 +4704,7 @@ static void simd_DOUBLE_rint_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_rint_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4723,7 +4716,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -4733,7 +4726,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_rint_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -4743,7 +4736,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_rint_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -4753,7 +4746,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_rint_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -4763,7 +4756,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_rint_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -4772,7 +4765,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -4781,7 +4774,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -4790,7 +4783,7 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -4843,8 +4836,8 @@ static void simd_DOUBLE_rint_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_floor_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4856,7 +4849,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -4866,7 +4859,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_floor_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -4876,7 +4869,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_floor_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -4886,7 +4879,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_floor_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -4896,7 +4889,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_floor_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -4905,7 +4898,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -4914,7 +4907,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -4923,7 +4916,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -4975,7 +4968,7 @@ static void simd_DOUBLE_floor_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_floor_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -4987,7 +4980,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -4997,7 +4990,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_floor_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5007,7 +5000,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_floor_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5017,7 +5010,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_floor_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5027,7 +5020,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_floor_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5036,7 +5029,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5045,7 +5038,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5054,7 +5047,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5106,7 +5099,7 @@ static void simd_DOUBLE_floor_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_floor_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5118,7 +5111,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5128,7 +5121,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_floor_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5138,7 +5131,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_floor_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5148,7 +5141,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_floor_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5158,7 +5151,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_floor_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5167,7 +5160,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5176,7 +5169,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5185,7 +5178,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5237,7 +5230,7 @@ static void simd_DOUBLE_floor_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_floor_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5249,7 +5242,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5259,7 +5252,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_floor_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5269,7 +5262,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_floor_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5279,7 +5272,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_floor_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5289,7 +5282,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_floor_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5298,7 +5291,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5307,7 +5300,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5316,7 +5309,7 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5369,8 +5362,8 @@ static void simd_DOUBLE_floor_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_ceil_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5382,7 +5375,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5392,7 +5385,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_ceil_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5402,7 +5395,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_ceil_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5412,7 +5405,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_ceil_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5422,7 +5415,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_ceil_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5431,7 +5424,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5440,7 +5433,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5449,7 +5442,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5501,7 +5494,7 @@ static void simd_DOUBLE_ceil_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_ceil_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5513,7 +5506,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5523,7 +5516,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_ceil_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5533,7 +5526,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_ceil_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5543,7 +5536,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_ceil_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5553,7 +5546,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_ceil_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5562,7 +5555,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5571,7 +5564,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5580,7 +5573,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5632,7 +5625,7 @@ static void simd_DOUBLE_ceil_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_ceil_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5644,7 +5637,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5654,7 +5647,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_ceil_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5664,7 +5657,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_ceil_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5674,7 +5667,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_ceil_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5684,7 +5677,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_ceil_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5693,7 +5686,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5702,7 +5695,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5711,7 +5704,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5763,7 +5756,7 @@ static void simd_DOUBLE_ceil_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5775,7 +5768,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5785,7 +5778,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_ceil_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5795,7 +5788,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_ceil_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5805,7 +5798,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_ceil_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5815,7 +5808,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_ceil_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5824,7 +5817,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5833,7 +5826,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5842,7 +5835,7 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -5895,8 +5888,8 @@ static void simd_DOUBLE_ceil_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_trunc_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -5908,7 +5901,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -5918,7 +5911,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_trunc_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -5928,7 +5921,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_trunc_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -5938,7 +5931,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_trunc_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -5948,7 +5941,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_trunc_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -5957,7 +5950,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -5966,7 +5959,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -5975,7 +5968,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6027,7 +6020,7 @@ static void simd_DOUBLE_trunc_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_trunc_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6039,7 +6032,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6049,7 +6042,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_trunc_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6059,7 +6052,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_trunc_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6069,7 +6062,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_trunc_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6079,7 +6072,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_trunc_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6088,7 +6081,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6097,7 +6090,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6106,7 +6099,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6158,7 +6151,7 @@ static void simd_DOUBLE_trunc_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_trunc_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6170,7 +6163,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6180,7 +6173,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_trunc_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6190,7 +6183,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_trunc_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6200,7 +6193,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_trunc_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6210,7 +6203,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_trunc_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6219,7 +6212,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6228,7 +6221,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6237,7 +6230,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6289,7 +6282,7 @@ static void simd_DOUBLE_trunc_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6301,7 +6294,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6311,7 +6304,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_trunc_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6321,7 +6314,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_trunc_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6331,7 +6324,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_trunc_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6341,7 +6334,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_trunc_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6350,7 +6343,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6359,7 +6352,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6368,7 +6361,7 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6421,8 +6414,8 @@ static void simd_DOUBLE_trunc_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_sqrt_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6434,7 +6427,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6444,7 +6437,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_sqrt_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6454,7 +6447,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_sqrt_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6464,7 +6457,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_sqrt_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6474,7 +6467,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_sqrt_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6483,7 +6476,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6492,7 +6485,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6501,7 +6494,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6553,7 +6546,7 @@ static void simd_DOUBLE_sqrt_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6565,7 +6558,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6575,7 +6568,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_sqrt_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6585,7 +6578,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_sqrt_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6595,7 +6588,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_sqrt_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6605,7 +6598,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_sqrt_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6614,7 +6607,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6623,7 +6616,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6632,7 +6625,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6684,7 +6677,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6696,7 +6689,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6706,7 +6699,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_sqrt_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6716,7 +6709,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_sqrt_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6726,7 +6719,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_sqrt_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6736,7 +6729,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_sqrt_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6745,7 +6738,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6754,7 +6747,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6763,7 +6756,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6815,7 +6808,7 @@ static void simd_DOUBLE_sqrt_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6827,7 +6820,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6837,7 +6830,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_sqrt_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6847,7 +6840,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_sqrt_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6857,7 +6850,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_sqrt_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -6867,7 +6860,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_sqrt_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -6876,7 +6869,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -6885,7 +6878,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -6894,7 +6887,7 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -6947,8 +6940,8 @@ static void simd_DOUBLE_sqrt_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_absolute_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -6960,7 +6953,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -6970,7 +6963,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_abs_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -6980,7 +6973,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_abs_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -6990,7 +6983,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_abs_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7000,7 +6993,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_abs_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7009,7 +7002,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7018,7 +7011,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7027,7 +7020,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7079,7 +7072,7 @@ static void simd_DOUBLE_absolute_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_absolute_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7091,7 +7084,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7101,7 +7094,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_abs_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7111,7 +7104,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_abs_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7121,7 +7114,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_abs_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7131,7 +7124,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_abs_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7140,7 +7133,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7149,7 +7142,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7158,7 +7151,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7210,7 +7203,7 @@ static void simd_DOUBLE_absolute_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_absolute_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7222,7 +7215,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7232,7 +7225,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_abs_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7242,7 +7235,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_abs_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7252,7 +7245,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_abs_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7262,7 +7255,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_abs_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7271,7 +7264,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7280,7 +7273,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7289,7 +7282,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7341,7 +7334,7 @@ static void simd_DOUBLE_absolute_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7353,7 +7346,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7363,7 +7356,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_abs_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7373,7 +7366,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_abs_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7383,7 +7376,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_abs_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7393,7 +7386,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_abs_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7402,7 +7395,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7411,7 +7404,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7420,7 +7413,7 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7473,8 +7466,8 @@ static void simd_DOUBLE_absolute_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_square_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7486,7 +7479,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7496,7 +7489,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_square_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7506,7 +7499,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_square_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7516,7 +7509,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_square_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7526,7 +7519,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_square_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7535,7 +7528,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7544,7 +7537,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7553,7 +7546,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7605,7 +7598,7 @@ static void simd_DOUBLE_square_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_square_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7617,7 +7610,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7627,7 +7620,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_square_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7637,7 +7630,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_square_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7647,7 +7640,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_square_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7657,7 +7650,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_square_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7666,7 +7659,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7675,7 +7668,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7684,7 +7677,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7736,7 +7729,7 @@ static void simd_DOUBLE_square_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_square_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7748,7 +7741,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7758,7 +7751,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_square_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7768,7 +7761,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_square_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7778,7 +7771,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_square_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7788,7 +7781,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_square_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7797,7 +7790,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7806,7 +7799,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7815,7 +7808,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7867,7 +7860,7 @@ static void simd_DOUBLE_square_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_square_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -7879,7 +7872,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -7889,7 +7882,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_square_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -7899,7 +7892,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_square_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -7909,7 +7902,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_square_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -7919,7 +7912,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_square_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -7928,7 +7921,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -7937,7 +7930,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -7946,7 +7939,7 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -7999,8 +7992,8 @@ static void simd_DOUBLE_square_NCONTIG_NCONTIG
 }
 
 
-#line 107
-#line 112
+#line 100
+#line 105
 static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -8012,7 +8005,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -8022,7 +8015,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_recip_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -8032,7 +8025,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_recip_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -8042,7 +8035,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_recip_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -8052,7 +8045,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_recip_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -8061,7 +8054,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -8070,7 +8063,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -8079,7 +8072,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -8131,7 +8124,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -8143,7 +8136,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 4 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -8153,7 +8146,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             npyv_f64 v_unary0 = npyv_recip_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 4 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -8163,7 +8156,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             npyv_f64 v_unary1 = npyv_recip_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 4 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -8173,7 +8166,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             npyv_f64 v_unary2 = npyv_recip_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 4 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -8183,7 +8176,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             npyv_f64 v_unary3 = npyv_recip_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 4 > 0
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -8192,7 +8185,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 1
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -8201,7 +8194,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 2
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -8210,7 +8203,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 4 > 3
             #if CONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -8262,7 +8255,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_CONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -8274,7 +8267,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if CONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -8284,7 +8277,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_recip_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if CONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -8294,7 +8287,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_recip_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if CONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -8304,7 +8297,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_recip_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if CONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -8314,7 +8307,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_recip_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -8323,7 +8316,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -8332,7 +8325,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -8341,7 +8334,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -8393,7 +8386,7 @@ static void simd_DOUBLE_reciprocal_CONTIG_NCONTIG
     npyv_cleanup();
 }
 
-#line 112
+#line 105
 static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
 (const void *_src, npy_intp ssrc, void *_dst, npy_intp sdst, npy_intp len)
 {
@@ -8405,7 +8398,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
 
     // unrolled iterations
     for (; len >= wstep; len -= wstep, src += ssrc*wstep, dst += sdst*wstep) {
-        #line 126
+        #line 119
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_f64 v_src0 = npyv_load_f64(src + vstep*0);
@@ -8415,7 +8408,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             npyv_f64 v_unary0 = npyv_recip_f64(v_src0);
         #endif
         
-#line 126
+#line 119
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_f64 v_src1 = npyv_load_f64(src + vstep*1);
@@ -8425,7 +8418,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             npyv_f64 v_unary1 = npyv_recip_f64(v_src1);
         #endif
         
-#line 126
+#line 119
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_f64 v_src2 = npyv_load_f64(src + vstep*2);
@@ -8435,7 +8428,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             npyv_f64 v_unary2 = npyv_recip_f64(v_src2);
         #endif
         
-#line 126
+#line 119
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_f64 v_src3 = npyv_load_f64(src + vstep*3);
@@ -8445,7 +8438,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             npyv_f64 v_unary3 = npyv_recip_f64(v_src3);
         #endif
         
-        #line 138
+        #line 131
         #if 2 > 0
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*0, v_unary0);
@@ -8454,7 +8447,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 1
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*1, v_unary1);
@@ -8463,7 +8456,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 2
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*2, v_unary2);
@@ -8472,7 +8465,7 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
             #endif
         #endif
         
-#line 138
+#line 131
         #if 2 > 3
             #if NCONTIG == CONTIG
                 npyv_store_f64(dst + vstep*3, v_unary3);
@@ -8531,8 +8524,8 @@ static void simd_DOUBLE_reciprocal_NCONTIG_NCONTIG
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 201
-#line 206
+#line 194
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_rint)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8583,7 +8576,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_floor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8634,7 +8627,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_ceil)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8685,7 +8678,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_trunc)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8736,7 +8729,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_sqrt)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8787,7 +8780,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8838,7 +8831,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_square)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8889,7 +8882,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_reciprocal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8941,8 +8934,8 @@ clear:;
 }
 
 
-#line 201
-#line 206
+#line 194
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_rint)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -8993,7 +8986,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_floor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9044,7 +9037,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_ceil)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9095,7 +9088,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_trunc)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9146,7 +9139,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_sqrt)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9197,7 +9190,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9248,7 +9241,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_square)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9299,7 +9292,7 @@ clear:;
 #endif
 }
 
-#line 206
+#line 199
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_reciprocal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

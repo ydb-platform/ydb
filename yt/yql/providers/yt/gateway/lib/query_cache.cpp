@@ -173,7 +173,7 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     const TMaybe<TString>& singleOutputHash,
     const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs,
     const TString& userName, const TString& tmpFolder, const NYT::TNode& mergeSpec,
-    const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
+    const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout,
     const std::pair<TString, TString>& logCtx)
     : TQueryCacheItemBase<TYtQueryCacheItem>(InitCacheMode(mode, hash, singleOutputHash.Defined()))
     , Entry(entry)
@@ -182,7 +182,6 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     , CachePath(GetCachePath(userName, tmpFolder))
     , ChunkLimit(chunkLimit)
     , UseExpirationTimeout(useExpirationTimeout)
-    , UseMultiSet(useMultiSet)
     , LogCtx(logCtx)
     , MergeSpec(mergeSpec)
     , TableAttrs(tableAttrs)
@@ -206,12 +205,13 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
 }
 
 void TYtQueryCacheItem::SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
-    const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter
+    const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter, bool enableProgressDataStatistics
 ) {
     Tracker_ = tracker;
     PublicId_ = publicId;
     ProgressWriter_ = progressWriter;
     StatWriter_ = statWriter;
+    EnableProgressDataStatistics_ = enableProgressDataStatistics;
 }
 
 TString TYtQueryCacheItem::GetCachePath(const TString& userName, const TString& tmpFolder) {
@@ -252,7 +252,8 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeak
         for (const auto& sortedEntry : SortedCachedPaths) {
             futureLock = futureLock.Apply([
                 cachedPath = CachedPaths[sortedEntry.second], logCtx = LogCtx, lockTx = LockTx, tracker = Tracker_,
-                progressWriter = ProgressWriter_, statWriter = StatWriter_, publicId = PublicId_, entry = Entry
+                progressWriter = ProgressWriter_, statWriter = StatWriter_, publicId = PublicId_, entry = Entry,
+                enableProgressDataStatistics = EnableProgressDataStatistics_
             ] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 if (f.HasException()) {
@@ -271,7 +272,7 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeak
                                 if (auto operation = GetBlockingOperation(entry->Client, lockTx, cachedPath)) {
                                     tracker->MakeOperationWaiter(*operation.Get(), publicId, entry->Server,
                                         entry->Cluster, progressWriter, statWriter,
-                                        [] (TOperationId) {}, true);
+                                        [] (TOperationId) {}, true, enableProgressDataStatistics);
                                     return lockFuture;
                                 }
                             }
@@ -448,30 +449,11 @@ void TYtQueryCacheItem::StoreImpl() {
 void TYtQueryCacheItem::SetTableAttrs(const NYT::TNode& spec, const TString& cachedPath) {
     NYT::TNode attrs = spec;
     NYT::MergeNodes(attrs, TableAttrs);
-    if (UseMultiSet) {
-        try {
-            Entry->CacheTx->MultisetAttributes(cachedPath + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
-        } catch (const TErrorResponse& e) {
-            if (!IsRace(e.GetError())) {
-                throw;
-            }
-        }
-    } else {
-        auto batchSet = Entry->CacheTx->CreateBatchRequest();
-        TVector<NThreading::TFuture<void>> batchSetRes;
-        for (auto& attr : attrs.AsMap()) {
-            batchSetRes.push_back(batchSet->Set(TStringBuilder() << cachedPath << "/@" << attr.first, attr.second));
-        }
-
-        batchSet->ExecuteBatch();
-        for (auto& x : batchSetRes) {
-            try {
-                x.GetValueSync();
-            } catch (const TErrorResponse& e) {
-                if (!IsRace(e.GetError())) {
-                    throw;
-                }
-            }
+    try {
+        Entry->CacheTx->MultisetAttributes(cachedPath + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
+    } catch (const TErrorResponse& e) {
+        if (!IsRace(e.GetError())) {
+            throw;
         }
     }
 }

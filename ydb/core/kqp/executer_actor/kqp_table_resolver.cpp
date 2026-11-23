@@ -1,5 +1,7 @@
 #include "kqp_table_resolver.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
@@ -24,12 +26,13 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames, NWilson::TTraceId traceId)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , TraceId(std::move(traceId)) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -93,7 +96,7 @@ private:
                 return;
             }
 
-            AFL_ENSURE(entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath);
+            YDB_LOG_ENSURE(entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath);
             if (iterTableRequestPathes != TableRequestPathes.end()) {
                 TVector<TStageId> stageIds(std::move(iterTableRequestPathes->second));
                 const bool isOlap = (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
@@ -104,7 +107,7 @@ private:
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
                         stageMeta.TableKind = ETableKind::Datashard;
                     } else {
-                        AFL_ENSURE(isOlap);
+                        YDB_LOG_ENSURE(isOlap);
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
@@ -112,23 +115,23 @@ private:
                     const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
                     if (stage.GetSinks().size() == 1) {
-                        AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                        YDB_LOG_ENSURE(stage.OutputTransformsSize() == 0);
                         const auto& sink = stage.GetSinks(0);
-                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
+                        YDB_LOG_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
                         intSinkPtr = &sink.GetInternalSink();
                     } else if (stage.OutputTransformsSize() == 1) {
-                        AFL_ENSURE(stage.GetSinks().size() == 0);
+                        YDB_LOG_ENSURE(stage.GetSinks().size() == 0);
                         const auto& transform = stage.GetOutputTransforms(0);
-                        AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                        YDB_LOG_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
                         intSinkPtr = &transform.GetInternalSink();
                     } else {
                         YQL_ENSURE(false);
                     }
 
-                    AFL_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    YDB_LOG_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
-                    AFL_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
-                    AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                    YDB_LOG_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
+                    YDB_LOG_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
                     settings.MutableTable()->SetSysView(entry.TableId.SysViewInfo);
@@ -152,13 +155,13 @@ private:
                     TVector<NScheme::TTypeInfo> keyTypes;
 
                     // CTAS writes all columns
-                    AFL_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
+                    YDB_LOG_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
 
                     for (const auto& [index, columnInfo] : entry.Columns) {
                         columnNameToIndex[columnInfo.Name] = index;
                         columnIdToIndex[columnInfo.Id] = index;
                         if (columnInfo.KeyOrder != -1) {
-                            AFL_ENSURE(columnInfo.KeyOrder >= 0);
+                            YDB_LOG_ENSURE(columnInfo.KeyOrder >= 0);
                             keyPositionToIndex[columnInfo.KeyOrder] = index;
                         }
                     }
@@ -166,14 +169,14 @@ private:
                     keyTypes.reserve(keyPositionToIndex.size());
                     for (const auto& [_, index] : keyPositionToIndex) {
                         const auto columnInfo = entry.Columns.FindPtr(index);
-                        AFL_ENSURE(columnInfo);
+                        YDB_LOG_ENSURE(columnInfo);
 
                         auto keyColumnProto = settings.AddKeyColumns();
                         fillColumnProto(*columnInfo, keyColumnProto);
 
                         keyTypes.push_back(columnInfo->PType);
                     }
-                    AFL_ENSURE(!keyPositionToIndex.empty());
+                    YDB_LOG_ENSURE(!keyPositionToIndex.empty());
 
                     stageMeta.ShardKey = ExtractKey(
                         stageMeta.TableId,
@@ -182,9 +185,9 @@ private:
 
                     for (const auto& columnName : settings.GetInputColumns()) {
                         const auto index = columnNameToIndex.FindPtr(columnName);
-                        AFL_ENSURE(index);
+                        YDB_LOG_ENSURE(index);
                         const auto columnInfo = entry.Columns.FindPtr(*index);
-                        AFL_ENSURE(columnInfo);
+                        YDB_LOG_ENSURE(columnInfo);
 
                         auto columnProto = settings.AddColumns();
                         fillColumnProto(*columnInfo, columnProto);
@@ -196,18 +199,18 @@ private:
                         if (!isOlap) {
                             for (const auto& [_, index] : keyPositionToIndex) {
                                 const auto columnInfo = entry.Columns.FindPtr(index);
-                                AFL_ENSURE(columnInfo);
+                                YDB_LOG_ENSURE(columnInfo);
                                 columnToOrder[columnInfo->Name] = currentIndex++;
                             }
                         }
                         for (const auto& [id, index] : columnIdToIndex) {
                             const auto columnInfo = entry.Columns.FindPtr(index);
-                            AFL_ENSURE(columnInfo);
-                            AFL_ENSURE(columnInfo->Id == id);
+                            YDB_LOG_ENSURE(columnInfo);
+                            YDB_LOG_ENSURE(columnInfo->Id == id);
                             if (isOlap || columnInfo->KeyOrder == -1) {
                                 columnToOrder[columnInfo->Name] = currentIndex++;
                             } else {
-                                AFL_ENSURE(columnToOrder.contains(columnInfo->Name));
+                                YDB_LOG_ENSURE(columnToOrder.contains(columnInfo->Name));
                             }
                         }
 
@@ -216,19 +219,20 @@ private:
                         }
                     }
 
-                    AFL_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
+                    YDB_LOG_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
 
                     stageMeta.ResolvedSinkSettings = settings;
                 }
             }
         }
 
+        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::SUCCESS);
         ResolvingNamesFinished = true;
         ResolveKeys();
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        AFL_ENSURE(ResolvingNamesFinished);
+        YDB_LOG_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -265,12 +269,13 @@ private:
             }
         }
 
+        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::SUCCESS);
         NavigationFinished = true;
         TryFinish();
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
-        AFL_ENSURE(ResolvingNamesFinished);
+        YDB_LOG_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -310,7 +315,7 @@ private:
             }
 
             for (auto& partition : entry.KeyDescription->GetPartitions()) {
-                AFL_ENSURE(partition.Range);
+                YDB_LOG_ENSURE(partition.Range);
             }
 
             YDB_LOG_DEBUG("Resolved",
@@ -333,6 +338,7 @@ private:
         }
 
         timer.reset();
+        EndQueryTraceSpan(PartitioningSpan, Ydb::StatusIds::SUCCESS);
         ResolvingFinished = true;
         TryFinish();
     }
@@ -363,8 +369,8 @@ private:
                 if (!stageInfo.Meta.ShardOperations.empty()) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (!tableInfo && !SkipUnresolvedNames) {
-                        AFL_ENSURE(!stageInfo.Meta.TableId);
-                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        YDB_LOG_ENSURE(!stageInfo.Meta.TableId);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TablePath);
                         needToResolveNames = true;
                     }
                 }
@@ -382,7 +388,7 @@ private:
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (tableInfo) {
                         if (ResolvingNamesFinished) {
-                            AFL_ENSURE(stageInfo.Meta.TableId);
+                            YDB_LOG_ENSURE(stageInfo.Meta.TableId);
                             TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
                             stageInfo.Meta.TableKind = tableInfo->TableKind;
 
@@ -436,8 +442,8 @@ private:
                         }
                     } else if (!ResolvingNamesFinished) {
                         // CTAS
-                        AFL_ENSURE(!stageInfo.Meta.TableId);
-                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        YDB_LOG_ENSURE(!stageInfo.Meta.TableId);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TablePath);
                         const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);
                         const auto canonizedPath = CanonizePath(splittedPath);
                         if (TableRequestPathes.find(canonizedPath) == TableRequestPathes.end()) {
@@ -453,14 +459,24 @@ private:
                         }
                     } else if (!SkipUnresolvedNames) {
                         // CTAS
-                        AFL_ENSURE(stageInfo.Meta.TableId);
-                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TableId);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TablePath);
 
                         TablePathsById.emplace(stageInfo.Meta.TableId, stageInfo.Meta.TablePath);
 
+                        if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                            if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                                auto& navEntry = requestNavigate->ResultSet.emplace_back();
+                                navEntry.TableId = stageInfo.Meta.TableId;
+                                navEntry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                                navEntry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                            }
+                            TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
+                        }
+
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
-                        AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
+                        YDB_LOG_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
                         entry.Access = NACLib::EAccessRights::UpdateRow;
                     }
                 }
@@ -468,17 +484,44 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, MetadataSpan.GetTraceId());
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, MetadataSpan.GetTraceId());
         } else {
             NavigationFinished = true;
         }
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        PartitioningSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+            NWilson::TTraceId(TraceId), {
+                .Name = "Partitioning",
+                .Phase = "ResolvePartitioning",
+                .ActorType = "TKqpTableResolver",
+                .Component = "KqpExecuter.Prepare",
+                .PeerActorType = "SchemeCache",
+            }, NWilson::EFlags::AUTO_END);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
+            0, 0, PartitioningSpan.GetTraceId());
         Become(&TKqpTableResolver::ResolveKeysState);
     }
 
@@ -515,6 +558,8 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TIssue&& issue) {
+        EndQueryTraceSpan(MetadataSpan, status);
+        EndQueryTraceSpan(PartitioningSpan, status);
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
@@ -535,6 +580,8 @@ private:
     }
 
 private:
+    NWilson::TSpan MetadataSpan;
+    NWilson::TSpan PartitioningSpan;
     const TActorId Owner;
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -548,6 +595,7 @@ private:
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;
+    NWilson::TTraceId TraceId;
 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
@@ -557,8 +605,8 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames, NWilson::TTraceId traceId) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames, std::move(traceId));
 }
 
 } // namespace NKikimr::NKqp

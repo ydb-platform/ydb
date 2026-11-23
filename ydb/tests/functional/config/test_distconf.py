@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from contextlib import ExitStack
 import yaml
 import tempfile
 import os
@@ -9,9 +10,10 @@ from hamcrest import assert_that
 import time
 import pytest
 import functools
+import yatest.common
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.wait_for import retry_assertions, wait_for
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
@@ -20,6 +22,8 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
+
+from test_config_with_metadata import check_replace_config_unknown_fields, fetch_config
 
 import ydb.public.api.protos.ydb_config_pb2 as config
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -30,15 +34,6 @@ logger = logging.getLogger(__name__)
 def value_for(key, tablet_id):
     return "Value: <key = {key}, tablet_id = {tablet_id}>".format(
         key=key, tablet_id=tablet_id)
-
-
-def fetch_config(config_client):
-    fetch_config_response = config_client.fetch_all_configs()
-    assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
-
-    result = config.FetchConfigResult()
-    fetch_config_response.operation.result.Unpack(result)
-    return result.config[0].config
 
 
 def bump_config_version(config_dict):
@@ -92,6 +87,15 @@ class DistConfKiKiMRTest(object):
             extra_grpc_services=['config'],
             additional_log_configs=log_configs,
             system_tablets=system_tablets)
+
+        if cls.protected_mode:
+            node_sid = 'dynamic-nodes@cert'
+            security = cls.configurator.yaml_config['security_config']
+            security['register_dynamic_node_allowed_sids'] = [node_sid]
+            # The harness bootstraps the cluster with the certificate before obtaining the root token.
+            security['bootstrap_allowed_sids'] = security['bootstrap_allowed_sids'] + [node_sid]
+            definitions = cls.configurator.yaml_config['client_certificate_authorization']['client_certificate_definitions']
+            definitions[0]['member_groups'] = [node_sid]
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
@@ -358,7 +362,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
 
-    def test_dynamic_node_start_with_seed_nodes(self):
+    def test_dynamic_node_start_with_seed_nodes(self, request):
         database_path = os.path.join('/', self.cluster.domain_name, 'dyn_seed_db')
         try:
             self.cluster.remove_database(database_path)
@@ -367,8 +371,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         self.cluster.create_database(database_path, storage_pool_units_count={'rot': 1}, timeout_seconds=60)
 
         endpoint = f"{self.cluster.nodes[1].host}:{self.cluster.nodes[1].grpc_port}"
-        driver = ydb.Driver(ydb.DriverConfig(endpoint, database_path))
-        pool = ydb.SessionPool(driver)
+        clients = ExitStack()
+        request.addfinalizer(clients.close)
+        driver = clients.enter_context(ydb.Driver(ydb.DriverConfig(endpoint, database_path)))
+        pool = clients.enter_context(ydb.SessionPool(driver))
 
         def create_table(num, session):
             session.execute_scheme(
@@ -432,14 +438,17 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             assert False, 'Query unexpectedly failed with dynamic slots'
         finally:
             try:
-                self.cluster.remove_database(database_path)
-            except Exception:
-                pass
-            if os.path.exists(seed_nodes_file.name):
+                clients.close()
+            finally:
                 try:
-                    os.unlink(seed_nodes_file.name)
+                    self.cluster.remove_database(database_path)
                 except Exception:
                     pass
+                if os.path.exists(seed_nodes_file.name):
+                    try:
+                        os.unlink(seed_nodes_file.name)
+                    except Exception:
+                        pass
 
     def test_cluster_expand_with_seed_nodes(self):
         table_path = '/Root/mydb/mytable_with_seed_nodes'
@@ -632,6 +641,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         finally:
             self.cluster.remove_database(database_path)
 
+    @pytest.mark.parametrize('location', ['root', 'nested', 'selector', 'array', 'host_config'])
+    def test_replace_config_unknown_fields(self, location):
+        check_replace_config_unknown_fields(self.cluster, self.cluster.config_client, location)
+
     def test_dry_run_valid_config_not_applied(self):
         fetched_config = fetch_config(self.cluster.config_client)
         dumped_config = yaml.safe_load(fetched_config)
@@ -733,7 +746,8 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
 class TestDistConfBootstrapValidation:
 
-    def test_bootstrap_selector_validation(self):
+    @pytest.mark.parametrize('invalid_selector', [False, True])
+    def test_bootstrap_selector_validation(self, invalid_selector):
         cfg = KikimrConfigGenerator(
             Erasure.NONE,
             nodes=1,
@@ -748,22 +762,53 @@ class TestDistConfBootstrapValidation:
             extra_grpc_services=['config'],
         )
 
+        cfg.yaml_config['unknown_field_for_test'] = True
+        cfg.yaml_config.setdefault('feature_flags', {})['unknown_flag_for_test'] = True
         cfg.full_config.setdefault('selector_config', []).append({
-            'config': None,
+            'config': None if invalid_selector else {'unknown_selector_field_for_test': True},
             'description': 'test',
             'selector': {'tenant': 'test'}
         })
 
         cluster = KiKiMR(configurator=cfg)
-        with pytest.raises(Exception) as ei:
-            cluster.start()
-        assert 'YAML validation failed' in str(ei.value)
+        try:
+            cluster.prepare()
+            cluster.start_node(1)
+            node = cluster.nodes[1]
+            command = [cfg.get_ydb_cli_path(), '--endpoint', f'grpc://{node.host}:{node.grpc_port}',
+                       '-y', 'admin', 'cluster', 'bootstrap', '--uuid', 'test-cluster']
+
+            def assert_bootstrap(extra_args, expected_error=None):
+                result = yatest.common.execute(command + extra_args, check_exit_code=False, timeout=30)
+                output = (result.std_out + result.std_err).decode('utf-8', errors='replace')
+                if expected_error is None:
+                    assert result.exit_code == 0, output
+                else:
+                    assert result.exit_code != 0, output
+                    assert expected_error in output, output
+
+            error = 'YAML validation failed' if invalid_selector else 'has forbidden unknown fields'
+            retry_assertions(lambda: assert_bootstrap([], error), timeout_seconds=60)
+            error = 'YAML validation failed' if invalid_selector else None
+            retry_assertions(lambda: assert_bootstrap(['--allow-unknown-fields'], error), timeout_seconds=60)
+
+            if not invalid_selector:
+                retry_assertions(lambda: assert_bootstrap([]), timeout_seconds=60)
+                stored = yaml.safe_load(fetch_config(cluster.config_client))
+                assert stored['config']['unknown_field_for_test'] is True
+                assert stored['config']['feature_flags']['unknown_flag_for_test'] is True
+                assert stored['selector_config'][0]['config']['unknown_selector_field_for_test'] is True
+        finally:
+            cluster.stop()
 
 
 class TestDistConfWithAuth(DistConfKiKiMRTest):
     protected_mode = True
 
-    def test_auth_v2_initialization(self):
+    def test_auth_v2_initialization(self, tmp_path):
+        response = self.cluster.config_client.fetch_all_configs()
+        assert response.operation.status == StatusIds.UNAUTHORIZED, response.operation
+
         table_path = '/Root/mydb/mytable_with_auth'
         self.cluster.create_database(
             table_path,
@@ -773,3 +818,18 @@ class TestDistConfWithAuth(DistConfKiKiMRTest):
             timeout_seconds=60,
             token=self.cluster.root_token
         )
+
+        seed_nodes_file = tmp_path / 'seed_nodes.yaml'
+        seed_nodes_file.write_text(yaml.safe_dump([
+            f'grpcs://{node.host}:{node.grpc_ssl_port}' for node in self.cluster.nodes.values()
+        ]))
+        slots = self.cluster.register_and_start_slots(table_path, count=1, seed_nodes_file=str(seed_nodes_file))
+        try:
+            def assert_seed_config_applied():
+                with open(slots[0].stdout_file_name) as output:
+                    assert 'Successfully applied dynamic config from seed nodes' in output.read()
+
+            retry_assertions(assert_seed_config_applied, timeout_seconds=60)
+            self.cluster.wait_tenant_up(table_path, token=self.cluster.root_token)
+        finally:
+            self.cluster.unregister_and_stop_slots(slots)

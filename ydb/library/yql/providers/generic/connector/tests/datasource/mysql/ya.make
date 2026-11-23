@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 NO_CHECK_IMPORTS()
 
 DATA(
@@ -13,8 +15,6 @@ DATA(
 ENV(COMPOSE_PROJECT_NAME=mysql)
 
 IF (AUTOCHECK)
-    # YQ-3351: enabling python style checks only for opensource
-    NO_LINT()
     # Temporarily disable these tests due to infrastructure incompatibility
     SKIP_TEST("DEVTOOLSUPPORT-44637")
     # Split tests to chunks only when they're running on different machines with distbuild,

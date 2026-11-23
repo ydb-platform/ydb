@@ -367,7 +367,6 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0')
         )
-        time.sleep(5)
         second_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('1')
         )

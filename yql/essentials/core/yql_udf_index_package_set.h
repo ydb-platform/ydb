@@ -4,7 +4,7 @@
 
 namespace NYql {
 
-class TUdfIndexPackageSet : public TThrRefBase {
+class TUdfIndexPackageSet: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUdfIndexPackageSet>;
 
@@ -26,4 +26,4 @@ private:
     TMap<std::pair<TString, ui32>, TResourceInfo::TPtr> Resources_;
 };
 
-}
+} // namespace NYql

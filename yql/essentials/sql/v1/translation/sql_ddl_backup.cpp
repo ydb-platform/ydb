@@ -4,30 +4,6 @@
 
 namespace NSQLTranslationV1 {
 
-namespace {
-
-bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
-    switch (from.Alt_case()) {
-        case TRule_table_setting_value::kAltTableSettingValue2: {
-            // STRING_VALUE
-            const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
-            auto unescaped = StringContent(ctx, ctx.Pos(), stringValue);
-            if (!unescaped) {
-                ctx.Error() << errorPrefix << " value cannot be unescaped";
-                return false;
-            }
-            to = TDeferredAtom(ctx.Pos(), unescaped->Content);
-            break;
-        }
-        default:
-            ctx.Error() << errorPrefix << " value should be a string literal";
-            return false;
-    }
-    return true;
-}
-
-} // namespace
-
 bool TBackupTranslation::StoreStringSettingsEntry(
     const TIdentifier& id,
     const TRule_table_setting_value* value,
@@ -37,7 +13,7 @@ bool TBackupTranslation::StoreStringSettingsEntry(
 
     const TString key = to_lower(id.Name);
     if (result.find(key) != result.end()) {
-        Ctx_.Error() << to_upper(key) << " duplicate keys";
+        Ctx_.Error(id.Pos) << to_upper(key) << " duplicate keys";
         return false;
     }
 
@@ -46,7 +22,7 @@ bool TBackupTranslation::StoreStringSettingsEntry(
             return StoreString(*value, result[key], Ctx_, to_upper(key));
 
         default:
-            Ctx_.Error() << to_upper(key) << " value should be a string literal";
+            Ctx_.Error(*value) << to_upper(key) << " value should be a string literal";
             return false;
     }
 

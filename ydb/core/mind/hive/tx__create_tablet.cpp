@@ -128,7 +128,9 @@ public:
 
         if (newChannels.any()) {
             tablet.ChannelProfileNewGroup |= newChannels;
-            tablet.State = ETabletState::GroupAssignment;
+            if (tablet.IsReadyToReassignTablet()) {
+                tablet.State = ETabletState::GroupAssignment;
+            }
             tablet.ChannelProfileReassignReason = NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
             tablet.BoundChannels = BoundChannels;
             for (auto& bind : tablet.BoundChannels) {
@@ -264,9 +266,9 @@ public:
                     if (BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                         // Make sure any running tablets are stopped
                         for (TFollowerTabletInfo& follower : tablet->Followers) {
-                            follower.InitiateStop(SideEffects);
+                            follower.InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                         }
-                        tablet->InitiateStop(SideEffects);
+                        tablet->InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                     }
 
                     if (tablet->State == ETabletState::StoppingInGroupAssignment) {
@@ -408,11 +410,13 @@ public:
         tablet.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
         tablet.BalancerPolicy = BalancerPolicy;
         tablet.IsBackup = IsBackup;
+        Self->RecordTabletEvent(tablet, EHiveEventType::Created, EHiveEventReason::OwnerRequest,
+            TStringBuilder() << "type=" << TTabletTypes::TypeToStr(tablet.Type) << " channels=" << BoundChannels.size());
 
         TDomainInfo* domain = Self->FindDomain(ObjectDomain);
         if (domain && domain->Stopped) {
             tablet.State = ETabletState::Stopped;
-            tablet.BecomeStopped();
+            tablet.BecomeStopped(EHiveEventReason::TenantStopped);
             tablet.StoppedByTenant = true;
         }
 
@@ -432,7 +436,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
                                                         NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy),
                                                         NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant),
-                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup));
+                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup),
+                                                        NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(tablet.ConfirmedStorageVersion));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 

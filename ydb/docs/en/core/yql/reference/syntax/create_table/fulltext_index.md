@@ -9,9 +9,9 @@ CREATE TABLE `<table_name>` (
         GLOBAL
         [SYNC]
         USING fulltext_plain | fulltext_relevance
-        ON ( <text_column> )
+        ON ( [<prefix_columns>,] <text_column> )
         [COVER ( <cover_columns> )]
-        [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        WITH ( <parameter_name> = <parameter_value>[, ...])
     [,   ...]
 )
 ```
@@ -20,7 +20,8 @@ Where:
 
 * `<index_name>` - unique index name for data access
 * `SYNC` - indicates synchronous data writing to the index. This is the only currently available option, and it is used by default.
-* `<text_column>` - a single table column with text content (currently only one indexed column is supported)
+* `<prefix_columns>` - optional filter columns for a [filtered fulltext index](../../../../dev/fulltext-indexes.md#filtered); queries require equality on every prefix column
+* `<text_column>` - a single `String` or `Utf8` column, specified last in `ON`
 * `<cover_columns>` - list of additional table columns stored in the index to enable retrieval without accessing the main table
 * `<parameter_name>` and `<parameter_value>` - list of key-value parameters:
 
@@ -45,6 +46,20 @@ CREATE TABLE articles (
     ),
     PRIMARY KEY (id)
 )
+```
+
+### Multilingual lemmatization {#snowball}
+
+The Snowball preset lemmatizes tokens and matches English and Russian word forms in the same text column. `language` accepts several supported languages, separated by commas. Spaces after commas are allowed:
+
+```yql
+CREATE TABLE documents (
+    id Uint64,
+    body Utf8,
+    PRIMARY KEY (id),
+    INDEX ft_idx GLOBAL USING fulltext_relevance ON (body)
+    WITH (analyzer="snowball", language="english, russian")
+);
 ```
 
 ### Example with n-grams

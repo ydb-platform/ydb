@@ -4,7 +4,7 @@ The way columns are selected for a table's primary key defines YDB's ability to 
 
 General recommendations for choosing a primary key:
 
-* Avoid situations where the main load falls on one [partition](../../concepts/datamodel/table.md#partitioning) of a table. The more evenly load is distributed across partitions, the better the performance.
+* Avoid situations where the main load falls on one [partition](../../concepts/datamodel/table.md#partitioning_row_table) of a table. The more evenly load is distributed across partitions, the better the performance.
 * Reduce the number of partitions that can be affected in a single request. Moreover, if the request affects no more than one partition, it is performed using a special simplified protocol. This significantly increases the speed and saves the resources.
 
 All {{ ydb-short-name }} tables are sorted by primary key in ascending order. In a table with a monotonically increasing primary key, this will result in new data being added at the end of a table. As {{ ydb-short-name }} splits table data into partitions based on key ranges, inserts are always processed by the same server that is responsible for the "last" partition. Concentrating the load on a single server results in slow data uploading and inefficient use of a distributed system.

@@ -50,6 +50,90 @@ static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
+    Y_UNIT_TEST_TWIN(SqlPathAliasesWithNewRbo, NewRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
+        auto* rule = appConfig.MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/kfront");
+        rule->SetDst("/Root");
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/kfront/Source` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+            CREATE TABLE `/kfront/TableTarget` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+            CREATE TABLE `/kfront/QueryTarget` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto rows = TValueBuilder().BeginList()
+            .AddListItem().BeginStruct().AddMember("Key").Uint64(1).EndStruct()
+            .EndList().Build();
+        auto upsertResult = tableClient.BulkUpsert("/Root/Source", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto prepareResult = session.PrepareDataQuery(R"(
+            PRAGMA TablePathPrefix = "/kfront";
+            INSERT INTO TableTarget SELECT Key FROM Source;
+        )").GetValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto preparedQuery = prepareResult.GetQuery();
+        auto tableWriteResult = preparedQuery.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(tableWriteResult.IsSuccess(), tableWriteResult.GetIssues().ToString());
+
+        auto tableReadResult = session.ExecuteDataQuery(R"(
+            PRAGMA TablePathPrefix = "/kfront";
+            SELECT Key FROM TableTarget;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(tableReadResult.IsSuccess(), tableReadResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(tableReadResult.GetResultSet(0)));
+
+        auto queryWriteResult = queryClient.ExecuteQuery(R"(
+            INSERT INTO `/kfront/QueryTarget` SELECT Key FROM `/kfront/Source`;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryWriteResult.IsSuccess(), queryWriteResult.GetIssues().ToString());
+
+        auto queryReadResult = queryClient.ExecuteQuery(R"(
+            SELECT Key FROM `/Root/QueryTarget`;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryReadResult.IsSuccess(), queryReadResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(queryReadResult.GetResultSet(0)));
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        UNIT_ASSERT_VALUES_EQUAL(
+            counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val() > 0, NewRbo);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val(), 0);
+
+        for (const auto& query : {
+            R"(
+                CREATE VIEW `/kfront/InnerView` WITH (security_invoker = true) AS
+                    SELECT Key FROM `/kfront/Source`;
+            )",
+            R"(
+                CREATE VIEW `/kfront/OuterView` WITH (security_invoker = true) AS
+                    SELECT Key FROM `/kfront/InnerView`;
+            )",
+        }) {
+            auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString viewQuery = R"(SELECT Key FROM `/kfront/OuterView`;)";
+        auto tableViewResult = session.ExecuteDataQuery(
+            viewQuery, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(tableViewResult.IsSuccess(), tableViewResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(tableViewResult.GetResultSet(0)));
+
+        auto queryViewResult = queryClient.ExecuteQuery(
+            viewQuery, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryViewResult.IsSuccess(), queryViewResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(queryViewResult.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(PreparedQueryInvalidate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1768,7 +1852,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -1814,7 +1897,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -1975,7 +2057,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         {
@@ -2042,7 +2123,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -2106,7 +2186,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -2150,7 +2229,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -2232,7 +2310,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -2827,7 +2904,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT 1 AS Col1, 2 As Col2;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Several CTAS statement can't be used without per-statement mode", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Multiple CTAS statements in one query are not supported", result.GetIssues().ToString());
         }
 
         {
@@ -2841,7 +2918,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 REPLACE INTO `/Root/ColSrc` (Col1, Col2) VALUES (1u, 1), (100u, 100), (10u, 10);
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS statement can't be used with other statements without per-statement mode", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS cannot be combined with other statements", result.GetIssues().ToString());
         }
 
         {
@@ -2855,7 +2932,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT * FROM `/Root/ColSrc`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS statement can't be used with other statements without per-statement mode", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS cannot be combined with other statements", result.GetIssues().ToString());
         }
 
         {
@@ -3004,7 +3081,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
 
@@ -3178,7 +3254,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
 
@@ -3219,6 +3294,33 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateAsSelectWarningPolicy, WarningsAsErrors) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(std::format(R"(
+            PRAGMA Warning("{0}", "1101");
+            CREATE TABLE `/Root/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN)
+            AS SELECT 1u AS Col1, TablePath() AS Col2 FROM (SELECT 1u AS x);
+        )", WarningsAsErrors ? "error" : "disable"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        const auto issues = result.GetIssues().ToString();
+        if (WarningsAsErrors) {
+            UNIT_ASSERT_C(!result.IsSuccess(), issues);
+            UNIT_ASSERT_STRING_CONTAINS_C(issues, "TablePath will be empty", issues);
+        } else {
+            UNIT_ASSERT_C(result.IsSuccess(), issues);
+            UNIT_ASSERT_C(issues.find("TablePath will be empty") == TString::npos, issues);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsSelectPath, UseTablePathPrefix) {
         const auto dirPath = UseTablePathPrefix ? "" : "/Root/test/";
         const auto pragma = UseTablePathPrefix ? "PRAGMA TablePathPrefix(\"/Root/test\");" : "";
@@ -3226,7 +3328,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         {
@@ -3381,7 +3482,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
@@ -3496,7 +3596,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(

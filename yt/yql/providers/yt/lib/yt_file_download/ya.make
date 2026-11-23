@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_file_download.cpp
@@ -17,7 +17,5 @@ PEERDIR(
     yt/yql/providers/yt/gateway/lib
 
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

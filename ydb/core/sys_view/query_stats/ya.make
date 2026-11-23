@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     query_metrics.h
@@ -8,14 +8,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
     ydb/core/base
-    ydb/core/kqp/runtime
+    ydb/core/kqp/common/events
+    ydb/core/kqp/runtime/common
     ydb/core/sys_view/common
     ydb/core/sys_view/service
+    ydb/library/actors/core
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

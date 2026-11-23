@@ -18,15 +18,17 @@ SRCS(
     portion_index.cpp
     duplicate_filtering.cpp
     error_collector.cpp
+    startup_timeline.cpp
 )
 
 PEERDIR(
     library/cpp/monlib/dynamic_counters
-    ydb/core/tx/columnshard/counters/aggregation
-    ydb/library/signals
     ydb/core/base
+    ydb/core/kqp/common/events
+    ydb/core/tx/columnshard/counters/aggregation
+    ydb/core/tx/columnshard/tracing
     ydb/library/actors/core
-    ydb/core/kqp/compute_actor
+    ydb/library/signals
 )
 
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(columnshard.h)

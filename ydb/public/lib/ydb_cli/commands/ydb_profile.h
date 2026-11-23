@@ -41,6 +41,8 @@ protected:
     TString ProfileName, Endpoint, Database, TokenFile, Oauth2KeyFile, YcTokenFile, SaKeyFile,
             IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile, ClientCertFile, ClientCertPrivateKeyFile, ClientCertPrivateKeyPasswordFile;
 
+    TOidcCliOptions Oidc;
+
     bool UseMetadataCredentials = false;
     bool AnonymousAuth = false;
 

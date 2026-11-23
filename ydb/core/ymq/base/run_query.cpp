@@ -13,6 +13,7 @@ namespace NKikimr::NSQS {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
+        request->SetIsInternalCall(true);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         request->SetKeepSession(false);

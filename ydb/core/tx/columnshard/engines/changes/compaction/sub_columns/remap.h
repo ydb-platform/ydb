@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 class TRemapColumns {
@@ -50,9 +52,10 @@ private:
         }
     };
 
-    const TDictStats* ResultColumnStats = nullptr;
     std::vector<std::vector<std::vector<std::optional<TRemapInfo>>>> RemapInfo;
+    THashMap<TString, ui32> ResultColumnKeyIndex;
     std::map<TString, ui32> TemporaryKeyIndex;
+    bool ColumnStatsRegistered = false;
 
     ui32 RegisterNewOtherIndex(const TString& keyName) {
         return TemporaryKeyIndex.emplace(keyName, TemporaryKeyIndex.size()).first->second;
@@ -69,17 +72,21 @@ public:
         const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
 
     void RegisterColumnStats(const TDictStats& resultColumnStats) {
-        ResultColumnStats = &resultColumnStats;
+        YDB_LOG_VERIFY(!ColumnStatsRegistered);
+        ColumnStatsRegistered = true;
+        for (ui32 i = 0; i < resultColumnStats.GetColumnsCount(); ++i) {
+            YDB_LOG_VERIFY(ResultColumnKeyIndex.emplace(resultColumnStats.GetColumnName(i), i).second);
+        }
     }
 
     void StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats);
 
     TRemapInfo RemapIndex(const ui32 sourceIdx, const ui32 sourceKeyIndex, const bool isColumnKey) const {
-        AFL_VERIFY(sourceIdx < RemapInfo.size());
-        AFL_VERIFY(RemapInfo[sourceIdx].size() == 2);
-        AFL_VERIFY(sourceKeyIndex < RemapInfo[sourceIdx][isColumnKey ? 1 : 0].size());
+        YDB_LOG_VERIFY(sourceIdx < RemapInfo.size());
+        YDB_LOG_VERIFY(RemapInfo[sourceIdx].size() == 2);
+        YDB_LOG_VERIFY(sourceKeyIndex < RemapInfo[sourceIdx][isColumnKey ? 1 : 0].size());
         auto result = RemapInfo[sourceIdx][isColumnKey ? 1 : 0][sourceKeyIndex];
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 };

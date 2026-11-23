@@ -6,7 +6,8 @@ namespace NTestUtils {
 
 TTestWithActorSystemFixture::TTestWithActorSystemFixture()
     : TTestWithActorSystemFixture(TSettings{})
-{}
+{
+}
 
 TTestWithActorSystemFixture::TTestWithActorSystemFixture(const TSettings& settings)
     : Settings(settings)
@@ -38,4 +39,4 @@ void TTestWithActorSystemFixture::TearDown(NUnitTest::TTestContext& /* ctx */) {
     PrevActorCtx = nullptr;
 }
 
-} // namespace NTestUtils
+}   // namespace NTestUtils

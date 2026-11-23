@@ -6,7 +6,7 @@ PRAGMA AnsiImplicitCrossJoin;
 PRAGMA YqlSelectAllowUnnamedGroupByExpr;
 
 SELECT
-    Substring(w_warehouse_name, 1, 20),
+    Substring(CAST(w_warehouse_name AS String), 1, 20),
     sm_type,
     cc_name,
     Sum(
@@ -43,15 +43,15 @@ SELECT
         END
     ) AS `>120 days`
 FROM
-    `/Root/test/ds/catalog_sales`
+    `catalog_sales`
 ,
-    `/Root/test/ds/warehouse`
+    `warehouse`
 ,
-    `/Root/test/ds/ship_mode`
+    `ship_mode`
 ,
-    `/Root/test/ds/call_center`
+    `call_center`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 WHERE
     d_month_seq BETWEEN 1212 AND 1212 + 11
     AND cs_ship_date_sk == d_date_sk
@@ -59,11 +59,11 @@ WHERE
     AND cs_ship_mode_sk == sm_ship_mode_sk
     AND cs_call_center_sk == cc_call_center_sk
 GROUP BY
-    Substring(w_warehouse_name, 1, 20),
+    Substring(CAST(w_warehouse_name AS String), 1, 20),
     sm_type,
     cc_name
 ORDER BY
-    Substring(w_warehouse_name, 1, 20),
+    Substring(CAST(w_warehouse_name AS String), 1, 20),
     sm_type,
     cc_name
 LIMIT 100;

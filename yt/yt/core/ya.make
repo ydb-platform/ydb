@@ -45,7 +45,6 @@ SRCS(
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
-    compression/public.cpp
     compression/snappy.cpp
     compression/zlib.cpp
     compression/zstd.cpp
@@ -104,6 +103,7 @@ SRCS(
 
     crypto/config.cpp
     crypto/crypto.cpp
+    crypto/helpers.cpp
     crypto/tls.cpp
 
     logging/appendable_compressed_file.cpp
@@ -151,6 +151,7 @@ SRCS(
     misc/id_generator.cpp
     misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
+    misc/jitter.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
@@ -196,7 +197,6 @@ SRCS(
 
     phoenix/context.cpp
     phoenix/descriptors.cpp
-    phoenix/load.cpp
     phoenix/schemas.cpp
     phoenix/type_def.cpp
     phoenix/type_registry.cpp
@@ -360,6 +360,7 @@ PEERDIR(
     contrib/libs/lz4
     contrib/libs/openssl
 
+    library/cpp/containers/absl
     library/cpp/openssl/init
     library/cpp/openssl/io
     library/cpp/threading/thread_local
@@ -392,6 +393,7 @@ PEERDIR(
     library/cpp/yt/system
     library/cpp/yt/threading
 
+    yt/yt/library/cgroup
     yt/yt/library/syncmap
     yt/yt/library/undumpable
     yt/yt/library/ytprof/api
@@ -436,6 +438,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         concurrency/benchmarks
         bus/benchmarks
         logging/benchmark
+        phoenix/benchmarks
         rpc/benchmark
         ypath/benchmarks
         yson/benchmark

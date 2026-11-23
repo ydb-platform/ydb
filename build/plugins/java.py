@@ -138,6 +138,22 @@ def JAVA_MODULE(unit: ymake.Unit, *args: str):
 
     data = {k: v for k, v in data.items() if v}
 
+    _dump_java_module(unit, data)
+
+
+@ymake.macro
+def JAVA_RUNTIME_MODULE(unit: ymake.Unit, *args: str):
+    if unit.get('YA_IDE_IDEA') == 'yes':
+        _dump_java_module(
+            unit,
+            {
+                'PATH': unit.path(),
+                'RUNTIME_MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
+            },
+        )
+
+
+def _dump_java_module(unit, data):
     dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8') + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
 
@@ -202,15 +218,13 @@ def _CHECK_JAVA_SRCDIR(unit: ymake.Unit, *args: str):
     for arg in args:
         if '$' not in arg:
             arc_srcdir = os.path.join(unit.get('MODDIR'), arg)
-            abs_srcdir = unit.resolve(os.path.join("$S/", arc_srcdir))
-            if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
-                unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', arc_srcdir))
+            srcdir_arg = os.path.join('${ARCADIA_ROOT}', arc_srcdir).replace(os.sep, '/')
+            unit.oncheck_srcdir(srcdir_arg)
             return
         srcdir = common.resolve_common_const(unit.resolve_arc_path(arg))
         if srcdir and srcdir.startswith('$S'):
-            abs_srcdir = unit.resolve(srcdir)
-            if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
-                unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', srcdir[3:]))
+            srcdir_arg = os.path.join('${ARCADIA_ROOT}', srcdir[3:]).replace(os.sep, '/')
+            unit.oncheck_srcdir(srcdir_arg)
 
 
 @ymake.macro

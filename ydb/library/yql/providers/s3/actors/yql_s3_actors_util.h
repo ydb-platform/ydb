@@ -4,11 +4,9 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <library/cpp/xml/document/xml-document-decl.h>
-
 #include <util/generic/string.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <optional>
 
@@ -47,11 +45,12 @@ public:
 protected:
     void OnRetriableError(const TIssues& issues);
 
-    void OnFatalError(TIssues issues, NYql::NDqProto::StatusIds::StatusCode fatalCode, std::source_location location = std::source_location::current());
+    void OnFatalError(
+        TIssues issues, NYql::NDqProto::StatusIds::StatusCode fatalCode, std::source_location location = std::source_location::current());
 
     virtual void SendError(std::unique_ptr<IDqComputeActorAsyncInput::TEvAsyncInputError> ev) = 0;
 
     const ui64 InputIndex = 0;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

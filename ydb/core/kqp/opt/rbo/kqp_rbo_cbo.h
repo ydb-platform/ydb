@@ -3,15 +3,31 @@
 #include "kqp_operator.h"
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 
+namespace NKikimr::NKqp {
+
+// A CBO column is named by its decimal ID, as in expression members, and
+// qualified by the relation of the CBO leaf that outputs it.
+inline TJoinColumn MakeCBOColumn(const TString& relation, TInfoUnitId id) {
+    return TJoinColumn(relation, ToString(id));
+}
+
+inline TInfoUnitId GetCBOColumnId(const TJoinColumn& column) {
+    TInfoUnitId id;
+    Y_ENSURE(TryFromString(column.AttributeName, id) && id != TUnorderedIUs::InvalidBit,
+        "CBO column " << column.RelName << "." << column.AttributeName << " is not an RBO ID");
+    return id;
+}
+
+} // namespace NKikimr::NKqp
+
 namespace NKikimr::NKqp::NOpt {
 
 struct TRBORelOptimizerNode : public TRelOptimizerNode {
 
-    TRBORelOptimizerNode(TVector<TString> labels, TOptimizerStatistics stats, TIntrusivePtr<IOperator> op, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& map) :
+    TRBORelOptimizerNode(TVector<TString> labels, TOptimizerStatistics stats, TIntrusivePtr<IOperator> op) :
         TRelOptimizerNode(labels[0], std::move(stats)),
         _Labels(labels),
-        Op(op),
-        CBOToColumns(map)
+        Op(op)
         {}
 
     TVector<TString> Labels() override {
@@ -37,11 +53,13 @@ struct TRBORelOptimizerNode : public TRelOptimizerNode {
 
     TVector<TString> _Labels;
     TIntrusivePtr<IOperator> Op;
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> CBOToColumns;
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {
-    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin) : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin) {}
+    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin, const TColumnLineage& lineage)
+        : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin)
+        , Lineage(lineage)
+    {}
 
     virtual bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& left,
@@ -52,5 +70,6 @@ struct TRBOProviderContext : public TKqpProviderContext {
         EJoinKind joinKind
     ) override;
 
+    const TColumnLineage& Lineage;
 };
 }

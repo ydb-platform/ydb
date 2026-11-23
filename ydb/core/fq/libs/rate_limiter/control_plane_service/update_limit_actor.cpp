@@ -1,32 +1,26 @@
 #include "update_limit_actor.h"
 
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/rate_limiter/utils/path.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NFq {
 namespace {
 
-class TUpdateCloudRateLimitActor : public NActors::TActorBootstrapped<TUpdateCloudRateLimitActor> {
+class TUpdateCloudRateLimitActor: public NActors::TActorBootstrapped<TUpdateCloudRateLimitActor> {
 public:
-    TUpdateCloudRateLimitActor(
-        NActors::TActorId parent,
-        TYdbConnectionPtr connection,
-        const TString& coordinationNodePath,
-        const TString& cloudId,
-        ui64 limit,
-        TYdbSdkRetryPolicy::TPtr retryPolicy,
-        ui64 cookie)
-    : Parent(parent)
-    , Connection(std::move(connection))
-    , CoordinationNodePath(coordinationNodePath)
-    , CloudId(cloudId)
-    , Limit(limit)
-    , RetryPolicy(std::move(retryPolicy))
-    , Cookie(cookie)
+    TUpdateCloudRateLimitActor(NActors::TActorId parent, TYdbConnectionPtr connection, const TString& coordinationNodePath,
+        const TString& cloudId, ui64 limit, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
+        : Parent(parent)
+        , Connection(std::move(connection))
+        , CoordinationNodePath(coordinationNodePath)
+        , CloudId(cloudId)
+        , Limit(limit)
+        , RetryPolicy(std::move(retryPolicy))
+        , Cookie(cookie)
     {
     }
 
@@ -34,21 +28,13 @@ public:
         Become(&TUpdateCloudRateLimitActor::StateFunc);
 
         if (CloudId.empty()) {
-            SendResponseAndPassAway(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Cloud id is empty")})));
+            SendResponseAndPassAway(
+                NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, NYdb::NIssue::TIssues({ NYdb::NIssue::TIssue("Cloud id is empty") })));
             return;
         }
 
-        Register(
-            MakeUpdateRateLimiterResourceActor(
-                SelfId(),
-                NKikimrServices::YQ_RATE_LIMITER,
-                Connection,
-                CoordinationNodePath,
-                GetRateLimiterResourcePath(CloudId),
-                Limit * 10,
-                RetryPolicy
-            )
-        );
+        Register(MakeUpdateRateLimiterResourceActor(SelfId(), NKikimrServices::YQ_RATE_LIMITER, Connection, CoordinationNodePath,
+            GetRateLimiterResourcePath(CloudId), Limit * 10, RetryPolicy));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -63,17 +49,9 @@ public:
         }
 
         // Path doesn't exist. Create it with new quota value
-        Register(
-            MakeCreateRateLimiterResourceActor(
-                SelfId(),
-                NKikimrServices::YQ_RATE_LIMITER,
-                Connection,
-                CoordinationNodePath,
-                GetRateLimiterResourcePath(CloudId),
-                {Limit * 10}, // percent -> milliseconds
-                RetryPolicy
-            )
-        );
+        Register(MakeCreateRateLimiterResourceActor(SelfId(), NKikimrServices::YQ_RATE_LIMITER, Connection, CoordinationNodePath,
+            GetRateLimiterResourcePath(CloudId), { Limit * 10 },   // percent -> milliseconds
+            RetryPolicy));
     }
 
     void Handle(TEvents::TEvSchemaCreated::TPtr& ev) {
@@ -81,12 +59,7 @@ public:
     }
 
     void SendResponseAndPassAway(NYdb::TStatus status) {
-        Send(
-            Parent,
-            new TEvents::TEvSchemaUpdated(std::move(status)),
-            0,
-            Cookie
-        );
+        Send(Parent, new TEvents::TEvSchemaUpdated(std::move(status)), 0, Cookie);
         PassAway();
     }
 
@@ -100,26 +73,12 @@ private:
     const ui64 Cookie;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-NActors::IActor* MakeUpdateCloudRateLimitActor(
-    NActors::TActorId parent,
-    TYdbConnectionPtr connection,
-    const TString& coordinationNodePath,
-    const TString& cloudId,
-    ui64 limit,
-    TYdbSdkRetryPolicy::TPtr retryPolicy,
-    ui64 cookie)
+NActors::IActor* MakeUpdateCloudRateLimitActor(NActors::TActorId parent, TYdbConnectionPtr connection, const TString& coordinationNodePath,
+    const TString& cloudId, ui64 limit, TYdbSdkRetryPolicy::TPtr retryPolicy, ui64 cookie)
 {
-    return new TUpdateCloudRateLimitActor(
-        parent,
-        std::move(connection),
-        coordinationNodePath,
-        cloudId,
-        limit,
-        std::move(retryPolicy),
-        cookie
-    );
+    return new TUpdateCloudRateLimitActor(parent, std::move(connection), coordinationNodePath, cloudId, limit, std::move(retryPolicy), cookie);
 }
 
-} // namespace NFq
+}   // namespace NFq

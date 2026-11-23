@@ -4,9 +4,8 @@
 
 #include <util/system/types.h>
 
-
 namespace NFq {
 
 NActors::TActorId YqAuditServiceActorId();
 
-} // namespace NFq
+}   // namespace NFq

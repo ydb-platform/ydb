@@ -57,6 +57,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
     {{- $type := include "ydb-prometheus.counter.type" $counter }}
     {{- if or (eq $type "all") (eq $type $specType) }}
 - job_name: {{ include "ydb-prometheus.counter.jobName" (tuple $spec.name $counter) }}
+  {{- if $counter.scrapeInterval }}
+  scrape_interval: {{ $counter.scrapeInterval | quote }}
+  {{- end }}
   metrics_path: {{ include "ydb-prometheus.counter.metricsPath" $counter | quote }}
   {{- if $counter.metricsPathParams }}
   params: {{ include "ydb-prometheus.counter.metricsPathParams" (tuple $spec $counter) | nindent 4 }}
@@ -98,6 +101,9 @@ spec:
       {{- $type := include "ydb-prometheus.counter.type" $counter }}
       {{- if or (eq $type "all") (eq $type $specType) }}
   - path: {{ include "ydb-prometheus.counter.metricsPath" $counter }}
+    {{- if $counter.scrapeInterval }}
+    interval: {{ $counter.scrapeInterval | quote }}
+    {{- end }}
     {{- if $counter.metricsPathParams }}
     params: {{ include "ydb-prometheus.counter.metricsPathParams" (tuple $spec $counter) | nindent 6 }}
     {{- end }}

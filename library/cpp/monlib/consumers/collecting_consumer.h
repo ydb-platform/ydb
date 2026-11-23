@@ -28,6 +28,7 @@ namespace NMonitoring {
         NMonitoring::EMetricType Kind{NMonitoring::EMetricType::UNKNOWN};
         THolder<NMonitoring::TMetricTimeSeries> Values;
         NMonitoring::TMetricOpts Opts;
+        ui32 StartTimeSeconds{0};
     };
 
     template <typename TLabelsImpl>
@@ -42,6 +43,10 @@ namespace NMonitoring {
 
         void OnCommonTime(TInstant time) override {
             CommonTime = time;
+        }
+
+        void OnCommonStartTimeSeconds(ui32 startTimeSeconds) override {
+            CommonStartTimeSeconds = startTimeSeconds;
         }
 
         void OnMetricBegin(NMonitoring::EMetricType kind) override {
@@ -102,10 +107,15 @@ namespace NMonitoring {
             Metrics.back().Opts.MemOnly = isMemOnly;
         }
 
+        void OnStartTimeSeconds(ui32 startTimeSeconds) override {
+            Metrics.back().StartTimeSeconds = startTimeSeconds;
+        }
+
         bool DoMergeCommonLabels{false};
         TVector<TMetricData> Metrics;
         TLabelsImpl CommonLabels;
         TInstant CommonTime;
+        ui32 CommonStartTimeSeconds{0};
         bool InsideSensor{false};
     };
 

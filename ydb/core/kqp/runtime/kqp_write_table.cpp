@@ -9,6 +9,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/runtime/kqp_arrow_memory_pool.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -57,7 +58,7 @@ public:
     }
 
     void Attach(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> scopedAlloc) {
-        AFL_ENSURE(!ScopedAlloc);
+        YDB_LOG_ENSURE(!ScopedAlloc);
         {
             TGuard guard(*scopedAlloc);
             scopedAlloc->Ref().OffloadAlloc(AllocatedSize);
@@ -66,7 +67,7 @@ public:
     }
 
     void Detach() {
-        AFL_ENSURE(ScopedAlloc);
+        YDB_LOG_ENSURE(ScopedAlloc);
         {
             TGuard guard(*ScopedAlloc);
             ScopedAlloc->Ref().OffloadFree(AllocatedSize);
@@ -119,32 +120,32 @@ public:
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 
     TString SerializeToString() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return NArrow::SerializeBatchNoCompression(Data);
     }
 
     i64 GetSerializedMemory() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return SerializedMemory;
     }
 
     i64 GetMemory() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return Memory;
     }
 
     bool IsEmpty() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return !Data || Data->num_rows() == 0;
     }
 
     size_t GetRowsCount() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return Data ? Data->num_rows() : 0;
     }
 
     TRecordBatchPtr Extract() {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         Extracted = true;
         SerializedMemory = 0;
         Memory = 0;
@@ -196,7 +197,7 @@ private:
 class TRowBatch : public IDataBatch {
 public:
     TString SerializeToString() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         TVector<TCell> cells;
         if (!Rows.empty()) {
             cells.reserve(Rows.Size() * Rows.front().size());
@@ -210,27 +211,27 @@ public:
     }
 
     i64 GetSerializedMemory() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return SerializedMemory;
     }
 
     i64 GetMemory() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return Memory;
     }
 
     bool IsEmpty() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return Rows.empty();
     }
 
     size_t GetRowsCount() const override {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         return Rows.Size();
     }
 
     TOwnedCellVecBatch Extract() {
-        AFL_ENSURE(!Extracted);
+        YDB_LOG_ENSURE(!Extracted);
         Extracted = true;
         return std::move(Rows);
     }
@@ -260,7 +261,7 @@ public:
         SerializedMemory = GetCellMatrixHeaderSize();
         Memory = 0;
         for (const auto& row : Rows) {
-            AFL_ENSURE(row.size() == Rows.front().size());
+            YDB_LOG_ENSURE(row.size() == Rows.front().size());
             const auto size = EstimateSize(row);
             SerializedMemory += GetCellHeaderSize() * row.size() + size;
             Memory += size;
@@ -299,6 +300,11 @@ public:
 
     virtual IDataBatchPtr FlushBatch(ui64 shardId) = 0;
     virtual const THashSet<ui64>& GetShardIds() const = 0;
+
+    virtual std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&&) {
+        YDB_LOG_ENSURE(false); // not supported for OLAP at current time
+        return {};
+    }
 
     virtual i64 GetMemory() = 0;
 };
@@ -348,7 +354,7 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
     std::vector<std::pair<TString, NScheme::TTypeInfo>> result(writeIndex.size());
     for (size_t index = 0; index < inputColumns.size(); ++index) {
         const auto& column = inputColumns[index];
-        AFL_ENSURE(column.HasTypeId());
+        YDB_LOG_ENSURE(column.HasTypeId());
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
             column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
         result[writeIndex[index]].first = column.GetName();
@@ -450,13 +456,13 @@ public:
             , WriteColumnIds(BuildWriteColumnIds(inputColumns))
             , MaxOperationBytes(maxOperationBytes)
             , Alloc(std::move(alloc)) {
-        AFL_ENSURE(MaxOperationBytes > 0);
-        AFL_ENSURE(Alloc);
-        AFL_ENSURE(schemeEntry.ColumnTableInfo);
+        YDB_LOG_ENSURE(MaxOperationBytes > 0);
+        YDB_LOG_ENSURE(Alloc);
+        YDB_LOG_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
-        AFL_ENSURE(description.HasSchema());
+        YDB_LOG_ENSURE(description.HasSchema());
         const auto& scheme = description.GetSchema();
-        AFL_ENSURE(description.HasSharding());
+        YDB_LOG_ENSURE(description.HasSharding());
         const auto& sharding = description.GetSharding();
 
         NSchemeShard::TOlapSchema olapSchema;
@@ -465,7 +471,7 @@ public:
         if (shardingConclusion.IsFail()) {
             ythrow yexception() << "Ydb::StatusIds::SCHEME_ERROR : " <<  shardingConclusion.GetErrorMessage();
         }
-        AFL_ENSURE(shardingConclusion.GetResult() != nullptr);
+        YDB_LOG_ENSURE(shardingConclusion.GetResult() != nullptr);
         Sharding = shardingConclusion.DetachResult();
     }
 
@@ -476,19 +482,19 @@ public:
     }
 
     void AddData(IDataBatchPtr&& batch) override {
-        AFL_ENSURE(!Closed);
+        YDB_LOG_ENSURE(!Closed);
         AddBatch(std::move(batch));
     }
 
     void AddBatch(IDataBatchPtr&& batch) override {
         TGuard guard(*Alloc);
         auto columnshardBatch = dynamic_cast<TColumnBatch*>(batch.Get());
-        AFL_ENSURE(columnshardBatch);
+        YDB_LOG_ENSURE(columnshardBatch);
         if (columnshardBatch->IsEmpty()) {
             return;
         }
         auto data = columnshardBatch->Extract();
-        AFL_ENSURE(data);
+        YDB_LOG_ENSURE(data);
         ShardAndFlushBatch(std::move(data), false);
     }
 
@@ -496,7 +502,7 @@ public:
         for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
                                                     unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
-            AFL_ENSURE(shardBatchMemory != 0);
+            YDB_LOG_ENSURE(shardBatchMemory != 0);
 
             ShardIds.insert(shardId);
             auto& unpreparedBatch = UnpreparedBatches[shardId];
@@ -516,9 +522,9 @@ public:
             while (!unpreparedBatch.Batches.empty()) {
                 auto batch = unpreparedBatch.Batches.front();
                 unpreparedBatch.Batches.pop_front();
-                AFL_ENSURE(UnpreparedBatchedCount > 0);
+                YDB_LOG_ENSURE(UnpreparedBatchedCount > 0);
                 UnpreparedBatchedCount--;
-                AFL_ENSURE(batch->num_rows() > 0);
+                YDB_LOG_ENSURE(batch->num_rows() > 0);
                 const auto batchDataSize = NArrow::GetBatchDataSize(batch);
                 unpreparedBatch.TotalDataSize -= batchDataSize;
                 Memory -= batchDataSize;
@@ -556,11 +562,11 @@ public:
                 toPrepare.push_back(batch);
             }
 
-            AFL_ENSURE(!toPrepare.empty() && toPrepare.front()->num_rows() > 0);
+            YDB_LOG_ENSURE(!toPrepare.empty() && toPrepare.front()->num_rows() > 0);
             auto batch = MakeIntrusive<TColumnBatch>(NArrow::CombineBatches(toPrepare), Alloc);
             Batches[shardId].emplace_back(batch);
             Memory += batch->GetMemory();
-            AFL_ENSURE(batch->GetMemory() != 0);
+            YDB_LOG_ENSURE(batch->GetMemory() != 0);
         }
     }
 
@@ -584,7 +590,7 @@ public:
 
     void Close() override {
         TGuard guard(*Alloc);
-        AFL_ENSURE(!Closed);
+        YDB_LOG_ENSURE(!Closed);
         Closed = true;
         FlushUnpreparedForce();
     }
@@ -717,7 +723,7 @@ public:
 
     IDataBatchPtr Flush(bool force) {
         if ((!Batches.empty() && force) || Batches.size() > 1) {
-            AFL_ENSURE(MaxBytesPerBatch || Batches.size() == 1);
+            YDB_LOG_ENSURE(MaxBytesPerBatch || Batches.size() == 1);
             Memory -= Batches.front()->GetMemory();
             auto res = Batches.front()->Build();
             Batches.pop_front();
@@ -736,7 +742,7 @@ public:
             Batches.emplace_back(std::make_unique<TBatch>(Alloc));
         }
 
-        AFL_ENSURE(newMemory == Batches.back()->AddRow(std::move(row)));
+        YDB_LOG_ENSURE(newMemory == Batches.back()->AddRow(std::move(row)));
         Memory += newMemory;
     }
 
@@ -770,12 +776,12 @@ public:
     }
 
     void AddCell(const TCell& cell) override {
-        AFL_ENSURE(CurrentRow.size() < ColumnsCount);
+        YDB_LOG_ENSURE(CurrentRow.size() < ColumnsCount);
         CurrentRow.push_back(cell);
     }
 
     void AddRow() override {
-        AFL_ENSURE(CurrentRow.size() == ColumnsCount);
+        YDB_LOG_ENSURE(CurrentRow.size() == ColumnsCount);
         RowBatcher.AddRow(CurrentRow);
         CurrentRow.clear();
     }
@@ -816,7 +822,7 @@ public:
                     Columns[index].PTypeMod);
             }
             auto cells = rowBuilder.BuildCells();
-            AFL_ENSURE(cells.size() == Columns.size());
+            YDB_LOG_ENSURE(cells.size() == Columns.size());
             RowBatcher.AddRow(cells);
         });
     }
@@ -872,7 +878,7 @@ public:
                     OldColumns[i].PTypeMod);
             }
             auto cells = rowBuilder.BuildCells();
-            AFL_ENSURE(cells.size() == NewColumns.size() + OldColumns.size());
+            YDB_LOG_ENSURE(cells.size() == NewColumns.size() + OldColumns.size());
             RowBatcher.AddRow(cells);
         });
     }
@@ -905,52 +911,89 @@ public:
         , WriteColumnIds(BuildWriteColumnIds(inputColumns))
         , KeyColumnTypes(BuildKeyColumnTypes(keyColumns))
         , Alloc(std::move(alloc)) {
-        AFL_ENSURE(Alloc);
-        AFL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
+        YDB_LOG_ENSURE(Alloc);
+        YDB_LOG_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
     }
 
-    void AddRow(TConstArrayRef<TCell> row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
-        AFL_ENSURE(row.size() >= KeyColumnTypes.size());
+    const TKeyDesc::TPartitionInfo& FindShard(TConstArrayRef<TCell> key, const TVector<TKeyDesc::TPartitionInfo>& partitioning) const {
+        YDB_LOG_ENSURE(key.size() >= KeyColumnTypes.size());
         auto shardIter = std::lower_bound(
             std::begin(partitioning),
             std::end(partitioning),
-            TArrayRef(row.data(), KeyColumnTypes.size()),
+            TArrayRef(key.data(), KeyColumnTypes.size()),
             [this](const auto &partition, const auto& key) {
                 const auto& range = *partition.Range;
                 return 0 > CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
                     range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
             });
 
-        AFL_ENSURE(shardIter != partitioning.end());
+        YDB_LOG_ENSURE(shardIter != partitioning.end());
+        return *shardIter;
+    }
 
-        auto batcherIter = Batchers.find(shardIter->ShardId);
+    void AddRow(TConstArrayRef<TCell> row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
+        auto shardIter = FindShard(row, partitioning);
+
+        auto batcherIter = Batchers.find(shardIter.ShardId);
         if (batcherIter == std::end(Batchers)) {
             Batchers.emplace(
-                shardIter->ShardId,
+                shardIter.ShardId,
                 TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc));
         }
 
-        AFL_ENSURE(row.size() == Columns.size());
-        Batchers.at(shardIter->ShardId).AddRow(row);
-        ShardIds.insert(shardIter->ShardId);
+        YDB_LOG_ENSURE(row.size() == Columns.size());
+        Batchers.at(shardIter.ShardId).AddRow(row);
+        ShardIds.insert(shardIter.ShardId);
     }
 
     void AddData(IDataBatchPtr&& data) override {
-        AFL_ENSURE(!Closed);
+        YDB_LOG_ENSURE(!Closed);
         AddBatch(std::move(data));
     }
 
     void AddBatch(IDataBatchPtr&& batch) override {
         auto datashardBatch = dynamic_cast<TRowBatch*>(batch.Get());
-        AFL_ENSURE(datashardBatch);
+        YDB_LOG_ENSURE(datashardBatch);
         auto rows = datashardBatch->Extract();
 
         for (const auto& row : rows) {
-            AFL_ENSURE(row.size() == Columns.size());
+            YDB_LOG_ENSURE(row.size() == Columns.size());
             AddRow(
                 row,
                 Partitioning);
         }
+    }
+
+    std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&& batch) override {
+        auto datashardBatch = dynamic_cast<TRowBatch*>(batch.Get());
+        YDB_LOG_ENSURE(datashardBatch);
+        auto rows = datashardBatch->Extract();
+
+        THashMap<ui64, TRowsBatcher> shardBatchers;
+        for (const auto& row : rows) {
+            YDB_LOG_ENSURE(row.size() == Columns.size());
+            const auto& partition = FindShard(row, Partitioning);
+            auto batcherIter = shardBatchers.find(partition.ShardId);
+            if (batcherIter == std::end(shardBatchers)) {
+                batcherIter = shardBatchers.emplace(
+                    partition.ShardId,
+                    TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc)).first;
+            }
+            batcherIter->second.AddRow(row);
+        }
+
+        std::vector<std::pair<ui64, IDataBatchPtr>> result;
+        result.reserve(shardBatchers.size());
+        for (auto& [shardId, batcher] : shardBatchers) {
+            while (true) {
+                auto fragment = batcher.Flush(true);
+                if (fragment->IsEmpty()) {
+                    break;
+                }
+                result.emplace_back(shardId, std::move(fragment));
+            }
+        }
+        return result;
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
@@ -970,7 +1013,7 @@ public:
     }
 
     void Close() override {
-        AFL_ENSURE(!Closed);
+        YDB_LOG_ENSURE(!Closed);
         Closed = true;
     }
 
@@ -1106,9 +1149,9 @@ public:
         , DocsBatcher(Added ? 2 + DataColumnCount : 1, std::nullopt, Alloc)
         , DictBatcher(2, std::nullopt, Alloc)
         , StatsBatcher(PrefixSize ? 2 + PrefixSize : 3, std::nullopt, Alloc) {
-        AFL_ENSURE(Indexes.size() == columnTypes.size());
+        YDB_LOG_ENSURE(Indexes.size() == columnTypes.size());
         // Settings/Analyzers are required for fulltext indexes, but not for json
-        AFL_ENSURE(settings.columns_size() == 1 ||
+        YDB_LOG_ENSURE(settings.columns_size() == 1 ||
             TextTypeId == NScheme::NTypeIds::Json ||
             TextTypeId == NScheme::NTypeIds::JsonDocument);
         if (settings.columns_size() == 1) {
@@ -1122,24 +1165,27 @@ public:
             prefixCells[i] = row[Indexes[i]];
         }
         ui64 docId = (ui64)row[Indexes[PrefixSize+1]].AsValue<TDocId>();
-        auto text = row[Indexes[PrefixSize]].AsBuf();
         TVector<TString> tokens;
-        switch (TextTypeId) {
-            case NScheme::NTypeIds::String:
-            case NScheme::NTypeIds::Utf8:
-                tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
-                break;
-            case NScheme::NTypeIds::Json: {
-                TString error;
-                tokens = NJsonIndex::TokenizeJson(text, error);
-                // Ignore errors, JSON is already validated
-                break;
+        const auto& textCell = row[Indexes[PrefixSize]];
+        if (!textCell.IsNull()) {
+            const auto text = textCell.AsBuf();
+            switch (TextTypeId) {
+                case NScheme::NTypeIds::String:
+                case NScheme::NTypeIds::Utf8:
+                    tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
+                    break;
+                case NScheme::NTypeIds::Json: {
+                    TString error;
+                    tokens = NJsonIndex::TokenizeJson(text, error);
+                    YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                    break;
+                }
+                case NScheme::NTypeIds::JsonDocument:
+                    tokens = NJsonIndex::TokenizeBinaryJson(text);
+                    break;
+                default:
+                    YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
             }
-            case NScheme::NTypeIds::JsonDocument:
-                tokens = NJsonIndex::TokenizeBinaryJson(text);
-                break;
-            default:
-                YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
         }
         auto& prefix = PrefixBuffers[TSerializedCellVec::Serialize(prefixCells)];
         ui32 docLength = 0;
@@ -1299,7 +1345,7 @@ std::vector<ui32> CreateMapping(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
         const bool preferAdditionalInputColumns) {
     // inputColumns + additionalInputColumns -> outputColumns
-    AFL_ENSURE(outputColumns.size() <= inputColumns.size() + additionalInputColumns.size());
+    YDB_LOG_ENSURE(outputColumns.size() <= inputColumns.size() + additionalInputColumns.size());
 
     THashMap<TStringBuf, ui32> inputColumnNameToIndex;
     auto fillInputColumnNameToIndex = [&](const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& columns, size_t shift) {
@@ -1344,10 +1390,10 @@ bool IsEqual(
         const std::vector<ui32>& newIndexes,
         const std::vector<ui32>& oldIndexes,
         TConstArrayRef<NScheme::TTypeInfo> types) {
-    AFL_ENSURE(newIndexes.size() == types.size());
-    AFL_ENSURE(oldIndexes.size() == types.size());
+    YDB_LOG_ENSURE(newIndexes.size() == types.size());
+    YDB_LOG_ENSURE(oldIndexes.size() == types.size());
     for (size_t index = 0; index < types.size(); ++index) {
-        AFL_ENSURE(newIndexes[index] < cells.size() && oldIndexes[index] < cells.size());
+        YDB_LOG_ENSURE(newIndexes[index] < cells.size() && oldIndexes[index] < cells.size());
         if (0 != CompareTypedCells(cells[newIndexes[index]], cells[oldIndexes[index]], types[index])) {
             return false;
         }
@@ -1371,7 +1417,7 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     // columnTypes: <prefix columns>, text, id, <optional data columns>
-    AFL_ENSURE(columnTypes.size() >= 2 + dataColumnCount);
+    YDB_LOG_ENSURE(columnTypes.size() >= 2 + dataColumnCount);
     const ui32 prefixSize = columnTypes.size() - 2 - dataColumnCount;
     switch (columnTypes[prefixSize + 1].GetTypeId()) {
     case NScheme::NTypeIds::Uint64:
@@ -1383,12 +1429,13 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     case NScheme::NTypeIds::Int32:
         return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
     }
-    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[prefixSize + 1].GetTypeId());
+    YDB_LOG_ENSURE(false,
+        {"primaryKeyType", columnTypes[prefixSize + 1].GetTypeId()});
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch, const size_t offset) {
     auto* data = dynamic_cast<TRowBatch*>(batch.Get());
-    AFL_ENSURE(data);
+    YDB_LOG_ENSURE(data);
     const auto& batchRows = data->GetRows();
     return std::vector<TConstArrayRef<TCell>>(batchRows.begin() + offset, batchRows.end());
 }
@@ -1454,11 +1501,11 @@ TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
         , SecondaryKeyColumns(secondaryKeyColumns)
         , SecondaryTableKeyColumns(secondaryTableKeyColumns)
         , PrimaryKeyInSecondaryTableKeyColumns(primaryKeyInSecondaryTableKeyColumns) {
-    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() == PrimaryKeyColumnTypes.size());
-    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() <= SecondaryKeyColumnTypes.size());
-    AFL_ENSURE(SecondaryTableKeyColumns.size() == SecondaryKeyColumnTypes.size());
-    AFL_ENSURE(SecondaryKeyColumns.size() <= SecondaryTableKeyColumns.size());
-    AFL_ENSURE(SecondaryTableKeyColumns.size() <= PrimaryKeyColumnTypes.size() + SecondaryKeyColumnTypes.size());
+    YDB_LOG_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() == PrimaryKeyColumnTypes.size());
+    YDB_LOG_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() <= SecondaryKeyColumnTypes.size());
+    YDB_LOG_ENSURE(SecondaryTableKeyColumns.size() == SecondaryKeyColumnTypes.size());
+    YDB_LOG_ENSURE(SecondaryKeyColumns.size() <= SecondaryTableKeyColumns.size());
+    YDB_LOG_ENSURE(SecondaryTableKeyColumns.size() <= PrimaryKeyColumnTypes.size() + SecondaryKeyColumnTypes.size());
 }
 
 bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
@@ -1475,7 +1522,7 @@ bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
 }
 
 bool TUniqueSecondaryKeyCollector::AddSecondaryTableRow(const TConstArrayRef<TCell> row) {
-    AFL_ENSURE(row.size() == SecondaryTableKeyColumns.size());
+    YDB_LOG_ENSURE(row.size() == SecondaryTableKeyColumns.size());
     Cells.emplace_back();
     Cells.back().reserve(SecondaryTableKeyColumns.size() + PrimaryKeyColumnTypes.size());
     for (const auto& cell : row) {
@@ -1593,6 +1640,11 @@ struct TBatchWithMetadata {
     // MvccSnapshot of the operation whose data this batch carries. Covering
     // (empty) batches have no snapshot.
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    ui64 WriteSeqNum = 0;
+    // Shard that first received this batch (its uncommitted write chain lives there).
+    // 0 = the batch is being sent to its original shard (current). Set on split/merge
+    // re-route so the destination validates against the transferred ancestor chain.
+    ui64 OriginalShard = 0;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1615,8 +1667,8 @@ public:
             : Memory(memory)
             , PendingBatches(pendingBatches)
             , NextCookie(nextCookie)
-            , Cookie(NextCookie++)
             , Closed(closed) {
+            AdvanceCookie();
         }
 
     public:
@@ -1637,16 +1689,16 @@ public:
         }
 
         void MakeNextBatches(std::optional<ui64> maxCount) {
-            AFL_ENSURE(BatchesInFlight == 0);
-            AFL_ENSURE(!IsEmpty());
+            YDB_LOG_ENSURE(BatchesInFlight == 0);
+            YDB_LOG_ENSURE(!IsEmpty());
 
             // For columnshard batch can be slightly larger than the limit.
             while ((!maxCount || BatchesInFlight < *maxCount)
                     && BatchesInFlight < Batches.size()) {
                 ++BatchesInFlight;
             }
-            AFL_ENSURE(BatchesInFlight != 0);
-            AFL_ENSURE(BatchesInFlight == Batches.size()
+            YDB_LOG_ENSURE(BatchesInFlight != 0);
+            YDB_LOG_ENSURE(BatchesInFlight == Batches.size()
                 || (maxCount && BatchesInFlight >= *maxCount));
         }
 
@@ -1661,28 +1713,29 @@ public:
         struct TBatchInfo {
             ui64 DataSize = 0;
         };
-        std::optional<TBatchInfo> PopBatches(const ui64 cookie) {
-            if (BatchesInFlight != 0 && Cookie == cookie) {
-                TBatchInfo result;
-                for (size_t index = 0; index < BatchesInFlight; ++index) {
-                    const i64 batchMemory = Batches.front().GetMemory();
-                    result.DataSize += batchMemory;
-                    Memory -= batchMemory;
-                    PendingBatches--;
-                    Batches.pop_front();
-                }
 
-                Cookie = NextCookie++;
-                SendAttempts = 0;
-                BatchesInFlight = 0;
+        TBatchInfo PopBatches(const ui64 cookie) {
+            YDB_LOG_ENSURE(Cookie == cookie);
+            YDB_LOG_ENSURE(BatchesInFlight != 0);
 
-                return result;
+            TBatchInfo result;
+            for (size_t index = 0; index < BatchesInFlight; ++index) {
+                const i64 batchMemory = Batches.front().GetMemory();
+                result.DataSize += batchMemory;
+                Memory -= batchMemory;
+                PendingBatches--;
+                Batches.pop_front();
             }
-            return std::nullopt;
+
+            AdvanceCookie();
+            SendAttempts = 0;
+            BatchesInFlight = 0;
+
+            return result;
         }
 
         void PushBatch(TBatchWithMetadata&& batch) {
-            AFL_ENSURE(!IsClosed());
+            YDB_LOG_ENSURE(!IsClosed());
             Batches.emplace_back(std::move(batch));
             Memory += Batches.back().GetMemory();
             PendingBatches++;
@@ -1690,6 +1743,11 @@ public:
         }
 
         ui64 GetCookie() const {
+            return Cookie;
+        }
+
+        ui64 AllocateMessageCookie() {
+            AdvanceCookie();
             return Cookie;
         }
 
@@ -1721,11 +1779,23 @@ public:
             return HasReadInBatch;
         }
 
+        // Next 1-based uncommitted write seq num in this shard's chain, assigned when
+        // batches are formed and carried by the batch itself on resend.
+        ui64 AllocateWriteSeqNum() {
+            return ++WriteSeqNum;
+        }
+
     private:
+        void AdvanceCookie() {
+            Cookie = NextCookie++;
+        }
+
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
         ui64& PendingBatches;
         bool HasReadInBatch = false;
+
+        ui64 WriteSeqNum = 0;
 
         ui64& NextCookie;
         ui64 Cookie;
@@ -1747,6 +1817,17 @@ public:
         return insertIt->second;
     }
 
+    TShardInfo* FindShard(const ui64 shard) {
+        auto it = ShardsInfo.find(shard);
+        return it != std::end(ShardsInfo) ? &it->second : nullptr;
+    }
+
+    ui64 AllocateMessageCookie(const ui64 shardId) {
+        auto* const shardInfo = FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo && !shardInfo->IsEmpty());
+        return shardInfo->AllocateMessageCookie();
+    }
+
     void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
         for (const auto& [id, shard] : ShardsInfo) {
             if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
@@ -1760,6 +1841,22 @@ public:
 
     bool Has(ui64 shardId) const {
         return ShardsInfo.contains(shardId);
+    }
+
+    std::vector<TBatchWithMetadata> ExtractShard(ui64 shardId) {
+        auto it = ShardsInfo.find(shardId);
+        if (it == std::end(ShardsInfo)) {
+            return {};
+        }
+        std::vector<TBatchWithMetadata> batches;
+        batches.reserve(it->second.Batches.size());
+        for (auto& batch : it->second.Batches) {
+            Memory -= batch.GetMemory();
+            --PendingBatches;
+            batches.push_back(std::move(batch));
+        }
+        ShardsInfo.erase(it);
+        return batches;
     }
 
     bool IsEmpty() const {
@@ -1798,6 +1895,12 @@ public:
         Closed = true;
     }
 
+    bool Reopen() {
+        const auto wasClosed = Closed;
+        Closed = false;
+        return wasClosed;
+    }
+
 private:
     THashMap<ui64, TShardInfo> ShardsInfo;
     i64 Memory = 0;
@@ -1825,11 +1928,11 @@ public:
     void OnPartitioningChanged(
         const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
-        Partitioning = partitioning;
+        Partitioning = TShardPartitionIndex(partitioning);
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                Partitioning->GetTablePartitioning(),
+                Partitioning.GetPartitioning()->GetTablePartitioning(),
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1838,9 +1941,6 @@ public:
     }
 
     void BeforePartitioningChanged() {
-        if (!Settings.Inconsistent) {
-            return;
-        }
         for (auto& [token, writeInfo] : WriteInfos) {
             if (writeInfo.Serializer) {
                 if (!writeInfo.Closed) {
@@ -1853,18 +1953,131 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        if (!Settings.Inconsistent) {
-            return;
+        for (const auto& [token, writeInfo] : WriteInfos) {
+            if (writeInfo.Closed) {
+                // Close recreated serializers. If they must be closed.
+                Close(token);
+            }
         }
-        if (!WriteInfos.empty()) {
-            ShardsInfo.Close();
-            ReshardData();
-            ShardsInfo.Clear();
-            for (const auto& [token, writeInfo] : WriteInfos) {
-                if (writeInfo.Closed) {
-                    Close(token);
+    }
+
+    TPartitioning::TCPtr GetPartitioning() const override {
+        return Partitioning.GetPartitioning();
+    }
+
+    const TShardPartitionIndex& GetShardPartitionIndex() const override {
+        return Partitioning;
+    }
+
+    TVector<ui64> GetDeletedShards() const override {
+        if (IsOlap.value_or(false)) {
+            return {};
+        }
+        YDB_LOG_ENSURE(Partitioning);
+        const auto& partitioning = *Partitioning.GetPartitioning();
+        THashSet<ui64> resolvedShards;
+        resolvedShards.reserve(partitioning.Size());
+        for (const auto& partition : partitioning.GetTablePartitioning()) {
+            resolvedShards.insert(partition.ShardId);
+        }
+        TVector<ui64> deletedShards;
+        for (const auto& [shardId, _] : ShardsInfo.GetShards()) {
+            if (!resolvedShards.contains(shardId)) {
+                deletedShards.push_back(shardId);
+            }
+        }
+        return deletedShards;
+    }
+
+    void EnsureShards(const TVector<ui64>& shardIds) override {
+        // Only records are created (no batch pushes), so the Reopen/Close dance of
+        // ReRouteShards is not needed here.
+        for (const ui64 shardId : shardIds) {
+            ShardsInfo.GetShard(shardId);
+        }
+    }
+
+    void ReRouteShards(TVector<ui64>&& deletedShards,
+            const TVector<std::pair<ui64, TVector<ui64>>>& coveringTargets) override {
+        // Batches must be pushed even if the sink finished producing (the controller
+        // may already be closed): temporarily re-open, push, then close back.
+        const auto wasClosed = ShardsInfo.Reopen();
+        THashMap<ui64, const TVector<ui64>*> targetsByShard;
+        targetsByShard.reserve(coveringTargets.size());
+        for (const auto& [shardId, targets] : coveringTargets) {
+            targetsByShard.emplace(shardId, &targets);
+        }
+        for (const ui64 shardId : deletedShards) {
+            auto batches = ShardsInfo.ExtractShard(shardId);
+            const TVector<ui64>* targets = nullptr;
+            if (auto it = targetsByShard.find(shardId); it != targetsByShard.end()) {
+                targets = it->second;
+            }
+            for (auto& batch : batches) {
+                YDB_LOG_ENSURE(batch.Data);
+                YDB_LOG_ENSURE(batch.OriginalShard != 0);
+                const ui64 originalShard = batch.OriginalShard;
+                auto fragments = WriteInfos.at(batch.Token).Serializer->SplitBatchByShards(std::move(batch.Data));
+
+                auto pushReroutedBatch = [&](const ui64 destShardId, IDataBatchPtr&& data) {
+                    auto& destShardInfo = ShardsInfo.GetShard(destShardId);
+                    destShardInfo.PushBatch(TBatchWithMetadata{
+                        .Token = batch.Token,
+                        .OperationType = batch.OperationType,
+                        .Data = std::move(data),
+                        .HasRead = batch.HasRead,
+                        .QuerySpanId = batch.QuerySpanId,
+                        .MvccSnapshot = batch.MvccSnapshot,
+                        // The chain position allocated by the original shard is
+                        // preserved; the destination's own counter does not move so
+                        // fresh current batches of the destination start at 1.
+                        .WriteSeqNum = Settings.EnableWriteSeqNum ? batch.WriteSeqNum : destShardInfo.AllocateWriteSeqNum(),
+                        .OriginalShard = originalShard,
+                    });
+                    ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                        .ShardId = destShardId,
+                        .HasRead = batch.HasRead,
+                        .QuerySpanId = batch.QuerySpanId,
+                    });
+                };
+
+                if (Settings.EnableWriteSeqNum && targets) {
+                    // Every covering shard must receive the batch's chain position: a
+                    // target whose key range holds none of the batch's rows gets an
+                    // empty 0-row batch, so the datashard still validates/advances the
+                    // transferred ancestor chain for this position and the commit-time
+                    // prepare carries fresh echo locks from it.
+                    THashSet<ui64> routedTargets;
+                    for (auto& [destShardId, fragment] : fragments) {
+                        // SplitBatchByShards only ever returns non-empty fragments (its
+                        // flush loop breaks on an empty batcher flush); the deliberate
+                        // empty batches are manufactured below.
+                        YDB_LOG_ENSURE(fragment && !fragment->IsEmpty());
+                        routedTargets.insert(destShardId);
+                        pushReroutedBatch(destShardId, std::move(fragment));
+                    }
+                    for (const ui64 destShardId : *targets) {
+                        if (routedTargets.contains(destShardId)) {
+                            continue;
+                        }
+                        auto poolAlloc = CreateOffloadedPoolAllocator(Alloc);
+                        pushReroutedBatch(destShardId,
+                            MakeIntrusive<TRowBatch>(TOwnedCellVecBatch(poolAlloc->CreateMemoryPool()), std::move(poolAlloc)));
+                    }
+                } else {
+                    for (auto& [destShardId, fragment] : fragments) {
+                        // SplitBatchByShards only ever returns non-empty fragments (its
+                        // flush loop breaks on an empty batcher flush); the deliberate
+                        // empty batches are manufactured separately in the
+                        // EnableWriteSeqNum branch above.
+                        YDB_LOG_ENSURE(fragment && !fragment->IsEmpty());
+                        pushReroutedBatch(destShardId, std::move(fragment));
+                    }
                 }
             }
+        }
+        if (wasClosed) {
+            ShardsInfo.Close();
         }
     }
 
@@ -1877,8 +2090,8 @@ public:
         const ui32 defaultColumnsCount,
         const i64 priority,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) override {
-        AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
-        AFL_ENSURE(defaultColumnsCount == 0 || operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT);
+        YDB_LOG_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
+        YDB_LOG_ENSURE(defaultColumnsCount == 0 || operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT);
 
         auto [iter, inserted] = WriteInfos.emplace(
             token,
@@ -1899,7 +2112,7 @@ public:
 
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                Partitioning->GetTablePartitioning(),
+                Partitioning.GetPartitioning()->GetTablePartitioning(),
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1916,12 +2129,12 @@ public:
             const TWriteToken token,
             IDataBatchPtr&& data) override {
         auto& info = WriteInfos.at(token);
-        AFL_ENSURE(!info.Closed);
-        AFL_ENSURE(info.Serializer);
-        AFL_ENSURE(info.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
+        YDB_LOG_ENSURE(!info.Closed);
+        YDB_LOG_ENSURE(info.Serializer);
+        YDB_LOG_ENSURE(info.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
 
         if (!data->AttachedAlloc()) {
-            AFL_ENSURE(!Settings.Inconsistent);
+            YDB_LOG_ENSURE(!Settings.Inconsistent);
             data->AttachAlloc(Alloc);
         }
         info.Serializer->AddData(std::move(data));
@@ -1929,7 +2142,7 @@ public:
 
     void Close(TWriteToken token) override {
         auto& info = WriteInfos.at(token);
-        AFL_ENSURE(info.Serializer);
+        YDB_LOG_ENSURE(info.Serializer);
         info.Closed = true;
         info.Serializer->Close();
     }
@@ -1937,7 +2150,7 @@ public:
     void CleanupClosedTokens() override {
         for (auto it = WriteInfos.begin(); it != WriteInfos.end();) {
             if (it->second.Closed) {
-                AFL_ENSURE(it->second.Serializer->IsFinished());
+                YDB_LOG_ENSURE(it->second.Serializer->IsFinished());
                 it = WriteInfos.erase(it);
             } else {
                 ++it;
@@ -2036,39 +2249,53 @@ public:
         return result;
     }
 
-    std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
-            return {};
-        }
-        BuildBatchesForShard(shardInfo);
-
-        TMessageMetadata meta;
-        meta.Cookie = shardInfo.GetCookie();
-        meta.OperationsCount = shardInfo.GetBatchesInFlight();
-        meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
-        meta.SendAttempts = shardInfo.GetSendAttempts();
-        meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
-
-        return meta;
+    bool HasShard(ui64 shardId) const override {
+        return ShardsInfo.Has(shardId);
     }
 
-    TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) override {
+    std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty()) {
+            return {};
+        }
+        return MakeMetadata(*shardInfo);
+    }
+
+    TMessageMetadata PrepareMessageMetadata(ui64 shardId) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo && !shardInfo->IsEmpty());
+        BuildBatchesForShard(*shardInfo);
+        return MakeMetadata(*shardInfo);
+    }
+
+    ui64 AllocateMessageCookie(ui64 shardId) override {
+        return ShardsInfo.AllocateMessageCookie(shardId);
+    }
+
+    TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
-        const auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
-            return result;
-        }
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo && !shardInfo->IsEmpty());
 
-        for (size_t index = 0; index < shardInfo.GetBatchesInFlight(); ++index) {
-            const auto& inFlightBatch = shardInfo.GetBatch(index);
+        for (size_t index = 0; index < shardInfo->GetBatchesInFlight(); ++index) {
+            const auto& inFlightBatch = shardInfo->GetBatch(index);
             if (inFlightBatch.Data) {
-                AFL_ENSURE(!inFlightBatch.Data->IsEmpty());
+                const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
+                // A re-routed batch may carry no rows for this shard (an empty fragment
+                // for a covering target that received no data): it still must produce
+                // an operation carrying the write chain (WriteSeqNum + OriginalShard),
+                // so the datashard validates/advances the transferred ancestor chain.
+                TString payload;
+                if (inFlightBatch.Data->IsEmpty()) {
+                    payload = TSerializedCellMatrix::Serialize({}, 0, writeInfo.Serializer->GetWriteColumnIds().size());
+                } else {
+                    payload = inFlightBatch.Data->SerializeToString();
+                }
                 result.TotalDataSize += inFlightBatch.Data->GetMemory();
                 const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(evWrite)
-                        .AddDataToPayload(inFlightBatch.Data->SerializeToString());
-                const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
+                        .AddDataToPayload(std::move(payload));
                 auto& operation = evWrite.AddOperation(
                     inFlightBatch.OperationType,
                     writeInfo.Metadata.TableId,
@@ -2079,39 +2306,47 @@ public:
                 if (inFlightBatch.QuerySpanId != 0) {
                     operation.SetQuerySpanId(inFlightBatch.QuerySpanId);
                 }
+                if (Settings.EnableWriteSeqNum && !isFinalPrepareOrCommit) {
+                    auto* writeSeqNum = operation.MutableWriteSeqNum();
+                    writeSeqNum->SetWriterIndex(Settings.WriterIndex);
+                    writeSeqNum->SetWriteSeqNum(inFlightBatch.WriteSeqNum);
+
+                    operation.SetOriginalShard(inFlightBatch.OriginalShard);
+                }
             } else {
-                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
+                YDB_LOG_ENSURE(index + 1 == shardInfo->GetBatchesInFlight());
             }
         }
 
         return result;
     }
 
-    std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        const auto result = shardInfo.PopBatches(cookie);
-        if (result) {
-            return TMessageAcknowledgedResult {
-                .DataSize = result->DataSize,
-                .IsShardEmpty = shardInfo.IsEmpty(),
-            };
-        }
-        return std::nullopt;
+    TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo);
+        YDB_LOG_ENSURE(cookie != 0);
+        const auto result = shardInfo->PopBatches(cookie);
+        return TMessageAcknowledgedResult {
+            .DataSize = result.DataSize,
+            .IsShardEmpty = shardInfo->IsEmpty(),
+        };
     }
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        AFL_ENSURE(!shardInfo.IsEmpty() && shardInfo.GetCookie() == cookie);
-        shardInfo.IncSendAttempts();
-        shardInfo.IncOverloadSeqNo();
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo);
+        YDB_LOG_ENSURE(!shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
+        shardInfo->IncSendAttempts();
+        shardInfo->IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        YDB_LOG_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
             return;
         }
-        shardInfo.ResetSendAttempts();
+        shardInfo->ResetSendAttempts();
     }
 
     i64 GetMemory() const override {
@@ -2120,7 +2355,7 @@ public:
             if (writeInfo.Serializer) {
                 total += writeInfo.Serializer->GetMemory();
             } else {
-                AFL_ENSURE(writeInfo.Closed);
+                YDB_LOG_ENSURE(writeInfo.Closed);
             }
         }
         return total;
@@ -2184,18 +2419,24 @@ private:
     void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
         for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
+            auto& shardInfo = ShardsInfo.GetShard(shardId);
             for (auto& batch : batches) {
                 if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
                             || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                    ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
+                    TBatchWithMetadata batchWithMetadata {
                         .Token = token,
                         .OperationType = writeInfo.Metadata.OperationType,
                         .Data = std::move(batch),
                         .HasRead = hasRead,
                         .QuerySpanId = writeInfo.QuerySpanId,
                         .MvccSnapshot = writeInfo.MvccSnapshot,
-                    });
+                        // Every non-empty batch gets a write seq num; whether it is attached
+                        // to the resulting operations is decided at serialization.
+                        .WriteSeqNum = shardInfo.AllocateWriteSeqNum(),
+                        .OriginalShard = shardId,
+                    };
+                    shardInfo.PushBatch(std::move(batchWithMetadata));
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
                         .ShardId = shardId,
                         .HasRead = hasRead,
@@ -2208,28 +2449,24 @@ private:
 
     void BuildBatchesForShard(TShardsInfo::TShardInfo& shard) {
         if (shard.GetBatchesInFlight() == 0) {
-            AFL_ENSURE(IsOlap != std::nullopt);
+            YDB_LOG_ENSURE(IsOlap != std::nullopt);
             if (*IsOlap) {
                 shard.MakeNextBatches(1);
             } else {
                 shard.MakeNextBatches(std::nullopt);
-                AFL_ENSURE(shard.GetBatchesInFlight() == shard.Size());
+                YDB_LOG_ENSURE(shard.GetBatchesInFlight() == shard.Size());
             }
         }
     }
 
-    void ReshardData() {
-        AFL_ENSURE(Settings.Inconsistent);
-        for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
-            for (size_t index = 0; index < shardInfo.Size(); ++index) {
-                auto& batch = shardInfo.GetBatch(index);
-                const auto& writeInfo = WriteInfos.at(batch.Token);
-                // Resharding supported only for inconsistent write,
-                // so convering empty batches don't exist in this case.
-                AFL_ENSURE(batch.Data);
-                writeInfo.Serializer->AddBatch(std::move(batch.Data));
-            }
-        }
+    static TMessageMetadata MakeMetadata(const TShardsInfo::TShardInfo& shard) {
+        TMessageMetadata meta;
+        meta.Cookie = shard.GetCookie();
+        meta.OperationsCount = shard.GetBatchesInFlight();
+        meta.IsFinal = shard.IsClosed() && shard.Size() == shard.GetBatchesInFlight();
+        meta.SendAttempts = shard.GetSendAttempts();
+        meta.NextOverloadSeqNo = shard.GetOverloadSeqNo();
+        return meta;
     }
 
     TShardedWriteControllerSettings Settings;
@@ -2251,7 +2488,7 @@ private:
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     std::optional<bool> IsOlap;
 };
 
@@ -2262,6 +2499,24 @@ IShardedWriteControllerPtr CreateShardedWriteController(
         const TShardedWriteControllerSettings& settings,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TShardedWriteController>(settings, std::move(alloc));
+}
+
+bool IsSupersededWriteResult(const ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata) {
+    YDB_LOG_ENSURE(cookie != 0);
+    return !metadata || metadata->Cookie != cookie;
+}
+
+bool IsIgnorableSupersededStatus(const NKikimrDataEvents::TEvWriteResult::EStatus status) {
+    switch (status) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 }

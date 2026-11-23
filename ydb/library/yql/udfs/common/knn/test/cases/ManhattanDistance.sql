@@ -16,6 +16,16 @@ $float_vector1 = Knn::ToBinaryStringFloat([1.0f, 2.0f, 3.0f]);
 $float_vector2 = Knn::ToBinaryStringFloat([4.0f, 5.0f, 6.0f]);
 select Knn::ManhattanDistance($float_vector1, $float_vector2);
 
+--float16 vector
+$float16_vector1 = Knn::ToBinaryStringFloat16([1.0f, 2.0f, 3.0f]);
+$float16_vector2 = Knn::ToBinaryStringFloat16([4.0f, 5.0f, 6.0f]);
+select Knn::ManhattanDistance($float16_vector1, $float16_vector2);
+
+--bfloat16 vector
+$bfloat16_vector1 = Knn::ToBinaryStringBFloat16([1.0f, 2.0f, 3.0f]);
+$bfloat16_vector2 = Knn::ToBinaryStringBFloat16([4.0f, 5.0f, 6.0f]);
+select Knn::ManhattanDistance($bfloat16_vector1, $bfloat16_vector2);
+
 --byte vector
 $byte_vector1 = Knn::ToBinaryStringUint8([1ut, 2ut, 3ut]);
 $byte_vector2 = Knn::ToBinaryStringUint8([4ut, 5ut, 6ut]);

@@ -72,6 +72,12 @@ void ExtractConstantExprs(const TExprNode::TPtr& input, TVector<std::pair<TExprN
         }
     }
 
+    if (input->IsCallable("SqlIn") && input->Child(0)->IsList()) {
+        for (const auto& item : input->Child(0)->Children()) {
+            ExtractConstantExprs(item, exprs, ctx, foldUdfs);
+        }
+    }
+
     return;
 }
 
@@ -92,7 +98,7 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     // Actual map used in the optimizer
     TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> globalExtractedExprs;
-    TVector<TIntrusivePtr<IOperator>> affectedOps;
+    TVector<IOperator*> affectedOps;
 
     for (const auto& it : root) {
         if (!it.Current->GetExpressions().empty()) {

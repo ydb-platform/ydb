@@ -9,12 +9,14 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow::NHash {
 
 namespace {
 template <class TStreamCalcer>
 void AppendFieldImpl(const std::shared_ptr<arrow::Scalar>& scalar, TStreamCalcer& hashCalcer) {
-    AFL_VERIFY(scalar);
+    YDB_LOG_VERIFY(scalar);
     NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
@@ -65,7 +67,7 @@ ui64 TXX64::CalcSimple(const std::string_view data, const ui64 seed) {
 }
 
 ui64 TXX64::CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui64 seed) {
-    AFL_VERIFY(scalar);
+    YDB_LOG_VERIFY(scalar);
     ui64 result = 0;
     NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -79,7 +81,7 @@ ui64 TXX64::CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui
             result = CalcSimple(typedScalar.data(), sizeof(typedScalar.value), seed);
         } else {
             static_assert(arrow::is_decimal_type<T>());
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
         return true;
     });
@@ -155,7 +157,10 @@ bool BuildHashUI64Impl(std::shared_ptr<TDataContainer>& batch, const std::vector
     if (fieldNames.size() == 1) {
         auto column = batch->GetColumnByName(fieldNames.front());
         if (!column) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
+            YDB_LOG_WARN("",
+                {"event", "cannot_build_hash"},
+                {"reason", "field_not_found"},
+                {"fieldName", fieldNames.front()});
             return false;
         }
         Y_ABORT_UNLESS(column);

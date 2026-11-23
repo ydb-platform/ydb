@@ -1,6 +1,7 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(storage_transport.h)
+GENERATE_ENUM_SERIALIZATION(chaos_injector_control.h)
 
 SRCS(
     ddisk_helpers.cpp

@@ -11,7 +11,8 @@
 #include <yt/yt/library/profiling/producer.h>
 
 #include <library/cpp/yt/threading/execution_stack.h>
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -130,7 +131,7 @@ private:
     TFiberStack<NDetail::TFiberRegisterTag> RegisterQueue_;
     TFiberStack<NDetail::TFiberUnregisterTag> UnregisterQueue_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
     TFiber::TFiberList Fibers_;
 
 // NB(arkady-e1ppa): This shutdown logic
@@ -333,7 +334,7 @@ std::optional<TDuration> TFiberIntrospectionBase::SetRunning()
     auto observed = GetState();
     std::optional<NProfiling::TWallTimer> lockedTimer;
 
-    do {
+    while (true) {
         // NB(arkady-e1ppa): We expect SetRunning to have
         // either SetIdle, SetWaiting or Ctor in HB relation to this call.
         // If we have SetIdle in HB relation then we must
@@ -355,11 +356,15 @@ std::optional<TDuration> TFiberIntrospectionBase::SetRunning()
             continue;
         }
         // TryAcquire lock.
-    } while (!State_.compare_exchange_weak(
-        observed,
-        EFiberState::Running,
-        std::memory_order::acquire,
-        std::memory_order::relaxed));
+        if (State_.compare_exchange_weak(
+            observed,
+            EFiberState::Running,
+            std::memory_order::acquire,
+            std::memory_order::relaxed))
+        {
+            break;
+        }
+    }
 
     return lockedTimer.has_value()
         ? std::optional(lockedTimer->GetElapsedTime())

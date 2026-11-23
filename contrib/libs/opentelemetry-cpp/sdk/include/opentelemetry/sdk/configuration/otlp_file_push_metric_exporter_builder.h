@@ -7,12 +7,16 @@
 
 #include "opentelemetry/sdk/configuration/otlp_file_push_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/push_metric_exporter_configuration.h"
-#include "opentelemetry/sdk/metrics/push_metric_exporter.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
+namespace metrics
+{
+class PushMetricExporter;
+}  // namespace metrics
+
 namespace configuration
 {
 

@@ -1,5 +1,5 @@
-/* Copyright (c) 2010 Lars Nordin <Lars.Nordin@SDlabs.se>
- * Copyright (C) 2010 Simon Josefsson <simon@josefsson.org>
+/* Copyright (C) Lars Nordin <Lars.Nordin@SDlabs.se>
+ * Copyright (C) Simon Josefsson <simon@josefsson.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms,
@@ -34,6 +34,8 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
  * OF SUCH DAMAGE.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "libssh2_priv.h"
@@ -74,5 +76,5 @@ void
 _libssh2_init_if_needed(void)
 {
     if(_libssh2_initialized == 0)
-        (void)libssh2_init (0);
+        (void)libssh2_init(0);
 }

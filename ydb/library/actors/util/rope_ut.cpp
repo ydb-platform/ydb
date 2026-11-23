@@ -162,6 +162,9 @@ Y_UNIT_TEST_SUITE(TRope) {
 
 #ifndef TSTRING_IS_STD_STRING
     Y_UNIT_TEST(ExtractZeroCopy) {
+        if (!TStringUseCow) {
+            return; // zero-copy TString interop requires copy-on-write
+        }
         TString str = Text;
         TRope packed(str);
         TString extracted = packed.ExtractUnderlyingContainerOrCopy<TString>();
@@ -169,6 +172,9 @@ Y_UNIT_TEST_SUITE(TRope) {
     }
 
     Y_UNIT_TEST(ExtractZeroCopySlice) {
+        if (!TStringUseCow) {
+            return; // zero-copy TString interop requires copy-on-write
+        }
         TString str = Text;
         TRope sliced(str);
         sliced.EraseFront(1);
@@ -181,6 +187,9 @@ Y_UNIT_TEST_SUITE(TRope) {
     }
 
     Y_UNIT_TEST(TStringDetach) {
+        if (!TStringUseCow) {
+            return; // zero-copy TString interop requires copy-on-write
+        }
         TRope pf;
         TRope rope;
         TString string = TString(Text.data(), Text.size());
@@ -193,6 +202,9 @@ Y_UNIT_TEST_SUITE(TRope) {
     }
 
     Y_UNIT_TEST(TStringUnsafeShared) {
+        if (!TStringUseCow) {
+            return; // zero-copy TString interop requires copy-on-write
+        }
         TRope pf;
         TRope rope;
         TString string = TString(Text.data(), Text.size());
@@ -204,6 +216,9 @@ Y_UNIT_TEST_SUITE(TRope) {
     }
 
     Y_UNIT_TEST(ContiguousDataInterop) {
+        if (!TStringUseCow) {
+            return; // zero-copy TString interop requires copy-on-write
+        }
         TString string = "Some long-long text needed for not sharing data and testing";
         TRcBuf data(string);
         UNIT_ASSERT_EQUAL(data.UnsafeGetDataMut(), &(*string.cbegin()));

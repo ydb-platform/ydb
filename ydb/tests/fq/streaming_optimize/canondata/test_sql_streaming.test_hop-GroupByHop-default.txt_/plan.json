@@ -42,7 +42,11 @@
                 ],
                 "Operators" : [
                     {
-                        "Inputs" : [ ],
+                        "Inputs" : [
+                            {
+                                "ExternalPlanNodeId" : 4
+                            }
+                        ],
                         "ExternalDataSource" : "pq",
                         "Name" : "Write pq",
                         "SinkType" : "pq"
@@ -67,6 +71,30 @@
         "Plans" : [
             {
                 "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 3,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 5,
+                                "Operators" : [
+                                    {
+                                        "ExternalDataSource" : "pq",
+                                        "Name" : "Read pq",
+                                        "SourceType" : "pq"
+                                    }
+                                ],
+                                "Node Type" : "Read pq"
+                            }
+                        ],
+                        "HashFunc" : "HashV2",
+                        "Node Type" : "HashShuffle",
+                        "KeyColumns" : [
+                            "k"
+                        ],
+                        "PlanNodeType" : "Connection"
+                    }
+                ],
                 "Operators" : [
                     {
                         "ExternalDataSource" : "pq",

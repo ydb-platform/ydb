@@ -1,22 +1,21 @@
 #include <ydb/core/fq/libs/ydb/sdk_table_client.h>
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
+
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 namespace NFq {
 
 namespace {
 
-struct TSdkYdbConnection : public IYdbConnection {
-
+struct TSdkYdbConnection: public IYdbConnection {
     TSdkYdbConnection(
-        const TExternalStorageSettings& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-        const NYdb::TDriver& driver)
+        const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver)
         : Driver(driver)
         , TableClient(CreateSdkTableClient(driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory)))
         , Db(config.GetDatabase())
-        , TablePathPrefix(JoinPath(Db, config.GetPathPrefix())) {
+        , TablePathPrefix(JoinPath(Db, config.GetPathPrefix()))
+    {
     }
 
     IYdbTableClient::TPtr GetTableClient() const override {
@@ -42,13 +41,11 @@ private:
     const TString TablePathPrefix;
 };
 
-} // namespace
+}   // namespace
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
-    const TExternalStorageSettings& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-    const NYdb::TDriver& driver) {
+    const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver) {
     return MakeIntrusive<TSdkYdbConnection>(config, credProviderFactory, driver);
 }
 
-} // namespace NFq
+}   // namespace NFq

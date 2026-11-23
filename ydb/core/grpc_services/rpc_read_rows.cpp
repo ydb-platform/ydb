@@ -3,9 +3,9 @@
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
-#include <ydb/core/kqp/common/kqp_ru_calc.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
+#include <ydb/core/kqp/common/stats/ru_calc.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/datashard/read_table_scan.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -22,6 +22,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 
@@ -92,6 +93,7 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 public:
     explicit TReadRowsRPC(IRequestNoOpCtx* request)
         : Request(request)
+        , TablePath(Request->NormalizePath(GetProto()->path()))
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -100,13 +102,8 @@ public:
         Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
-
-        if (entry.Indexes.size()) {
-            errorMessage = "EvReadResults is not supported for tables with indexes";
-            return false;
-        }
-
         const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
+        const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
 
         THashSet<TString> keyColumnNamesInSchema;
         THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*> nameToColumn;
@@ -123,6 +120,7 @@ public:
         if (!PrepareRequestedKeyColumns(keyColumnNamesInSchema,
                                         nameToColumn,
                                         entry.NotNullColumns,
+                                        disablePgCompatibility,
                                         errorMessage))
         {
             return false;
@@ -134,12 +132,23 @@ public:
             return false;
         }
 
+        if (disablePgCompatibility) {
+            const auto* pgColumn = FindIfPtr(RequestedColumnsMeta, [](const auto& column) {
+                return column.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+            });
+            if (pgColumn) {
+                errorMessage = Sprintf("PostgreSQL compatibility is disabled for column '%s'", pgColumn->Name.c_str());
+                return false;
+            }
+        }
+
         return true;
     }
 
     bool PrepareRequestedKeyColumns(const THashSet<TString>& keyColumnNamesInSchema,
                                     const THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*>& nameToColumn,
                                     const THashSet<TString>& notNullColumns,
+                                    bool disablePgCompatibility,
                                     TString& errorMessage)
     {
         auto keyColumnsLeft = keyColumnNamesInSchema;
@@ -155,6 +164,11 @@ public:
                 return false;
             }
             const auto& colInfo = *colInfoPtr;
+
+            if (disablePgCompatibility && (typeInProto.has_pg_type() || colInfo.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
+                errorMessage = Sprintf("PostgreSQL compatibility is disabled for column '%s'", name.c_str());
+                return false;
+            }
 
             TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
 
@@ -272,7 +286,7 @@ public:
     }
 
     const TString& GetTable() {
-        return GetProto()->path();
+        return TablePath;
     }
 
     bool CheckAccess(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
@@ -594,11 +608,20 @@ public:
         }
     }
 
-    void FillResultRows(Ydb::Table::ReadRowsResponse* response) {
+    bool FillResultRows(Ydb::Table::ReadRowsResponse* response, TString& error) {
         auto *resultSet = response->Mutableresult_set();
+        resultSet->set_format(Ydb::ResultSet::FORMAT_VALUE);
 
         NKqp::TProgressStatEntry stats;
         auto& ioStats = stats.ReadIOStat;
+
+        resultSet->mutable_columns()->Reserve(RequestedColumnsMeta.size());
+
+        size_t rowsCount = 0;
+        for (const auto& result : EvReadResults) {
+            rowsCount += result->GetRowsCount();
+        }
+        resultSet->mutable_rows()->Reserve(rowsCount);
 
         const auto getPgTypeFromColMeta = [](const auto &colMeta) {
             return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetPgTypeDesc()),
@@ -625,7 +648,10 @@ public:
             }
         };
 
+        TVector<NScheme::TTypeInfo> requestedColumnTypes;
+        requestedColumnTypes.reserve(RequestedColumnsMeta.size());
         for (const auto& colMeta : RequestedColumnsMeta) {
+            requestedColumnTypes.emplace_back(colMeta.Type);
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
             if (colMeta.IsNotNullColumn || colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) { // pg type in nullable itself
@@ -638,84 +664,34 @@ public:
 
         for (auto& result : EvReadResults) {
             for (size_t i = 0; i < result->GetRowsCount(); ++i) {
-                const auto& row = result->GetCells(i);
-                NYdb::TValueBuilder vb;
-                vb.BeginStruct();
-                ui64 sz = 0;
-                for (size_t i = 0; i < RequestedColumnsMeta.size(); ++i) {
-                    const auto& colMeta = RequestedColumnsMeta[i];
-                    const auto type = getTypeFromColMeta(colMeta);
-                    YDB_LOG_DEBUG("TReadRowsRPC",
-                        {"name", colMeta.Name});
-                    const auto& cell = row[i];
-                    vb.AddMember(colMeta.Name);
-                    switch (colMeta.Type.GetTypeId()) {
-                    case NScheme::NTypeIds::Pg: {
-                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
-                        if (pgResult.Error) {
-                            YDB_LOG_DEBUG("PgNativeTextFromNativeBinary error",
-                                {"pgResult", *pgResult.Error});
-                        }
-                        const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
-                        vb.Pg(pgValue);
-                        break;
-                    }
-                    case NScheme::NTypeIds::Decimal: {
-                        using namespace NYql::NDecimal;
-
-                        NYdb::TDecimalType decimalType{
-                            static_cast<ui8>(colMeta.Type.GetDecimalType().GetPrecision()),
-                            static_cast<ui8>(colMeta.Type.GetDecimalType().GetScale())
-                        };
-
-                        if (cell.IsNull()) {
-                            vb.EmptyOptional(NYdb::TTypeBuilder().Decimal(decimalType).Build());
-                        } else {
-                            const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
-                            Ydb::Value valueProto;
-                            valueProto.set_low_128(loHi.first);
-                            valueProto.set_high_128(loHi.second);
-                            if (colMeta.IsNotNullColumn) {
-                                vb.Decimal({valueProto, decimalType});
-                            } else {
-                                vb.BeginOptional();
-                                vb.Decimal({valueProto, decimalType});
-                                vb.EndOptional();
-                            }
-                        }
-                        break;
-                    }
-                    default: {
-                        if (cell.IsNull()) {
-                            vb.EmptyOptional((NYdb::EPrimitiveType)colMeta.Type.GetTypeId());
-                        } else {
-                            if (colMeta.IsNotNullColumn) {
-                                ProtoValueFromCell(vb, colMeta.Type, cell);
-                            } else {
-                                vb.BeginOptional();
-                                ProtoValueFromCell(vb, colMeta.Type, cell);
-                                vb.EndOptional();
-                            }
-                        }
-                        break;
-                    }
-                    }
-                    sz += cell.Size();
+                const auto row = result->GetCells(i);
+                TString serializationError;
+                if (!NDataShard::AddRowToYdbResultSet(
+                        *resultSet, requestedColumnTypes, row, serializationError))
+                {
+                    error = TStringBuilder()
+                        << "Failed to serialize ReadRows result: " << serializationError;
+                    return false;
                 }
-                vb.EndStruct();
-                auto proto = NYdb::TProtoAccessor::GetProto(vb.Build());
+
+                ui64 sz = 0;
+                for (size_t columnIndex = 0; columnIndex < RequestedColumnsMeta.size(); ++columnIndex) {
+                    YDB_LOG_DEBUG("TReadRowsRPC",
+                        {"name", RequestedColumnsMeta[columnIndex].Name});
+                    sz += row[columnIndex].Size();
+                }
                 ioStats.Rows++;
                 ioStats.Bytes += sz;
-                *resultSet->add_rows() = std::move(proto);
             }
         }
 
         RuCost = NKqp::NRuCalc::CalcRequestUnit(stats);
         YDB_LOG_DEBUG("TReadRowsRPC created ReadRowsResponse",
             {"response", response->DebugString()});
+        return true;
     }
 
-    void SendResult(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
+    void SendResult(Ydb::StatusIds::StatusCode status, const TString& errorMsg,
         const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues = nullptr)
     {
         auto* resp = CreateResponse();
@@ -732,9 +708,18 @@ public:
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            Request->SetRuHeader(RuCost);
+            TString serializationError;
+            if (!FillResultRows(resp, serializationError)) {
+                status = Ydb::StatusIds::INTERNAL_ERROR;
+                resp->set_status(status);
+                resp->clear_result_set();
 
-            FillResultRows(resp);
+                const NYql::TIssue& issue = MakeIssue(
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, serializationError);
+                NYql::IssueToMessage(issue, resp->add_issues());
+            } else {
+                Request->SetRuHeader(RuCost);
+            }
         }
 
         YDB_LOG_DEBUG("TReadRowsRPC sent result");
@@ -857,6 +842,7 @@ public:
 
 private:
     std::unique_ptr<IRequestNoOpCtx> Request;
+    const TString TablePath;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
     TActorId PipeCache;

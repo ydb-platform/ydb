@@ -23,6 +23,7 @@ namespace NTable {
     class TRowState;
     struct TChange;
     class TDatabaseImpl;
+    struct IRedoObserver;
     class TAnnex;
     class TTable;
     class TKeyRangeCache;
@@ -152,7 +153,11 @@ public:
 
     void Update(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, TRowVersion rowVersion = TRowVersion::Min());
 
-    void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId);
+    /**
+     * Writes an uncommitted update of txId. A non-zero savepointSeqNum marks
+     * the operation this update belongs to within the transaction.
+     */
+    void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId, ui32 savepointSeqNum = 0);
     void LockRowTx(ui32 table, ELockMode, TRawVals key, ui64 txId);
     void RemoveTx(ui32 table, ui64 txId);
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
@@ -227,6 +232,7 @@ public:
     void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
+    ui64 GetTableMemAllocatedSize(ui32 table) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
     ui64 GetTableMemOpsCount(ui32 tableId) const;
     ui64 GetTableIndexSize(ui32 table) const;
@@ -275,10 +281,14 @@ public:
      */
     void RollbackChanges();
 
+    // Page environment of the current transaction. Valid between Begin and Commit.
+    IPages* GetPagesEnv() const noexcept { return Env; }
+
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
-    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex);
+    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex,
+        TArrayRef<const ui32> truncatedTables, IRedoObserver* observer = nullptr);
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 

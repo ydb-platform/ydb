@@ -58,6 +58,9 @@ namespace TEvKesus {
         EvReleaseSemaphore,
         EvReleaseSemaphoreResult,
 
+        EvDescribeSemaphores,
+        EvDescribeSemaphoresResult,
+
         // Notifications
         EvProxyExpired = EvBegin + 512,
         EvSessionExpired,
@@ -216,6 +219,10 @@ namespace TEvKesus {
             Record.SetData(data);
         }
     };
+
+    struct TEvDescribeSemaphores : public TEventPB<TEvDescribeSemaphores, NKikimrKesus::TEvDescribeSemaphores, EvDescribeSemaphores> {};
+
+    struct TEvDescribeSemaphoresResult : public TEventPB<TEvDescribeSemaphoresResult, NKikimrKesus::TEvDescribeSemaphoresResult, EvDescribeSemaphoresResult> {};
 
     struct TEvCreateSemaphoreResult : public TResultBase<TEvCreateSemaphoreResult, NKikimrKesus::TEvCreateSemaphoreResult, EvCreateSemaphoreResult> {
         using TResultBase::TResultBase;

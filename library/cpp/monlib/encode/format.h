@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/http/io/headers.h>
+
 #include <util/generic/strbuf.h>
 
 namespace NMonitoring {
@@ -132,6 +134,12 @@ namespace NMonitoring {
      * @return message format
      */
     EFormat FormatFromContentType(TStringBuf value);
+
+    /**
+     * Content-encoding policy that disables HTTP encoding for monitoring media types.
+     * Monitoring formats manage compression inside their payload and must pass through.
+     */
+    bool DisableContentEncoding(const THttpHeaders& requestHeaders, const THttpHeaders& responseHeaders);
 
     /**
      * Returns value for "Content-Type" header determined by the given

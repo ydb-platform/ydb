@@ -1,0 +1,115 @@
+diff --git a/src/core/lib/event_engine/posix_engine/posix_engine.cc b/src/core/lib/event_engine/posix_engine/posix_engine.cc
+--- a/src/core/lib/event_engine/posix_engine/posix_engine.cc
++++ b/src/core/lib/event_engine/posix_engine/posix_engine.cc
+@@ -95,6 +95,32 @@ class TimerForkCallbackMethods {
+   static void PostforkChild() { g_timer_fork_manager->PostforkChild(); }
+ };
+ 
++grpc_core::NoDestruct<ObjectGroupForkHandler> g_poll_loop_fork_manager;
++
++class PollLoopForkCallbackMethods {
++ public:
++  static void Prefork() { g_poll_loop_fork_manager->Prefork(); }
++  static void PostforkParent() { g_poll_loop_fork_manager->PostforkParent(); }
++  static void PostforkChild() { g_poll_loop_fork_manager->PostforkChild(); }
++};
++
++// The poller's PrepareFork() kicks the poll loop, which then stops without
++// rescheduling itself, and the poller's PostforkParent() does nothing. Restart
++// the loop in the parent once the thread pool is running again; otherwise the
++// EventEngine never polls again (e.g. EventEngine listeners stop accepting).
++// The child is left as is: it shares the epoll set with the parent.
++class PollLoopForkHandler : public Forkable {
++ public:
++  explicit PollLoopForkHandler(y_absl::AnyInvocable<void()> restart_poll_loop)
++      : restart_poll_loop_(std::move(restart_poll_loop)) {}
++  void PrepareFork() override {}
++  void PostforkParent() override { restart_poll_loop_(); }
++  void PostforkChild() override {}
++
++ private:
++  y_absl::AnyInvocable<void()> restart_poll_loop_;
++};
++
+ bool ShouldUseAresDnsResolver() {
+ #if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
+   auto resolver_env = grpc_core::ConfigVars::Get().DnsResolver();
+@@ -400,6 +426,22 @@ PosixEventEngine::PosixEventEngine()
+     executor_->Run([poller_manager = poller_manager_]() {
+       PollerWorkInternal(poller_manager);
+     });
++    poll_loop_fork_handler_ = std::make_shared<PollLoopForkHandler>(
++        [weak_poller_manager = std::weak_ptr<PosixEnginePollerManager>(
++             poller_manager_)]() {
++          auto poller_manager = weak_poller_manager.lock();
++          if (poller_manager == nullptr || poller_manager->IsShuttingDown() ||
++              !poller_manager->ResetPollLoopStopped()) {
++            return;
++          }
++          poller_manager->Executor()->Run([poller_manager]() {
++            PollerWorkInternal(poller_manager);
++          });
++        });
++    g_poll_loop_fork_manager->RegisterForkable(
++        poll_loop_fork_handler_, PollLoopForkCallbackMethods::Prefork,
++        PollLoopForkCallbackMethods::PostforkParent,
++        PollLoopForkCallbackMethods::PostforkChild);
+   }
+ #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+ }
+@@ -422,6 +464,11 @@ void PosixEventEngine::PollerWorkInternal(
+       PollerWorkInternal(poller_manager);
+     });
+   } else if (result == Poller::WorkResult::kKicked &&
++             !poller_manager->IsShuttingDown()) {
++    // Kicked by the poller's PrepareFork(): the loop stops here and is
++    // restarted after fork by PollLoopForkHandler.
++    poller_manager->SetPollLoopStopped();
++  } else if (result == Poller::WorkResult::kKicked &&
+              poller_manager->IsShuttingDown()) {
+     // The Poller Got Kicked and poller_state_ is set to
+     // PollerState::kShuttingDown. This can currently happen only from the
+diff --git a/src/core/lib/event_engine/posix_engine/posix_engine.h b/src/core/lib/event_engine/posix_engine/posix_engine.h
+--- a/src/core/lib/event_engine/posix_engine/posix_engine.h
++++ b/src/core/lib/event_engine/posix_engine/posix_engine.h
+@@ -35,6 +35,7 @@
+ #include <grpc/event_engine/event_engine.h>
+ #include <grpc/event_engine/memory_allocator.h>
+ 
++#include "src/core/lib/event_engine/forkable.h"
+ #include "src/core/lib/event_engine/handle_containers.h"
+ #include "src/core/lib/event_engine/posix.h"
+ #include "src/core/lib/event_engine/posix_engine/event_poller.h"
+@@ -122,12 +123,23 @@ class PosixEnginePollerManager
+   }
+   void TriggerShutdown();
+ 
++  // Set when the poll loop stops on a Kick() while not shutting down, i.e.
++  // on the Kick() issued by the poller's PrepareFork(). The fork handler uses
++  // it to restart the loop after fork.
++  void SetPollLoopStopped() {
++    poll_loop_stopped_.store(true, std::memory_order_release);
++  }
++  bool ResetPollLoopStopped() {
++    return poll_loop_stopped_.exchange(false, std::memory_order_acq_rel);
++  }
++
+   ~PosixEnginePollerManager() override;
+ 
+  private:
+   enum class PollerState { kExternal, kOk, kShuttingDown };
+   std::shared_ptr<grpc_event_engine::experimental::PosixEventPoller> poller_;
+   std::atomic<PollerState> poller_state_{PollerState::kOk};
++  std::atomic<bool> poll_loop_stopped_{false};
+   std::shared_ptr<ThreadPool> executor_;
+   bool trigger_shutdown_called_;
+ };
+@@ -257,6 +269,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
+   std::shared_ptr<TimerManager> timer_manager_;
+ #ifdef GRPC_POSIX_SOCKET_TCP
+   std::shared_ptr<PosixEnginePollerManager> poller_manager_;
++  // Restarts the poll loop in the parent process after fork.
++  std::shared_ptr<Forkable> poll_loop_fork_handler_;
+ #endif  // GRPC_POSIX_SOCKET_TCP
+ };
+ 

@@ -13,7 +13,7 @@ namespace NYql::NCommon {
 
 class TProviderConfigurationTransformer: public TSyncTransformerBase {
 public:
-    TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher, const TTypeAnnotationContext& types,
+    TProviderConfigurationTransformer(ISettingDispatcher::TPtr dispatcher, const TTypeAnnotationContext& types,
                                       TString provider, const THashSet<TStringBuf>& configureCallables = {});
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -26,16 +26,16 @@ protected:
     virtual bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx);
 
     // FIXME switch to an accessor
-    TSettingDispatcher::TPtr GetDispatcher() const;
+    ISettingDispatcher::TPtr GetDispatcher() const;
 
-    TSettingDispatcher::TPtr Dispatcher; // NOLINT(readability-identifier-naming)
+    ISettingDispatcher::TPtr Dispatcher; // NOLINT(readability-identifier-naming)
     const TTypeAnnotationContext& Types_;
     TString Provider_;
     THashSet<TStringBuf> ConfigureCallables_;
 };
 
 THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
-    TSettingDispatcher::TPtr dispatcher,
+    ISettingDispatcher::TPtr dispatcher,
     const TTypeAnnotationContext& types,
     const TString& provider);
 

@@ -39,6 +39,10 @@ WHERE  ...
 * `CROSS` — декартово произведение двух таблиц целиком без указания ключевых колонок, секция с `ON/USING` явно не пишется;
 * `EXCLUSION` — обе стороны минус пересечение.
 
+Используйте `LEFT SEMI JOIN` вместо коррелированного подзапроса `EXISTS`, а
+`LEFT ONLY JOIN` — вместо коррелированного `NOT EXISTS`. Подробнее см. в разделе
+[Коррелированные подзапросы, EXISTS и NOT EXISTS](../correlated-subqueries.md).
+
 ![JOIN](_assets/join-YQL-06.png)
 
 {% note info %}
@@ -145,5 +149,4 @@ ON a.key == b.key;
 |"2"|"v122"|"v222"|
 
 {% endif %}
-
 

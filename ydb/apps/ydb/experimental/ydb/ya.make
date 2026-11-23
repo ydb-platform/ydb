@@ -29,3 +29,9 @@ IF (NOT USE_SSE4 AND NOT OPENSOURCE)
 ENDIF()
 
 END()
+
+IF (OS_LINUX AND USE_SSE4 != "no")
+    RECURSE_FOR_TESTS(
+        ut
+    )
+ENDIF()

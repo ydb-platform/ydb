@@ -330,6 +330,7 @@ private:
                 case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                 case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+                case Ydb::Table::TableIndex::kGlobalHnswIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
                 case Ydb::Table::TableIndex::kGlobalJsonIndex:
@@ -347,10 +348,17 @@ private:
     }
 
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto* req = GetProtoRequest();
+        Ydb::Table::CreateTableRequest requestWithNormalizedPaths;
+        if (req->has_ttl_settings() && req->ttl_settings().has_tiered_ttl()) {
+            requestWithNormalizedPaths.CopyFrom(*req);
+            NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_ttl_settings(), *Request_);
+            req = &requestWithNormalizedPaths;
+        }
+
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -472,12 +480,6 @@ private:
                 issues.AddIssue(NYql::TIssue(error));
                 return Reply(code, issues, ctx);
             }
-        }
-
-        if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
         }
 
         // Attributes

@@ -2,6 +2,7 @@
 
 #include <yql/essentials/sql/v1/ide/completion/name/object/simple/schema.h>
 #include <yql/essentials/sql/v1/ide/completion/name/cache/byte_size.h>
+#include <yql/essentials/utils/meta/hash.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -46,10 +47,10 @@ struct TByteSize<TTableDetails> {
 
 } // namespace NSQLComplete
 
-template <>
-struct THash<NSQLComplete::TSchemaDescribeCacheKey> {
-    inline size_t operator()(const NSQLComplete::TSchemaDescribeCacheKey& key) const {
-        return THash<std::tuple<TString, TString, TString>>()(
-            std::tie(key.Zone, key.Cluster, key.Path));
-    }
-};
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NSQLComplete::TSchemaDescribeCacheKey, (Zone)(Cluster)(Path));
+
+} // namespace NYql::NReflection
+
+YQL_DERIVE_HASH(NSQLComplete::TSchemaDescribeCacheKey);

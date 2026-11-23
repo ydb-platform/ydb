@@ -10,6 +10,11 @@
 #include <util/system/hostname.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NOptimizer {
+
+NColumnShard::TInternalPathId TSourceData::GetPathId() const {
+    return Granule->GetPathId();
+}
+
 std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::PathId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(ExternalPathId.GetRawValue()), recordsCount));
@@ -72,7 +77,8 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
 
-    AFL_VERIFY(false)("column_id", columnId);
+    YDB_LOG_VERIFY(false,
+        {"columnId", columnId});
     return nullptr;
 }
 

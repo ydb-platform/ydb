@@ -1,5 +1,6 @@
 RECURSE(
     build_info
+    config
     connection_string
     coordination
     discovery_mutator
@@ -8,13 +9,17 @@ RECURSE(
     endpoints
     iam
     iam_private
+    login
     oauth2_token_exchange
+    oidc
     observability
     params
     query
     result
     row_ranges
+    retry
     retry_range
+    scheme
     table
     value
 )

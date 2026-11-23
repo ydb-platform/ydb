@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/prof/tag.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow::NAccessor {
 
 IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChunkedArray(
@@ -13,17 +15,24 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
         return TLocalChunkedArrayAddress(PredefinedArray, 0, 0);
     }
     if (Counter.Inc() > 1) {
-        AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "many_deserializations")("counter", Counter.Val())("size", Data.size())(
-            "buffer", DataBuffer.size());
+        YDB_LOG_WARN("",
+            {"event", "many_deserializations"},
+            {"counter", Counter.Val()},
+            {"size", Data.size()},
+            {"buffer", DataBuffer.size()});
     }
     if (!!Data) {
         auto result = Loader->ApplyConclusion(Data, GetRecordsCount(), std::nullopt, AdditionalAccessorData);
-        AFL_VERIFY(result.IsSuccess())("event", "deserialization_error")("error", result.GetErrorMessage());
+        YDB_LOG_VERIFY(result.IsSuccess(),
+            {"event", "deserialization_error"},
+            {"error", result.GetErrorMessage()});
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     } else {
-        AFL_VERIFY(!!DataBuffer);
+        YDB_LOG_VERIFY(!!DataBuffer);
         auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount(), std::nullopt, AdditionalAccessorData);
-        AFL_VERIFY(result.IsSuccess())("event", "deserialization_error")("error", result.GetErrorMessage());
+        YDB_LOG_VERIFY(result.IsSuccess(),
+            {"event", "deserialization_error"},
+            {"error", result.GetErrorMessage()});
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     }
 }

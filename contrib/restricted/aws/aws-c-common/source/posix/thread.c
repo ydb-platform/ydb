@@ -213,6 +213,10 @@ const struct aws_thread_options *aws_default_thread_options(void) {
     return &s_default_options;
 }
 
+void aws_set_default_thread_options(const struct aws_thread_options *options) {
+    s_default_options = *options;
+}
+
 void aws_thread_clean_up(struct aws_thread *thread) {
     if (thread->detach_state == AWS_THREAD_JOINABLE) {
         pthread_detach(thread->thread_id);
@@ -403,7 +407,7 @@ cleanup:
         s_thread_wrapper_destroy(wrapper);
         if (options && options->cpu_id >= 0) {
             /*
-             * `pthread_create` can fail with an `EINVAL` error or `EDEADLK` on freebasd if the `cpu_id` is
+             * `pthread_create` can fail with an `EINVAL` error or `EDEADLK` on FreeBSD if the `cpu_id` is
              * restricted/invalid. Since the pinning to a particular `cpu_id` is supposed to be best-effort, try to
              * launch a thread again without pinning to a specific cpu_id.
              */

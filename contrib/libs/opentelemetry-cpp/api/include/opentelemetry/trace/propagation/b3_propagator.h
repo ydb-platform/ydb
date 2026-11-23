@@ -4,9 +4,13 @@
 #pragma once
 
 #include <array>
+#include <memory>
+#include <new>
+#include <utility>
 
 #include "detail/hex.h"
 #include "detail/string.h"
+#include "opentelemetry/common/macros.h"
 #include "opentelemetry/context/propagation/text_map_propagator.h"
 #include "opentelemetry/trace/context.h"
 #include "opentelemetry/trace/default_span.h"
@@ -50,10 +54,22 @@ public:
                            context::Context &context) noexcept override
   {
     SpanContext span_context = ExtractImpl(carrier);
-    nostd::shared_ptr<Span> sp{new DefaultSpan(span_context)};
     if (span_context.IsValid())
     {
-      return trace::SetSpan(context, sp);
+      nostd::shared_ptr<Span> span;
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+      try
+      {
+        span = nostd::shared_ptr<Span>{std::make_shared<DefaultSpan>(std::move(span_context))};
+      }
+      catch (const std::bad_alloc &)
+      {
+        return context;
+      }
+#else
+      span = nostd::shared_ptr<Span>{std::make_shared<DefaultSpan>(std::move(span_context))};
+#endif
+      return trace::SetSpan(context, span);
     }
     else
     {
@@ -139,7 +155,7 @@ public:
   void Inject(context::propagation::TextMapCarrier &carrier,
               const context::Context &context) noexcept override
   {
-    SpanContext span_context = trace::GetSpan(context)->GetContext();
+    SpanContext span_context = trace::GetSpanContext(context);
     if (!span_context.IsValid())
     {
       return;
@@ -171,7 +187,7 @@ public:
   void Inject(context::propagation::TextMapCarrier &carrier,
               const context::Context &context) noexcept override
   {
-    SpanContext span_context = GetSpan(context)->GetContext();
+    SpanContext span_context = GetSpanContext(context);
     if (!span_context.IsValid())
     {
       return;

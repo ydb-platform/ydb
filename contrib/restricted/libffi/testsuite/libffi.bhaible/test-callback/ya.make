@@ -2,7 +2,7 @@
 
 PROGRAM()
 
-VERSION(3.5.2)
+VERSION(3.6.0)
 
 LICENSE(GPL-3.0-or-later)
 

@@ -11,16 +11,16 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TConstProcessor::DoExecute(
+TConclusion<TExecutionResult> TConstProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(GetInput().empty());
+    YDB_LOG_VERIFY(GetInput().empty());
     context.MutableResources().AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 NJson::TJsonValue TConstProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    AFL_VERIFY(ScalarConstant);
+    YDB_LOG_VERIFY(ScalarConstant);
     result.InsertValue("v", ScalarConstant->ToString());
     return result;
 }

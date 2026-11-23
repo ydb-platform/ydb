@@ -53,7 +53,7 @@ private:
         return Sources.empty();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override;
 
 public:

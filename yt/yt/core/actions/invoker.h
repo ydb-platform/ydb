@@ -25,7 +25,7 @@ struct IInvoker
     //! Returns the thread id this invoker is bound to.
     //! For invokers not bound to any particular thread,
     //! returns |InvalidThreadId|.
-    virtual NThreading::TThreadId GetThreadId() const = 0;
+    virtual TThreadId GetThreadId() const = 0;
 
     //! Returns true if this invoker is either equal to #invoker or wraps it,
     //! in some sense.

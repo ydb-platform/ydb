@@ -15,6 +15,10 @@ namespace NKikimr::NPQ::NMLP {
     struct TMessageId;
 } // namespace NKikimr::NPQ::NMLP
 
+namespace NKikimrPQ {
+    class TPQConfig;
+} // namespace NKikimrPQ
+
 namespace NKikimr::NSqsTopic {
 
     struct TRichQueueUrl;
@@ -40,14 +44,18 @@ namespace NKikimr::NSqsTopic {
         const TString& consumer,
         const TString& method,
         TVector<std::pair<TString, TString>>&& labels,
-        const TString& databaseId = {}
+        const TString& databaseId = {},
+        const TString& cloudId = {},
+        const TString& folderId = {},
+        const NKikimrPQ::TPQConfig* pqConfig = nullptr
     );
 
     TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig = nullptr
     );
 
     TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
@@ -55,21 +63,24 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumer,
         const TString& method,
-        const TString& status
+        const TString& status,
+        const NKikimrPQ::TPQConfig* pqConfig = nullptr
     );
 
     TVector<std::pair<TString, TString>> GetResponseEmptyCountMetricsLabels(
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig = nullptr
     );
 
     TVector<std::pair<TString, TString>> GetRequestSizeMetricsLabels(
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig = nullptr
     );
 
     ui64 SampleIdFromRequestId(const TStringBuf requestId);

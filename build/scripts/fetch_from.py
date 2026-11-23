@@ -10,6 +10,7 @@ import platform
 import random
 import shutil
 import socket
+import stat
 import string
 import sys
 import tarfile
@@ -71,7 +72,7 @@ def hardlink_or_copy(src, dst):
         except OSError as e:
             if e.errno == errno.EEXIST:
                 return
-            elif e.errno in (errno.EXDEV, errno.EMLINK, errno.EINVAL, errno.EACCES):
+            elif e.errno in (errno.EXDEV, errno.EMLINK, errno.EINVAL, errno.EACCES, errno.EPERM):
                 sys.stderr.write(
                     "Can't make hardlink (errno={}) - fallback to copy: {} -> {}\n".format(e.errno, src, dst)
                 )
@@ -319,16 +320,13 @@ def chmod(filename, mode):
         # https://docs.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions:
         # hard to reset read-only attribute for removal if there are multiple hardlinks
         return
-    stat = os.stat(filename)
-    if stat.st_mode & 0o777 != mode:
+    metadata = os.stat(filename)
+    mode = stat.S_IMODE(mode)
+    if stat.S_IMODE(metadata.st_mode) != mode:
         try:
             os.chmod(filename, mode)
         except OSError:
-            import pwd
-
-            sys.stderr.write(
-                "{} st_mode: {} pwuid: {}\n".format(filename, stat.st_mode, pwd.getpwuid(os.stat(filename).st_uid))
-            )
+            sys.stderr.write("{} st_mode: {} uid: {}\n".format(filename, metadata.st_mode, metadata.st_uid))
             raise
 
 

@@ -10,6 +10,8 @@
 #include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+
+#include <atomic>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -139,6 +141,7 @@ public:
     ui32 GroupSizeInUnits;
     bool GetUringRouterClient;
     ui32 UringIdleSpinUs;
+    bool UringDevNullMode;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -150,6 +153,7 @@ public:
         , GroupSizeInUnits(ev.GroupSizeInUnits)
         , GetUringRouterClient(ev.GetUringRouterClient)
         , UringIdleSpinUs(ev.UringIdleSpinUs)
+        , UringDevNullMode(ev.UringDevNullMode)
     {}
 
     ERequestType GetType() const override {
@@ -171,6 +175,7 @@ public:
         str << " GroupSizeInUnits# " << GroupSizeInUnits;
         str << " GetUringRouterClient# " << GetUringRouterClient;
         str << " UringIdleSpinUs# " << UringIdleSpinUs;
+        str << " UringDevNullMode# " << UringDevNullMode;
         str << "}";
         return str.Str();
     }
@@ -190,6 +195,42 @@ public:
 
     ERequestType GetType() const override {
         return ERequestType::RequestYardResize;
+    }
+};
+
+//
+// TCompactionBidder
+//
+class TCompactionBidder : public TRequestBase {
+public:
+    const NPDisk::TEvCompactionBidder::EKind Kind;
+    const ui32 BidderId;
+    const ui64 RoundId;
+    const bool HasCandidate;
+    const ui32 NeedChunks;
+    const ui32 FreeChunks;
+
+    TCompactionBidder(const NPDisk::TEvCompactionBidder &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::CompactionBidder, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Kind(ev.Kind)
+        , BidderId(ev.BidderId)
+        , RoundId(ev.RoundId)
+        , HasCandidate(ev.HasCandidate)
+        , NeedChunks(ev.NeedChunks)
+        , FreeChunks(ev.FreeChunks)
+    {}
+
+    std::unique_ptr<NPDisk::TEvCompactionBidder> ToEvent() const {
+        auto ev = std::make_unique<NPDisk::TEvCompactionBidder>(Kind, Owner, OwnerRound, BidderId);
+        ev->RoundId = RoundId;
+        ev->HasCandidate = HasCandidate;
+        ev->NeedChunks = NeedChunks;
+        ev->FreeChunks = FreeChunks;
+        return ev;
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestCompactionBidder;
     }
 };
 
@@ -411,6 +452,7 @@ public:
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
     bool ChunkEncrypted = true;
+    bool RawSectors = false; // see TEvChunkRead::RawSectors; read then as a plain chunk would be
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -434,6 +476,7 @@ public:
         , Cookie(ev.Cookie)
         , BlobId(ev.BlobId)
         , RemainingSize(ev.Size)
+        , RawSectors(ev.RawSectors)
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
     {
@@ -526,6 +569,13 @@ public:
     bool IsSeqWrite;
     bool IsReplied = false;
     bool ChunkEncrypted = true;
+    bool PreformattedSectors = false; // see TEvChunkWrite::PreformattedSectors
+    ui64 FirstSectorNonce = 0;
+    // A preformatted write goes to the device in pieces; Completion waits for the pieces and, once all are submitted, the device fence.
+    std::atomic<ui32> PreformattedPiecesInFlight = 0;
+    std::atomic<bool> PreformattedPieceFailed = false;
+    ui32 PreformattedPieceCount = 0; // set when the write is cut into pieces
+    ui32 PreformattedPiecesSubmitted = 0; // in the PDisk thread
 
     TLogoBlobID BlobId;
 
@@ -548,11 +598,16 @@ public:
         AtomicIncrement(Pieces);
     }
 
-    void AbortPiece(TActorSystem *actorSystem) {
-        if (AtomicDecrement(Pieces) == 0) {
-            this->Abort(actorSystem);
-        }
-    }
+    // Each piece, sent or dropped, is accounted for exactly once, as the pieces of a read are: a write that lost a
+    // piece is answered once, with an error, when the last of its pieces is done or dropped.
+    void AbortPiece(TActorSystem *actorSystem); // a piece dropped unsent, when the PDisk stops
+    void PieceDone(TActorSystem *actorSystem); // a piece of an ordinary write was executed
+    std::atomic<bool> PieceAborted = false;
+
+private:
+    void ReplyAborted(TActorSystem *actorSystem);
+
+public:
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWrite;
@@ -755,14 +810,31 @@ public:
 class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
+    bool ForHousekeeping;
+    EAllocationPurpose Purpose;
+    bool IsDDisk;
+    NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
+        , ForHousekeeping(ev.ForHousekeeping)
+        , Purpose(ev.Purpose)
+        , IsDDisk(ev.IsDDisk)
+        , RefuseAtColor(ev.RefuseAtColor)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkReserve;
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!IsDDisk) {
+            return;
+        }
+        TString errorReason = "PDisk stopped before processing chunk reserve";
+        actorSystem->Send(Sender, new NPDisk::TEvChunkReserveResult(
+            NKikimrProto::CORRUPTED, 0, errorReason), 0, Cookie);
     }
 };
 
@@ -772,14 +844,25 @@ public:
 class TChunkForget : public TRequestBase {
 public:
     TVector<TChunkIdx> ForgetChunks;
+    bool IsDDisk;
 
     TChunkForget(const NPDisk::TEvChunkForget &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkForget, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::LogWrite)
         , ForgetChunks(std::move(ev.ForgetChunks))
+        , IsDDisk(ev.IsDDisk)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkForget;
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!IsDDisk) {
+            return;
+        }
+        TString errorReason = "PDisk stopped before processing chunk forget";
+        actorSystem->Send(Sender, new NPDisk::TEvChunkForgetResult(
+            NKikimrProto::CORRUPTED, 0, errorReason), 0, Cookie);
     }
 
     void EstimateCost(const TDriveModel &) override {

@@ -10,4 +10,4 @@ void TQuotaServiceFakeActor::Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev)
     Send(ev->Sender, std::move(response));
 }
 
-} // namespace NFq
+}   // namespace NFq

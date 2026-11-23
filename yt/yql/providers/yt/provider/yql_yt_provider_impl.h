@@ -22,6 +22,7 @@ THolder<IGraphTransformer> CreateYtLoadColumnarStatsTransformer(TYtState::TPtr s
 THolder<TVisitorTransformerBase> CreateYtDataSourceTypeAnnotationTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtDataSourceConstraintTransformer(TYtState::TPtr state);
 THolder<TExecTransformerBase> CreateYtDataSourceExecTransformer(TYtState::TPtr state);
+THolder<IGraphTransformer> CreateYtDataSourceTrackableNodesCleanupTransformer(TYtState::TPtr state);
 
 THolder<TVisitorTransformerBase> CreateYtDataSinkTypeAnnotationTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtDataSinkConstraintTransformer(TYtState::TPtr state, bool subGraph);
@@ -42,7 +43,9 @@ THolder<IGraphTransformer> CreateYtBlockOutputTransformer(TYtState::TPtr state);
 void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children);
 TString MakeTableDisplayName(NNodes::TExprBase table, bool isOutput);
 
-void ScanForUsedOutputTables(const TExprNode& input, TVector<TString>& usedNodeIds);
+void ScanForUsedInputTables(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds);
+void ScanForUsedOutputTables(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds);
+TString MakeUsedSnapshotNodeId(const TString& cluster, const TString& table, ui32 epoch);
 TString MakeUsedNodeId(const TString& cluster, const TString& table);
 
 } // NYql

@@ -1,132 +1,90 @@
 #include "test_client.h"
 
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-#include <ydb/services/scheme_secret/service.h>
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/hive.h>
 #include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/user_registry.h>
+#include <ydb/core/blob_depot/blob_depot.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/client/metadata/functions_metadata.h>
+#include <ydb/core/client/metadata/types_metadata.h>
+#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
+#include <ydb/core/client/server/msgbus_server.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
+#include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/driver_lib/run/auto_config_initializer.h>
 #include <ydb/core/driver_lib/run/config_helpers.h>
-#include <ydb/core/viewer/viewer.h>
-#include <ydb/public/lib/base/msgbus.h>
-#include <ydb/core/grpc_services/db_metadata_cache.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/services/auth/grpc_service.h>
-#include <ydb/services/fq/grpc_service.h>
-#include <ydb/services/fq/private_grpc.h>
-#include <ydb/services/cms/grpc_service.h>
-#include <ydb/services/datastreams/grpc_service.h>
-#include <ydb/services/view/grpc_service.h>
-#include <ydb/services/ymq/grpc_service.h>
-#include <ydb/services/kesus/grpc_service.h>
-#include <ydb/core/grpc_services/grpc_mon.h>
-#include <ydb/services/ydb/ydb_clickhouse_internal.h>
-#include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb/services/ydb/ydb_export.h>
-#include <ydb/services/ydb/ydb_import.h>
-#include <ydb/services/ydb/ydb_operation.h>
-#include <ydb/services/ydb/ydb_object_storage.h>
-#include <ydb/services/ydb/ydb_query.h>
-#include <ydb/services/ydb/ydb_scheme.h>
-#include <ydb/services/ydb/ydb_scripting.h>
-#include <ydb/services/ydb/ydb_table.h>
-#include <ydb/services/ydb/ydb_logstore.h>
-#include <ydb/services/tablet/ydb_tablet.h>
-#include <ydb/services/discovery/grpc_service.h>
-#include <ydb/services/rate_limiter/grpc_service.h>
-#include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
-#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
-#include <ydb/services/persqueue_v1/persqueue.h>
-#include <ydb/services/persqueue_v1/topic.h>
-#include <ydb/services/persqueue_v1/topic_deferred_publish.h>
-#include <ydb/services/persqueue_v1/grpc_pq_write.h>
-#include <ydb/services/replication/grpc_service.h>
-#include <ydb/services/monitoring/grpc_service.h>
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/formats/clickhouse_block.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/client/metadata/types_metadata.h>
-#include <ydb/core/client/metadata/functions_metadata.h>
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/cms/console/feature_flags_configurator.h>
-#include <ydb/core/cms/console/immediate_controls_configurator.h>
-#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
-#include <ydb/core/formats/clickhouse_block.h>
-#include <ydb/core/client/server/msgbus_server.h>
-#include <ydb/core/security/ticket_parser.h>
-#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
-#include <ydb/core/security/token_manager/token_manager.h>
-#include <ydb/core/security/ticket_parser_settings.h>
-#include <ydb/core/base/user_registry.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
+#include <ydb/core/grpc_services/grpc_mon.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/health_check/health_check.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
-#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
+#include <ydb/core/kesus/proxy/proxy.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/kesus/tablet/tablet.h>
+#include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
-#include <ydb/services/workload_manager/service/service.h>
-#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
-#include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/protos/stream.pb.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/coordinator/coordinator.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
-#include <ydb/core/tx/long_tx_service/long_tx_service.h>
-#include <ydb/core/tx/mediator/mediator.h>
-#include <ydb/core/tx/replication/controller/controller.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
-#include <ydb/core/tx/sequenceshard/sequenceshard.h>
-#include <ydb/core/tx/tx_allocator/txallocator.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/mind/labels_maintainer.h>
+#include <ydb/core/mind/node_broker.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/mind/tenant_node_enumeration.h>
-#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/mon_alloc/monitor.h>
-#include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/sys_view/service/sysview_service.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/core/engine/mkql_engine_flat.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/kesus/proxy/proxy.h>
-#include <ydb/core/kesus/tablet/tablet.h>
-#include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+#include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/security/ticket_parser_settings.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
-#include <ydb/core/keyvalue/keyvalue.h>
-#include <ydb/core/blob_depot/blob_depot.h>
+#include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/test_tablet/test_tablet.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -134,30 +92,84 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/coordinator/coordinator.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/long_tx_service/long_tx_service.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+#include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
-#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
-#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
-#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
-#include <ydb/core/tx/general_cache/usage/service.h>
-#include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
-
-#include <ydb/core/client/server/ic_nodes_cache_service.h>
-
+#include <ydb/core/tx/replication/controller/controller.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
+#include <ydb/core/tx/sequenceshard/sequenceshard.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
+#include <ydb/core/tx/tx_allocator/txallocator.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/viewer/viewer.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-
+#include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/public/lib/base/msgbus.h>
+#include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/cms/grpc_service.h>
+#include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
+#include <ydb/services/discovery/grpc_service.h>
+#include <ydb/services/fq/grpc_service.h>
+#include <ydb/services/fq/private_grpc.h>
+#include <ydb/services/kesus/grpc_service.h>
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
+#include <ydb/services/monitoring/grpc_service.h>
+#include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
+#include <ydb/services/persqueue_v1/grpc_pq_write.h>
+#include <ydb/services/persqueue_v1/persqueue.h>
+#include <ydb/services/persqueue_v1/topic.h>
+#include <ydb/services/persqueue_v1/topic_deferred_publish.h>
+#include <ydb/services/rate_limiter/grpc_service.h>
+#include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/scheme_secret/service.h>
+#include <ydb/services/tablet/ydb_tablet.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
+#include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
+#include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/ydb/ydb_clickhouse_internal.h>
+#include <ydb/services/ydb/ydb_dummy.h>
+#include <ydb/services/ydb/ydb_export.h>
+#include <ydb/services/ydb/ydb_import.h>
+#include <ydb/services/ydb/ydb_logstore.h>
+#include <ydb/services/ydb/ydb_object_storage.h>
+#include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_query.h>
+#include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_scripting.h>
+#include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_udf.h>
+#include <ydb/services/ymq/grpc_service.h>
 
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <util/system/env.h>
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <util/system/env.h>
-
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 namespace NKikimr {
 
@@ -470,6 +482,11 @@ namespace Tests {
                                                     Settings->UseRealThreads);
         }
 
+        // read only while the runtime is initialized, so it has to be set here even for init = false
+        if (Settings->UseRealInterconnect) {
+            Runtime->SetUseRealInterconnect();
+        }
+
         if (init) {
             Initialize();
         }
@@ -546,6 +563,11 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
+            const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
+            if (pathMapping.RulesSize()) {
+                appData.SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, appData.Counters));
+            }
+
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
 #define MERGE_CFG_FROM_SETTINGS(cfg) MERGE_APP_CFG_FROM(cfg, Settings->cfg)
@@ -591,6 +613,13 @@ namespace Tests {
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            const auto& featureFlags = appData.FeatureFlags;
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
+            appData.KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -630,6 +659,17 @@ namespace Tests {
             &Settings->AppConfig->GetSharedCacheConfig(),
             Settings->EnableForceFollowers,
             Settings->ProxyDSMocks);
+
+        {
+            auto& appData = Runtime->GetAppData(0);
+            const auto& pqConfig = appData.PQConfig;
+            if (pqConfig.GetEnabled() && pqConfig.GetMirrorConfig().GetEnabled() && appData.PersQueueMirrorReaderFactory) {
+                appData.PersQueueMirrorReaderFactory->Initialize(
+                    Runtime->GetActorSystem(0),
+                    pqConfig.GetMirrorConfig().GetPQLibSettings()
+                );
+            }
+        }
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -712,7 +752,7 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
-        grpcInfo->Shutdown();
+        grpcInfo->Shutdown(StoppedGRpcServers);
 
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
@@ -725,7 +765,9 @@ namespace Tests {
 
         auto& appData = Runtime->GetAppData(grpcServiceNodeId);
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
+            auto grpcRequestProxy = Settings->AppConfig->GetGRpcConfig().GetSkipSchemeCheck()
+                ? NGRpcService::CreateGRpcRequestProxySimple(*Settings->AppConfig)
+                : NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
@@ -739,12 +781,11 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
-                appData.TracingConfigurator,
-                appData.UserFacingTracingConfigurator,
-                *Settings->AppConfig)) {
-            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
-        }
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
+            TMailboxType::ReadAsFilled,
+            appData.UserPoolId
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -828,6 +869,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::TGRpcYdbUdfService(system, counters, grpcRequestProxies[0], true));
         grpcServer->Start();
     }
 
@@ -1214,6 +1256,14 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::CdcAggregator] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NCdcAggregator::CreateCdcAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -1246,9 +1296,19 @@ namespace Tests {
             if (!initial.HasImmediateControlsConfig()) {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
+
+            TMap<TString, TString> labels;
+            for (const auto& label : initial.GetLabels()) {
+                labels[label.GetName()] = label.GetValue();
+            }
+
+            labels["tenant"] = canonicalTenantName;
+            labels["node_id"] = ToString(Runtime->GetNodeId(nodeIdx));
+            labels["host"] = Settings->GrpcHost;
             auto *dispatcher = NConsole::CreateConfigsDispatcher(
                     NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = initial,
+                        .Labels = std::move(labels),
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
@@ -1387,13 +1447,21 @@ namespace Tests {
         }
 
         {
-            const auto& appData = Runtime->GetAppData(nodeIdx);
+            auto& appData = Runtime->GetAppData(nodeIdx);
+            auto gateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+            appData.WorkloadManagerGateway = gateway;
+            TActorId stateActorId = Runtime->Register(NWorkloadManager::CreateWorkloadManagerStateActor(gateway), nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeWorkloadManagerStateActorId(Runtime->GetNodeId(nodeIdx)), stateActorId, nodeIdx);
+
             IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
             TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
         }
 
-        {
+        // Stopping a dynamic tenant leaves its KQP proxy alive. Reuse it on restart:
+        // a second proxy would start another scheduler actor on the same node's scheduler state.
+        const auto kqpProxyId = NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx));
+        if (!Runtime->GetLocalServiceId(kqpProxyId, nodeIdx)) {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
@@ -1449,6 +1517,7 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                FederatedQuerySetupActorSystems_.push_back(actorSystemPtr);
 
                 if (FederatedQuerySetupDriver_) {
                     FederatedQuerySetupDriver_.reset();
@@ -1488,15 +1557,11 @@ namespace Tests {
                         });
             }
 
-            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
             for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
-                if (!allExternalSourcesTypes.contains(source)) {
+                if (!NYql::IsValidAvailableExternalDataSourceType(source)) {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
             }
-
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
 
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
@@ -1511,7 +1576,7 @@ namespace Tests {
                                                                   std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+            Runtime->RegisterService(kqpProxyId, kqpProxyServiceId, nodeIdx);
         }
 
         {
@@ -1571,6 +1636,11 @@ namespace Tests {
             IActor* pqReadCacheService = NPQ::CreatePQDReadCacheService(Runtime->GetDynamicCounters());
             TActorId readCacheId = Runtime->Register(pqReadCacheService, nodeIdx, userPoolId);
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
+        }
+        {
+            IActor* writeSessionsQuoter = NPQ::CreateWriteSessionsQuoter();
+            TActorId writeSessionsQuoterId = Runtime->Register(writeSessionsQuoter, nodeIdx, userPoolId);
+            Runtime->RegisterService(NPQ::MakeWriteSessionsQuoterId(), writeSessionsQuoterId, nodeIdx);
         }
         {
             IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
@@ -1650,7 +1720,8 @@ namespace Tests {
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
-        {
+        // the runtime has one: replacing it races with the interconnect sessions, a lookup may then find none
+        if (!Runtime->GetLocalServiceId(MakePollerActorId(), nodeIdx)) {
             IActor* actor = CreatePollerActor();
             TActorId actorId = Runtime->Register(actor, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId);
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
@@ -1756,7 +1827,7 @@ namespace Tests {
                 auto& privateApiConfig = *protoConfig.MutablePrivateApi();
                 privateApiConfig.SetEnabled(true);
                 privateApiConfig.SetTaskServiceEndpoint(endpoint);
-                privateApiConfig.SetTaskServiceDatabase("Root");
+                privateApiConfig.SetTaskServiceDatabase("/Root");
             }
 
             {
@@ -1935,6 +2006,13 @@ namespace Tests {
         if (Settings->FederatedQuerySetupFactory) {
             Settings->FederatedQuerySetupFactory->Cleanup();
         }
+
+        for (const auto& actorSystem : FederatedQuerySetupActorSystems_) {
+            if (actorSystem) {
+                actorSystem->store(nullptr, std::memory_order_release);
+            }
+        }
+        FederatedQuerySetupActorSystems_.clear();
 
         if (Runtime) {
             WaitFinalization();
@@ -2517,6 +2595,20 @@ namespace Tests {
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::CreateIndexedTable(const TString& parent,
+            const NKikimrSchemeOp::TIndexedTableCreationConfig& table, TDuration timeout) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
+        op->SetWorkingDir(parent);
+        op->MutableCreateIndexedTable()->CopyFrom(table);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 

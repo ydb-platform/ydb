@@ -352,12 +352,42 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
         }
         helper.GetVolumes(rawBytes3, bytes3, count3, false, { "field" });
-        AFL_VERIFY(bytes2 * 10 < bytes1);
-        AFL_VERIFY(bytes3 * 90 < bytes1);
-        AFL_VERIFY(rawBytes3 * 10 < rawBytes1);
+        YDB_LOG_VERIFY(bytes2 * 10 < bytes1);
+        YDB_LOG_VERIFY(bytes3 * 90 < bytes1);
+        YDB_LOG_VERIFY(rawBytes3 * 10 < rawBytes1);
         Cerr << rawBytes1 << "/" << bytes1 << "/" << count1 << Endl;
         Cerr << rawBytes2 << "/" << bytes2 << "/" << count2 << Endl;
         Cerr << rawBytes3 << "/" << bytes3 << "/" << count3 << Endl;
+    }
+
+    Y_UNIT_TEST(StatsSysViewOrderByPKWithLimit) {
+        constexpr ui64 portionsCount = 3;
+        constexpr ui64 limit = 3;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        for (ui64 i = 0; i < portionsCount; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString sysViewPath = "/Root/olapStore/olapTable/.sys/primary_index_stats";
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteScanQuery(tableClient, "SELECT DISTINCT PortionId FROM `" + sysViewPath + "`").size(), portionsCount);
+        NYdb::NTable::TStreamExecScanQuerySettings scanSettings;
+        scanSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full);
+        for (const TStringBuf direction : {"ASC"sv, "DESC"sv}) {
+            const TString query = TStringBuilder()
+                << "SELECT PathId, TabletId, PortionId FROM `" << sysViewPath << "` ORDER BY PathId " << direction
+                << ", TabletId " << direction << ", PortionId " << direction << " LIMIT " << limit;
+            auto stream = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+            const auto result = CollectStreamResult(stream);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.RowsCount, limit, direction);
+            UNIT_ASSERT(result.QueryStats);
+            // Count rows entering KQP, before its own TopSort and LIMIT can hide a missing pushdown.
+            AssertTableStats(*result.QueryStats, sysViewPath, {.ExpectedReads = limit});
+        }
     }
 
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {
@@ -390,8 +420,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 rawBytesPK2;
             ui64 bytesPK2;
             helper.GetVolumes(rawBytesPK2, bytesPK2, count2, false, {"pk_int"});
-            AFL_VERIFY(rawBytesPK2 == rawBytesPK1)("pk1", rawBytesPK1)("pk2", rawBytesPK2);
-            AFL_VERIFY(bytesPK2 < bytesPK1 / 3)("pk1", bytesPK1)("pk2", bytesPK2);
+            YDB_LOG_VERIFY(rawBytesPK2 == rawBytesPK1,
+                {"pk1", rawBytesPK1},
+                {"pk2", rawBytesPK2});
+            YDB_LOG_VERIFY(bytesPK2 < bytesPK1 / 3,
+                {"pk1", bytesPK1},
+                {"pk2", bytesPK2});
         }
         {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=pk_int, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);");
@@ -400,8 +434,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 rawBytesPK2;
             ui64 bytesPK2;
             helper.GetVolumes(rawBytesPK2, bytesPK2, count3, false, {"pk_int"});
-            AFL_VERIFY(rawBytesPK2 == rawBytesPK1)("pk1", rawBytesPK1)("pk2", rawBytesPK2);
-            AFL_VERIFY(bytesPK2 < bytesPK1 * 1.01 && bytesPK1 < bytesPK2 * 1.01)("pk1", bytesPK1)("pk2", bytesPK2);
+            YDB_LOG_VERIFY(rawBytesPK2 == rawBytesPK1,
+                {"pk1", rawBytesPK1},
+                {"pk2", rawBytesPK2});
+            YDB_LOG_VERIFY(bytesPK2 < bytesPK1 * 1.01 && bytesPK1 < bytesPK2 * 1.01,
+                {"pk1", bytesPK1},
+                {"pk2", bytesPK2});
         }
     }
 
@@ -425,8 +463,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         csController->WaitCompactions(TDuration::Seconds(5));
 
         helper.GetVolumes(rawBytes1, bytes1, count1, false, {"new_column_ui64"});
-        AFL_VERIFY(rawBytes1 == 0);
-        AFL_VERIFY(bytes1 == 0);
+        YDB_LOG_VERIFY(rawBytes1 == 0);
+        YDB_LOG_VERIFY(bytes1 == 0);
         auto tableClient = kikimr.GetTableClient();
         {
             helper.ExecuteSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
@@ -435,8 +473,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 rawBytes2;
             ui64 bytes2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
-            AFL_VERIFY(rawBytes2 == 0)("real", rawBytes2);
-            AFL_VERIFY(bytes2 == 0)("b", bytes2);
+            YDB_LOG_VERIFY(rawBytes2 == 0,
+                {"real", rawBytes2});
+            YDB_LOG_VERIFY(bytes2 == 0,
+                {"b", bytes2});
         }
     }
 
@@ -467,8 +507,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 bytes2;
             ui64 count2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
-            AFL_VERIFY(rawBytes2 * 2 < rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
-            AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
+            YDB_LOG_VERIFY(rawBytes2 * 2 < rawBytes1,
+                {"f1", rawBytes1},
+                {"f2", rawBytes2});
+            YDB_LOG_VERIFY(bytes2 < bytes1 * 0.5,
+                {"f1", bytes1},
+                {"f2", bytes2});
         }
         {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`);");
@@ -478,8 +522,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 bytes2;
             ui64 count2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, {"field"});
-            AFL_VERIFY(rawBytes2 == rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
-            AFL_VERIFY(bytes2 < bytes1 * 1.01 && bytes1 < bytes2 * 1.01)("f1", bytes1)("f2", bytes2);
+            YDB_LOG_VERIFY(rawBytes2 == rawBytes1,
+                {"f1", rawBytes1},
+                {"f2", rawBytes2});
+            YDB_LOG_VERIFY(bytes2 < bytes1 * 1.01 && bytes1 < bytes2 * 1.01,
+                {"f1", bytes1},
+                {"f2", bytes2});
         }
     }
 
@@ -507,7 +555,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto tableClient = kikimr.GetTableClient();
         {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_min_max, TYPE=MIN_MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(40));
             csController->WaitCompactions(TDuration::Seconds(5));
@@ -515,52 +563,59 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 ui64 rawBytes2;
                 ui64 bytes2;
                 helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
-                AFL_VERIFY(rawBytes2 * 2 < rawBytes1)("f1", rawBytes1)("f2", rawBytes2);
-                AFL_VERIFY(bytes2 < bytes1 * 0.5)("f1", bytes1)("f2", bytes2);
+                YDB_LOG_VERIFY(rawBytes2 * 2 < rawBytes1,
+                    {"f1", rawBytes1},
+                    {"f2", rawBytes2});
+                YDB_LOG_VERIFY(bytes2 < bytes1 * 0.5,
+                    {"f1", bytes1},
+                    {"f2", bytes2});
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3)("count", stats.size());
+                YDB_LOG_VERIFY(stats.size() == 3,
+                    {"count", stats.size()});
 //                for (auto&& i : stats) {
-//                    AFL_VERIFY(i.IsArray());
-//                    AFL_VERIFY(i.GetArraySafe().size() == 1);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
+//                    YDB_LOG_VERIFY(i.IsArray());
+//                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 1);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
 //                    YDB_LOG_INFO("",
 //                          {"json", i});
 //                }
             }
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=pk_int_max);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=pk_int_min_max);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(30));
             {
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3);
+                YDB_LOG_VERIFY(stats.size() == 3);
 //                for (auto&& i : stats) {
-//                    AFL_VERIFY(i.IsArray());
-//                    AFL_VERIFY(i.GetArraySafe().size() == 0)("json", i);
+//                    YDB_LOG_VERIFY(i.IsArray());
+//                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 0,
+//                          {"json", i});
 //                }
             }
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_min_max, TYPE=MIN_MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(40));
             {
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3);
+                YDB_LOG_VERIFY(stats.size() == 3);
 //                for (auto&& i : stats) {
-//                    AFL_VERIFY(i.IsArray());
-//                    AFL_VERIFY(i.GetArraySafe().size() == 1);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5)("json", i);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
+//                    YDB_LOG_VERIFY(i.IsArray());
+//                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 1);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5,
+//                          {"json", i});
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
 //                    YDB_LOG_INFO("",
 //                          {"json", i});
 //                }
@@ -637,7 +692,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
@@ -657,7 +712,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 3000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i * 10000, 5000);
         }
-        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
 

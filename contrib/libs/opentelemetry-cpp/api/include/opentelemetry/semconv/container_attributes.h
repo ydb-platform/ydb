@@ -32,7 +32,7 @@ static constexpr const char *kContainerId = "container.id";
 static constexpr const char *kContainerImageName = "container.image.name";
 
 /**
-  Repo digests of the container image as provided by the container runtime.
+  Repository digests of the container image as provided by the container runtime.
   <p>
   <a
   href="https://docs.docker.com/reference/api/engine/version/v1.52/#tag/Image/operation/ImageInspect">Docker</a>

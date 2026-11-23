@@ -20,6 +20,11 @@ struct TUringRouterConfig {
     // values trade CPU for submit-wakeup latency.
     ui32 IdleSpinUs = 10;
 
+    // Complete accepted data reads/writes on the I/O thread without submitting
+    // device SQEs. Reads fill every requested byte with zero. Control, wake and
+    // shutdown operations still use io_uring.
+    bool DevNullMode = false;
+
     TString ToString() const;
 };
 

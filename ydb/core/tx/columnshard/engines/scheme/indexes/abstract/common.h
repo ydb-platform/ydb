@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/sub_columns/sub_column_name.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/digest/fnv.h>
@@ -20,16 +22,20 @@ enum class ENodeType: ui32 {
 class TOriginalDataAddress {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY_DEF(TString, SubColumnName);
+    NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName SubColumnName;
 
 public:
+    const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& GetSubColumnName() const {
+        return SubColumnName;
+    }
+
     static ui64 CalcSubColumnHash(const std::string_view sv);
 
     static ui64 CalcSubColumnHash(const TString& path) {
         return CalcSubColumnHash(std::string_view(path.data(), path.size()));
     }
 
-    explicit TOriginalDataAddress(const ui32 columnId, const TString& subColumnName = "")
+    explicit TOriginalDataAddress(const ui32 columnId, const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName = {})
         : ColumnId(columnId)
         , SubColumnName(subColumnName)
     {
@@ -45,7 +51,7 @@ public:
 
     explicit operator size_t() const {
         if (SubColumnName) {
-            return CombineHashes<ui64>(ColumnId, FnvHash<ui64>(SubColumnName.data(), SubColumnName.size()));
+            return CombineHashes<ui64>(ColumnId, SubColumnName.GetHash());
         } else {
             return ColumnId;
         }
@@ -57,7 +63,6 @@ public:
 class TNodeId {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY_DEF(TString, SubColumnName);
     YDB_READONLY(ui32, GenerationId, 0);
     YDB_READONLY(ENodeType, NodeType, ENodeType::OriginalColumn);
 
@@ -72,11 +77,8 @@ private:
 
 public:
     bool operator==(const TNodeId& item) const {
-        return ColumnId == item.ColumnId && GenerationId == item.GenerationId && NodeType == item.NodeType &&
-               SubColumnName == item.SubColumnName;
+        return ColumnId == item.ColumnId && GenerationId == item.GenerationId && NodeType == item.NodeType;
     }
-
-    TOriginalDataAddress BuildOriginalDataAddress() const;
 
     TNodeId BuildCopy() const {
         return TNodeId(ColumnId, Counter.Inc(), NodeType);
@@ -92,8 +94,6 @@ public:
         return TNodeId(columnId, Counter.Inc(), ENodeType::Constant);
     }
 
-    static TNodeId Original(const ui32 columnId, const TString& subColumnName = "");
-
     static TNodeId Aggregation() {
         return TNodeId(0, Counter.Inc(), ENodeType::Aggregation);
     }
@@ -103,8 +103,7 @@ public:
     }
 
     bool operator<(const TNodeId& item) const {
-        return std::tie(ColumnId, GenerationId, NodeType, SubColumnName) <
-               std::tie(item.ColumnId, item.GenerationId, item.NodeType, item.SubColumnName);
+        return std::tie(ColumnId, GenerationId, NodeType) < std::tie(item.ColumnId, item.GenerationId, item.NodeType);
     }
 };
 

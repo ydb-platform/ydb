@@ -79,6 +79,14 @@ namespace NKikimr {
             }
         }
 
+        void TSyncLogKeeperState::FillInSpaceStat(TEvSyncLogSpaceStatResult *result) const {
+            const TSyncLogDiskSpaceStat stat = SyncLogPtr->GetDiskSpaceStat();
+            result->ChunkSizeBytes = stat.ChunkSizeBytes;
+            result->ActiveChunkCount = stat.ActiveChunkCount;
+            result->UsedBytes = stat.UsedBytes;
+            result->FreeBytes = stat.FreeBytes;
+        }
+
         // Calculate first lsn in recovery log we must keep
         ui64 TSyncLogKeeperState::CalculateFirstLsnToKeep() const {
             // calculate first lsn for data
@@ -161,6 +169,16 @@ namespace NKikimr {
             // Check for memory overflow
             if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages)
                 DelayedActions.MemOverflow = true;
+        }
+
+        void TSyncLogKeeperState::AdvanceRecoveryBase(ui64 lsn) {
+            Y_ABORT_UNLESS(lsn != Max<ui64>());
+            RecoveryBaseLsn = Max(RecoveryBaseLsn, lsn);
+            if (lsn && SyncLogPtr->GetFirstLsn() <= RecoveryBaseLsn) {
+                TrimTailEvent(RecoveryBaseLsn);
+                // Persist LogStartLsn even when advancing an empty journal removes no chunks.
+                NeedsInitialCommit = true;
+            }
         }
 
         void TSyncLogKeeperState::TrimTailEvent(ui64 trimTailLsn) {
@@ -269,7 +287,7 @@ namespace NKikimr {
                 YDB_LOG_INFO_CTX_COMP(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: %s", msg.data()));
             };
 
-            TVector<ui32> scheduledChunks = SyncLogPtr->TrimLogByConfirmedLsn(TrimTailLsn, Notifier, logger);
+            TVector<ui32> scheduledChunks = SyncLogPtr->TrimLogByConfirmedLsn(Max(TrimTailLsn, RecoveryBaseLsn), Notifier, logger);
             ChunksToDelete.insert(ChunksToDelete.end(), scheduledChunks.begin(), scheduledChunks.end());
             DeletedChunksPending.insert(scheduledChunks.begin(), scheduledChunks.end());
             return !ChunksToDelete.empty();

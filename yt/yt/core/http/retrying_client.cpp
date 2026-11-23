@@ -205,7 +205,7 @@ private:
 
         const auto shouldRetry = [&] (const TError& error) {
             const auto isRetriableError = responseChecker->IsRetriableError(error);
-            auto attemptError = TError("Request attempt %v failed", attempt)
+            auto attemptError = TError("Request to %v failed", sanitizedUrl)
                 .With(error)
                 .With("attempt", attempt);
 
@@ -213,7 +213,7 @@ private:
                 .With("Url", sanitizedUrl)
                 .With("Attempt", attempt)
                 .With("Retriable", isRetriableError)
-                .With(attemptError);
+                .With(error);
 
             accumulatedErrors.push_back(std::move(attemptError));
             return isRetriableError && TInstant::Now() < deadline && attempt < Config_->MaxAttemptCount;

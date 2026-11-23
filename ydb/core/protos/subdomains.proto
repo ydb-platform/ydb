@@ -55,6 +55,7 @@ message TSubDomainSettings {
     optional bool ExternalStatisticsAggregator = 14 [default = false];
     optional bool GraphShard = 16 [default = false];
     optional bool ExternalBackupController = 17 [default = false];
+    optional bool ExternalWasmCompileController = 20 [default = false];
 
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 19;
 }
@@ -72,6 +73,7 @@ message TProcessingParams {
     optional fixed64 StatisticsAggregator = 10;
     optional fixed64 GraphShard = 11;
     optional fixed64 BackupController = 12;
+    optional fixed64 WasmCompileController = 13;
 
     // Plan resolution for idle coordinators
     optional uint64 IdlePlanResolution = 9;
@@ -107,8 +109,39 @@ message TDiskSpaceUsage {
 }
 
 message TDomainState {
-    optional bool DiskQuotaExceeded = 1;
+    optional bool DiskQuotaExceeded = 1; // also set when StorageSpaceExhausted is set
     optional bool SmallBlobsQuotaExceeded = 2;
+    optional bool StorageSpaceExhausted = 3; // storage pools of the database are running out of space (reported by BS_CONTROLLER)
+}
+
+// Disk space quotas exactly as SchemeShard enforces them, together with the usage it compares them against.
+// Lets clients show the quota state without reproducing SchemeShard accounting rules.
+// Whether the quotas are exceeded is reported in TDomainState.DiskQuotaExceeded (which StorageSpaceExhausted sets as well).
+message TDiskSpaceQuotaUsage {
+    enum EMode {
+        MODE_UNSPECIFIED = 0;
+        // The overall quota (DatabaseQuotas.data_size_*_quota) is checked against the total database usage
+        // (tables, plus topics when EnableTopicDiskSubDomainQuota is on); storage_quotas are ignored.
+        // Entries contain a single item with an empty PoolKind.
+        MODE_OVERALL = 1;
+        // Separate quotas (DatabaseQuotas.storage_quotas) are checked against the usage of the storage pool kind
+        // with the same name (tables only); the overall quota is ignored.
+        // Entries contain an item for every pool kind that has either usage or a quota.
+        MODE_STORAGE_POOL_KINDS = 2;
+    }
+
+    message TEntry {
+        optional string PoolKind = 1; // empty in MODE_OVERALL
+        optional uint64 Usage = 2; // bytes, the value compared with the quotas
+        // Effective quotas in bytes: when only one of the quotas is configured, the other one is equal to it.
+        // 0 means no limit. The quotas are exceeded when Usage > HardQuota for any entry with a non-zero HardQuota,
+        // and stay exceeded until Usage < SoftQuota for every entry with a non-zero SoftQuota.
+        optional uint64 SoftQuota = 3;
+        optional uint64 HardQuota = 4;
+    }
+
+    optional EMode Mode = 1;
+    repeated TEntry Entries = 2;
 }
 
 message TAuditSettings {
@@ -149,6 +182,10 @@ message TDomainDescription {
     optional TAuditSettings AuditSettings = 21;
 
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 26;
+
+    // Set only by the SchemeShard that enforces the quotas of the database. Absent in older SchemeShard versions
+    // and in the parent SchemeShard's description of an external subdomain: describe it via its tenant SchemeShard.
+    optional TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 27;
 }
 
 message TSchemeQuotas {

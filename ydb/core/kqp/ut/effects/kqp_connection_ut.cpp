@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpFail) {
                     ++stage;
                     return TTestActorRuntime::EEventAction::PROCESS;
                 } else if (ev->GetTypeRewrite() == TEvTxProxy::TEvProposeTransaction::EventType) {
-                    AFL_ENSURE(stage == 2);
+                    YDB_LOG_ENSURE(stage == 2);
                     ++stage;
                     requests.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -257,7 +257,9 @@ Y_UNIT_TEST_SUITE(KqpFail) {
                 runtime.DispatchEvents(opts);
             }
 
-            auto result = runtime.WaitFuture(future);
+            // The SDK deadline uses real time. Keep virtual time at the intercepted
+            // commit until it expires, so DataShard cleanup cannot win this race.
+            auto result = future.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, result.GetIssues().ToString());
 
             {

@@ -1,5 +1,7 @@
 PY3_PROGRAM(solomon_emulator)
 
+STYLE_PYTHON()
+
 PEERDIR(
     ydb/library/yql/tools/solomon_emulator/lib
 )

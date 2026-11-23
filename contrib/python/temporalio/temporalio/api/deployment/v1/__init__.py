@@ -1,0 +1,31 @@
+from .message_pb2 import (
+    ComputeStatus,
+    Deployment,
+    DeploymentInfo,
+    DeploymentListInfo,
+    InheritedAutoUpgradeInfo,
+    RoutingConfig,
+    UpdateDeploymentMetadata,
+    VersionDrainageInfo,
+    VersionMetadata,
+    WorkerDeploymentInfo,
+    WorkerDeploymentOptions,
+    WorkerDeploymentVersion,
+    WorkerDeploymentVersionInfo,
+)
+
+__all__ = [
+    "ComputeStatus",
+    "Deployment",
+    "DeploymentInfo",
+    "DeploymentListInfo",
+    "InheritedAutoUpgradeInfo",
+    "RoutingConfig",
+    "UpdateDeploymentMetadata",
+    "VersionDrainageInfo",
+    "VersionMetadata",
+    "WorkerDeploymentInfo",
+    "WorkerDeploymentOptions",
+    "WorkerDeploymentVersion",
+    "WorkerDeploymentVersionInfo",
+]

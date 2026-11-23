@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/base

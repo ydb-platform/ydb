@@ -115,6 +115,8 @@ public:
     virtual IEventBase* PrepareEvent(bool last, TStats& stats) = 0;
     virtual void Clear() = 0;
     virtual bool IsFilled() const = 0;
+    // Bytes currently held in memory by the buffer (i.e. what a flush would release)
+    virtual ui64 GetMemoryBytes() const = 0;
     virtual TString GetError() const = 0;
 };
 

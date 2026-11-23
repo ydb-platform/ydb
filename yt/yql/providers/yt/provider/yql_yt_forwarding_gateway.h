@@ -1,3 +1,5 @@
+#pragma once
+
 #include "yql_yt_provider.h"
 
 using namespace NThreading;
@@ -38,6 +40,8 @@ public:
     TFuture<TPublishResult> Publish(const TExprNode::TPtr& node, TExprContext& ctx, TPublishOptions&& options) override;
 
     TFuture<TCommitResult> Commit(TCommitOptions&& options) override;
+
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) override;
 
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override;
 

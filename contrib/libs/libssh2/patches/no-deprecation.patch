@@ -1,0 +1,11 @@
+--- contrib/libs/libssh2/include/libssh2.h	(index)
++++ contrib/libs/libssh2/include/libssh2.h	(working tree)
+@@ -150,6 +150,8 @@ typedef int libssh2_socket_t;
+ #define LIBSSH2_SOCKET_CLOSE(s) close(s)
+ #endif /* _WIN32 */
+ 
++#define LIBSSH2_DISABLE_DEPRECATION
++
+ /* Compile-time deprecation macros */
+ #if !defined(LIBSSH2_DISABLE_DEPRECATION) && !defined(LIBSSH2_LIBRARY)
+ #  if defined(_MSC_VER)

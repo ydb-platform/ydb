@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 namespace NYql {
-class IHTTPMockGateway : public IHTTPGateway {
+class IHTTPMockGateway: public IHTTPGateway {
 public:
     using TPtr = std::shared_ptr<IHTTPMockGateway>;
 
@@ -16,10 +16,6 @@ public:
 
     virtual void AddDefaultResponse(TDataDefaultResponse responseCallback) = 0;
 
-    virtual void AddDownloadResponse(
-            TString url,
-            IHTTPGateway::THeaders headers,
-            TString data,
-            TDataResponse responseCallback) = 0;
+    virtual void AddDownloadResponse(TString url, IHTTPGateway::THeaders headers, TString data, TDataResponse responseCallback) = 0;
 };
-}
+}   // namespace NYql

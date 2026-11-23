@@ -18,7 +18,7 @@ Start with the [DDisk source map](../../../README.md) and [DDisk contract](../..
 
 ## Follow the Operation
 
-Inspect `ydb/core/blobstorage/ddisk/ddisk.h`, the corresponding implementation handler, and `ydb/core/protos/blobstorage_ddisk.proto`. Trace credentials/session validation, selector and checksum validation, chunk ownership, durable metadata, completion, and the failure response relevant to the changed path.
+Inspect `ydb/core/blobstorage/ddisk/ddisk.h`, the corresponding implementation handler, and `ydb/core/protos/blobstorage_ddisk.proto`. Trace how `ResolveConnection` in `ddisk_actor_connect.cpp` handles the request's `TQueryCredentials`. An ordinary request carries a connection token. The actor restores tablet, generation, and session from that connection, or rejects a stale token. An internal DDisk/PB request has its own checks and may arrive without a client connection. Then trace the selector and checksum checks, chunk ownership, durable metadata, completion, and the failure response relevant to the changed path.
 
 For PB identity or erase changes, account for TabletId, Generation, DirectBlockGroupIndex, and Lsn. LSN production and quorum are caller policy. For sync, inspect the destination pull path and the selected DDisk/PB source segment. For allocation, distinguish a BSC claim from lazily materialized physical chunks.
 
@@ -30,8 +30,8 @@ Preserve these invariants in every lifecycle change; see the [shutdown and resta
 
 1. DDisk and PB always drain their accepted asynchronous router I/O before acknowledging shutdown. Callback retirement and result processing must finish; actor-owned PDisk fallback requests are canceled with terminal replies before Gone. Normal shutdown has no deadline.
 2. DDisk also waits for its concrete PB incarnation's `TEvGone` before publishing its own Gone. Tracked poison nondelivery accounts for an already absent child. PB releases its router reference before notifying DDisk; DDisk releases its reference before notifying NodeWarden.
-3. For a NodeWarden-requested PDisk restart, NodeWarden first requests DDisk shutdown, DDisk requests PB shutdown, and only after all affected DDisks are Gone does NodeWarden permit PDisk restart. Fence replacement DDisk/PB startup during this handoff.
-4. A replacement PDisk must not start device I/O until the previous PDisk's I/O has retired. `TPDisk::Stop()` synchronously stops the shared router, including publisher/callback retirement, issuer/ring retirement, and duplicated descriptor closure, then stops the source block device. Retaining an old router client must not prolong access to the device.
+3. For a NodeWarden-requested PDisk restart, NodeWarden first requests DDisk shutdown, DDisk requests PB shutdown, and only after all affected DDisks are Gone does NodeWarden permit PDisk restart. Do not start a replacement DDisk or PB until this handoff completes.
+4. A replacement PDisk must not start device I/O until the previous PDisk's I/O has retired. `TPDisk::Stop()` synchronously stops the shared router, including publisher/callback retirement, issuer/ring retirement, and duplicated descriptor closure, then stops the source block device. An old router client that is still held must not keep the device in use.
 5. An independent PDisk stop/restart must preserve the same I/O barrier even while DDisk/PB clients remain. The router closes admission; rejected submissions make those actors enter Stopping and drain, as does PDisk session loss. This is not an unsolicited notification to idle actors. The PDisk barrier waits for their accepted router I/O and callbacks, not their actor Gone; poison remains necessary for actor death and Warden notification.
 
 Keep the 60-second stalled-I/O diagnostic and 10-second forced-destructor fail-stop deadline separate from the indefinite normal shutdown wait. Do not replace a drain with a timeout that releases live callback or kernel-owned resources.

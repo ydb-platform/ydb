@@ -3,10 +3,12 @@
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <optional>
 #include <unordered_set>
 
 namespace NKikimr::NNodeWhiteboard {
@@ -82,6 +84,31 @@ protected:
     std::unordered_map<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
+
+    struct TDDiskState {
+        struct TComponent {
+            TActorId Publisher;
+            TInstant UpdatedAt;
+            TInstant ExpiresAt;
+            std::optional<NKikimrWhiteboard::TDDiskStateInfo::EComponentStatus> Status;
+            TString Reason;
+            bool Deleted = false;
+        };
+
+        TComponent DDisk;
+        TComponent PersistentBuffer;
+        NKikimrWhiteboard::TDDiskStateInfo Space;
+        TInstant SpaceExpiresAt;
+        TString StoragePoolName;
+        ui64 OwnerRound = 0;
+
+        TComponent& GetComponent(bool isPersistentBuffer) {
+            return isPersistentBuffer ? PersistentBuffer : DDisk;
+        }
+    };
+    // Keep the last owner round even after expiry/deletion to fence delayed publications.
+    // NodeWarden assigns increasing rounds for slot incarnations within this process.
+    std::unordered_map<ui64, TDDiskState> DDiskStateInfo;
 
     i64 MaxClockSkewWithPeerUs = 0;
     ui32 MaxClockSkewPeerId = 0;
@@ -549,6 +576,9 @@ protected:
             hFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskHealthUpdate, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
@@ -633,6 +663,69 @@ protected:
             pDiskStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
         SetRole("Storage");
+    }
+
+    TDDiskState* AcceptDDiskPublication(ui32 pdiskId, ui32 slotId, ui64 ownerRound, bool isPersistentBuffer,
+            const TActorId& sender) {
+        const ui64 key = (ui64(pdiskId) << 32) | slotId;
+        auto& state = DDiskStateInfo[key];
+        if (ownerRound < state.OwnerRound) {
+            return nullptr;
+        }
+        if (ownerRound > state.OwnerRound) {
+            // A new slot incarnation invalidates publications from both old actors.
+            state = TDDiskState{};
+            state.OwnerRound = ownerRound;
+        }
+        auto& component = state.GetComponent(isPersistentBuffer);
+        if (component.Deleted || (component.Publisher && component.Publisher != sender)) {
+            return nullptr;
+        }
+        component.Publisher = sender;
+        return &state;
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskStateUpdate::TPtr& ev) {
+        auto& update = *ev->Get();
+        if (auto* state = AcceptDDiskPublication(update.Record.GetPDiskId(), update.Record.GetDDiskSlotId(),
+                update.OwnerRound, true, ev->Sender)) {
+            const auto now = TActivationContext::Now();
+            if (update.Record.GetStoragePoolName()) {
+                state->StoragePoolName = update.Record.GetStoragePoolName();
+            }
+            state->Space = std::move(update.Record);
+            state->Space.SetChangeTime(now.MilliSeconds());
+            state->SpaceExpiresAt = now + update.Lifetime;
+        }
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskStateDelete::TPtr& ev) {
+        const auto& deletion = *ev->Get();
+        if (auto* state = AcceptDDiskPublication(deletion.PDiskId, deletion.DDiskSlotId, deletion.OwnerRound,
+                deletion.IsPersistentBuffer, ev->Sender)) {
+            auto& component = state->GetComponent(deletion.IsPersistentBuffer);
+            component.Status.reset();
+            component.Reason.clear();
+            component.Deleted = true;
+            if (deletion.IsPersistentBuffer) {
+                state->Space.Clear();
+            }
+        }
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskHealthUpdate::TPtr& ev) {
+        auto& update = *ev->Get();
+        if (auto* state = AcceptDDiskPublication(update.PDiskId, update.DDiskSlotId, update.OwnerRound,
+                update.IsPersistentBuffer, ev->Sender)) {
+            if (update.StoragePoolName) {
+                state->StoragePoolName = std::move(update.StoragePoolName);
+            }
+            auto& component = state->GetComponent(update.IsPersistentBuffer);
+            component.Status = update.Status;
+            component.Reason = std::move(update.Reason);
+            component.UpdatedAt = TActivationContext::Now();
+            component.ExpiresAt = component.UpdatedAt + update.Lifetime;
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr& ev) {
@@ -980,6 +1073,47 @@ protected:
                 Copy(pDiskStateInfo, pr.second, request);
             }
         }
+        if (request.GetIncludeDDiskState()) {
+            const auto now = TActivationContext::Now();
+            for (const auto& [key, state] : DDiskStateInfo) {
+                const bool hasSpace = state.Space.HasPDiskId() && state.SpaceExpiresAt >= now;
+                const bool hasDDisk = state.DDisk.Status && state.DDisk.ExpiresAt >= now;
+                const bool hasBuffer = state.PersistentBuffer.Status && state.PersistentBuffer.ExpiresAt >= now;
+                if (!(hasSpace && state.Space.GetChangeTime() >= changedSince)
+                        && !(hasDDisk && state.DDisk.UpdatedAt.MilliSeconds() >= changedSince)
+                        && !(hasBuffer && state.PersistentBuffer.UpdatedAt.MilliSeconds() >= changedSince)) {
+                    continue;
+                }
+
+                auto* info = record.AddDDiskStateInfo();
+                if (hasSpace) {
+                    info->CopyFrom(state.Space);
+                }
+                const ui32 pdiskId = key >> 32;
+                const ui32 slotId = key;
+                info->SetPDiskId(pdiskId);
+                info->SetDDiskSlotId(slotId);
+                if (state.StoragePoolName) {
+                    info->SetStoragePoolName(state.StoragePoolName);
+                }
+                if (!info->HasPersistentBufferId()) {
+                    info->SetPersistentBufferId(MakeBlobStoragePersistentBufferId(SelfId().NodeId(), pdiskId, slotId).ToString());
+                }
+                info->SetHasWhiteboardData(hasSpace);
+                if (hasDDisk) {
+                    info->SetDDiskStatus(*state.DDisk.Status);
+                    if (state.DDisk.Reason) {
+                        info->SetDDiskStatusReason(state.DDisk.Reason);
+                    }
+                }
+                if (hasBuffer) {
+                    info->SetPersistentBufferStatus(*state.PersistentBuffer.Status);
+                    if (state.PersistentBuffer.Reason) {
+                        info->SetPersistentBufferStatusReason(state.PersistentBuffer.Reason);
+                    }
+                }
+            }
+        }
         response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
         Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
@@ -1230,6 +1364,18 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr&) {
+        const auto ddiskNow = TActivationContext::Now();
+        for (auto& [key, state] : DDiskStateInfo) {
+            if (state.SpaceExpiresAt < ddiskNow) {
+                state.Space.Clear();
+            }
+            for (auto* component : {&state.DDisk, &state.PersistentBuffer}) {
+                if (component->ExpiresAt < ddiskNow) {
+                    component->Status.reset();
+                    component->Reason.clear();
+                }
+            }
+        }
         auto it = TabletStateInfo.begin();
         auto now(TActivationContext::Now());
         ui64 deadDeadline = (now - TDuration::Minutes(10)).MilliSeconds();

@@ -21,6 +21,12 @@ std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config) {
     if (config.SecurityToken.empty() && !config.StaticCredentials.User.empty()) {
         NYdb::TDriverConfig driverConfig;
         driverConfig.SetEndpoint(TCommandConfig::ParseServerAddress(config.Address).Address);
+        if (config.EnableSsl) {
+            driverConfig.UseSecureConnection(TString(config.CaCerts));
+            if (config.ClientCert) {
+                driverConfig.UseClientCertificate(TString(config.ClientCert), TString(config.ClientCertPrivateKey));
+            }
+        }
         NYdb::TDriver connection(driverConfig);
         NYdb::NConsoleClient::TDummyClient client(connection);
 

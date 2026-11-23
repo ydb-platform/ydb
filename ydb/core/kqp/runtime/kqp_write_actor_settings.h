@@ -19,6 +19,7 @@ struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
 
     ui64 MaxWriteAttempts = 5;
     ui64 MaxResolveAttempts = 5;
+    ui64 MaxRetryResolvesPerShard = 5; // consecutive re-resolves caused by one shard before UNAVAILABLE
 };
 
 TWriteActorSettings GetWriteActorSettings();

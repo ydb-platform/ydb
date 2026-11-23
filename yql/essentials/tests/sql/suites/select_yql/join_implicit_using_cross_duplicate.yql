@@ -1,0 +1,7 @@
+/* custom error: Collision in name: id */
+PRAGMA YqlSelect = 'force';
+
+SELECT *
+FROM AS_TABLE([<|id: 1, av: 'a'|>]) AS a
+JOIN AS_TABLE([<|id: 1, bv: 'b'|>]) AS b ON a.id == b.id
+CROSS JOIN AS_TABLE([<|id: 2, cv: 'c'|>]) AS c;

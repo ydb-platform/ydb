@@ -3,15 +3,23 @@ PY3_LIBRARY()
     PY_SRCS (
         allure_utils.py
         compaction.py
+        errors_report.py
         results_processor.py
         remote_execution.py
         tpcc_deviation.py
+        workload_result.py
         ydb_cluster.py
         utils.py
         ydb_cli.py
     )
 
+    RESOURCE_FILES(
+        PREFIX ydb/tests/olap/lib/
+        allure-html-plugin/static/styles.css
+    )
+
     PEERDIR(
+        library/python/resource
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
         contrib/python/PyYAML
@@ -24,3 +32,5 @@ PY3_LIBRARY()
     )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

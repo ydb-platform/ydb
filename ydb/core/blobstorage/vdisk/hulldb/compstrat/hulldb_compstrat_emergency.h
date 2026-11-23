@@ -28,11 +28,13 @@ namespace NKikimr {
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TSelectorParams &params,
                     const TLevelIndexSnapshot &levelSnap,
-                    TTask *task)
+                    TTask *task,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , Params(params)
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Yield(yield)
                 , MaxSsts(ui32(HullCtx->VCfg->HullCompEmergencyMaxSsts))
                 , ChunkSize(HullCtx->ChunkSize)
             {}
@@ -45,6 +47,7 @@ namespace NKikimr {
                 }
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::Emergency;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
@@ -88,6 +91,8 @@ namespace NKikimr {
                 ui32 SrcLevel = 0;
                 ui32 InputChunks = 0;
                 ui32 OutputChunks = 0;
+                ui32 StripeBlocksAllocated = 0;
+                ui32 StripeBlocksReleased = 0;
                 ui64 HugeGarbage = 0;
                 typename TSegments::const_iterator SrcFirst{};
                 typename TSegments::const_iterator SrcLast{};
@@ -121,6 +126,8 @@ namespace NKikimr {
                         << " TargetLevel# " << TargetLevel
                         << " InputChunks# " << InputChunks
                         << " OutputChunks# " << OutputChunks
+                        << " StripeBlocksAllocated# " << StripeBlocksAllocated
+                        << " StripeBlocksReleased# " << StripeBlocksReleased
                         << " HugeGarbage# " << HugeGarbage
                         << "}";
                     return str.Str();
@@ -131,6 +138,7 @@ namespace NKikimr {
             const TSelectorParams &Params;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            TCompactionYield* const Yield;
             const ui32 MaxSsts;
             const ui32 ChunkSize;
             TCandidate Best;
@@ -159,14 +167,24 @@ namespace NKikimr {
                     typename TSegments::const_iterator first,
                     typename TSegments::const_iterator last,
                     ui32 &inputChunks,
+                    ui32 &stripeBlocks,
                     ui64 &keepBytes,
                     ui64 &hugeGarbage) const
             {
                 for (auto it = first; it != last; ++it) {
+                    CheckCompactionYield(Yield);
                     inputChunks += TUtils::SstInputChunks(**it);
+                    stripeBlocks += TUtils::SstReleasedStripeBlocks(**it, Params.AppendBlockSize);
                     keepBytes += TUtils::SstKeepBytes(**it);
                     hugeGarbage += TUtils::SstHugeGarbageBytes(**it);
                 }
+            }
+
+            void SetOutput(TCandidate &c, ui64 keepBytes) const {
+                c.OutputChunks = TUtils::EstimateJobOutputChunks(keepBytes, ChunkSize,
+                    Params.AppendBlockSize, Params.StripeSstBytes);
+                c.StripeBlocksAllocated = TUtils::EstimateOutputStripeBlocks(keepBytes,
+                    Params.AppendBlockSize, Params.StripeSstBytes);
             }
 
             void ScanSameLevel(ui32 levelIdx) {
@@ -181,12 +199,15 @@ namespace NKikimr {
                 const ui32 n = segs.size();
                 for (ui32 i = 0; i < n; ++i) {
                     ui32 inputChunks = 0;
+                    ui32 stripeBlocks = 0;
                     ui64 keepBytes = 0;
                     ui64 hugeGarbage = 0;
                     const ui32 maxW = Min(MaxSsts, n - i);
                     for (ui32 w = 1; w <= maxW; ++w) {
+                        CheckCompactionYield(Yield);
                         const auto sst = segs[i + w - 1];
                         inputChunks += TUtils::SstInputChunks(*sst);
+                        stripeBlocks += TUtils::SstReleasedStripeBlocks(*sst, Params.AppendBlockSize);
                         keepBytes += TUtils::SstKeepBytes(*sst);
                         hugeGarbage += TUtils::SstHugeGarbageBytes(*sst);
 
@@ -196,7 +217,8 @@ namespace NKikimr {
                         c.SrcFirst = segs.begin() + i;
                         c.SrcLast = segs.begin() + i + w;
                         c.InputChunks = inputChunks;
-                        c.OutputChunks = TUtils::EstimateOutputChunks(keepBytes, ChunkSize);
+                        c.StripeBlocksReleased = stripeBlocks;
+                        SetOutput(c, keepBytes);
                         c.HugeGarbage = hugeGarbage;
                         c.Kind = (w == 1) ? TCandidate::EKind::Squeeze : TCandidate::EKind::Pack;
                         Consider(std::move(c));
@@ -233,6 +255,7 @@ namespace NKikimr {
 
                 const ui32 srcLevel = srcLevelIdx + 1;
                 for (auto srcIt = srcSegs.begin(); srcIt != srcSegs.end(); ++srcIt) {
+                    CheckCompactionYield(Yield);
                     auto [nextFirst, nextLast] = FindOverlap(nextSegs,
                         (*srcIt)->FirstKey(), (*srcIt)->LastKey());
                     const ui32 overlap = static_cast<ui32>(nextLast - nextFirst);
@@ -252,9 +275,9 @@ namespace NKikimr {
                     c.NextFirst = nextFirst;
                     c.NextLast = nextLast;
                     ui64 keepBytes = 0;
-                    AddRangeMetrics(c.SrcFirst, c.SrcLast, c.InputChunks, keepBytes, c.HugeGarbage);
-                    AddRangeMetrics(c.NextFirst, c.NextLast, c.InputChunks, keepBytes, c.HugeGarbage);
-                    c.OutputChunks = TUtils::EstimateOutputChunks(keepBytes, ChunkSize);
+                    AddRangeMetrics(c.SrcFirst, c.SrcLast, c.InputChunks, c.StripeBlocksReleased, keepBytes, c.HugeGarbage);
+                    AddRangeMetrics(c.NextFirst, c.NextLast, c.InputChunks, c.StripeBlocksReleased, keepBytes, c.HugeGarbage);
+                    SetOutput(c, keepBytes);
                     Consider(std::move(c));
                 }
             }
@@ -263,16 +286,16 @@ namespace NKikimr {
                 auto &compactSsts = Task->CompactSsts;
                 if (Best.Kind == TCandidate::EKind::CrossLevel) {
                     compactSsts.TargetLevel = Best.TargetLevel;
-                    compactSsts.PushSstFromLevelX(Best.SrcLevel, Best.SrcFirst, Best.SrcLast);
+                    compactSsts.PushSstFromLevelX(Best.SrcLevel, Best.SrcFirst, Best.SrcLast, Yield);
                     compactSsts.LastCompactedKey = (*Best.SrcFirst)->LastKey();
-                    compactSsts.PushSstFromLevelX(Best.SrcLevel + 1, Best.NextFirst, Best.NextLast);
+                    compactSsts.PushSstFromLevelX(Best.SrcLevel + 1, Best.NextFirst, Best.NextLast, Yield);
                 } else {
                     TUtils::CompactContiguousSsts(
                         LevelSnap.SliceSnap,
                         Best.SrcLevel,
                         Best.SrcFirst,
                         Best.SrcLast,
-                        compactSsts);
+                        compactSsts, Yield);
                 }
             }
 
@@ -303,6 +326,14 @@ namespace NKikimr {
                         {"budget", Params.FreeChunksBudget});
                 }
                 ApplyBest();
+                // The scan already measured this candidate exactly; hand those numbers to
+                // the broker rather than letting the generic estimator redo them coarsely.
+                Task->Forecast.Valid = true;
+                Task->Forecast.OutputChunks = Best.OutputChunks;
+                Task->Forecast.InputChunks = Best.InputChunks;
+                Task->Forecast.StripeBlocksAllocated = Best.StripeBlocksAllocated;
+                Task->Forecast.StripeBlocksReleased = Best.StripeBlocksReleased;
+                Task->Forecast.HugeGarbageBytes = Best.HugeGarbage;
                 return ActCompactSsts;
             }
         };

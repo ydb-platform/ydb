@@ -2,8 +2,14 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
+#include "hulldb_compstrat_utils.h"
+#include "hulldb_compstrat_ranks.h"
+#include "hulldb_compstrat_yield.h"
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
+#include <util/datetime/cputimer.h>
 #include <util/stream/file.h>
 
 namespace NKikimr {
@@ -33,30 +39,66 @@ namespace NKikimr {
                     TLevelIndexSnapshot &&levelSnap,
                     TBarriersSnapshot &&barriersSnap,
                     TTask *task,
-                    bool allowGarbageCollection)
+                    bool allowGarbageCollection,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(hullCtx)
                 , LevelSnap(std::move(levelSnap))
                 , BarriersSnap(std::move(barriersSnap))
                 , Task(task)
                 , Params(params)
                 , AllowGarbageCollection(allowGarbageCollection)
+                , Ranks(*Params.Boundaries, LevelSnap.SliceSnap)
+                , Yield(yield)
             {
                 Y_DEBUG_ABORT_UNLESS(Task);
                 Task->Clear();
+                Task->Priority = {Ranks.GetMaxRank(), Params.EmergencyMode};
                 Task->FullCompactionInfo.first = Params.FullCompactionAttrs;
+
+                double maxSortedRank = 0.0;
+                for (ui32 i = 2; i < Ranks.Ranks.size(); ++i) {
+                    maxSortedRank = Max(maxSortedRank, Ranks.Ranks[i]);
+                }
+                auto &mon = HullCtx->LsmCompactionRankGroups[ui32(TKeyToEHullDbType<TKey>())];
+                mon.Rank0() = Ranks.Ranks[0] * NMonGroup::TLsmCompactionRankGroup::RankScale;
+                mon.Rank1_16() = Ranks.Ranks[1] * NMonGroup::TLsmCompactionRankGroup::RankScale;
+                mon.Rank17Plus() = maxSortedRank * NMonGroup::TLsmCompactionRankGroup::RankScale;
             }
 
             // Select an action to perform
-            EAction Select();
+            EAction Select() {
+                const EAction action = SelectAction();
+                if (action == ActCompactSsts && !Task->Forecast.Valid) {
+                    // Every job that writes chunks has to say how many, so the compaction
+                    // broker can hand out the shared pool instead of letting each VDisk
+                    // guess at it. A strategy that knows better fills this in itself.
+                    Task->Forecast = TUtils::ForecastCompactSsts(Task->CompactSsts, HullCtx->ChunkSize,
+                        Params.AppendBlockSize, Params.StripeSstBytes, Yield);
+                }
+                return action;
+            }
 
         private:
+            using TUtils = ::NKikimr::NHullComp::TUtils<TKey, TMemRec>;
+
+            // The strategy chain proper; specialized per key type.
+            EAction SelectAction();
+
             TIntrusivePtr<THullCtx> HullCtx;
             TLevelIndexSnapshot LevelSnap;
             TBarriersSnapshot BarriersSnap;
             TTask *Task;
             TSelectorParams Params;
             const bool AllowGarbageCollection;
+            const TLevelRanks Ranks;
+            TCompactionYield* const Yield;
         };
+
+        // Declared here so that Select() above always calls the specialization, whatever
+        // translation unit it is instantiated in.
+        template <> EAction TStrategy<TKeyLogoBlob, TMemRecLogoBlob>::SelectAction();
+        template <> EAction TStrategy<TKeyBlock, TMemRecBlock>::SelectAction();
+        template <> EAction TStrategy<TKeyBarrier, TMemRecBarrier>::SelectAction();
 
         ////////////////////////////////////////////////////////////////////////////
         // TSelected
@@ -134,6 +176,86 @@ namespace NKikimr {
                 , RecipientID(recipientID)
                 , CompactionTask(std::move(compactionTask))
                 , AllowGarbageCollection(allowGarbageCollection)
+            {}
+        };
+
+        ////////////////////////////////////////////////////////////////////////////
+        // NHullComp::TSelectorActorCoro
+        ////////////////////////////////////////////////////////////////////////////
+        template <class TKey, class TMemRec>
+        class TSelectorActorCoro : public TActorCoro {
+            using TLevelIndexSnapshot = ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
+            using TCompactionTask = NHullComp::TTask<TKey, TMemRec>;
+            using TStrategy = NHullComp::TStrategy<TKey, TMemRec>;
+            using TSelected = NHullComp::TSelected<TKey, TMemRec>;
+
+            class TImpl : public TActorCoroImpl {
+                TIntrusivePtr<THullCtx> HullCtx;
+                TSelectorParams Params;
+                TLevelIndexSnapshot LevelSnap;
+                TBarriersSnapshot BarriersSnap;
+                const TActorId RecipientID;
+                std::unique_ptr<TCompactionTask> CompactionTask;
+                const bool AllowGarbageCollection;
+
+                struct TCancelled {};
+
+                void Yield() {
+                    Send(SelfActorId, new TEvents::TEvWakeup);
+                    auto ev = WaitForEvent();
+                    if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                        throw TCancelled();
+                    }
+                    Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Wakeup);
+                }
+
+                void Run() override {
+                    try {
+                        const TInstant startTime = TAppData::TimeProvider->Now();
+                        TCompactionYield yield(CyclesToDuration(TActivationContext::GetOverwrittenTimePerMailboxTs()),
+                            [this] { Yield(); });
+                        TStrategy strategy(HullCtx, Params, std::move(LevelSnap), std::move(BarriersSnap),
+                            CompactionTask.get(), AllowGarbageCollection, &yield);
+                        const EAction action = strategy.Select();
+                        Send(RecipientID, new TSelected(action, std::move(CompactionTask)));
+                        const TInstant finishTime = TAppData::TimeProvider->Now();
+                        YDB_LOG_CTX_COMP(GetActorContext(), action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
+                            NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix,
+                                "%s: Selector actor: action# %s timeSpent# %s",
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action),
+                                (finishTime - startTime).ToString().data()));
+                    } catch (const TCancelled&) {
+                    }
+                }
+
+            public:
+                TImpl(TIntrusivePtr<THullCtx> hullCtx, const TSelectorParams& params,
+                        TLevelIndexSnapshot&& levelSnap, TBarriersSnapshot&& barriersSnap,
+                        const TActorId& recipientID, std::unique_ptr<TCompactionTask> compactionTask,
+                        bool allowGarbageCollection)
+                    : TActorCoroImpl(TUsePooledStack{64_KB}, true)
+                    , HullCtx(std::move(hullCtx))
+                    , Params(params)
+                    , LevelSnap(std::move(levelSnap))
+                    , BarriersSnap(std::move(barriersSnap))
+                    , RecipientID(recipientID)
+                    , CompactionTask(std::move(compactionTask))
+                    , AllowGarbageCollection(allowGarbageCollection)
+                {}
+            };
+
+        public:
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+                return NKikimrServices::TActivity::BS_HULLCOMP_SELECTOR;
+            }
+
+            TSelectorActorCoro(TIntrusivePtr<THullCtx> hullCtx, const TSelectorParams& params,
+                    TLevelIndexSnapshot&& levelSnap, TBarriersSnapshot&& barriersSnap,
+                    const TActorId& recipientID, std::unique_ptr<TCompactionTask> compactionTask,
+                    bool allowGarbageCollection)
+                : TActorCoro(MakeHolder<TImpl>(std::move(hullCtx), params, std::move(levelSnap),
+                    std::move(barriersSnap), recipientID, std::move(compactionTask), allowGarbageCollection),
+                    ActorActivityType())
             {}
         };
 

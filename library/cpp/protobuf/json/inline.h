@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 // A printer from protobuf to json string, with ability to inline some string fields of given protobuf message
 // into output as ready json without additional escaping. These fields should be marked using special field option.
 // An example of usage:

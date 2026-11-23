@@ -26,18 +26,15 @@ TString NormalizeName(TStringBuf name) {
 
 } // namespace NSQLComplete
 
-template <>
-void Out<NSQLComplete::TTableId>(IOutputStream& out, const NSQLComplete::TTableId& value) {
+Y_DECLARE_OUT_SPEC(, NSQLComplete::TTableId, out, value) {
     out << value.Cluster << ".`" << value.Path << "`";
 }
 
-template <>
-void Out<NSQLComplete::TAliased<NSQLComplete::TTableId>>(IOutputStream& out, const NSQLComplete::TAliased<NSQLComplete::TTableId>& value) {
+Y_DECLARE_OUT_SPEC(, NSQLComplete::TAliased<NSQLComplete::TTableId>, out, value) {
     Out<NSQLComplete::TTableId>(out, value);
     out << " AS " << value.Alias;
 }
 
-template <>
-void Out<NSQLComplete::TColumnId>(IOutputStream& out, const NSQLComplete::TColumnId& value) {
+Y_DECLARE_OUT_SPEC(, NSQLComplete::TColumnId, out, value) {
     out << value.TableAlias << "." << value.Name;
 }

@@ -256,6 +256,44 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 }
 
 /**
+  Total number of errors encountered and corrected by the CPU.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwCpuErrors = "hw.errors";
+static constexpr const char *descrMetricHwCpuErrors =
+    "Total number of errors encountered and corrected by the CPU.";
+static constexpr const char *unitMetricHwCpuErrors = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricHwCpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwCpuErrors, descrMetricHwCpuErrors,
+                                    unitMetricHwCpuErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricHwCpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwCpuErrors, descrMetricHwCpuErrors,
+                                    unitMetricHwCpuErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwCpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricHwCpuErrors, descrMetricHwCpuErrors,
+                                             unitMetricHwCpuErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDoubleMetricHwCpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(kMetricHwCpuErrors, descrMetricHwCpuErrors,
+                                              unitMetricHwCpuErrors);
+}
+
+/**
   Number of errors encountered by the component.
   <p>
   counter
@@ -288,6 +326,233 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 {
   return meter->CreateDoubleObservableCounter(kMetricHwErrors, descrMetricHwErrors,
                                               unitMetricHwErrors);
+}
+
+/**
+  Number of errors encountered by the GPU.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwGpuErrors     = "hw.errors";
+static constexpr const char *descrMetricHwGpuErrors = "Number of errors encountered by the GPU.";
+static constexpr const char *unitMetricHwGpuErrors  = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricHwGpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwGpuErrors, descrMetricHwGpuErrors,
+                                    unitMetricHwGpuErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricHwGpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwGpuErrors, descrMetricHwGpuErrors,
+                                    unitMetricHwGpuErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwGpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricHwGpuErrors, descrMetricHwGpuErrors,
+                                             unitMetricHwGpuErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDoubleMetricHwGpuErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(kMetricHwGpuErrors, descrMetricHwGpuErrors,
+                                              unitMetricHwGpuErrors);
+}
+
+/**
+  Number of errors encountered on this logical disk.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwLogicalDiskErrors = "hw.errors";
+static constexpr const char *descrMetricHwLogicalDiskErrors =
+    "Number of errors encountered on this logical disk.";
+static constexpr const char *unitMetricHwLogicalDiskErrors = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricHwLogicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwLogicalDiskErrors, descrMetricHwLogicalDiskErrors,
+                                    unitMetricHwLogicalDiskErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricHwLogicalDiskErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwLogicalDiskErrors, descrMetricHwLogicalDiskErrors,
+                                    unitMetricHwLogicalDiskErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwLogicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricHwLogicalDiskErrors, descrMetricHwLogicalDiskErrors, unitMetricHwLogicalDiskErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwLogicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricHwLogicalDiskErrors, descrMetricHwLogicalDiskErrors, unitMetricHwLogicalDiskErrors);
+}
+
+/**
+  Number of errors encountered on this memory module.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwMemoryErrors = "hw.errors";
+static constexpr const char *descrMetricHwMemoryErrors =
+    "Number of errors encountered on this memory module.";
+static constexpr const char *unitMetricHwMemoryErrors = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricHwMemoryErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwMemoryErrors, descrMetricHwMemoryErrors,
+                                    unitMetricHwMemoryErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricHwMemoryErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwMemoryErrors, descrMetricHwMemoryErrors,
+                                    unitMetricHwMemoryErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwMemoryErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricHwMemoryErrors, descrMetricHwMemoryErrors,
+                                             unitMetricHwMemoryErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwMemoryErrors(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(kMetricHwMemoryErrors, descrMetricHwMemoryErrors,
+                                              unitMetricHwMemoryErrors);
+}
+
+/**
+  Number of errors encountered by the network adapter.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwNetworkErrors = "hw.errors";
+static constexpr const char *descrMetricHwNetworkErrors =
+    "Number of errors encountered by the network adapter.";
+static constexpr const char *unitMetricHwNetworkErrors = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricHwNetworkErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwNetworkErrors, descrMetricHwNetworkErrors,
+                                    unitMetricHwNetworkErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricHwNetworkErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwNetworkErrors, descrMetricHwNetworkErrors,
+                                    unitMetricHwNetworkErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwNetworkErrors(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricHwNetworkErrors, descrMetricHwNetworkErrors,
+                                             unitMetricHwNetworkErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwNetworkErrors(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(kMetricHwNetworkErrors, descrMetricHwNetworkErrors,
+                                              unitMetricHwNetworkErrors);
+}
+
+/**
+  Number of errors encountered on this disk.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwPhysicalDiskErrors = "hw.errors";
+static constexpr const char *descrMetricHwPhysicalDiskErrors =
+    "Number of errors encountered on this disk.";
+static constexpr const char *unitMetricHwPhysicalDiskErrors = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricHwPhysicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwPhysicalDiskErrors, descrMetricHwPhysicalDiskErrors,
+                                    unitMetricHwPhysicalDiskErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>>
+CreateSyncDoubleMetricHwPhysicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwPhysicalDiskErrors, descrMetricHwPhysicalDiskErrors,
+                                    unitMetricHwPhysicalDiskErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwPhysicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricHwPhysicalDiskErrors, descrMetricHwPhysicalDiskErrors, unitMetricHwPhysicalDiskErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwPhysicalDiskErrors(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricHwPhysicalDiskErrors, descrMetricHwPhysicalDiskErrors, unitMetricHwPhysicalDiskErrors);
+}
+
+/**
+  Number of errors encountered by the tape drive.
+  <p>
+  counter
+ */
+static constexpr const char *kMetricHwTapeDriveErrors = "hw.errors";
+static constexpr const char *descrMetricHwTapeDriveErrors =
+    "Number of errors encountered by the tape drive.";
+static constexpr const char *unitMetricHwTapeDriveErrors = "{error}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricHwTapeDriveErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricHwTapeDriveErrors, descrMetricHwTapeDriveErrors,
+                                    unitMetricHwTapeDriveErrors);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricHwTapeDriveErrors(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricHwTapeDriveErrors, descrMetricHwTapeDriveErrors,
+                                    unitMetricHwTapeDriveErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwTapeDriveErrors(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(kMetricHwTapeDriveErrors, descrMetricHwTapeDriveErrors,
+                                             unitMetricHwTapeDriveErrors);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwTapeDriveErrors(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricHwTapeDriveErrors, descrMetricHwTapeDriveErrors, unitMetricHwTapeDriveErrors);
 }
 
 /**
@@ -1420,6 +1685,505 @@ CreateAsyncDoubleMetricHwPowerSupplyUtilization(metrics::Meter *meter)
   <p>
   updowncounter
  */
+static constexpr const char *kMetricHwBatteryStatus = "hw.status";
+static constexpr const char *descrMetricHwBatteryStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwBatteryStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwBatteryStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwBatteryStatus, descrMetricHwBatteryStatus,
+                                         unitMetricHwBatteryStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwBatteryStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwBatteryStatus, descrMetricHwBatteryStatus,
+                                          unitMetricHwBatteryStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwBatteryStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwBatteryStatus, descrMetricHwBatteryStatus, unitMetricHwBatteryStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwBatteryStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwBatteryStatus, descrMetricHwBatteryStatus, unitMetricHwBatteryStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwCpuStatus = "hw.status";
+static constexpr const char *descrMetricHwCpuStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwCpuStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>> CreateSyncInt64MetricHwCpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwCpuStatus, descrMetricHwCpuStatus,
+                                         unitMetricHwCpuStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>> CreateSyncDoubleMetricHwCpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwCpuStatus, descrMetricHwCpuStatus,
+                                          unitMetricHwCpuStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwCpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricHwCpuStatus, descrMetricHwCpuStatus,
+                                                   unitMetricHwCpuStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDoubleMetricHwCpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricHwCpuStatus, descrMetricHwCpuStatus,
+                                                    unitMetricHwCpuStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwDiskControllerStatus = "hw.status";
+static constexpr const char *descrMetricHwDiskControllerStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwDiskControllerStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwDiskControllerStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwDiskControllerStatus,
+                                         descrMetricHwDiskControllerStatus,
+                                         unitMetricHwDiskControllerStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwDiskControllerStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwDiskControllerStatus,
+                                          descrMetricHwDiskControllerStatus,
+                                          unitMetricHwDiskControllerStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwDiskControllerStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricHwDiskControllerStatus,
+                                                   descrMetricHwDiskControllerStatus,
+                                                   unitMetricHwDiskControllerStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwDiskControllerStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricHwDiskControllerStatus,
+                                                    descrMetricHwDiskControllerStatus,
+                                                    unitMetricHwDiskControllerStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwEnclosureStatus = "hw.status";
+static constexpr const char *descrMetricHwEnclosureStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwEnclosureStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwEnclosureStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwEnclosureStatus, descrMetricHwEnclosureStatus,
+                                         unitMetricHwEnclosureStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwEnclosureStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwEnclosureStatus, descrMetricHwEnclosureStatus,
+                                          unitMetricHwEnclosureStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwEnclosureStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwEnclosureStatus, descrMetricHwEnclosureStatus, unitMetricHwEnclosureStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwEnclosureStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwEnclosureStatus, descrMetricHwEnclosureStatus, unitMetricHwEnclosureStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwFanStatus = "hw.status";
+static constexpr const char *descrMetricHwFanStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwFanStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>> CreateSyncInt64MetricHwFanStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwFanStatus, descrMetricHwFanStatus,
+                                         unitMetricHwFanStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>> CreateSyncDoubleMetricHwFanStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwFanStatus, descrMetricHwFanStatus,
+                                          unitMetricHwFanStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwFanStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricHwFanStatus, descrMetricHwFanStatus,
+                                                   unitMetricHwFanStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDoubleMetricHwFanStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricHwFanStatus, descrMetricHwFanStatus,
+                                                    unitMetricHwFanStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwGpuStatus = "hw.status";
+static constexpr const char *descrMetricHwGpuStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwGpuStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>> CreateSyncInt64MetricHwGpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwGpuStatus, descrMetricHwGpuStatus,
+                                         unitMetricHwGpuStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>> CreateSyncDoubleMetricHwGpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwGpuStatus, descrMetricHwGpuStatus,
+                                          unitMetricHwGpuStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwGpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricHwGpuStatus, descrMetricHwGpuStatus,
+                                                   unitMetricHwGpuStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDoubleMetricHwGpuStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricHwGpuStatus, descrMetricHwGpuStatus,
+                                                    unitMetricHwGpuStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwLogicalDiskStatus = "hw.status";
+static constexpr const char *descrMetricHwLogicalDiskStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwLogicalDiskStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwLogicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwLogicalDiskStatus, descrMetricHwLogicalDiskStatus,
+                                         unitMetricHwLogicalDiskStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwLogicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(
+      kMetricHwLogicalDiskStatus, descrMetricHwLogicalDiskStatus, unitMetricHwLogicalDiskStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwLogicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwLogicalDiskStatus, descrMetricHwLogicalDiskStatus, unitMetricHwLogicalDiskStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwLogicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwLogicalDiskStatus, descrMetricHwLogicalDiskStatus, unitMetricHwLogicalDiskStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwMemoryStatus = "hw.status";
+static constexpr const char *descrMetricHwMemoryStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwMemoryStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwMemoryStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwMemoryStatus, descrMetricHwMemoryStatus,
+                                         unitMetricHwMemoryStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwMemoryStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwMemoryStatus, descrMetricHwMemoryStatus,
+                                          unitMetricHwMemoryStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncInt64MetricHwMemoryStatus(
+    metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricHwMemoryStatus, descrMetricHwMemoryStatus,
+                                                   unitMetricHwMemoryStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwMemoryStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwMemoryStatus, descrMetricHwMemoryStatus, unitMetricHwMemoryStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwNetworkStatus = "hw.status";
+static constexpr const char *descrMetricHwNetworkStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwNetworkStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwNetworkStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwNetworkStatus, descrMetricHwNetworkStatus,
+                                         unitMetricHwNetworkStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwNetworkStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwNetworkStatus, descrMetricHwNetworkStatus,
+                                          unitMetricHwNetworkStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwNetworkStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwNetworkStatus, descrMetricHwNetworkStatus, unitMetricHwNetworkStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwNetworkStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwNetworkStatus, descrMetricHwNetworkStatus, unitMetricHwNetworkStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwPhysicalDiskStatus = "hw.status";
+static constexpr const char *descrMetricHwPhysicalDiskStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwPhysicalDiskStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwPhysicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(
+      kMetricHwPhysicalDiskStatus, descrMetricHwPhysicalDiskStatus, unitMetricHwPhysicalDiskStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwPhysicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(
+      kMetricHwPhysicalDiskStatus, descrMetricHwPhysicalDiskStatus, unitMetricHwPhysicalDiskStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwPhysicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwPhysicalDiskStatus, descrMetricHwPhysicalDiskStatus, unitMetricHwPhysicalDiskStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwPhysicalDiskStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwPhysicalDiskStatus, descrMetricHwPhysicalDiskStatus, unitMetricHwPhysicalDiskStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwPowerSupplyStatus = "hw.status";
+static constexpr const char *descrMetricHwPowerSupplyStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwPowerSupplyStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwPowerSupplyStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwPowerSupplyStatus, descrMetricHwPowerSupplyStatus,
+                                         unitMetricHwPowerSupplyStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwPowerSupplyStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(
+      kMetricHwPowerSupplyStatus, descrMetricHwPowerSupplyStatus, unitMetricHwPowerSupplyStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwPowerSupplyStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwPowerSupplyStatus, descrMetricHwPowerSupplyStatus, unitMetricHwPowerSupplyStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwPowerSupplyStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwPowerSupplyStatus, descrMetricHwPowerSupplyStatus, unitMetricHwPowerSupplyStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
 static constexpr const char *kMetricHwStatus = "hw.status";
 static constexpr const char *descrMetricHwStatus =
     "Operational status: `1` (true) or `0` (false) for each of the possible states.";
@@ -1449,6 +2213,141 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 {
   return meter->CreateDoubleObservableUpDownCounter(kMetricHwStatus, descrMetricHwStatus,
                                                     unitMetricHwStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwTapeDriveStatus = "hw.status";
+static constexpr const char *descrMetricHwTapeDriveStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwTapeDriveStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwTapeDriveStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwTapeDriveStatus, descrMetricHwTapeDriveStatus,
+                                         unitMetricHwTapeDriveStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwTapeDriveStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwTapeDriveStatus, descrMetricHwTapeDriveStatus,
+                                          unitMetricHwTapeDriveStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwTapeDriveStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwTapeDriveStatus, descrMetricHwTapeDriveStatus, unitMetricHwTapeDriveStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwTapeDriveStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwTapeDriveStatus, descrMetricHwTapeDriveStatus, unitMetricHwTapeDriveStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwTemperatureStatus = "hw.status";
+static constexpr const char *descrMetricHwTemperatureStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwTemperatureStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwTemperatureStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwTemperatureStatus, descrMetricHwTemperatureStatus,
+                                         unitMetricHwTemperatureStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwTemperatureStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(
+      kMetricHwTemperatureStatus, descrMetricHwTemperatureStatus, unitMetricHwTemperatureStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwTemperatureStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwTemperatureStatus, descrMetricHwTemperatureStatus, unitMetricHwTemperatureStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwTemperatureStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwTemperatureStatus, descrMetricHwTemperatureStatus, unitMetricHwTemperatureStatus);
+}
+
+/**
+  Operational status: @code 1 @endcode (true) or @code 0 @endcode (false) for each of the possible
+  states. <p>
+  @code hw.status @endcode is currently specified as an <em>UpDownCounter</em> but would ideally be
+  represented using a <a
+  href="https://github.com/prometheus/OpenMetrics/blob/v1.0.0/specification/OpenMetrics.md#stateset"><em>StateSet</em>
+  as defined in OpenMetrics</a>. This semantic convention will be updated once <em>StateSet</em> is
+  specified in OpenTelemetry. This planned change is not expected to have any consequence on the way
+  users query their timeseries backend to retrieve the values of @code hw.status @endcode over time.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricHwVoltageStatus = "hw.status";
+static constexpr const char *descrMetricHwVoltageStatus =
+    "Operational status: `1` (true) or `0` (false) for each of the possible states.";
+static constexpr const char *unitMetricHwVoltageStatus = "1";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricHwVoltageStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricHwVoltageStatus, descrMetricHwVoltageStatus,
+                                         unitMetricHwVoltageStatus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricHwVoltageStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricHwVoltageStatus, descrMetricHwVoltageStatus,
+                                          unitMetricHwVoltageStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricHwVoltageStatus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricHwVoltageStatus, descrMetricHwVoltageStatus, unitMetricHwVoltageStatus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricHwVoltageStatus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricHwVoltageStatus, descrMetricHwVoltageStatus, unitMetricHwVoltageStatus);
 }
 
 /**

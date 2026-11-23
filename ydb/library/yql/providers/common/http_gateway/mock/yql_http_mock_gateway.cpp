@@ -9,31 +9,35 @@ using TKeyType = std::tuple<TString, IHTTPGateway::THeaders, TString>;
 
 class TKeyHash {
 public:
-    TKeyHash() : Hash() {}
+    TKeyHash()
+        : Hash()
+    {
+    }
 
     size_t operator()(const TKeyType& key) const {
         const auto& headers = std::get<1U>(key);
         auto initHash = CombineHashes(Hash(std::get<0U>(key)), Hash(std::get<2U>(key)));
-        return std::accumulate(headers.Fields.cbegin(), headers.Fields.cend(), initHash,
-                               [this](size_t hash, const TString& item) { return CombineHashes(hash, Hash(item)); });
+        return std::accumulate(headers.Fields.cbegin(), headers.Fields.cend(), initHash, [this](size_t hash, const TString& item) {
+            return CombineHashes(hash, Hash(item));
+        });
     }
+
 public:
     const std::hash<TString> Hash;
 };
 
-struct TKeyEqual
-{
-    bool operator()(const TKeyType& lhs, const TKeyType& rhs) const
-    {
+struct TKeyEqual {
+    bool operator()(const TKeyType& lhs, const TKeyType& rhs) const {
         auto& lhsHeader = get<1>(lhs);
         auto& rhsHeader = get<1>(rhs);
-        return std::tie(std::get<0U>(lhs), lhsHeader.Fields, lhsHeader.Options.AwsSigV4, lhsHeader.Options.UserPwd) 
-            == std::tie(std::get<0U>(rhs), rhsHeader.Fields, rhsHeader.Options.AwsSigV4, rhsHeader.Options.UserPwd);
+        return std::tie(std::get<0U>(lhs), lhsHeader.Fields, lhsHeader.Options.AwsSigV4, lhsHeader.Options.UserPwd) ==
+               std::tie(std::get<0U>(rhs), rhsHeader.Fields, rhsHeader.Options.AwsSigV4, rhsHeader.Options.UserPwd);
     }
 };
 
-class THTTPMockGateway : public IHTTPMockGateway {
-friend class IHTTPMockGateway;
+class THTTPMockGateway: public IHTTPMockGateway {
+    friend class IHTTPMockGateway;
+
 public:
     using TPtr = std::shared_ptr<THTTPMockGateway>;
 
@@ -54,21 +58,14 @@ public:
         return std::move(ret);
     }
 
-    void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) final {}
+    void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) final {
+    }
 
-    void Delete(TString, THeaders, TOnResult, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) final {}
+    void Delete(TString, THeaders, TOnResult, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) final {
+    }
 
-    void Download(
-            TString url,
-            THeaders headers,
-            std::size_t offset,
-            std::size_t sizeLimit,
-            TOnResult callback,
-            TString data,
-            TRetryPolicy::TPtr retryPolicy,
-            IHttpRequestContext::TPtr) final
-    {
-
+    void Download(TString url, THeaders headers, std::size_t offset, std::size_t sizeLimit, TOnResult callback, TString data,
+        TRetryPolicy::TPtr retryPolicy, IHttpRequestContext::TPtr) final {
         Y_UNUSED(sizeLimit);
         Y_UNUSED(offset);
         Y_UNUSED(retryPolicy);
@@ -85,16 +82,8 @@ public:
         }
     }
 
-    TCancelHook Download(
-            TString,
-            THeaders,
-            std::size_t,
-            std::size_t,
-            TOnDownloadStart,
-            TOnNewDataPart,
-            TOnDownloadFinish,
-            const ::NMonitoring::TDynamicCounters::TCounterPtr&,
-            IHttpRequestContext::TPtr) final {
+    TCancelHook Download(TString, THeaders, std::size_t, std::size_t, TOnDownloadStart, TOnNewDataPart, TOnDownloadFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr&, IHttpRequestContext::TPtr) final {
         return {};
     }
 
@@ -109,12 +98,7 @@ public:
         DefaultResponse = response;
     }
 
-    void AddDownloadResponse(
-            TString url,
-            THeaders headers,
-            TString data,
-            TDataResponse response) {
-
+    void AddDownloadResponse(TString url, THeaders headers, TString data, TDataResponse response) {
         auto& entry = RequestsResponse[TKeyType(url, headers, data)];
         entry.emplace_back(std::move(response));
     }
@@ -123,11 +107,10 @@ private:
     std::unordered_map<TKeyType, std::vector<TDataResponse>, TKeyHash, TKeyEqual> RequestsResponse;
     TDataDefaultResponse DefaultResponse;
 };
-}
-
+}   // namespace
 
 IHTTPMockGateway::TPtr IHTTPMockGateway::Make() {
     return std::make_shared<THTTPMockGateway>();
 }
 
-}
+}   // namespace NYql

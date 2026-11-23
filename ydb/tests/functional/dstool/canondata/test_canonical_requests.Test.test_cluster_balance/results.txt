@@ -25,7 +25,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -41,7 +41,7 @@ PDisk {
   ExpectedSlotCount: 4
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 4
+    ExpectedSlotCount: 4
     SlotSizeInUnits: 0
   }
 }

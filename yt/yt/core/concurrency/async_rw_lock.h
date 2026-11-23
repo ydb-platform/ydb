@@ -31,7 +31,7 @@ private:
         void ReleaseWriter();
 
     private:
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
         int ActiveReaderCount_ = 0;
         bool HasActiveWriter_ = false;
@@ -39,7 +39,7 @@ private:
         std::vector<TPromise<void>> ReaderPromiseQueue_;
         std::queue<TPromise<void>> WriterPromiseQueue_;
 
-        void WakeNext(TGuard<NThreading::TSpinLock>& guard);
+        void WakeNext(TGuard<TSpinLock>& guard);
         void ReleaseReaders(int amount);
     };
 

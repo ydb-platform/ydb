@@ -45,6 +45,7 @@ SET(ORIG_SOURCES
     mkql_collect.cpp
     mkql_combine.cpp
     mkql_contains.cpp
+    mkql_decimal_add_sub.cpp
     mkql_decimal_div.cpp
     mkql_decimal_mod.cpp
     mkql_decimal_mul.cpp
@@ -155,6 +156,15 @@ SET(ORIG_SOURCES
     mkql_window_range_pg_caller.h
     mkql_withcontext.cpp
     mkql_zip.cpp
+    mkql_block_agg_state_helper.cpp
+    mkql_block_coalesce_blending_helper.cpp
+    mkql_counters.cpp
+    mkql_factories.cpp
+    mkql_match_recognize_matched_vars.cpp
+    mkql_match_recognize_nfa.cpp
+    mkql_match_recognize_save_load.cpp
+    mkql_match_recognize_version.cpp
+    mkql_saveload.cpp
 )
 
 ADDINCL(
@@ -198,7 +208,5 @@ CFLAGS(
 )
 
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 PROVIDES(MINIKQL_COMP_NODES)

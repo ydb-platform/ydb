@@ -31,11 +31,10 @@ public:
 
         TCompileContext(const TString& pgm,
             TActorId sender,
-            const TAlignedPagePoolCounters& allocPoolCounters,
-            const NMiniKQL::IFunctionRegistry* functionRegistry)
+            const TAlignedPagePoolCounters& allocPoolCounters)
             : Program(pgm)
             , ResponseTo(sender)
-            , Alloc(__LOCATION__, allocPoolCounters, functionRegistry->SupportsSizedAllocators())
+            , Alloc(__LOCATION__, allocPoolCounters)
             , TypeEnv(Alloc)
             , Cookie(0)
             , Retried(false)
@@ -99,7 +98,7 @@ public:
 private:
     void Handle(TMiniKQLCompileServiceEvents::TEvCompile::TPtr& ev, const TActorContext& ctx) {
         TMiniKQLCompileServiceEvents::TEvCompile *msg = ev->Get();
-        TCompileContext::TPtr c(new TCompileContext(msg->Program, ev->Sender, AllocPoolCounters, AppData(ctx)->FunctionRegistry));
+        TCompileContext::TPtr c(new TCompileContext(msg->Program, ev->Sender, AllocPoolCounters));
         c->Cookie = ev->Cookie;
         c->CompileResolveCookies = std::move(msg->CompileResolveCookies);
         c->ForceRefresh = msg->ForceRefresh;
@@ -125,7 +124,7 @@ private:
         } else {
             // recreate compile context
             const TAppData *appData = AppData(ctx);
-            TCompileContext::TPtr c = new TCompileContext(cptr->Program, cptr->ResponseTo, AllocPoolCounters, appData->FunctionRegistry);
+            TCompileContext::TPtr c = new TCompileContext(cptr->Program, cptr->ResponseTo, AllocPoolCounters);
             c->Cookie = cptr->Cookie;
             c->Retried = true;
 

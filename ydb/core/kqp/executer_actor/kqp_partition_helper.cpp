@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -617,8 +617,34 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
             return value;
         }
 
-        case NKqpProto::TKqpPhyValue::kParamElementValue:
-            YQL_ENSURE(false, "Unexpected PhyValue kind " << protoPhyValue.DebugString());
+        case NKqpProto::TKqpPhyValue::kParamElementValue: {
+            const auto& paramElement = protoPhyValue.GetParamElementValue();
+            const TString& paramName = paramElement.GetParamName();
+            if (!paramName) {
+                return defaultValue;
+            }
+
+            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
+            const ui32 elementIndex = paramElement.GetElementIndex();
+            if (type->GetKind() == NMiniKQL::TType::EKind::Tuple) {
+                auto* tupleType = static_cast<NMiniKQL::TTupleType*>(type);
+                YQL_ENSURE(elementIndex < tupleType->GetElementsCount(),
+                    "Parameter element index is out of range for tuple '" << paramName << "'");
+                type = tupleType->GetElementType(elementIndex);
+            } else if (type->GetKind() == NMiniKQL::TType::EKind::Struct) {
+                auto* structType = static_cast<NMiniKQL::TStructType*>(type);
+                YQL_ENSURE(elementIndex < structType->GetMembersCount(),
+                    "Parameter element index is out of range for struct '" << paramName << "'");
+                type = structType->GetMemberType(elementIndex);
+            } else {
+                YQL_ENSURE(false, "Unexpected parameter element container kind " << static_cast<int>(type->GetKind()));
+            }
+
+            if (valueType) {
+                *valueType = type;
+            }
+            return value.GetElement(elementIndex);
+        }
 
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
             return defaultValue;
@@ -649,6 +675,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
+            readSettings.RequireSortedRead = operation.GetReadOlapRange().GetRequireSortedRead();
             if (operation.GetReadOlapRange().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             } else if (operation.GetReadOlapRange().GetSorted()) {

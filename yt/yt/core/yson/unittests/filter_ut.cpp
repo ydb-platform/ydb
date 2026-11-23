@@ -1,5 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/ypath/stack.h>
+
 #include <yt/yt/core/yson/string.h>
 #include <yt/yt/core/yson/writer.h>
 #include <yt/yt/core/yson/string_filter.h>
@@ -56,7 +58,28 @@ void CheckNull(const std::string& yson, const std::vector<TYPath>& paths)
 const std::vector<std::string> ScalarYsons = {"#", "%true", "-42", "23u", "42.5", "xyz"};
 const std::vector<std::string> CompositeYsons = {"{foo=bar}", "[foo;bar]"};
 
-TEST(TStringFilterTest, TestNoMatchFallback)
+TEST(TStringFilterTest, EscapedMapKeysArePreserved)
+{
+    Check("{\"a/b\"={\"c@d\"=42}; other=0}", {"/a\\/b/c\\@d"}, "{\"a/b\"={\"c@d\"=42}}");
+}
+
+TEST(TYPathStackTest, RawKeysSurvivePathMaterialization)
+{
+    TYPathStack stack;
+    stack.Push("a/b");
+    EXPECT_EQ("a/b", std::get<std::string>(stack.Items().back()));
+    EXPECT_EQ("a/b", stack.TryGetStringifiedLastPathToken());
+    EXPECT_EQ("/a\\/b", stack.GetPath());
+
+    stack.Push("c@d");
+    EXPECT_EQ("c@d", std::get<std::string>(stack.Items().back()));
+    EXPECT_EQ("c@d", stack.TryGetStringifiedLastPathToken());
+    EXPECT_EQ("/a\\/b/c\\@d", stack.GetPath());
+    stack.Pop();
+    EXPECT_EQ("/a\\/b", stack.GetPath());
+}
+
+TEST(TStringFilterTest, NoMatchFallback)
 {
     // In a no match case attribute-stripped original YSON must be returned.
 
@@ -83,7 +106,7 @@ TEST(TStringFilterTest, TestNoMatchFallback)
     }
 }
 
-TEST(TStringFilterTest, TestNoMatchNullString)
+TEST(TStringFilterTest, NoMatchNullString)
 {
     // In a no match case attribute-stripped original YSON must be returned.
 
@@ -99,7 +122,7 @@ TEST(TStringFilterTest, TestNoMatchNullString)
     }
 }
 
-TEST(TStringFilterTest, TestFullMatch)
+TEST(TStringFilterTest, FullMatch)
 {
     // In a match case original YSON must be returned.
     for (const std::string& yson : ScalarYsons) {
@@ -115,7 +138,7 @@ TEST(TStringFilterTest, TestFullMatch)
     }
 }
 
-TEST(TStringFilterTest, TestSomeManualCases)
+TEST(TStringFilterTest, SomeManualCases)
 {
     Check("{a=1;b={foo=bar};c=2}", {"/b"}, "{b={foo=bar}}");
     Check("{a=1;b={foo=bar};c=2}", {"/b/foo"}, "{b={foo=bar}}");
@@ -127,7 +150,7 @@ TEST(TStringFilterTest, TestSomeManualCases)
     Check("{a=1;b={foo=bar};c=2}", {"/a", "/b/foo"}, "{a=1;b={foo=bar}}");
 }
 
-TEST(TStringFilterTest, TestSomeOtherManualCases)
+TEST(TStringFilterTest, SomeOtherManualCases)
 {
     Check(
         "[{foo=0;bar=1};{foo=2;bar=3};{foo=4;bar=5};{foo=6;bar=7};{foo=8;bar=9}]",
@@ -147,7 +170,7 @@ TEST(TStringFilterTest, TestSomeOtherManualCases)
         "[#;{foo=2;bar=3};#;{bar=7}]");
 }
 
-TEST(TStringFilterTest, TestAttributes)
+TEST(TStringFilterTest, Attributes)
 {
     // Attributes of matched subYSONs are preserved.
     Check("<foo=bar>{a=<fuu=bor>42}", {""}, "<foo=bar>{a=<fuu=bor>42}");
@@ -157,7 +180,7 @@ TEST(TStringFilterTest, TestAttributes)
     Check("<foo=bar>{a=<fuu=bor>42}", {"/a/@fuu"}, "{}");
 }
 
-TEST(TStringFilterTest, TestIncorrectYson)
+TEST(TStringFilterTest, IncorrectYson)
 {
     // In case of incorrect YSON we at least must not crash. We do not intend
     // to test all possible structures of incorrect YSONs here, but let us check

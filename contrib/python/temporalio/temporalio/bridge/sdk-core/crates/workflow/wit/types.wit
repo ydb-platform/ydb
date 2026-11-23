@@ -1,0 +1,126 @@
+package temporal:workflow-runtime@0.1.0;
+
+interface types {
+type payload = list<u8>;
+
+type workflow-command = list<u8>;
+
+type failure = list<u8>;
+
+type workflow-task-failed-cause = u32;
+
+record workflow-init {
+  namespace: string,
+  task-queue: string,
+  run-id: string,
+  initialize-workflow: list<u8>,
+}
+
+record workflow-definition {
+  workflow-type: string,
+  has-init: bool,
+  init-takes-input: bool,
+  signals: list<string>,
+  queries: list<string>,
+  updates: list<update-definition>,
+}
+
+record update-definition {
+  name: string,
+  has-validator: bool,
+}
+
+record query-response {
+  response: result<payload, failure>,
+}
+
+type routine-id = u64;
+
+type workflow-activation = list<u8>;
+
+variant routine-kind {
+  main,
+  signal(string),
+  update(update-routine-kind),
+}
+
+record update-routine-kind {
+  name: string,
+  update-id: string,
+  protocol-instance-id: string,
+}
+
+record started-routine {
+  routine-id: routine-id,
+  kind: routine-kind,
+}
+
+variant activation-job-result {
+  none,
+  started-routine(started-routine),
+  query-response(query-response),
+  update-rejected(failure),
+}
+
+record activation-result {
+  job-results: list<activation-job-result>,
+}
+
+type continue-as-new-request = list<u8>;
+
+record task-failure {
+  failure: failure,
+  force-cause: option<workflow-task-failed-cause>,
+}
+
+variant terminal-outcome {
+  completed(payload),
+  failed(failure),
+  cancelled,
+  continue-as-new(continue-as-new-request),
+}
+
+variant main-routine-completion {
+  blocked,
+  task-failed(task-failure),
+  terminal(terminal-outcome),
+}
+
+variant update-routine-completion {
+  completed(update-routine-success),
+  rejected(update-routine-rejection),
+}
+
+record update-routine-success {
+  protocol-instance-id: string,
+  value: payload,
+}
+
+record update-routine-rejection {
+  protocol-instance-id: string,
+  failure: failure,
+}
+
+variant signal-routine-completion {
+  succeeded,
+  failed(failure),
+}
+
+variant routine-completion {
+  main(main-routine-completion),
+  signal(signal-routine-completion),
+  update(update-routine-completion),
+}
+
+variant routine-pending-state {
+  handler,
+  interceptor,
+  interceptor-with-activation,
+}
+
+record routine-poll-result {
+  completion: option<routine-completion>,
+  made-progress: bool,
+  pending-state: option<routine-pending-state>,
+}
+}

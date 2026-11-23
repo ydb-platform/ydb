@@ -392,6 +392,21 @@ namespace NKikimr {
             return DiskRecLog.GetSizeInChunks();
         }
 
+        TSyncLogDiskSpaceStat TSyncLog::GetDiskSpaceStat() const {
+            const ui64 activeChunkCount = DiskRecLog.GetSizeInChunks();
+            const ui64 freeBytes = activeChunkCount
+                ? ui64(DiskRecLog.LastChunkFreePagesNum()) * DiskRecLog.AppendBlockSize
+                : 0;
+            const ui64 allocatedBytes = activeChunkCount * DiskRecLog.ChunkSize;
+            Y_VERIFY_DEBUG_S(freeBytes <= allocatedBytes, "Invalid SyncLog disk extent");
+            return {
+                .ChunkSizeBytes = DiskRecLog.ChunkSize,
+                .ActiveChunkCount = activeChunkCount,
+                .UsedBytes = allocatedBytes - freeBytes,
+                .FreeBytes = freeBytes,
+            };
+        }
+
         // returns lsn of last record stored in DiskRecLog or 0 if it's empty
         ui64 TSyncLog::GetDiskLastLsn() const {
             return DiskRecLog.Empty() ? 0 : DiskRecLog.GetLastLsn();

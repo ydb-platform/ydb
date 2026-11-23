@@ -93,7 +93,12 @@ TPgResolvedCallBase::TPgResolvedCallBase(std::string_view name,
             if (argTypeIds[i]) {
                 return *argTypeIds[i];
             }
-            return ProcDesc.ArgTypes[i];
+            if (i < ProcDesc.ArgTypes.size()) {
+                return ProcDesc.ArgTypes[i];
+            }
+            Y_ENSURE(ProcDesc.VariadicType, "No type for NULL argument " << i << " of " << Name
+                                                                         << ": fixed arguments=" << ProcDesc.ArgTypes.size());
+            return ProcDesc.VariadicType;
         }();
         ArgDesc.emplace_back(NPg::LookupType(type));
     }
@@ -375,6 +380,13 @@ NUdf::TUnboxedValue TPgCast::Calculate(NUdf::TUnboxedValue value, i32 typeMod, T
     }
 
     TPAllocScope call;
+    // Function caches must not retain allocations owned by this scope.
+    Y_DEFER {
+        state.CallInfo1.Ref().flinfo->fn_extra = nullptr;
+        if (FInfo2.fn_addr) {
+            state.CallInfo2.Ref().flinfo->fn_extra = nullptr;
+        }
+    };
     if (ArrayCast) {
         auto arr = (ArrayType*)DatumGetPointer(PointerDatumFromPod(value));
         auto ndim = ARR_NDIM(arr);

@@ -15,10 +15,22 @@ enum class EMemoryConsumerKind {
     ColumnTablesColumnDataCache,
     ColumnTablesDeduplicationGroupedMemory,
     ColumnTablesPortionsMetaDataCache,
+
+    QueryExecution,
+};
+
+struct TConsumerReport {
+    ui64 Used = 0;
+    ui64 Demand = 0; // total desired footprint, invariant: Demand >= Used
+    ui64 Reclaimable = 0; // releasable asynchronously on request, invariant: Reclaimable <= Used
 };
 
 struct IMemoryConsumer : public TThrRefBase {
-    virtual void SetConsumption(ui64 value) = 0;
+    virtual void SetReport(TConsumerReport report) = 0;
+
+    void SetConsumption(ui64 value) {
+        SetReport({.Used = value, .Demand = value, .Reclaimable = 0});
+    }
 };
 
 enum EEvMemory {
@@ -32,6 +44,8 @@ enum EEvMemory {
     EvMemTableCompacted,
     EvMemTableUnregister,
 
+    EvConsumerUnregister,
+
     EvEnd
 };
 
@@ -39,9 +53,23 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
+    const bool DemandOnly;
 
-    TEvConsumerRegister(EMemoryConsumerKind kind)
+    TEvConsumerRegister(EMemoryConsumerKind kind, bool demandOnly = false)
         : Kind(kind)
+        , DemandOnly(demandOnly)
+    {}
+};
+
+// Sent by the registrant itself: a consumer that stops serving its kind takes its bytes out of the accounting
+struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
+    const EMemoryConsumerKind Kind;
+
+    const bool RetainUntilUnused;
+
+    TEvConsumerUnregister(EMemoryConsumerKind kind, bool retainUntilUnused = false)
+        : Kind(kind)
+        , RetainUntilUnused(retainUntilUnused)
     {}
 };
 

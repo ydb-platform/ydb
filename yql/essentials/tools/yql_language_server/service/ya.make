@@ -8,6 +8,7 @@ PEERDIR(
     yql/essentials/sql/v1/ide/completion
     yql/essentials/sql/v1/ide/completion/name/service/static
     yql/essentials/sql/v1/ide/completion/name/service/union
+    yql/essentials/sql/v1/ide/pure_ast
     yql/essentials/sql/v1/lexer/antlr4_pure
     yql/essentials/sql/v1/lexer/antlr4_pure_ansi
 )
@@ -18,6 +19,7 @@ SRCS(
     formatting.cpp
     layer.cpp
     radix.cpp
+    text_document.cpp
 )
 
 END()

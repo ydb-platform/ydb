@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/public/lib/json_value)
 
 SIZE(MEDIUM)
 
-FORK_SUBTESTS()
-
 SRCS(
     ydb_json_value_ut.cpp
 )

@@ -26,6 +26,8 @@
 
 #include <memory>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
@@ -155,8 +157,11 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
     if (result.ok()) {
         return *result;
     } else {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())(
-            "schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse"},
+            {"message", result.status()},
+            {"schemaColumnsCount", schema->num_fields()},
+            {"schemaColumns", JoinSeq(",", schema->field_names())});
         return nullptr;
     }
 }
@@ -263,7 +268,7 @@ std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow
     auto f = std::make_shared<arrow::Field>("1", original->type());
     auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
     table = ReallocateBatch(table, pool);
-    AFL_VERIFY(table->num_columns() == 1);
+    YDB_LOG_VERIFY(table->num_columns() == 1);
     return table->column(0);
 }
 
@@ -276,7 +281,7 @@ std::shared_ptr<arrow::Array> ReallocateArray(
         return arr;
     }
     auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
-    AFL_VERIFY(cArray->num_chunks() == 1);
+    YDB_LOG_VERIFY(cArray->num_chunks() == 1);
     return cArray->chunk(0);
 }
 

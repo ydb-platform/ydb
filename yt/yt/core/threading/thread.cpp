@@ -90,7 +90,8 @@ public:
 private:
     TExecutionStack Stack_;
 
-    static constexpr size_t SignalHandlerStackSize = 32_KB;
+    // Symbolizing deeply inlined frames overflows 32 KB.
+    static constexpr size_t SignalHandlerStackSize = 256_KB;
 #endif
 };
 

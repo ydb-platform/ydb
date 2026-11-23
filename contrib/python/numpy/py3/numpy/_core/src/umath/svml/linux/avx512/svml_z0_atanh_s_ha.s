@@ -23,6 +23,7 @@
  */
 
 
+	.file   "svml_z0_atanh_s_ha.s"
 	.text
 .L_2__routine_start___svml_atanhf16_ha_z0_0:
 

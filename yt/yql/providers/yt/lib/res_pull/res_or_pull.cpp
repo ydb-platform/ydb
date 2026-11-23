@@ -25,8 +25,8 @@ TString TYsonExecuteResOrPull::Finish() {
     if (IsList) {
         Writer->OnEndList();
     }
-    Writer.Destroy();
-    Out.Destroy();
+    Writer.reset();
+    Out.reset();
     return Result;
 }
 
@@ -123,7 +123,7 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
 
 TString TSkiffExecuteResOrPull::Finish() {
     SkiffWriter.Finish();
-    Out.Destroy();
+    Out.reset();
     Specs.Clear();
     return Result;
 }

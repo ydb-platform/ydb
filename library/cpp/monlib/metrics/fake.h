@@ -96,12 +96,20 @@ namespace NMonitoring {
             return 0;
         }
 
+        ui32 StartTimeSeconds() const noexcept override {
+            return 0;
+        }
+
         void Reset() noexcept override {
         }
     };
 
     struct TFakeLazyRate final: public TFakeAcceptor<ILazyRate> {
         ui64 Get() const noexcept override {
+            return 0;
+        }
+
+        ui32 StartTimeSeconds() const noexcept override {
             return 0;
         }
 

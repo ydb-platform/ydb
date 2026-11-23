@@ -5,8 +5,7 @@
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class ExplainDataQueryRPC
-    : public TRpcBase<ExplainDataQueryRPC, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse> {
+class ExplainDataQueryRPC: public TRpcBase<ExplainDataQueryRPC, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse> {
 public:
     using TBase = TRpcBase<ExplainDataQueryRPC, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse>;
     static constexpr std::string_view RpcName = "ExplainDataQuery";
@@ -44,8 +43,9 @@ public:
     void Handle(const FederatedQuery::DescribeQueryResult& result, const TActorContext& ctx) {
         auto status = result.query().meta().status();
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
-            TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
-                " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
+            TString errorMsg =
+                TStringBuilder{} << "created query " << result.query().meta().common().id()
+                                 << " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
             YDB_LOG_INFO_CTX(ctx, "Query finished with non-success status",
                 {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query().meta().common().id()})},
                 {"error", errorMsg});
@@ -70,4 +70,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
         f.RegisterActor(new ExplainDataQueryRPC(p.release(), grpcProxyId));
     };
 }
-}
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

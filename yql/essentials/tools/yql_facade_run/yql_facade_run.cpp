@@ -1,5 +1,7 @@
 #include "yql_facade_run.h"
 
+#include <yql/essentials/core/project_settings/convert/convert.h>
+
 #include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -249,6 +251,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("params-file", "Query parameters values in YSON format").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         Params = TFileInput(file).ReadAll();
     });
+    opts.AddLongOption("project-settings-json", "Project settings in JSON format").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        ProjectSettings = ProjectSettingsFromJson(TFileInput(file).ReadAll());
+    });
     opts.AddLongOption("yson-attrs", "Provide operation yson attribues").Optional().RequiredArgument("VALUE").StoreResult(&YsonAttrs);
     opts.AddLongOption('G', "gateways", TStringBuilder() << "Used gateways, available: " << JoinSeq(",", SupportedGateways_)).DefaultValue(JoinSeq(",", GatewayTypes)).Handler1T<TString>([this](const TString& gateways) {
         GatewayTypes.clear();
@@ -262,6 +267,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         GatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
     });
+    opts.AddLongOption("static-gateways-cfg", "Static gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        StaticGatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TStaticGatewaysConfig>(file);
+    });
     opts.AddLongOption("fs-cfg", "Fs configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         FsConfig = MakeHolder<TFileStorageConfig>();
         LoadFsConfigFromFile(file, *FsConfig);
@@ -270,9 +278,21 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
         NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
     });
-    opts.AddLongOption("udf-resolver", "Path to udf_resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver", "Path to udf_resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverOptions.ResolverPath);
     opts.AddLongOption("udf-resolver-log", "Path to udf_resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
-    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf_resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
+    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf_resolver").Optional().NoArgument().SetFlag(&UdfResolverOptions.FilterSysCalls);
+    opts.AddLongOption("udf-resolver-porto-proxy-path", "Path to udf_resolver porto proxy script").Optional().RequiredArgument("PATH").Handler1T<TString>([this](const TString& path) {
+        if (!UdfResolverOptions.PortoConfig) {
+            UdfResolverOptions.PortoConfig.ConstructInPlace();
+        }
+        UdfResolverOptions.PortoConfig->ProxyBinaryPath = path;
+    });
+    opts.AddLongOption("udf-resolver-porto-layer", "Porto layer for udf_resolver sandbox; multiple layers are ordered from top to bottom").Optional().RequiredArgument("LAYER").Handler1T<TString>([this](const TString& layer) {
+        if (!UdfResolverOptions.PortoConfig) {
+            UdfResolverOptions.PortoConfig.ConstructInPlace();
+        }
+        UdfResolverOptions.PortoConfig->Layers.push_back(layer);
+    });
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf_resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
     opts.AddLongOption("udf-bridge", "Path to udf_bridge").Optional().RequiredArgument("PATH").StoreResult(&UdfBridgePath);
 
@@ -461,6 +481,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     }
 
     auto res = NLastGetopt::TOptsParseResult(&opts, argc, argv);
+    if (!res.Has("langver") && ProjectSettings.LangVer) {
+        LangVer = *ProjectSettings.LangVer;
+    }
 
     if (QPlayerMode != EQPlayerMode::None) {
         if (!QPlayerStorage_) {
@@ -486,7 +509,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
-    if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
+    if (EQPlayerMode::Replay != QPlayerMode && ProgramFile.empty()) {
         throw yexception() << "Either program or replay option should be specified";
     }
     if (GatewaysPatch && EQPlayerMode::Replay != QPlayerMode) {
@@ -510,7 +533,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    if (!StaticGatewaysConfig) {
+        StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    }
     SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
 
     {
@@ -706,25 +731,29 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         };
     }
 
+    TUserDataTable defaultMounts;
     if (RunOptions_.MountConfig) {
-        TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
-
-        if (!CompileLibraries(translators, RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
-            *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
-            ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
-            return -1;
-        }
-
-        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
-                                                           ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
-            *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
-            ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
-            return -1;
-        }
+        LoadYqlDefaultMounts(defaultMounts);
     }
+
+    TModulesTable modules;
+    const auto projectSettings = RunOptions_.QPlayerContext.CanRead()
+                                     ? ProjectSettingsFromQContext(RunOptions_.QPlayerContext)
+                                     : RunOptions_.ProjectSettings;
+    const auto& mounts = RunOptions_.MountConfig ? RunOptions_.DataTable : defaultMounts;
+    if (!CompileLibraries(translators, mounts, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, projectSettings)) {
+        *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
+        ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
+        return -1;
+    }
+    RunOptions_.DataTable.insert(defaultMounts.begin(), defaultMounts.end());
+
+    // Optimize libraries attached by the program independently of mounted libraries.
+    moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
+                                                       ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
+    moduleResolver->SetProjectSettings(std::make_shared<const TProjectSettings>(projectSettings));
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
@@ -742,11 +771,11 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     IUdfResolver::TPtr udfResolver;
     TUdfIndex::TPtr udfIndex;
     if (FileStorage_ && RunOptions_.ScanUdfs) {
-        if (!RunOptions_.UdfResolverPath && EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
+        if (!RunOptions_.UdfResolverOptions.ResolverPath && EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
             Cerr << "udf-resolver path must be specified when use 'scan-udfs'";
             return -1;
         }
-        udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {});
+        udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverOptions);
 
         udfIndex = new TUdfIndex();
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
@@ -763,8 +792,8 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
         RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udfs scanned");
     } else {
-        udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
-                          ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
+        udfResolver = FileStorage_ && RunOptions_.UdfResolverOptions.ResolverPath
+                          ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverOptions)
                           : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, /*useFakeMD5=*/true);
         if (RunOptions_.UdfResolverLog) {
             udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
@@ -789,6 +818,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     }
 
     TProgramFactory factory(RunOptions_.UseRepeatableRandomAndTimeProviders, FuncRegistry_.Get(), ctx.NextUniqueId, dataProvidersInit, Name_);
+    factory.SetProjectSettings(projectSettings);
     factory.AddUserDataTable(RunOptions_.DataTable);
     factory.SetModules(moduleResolver);
     factory.SetFileStorage(FileStorage_);
@@ -871,6 +901,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.ClusterMapping = ClusterMapping_;
         ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
+        settings.Syntax = RunOptions_.Syntax;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;

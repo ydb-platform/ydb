@@ -2,9 +2,13 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include "index/index_utils.h"
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -28,6 +32,14 @@ bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchem
     }
 
     return false;
+}
+
+// An alter that only changes the replication config of a table does not touch its layout.
+bool IsReplicationConfigOnlyAlter(const NKikimrSchemeOp::TTableDescription& alter) {
+    auto rest = alter;
+    rest.ClearPathId();
+    rest.ClearReplicationConfig();
+    return rest.ByteSizeLong() == 0;
 }
 
 template <typename TMessage>
@@ -56,6 +68,64 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
     return true;
 }
 
+// Returns column names whose NOT NULL constraint is required by the index.
+// Fulltext and JSON readers require non-null document identifiers in all storage formats.
+THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& index, const TTableInfo& table) {
+    const auto* fulltext = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index.SpecializedIndexDescription);
+
+    if (fulltext && fulltext->GetUseRowIdAsDocId()) {
+        return {NTableIndex::NFulltext::RowIdColumn};
+    }
+
+    THashSet<TString> columns;
+
+    // Without row-id mode, these indexes require exactly one integer PK column,
+    // as validated when the index is created.
+    if (NTableIndex::IsCompactFulltextIndex(index.Type)
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalJson)
+    {
+        for (const auto columnId : table.KeyColumnIds) {
+            columns.insert(table.Columns.at(columnId).Name);
+        }
+    }
+    return columns;
+}
+
+bool CheckIndexNotNullConstraints(const NKikimrSchemeOp::TTableDescription& alter,
+        const TPath& indexPath, const TOperationContext& context, TString& errStr)
+{
+    if (!AnyOf(alter.GetColumns(), [](const auto& column) {
+        return !column.HasType() && column.HasNotNull() && !column.GetNotNull();
+    })) {
+        return true;
+    }
+
+    const auto indexIt = context.SS->Indexes.find(indexPath.Base()->PathId);
+    if (indexIt == context.SS->Indexes.end()) {
+        errStr = TStringBuilder() << "Index metadata is missing for path: " << indexPath.PathString();
+        return false;
+    }
+    const auto baseTablePath = indexPath.Parent();
+    const auto baseTableIt = context.SS->Tables.find(baseTablePath.Base()->PathId);
+    if (baseTableIt == context.SS->Tables.end()) {
+        errStr = TStringBuilder() << "Table metadata is missing for path: " << baseTablePath.PathString();
+        return false;
+    }
+    const auto requiredColumns = GetColumnNamesWithNonDroppableNotNull(*indexIt->second, *baseTableIt->second);
+    for (const auto& column : alter.GetColumns()) {
+        if (!column.HasType() && column.HasNotNull() && !column.GetNotNull()
+            && requiredColumns.contains(column.GetName()))
+        {
+            errStr = TStringBuilder() << "Cannot drop NOT NULL on column '" << column.GetName()
+                << "': index '" << indexPath.LeafName() << "' requires a non-null document id";
+            return false;
+        }
+    }
+    return true;
+}
+
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
@@ -63,10 +133,25 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
-        if (alter.ColumnsSize() != 0 || alter.DropColumnsSize() != 0) {
+        bool onlyDropNotNull = isInternal;
+        for (const auto& column : alter.GetColumns()) {
+            onlyDropNotNull = onlyDropNotNull
+                && CheckAllowedFields(column, {"Name", "NotNull"})
+                && column.HasNotNull() && !column.GetNotNull()
+                && table->GetColumnIdByNameSlow(column.GetName()) != TTableInfo::InvalidColumnId;
+        }
+        if ((alter.ColumnsSize() != 0 && !onlyDropNotNull) || alter.DropColumnsSize() != 0) {
             errStr = "Adding or dropping columns in index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
+        }
+
+        if (alter.ColumnsSize() != 0 && path.IsInsideTableIndexPath()) {
+            // Internal requests may also arrive directly, bypassing base-table decomposition.
+            if (!CheckIndexNotNullConstraints(alter, path.Parent(), context, errStr)) {
+                status = NKikimrScheme::StatusPreconditionFailed;
+                return nullptr;
+            }
         }
 
         if (alter.HasTTLSettings()) {
@@ -251,6 +336,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -262,7 +348,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        featureFlags, errStr, localSequences);
+        featureFlags, errStr, localSequences, isInternal);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -367,39 +453,29 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
 }
 
 class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TConfigureParts"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -411,8 +487,9 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose modify scheme on datashard " << datashardId << " txid: " << OperationId << " at schemeshard" << ssId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on datashard",
+                {"datashardId", datashardId},
+            );
 
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
@@ -426,31 +503,25 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TPropose"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
-                               << " triggers early"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << evRecord.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", evRecord.ShortDebugString()},
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -458,13 +529,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", operationId: " << OperationId
-                               << ", stepId: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -476,11 +544,25 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        const auto parentIndex = context.SS->Indexes.find(path->ParentPathId);
+        const bool hasReadyUniqueIndex = parentIndex != context.SS->Indexes.end()
+            && parentIndex->second->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+            && parentIndex->second->State == NKikimrSchemeOp::EIndexStateReady;
+        const auto& alterPartitionConfig = table->AlterData->PartitionConfigCompatible();
+        const bool disablesShadowData = alterPartitionConfig.HasShadowData()
+            && !alterPartitionConfig.GetShadowData();
         table->FinishAlter();
 
-        if (!table->IsAsyncReplica()) {
-            path->SetAsyncReplica(false);
+        if (disablesShadowData && hasReadyUniqueIndex) {
+            // Republish the index's Children listing with the implementation table's new schema version.
+            auto indexPath = context.SS->PathsById.at(path->ParentPathId);
+            ++indexPath->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, indexPath);
+            context.SS->ClearDescribePathCaches(indexPath);
+            context.OnComplete.PublishToSchemeBoard(OperationId, indexPath->PathId);
         }
+
+        path->SetAsyncReplica(table->IsAsyncReplica());
 
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
@@ -521,11 +603,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -545,6 +623,9 @@ public:
 
 class TAlterTable: public TSubOperation {
     bool AllowShadowData = false;
+
+public:
+    virtual const char* Name() const override final { return "TAlterTable"; }
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -595,7 +676,7 @@ public:
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterTable();
@@ -610,12 +691,10 @@ public:
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", pathId},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -644,7 +723,15 @@ public:
                     .NotBackupTable();
             }
 
-            if (!context.IsAllowedPrivateTables) {
+            const bool isInternalShadowDataRepair = Transaction.GetInternal()
+                && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData
+                && AllowShadowData;
+            // A replication config change keeps the impl table layout intact, so an internal
+            // operation may apply it to an index impl table directly (a consistent operation uses
+            // one index version for all its impl tables, see CreateConsistentAlterTable).
+            if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair &&
+                !(Transaction.GetInternal() && IsReplicationConfigOnlyAlter(alter)))
+            {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 
@@ -720,7 +807,50 @@ public:
             return result;
         }
 
-        bool isReplicated = false;
+        // Keep validation in Propose; decomposition also checks it because TAlterTable
+        // does not yet support rolling back its proposal when another sub-operation fails.
+        if (alter.ColumnsSize() != 0) {
+            for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
+                const auto& child = context.SS->PathsById.at(childPathId);
+                if (child->Dropped() || !child->IsTableIndex()) {
+                    continue;
+                }
+                if (!CheckIndexNotNullConstraints(alter, TPath::Init(childPathId, context.SS), context, errStr)) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+                    return result;
+                }
+            }
+        }
+
+        const auto& replicationConfig = table->ReplicationConfig();
+        const auto replicationPathId = replicationConfig.HasOwnerPathId()
+            ? TPathId::FromProto(replicationConfig.GetOwnerPathId()) : TPathId{};
+        if (alter.HasReplicationConfig()) {
+            const auto& config = alter.GetReplicationConfig();
+            const auto newReplicationPathId = config.HasOwnerPathId()
+                ? TPathId::FromProto(config.GetOwnerPathId()) : TPathId{};
+            if (replicationPathId && replicationPathId != newReplicationPathId
+                && !Transaction.HasExpectedReplicationOwnerPathId())
+            {
+                const auto replicationPath = context.SS->PathsById.find(replicationPathId);
+                // A DROP in progress still owns its tables until the controller
+                // has stopped and SchemeShard has committed deletion of its path.
+                if (!newReplicationPathId || !context.SS->IsLocalId(replicationPathId)
+                    || (replicationPath != context.SS->PathsById.end() && !replicationPath->second->Dropped())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Table is owned by another replication");
+                    return result;
+                }
+            }
+            if (newReplicationPathId && replicationConfig.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                && !replicationConfig.HasOwnerPathId()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot attach a replication to a table that is already read-only");
+                return result;
+            }
+        }
+
+        bool hasLegacyReplicationStream = false;
+        bool hasSchemaReplicationStream = false;
+        bool hasSchemaCdcStream = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -730,8 +860,18 @@ public:
                     continue;
                 }
 
-                if (isReplicated = childPath->AsyncReplication.IsDefined()) {
-                    break;
+                Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
+                const auto& stream = context.SS->CdcStreams.at(childPathId);
+                hasSchemaCdcStream |= stream->SchemaChanges;
+
+                if (!childPath->AsyncReplication.IsDefined()) {
+                    continue;
+                }
+                if (stream->SchemaChanges) {
+                    hasSchemaReplicationStream = true;
+                } else {
+                    // A legacy stream will not receive the column DDL record.
+                    hasLegacyReplicationStream = true;
                 }
             }
         }
@@ -747,12 +887,22 @@ public:
 
         Y_ABORT_UNLESS(alterData->AlterVersion == table->AlterVersion + 1);
 
+        if (hasSchemaCdcStream) {
+            for (const auto& family : alterData->PartitionConfigFull().GetColumnFamilies()) {
+                if (family.GetId() != 0 && family.GetName().empty()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "SCHEMA_CHANGES requires names for non-default column families");
+                    return result;
+                }
+            }
+        }
+
         if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
-        if (isReplicated) {
+        if (hasLegacyReplicationStream) {
             for (const auto& [id, column] : alterData->Columns) {
                 if (column.CreateVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot add columns to replicated table");
@@ -760,6 +910,24 @@ public:
                 }
                 if (column.DeleteVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
+                    return result;
+                }
+            }
+        }
+
+        // CDC schema records contain the resulting column name/type/key
+        // snapshot, but cannot reproduce defaults or NOT NULL transitions.
+        if (hasSchemaReplicationStream) {
+            for (const auto& column : alter.GetColumns()) {
+                const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
+                    != TTableInfo::InvalidColumnId;
+                if (column.HasDefaultFromLiteral() || column.HasDefaultFromSequence()
+                    || column.HasDefaultFromExpression() || column.HasEmptyDefault()
+                    || (column.HasSetNotNullInProgress() && column.GetSetNotNullInProgress())
+                    || (column.HasNotNull() && (column.GetNotNull() || altersExistingColumn)))
+                {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot alter column defaults or NOT NULL on replicated table");
                     return result;
                 }
             }
@@ -781,16 +949,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -879,10 +1047,55 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 }
 
-// A table's detailed metrics level covers its indexes: fan the setting out to every live impl
-// table under the table's index children. Both Configured and NotConfigured propagate - clearing
-// the base table's level must clear the copies too, or an index stays pinned at a stale level.
-static void AppendIndexImplTableMetricsAlters(TVector<ISubOperation::TPtr>& result, TOperationId id,
+// Collect changes by implementation-table path so independent alterations can share
+// one sub-operation per table.
+using TIndexImplTableAlters = TMap<TPathId, NKikimrSchemeOp::TTableDescription>;
+
+// Validate both index and implementation-table alters before any Propose: TAlterTable
+// cannot roll back its DB writes. This is shared by constraint and metrics changes.
+static ISubOperation::TPtr CheckIndexAlterPath(TOperationId id, const TPath& path,
+        TOperationContext& context)
+{
+    const auto checks = path.Check();
+    // Domain upgrades and migrated paths must be checked before NotUnderOperation,
+    // which assumes the path is in exactly one operation.
+    checks
+        .NotUnderDomainUpgrade()
+        .IsAtLocalSchemeShard()
+        .NotUnderDeleting()
+        .NotUnderOperation();
+    if (!checks) {
+        return CreateReject(id, checks.GetStatus(), checks.GetError());
+    }
+    const auto pathId = path.Base()->PathId;
+    if (path->IsTableIndex() && !context.SS->IsLocalId(pathId)) {
+        return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, "Cannot alter migrated index");
+    }
+    if (path->IsTable() && path.IsLocked()) {
+        return CreateReject(id, NKikimrScheme::StatusMultipleModifications, TStringBuilder()
+            << "path is locked by tx " << path.LockedBy() << " (" << path.PathString() << ")");
+    }
+    if (path->IsTableIndex()
+        ? !context.SS->Indexes.contains(pathId)
+        : !context.SS->Tables.contains(pathId))
+    {
+        return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+            << "Path metadata is missing: " << path.PathString());
+    }
+    // Not every operation with an alter in flight marks the path state
+    // (e.g. the finalization of an incremental restore).
+    const bool hasAlter = path->IsTableIndex()
+        ? bool(context.SS->Indexes.at(pathId)->AlterData)
+        : bool(context.SS->Tables.at(pathId)->AlterData);
+    if (hasAlter) {
+        return CreateReject(id, NKikimrScheme::StatusMultipleModifications, TStringBuilder()
+            << "path has another alter in flight (" << path.PathString() << ")");
+    }
+    return nullptr;
+}
+
+// A table's detailed metrics level covers its indexes, including clearing the setting.
+static void CollectIndexImplTableMetricsAlters(TIndexImplTableAlters& alters,
         const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
     const auto& alter = tx.GetAlterTable();
@@ -897,38 +1110,146 @@ static void AppendIndexImplTableMetricsAlters(TVector<ISubOperation::TPtr>& resu
         if (child->Dropped() || !child->IsTableIndex()) {
             continue;
         }
+        // A migrated index cannot be altered here and keeps its previous metrics level.
+        if (!context.SS->IsLocalId(childPathId)) {
+            continue;
+        }
+
+        for (const auto& [_, implTablePathId] : child->GetChildren()) {
+            const auto& implTable = context.SS->PathsById.at(implTablePathId);
+            // Dropped build tables remain here until their shards are deleted.
+            if (implTable->Dropped() || !implTable->IsTable()) {
+                continue;
+            }
+            *alters[implTablePathId].MutableDetailedMetricsSettings() = alter.GetDetailedMetricsSettings();
+        }
+    }
+}
+
+// Validate DROP NOT NULL before any Propose: TAlterTable cannot roll back its DB writes.
+// This collector has no dependency on detailed metrics or their feature flag.
+static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlters& alters,
+        TOperationId id, const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+{
+    TVector<TString> columns;
+    for (const auto& column : tx.GetAlterTable().GetColumns()) {
+        // New columns carry a type; only propagate constraint changes.
+        if (!column.HasType() && column.HasNotNull() && !column.GetNotNull()) {
+            columns.push_back(column.GetName());
+        }
+    }
+    if (columns.empty()) {
+        return nullptr;
+    }
+
+    const auto tableIt = context.SS->Tables.find(tablePath.Base()->PathId);
+    if (tableIt == context.SS->Tables.end()) {
+        return nullptr;
+    }
+
+    for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
+        const auto& child = context.SS->PathsById.at(childPathId);
+        if (child->Dropped() || !child->IsTableIndex()) {
+            continue;
+        }
 
         const TPath indexPath = TPath::Init(childPathId, context.SS);
-        for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
+        TString errStr;
+        if (!CheckIndexNotNullConstraints(tx.GetAlterTable(), indexPath, context, errStr)) {
+            return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, errStr);
+        }
+        for (const auto& [_, implTablePathId] : indexPath.Base()->GetChildren()) {
             const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
-            const auto checks = implTablePath.Check();
-            checks
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .NotUnderOperation()
-                .IsTable()
-                .IsInsideTableIndexPath();
-            // An impl table busy under another operation is skipped rather than failing the
-            // whole alter; it keeps its previous level until the base table's
-            // DetailedMetricsSettings is set again.
-            if (!checks) {
+            if (!implTablePath.IsResolved() || implTablePath.IsDeleted() || !implTablePath->IsTable()) {
                 continue;
             }
 
-            auto scheme = TransactionTemplate(indexPath.PathString(),
-                NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
-            // Internal so the sub-operation may alter a private impl table.
-            scheme.SetInternal(true);
-
-            auto& implTableAlter = *scheme.MutableAlterTable();
-            implTableAlter.SetName(implTableName);
-            *implTableAlter.MutableDetailedMetricsSettings() = alter.GetDetailedMetricsSettings();
-
-            result.push_back(CreateAlterTable(NextPartId(id, result), scheme));
+            const auto implTableIt = context.SS->Tables.find(implTablePathId);
+            if (implTableIt == context.SS->Tables.end()) {
+                return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                    << "Table metadata is missing for path: " << implTablePath.PathString());
+            }
+            const auto& implTable = implTableIt->second;
+            NKikimrSchemeOp::TTableDescription implTableAlter;
+            for (const auto& column : columns) {
+                if (implTable->GetColumnIdByNameSlow(column) != TTableInfo::InvalidColumnId) {
+                    auto* implColumn = implTableAlter.AddColumns();
+                    implColumn->SetName(column);
+                    implColumn->SetNotNull(false);
+                }
+            }
+            if (implTableAlter.ColumnsSize() != 0) {
+                alters[implTablePathId].MergeFrom(implTableAlter);
+            }
         }
     }
+    return nullptr;
+}
+
+static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPtr>& result, TOperationId id,
+        const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+{
+    TIndexImplTableAlters alters;
+    if (auto reject = CollectIndexImplTableNotNullAlters(alters, id, tx, tablePath, context)) {
+        return reject;
+    }
+    CollectIndexImplTableMetricsAlters(alters, tx, tablePath, context);
+
+    THashSet<TPathId> pathsToCheck;
+    for (const auto& [implTablePathId, _] : alters) {
+        pathsToCheck.insert(implTablePathId);
+        pathsToCheck.insert(context.SS->PathsById.at(implTablePathId)->ParentPathId);
+    }
+    // Only affected indexes must be alterable: an unrelated migrated index must not
+    // prevent changing the base table's columns.
+    // Check each path once before any Propose: TAlterTable cannot roll back its DB writes.
+    for (const auto& pathId : pathsToCheck) {
+        if (auto reject = CheckIndexAlterPath(id, TPath::Init(pathId, context.SS), context)) {
+            return reject;
+        }
+    }
+
+    THashSet<TPathId> alteredIndexes;
+    for (auto& [implTablePathId, alter] : alters) {
+        const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
+        const TPath indexPath = implTablePath.Parent();
+        if (alteredIndexes.insert(indexPath.Base()->PathId).second) {
+            // Republish index metadata so schema-cache clients see the new impl-table versions.
+            auto indexScheme = TransactionTemplate(tablePath.PathString(),
+                NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+            indexScheme.SetInternal(true);
+            // The index alter checks the base table's locks, just like the base table alter.
+            *indexScheme.MutableLockGuard() = tx.GetLockGuard();
+            auto* indexAlter = indexScheme.MutableAlterTableIndex();
+            indexAlter->SetName(indexPath.LeafName());
+            indexAlter->SetState(context.SS->Indexes.at(indexPath.Base()->PathId)->State);
+            result.push_back(CreateAlterTableIndex(NextPartId(id, result), indexScheme));
+        }
+        auto scheme = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::ESchemeOpAlterTable);
+        scheme.SetInternal(true);
+        alter.SetName(implTablePath.LeafName());
+        *scheme.MutableAlterTable() = std::move(alter);
+        result.push_back(CreateAlterTable(NextPartId(id, result), scheme));
+    }
+    if (!alters.empty()) {
+        // Check all parts together before Propose: a later rejection cannot roll back
+        // the base table alter, even if each individual alter fits the in-flight limit.
+        THashMap<TTxState::ETxType, ui64> partsByTxType;
+        for (const auto& part : result) {
+            if (const auto txType = ConvertToTxType(part->GetModifyScheme().GetOperationType());
+                txType != TTxState::TxInvalid)
+            {
+                ++partsByTxType[txType];
+            }
+        }
+        for (const auto& [txType, count] : partsByTxType) {
+            TString errStr;
+            if (!context.SS->CheckInFlightLimit(txType, errStr, count)) {
+                return CreateReject(id, NKikimrScheme::StatusResourceExhausted, errStr);
+            }
+        }
+    }
+    return nullptr;
 }
 
 // Collects the names of the table's live local prefix bloom filter index children.
@@ -971,7 +1292,9 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     for (const auto& indexName : bloomIndexNames) {
         AddDropIndex(result, id, path.Child(indexName));
     }
-    AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
+    if (auto reject = AppendIndexImplTableAlters(result, id, tx, path, context)) {
+        return TVector<ISubOperation::TPtr>{reject};
+    }
     return result;
 }
 
@@ -1045,7 +1368,9 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
         result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
     }
 
-    AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
+    if (auto reject = AppendIndexImplTableAlters(result, id, tx, path, context)) {
+        return TVector<ISubOperation::TPtr>{reject};
+    }
     return result;
 }
 
@@ -1078,6 +1403,26 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    // Fence cleanup before creating sub-operations for an index table.
+    if (tx.HasExpectedReplicationOwnerPathId()) {
+        const auto checks = path.Check().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+        const auto table = context.SS->Tables.find(path->PathId);
+        if (table != context.SS->Tables.end()) {
+            if (table->second->AlterData) {
+                return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight")};
+            }
+            const auto& config = table->second->ReplicationConfig();
+            if (config.HasOwnerPathId()
+                && TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())) {
+                return {CreateReject(id, NKikimrScheme::StatusSuccess,
+                    "Table is owned by another replication; cleanup skipped")};
+            }
+        }
+    }
+
     if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {
         return std::move(*result);
     }
@@ -1090,7 +1435,9 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         TVector<ISubOperation::TPtr> result;
         result.push_back(CreateAlterTable(NextPartId(id, result), tx));
         AppendOwnedSequenceDrops(result, id, tx, path, context);
-        AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
+        if (auto reject = AppendIndexImplTableAlters(result, id, tx, path, context)) {
+            return {reject};
+        }
         return result;
     }
 
@@ -1124,6 +1471,36 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateReject(id, NKikimrScheme::EStatus::StatusPreconditionFailed, "Cannot alter migrated index")};
     }
 
+    // Reject overlapping impl-table ALTERs before proposing the index part:
+    // it creates the next index version before the table part checks its path.
+    // An internal operation may alter all impl tables of one index at once (e.g. the replication
+    // import marks them as imported in one transaction): the first alter creates the new index
+    // version and the others share it, so the index is legitimately under operation here.
+    const bool indexAlteredByThisOperation = tx.GetInternal()
+        && parent.Base()->LastTxId == id.GetTxId();
+    for (const auto& alterPath : {parent, path}) {
+        auto checks = alterPath.Check();
+        checks.NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved()
+            .NotDeleted().NotUnderDeleting();
+        if (!(indexAlteredByThisOperation && alterPath.Base()->PathId == parent.Base()->PathId)) {
+            checks.NotUnderOperation();
+        }
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+    }
+    if ((!indexAlteredByThisOperation && context.SS->Indexes.at(parent.Base()->PathId)->AlterData)
+        || context.SS->Tables.at(path.Base()->PathId)->AlterData)
+    {
+        return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another index table Alter in flight")};
+    }
+
+    // The new index version was already created by the first impl table alter of this operation,
+    // so this one only changes its own table.
+    if (indexAlteredByThisOperation) {
+        return {CreateAlterTable(id, tx)};
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     {
@@ -1143,3 +1520,5 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

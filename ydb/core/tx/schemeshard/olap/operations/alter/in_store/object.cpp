@@ -8,7 +8,7 @@
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializationContext& context) {
-    AFL_VERIFY(!GetTableInfoPtrVerified()->IsStandalone());
+    YDB_LOG_VERIFY(!GetTableInfoPtrVerified()->IsStandalone());
     const auto storePathId = GetTableInfoPtrVerified()->GetOlapStorePathIdVerified();
     TPath storePath = TPath::Init(storePathId, context.GetSSOperationContext()->SS);
     {
@@ -42,12 +42,12 @@ TConclusionStatus TInStoreTable::DoInitializeImpl(const TEntityInitializationCon
     return InitializeWithTableInfo(context);
 }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoBuildUpdate(const NKikimrSchemeOp::TModifyScheme& modification) const {
     std::shared_ptr<ISSEntityUpdate> result;
-    if (context.GetModification()->HasAlterTable()) {
+    if (modification.HasAlterTable()) {
         result = std::make_shared<TInStoreSchemaUpdate>();
-    } else if (context.GetModification()->HasAlterColumnTable()) {
-        auto& alter = context.GetModification()->GetAlterColumnTable();
+    } else if (modification.HasAlterColumnTable()) {
+        auto& alter = modification.GetAlterColumnTable();
 
         if (alter.HasAlterShards()) {
             if (alter.GetAlterShards().HasTransfer()) {
@@ -61,18 +61,16 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(
             result = std::make_shared<TInStoreSchemaUpdate>();
         }
     }
+
     if (!result) {
         return NKikimr::TConclusionStatus::Fail("Undefined modification type");
     }
-    auto initConclusion = result->Initialize(context);
-    if (initConclusion.IsFail()) {
-        return initConclusion;
-    }
+
     return result;
 }
 
 NKikimr::TConclusion<NKikimrSchemeOp::TColumnTableSchema> TInStoreTable::GetTableSchemaProto() const {
-    AFL_VERIFY(!!StoreInfo);
+    YDB_LOG_VERIFY(!!StoreInfo);
     if (!StoreInfo->SchemaPresets.count(GetTableInfoPtrVerified()->Description.GetSchemaPresetId())) {
         return TConclusionStatus::Fail("No preset for in-store column table");
     }

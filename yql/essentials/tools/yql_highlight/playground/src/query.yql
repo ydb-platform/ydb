@@ -1,3 +1,6 @@
+/* -- text */ SELECT 1;
+SELECT 2;
+
 SELECT 1; -- A single-line comment SELECT 1
 select 1; /*
    Some SELECT 1
@@ -17,6 +20,15 @@ SELECT @@some
 multiline with double at: @@@@
 text@@;
 SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
+
+SELECT @@
+    {"a":null}
+@@j;
+
+SELECT @@ text@ @@u;
+
+SELECT @@ text@
+@@u;
 
 SELECT
     CAST(123l AS Int64) AS `Int64`,

@@ -42,7 +42,28 @@ TString EBalancerTypeName(EBalancerType value) {
         case EBalancerType::SpreadNeighbours: return "Spread";
         case EBalancerType::Manual: return "Manual";
         case EBalancerType::Storage: return "Storage";
+        case EBalancerType::ScatterNamed: return "Named";
     }
+}
+
+TString EBalancerSuppressReasonName(EBalancerSuppressReason value) {
+    switch (value) {
+        case EBalancerSuppressReason::PreviousRunNoMovements: return "previous run of this type made no movements";
+        case EBalancerSuppressReason::AnotherBalancerRunning: return "another balancer is running";
+        case EBalancerSuppressReason::SubActorActivity: return "sub-actor activity";
+    }
+    return Sprintf("%d", static_cast<int>(value));
+}
+
+TString EResourceToBalanceName(EResourceToBalance value) {
+    switch (value) {
+        case EResourceToBalance::ComputeResources: return "ComputeResources";
+        case EResourceToBalance::Counter: return "Counter";
+        case EResourceToBalance::CPU: return "CPU";
+        case EResourceToBalance::Memory: return "Memory";
+        case EResourceToBalance::Network: return "Network";
+    }
+    return Sprintf("%d", static_cast<int>(value));
 }
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource) {
@@ -109,15 +130,14 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
-    if (MustBePrimaryPile) {
+    if (MustBePrimaryPile && Hive->GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
         return Hive->IsPrimaryPile(pile);
-    } else {
-        const auto* pileInfo = Hive->FindPile(pile);
-        if (!pileInfo) {
-            return false;
-        }
-        return pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
     }
+    if (Hive->IsPrimaryPile(pile)) {
+        return true; // the pile being promoted must be allowed even before it becomes synchronized
+    }
+    const auto* pileInfo = Hive->FindPile(pile);
+    return pileInfo && pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
 }
 
 TMetrics& TMetrics::operator+=(const TMetrics& other) {
@@ -130,6 +150,7 @@ TMetrics& TMetrics::operator+=(const TMetrics& other) {
     WriteThroughput += other.WriteThroughput;
     ReadIops += other.ReadIops;
     WriteIops += other.WriteIops;
+    NamedResources.Add(other.NamedResources);
     return *this;
 }
 
@@ -165,6 +186,7 @@ void TMetrics::ToProto(NKikimrTabletBase::TMetrics* proto) const {
     proto->MutableGroupWriteThroughput()->Assign(GroupWriteThroughput.begin(), GroupWriteThroughput.end());
     proto->MutableGroupReadIops()->Assign(GroupReadIops.begin(), GroupReadIops.end());
     proto->MutableGroupWriteIops()->Assign(GroupWriteIops.begin(), GroupWriteIops.end());
+    NamedResources.ToProto(proto->MutableNamedResources());
 }
 
 template <typename K, typename V>
@@ -203,6 +225,8 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::NodeBroker, "NB"},
                                                                                   {TTabletTypes::BlockStoreDiskRegistry, "BDR"},
                                                                                   {TTabletTypes::BackupController, "BCT"},
+                                                                                  {TTabletTypes::WasmCompileController, "WCC"},
+                                                                                  {TTabletTypes::CdcAggregator, "CA"},
                                                                                  };
 
 const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);

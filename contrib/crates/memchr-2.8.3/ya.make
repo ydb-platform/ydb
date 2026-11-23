@@ -1,0 +1,133 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(memchr)
+
+CRATE_VERSION(2.8.3)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/arch/aarch64/memchr.rs
+    src/arch/aarch64/mod.rs
+    src/arch/aarch64/neon/memchr.rs
+    src/arch/aarch64/neon/mod.rs
+    src/arch/aarch64/neon/packedpair.rs
+    src/arch/all/memchr.rs
+    src/arch/all/mod.rs
+    src/arch/all/packedpair/default_rank.rs
+    src/arch/all/packedpair/mod.rs
+    src/arch/all/rabinkarp.rs
+    src/arch/all/shiftor.rs
+    src/arch/all/twoway.rs
+    src/arch/generic/memchr.rs
+    src/arch/generic/mod.rs
+    src/arch/generic/packedpair.rs
+    src/arch/mod.rs
+    src/arch/wasm32/memchr.rs
+    src/arch/wasm32/mod.rs
+    src/arch/wasm32/simd128/memchr.rs
+    src/arch/wasm32/simd128/mod.rs
+    src/arch/wasm32/simd128/packedpair.rs
+    src/arch/x86_64/avx2/memchr.rs
+    src/arch/x86_64/avx2/mod.rs
+    src/arch/x86_64/avx2/packedpair.rs
+    src/arch/x86_64/memchr.rs
+    src/arch/x86_64/mod.rs
+    src/arch/x86_64/sse2/memchr.rs
+    src/arch/x86_64/sse2/mod.rs
+    src/arch/x86_64/sse2/packedpair.rs
+    src/cow.rs
+    src/ext.rs
+    src/macros.rs
+    src/memchr.rs
+    src/memmem/mod.rs
+    src/memmem/searcher.rs
+    src/tests/memchr/mod.rs
+    src/tests/memchr/naive.rs
+    src/tests/memchr/prop.rs
+    src/tests/mod.rs
+    src/tests/packedpair.rs
+    src/tests/substring/mod.rs
+    src/tests/substring/naive.rs
+    src/tests/substring/prop.rs
+    src/vector.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    .gitignore
+    .ignore
+    .vim/coc-settings.json
+    AI_POLICY.md
+    CONTRIBUTING.md
+    COPYING
+    Cargo.lock
+    LICENSE-MIT
+    README.md
+    UNLICENSE
+    rustfmt.toml
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    alloc
+    default
+    std
+)
+
+LICENSE("Unlicense OR MIT")
+VERSION(2.8.3)
+ORIGINAL_SOURCE(https://static.crates.io/crates/memchr/memchr-2.8.3.crate)
+
+CRATE_SOURCES(
+    src/arch/aarch64/memchr.rs
+    src/arch/aarch64/mod.rs
+    src/arch/aarch64/neon/memchr.rs
+    src/arch/aarch64/neon/mod.rs
+    src/arch/aarch64/neon/packedpair.rs
+    src/arch/all/memchr.rs
+    src/arch/all/mod.rs
+    src/arch/all/packedpair/default_rank.rs
+    src/arch/all/packedpair/mod.rs
+    src/arch/all/rabinkarp.rs
+    src/arch/all/shiftor.rs
+    src/arch/all/twoway.rs
+    src/arch/generic/memchr.rs
+    src/arch/generic/mod.rs
+    src/arch/generic/packedpair.rs
+    src/arch/mod.rs
+    src/arch/wasm32/memchr.rs
+    src/arch/wasm32/mod.rs
+    src/arch/wasm32/simd128/memchr.rs
+    src/arch/wasm32/simd128/mod.rs
+    src/arch/wasm32/simd128/packedpair.rs
+    src/arch/x86_64/avx2/memchr.rs
+    src/arch/x86_64/avx2/mod.rs
+    src/arch/x86_64/avx2/packedpair.rs
+    src/arch/x86_64/memchr.rs
+    src/arch/x86_64/mod.rs
+    src/arch/x86_64/sse2/memchr.rs
+    src/arch/x86_64/sse2/mod.rs
+    src/arch/x86_64/sse2/packedpair.rs
+    src/cow.rs
+    src/ext.rs
+    src/lib.rs
+    src/macros.rs
+    src/memchr.rs
+    src/memmem/mod.rs
+    src/memmem/searcher.rs
+    src/tests/memchr/mod.rs
+    src/tests/memchr/naive.rs
+    src/tests/memchr/prop.rs
+    src/tests/mod.rs
+    src/tests/packedpair.rs
+    src/tests/substring/mod.rs
+    src/tests/substring/naive.rs
+    src/tests/substring/prop.rs
+    src/vector.rs
+)
+
+END()

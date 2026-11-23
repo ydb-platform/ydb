@@ -40,6 +40,8 @@ message TAllocateWorkersRequest {
     NYql.NDqProto.EDqStatsMode StatsMode = 16;
     reserved 17;
     string Scheduler = 18;
+    string UploadPrefix = 19;
+    string UploadClusterAddress = 20;
 }
 
 message TWorkerGroup {

@@ -2,7 +2,6 @@
 
 #include <util/string/cast.h>
 
-
 namespace NKikimr::NResourcePool {
 
 struct TSettingsBase {
@@ -10,10 +9,9 @@ struct TSettingsBase {
         const TString& Value;
     };
 
-    struct TExtractor {
-    };
+    struct TExtractor {};
 
     bool operator==(const TSettingsBase& other) const = default;
 };
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

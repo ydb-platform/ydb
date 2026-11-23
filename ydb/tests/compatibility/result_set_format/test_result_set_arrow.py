@@ -265,6 +265,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         schema_inclusion_mode=None,
         arrow_format_settings=None,
         concurrent_result_sets=False,
+        idempotent=False,
     ):
         may_throw = (
             arrow_format_settings is not None
@@ -277,6 +278,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             try:
                 return pool.execute_with_retries(
                     query,
+                    retry_settings=ydb.RetrySettings(idempotent=idempotent),
                     result_set_format=ydb.QueryResultSetFormat.ARROW,
                     schema_inclusion_mode=schema_inclusion_mode,
                     arrow_format_settings=arrow_format_settings,
@@ -319,15 +321,15 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                     value.append('NULL')
             values.append("(" + ", ".join(value) + ")")
 
-        query = ""
+        assert len(values) != 0
+        assert batch_size > 0
+        # Execute batches separately to limit query compilation work under ASAN.
         for batch_start in range(0, rows_count, batch_size):
             batch_rows = values[batch_start:batch_start + batch_size]
             if not batch_rows:
                 continue
-            query += f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
-
-        assert len(query) != 0
-        self._try_execute(query)
+            query = f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
+            self._try_execute(query, idempotent=True)
 
     def _read_table(
         self,
@@ -417,6 +419,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         assert result_sets is not None and len(result_sets) != 0
 
         result_rows_count = 0
+        compressed_size = 0
+        uncompressed_size = 0
         for result_set in result_sets:
             self.validate_format_arrow(result_set)
 
@@ -424,14 +428,19 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
             batch.validate()
 
-            # is there the best way to check if the compression is working?
+            serialized_size = len(batch.serialize().to_pybytes())
             if codec.type in [ydb.ArrowCompressionCodecType.UNSPECIFIED, ydb.ArrowCompressionCodecType.NONE]:
-                assert len(result_set.data) == len(batch.serialize().to_pybytes())
+                assert len(result_set.data) == serialized_size
             else:
-                assert len(result_set.data) < len(batch.serialize().to_pybytes())
+                compressed_size += len(result_set.data)
+                uncompressed_size += serialized_size
 
             result_rows_count += batch.num_rows
             assert batch.num_columns == len(self.all_types) + 1
+
+        if codec.type not in [ydb.ArrowCompressionCodecType.UNSPECIFIED, ydb.ArrowCompressionCodecType.NONE]:
+            # Compression framing can make an individual small batch larger.
+            assert compressed_size < uncompressed_size
 
         assert result_rows_count == rows_count
 

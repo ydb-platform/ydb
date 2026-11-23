@@ -1,36 +1,35 @@
 #pragma once
-#include <yql/essentials/utils/log/log_component.h>
-
 #include <util/system/types.h>
+#include <yql/essentials/utils/log/log_component.h>
 
 #include <unordered_set>
 
 namespace NYql::NPushdown {
 
 struct TSettings {
-    enum EFeatureFlag : ui64 {
+    enum EFeatureFlag: ui64 {
         LikeOperator = 1,
         LikeOperatorOnlyForUtf8 = 1 << 1,
         JsonQueryOperators = 1 << 2,
         JsonExistsOperator = 1 << 3,
         LogicalXorOperator = 1 << 4,
-        ExpressionAsPredicate = 1 << 5, // Bool columns and bool expressions can take part in AND/OR/NOT statements
-        ArithmeticalExpressions = 1 << 6, // *, +, -
-        ParameterExpression = 1 << 7, // Query parameters
-        CastExpression = 1 << 8, // CAST()
-        StringTypes = 1 << 9, // Support string types
-        DateTimeTypes = 1 << 10, // Date, Datetime, Timestamp
+        ExpressionAsPredicate = 1 << 5,   // Bool columns and bool expressions can take part in AND/OR/NOT statements
+        ArithmeticalExpressions = 1 << 6,   // *, +, -
+        ParameterExpression = 1 << 7,   // Query parameters
+        CastExpression = 1 << 8,   // CAST()
+        StringTypes = 1 << 9,   // Support string types
+        DateTimeTypes = 1 << 10,   // Date, Interval, Timestamp
         UuidType = 1 << 11,
         DecimalType = 1 << 12,
         DyNumberType = 1 << 13,
-        ImplicitConversionToInt64 = 1 << 14, // Allow implicit conversions to 64-bits integers from other types of integers
-        UnaryOperators = 1 << 15, // -, Abs, Size
+        ImplicitConversionToInt64 = 1 << 14,   // Allow implicit conversions to 64-bits integers from other types of integers
+        UnaryOperators = 1 << 15,   // -, Abs, Size
         DoNotCheckCompareArgumentsTypes = 1 << 16,
         TimestampCtor = 1 << 17,
-        JustPassthroughOperators = 1 << 18, // if + coalesce + just
-        InOperator = 1 << 19, // IN()
-        IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM
-        DivisionExpressions = 1 << 21, // %, / -- NOTE: division by zero is not handled and also pushdown
+        JustPassthroughOperators = 1 << 18,   // if + coalesce + just
+        InOperator = 1 << 19,   // IN()
+        IsDistinctOperator = 1 << 20,   // IS NOT DISTINCT FROM / IS DISTINCT FROM
+        DivisionExpressions = 1 << 21,   // %, / -- NOTE: division by zero is not handled and also pushdown
 
         // Option which enables partial pushdown for sequence of OR
         // For example next predicate:
@@ -39,17 +38,18 @@ struct TSettings {
         // $A OR $C
         // In case of unsupported / complicated expressions $B and $D
         SplitOrOperator = 1 << 22,
-        ToBytesFromStringExpressions = 1 << 23, // ToBytes(string like)
-        FlatMapOverOptionals = 1 << 24, // FlatMap(Optional<T>, Lambda (T) -> Optional<U>)
-        ToStringFromStringExpressions = 1 << 25, // ToString(string like)
+        ToBytesFromStringExpressions = 1 << 23,   // ToBytes(string like)
+        FlatMapOverOptionals = 1 << 24,   // FlatMap(Optional<T>, Lambda (T) -> Optional<U>)
+        ToStringFromStringExpressions = 1 << 25,   // ToString(string like)
         IntervalCtor = 1 << 26,
         MinMax = 1 << 27,
         NonDeterministic = 1 << 28,
-        DecimalCtor = 1 << 29, 
+        DecimalCtor = 1 << 29,
         DateCtor = 1 << 30,
-        PredicateAsExpression = ui64{1} << 31, // Predicates can be used in expressions (e.g. (a = b) = (c = d))
-        AnyExpressionExceptMember = ui64{1} << 32,
-        StructOperators = ui64{1} << 33, // Struct operators can be used
+        PredicateAsExpression = ui64{ 1 } << 31,   // Predicates can be used in expressions (e.g. (a = b) = (c = d))
+        AnyExpressionExceptMember = ui64{ 1 } << 32,
+        StructOperators = ui64{ 1 } << 33,   // Struct operators can be used
+        LikeOperatorComplex = ui64{ 1 } << 34,   // Complete LIKE/ILIKE supported
     };
 
     explicit TSettings(NLog::EComponent logComponent)
@@ -82,4 +82,4 @@ private:
     std::unordered_set<TString> EnabledMembers;
 };
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

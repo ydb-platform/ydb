@@ -1,0 +1,61 @@
+# See devel-docs/compiling.rst for details on these options.
+
+option('introspection',
+       type: 'feature',
+       value: 'auto',
+       yield: true,
+       description: 'Build introspection data (requires gobject-introspection)')
+
+option('pixbuf',
+       type: 'feature',
+       value: 'auto',
+       yield: true,
+       description: 'Build with GDK-Pixbuf'
+       )
+
+option('rsvg-convert',
+       type: 'feature',
+       value: 'enabled',
+       yield: true,
+       description: 'Build the rsvg-convert util to convert SVG files to other image formats'
+       )
+
+option('pixbuf-loader',
+       type: 'feature',
+       value: 'disabled',
+       yield: true,
+       description: 'Build the GDK-Pixbuf SVG loader (requires gdk-pixbuf-query-loaders)'
+       )
+
+option('docs',
+       type: 'feature',
+       value: 'auto',
+       yield: true,
+       description: 'Build API reference and rsvg-convert documentation (requires gi-docgen and rst2man)')
+
+option('vala',
+       type: 'feature',
+       value: 'auto',
+       yield: true,
+       description: 'Build Vala bindings (requires the vala compiler)')
+
+option('tests',
+       type: 'boolean',
+       value: true,
+       yield: true,
+       description: 'Build the test suite')
+
+option('triplet',
+       type: 'string',
+       value: '',
+       description : 'Rust target triplet (if needed)')
+
+option('avif',
+       type: 'feature',
+       value: 'auto',
+       description : 'Support embedded AVIF via libdav1d')
+
+option('rustc-version',
+       type: 'string',
+       value: '',
+       description: 'Installed RustC version to use (if needed; currently only supported for Windows builds)')

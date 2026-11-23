@@ -15,11 +15,15 @@ private:
     TMaybe<NMonitoring::TOutputStreamRef> Html;
     TMaybe<NMonitoring::TTable> Table;
     TMaybe<NMonitoring::TTableBody> TableBody;
+    // Controls rendered with a value different from their current default.
+    ui64 ChangedCount = 0;
 public:
     TControlBoardTableHtmlRenderer();
     void AddNewTable(const TString& caption);
     void AddTableItem(const TString& name, TIntrusivePtr<TControl> control);
     TString GetHtml();
+    // Return the number of changed controls rendered across all tables.
+    ui64 GetChangedCount() const;
 };
 
 }

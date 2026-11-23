@@ -15,7 +15,7 @@ import library.python.resource as rs
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
-from ydb.tools.ydbd_slice import nodes, handlers, cluster_description, yaml_configurator
+from ydb.tools.ydbd_slice import nodes, handlers, cluster_description, yaml_configurator, process_profiles
 from ydb.tools.ydbd_slice.kube import handlers as kube_handlers, docker
 
 # warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -533,6 +533,34 @@ def ssh_args():
     return args
 
 
+def rolling_restart_seconds(value):
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected an integer number of seconds")
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("expected a non-negative number of seconds")
+    return parsed
+
+
+def rolling_restart_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--rolling-restart",
+        metavar="SECONDS",
+        type=rolling_restart_seconds,
+        default=None,
+        help="After binaries and configs are uploaded, restart nodes one by one. "
+             "Storage hosts first, then dynamic. Each host is stopped and started; "
+             "the tool waits until matching kikimr processes are up and stable "
+             "(not full cluster rejoin), then waits SECONDS before the next host "
+             "and between the storage and dynamic phases. "
+             "Choose SECONDS large enough for storage/dynnode rejoin. "
+             "Without this option all nodes restart at once.",
+    )
+    return args
+
+
 def with_confirmation():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
@@ -567,6 +595,19 @@ def yaml_config_path_args():
         help="Path to file with config.yaml configuration",
     )
 
+    return args
+
+
+def process_profiles_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--process-profiles",
+        dest="process_profiles",
+        action="store_true",
+        default=False,
+        help="Generate per-process YAML from process_profiles overlays "
+             "(storage_profile / dynamic_profiles on hosts)",
+    )
     return args
 
 
@@ -621,6 +662,16 @@ def add_explain_mode(modes, walle_provider):
             kikimr_compressed_bin,
             walle_provider
         )
+        enable_process_profiles = getattr(args, 'process_profiles', False)
+        configuration.enable_process_profiles = enable_process_profiles
+        process_profiles.require_flag_if_used(cluster_details.template, enable_process_profiles)
+        if enable_process_profiles:
+            catalog = process_profiles.parse_process_profiles(cluster_details.template)
+            process_profiles.validate_host_profiles(
+                cluster_details.template,
+                catalog,
+                len(cluster_details.dynamic_slots),
+            )
 
         if 'kikimr' in components:
             static = configuration.create_static_cfg()
@@ -631,7 +682,7 @@ def add_explain_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "explain",
-        parents=[cluster_description_args(), binaries_args(), component_args()],
+        parents=[cluster_description_args(), binaries_args(), component_args(), process_profiles_args()],
         description="Just dump generated cfg into --out-cfg."
     )
     mode.add_argument(
@@ -658,6 +709,7 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
     configurator = None
 
     kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
+    enable_process_profiles = getattr(args, 'process_profiles', False)
     if args.yaml_config:
         configurator = yaml_configurator.YamlConfigurator(
             args.cluster,
@@ -674,6 +726,21 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
             kikimr_compressed_bin=kikimr_compressed_bin,
             walle_provider=walle_provider
         )
+
+    configurator.enable_process_profiles = enable_process_profiles
+    generates_cfg = func in (
+        handlers.Slice.slice_install,
+        handlers.Slice.slice_update,
+    )
+    if generates_cfg:
+        process_profiles.require_flag_if_used(cluster_details.template, enable_process_profiles)
+        if enable_process_profiles:
+            catalog = process_profiles.parse_process_profiles(cluster_details.template)
+            process_profiles.validate_host_profiles(
+                cluster_details.template,
+                catalog,
+                len(cluster_details.dynamic_slots),
+            )
 
     # Always compute components after cluster_details
     components = deduce_components_from_args(args, cluster_details)
@@ -700,6 +767,7 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
         yav_version,
         walle_provider,
         configurator,
+        rolling_restart_sec=v.get('rolling_restart'),
     )
     func(slice)
 
@@ -739,6 +807,7 @@ def add_install_mode(modes, walle_provider):
             direct_nodes_args(),
             cluster_description_args(),
             yaml_config_path_args(),
+            process_profiles_args(),
             binaries_args(),
             component_args(),
             log_args(),
@@ -764,13 +833,20 @@ def add_update_mode(modes, walle_provider):
             direct_nodes_args(),
             cluster_description_args(),
             yaml_config_path_args(),
+            process_profiles_args(),
             binaries_args(),
             component_args(),
             log_args(),
             ssh_args(),
+            rolling_restart_args(),
         ],
-        description="Minor cluster update, just binary and cfg. No additional configuration is performed."
-        "Stop all ydbd instances at the nodes, sync binary and cfg, start the instances. "
+        description="Minor cluster update, just binary and cfg. No additional configuration is performed. "
+        "Sync binary and cfg, then restart ydbd. "
+        "Without --rolling-restart stop all instances then start them. "
+        "With --rolling-restart SECONDS the same storage-then-dynamic order, one host at a time: "
+        "stop, start, wait until kikimr processes are up and stable (PID check only, not cluster "
+        "health), then wait SECONDS before the next host and between phases. "
+        "SECONDS must cover real storage/dynnode rejoin time. "
         "Use --hosts to specify particular hosts.",
     )
     mode.set_defaults(handler=_run)

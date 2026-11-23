@@ -1,3 +1,7 @@
+$input = [
+    <|TestField: Just(@@{"inner":{"i":{"a":"hello"}},"test":{"inner":{"i":{"a":"bye"}}}}@@)|>,
+];
+
 /*
 syntax='proto3';
 
@@ -29,4 +33,4 @@ $config = @@{
 
 $udf = Udf(Protobuf::Parse, $config as TypeConfig);
 
-SELECT $udf(TestField) FROM plato.Input;
+SELECT $udf(TestField) FROM AS_TABLE($input);

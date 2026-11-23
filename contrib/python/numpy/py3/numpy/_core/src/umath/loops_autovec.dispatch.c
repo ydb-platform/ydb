@@ -8,13 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt $autovec baseline
- ** sse2 avx2
- ** neon
- ** vsx2
- ** vx
- **/
 #define _UMATHMODULE
 #define _MULTIARRAYMODULE
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
@@ -42,7 +35,7 @@
 #define INT_left_shift_needs_clear_floatstatus
 #define UINT_left_shift_needs_clear_floatstatus
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -62,7 +55,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_reciprocal)
     UNARY_LOOP_FAST(npy_byte, npy_byte, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -74,7 +67,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -86,7 +79,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -132,7 +125,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -152,7 +145,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_reciprocal)
     UNARY_LOOP_FAST(npy_ubyte, npy_ubyte, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -164,7 +157,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -176,7 +169,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -222,7 +215,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -242,7 +235,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_reciprocal)
     UNARY_LOOP_FAST(npy_short, npy_short, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -254,7 +247,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -266,7 +259,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -312,7 +305,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -332,7 +325,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_reciprocal)
     UNARY_LOOP_FAST(npy_ushort, npy_ushort, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -344,7 +337,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -356,7 +349,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -402,7 +395,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -422,7 +415,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_reciprocal)
     UNARY_LOOP_FAST(npy_int, npy_int, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -434,7 +427,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -446,7 +439,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -492,7 +485,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -512,7 +505,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_reciprocal)
     UNARY_LOOP_FAST(npy_uint, npy_uint, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -524,7 +517,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -536,7 +529,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -582,7 +575,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -602,7 +595,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_reciprocal)
     UNARY_LOOP_FAST(npy_long, npy_long, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -614,7 +607,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -626,7 +619,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -672,7 +665,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -692,7 +685,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_reciprocal)
     UNARY_LOOP_FAST(npy_ulong, npy_ulong, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -704,7 +697,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -716,7 +709,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -762,7 +755,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -782,7 +775,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_reciprocal)
     UNARY_LOOP_FAST(npy_longlong, npy_longlong, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -794,7 +787,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -806,7 +799,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -852,7 +845,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_bitwise_count)
 }
 
 
-#line 45
+#line 38
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_positive)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -872,7 +865,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_reciprocal)
     UNARY_LOOP_FAST(npy_ulonglong, npy_ulonglong, *out = 1.0 / in);
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -884,7 +877,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_add)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -896,7 +889,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_subtract)
     }
 }
 
-#line 69
+#line 62
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -948,7 +941,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_count)
  **                         UNSIGNED INTEGER LOOPS
  *****************************************************************************
  */
-#line 125
+#line 118
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -961,7 +954,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_sign)
     UNARY_LOOP_FAST(npy_ubyte, npy_ubyte, *out = in > 0 ? 1 : 0);
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -973,7 +966,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_and)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -985,7 +978,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_or)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -998,7 +991,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_xor)
 }
 
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1009,7 +1002,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_logical_and)
     BINARY_LOOP_FAST(npy_ubyte, npy_bool, *out = in1 && in2);
 }
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1030,7 +1023,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_logical_xor)
     BINARY_LOOP_FAST(npy_ubyte, npy_bool, *out = UBYTE_logical_xor_(in1, in2));
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UBYTE_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1041,7 +1034,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UBYTE_isnan)
     UNARY_LOOP_FAST(npy_ubyte, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UBYTE_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1052,7 +1045,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UBYTE_isinf)
     UNARY_LOOP_FAST(npy_ubyte, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UBYTE_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1082,7 +1075,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_invert)
     UNARY_LOOP_FAST(npy_ubyte, npy_ubyte, *out = ~in);
 }
 
-#line 125
+#line 118
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1095,7 +1088,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_sign)
     UNARY_LOOP_FAST(npy_ushort, npy_ushort, *out = in > 0 ? 1 : 0);
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1107,7 +1100,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_and)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1119,7 +1112,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_or)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1132,7 +1125,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_xor)
 }
 
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1143,7 +1136,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_logical_and)
     BINARY_LOOP_FAST(npy_ushort, npy_bool, *out = in1 && in2);
 }
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1164,7 +1157,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_logical_xor)
     BINARY_LOOP_FAST(npy_ushort, npy_bool, *out = USHORT_logical_xor_(in1, in2));
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(USHORT_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1175,7 +1168,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(USHORT_isnan)
     UNARY_LOOP_FAST(npy_ushort, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(USHORT_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1186,7 +1179,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(USHORT_isinf)
     UNARY_LOOP_FAST(npy_ushort, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(USHORT_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1216,7 +1209,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_invert)
     UNARY_LOOP_FAST(npy_ushort, npy_ushort, *out = ~in);
 }
 
-#line 125
+#line 118
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1229,7 +1222,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_sign)
     UNARY_LOOP_FAST(npy_uint, npy_uint, *out = in > 0 ? 1 : 0);
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1241,7 +1234,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_and)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1253,7 +1246,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_or)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1266,7 +1259,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_bitwise_xor)
 }
 
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1277,7 +1270,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_logical_and)
     BINARY_LOOP_FAST(npy_uint, npy_bool, *out = in1 && in2);
 }
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1298,7 +1291,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_logical_xor)
     BINARY_LOOP_FAST(npy_uint, npy_bool, *out = UINT_logical_xor_(in1, in2));
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UINT_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1309,7 +1302,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UINT_isnan)
     UNARY_LOOP_FAST(npy_uint, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UINT_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1320,7 +1313,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UINT_isinf)
     UNARY_LOOP_FAST(npy_uint, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(UINT_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1350,7 +1343,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_invert)
     UNARY_LOOP_FAST(npy_uint, npy_uint, *out = ~in);
 }
 
-#line 125
+#line 118
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1363,7 +1356,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_sign)
     UNARY_LOOP_FAST(npy_ulong, npy_ulong, *out = in > 0 ? 1 : 0);
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1375,7 +1368,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_and)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1387,7 +1380,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_or)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1400,7 +1393,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_xor)
 }
 
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1411,7 +1404,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_logical_and)
     BINARY_LOOP_FAST(npy_ulong, npy_bool, *out = in1 && in2);
 }
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1432,7 +1425,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_logical_xor)
     BINARY_LOOP_FAST(npy_ulong, npy_bool, *out = ULONG_logical_xor_(in1, in2));
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONG_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1443,7 +1436,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONG_isnan)
     UNARY_LOOP_FAST(npy_ulong, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONG_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1454,7 +1447,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONG_isinf)
     UNARY_LOOP_FAST(npy_ulong, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONG_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1484,7 +1477,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_invert)
     UNARY_LOOP_FAST(npy_ulong, npy_ulong, *out = ~in);
 }
 
-#line 125
+#line 118
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1497,7 +1490,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_sign)
     UNARY_LOOP_FAST(npy_ulonglong, npy_ulonglong, *out = in > 0 ? 1 : 0);
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1509,7 +1502,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_and)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1521,7 +1514,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_or)
     }
 }
 
-#line 142
+#line 135
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1534,7 +1527,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_xor)
 }
 
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1545,7 +1538,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_and)
     BINARY_LOOP_FAST(npy_ulonglong, npy_bool, *out = in1 && in2);
 }
 
-#line 158
+#line 151
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1566,7 +1559,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_xor)
     BINARY_LOOP_FAST(npy_ulonglong, npy_bool, *out = ULONGLONG_logical_xor_(in1, in2));
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONGLONG_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1577,7 +1570,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONGLONG_isnan)
     UNARY_LOOP_FAST(npy_ulonglong, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONGLONG_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1588,7 +1581,7 @@ NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONGLONG_isinf)
     UNARY_LOOP_FAST(npy_ulonglong, npy_bool, (void)in; *out = NPY_FALSE);
 }
 
-#line 183
+#line 176
 NPY_NO_EXPORT void  NPY_CPU_DISPATCH_CURFX(ULONGLONG_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1625,7 +1618,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_invert)
  *****************************************************************************
  */
 
-#line 224
+#line 217
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -1639,84 +1632,84 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_sign)
     UNARY_LOOP_FAST(npy_byte, npy_byte, *out = in > 0 ? 1 : (in < 0 ? -1 : 0));
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_conjugate)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_invert)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_invert)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_isnan)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_isinf)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_isfinite)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_logical_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_logical_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_logical_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_logical_xor)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_logical_not)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_logical_not)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_bitwise_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
@@ -1724,7 +1717,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_bitwise_xor)
 }
 
 
-#line 224
+#line 217
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -1738,84 +1731,84 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_sign)
     UNARY_LOOP_FAST(npy_short, npy_short, *out = in > 0 ? 1 : (in < 0 ? -1 : 0));
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_conjugate)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_invert)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_invert)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_isnan)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_isinf)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_isfinite)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_logical_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_logical_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_logical_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_logical_xor)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_logical_not)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_logical_not)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(USHORT_bitwise_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
@@ -1823,7 +1816,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_bitwise_xor)
 }
 
 
-#line 224
+#line 217
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -1837,84 +1830,84 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_sign)
     UNARY_LOOP_FAST(npy_int, npy_int, *out = in > 0 ? 1 : (in < 0 ? -1 : 0));
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_conjugate)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_invert)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_invert)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_isnan)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_isinf)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_isfinite)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_logical_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_logical_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_logical_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_logical_xor)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_logical_not)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_logical_not)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_bitwise_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UINT_bitwise_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
@@ -1922,7 +1915,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_bitwise_xor)
 }
 
 
-#line 224
+#line 217
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -1936,84 +1929,84 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_sign)
     UNARY_LOOP_FAST(npy_long, npy_long, *out = in > 0 ? 1 : (in < 0 ? -1 : 0));
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_conjugate)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_invert)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_invert)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_isnan)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_isinf)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_isfinite)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_logical_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_logical_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_logical_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_logical_xor)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_logical_not)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_logical_not)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONG_bitwise_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
@@ -2021,7 +2014,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_bitwise_xor)
 }
 
 
-#line 224
+#line 217
 
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_absolute)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -2035,84 +2028,84 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_sign)
     UNARY_LOOP_FAST(npy_longlong, npy_longlong, *out = in > 0 ? 1 : (in < 0 ? -1 : 0));
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_conjugate)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_invert)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_invert)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_isnan)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_isinf)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_isfinite)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_logical_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_logical_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_logical_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_xor)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_logical_not)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_logical_not)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_bitwise_and)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_and)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_bitwise_or)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_bitwise_or)(args, dimensions, steps, func);
 }
 
-#line 242
+#line 235
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_bitwise_xor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
@@ -2126,21 +2119,21 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_bitwise_xor)
  **                             BOOLEAN LOOPS                               **
  *****************************************************************************
  */
-#line 260
+#line 253
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_isnan)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_isnan)(args, dimensions, steps, func);
 }
 
-#line 260
+#line 253
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(UBYTE_isinf)(args, dimensions, steps, func);
 }
 
-#line 260
+#line 253
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_isfinite)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
@@ -2148,21 +2141,21 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_isfinite)
 }
 
 
-#line 271
+#line 264
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_floor)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     UNARY_LOOP_FAST(npy_bool, npy_bool, *out = in);
 }
 
-#line 271
+#line 264
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_ceil)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     UNARY_LOOP_FAST(npy_bool, npy_bool, *out = in);
 }
 
-#line 271
+#line 264
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_trunc)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2188,14 +2181,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_absolute)
  *****************************************************************************
  */
 
-#line 300
+#line 293
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DATETIME_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_isinf)(args, dimensions, steps, func);
 }
 
-#line 300
+#line 293
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(TIMEDELTA_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {

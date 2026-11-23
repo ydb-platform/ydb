@@ -34,3 +34,4 @@ See also:
 - [Documentation for application developers](../../dev/index.md)
 - [Test applications](../../dev/example-app/index.md)
 - [Code recipes](../../recipes/ydb-sdk/index.md)
+- [Generate code from YQL](../../dev/sqlc-ydb.md)

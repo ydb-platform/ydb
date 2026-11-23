@@ -6,15 +6,15 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-class TPhysicalFilterBuilder: public TPhysicalUnaryOpBuilder {
+class TPhysicalFilterBuilder: public TPhysicalWideUnaryOpBuilder {
 public:
-    TPhysicalFilterBuilder(TIntrusivePtr<TOpFilter> filter, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+    TPhysicalFilterBuilder(TOpFilter& filter, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalWideUnaryOpBuilder(ctx, pos, names)
         , Filter(filter) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
+    NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) override;
 
 private:
-    TIntrusivePtr<TOpFilter> Filter;
+    TOpFilter& Filter;
 };

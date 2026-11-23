@@ -51,6 +51,10 @@ namespace NKikimr::NDDisk {
     struct TPersistentBufferBarriersManager {
         using TTabletKey = TPersistentBufferTabletKey;
 
+        static constexpr ui64 MaxRegistrations(ui32 barriersLimit) {
+            return ui64(barriersLimit) * TPersistentBufferBarriers::MaxBarriersPerHeader;
+        }
+
         struct TErase {
             std::vector<ui64> Lsns;
             ui32 ChunkIdx = Max<ui32>();
@@ -79,11 +83,15 @@ namespace NKikimr::NDDisk {
 
         void Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId);
         bool CanMoveBarrier(ui64 tabletId, ui32 barriersLimit, ui8 directBlockGroupIndex = 0);
+        bool HasBarrier(ui64 tabletId, ui8 directBlockGroupIndex = 0) const;
         TPersistentBufferBarrierRecord GetBarrier(ui64 tabletId, ui8 directBlockGroupIndex = 0) const;
         // Keyed by (TabletId, DirectBlockGroupIndex): a plain TabletId key would collapse barriers
         // belonging to different direct block groups of the same tablet into a single entry.
         std::map<std::pair<ui64, ui8>, ui64> GetBarriers() const;
         std::tuple<ui32, ui32, TEraseBarrier&> MoveBarrier(ui64 tabletId, ui32 generation, ui64 lsn, const TPersistentBufferSectorInfo& newSector, ui8 directBlockGroupIndex = 0);
+        // Like MoveBarrier, returns replacement metadata that the caller must persist before
+        // releasing the old sector. Keep the header (even if empty) to supersede older copies.
+        std::tuple<ui32, ui32, TEraseBarrier&> RemoveBarrier(ui64 tabletId, const TPersistentBufferSectorInfo& newSector, ui8 directBlockGroupIndex = 0);
         void RestoreBarriers(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
         bool AddBarrier(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);
 

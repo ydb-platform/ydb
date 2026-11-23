@@ -4,6 +4,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
+#include <exception>
 
 namespace NYdb::inline Dev {
 
@@ -63,6 +64,15 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
 {
     auto promise = NThreading::NewPromise<TResponse>();
     asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
+        try {
+            future.TryRethrow();
+        } catch (...) {
+            const auto client = impl->GetSessionClient();
+            NSessionCloseCommands::TransportError.Execute(*impl, client.get());
+            impl.reset();
+            promise.SetException(std::current_exception());
+            return;
+        }
         Y_ABORT_UNLESS(future.HasValue());
 
         // TResponse can hold refcounted user provided data (TSession for example)

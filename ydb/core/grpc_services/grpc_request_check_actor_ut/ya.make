@@ -1,10 +1,12 @@
 UNITTEST_FOR(ydb/core/grpc_services)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/core/base
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
 )

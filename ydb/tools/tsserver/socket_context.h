@@ -126,6 +126,10 @@ public:
                 send(Processor.Execute(request.GetRead()));
                 break;
 
+            case ::NTestShard::TStateServer::TRequest::kInitialize:
+                send(Processor.Execute(request.GetInitialize()));
+                break;
+
             case ::NTestShard::TStateServer::TRequest::kTabletInfo:
             case ::NTestShard::TStateServer::TRequest::COMMAND_NOT_SET:
                 printf("[%" PRIu64 "] incorrect request received\n", ClientId);

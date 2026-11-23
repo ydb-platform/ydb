@@ -32,6 +32,7 @@ private:
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
     YDB_READONLY_DEF(TLockWriteSeqNum, WriteSeqNum);
+    YDB_READONLY_DEF(ui64, OriginalShard);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -69,6 +70,7 @@ public:
     bool HasWrites() const {
         return TxInfo().HasWrites();
     }
+    bool IsReadOnlyPrepare(const TSysLocks& sysLocks) const;
     bool HasLockedWrites() const {
         return HasWrites() && LockTxId;
     }
@@ -91,6 +93,11 @@ public:
 
     ui64 HasOperations() const {
         return !Operations.empty();
+    }
+    bool HasUnsafeTruncate() const {
+        return AnyOf(Operations, [](const TValidatedWriteTxOperation& operation) {
+            return operation.GetOperationType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE;
+        });
     }
     ui32 KeysCount() const {
         return TxInfo().WritesCount;
@@ -130,6 +137,8 @@ private:
 
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
+    // Locks spared by an unsafe truncate, see TEvWrite::PreserveLockTxIds.
+    YDB_READONLY_DEF(std::vector<ui64>, PreserveLockTxIds);
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
@@ -294,6 +303,10 @@ private:
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
     NWilson::TTraceId WriteRequestTraceId;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
+    // Statistics of the already applied (duplicate) operations of this batch,
+    // taken from the stored results of their original deliveries: the reply must
+    // report the sum of duplicate and newly applied operations' statistics.
+    TVector<NKikimrQueryStats::TTxStats> DuplicateTxStats;
 
     TValidatedWriteTx::TPtr WriteTx;
 
@@ -306,6 +319,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, SchemeShardId);
     YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
+    YDB_ACCESSOR_DEF(absl::flat_hash_set<size_t>, DuplicateWriteOpIdxs);
 
     ui64 PageFaultCount = 0;
 };

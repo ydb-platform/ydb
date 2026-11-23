@@ -127,6 +127,8 @@ private:
                         labels["external_threshold"] = ToString(family.GetStorageConfig().GetExternalThreshold());
                     if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecLZ4)
                         labels["codec"] = "lz4";
+                    else if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD)
+                        labels["codec"] = "zstd";
                     else
                         labels["codec"] = "none";
                     break;

@@ -17,7 +17,7 @@ private:
 
     virtual NJson::TJsonValue DoDebugJson() const override;
 
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual TString DoGetSignalCategoryName() const override;
 
@@ -26,8 +26,8 @@ private:
         : TBase(std::move(input), std::move(output), EProcessorType::Calculation)
         , KernelLogic(kernelLogic)
         , Function(function) {
-        AFL_VERIFY(KernelLogic);
-        AFL_VERIFY(Function);
+        YDB_LOG_VERIFY(KernelLogic);
+        YDB_LOG_VERIFY(Function);
     }
 
     virtual bool IsAggregation() const override {

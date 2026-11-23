@@ -22,7 +22,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
         result, error = self.execute_query(query)
 
         assert error is not None, "Query executed without errors, expecting to have at least one"
-        assert error_msg in extract_issue_messages(error), "Expected to find specific error: {}, have errors: {}".format(error_msg, error)
+        assert error_msg in extract_issue_messages(
+            error
+        ), "Expected to find specific error: {}, have errors: {}".format(error_msg, error)
 
     @link_test_case("#16385")
     def test_settings_validation_solomon_selectors(self):
@@ -52,7 +54,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 selectors = @@{cluster=settings_validation, service=my_service, test_type=setting_validation}@@
             )
         """
-        self.check_query_error(query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format")
+        self.check_query_error(
+            query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format"
+        )
 
         # check `selectors` validation
         query = """
@@ -60,7 +64,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 selectors = @@cluster="settings_validation", service="my_service", test_type="setting_validation"@@
             )
         """
-        self.check_query_error(query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format")
+        self.check_query_error(
+            query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format"
+        )
 
         # check `selectors` validation
         query = """
@@ -68,7 +74,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 selectors = @@series_avg{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@
             )
         """
-        self.check_query_error(query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format")
+        self.check_query_error(
+            query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format"
+        )
 
         # check `labels` validation
         query = """
@@ -77,7 +85,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = "[test_type]"
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `labels` validation
         query = """
@@ -86,7 +96,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = @@"test_type"@@
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `from` setting validation
         query = """
@@ -122,7 +134,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.aggregation` = "ABC"
             )
         """
-        self.check_query_error(query, "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC")
+        self.check_query_error(
+            query,
+            "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC",
+        )
 
         # check `downsampling.fill` setting validation
         query = """
@@ -161,7 +176,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15"
             )
         """
-        self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")
+        self.check_query_error(
+            query,
+            "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified",
+        )
 
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
@@ -210,7 +228,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = "[test_type]"
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `labels` validation
         query = """
@@ -219,7 +239,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = @@"test_type"@@
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `from` setting validation
         query = """
@@ -255,7 +277,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.aggregation` = "ABC"
             )
         """
-        self.check_query_error(query, "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC")
+        self.check_query_error(
+            query,
+            "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC",
+        )
 
         # check `downsampling.fill` setting validation
         query = """
@@ -294,7 +319,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15"
             )
         """
-        self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")
+        self.check_query_error(
+            query,
+            "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified",
+        )
 
         drop_source_query = """
             DROP EXTERNAL DATA SOURCE local_solomon;
@@ -332,7 +360,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 selectors = @@{test_type=setting_validation}@@
             )
         """
-        self.check_query_error(query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format")
+        self.check_query_error(
+            query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format"
+        )
 
         # check `selectors` validation
         query = """
@@ -340,7 +370,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 selectors = @@test_type="setting_validation"@@
             )
         """
-        self.check_query_error(query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format")
+        self.check_query_error(
+            query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format"
+        )
 
         # check `selectors` validation
         query = """
@@ -348,7 +380,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 selectors = @@series_avg{test_type="setting_validation"}@@
             )
         """
-        self.check_query_error(query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format")
+        self.check_query_error(
+            query, "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format"
+        )
 
         # check `labels` validation
         query = """
@@ -357,7 +391,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = "[test_type]"
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `labels` validation
         query = """
@@ -366,7 +402,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = @@"test_type"@@
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `from` setting validation
         query = """
@@ -402,7 +440,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.aggregation` = "ABC"
             )
         """
-        self.check_query_error(query, "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC")
+        self.check_query_error(
+            query,
+            "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC",
+        )
 
         # check `downsampling.fill` setting validation
         query = """
@@ -441,7 +482,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15"
             )
         """
-        self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")
+        self.check_query_error(
+            query,
+            "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified",
+        )
 
         drop_source_query = """
             DROP EXTERNAL DATA SOURCE local_monitoring;
@@ -480,7 +524,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = "[test_type]"
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `labels` validation
         query = """
@@ -489,7 +535,9 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 labels = @@"test_type"@@
             )
         """
-        self.check_query_error(query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format")
+        self.check_query_error(
+            query, "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format"
+        )
 
         # check `from` setting validation
         query = """
@@ -525,7 +573,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.aggregation` = "ABC"
             )
         """
-        self.check_query_error(query, "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC")
+        self.check_query_error(
+            query,
+            "downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC",
+        )
 
         # check `downsampling.fill` setting validation
         query = """
@@ -564,7 +615,10 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15"
             )
         """
-        self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")
+        self.check_query_error(
+            query,
+            "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified",
+        )
 
         query = """
             SELECT * FROM local_monitoring.my_service WITH (

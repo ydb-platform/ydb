@@ -87,7 +87,7 @@ public:
             return;
         }
         with_lock(BufferLock_) {
-            Buffer_.Destroy();
+            Buffer_.reset();
         }
     }
 

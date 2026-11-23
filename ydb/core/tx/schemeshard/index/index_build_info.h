@@ -1,6 +1,10 @@
 #pragma once
 
+#include "index_utils.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -123,6 +127,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
         FulltextIndexPrefixBorders = 204,
+
+        RebuildReplacing = 300,
     };
 
     struct TColumnBuildInfo {
@@ -206,6 +212,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     bool IsRebuild = false;
 
     TString IndexName;
+    // Empty for builds started before online rebuilds were supported.
+    TString RebuildIndexName;
+
+    const TString& GetBuildIndexName() const {
+        return RebuildIndexName.empty() ? IndexName : RebuildIndexName;
+    }
+
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
     TVector<TString> FillIndexColumns;
@@ -218,9 +231,55 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
+    size_t IndexPartitions = 0;
+    size_t IndexHistogramFields = 0;
+    std::shared_ptr<TEqHeightHistogram> IndexHistogram;
+
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
+
+    const Ydb::Table::KMeansTreeSettings* TryGetVectorSettings() const {
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            if (const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(&SpecializedIndexDescription)) {
+                return &description->GetSettings();
+            }
+        } else if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+            if (const auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&SpecializedIndexDescription)) {
+                return &description->GetSettings();
+            }
+        }
+        return nullptr;
+    }
+
+    void RestoreSpecializedIndexDescription(const NKikimrSchemeOp::TIndexCreationConfig& config);
+
+    const Ydb::Table::KMeansTreeSettings& GetVectorSettings() const {
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription).GetSettings();
+        }
+        return std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).GetSettings();
+    }
+
+    Ydb::Table::KMeansTreeSettings& MutableVectorSettings() {
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return *std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription).MutableSettings();
+        }
+        return *std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).MutableSettings();
+    }
+
+    Ydb::Table::VectorIndexSettings GetKMeansVectorSettings() const {
+        auto settings = GetVectorSettings().settings();
+        if (IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            // Routing uses KMeans without changing the persisted HNSW settings.
+            settings.clear_m();
+            settings.clear_ef_construction();
+            settings.clear_min_rows();
+            settings.clear_delta_rows();
+        }
+        return settings;
+    }
 
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
@@ -235,13 +294,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         enum EState : ui32 {
             Sample = 0,
-            Reshuffle,
+            ReshuffleLegacy, // deprecated, should not be used in new code
             MultiLocal,
             Recompute,
             Filter,
             FilterBorders,
             RebuildDrop,    // dropping old impl tables for rebuild
             RebuildCreate,  // creating new impl tables for rebuild
+            Reshuffle,
+            UploadClusters, // new version of Sample+Upload which runs after Reshuffle
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -578,6 +639,7 @@ public:
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
+        indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
         indexInfo->CancelRequested =
@@ -702,9 +764,9 @@ public:
         indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
         indexInfo->Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsProcessed>(0));
 
-        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
+        // Restore the operation details, including absent or mismatched descriptions.
+        NKikimrSchemeOp::TIndexCreationConfig creationConfig;
         if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
-            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
             Y_ENSURE(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
 
             auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
@@ -712,42 +774,13 @@ public:
             for (auto& description : descriptions) {
                 indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
             }
-
-            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
-                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
-                    auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
-                    TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError), createError);
-                    indexInfo->KMeans.K = desc.settings().clusters();
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
-                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
-                    indexInfo->KMeans.Adaptive = desc.settings().adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
-                    indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-                    indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
-                        ? desc.settings().overlap_clusters()
-                        : NTableIndex::NKMeans::DefaultOverlapClusters;
-                    indexInfo->KMeans.OverlapRatio = desc.settings().has_overlap_ratio()
-                        ? desc.settings().overlap_ratio()
-                        : NTableIndex::NKMeans::DefaultOverlapRatio;
-                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    indexInfo->SpecializedIndexDescription = std::move(desc);
-                    break;
-                }
-                case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
-                    auto& desc = *creationConfig.MutableFulltextIndexDescription();
-                    indexInfo->SpecializedIndexDescription = std::move(desc);
-                    break;
-                }
-                case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
-                case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
-                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
-                    /* do nothing */
-                    break;
-                }
         }
+        indexInfo->RestoreSpecializedIndexDescription(creationConfig);
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
+        YDB_LOG_DEBUG("Restored index build",
+            {"buildId", indexInfo->Id},
+            {"indexInfo", *indexInfo},
+        );
     }
 
     template<class TRow>
@@ -764,8 +797,10 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        YDB_LOG_DEBUG("AddShardStatus",
+            {"buildId", Id},
+            {"shardIdx", shardIdx},
+        );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)
@@ -811,7 +846,7 @@ public:
         return CancelRequested;
     }
 
-    TString InvalidBuildKind() {
+    TString InvalidBuildKind() const {
         return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
             << " for index type " << static_cast<int>(IndexType);
     }
@@ -822,6 +857,11 @@ public:
 
     bool IsBuildSecondaryUniqueIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
+    }
+
+    bool IsBuildSimpleIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex ||
+            BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
     bool IsBuildPrefixedVectorIndex() const {
@@ -847,10 +887,7 @@ public:
     }
 
     bool IsBuildFulltextCompact() const {
-        return BuildKind == EBuildKind::BuildFulltext && (
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactFulltextIndex(IndexType);
     }
 
     // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the
@@ -965,7 +1002,10 @@ public:
         if (IsBuildVectorIndex()) {
             const auto inProgress = InProgressShards.size();
             const auto toUpload = ToUploadShards.size();
-            Y_ENSURE(KMeans.Level != 0 && KMeans.Levels != 0);
+            // A broken restored description may leave the tree shape unknown.
+            if (!KMeans.Level || !KMeans.Levels) {
+                return 0.f;
+            }
             if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
                 && toUpload == 0 && inProgress == 0) {
                 return 100.f;
@@ -1006,6 +1046,9 @@ public:
         return 0.f;
     }
 
+    std::vector<ui32> GetSecondaryIndexKeyTags(TSchemeShard* ss) const;
+    void FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const;
+    bool HasPartitionSettings() const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 
@@ -1143,3 +1186,5 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
 
     o << "}";
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

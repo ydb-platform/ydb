@@ -12,14 +12,15 @@ PEERDIR(
     library/cpp/http/server
     library/cpp/threading/future
     library/cpp/deprecated/atomic
+    library/cpp/testing/common
     yql/essentials/utils/test_http_server
     yql/essentials/utils/fetch/proto
 )
 
 BUILD_ONLY_IF(OS_LINUX)
 
-DATA(
-    sbr://12747367284  # pv utility for bandwidth limiting in strip operations
+DEPENDS(
+    yql/essentials/core/file_storage/external_utils
 )
 
 END()

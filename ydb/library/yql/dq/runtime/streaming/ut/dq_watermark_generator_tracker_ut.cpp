@@ -9,30 +9,23 @@ namespace NYql::NDq {
 
 namespace {
 
-    TPartitionKey Partition(ui64 partitionId) {
-        return TPartitionKey{
-            .Cluster = "test",
-            .PartitionId = partitionId,
-        };
-    }
+TPartitionKey Partition(ui64 partitionId) {
+    return TPartitionKey{
+        .Cluster = "test",
+        .PartitionId = partitionId,
+    };
+}
 
-    TDqWatermarkGeneratorTracker InitTracker(
-        TDqWatermarkGeneratorTracker::TNotifyHandler notifyHandler = {}
-    ) {
-        auto result = TDqWatermarkGeneratorTracker("Test ");
+TDqWatermarkGeneratorTracker InitTracker(TDqWatermarkGeneratorTracker::TNotifyHandler notifyHandler = {}) {
+    auto result = TDqWatermarkGeneratorTracker("Test ");
 
-        result.SetSettings(
-            TDuration::Seconds(5),
-            true,
-            TDuration::Seconds(1),
-            TDuration::Seconds(10)
-        );
-        result.SetNotifyHandler(std::move(notifyHandler));
+    result.SetSettings(TDuration::Seconds(5), true, TDuration::Seconds(1), TDuration::Seconds(10));
+    result.SetNotifyHandler(std::move(notifyHandler));
 
-        return result;
-    }
+    return result;
+}
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTrackerTest) {
     Y_UNIT_TEST(HandlesIdlenessWithoutNotifyHandler) {
@@ -41,10 +34,7 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTrackerTest) {
         UNIT_ASSERT(tracker.RegisterPartition(Partition(0), TInstant::Seconds(10)));
         UNIT_ASSERT(tracker.RegisterPartition(Partition(1), TInstant::Seconds(10)));
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            Nothing(),
-            tracker.NotifyNewPartitionTime(Partition(0), TInstant::Seconds(7), TInstant::MilliSeconds(20'500))
-        );
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(Partition(0), TInstant::Seconds(7), TInstant::MilliSeconds(20'500)));
 
         UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(19'999)));
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
@@ -58,20 +48,14 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTrackerTest) {
 
         UNIT_ASSERT(tracker.RegisterPartition(Partition(0), TInstant::Seconds(10)));
         UNIT_ASSERT(tracker.RegisterPartition(Partition(1), TInstant::Seconds(10)));
-        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>{TInstant::Seconds(30)}, scheduledChecks);
+        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>{ TInstant::Seconds(30) }, scheduledChecks);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            Nothing(),
-            tracker.NotifyNewPartitionTime(Partition(0), TInstant::Seconds(7), TInstant::MilliSeconds(20'500))
-        );
-        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>{TInstant::Seconds(30)}, scheduledChecks);
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(Partition(0), TInstant::Seconds(7), TInstant::MilliSeconds(20'500)));
+        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>{ TInstant::Seconds(30) }, scheduledChecks);
 
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
-        UNIT_ASSERT_VALUES_EQUAL(
-            std::vector<TInstant>({TInstant::Seconds(30), TInstant::Seconds(40)}),
-            scheduledChecks
-        );
+        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>({ TInstant::Seconds(30), TInstant::Seconds(40) }), scheduledChecks);
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

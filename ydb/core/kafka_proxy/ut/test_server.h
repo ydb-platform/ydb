@@ -49,6 +49,7 @@ struct TTestServerSettings {
     TString LoginTokenExpireTime;
     TString AuthRefreshTime;
     ui32 ACLRetryTimeoutSec = 0;
+    bool EnableMtls = false;
 };
 
 template <class TKikimr, bool secure>
@@ -68,7 +69,6 @@ public:
     THolder<TTempFileHandle> MeteringFile;
 
     TTicketParserAccessServiceMock accessServiceMock;
-    TTicketParserAccessServiceMockV2 accessServiceMockV2;
     std::unique_ptr<grpc::Server> AccessServer;
 };
 

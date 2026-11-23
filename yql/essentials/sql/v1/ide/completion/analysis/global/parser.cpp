@@ -30,7 +30,12 @@ public:
         TStringBuf prefix = TStringBuf(input.Text).Head(input.CursorPosition);
         output.CursorPosition = GetNumberOfUTF8Chars(prefix);
 
-        NSQLPureAST::IParseTree::TPtr tree = Parser_->Parse(input.Text);
+        NSQLPureAST::IParseTree::TPtr tree;
+        if (output.RecoveredText || !input.ParseTree) {
+            tree = Parser_->Parse(input.Text);
+        } else {
+            tree = input.ParseTree;
+        }
         output.ParseTree = std::move(tree);
 
         return output;
@@ -48,8 +53,8 @@ private:
 
 } // namespace
 
-IParser::TPtr MakeParser(bool isAnsiLexer) {
-    return MakeHolder<TParser>(NSQLPureAST::MakeParser(isAnsiLexer));
+IParser::TPtr MakeParser() {
+    return MakeHolder<TParser>(NSQLPureAST::MakeParser());
 }
 
 } // namespace NSQLComplete

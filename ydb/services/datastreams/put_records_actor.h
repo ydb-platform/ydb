@@ -280,6 +280,10 @@ namespace NKikimr::NDataStreams::V1 {
 
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Bootstrap(const NActors::TActorContext& ctx) {
+        if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+            return this->ReplyWithError(Ydb::StatusIds::PRECONDITION_FAILED,
+                Ydb::PersQueue::ErrorCode::PRECONDITION_FAILED, "Client data writes are disabled");
+        }
         TString error = CheckRequestIsValid(static_cast<TDerived*>(this)->GetPutRecordsRequest());
 
         if (!error.empty()) {

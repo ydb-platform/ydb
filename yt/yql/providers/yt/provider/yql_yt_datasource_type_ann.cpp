@@ -97,6 +97,10 @@ public:
             | EYtSettingType::WithQB | EYtSettingType::View | EYtSettingType::UserSchema
             | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3;
 
+        if (State_->Types->EngineType == EEngineType::Ytflow) {
+            accepted |= EYtSettingType::Consumer;
+        }
+
         if (!TYtTableInfo::Validate(*input, accepted, ctx)) {
             return TStatus::Error;
         }
@@ -400,6 +404,7 @@ public:
             | EYtSettingType::UserColumns
             | EYtSettingType::StatColumns
             | EYtSettingType::SysColumns;
+
         if (!ValidateSettings(*input.Ref().Child(TYtSection::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }

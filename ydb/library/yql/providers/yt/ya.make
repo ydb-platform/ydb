@@ -1,4 +1,6 @@
 RECURSE(
-    actors
-    dq_task_preprocessor
+    async_io
+    expr_nodes
+    gateway
+    provider
 )

@@ -31,6 +31,49 @@ namespace NYT::NNet {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+void ConfigureSocket(SOCKET socket, TErrorCode closeOnExecErrorCode = NRpc::EErrorCode::TransportError)
+{
+#if defined(_unix_) && !defined(_linux_)
+    {
+        int flags = fcntl(socket, F_GETFL);
+        int result = fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+        if (result != 0) {
+            auto lastError = LastSystemError();
+            SafeClose(socket, false);
+            THROW_ERROR_EXCEPTION(
+                NRpc::EErrorCode::TransportError,
+                "Failed to enable nonblocking mode")
+                .With(TError::FromSystem(lastError));
+        }
+    }
+
+    {
+        int flags = fcntl(socket, F_GETFD);
+        int result = fcntl(socket, F_SETFD, flags | FD_CLOEXEC);
+        if (result != 0) {
+            auto lastError = LastSystemError();
+            SafeClose(socket, false);
+            THROW_ERROR_EXCEPTION(
+                closeOnExecErrorCode,
+                "Failed to enable close-on-exec mode")
+                .With(TError::FromSystem(lastError));
+        }
+    }
+#elif defined(_win_)
+    Y_UNUSED(closeOnExecErrorCode);
+    SetNonBlock(socket);
+#else
+    Y_UNUSED(socket);
+    Y_UNUSED(closeOnExecErrorCode);
+#endif
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 void SetReuseAddrFlag(SOCKET socket)
 {
     int flag = 1;
@@ -75,37 +118,7 @@ SOCKET CreateTcpServerSocket()
             .With(TError::FromSystem(lastError));
     }
 
-#ifdef _win_
-    SetNonBlock(serverSocket);
-#endif
-
-#if defined _unix_ && !defined _linux_
-    {
-        int flags = fcntl(serverSocket, F_GETFL);
-        int result = fcntl(serverSocket, F_SETFL, flags | O_NONBLOCK);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(serverSocket, false);
-            THROW_ERROR_EXCEPTION(
-                NRpc::EErrorCode::TransportError,
-                "Failed to enable nonblocking mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-
-    {
-        int flags = fcntl(serverSocket, F_GETFD);
-        int result = fcntl(serverSocket, F_SETFD, flags | FD_CLOEXEC);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(serverSocket, false);
-            THROW_ERROR_EXCEPTION(
-                NRpc::EErrorCode::TransportError,
-                "Failed to enable close-on-exec mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-#endif
+    ConfigureSocket(serverSocket);
 
     {
         int flag = 0;
@@ -190,33 +203,7 @@ SOCKET CreateTcpClientSocket(int family)
         }
     }
 
-#if defined _unix_ && !defined _linux_
-    {
-        int flags = fcntl(clientSocket, F_GETFL);
-        int result = fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(clientSocket, false);
-            THROW_ERROR_EXCEPTION(
-                NRpc::EErrorCode::TransportError,
-                "Failed to enable nonblocking mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-
-    {
-        int flags = fcntl(clientSocket, F_GETFD);
-        int result = fcntl(clientSocket, F_SETFD, flags | FD_CLOEXEC);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(clientSocket, false);
-            THROW_ERROR_EXCEPTION("Failed to enable close-on-exec mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-#elif defined _win_
-    SetNonBlock(clientSocket);
-#endif
+    ConfigureSocket(clientSocket, NYT::EErrorCode::Generic);
 
     return clientSocket;
 }
@@ -240,33 +227,7 @@ SOCKET CreateUnixClientSocket()
             .With(TError::FromSystem());
     }
 
-#if defined _unix_ && !defined _linux_
-    {
-        int flags = fcntl(clientSocket, F_GETFL);
-        int result = fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(clientSocket, false);
-            THROW_ERROR_EXCEPTION(
-                NRpc::EErrorCode::TransportError,
-                "Failed to enable nonblocking mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-
-    {
-        int flags = fcntl(clientSocket, F_GETFD);
-        int result = fcntl(clientSocket, F_SETFD, flags | FD_CLOEXEC);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(clientSocket, false);
-            THROW_ERROR_EXCEPTION("Failed to enable close-on-exec mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-#elif defined _win_
-    SetNonBlock(clientSocket);
-#endif
+    ConfigureSocket(clientSocket, NYT::EErrorCode::Generic);
 
     return clientSocket;
 }
@@ -369,35 +330,7 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
         return clientSocket;
     }
 
-#if defined _unix_ && !defined _linux_
-    {
-        int flags = fcntl(clientSocket, F_GETFL);
-        int result = fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(clientSocket, false);
-            THROW_ERROR_EXCEPTION(
-                NRpc::EErrorCode::TransportError,
-                "Failed to enable nonblocking mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-
-    {
-        int flags = fcntl(clientSocket, F_GETFD);
-        int result = fcntl(clientSocket, F_SETFD, flags | FD_CLOEXEC);
-        if (result != 0) {
-            auto lastError = LastSystemError();
-            SafeClose(clientSocket, false);
-            THROW_ERROR_EXCEPTION(
-                NRpc::EErrorCode::TransportError,
-                "Failed to enable close-on-exec mode")
-                .With(TError::FromSystem(lastError));
-        }
-    }
-#elif defined _win_
-    SetNonBlock(clientSocket);
-#endif
+    ConfigureSocket(clientSocket);
 
     return clientSocket;
 }

@@ -21,7 +21,7 @@ namespace destination
 
 /**
   Destination address - domain name if available without reverse DNS lookup; otherwise, IP address
-  or Unix domain socket name. <p> When observed from the source side, and when communicating through
+  or UNIX domain socket name. <p> When observed from the source side, and when communicating through
   an intermediary, @code destination.address @endcode SHOULD represent the destination address
   behind any intermediaries, for example proxies, if it's available.
  */

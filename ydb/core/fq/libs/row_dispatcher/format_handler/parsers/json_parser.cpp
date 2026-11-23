@@ -1,19 +1,17 @@
 #include "json_parser.h"
-
 #include "parser_base.h"
-
-#include <contrib/libs/simdjson/include/simdjson.h>
-
-#include <library/cpp/containers/absl/flat_hash_map.h>
-#include <util/string/join.h>
 
 #include <ydb/library/actors/core/log.h>
 
+#include <contrib/libs/simdjson/include/simdjson.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <util/generic/scope.h>
+#include <util/string/join.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <sstream>
 
@@ -38,16 +36,33 @@ static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type
     return std::move(ss).str();
 }
 
-#define CHECK_JSON_ERROR(value)                 \
-    const simdjson::error_code error = value;   \
-    if (Y_UNLIKELY(error))                      \
+#define CHECK_JSON_ERROR(value)               \
+    const simdjson::error_code error = value; \
+    if (Y_UNLIKELY(error))
 
-struct TJsonParserBuffer {
+template <typename T>
+using TParserVector = TVector<T, NKikimr::NMiniKQL::TMKQLAllocator<T>>;
+using TParserString = std::basic_string<char, std::char_traits<char>, NKikimr::NMiniKQL::TMKQLAllocator<char>>;
+
+struct TJsonParserBuffer: public TNonCopyable {
+    explicit TJsonParserBuffer(NKikimr::NMiniKQL::TScopedAlloc& alloc)
+        : Alloc(alloc)
+    {
+    }
+
+    ~TJsonParserBuffer() {
+        with_lock(Alloc) {
+            decltype(Values)().swap(Values);
+            decltype(MessageOffsets)().swap(MessageOffsets);
+            decltype(Offsets)().swap(Offsets);
+        }
+    }
+
     ui16 NumberValues = 0;
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
-    TVector<ui64> Offsets = {};             // Offsets in topics (seqno).
-    TVector<ui32> MessageOffsets = {};      // Message positions in Values.
+    TParserVector<ui64> Offsets = {};   // Offsets in topics (seqno).
+    TParserVector<ui32> MessageOffsets = {};   // Message boundaries in Values; Finish() appends the final boundary.
 
     bool IsReady() const {
         return !Finished && NumberValues > 0;
@@ -59,14 +74,14 @@ struct TJsonParserBuffer {
 
     void Reserve(size_t size, size_t numberValues) {
         Values.reserve(size + simdjson::SIMDJSON_PADDING);
-        MessageOffsets.reserve(numberValues);
+        MessageOffsets.reserve(numberValues + 1);
         Offsets.reserve(numberValues);
     }
 
-    void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+    void AddRecord(const TMessageStreamRecord& record) {
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
 
-        const auto offset = message.GetOffset();
+        const auto offset = record.Id.Offset;
         if (Y_UNLIKELY(Offsets && Offsets.back() > offset)) {
             YDB_LOG_WARN("Got message with offset which is less than previous offset",
                 {"logPrefix", LogPrefix},
@@ -74,21 +89,32 @@ struct TJsonParserBuffer {
                 {"offsetsBack", Offsets.back()});
         }
 
-        NumberValues++;
-        MessageOffsets.emplace_back(Values.size());
-        Values += message.GetData();
-        Offsets.emplace_back(offset);
+        if (!record.Data) {
+            ythrow TMessageStreamException(EMessageStreamStatus::Unsupported) << "PQ parser does not support null message payloads";
+        }
+        const auto& data = *record.Data;
+        try {
+            MessageOffsets.emplace_back(Values.size());
+            Offsets.emplace_back(offset);
+            Values.append(data.data(), data.size());
+        } catch (...) {
+            // Preserve already buffered messages if an allocation fails.
+            MessageOffsets.resize(NumberValues);
+            Offsets.resize(NumberValues);
+            throw;
+        }
+        ++NumberValues;
     }
 
     std::pair<const char*, size_t> Finish() {
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
+        MessageOffsets.emplace_back(Values.size());
         Values.resize(Values.size() + simdjson::SIMDJSON_PADDING, ' ');
-        return {Values.data(), Values.size() - simdjson::SIMDJSON_PADDING};
+        return { Values.data(), Values.size() - simdjson::SIMDJSON_PADDING };
     }
 
     void Clear() {
-        Y_ENSURE(Finished, "Cannot clear not finished buffer");
         NumberValues = 0;
         Finished = false;
         CreationStartTime = TInstant::Now();
@@ -98,38 +124,50 @@ struct TJsonParserBuffer {
     }
 
 private:
-    TString Values = {};
+    NKikimr::NMiniKQL::TScopedAlloc& Alloc;
+    TParserString Values = {};
     const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 
-class TColumnParser {
-public:
-    std::string Name;  // Used for column index by std::string_view
-    TString TypeYson;
+class TColumnParser: public TMoveOnly {
+    template <typename K, typename V>
+    using TColumnMap = THashMap<K, V, THash<K>, TEqualTo<K>, NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const K, V>>>;
+    using TMemberNames = TColumnMap<std::string_view, size_t>;
+    using TStructMembers = TColumnMap<const NKikimr::NMiniKQL::TStructType*, TMemberNames>;
 
 public:
-    TStatus InitParser(const TString& name, const TString& typeYson, std::span<ui16> parsedRows, const NKikimr::NMiniKQL::TType* typeMkql, bool skipErrors, NKikimr::NMiniKQL::THolderFactory* holderFactory) {
-        Name = name;
-        TypeYson = typeYson;
+    TParserString Name;
+    TParserString TypeYson;
+
+public:
+    TStatus InitParser(const TString& name, const TString& typeYson, std::span<size_t> parsedRows, const NKikimr::NMiniKQL::TType* typeMkql,
+        bool skipErrors, NKikimr::NMiniKQL::THolderFactory* holderFactory) {
+        ClearParsedRows();
+        StructMembers = TStructMembers();
+        Name = TParserString(name.data(), name.size());
+        TypeYson = TParserString(typeYson.data(), typeYson.size());
         IsOptional = false;
         SkipErrors = skipErrors;
-        Status = TStatus::Success();
-        ParsedRowsCount = 0;
         ParsedRows = parsedRows;
         TypeMkql = nullptr;
         HolderFactory = holderFactory;
-        return Status = ExtractDataSlot(typeMkql);
+        Status = ExtractDataSlot(typeMkql);
+        return Status;
+    }
+
+    void SetParsedRows(std::span<size_t> parsedRows) {
+        ParsedRows = parsedRows;
     }
 
     bool GetIsOptional() {
         return IsOptional;
     }
 
-    ui16 GetParsedRowsCount() const {
+    size_t GetParsedRowsCount() const {
         return ParsedRowsCount;
     }
 
-    const std::span<ui16>& GetParsedRows() const {
+    const std::span<size_t>& GetParsedRows() const {
         return ParsedRows;
     }
 
@@ -137,8 +175,9 @@ public:
         return Status;
     }
 
-    bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isOptional) const {
-        Y_ENSURE(HolderFactory); // should be already verified by ParseNestedType
+    bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isOptional) const {
+        Y_ENSURE(HolderFactory);   // should be already verified by ParseNestedType
         simdjson::builtin::ondemand::json_type cellType;
         CHECK_JSON_ERROR(jsonValue.type().get(cellType)) {
             SetParsingError(error, jsonValue, "determine json value type", status);
@@ -150,7 +189,8 @@ public:
                 resultValue = NYql::NUdf::TUnboxedValuePod();
                 return true;
             }
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
+            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
             return false;
         }
 
@@ -160,7 +200,8 @@ public:
                 Y_ENSURE(maybeDataSlot);
                 auto dataSlot = *maybeDataSlot;
                 if (dataSlot != NYql::NUdf::EDataSlot::Json) {
-                    return ParseDataType(std::move(jsonValue), resultValue, status, dataSlot, isOptional, NYql::NUdf::GetDataTypeInfo(dataSlot).Name);
+                    return ParseDataType(
+                        std::move(jsonValue), resultValue, status, dataSlot, isOptional, NYql::NUdf::GetDataTypeInfo(dataSlot).Name);
                 } else {
                     return ParseJsonType(std::move(jsonValue), resultValue, status);
                 }
@@ -168,12 +209,14 @@ public:
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {
                 Y_ENSURE(!isOptional);
-                return ParseNestedValue(std::move(jsonValue), resultValue, status, AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true);
+                return ParseNestedValue(
+                    std::move(jsonValue), resultValue, status, AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true);
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
                 if (cellType != simdjson::builtin::ondemand::json_type::array) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (List), expected array, but got " << JsonTypeToString(cellType));
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                        TStringBuilder() << "Failed to parse nested json value (List), expected array, but got " << JsonTypeToString(cellType));
                     return false;
                 }
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
@@ -197,12 +240,13 @@ public:
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
                 if (cellType != simdjson::builtin::ondemand::json_type::array) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Tuple), expected array, but got " << JsonTypeToString(cellType));
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                        TStringBuilder() << "Failed to parse nested json value (Tuple), expected array, but got " << JsonTypeToString(cellType));
                     return false;
                 }
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
-                NYql::NUdf::TUnboxedValue *resultValues;
+                NYql::NUdf::TUnboxedValue* resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
                 size_t idx = 0;
                 for (auto elt : jsonValue.get_array()) {
@@ -222,7 +266,9 @@ public:
                 for (; idx != elementsCount; ++idx) {
                     // tail must be optional
                     if (tupleType->GetElementType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Tuple), short json array at index " << idx << ", expected non optional type " << GetTypeName(tupleType->GetElementType(idx)));
+                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                            TStringBuilder() << "Failed to parse nested json value (Tuple), short json array at index " << idx
+                                             << ", expected non optional type " << GetTypeName(tupleType->GetElementType(idx)));
                         return false;
                     }
                 }
@@ -231,7 +277,9 @@ public:
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
                 if (cellType != simdjson::builtin::ondemand::json_type::object) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected object, but got " << JsonTypeToString(cellType));
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                        TStringBuilder() << "Failed to parse nested json value (Struct), expected object, but got "
+                                         << JsonTypeToString(cellType));
                     return false;
                 }
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
@@ -242,7 +290,7 @@ public:
                 const auto& memberNames = it->second;
                 Y_ENSURE(memberNames.size() == membersCount);
 
-                NYql::NUdf::TUnboxedValue *resultValues;
+                NYql::NUdf::TUnboxedValue* resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
                 for (auto elt : jsonValue.get_object()) {
                     std::string_view name;
@@ -271,7 +319,9 @@ public:
 
                 for (ui32 idx = 0; idx != membersCount; ++idx) {
                     if (!resultValues[idx] && structType->GetMemberType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field " << structType->GetMemberName(idx));
+                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                            TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field "
+                                             << structType->GetMemberName(idx));
                         return false;
                     }
                 }
@@ -280,7 +330,8 @@ public:
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
                 if (cellType != simdjson::builtin::ondemand::json_type::object) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                        TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
                 auto jsonObject = jsonValue.get_object();
@@ -297,9 +348,9 @@ public:
                 }
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();
-                Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data); // should be already verified, not user-data-error
+                Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data);   // should be already verified, not user-data-error
                 auto keyDataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, keyType)->GetDataSlot();
-                Y_ENSURE(keyDataSlot); // should be already verified, not user-data-error
+                Y_ENSURE(keyDataSlot);   // should be already verified, not user-data-error
                 auto payloadType = dictType->GetPayloadType();
                 NKikimr::NMiniKQL::TKeyTypes keyTypes;
                 bool isTuple;
@@ -308,29 +359,27 @@ public:
                 GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
                 Y_ENSURE(!(isTuple || encoded || useIHash));
                 status = TStatus::Success();
-                resultValue = HolderFactory->CreateDirectHashedDictHolder(
-                    [&, this](auto& map) {
-                        for (auto elt : jsonObject) {
-                            std::string_view name;
-                            {
-                                CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
-                                    SetParsingError(error, jsonValue, "parse as object", status);
-                                    return;
-                                }
-                            }
-                            simdjson::builtin::ondemand::value eltValue;
-                            CHECK_JSON_ERROR(elt.value().get(eltValue)) {
+                resultValue = HolderFactory->CreateDirectHashedDictHolder([&, this](auto& map) {
+                    for (auto elt : jsonObject) {
+                        std::string_view name;
+                        {
+                            CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
                                 SetParsingError(error, jsonValue, "parse as object", status);
                                 return;
                             }
-                            NYql::NUdf::TUnboxedValue payload;
-                            if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false)) {
-                                return;
-                            }
-                            map.emplace(NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name), std::move(payload));
                         }
-                    },
-                    keyTypes, false, true, nullptr, nullptr, nullptr);
+                        simdjson::builtin::ondemand::value eltValue;
+                        CHECK_JSON_ERROR(elt.value().get(eltValue)) {
+                            SetParsingError(error, jsonValue, "parse as object", status);
+                            return;
+                        }
+                        NYql::NUdf::TUnboxedValue payload;
+                        if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false)) {
+                            return;
+                        }
+                        map.emplace(NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name), std::move(payload));
+                    }
+                }, keyTypes, false, true, nullptr, nullptr, nullptr);
                 return status.IsSuccess();
             }
 
@@ -342,7 +391,7 @@ public:
         return true;
     }
 
-    bool ParseJsonValue(ui64 offset, ui16 rowId, simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+    bool ParseJsonValue(ui64 offset, size_t rowId, simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
             return false;
         }
@@ -363,18 +412,22 @@ public:
         resultValue = LockObject(std::move(resultValue));
 
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
-            Status.AddParentIssue(TStringBuilder() << "Failed to parse json string at offset " << offset << ", got parsing error for column '" << Name << "' with type " << TypeYson);
+            Status.AddParentIssue(TStringBuilder() << "Failed to parse json string at offset " << offset << ", got parsing error for column '"
+                                                   << TStringBuf(Name) << "' with type " << TStringBuf(TypeYson));
             return false;
         }
         return success;
     }
 
-    void ValidateNumberValues(ui16 expectedNumberValues, const TVector<ui64>& offsets) {
+    void ValidateNumberValues(size_t expectedNumberValues, std::span<const ui64> offsets) {
         if (Status.IsFail()) {
             return;
         }
         if (Y_UNLIKELY(!IsOptional && ParsedRowsCount < expectedNumberValues)) {
-            Status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found " << expectedNumberValues - ParsedRowsCount << " missing values in non optional column '" << Name << "' with type " << TypeYson << ", buffered offsets: " << JoinSeq(' ' , offsets));
+            Status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                TStringBuilder() << "Failed to parse json messages, found " << expectedNumberValues - ParsedRowsCount
+                                 << " missing values in non optional column '" << TStringBuf(Name) << "' with type " << TStringBuf(TypeYson)
+                                 << ", buffered offsets: " << JoinSeq(' ', offsets));
         }
     }
 
@@ -383,7 +436,7 @@ public:
         Status = TStatus::Success();
     }
 
-    bool ClearParsedRow(ui16 rowId) {
+    bool ClearParsedRow(size_t rowId) {
         if (ParsedRowsCount > 0 && ParsedRows[ParsedRowsCount - 1] == rowId) {
             --ParsedRowsCount;
             return true;
@@ -394,10 +447,10 @@ public:
     bool ValidateObjectRefs(const NYql::NUdf::TUnboxedValue& value) {
         return TypeMkql ? ValidateObjectRefs(TypeMkql, value) : true;
     }
-private:
 
+private:
     bool ValidateObjectRefs(const NKikimr::NMiniKQL::TType* type, const NYql::NUdf::TUnboxedValue& value, i32 expectedRefs = 1) {
-        if (value.RefCount() == -1) { // NULL/POD/Embedded String
+        if (value.RefCount() == -1) {   // NULL/POD/Embedded String
             return true;
         }
         if (type->IsOptional()) {
@@ -443,7 +496,7 @@ private:
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
                 if (value.RefCount() != expectedRefs) {
-                    if (elementsCount == 0) { // special case: shared empty list
+                    if (elementsCount == 0) {   // special case: shared empty list
                         return true;
                     }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
@@ -464,7 +517,7 @@ private:
                     return false;
                 }
                 if (value.RefCount() != expectedRefs) {
-                    if (value.GetListLength() == 0) { // special case: shared empty list
+                    if (value.GetListLength() == 0) {   // special case: shared empty list
                         return true;
                     }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
@@ -474,8 +527,8 @@ private:
                 auto itemType = listType->GetItemType();
                 auto listIterator = value.GetListIterator();
 
-                for(NYql::NUdf::TUnboxedValue itemValue; listIterator.Next(itemValue); ) {
-                    if (!ValidateObjectRefs(itemType, itemValue, 2)) { // two refs expected: one from object, one from itemValue
+                for (NYql::NUdf::TUnboxedValue itemValue; listIterator.Next(itemValue);) {
+                    if (!ValidateObjectRefs(itemType, itemValue, 2)) {   // two refs expected: one from object, one from itemValue
                         Y_DEBUG_ABORT();
                         return false;
                     }
@@ -489,7 +542,7 @@ private:
                     return false;
                 }
                 if (value.RefCount() != expectedRefs) {
-                    if (value.GetDictLength() == 0) { // special case: shared empty dict
+                    if (value.GetDictLength() == 0) {   // special case: shared empty dict
                         return true;
                     }
                     Y_DEBUG_ABORT("%s", (TStringBuilder() << value.RefCount() << "!=" << expectedRefs).c_str());
@@ -500,12 +553,12 @@ private:
                 auto valueType = dictType->GetPayloadType();
                 auto dictIterator = value.GetDictIterator();
 
-                for(NYql::NUdf::TUnboxedValue keyValue, payload; dictIterator.NextPair(keyValue, payload); ) {
-                    if (!ValidateObjectRefs(keyType, keyValue, 2)) { // two refs expected: one from object, one from keyValue
+                for (NYql::NUdf::TUnboxedValue keyValue, payload; dictIterator.NextPair(keyValue, payload);) {
+                    if (!ValidateObjectRefs(keyType, keyValue, 2)) {   // two refs expected: one from object, one from keyValue
                         Y_DEBUG_ABORT();
                         return false;
                     }
-                    if (!ValidateObjectRefs(valueType, payload, 2)) { // two refs expected: one from object, one from payload
+                    if (!ValidateObjectRefs(valueType, payload, 2)) {   // two refs expected: one from object, one from payload
                         Y_DEBUG_ABORT();
                         return false;
                     }
@@ -520,7 +573,8 @@ private:
 
     TStatus ParseNestedType(const NKikimr::NMiniKQL::TType* type, bool isOptional = false) {
         if (!HolderFactory) {
-            return TStatus::Fail(EStatusId::UNSUPPORTED, "Structured Json Parsing is disabled. Please contact your system administrator to enable it");
+            return TStatus::Fail(
+                EStatusId::UNSUPPORTED, "Structured Json Parsing is disabled. Please contact your system administrator to enable it");
         }
         switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
@@ -565,11 +619,14 @@ private:
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();
                 if (keyType->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Data) {
-                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Dict key type: expected either String, or Utf8, but got " << keyType->GetKindAsStr());
+                    return TStatus::Fail(EStatusId::UNSUPPORTED,
+                        TStringBuilder() << "Dict key type: expected either String, or Utf8, but got " << keyType->GetKindAsStr());
                 }
                 auto keyTypeSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, keyType)->GetDataSlot();
-                if (!IsIn({NYql::NUdf::EDataSlot::String, NYql::NUdf::EDataSlot::Utf8}, keyTypeSlot)) {
-                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Dict key type: expected either String, or Utf8, but got " << (keyTypeSlot ? NYql::NUdf::GetDataTypeInfo(*keyTypeSlot).Name : "<empty>"));
+                if (!IsIn({ NYql::NUdf::EDataSlot::String, NYql::NUdf::EDataSlot::Utf8 }, keyTypeSlot)) {
+                    return TStatus::Fail(
+                        EStatusId::UNSUPPORTED, TStringBuilder() << "Dict key type: expected either String, or Utf8, but got "
+                                                                 << (keyTypeSlot ? NYql::NUdf::GetDataTypeInfo(*keyTypeSlot).Name : "<empty>"));
                 }
                 return ParseNestedType(dictType->GetPayloadType());
             }
@@ -632,11 +689,13 @@ private:
         }
     }
 
-    Y_FORCE_INLINE bool ParseDataType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
+    Y_FORCE_INLINE bool ParseDataType(
+        simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
         return ParseDataType(jsonValue, resultValue, status, DataSlot, IsOptional, DataTypeName);
     }
 
-    Y_FORCE_INLINE bool ParseDataType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, NYql::NUdf::EDataSlot dataSlot, bool isOptional, const TStringBuf dataTypeName) const {
+    Y_FORCE_INLINE bool ParseDataType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        NYql::NUdf::EDataSlot dataSlot, bool isOptional, const TStringBuf dataTypeName) const {
         simdjson::builtin::ondemand::json_type cellType;
         CHECK_JSON_ERROR(jsonValue.type().get(cellType)) {
             SetParsingError(error, jsonValue, "determine json value type", status);
@@ -680,11 +739,13 @@ private:
                         break;
 
                     default:
-                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Number value is not expected for data type " << dataTypeName);
+                        status = TStatus::Fail(
+                            EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Number value is not expected for data type " << dataTypeName);
                         break;
                 }
                 if (Y_UNLIKELY(status.IsFail())) {
-                    status.AddParentIssue(TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json number (raw: '" << TruncateString(jsonValue.raw_json_token()) << "')");
+                    status.AddParentIssue(TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json number (raw: '"
+                                                           << TruncateString(jsonValue.raw_json_token()) << "')");
                 }
                 return resultValue.HasValue();
             }
@@ -698,7 +759,9 @@ private:
 
                 resultValue = NKikimr::NMiniKQL::ValueFromString(dataSlot, rawString);
                 if (Y_UNLIKELY(!resultValue)) {
-                    status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json string: '" << TruncateString(rawString) << "'");
+                    status =
+                        TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << dataTypeName
+                                                                               << " from json string: '" << TruncateString(rawString) << "'");
                 }
                 return resultValue.HasValue();
             }
@@ -710,13 +773,16 @@ private:
                     SetParsingError(error, jsonValue, "extract json value", status);
                     return false;
                 }
-                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " << dataTypeName << ", please use Json type for nested values");
+                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                    TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type "
+                                     << dataTypeName << ", please use Json type for nested values");
                 return false;
             }
 
             case simdjson::builtin::ondemand::json_type::boolean: {
                 if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Bool)) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected bool value, expected data type " << dataTypeName);
+                    status = TStatus::Fail(
+                        EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected bool value, expected data type " << dataTypeName);
                     return false;
                 }
 
@@ -732,7 +798,8 @@ private:
 
             case simdjson::builtin::ondemand::json_type::null: {
                 if (Y_UNLIKELY(!isOptional)) {
-                    status =  TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected null value, expected non optional data type " << dataTypeName);
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                        TStringBuilder() << "Found unexpected null value, expected non optional data type " << dataTypeName);
                     return false;
                 }
 
@@ -745,13 +812,15 @@ private:
                     SetParsingError(error, jsonValue, "extract json string", status);
                     return false;
                 }
-                status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json string: '" << TruncateString(rawString) << "'");
+                status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse data type " << dataTypeName
+                                                                                << " from json string: '" << TruncateString(rawString) << "'");
                 return false;
             }
         }
     }
 
-    Y_FORCE_INLINE bool ParseJsonType(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
+    Y_FORCE_INLINE bool ParseJsonType(
+        simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) const {
         std::string_view rawJson;
         CHECK_JSON_ERROR(jsonValue.raw_json().get(rawJson)) {
             SetParsingError(error, jsonValue, "extract json value", status);
@@ -768,15 +837,19 @@ private:
     }
 
     template <typename TResult, typename TJsonNumber>
-    Y_FORCE_INLINE static void ParseJsonNumber(simdjson::simdjson_result<TJsonNumber> jsonNumber, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) {
+    Y_FORCE_INLINE static void ParseJsonNumber(
+        simdjson::simdjson_result<TJsonNumber> jsonNumber, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) {
         CHECK_JSON_ERROR(jsonNumber.error()) {
-            status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to extract json integer number, error: " << simdjson::error_message(error));
+            status = TStatus::Fail(
+                EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to extract json integer number, error: " << simdjson::error_message(error));
             return;
         }
 
         TJsonNumber number = jsonNumber.value();
         if (Y_UNLIKELY(number < std::numeric_limits<TResult>::min() || std::numeric_limits<TResult>::max() < number)) {
-            status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Number is out of range [" << ToString(std::numeric_limits<TResult>::min()) << ", " << ToString(std::numeric_limits<TResult>::max()) << "]");
+            status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder()
+                                                               << "Number is out of range [" << ToString(std::numeric_limits<TResult>::min())
+                                                               << ", " << ToString(std::numeric_limits<TResult>::max()) << "]");
             return;
         }
 
@@ -784,34 +857,45 @@ private:
     }
 
     template <typename TResult>
-    Y_FORCE_INLINE static void ParseJsonDouble(simdjson::simdjson_result<double> jsonNumber, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) {
+    Y_FORCE_INLINE static void ParseJsonDouble(
+        simdjson::simdjson_result<double> jsonNumber, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status) {
         CHECK_JSON_ERROR(jsonNumber.error()) {
-            status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to extract json float number, error: " << simdjson::error_message(error));
+            status = TStatus::Fail(
+                EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to extract json float number, error: " << simdjson::error_message(error));
             return;
         }
 
-        resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(jsonNumber.value()));
+        const double number = jsonNumber.value();
+        if (Y_UNLIKELY(number < std::numeric_limits<TResult>::lowest() || number > std::numeric_limits<TResult>::max())) {
+            status = TStatus::Fail(EStatusId::BAD_REQUEST, "Floating point number is out of range");
+            return;
+        }
+
+        resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(number));
     }
 
-    static void SetParsingError(simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status) {
-        status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to " << description << ", current token: '" << TruncateString(jsonValue.raw_json_token()) << "', error: " << simdjson::error_message(error));
+    static void SetParsingError(
+        simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status) {
+        status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to " << description << ", current token: '"
+                                                                        << TruncateString(jsonValue.raw_json_token())
+                                                                        << "', error: " << simdjson::error_message(error));
     }
 
 private:
     NKikimr::NMiniKQL::THolderFactory* HolderFactory;
-    THashMap<const NKikimr::NMiniKQL::TStructType*, THashMap<std::string_view, size_t>> StructMembers;
-    const NKikimr::NMiniKQL::TType* TypeMkql = nullptr; // for complex types
+    TStructMembers StructMembers;
+    const NKikimr::NMiniKQL::TType* TypeMkql = nullptr;   // for complex types
     NYql::NUdf::EDataSlot DataSlot;
-    TString DataTypeName;
+    TStringBuf DataTypeName;
     bool IsOptional = false;
     bool SkipErrors = false;
 
-    ui16 ParsedRowsCount = 0;
-    std::span<ui16> ParsedRows;
+    size_t ParsedRowsCount = 0;
+    std::span<size_t> ParsedRows;
     TStatus Status = TStatus::Success();
 };
 
-class TJsonParser : public TTopicParserBase {
+class TJsonParser: public TTopicParserBase {
 public:
     using TBase = TTopicParserBase;
     using TPtr = TIntrusivePtr<TJsonParser>;
@@ -821,14 +905,22 @@ public:
 
 public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
-        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters)
+        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters, config.MemoryQuotaManager, "JsonParserAlloc")
         , Config(config)
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
+        , ColumnIndexMemory(config.MemoryQuotaManager, "ColumnIndexMemory", counters.ReadGroupSubgroup)
+        , SimdJsonMemory(config.MemoryQuotaManager, "SimdJsonMemory", counters.ReadGroupSubgroup)
+        , Buffer(Alloc)
         , Counters(counters.CountersSubgroup)
         , PartitionParsingErrors(Counters->GetCounter("ParsingErrors", true))
         , ReadGroupParsingErrors(counters.ReadGroupSubgroup->GetCounter("JsonParsingErrors", true))
     {
+        Parser.threaded = false;
+    }
+
+    TStatus Init() {
+        const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
@@ -841,17 +933,27 @@ public:
             {"latencyLimit", Config.LatencyLimit},
             {"bufferCellCount", Config.BufferCellCount},
             {"maxNumberRows", MaxNumberRows});
-        Parser.threaded = false;
+        return InitColumnsParsers();
+    }
+
+    ~TJsonParser() override {
+        with_lock(Alloc) {
+            // Release capacities here: member destructors run after this guard.
+            decltype(Columns)().swap(Columns);
+            decltype(ParsedValues)().swap(ParsedValues);
+            decltype(ParsedValuesBuffer)().swap(ParsedValuesBuffer);
+            decltype(ParsedRowsIdxBuffer)().swap(ParsedRowsIdxBuffer);
+            decltype(OutputOffsets)().swap(OutputOffsets);
+        }
     }
 
     TStatus InitColumnsParsers() {
+        const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         const auto& consumerColumns = Consumer->GetColumns();
 
-        ParsedRowsIdxBuffer.resize(consumerColumns.size() * MaxNumberRows);
         const std::span parsedRowsIdxSpan(ParsedRowsIdxBuffer);
 
         NonOptionalColumnsCount = 0;
-        Columns.resize(consumerColumns.size());
         for (ui64 i = 0; i < consumerColumns.size(); ++i) {
             const auto& name = consumerColumns[i].Name;
             const auto& typeYson = consumerColumns[i].TypeYson;
@@ -860,7 +962,9 @@ public:
                 return TStatus(typeStatus).AddParentIssue(TStringBuilder() << "Failed to parse column '" << name << "' type " << typeYson);
             }
 
-            if (auto status = Columns[i].InitParser(name, typeYson, parsedRowsIdxSpan.subspan(i * MaxNumberRows, MaxNumberRows), typeStatus.DetachResult(), Config.SkipErrors, Config.StructuredParsing ? HolderFactory.get() : nullptr); status.IsFail()) {
+            if (auto status = Columns[i].InitParser(name, typeYson, parsedRowsIdxSpan.subspan(i * RowCapacity, RowCapacity),
+                    typeStatus.DetachResult(), Config.SkipErrors, Config.StructuredParsing ? HolderFactory.get() : nullptr);
+                status.IsFail()) {
                 return status.AddParentIssue(TStringBuilder() << "Failed to create parser for column '" << name << "' with type " << typeYson);
             }
             if (!Columns[i].GetIsOptional()) {
@@ -872,14 +976,18 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseRecords(const std::vector<TMessageStreamRecord>& records) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
-            {"messages", messages.size()});
+            {"messages", records.size()});
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");
-        for (const auto& message : messages) {
-            Buffer.AddMessage(message);
+        for (auto record = records.begin(); record != records.end();) {
+            with_lock(Alloc) {
+                do {
+                    Buffer.AddRecord(*record++);
+                } while (record != records.end() && Buffer.NumberValues < MaxNumberRows && Buffer.GetSize() < Config.BatchSize);
+            }
             if (Buffer.IsReady() && (Buffer.NumberValues >= MaxNumberRows || Buffer.GetSize() >= Config.BatchSize)) {
                 ParseBuffer();
             }
@@ -930,15 +1038,19 @@ public:
         return InitColumnsParsers();
     }
 
-    const TVector<ui64>& GetOffsets() const override {
-        return !ParsingFailedRowCount ? Buffer.Offsets : OutputOffsets;
+    std::span<const ui64> GetOffsets() const override {
+        return OutputOffsets;
+    }
+
+    std::optional<ui64> GetLastMessageOffset() const override {
+        return Buffer.Offsets.empty() ? std::nullopt : std::optional<ui64>(Buffer.Offsets.back());
     }
 
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         if (auto status = Columns[columnId].GetStatus(); !Config.SkipErrors && status.IsFail()) {
             return status;
         }
-        return ParsedValues[columnId];
+        return ParsedValues[columnId].first(OutputOffsets.size());
     }
 
 protected:
@@ -946,60 +1058,48 @@ protected:
         Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
         Y_ENSURE(Buffer.NumberValues <= MaxNumberRows, "Too many values to parse");
 
+        SimdJsonMemory.Reserve(12 * std::max<size_t>(Buffer.GetSize(), simdjson::ondemand::MINIMAL_BATCH_SIZE) +
+                               64_KB);   // Approximated upper bound for simdjson memory
         auto [values, size] = Buffer.Finish();
-        OutputOffsets.resize(Buffer.Offsets.size());
-        YDB_LOG_TRACE("Do parsing",
-            {"logPrefix", LogPrefix},
-            {"offset", Buffer.Offsets.front()},
-            {"firstValues", values});
+        OutputOffsets.clear();
+        ParsingFailedRowCount = 0;
 
-         if (Config.SkipErrors) {
-            OutputOffsets = Buffer.Offsets;
-        }
-        TParsingState state{.InitialBufferPtr = values, .CurrentBufferPtr = values, .Size = size, .SkipErrors = Config.SkipErrors, .Status = TStatus::Success()};
-
-        while (true) {
-            auto status = ParseRows(state);
-            if (status == EParsingStatus::Finish) {
-                break;
+        if (Buffer.NumberValues == 1 || ParseDocuments(values, size, Buffer.Offsets.front(), true).IsFail()) {
+            ClearParsedData();
+            for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
+                const size_t begin = Buffer.MessageOffsets[messageId];
+                const size_t end = Buffer.MessageOffsets[messageId + 1];
+                if (auto status = ParseDocuments(values + begin, end - begin, Buffer.Offsets[messageId]); status.IsFail()) {
+                    return status;
+                }
             }
-            size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-            if (inputRowId < Buffer.MessageOffsets.size()) {
-                auto nextJsonOffset = Buffer.MessageOffsets[inputRowId];
-                state.CurrentBufferPtr = values + nextJsonOffset;
-                state.Size = size - nextJsonOffset;
-            } else {
-                break;
-            }
-        };
-        if (!state.Status.IsSuccess()) {
-            return state.Status;
-        }
-
-        ParsingFailedRowCount = state.ErrorsCount;
-        if (Y_UNLIKELY(!Config.SkipErrors && state.OutputRowId != Buffer.NumberValues)) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << state.OutputRowId << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
         }
 
         if (ParsingFailedRowCount) {
             PartitionParsingErrors->Add(ParsingFailedRowCount);
             ReadGroupParsingErrors->Add(ParsingFailedRowCount);
-            OutputOffsets.resize(Buffer.Offsets.size() - ParsingFailedRowCount);
         }
         for (auto& column : Columns) {
-            column.ValidateNumberValues(state.OutputRowId, GetOffsets());
+            column.ValidateNumberValues(OutputOffsets.size(), GetOffsets());
         }
         return TStatus::Success();
     }
 
     void ClearBuffer() override {
+        ClearParsedData();
+        Buffer.Clear();
+    }
+
+private:
+    // Unlike ClearBuffer(), preserve the input for a per-message retry.
+    void ClearParsedData() {
         for (size_t i = 0; i < Columns.size(); ++i) {
             auto& parsedColumn = ParsedValues[i];
 
             auto& column = Columns[i];
             const auto parsedRows = column.GetParsedRows();
             const auto parsedRowsCount = column.GetParsedRowsCount();
-            for (ui16 rowId = 0; rowId < parsedRowsCount; ++rowId) {
+            for (size_t rowId = 0; rowId < parsedRowsCount; ++rowId) {
                 Y_DEBUG_ABORT_UNLESS(column.ValidateObjectRefs(parsedColumn[parsedRows[rowId]]));
                 ClearObject(parsedColumn[parsedRows[rowId]]);
             }
@@ -1007,188 +1107,216 @@ protected:
             column.ClearParsedRows();
         }
 
-        Buffer.Clear();
+        OutputOffsets.clear();
         ParsingFailedRowCount = 0;
     }
 
 private:
-    struct TParsingState {
-        const char* InitialBufferPtr;
-        const char* CurrentBufferPtr;
-        size_t Size;
-        bool SkipErrors = false;
-        TStatus Status;
-        ui16 OutputRowId = 0;
-        ui16 ErrorsCount = 0;
-    };
+    // In batch mode every document must fit within its original message.
+    // The isolated mode is also the fallback for malformed batches, preserving
+    // error diagnostics and SkipErrors recovery at topic message boundaries.
+    TStatus ParseDocuments(const char* values, size_t size, ui64 offset, bool batch = false) {
+        auto parsingError = [&](const TString& message) {
+            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder()
+                                                             << "Failed to parse json message for offset " << offset << ", " << message
+                                                             << " Current data batch: " << TruncateString(std::string_view(values, size)));
+        };
+        auto handleError = [&](TStatus status) {
+            if (!batch && Config.SkipErrors) {
+                ++ParsingFailedRowCount;
+                return TStatus::Success();
+            }
+            return status;
+        };
 
-    enum class EParsingStatus {
-        Finish,
-        RepeatFromNextJson,
-    };
-
-private:
-
-    bool TryParseOneJson(TParsingState& state) {
-        size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-
-        if (inputRowId >= Buffer.MessageOffsets.size() - 1) {
-            return false;
+        const auto isJsonWhitespace = [](char c) {
+            return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+        };
+        // Empty and whitespace-only messages are valid inputs with no rows.
+        // They must not increment parsing error counters, even with SkipErrors.
+        if (std::all_of(values, values + size, isJsonWhitespace)) {
+            return TStatus::Success();
         }
 
-        auto currentJsonOffset = Buffer.MessageOffsets[inputRowId];
-        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];
-        ui16 parsedNonOptional = 0;
-        auto len = nextJsonOffset - currentJsonOffset;
-
-        simdjson::padded_string_view view{state.InitialBufferPtr + currentJsonOffset, len, len + simdjson::SIMDJSON_PADDING}; // SIMDJSON_PADDING already was added to Buffer
-        simdjson::ondemand::document document;
-        CHECK_JSON_ERROR(Parser.iterate(view).get(document)) {
-            return false;
-        }
-        for (auto item : document.get_object()) {
-            CHECK_JSON_ERROR(item.error()) {
-                return false;
-            }
-            const auto it = ColumnsIndex.find(item.escaped_key().value());
-            if (it == ColumnsIndex.end()) {
-                continue;
-            }
-
-            const size_t columnId = it->second;
-            auto& column = Columns[columnId];
-            const ui64 offset = Buffer.Offsets[inputRowId];
-            auto& value = ParsedValues[columnId][state.OutputRowId];
-            bool valueWasSet = bool(value);
-            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
-            if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
-                ++parsedNonOptional;
-            }
-            if (!success) {
-                return false;
+        size_t expectedMessages = 0;
+        if (batch) {
+            for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
+                const size_t begin = Buffer.MessageOffsets[messageId];
+                const size_t end = Buffer.MessageOffsets[messageId + 1];
+                if (!std::all_of(values + begin, values + end, isJsonWhitespace)) {
+                    ++expectedMessages;
+                }
             }
         }
-        if (NonOptionalColumnsCount && parsedNonOptional != NonOptionalColumnsCount) {
-            ClearRowBuffer(state.OutputRowId);
-            return false;
-        }
-        return true;
-    }
 
-    EParsingStatus TryToParseOneJson(TParsingState& state, const TStatus& status) {
-        if (!state.SkipErrors) {
-            state.Status = status;
-            return EParsingStatus::Finish;
-        }
-        YDB_LOG_DEBUG("Unbatched parser, skipped outputRowId recovering",
-            {"logPrefix", LogPrefix},
-            {"errorsCount", state.ErrorsCount},
-            {"outputRowId", state.OutputRowId},
-            {"error", status.GetErrorMessage()});
-        ClearRowBuffer(state.OutputRowId);
-        if (TryParseOneJson(state)) {
-            state.OutputRowId++;
-            return EParsingStatus::RepeatFromNextJson;
-        }
-        ClearRowBuffer(state.OutputRowId);
-        ++state.ErrorsCount;
-        return EParsingStatus::RepeatFromNextJson;
-    };
-
-    EParsingStatus ParseRows(TParsingState& state) {
-        YDB_LOG_TRACE("Init parser, skipped outputRowId size",
-            {"logPrefix", LogPrefix},
-            {"errorsCount", state.ErrorsCount},
-            {"outputRowId", state.OutputRowId},
-            {"stateSize", state.Size});
-
-        /*
-           Batch size must be at least maximum of document size.
-           Since we are merging several messages before feeding them to
-           `simdjson::iterate_many`, we must specify Buffer.GetSize() as batch
-           size.
-           Suppose we batched two rows:
-           '{"a":"bbbbbbbbbbb"'
-           ',"c":"d"}{"e":"f"}'
-           (both 18 byte size) into buffer
-           '{"a":"bbbbbbbbbbb","c":"d"}{"e":"f"}'
-           Then, after parsing maximum document size will be 27 bytes.
-        */
         simdjson::ondemand::document_stream documents;
-        CHECK_JSON_ERROR(Parser.iterate_many(state.CurrentBufferPtr, state.Size, state.Size).get(documents)) {
-            auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-            return TryToParseOneJson(state, status);
+        CHECK_JSON_ERROR(Parser.iterate_many(values, size, std::max(size, simdjson::ondemand::MINIMAL_BATCH_SIZE)).get(documents)) {
+            return handleError(parsingError(TStringBuilder() << "json documents was corrupted: " << simdjson::error_message(error)));
         }
 
-        for (auto document : documents) {
-            size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-            if (Y_UNLIKELY(inputRowId >= Buffer.NumberValues)) {
-                auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << inputRowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                if (!state.SkipErrors) {
-                    state.Status = status;
-                }
-                return EParsingStatus::Finish;
-            }
-
-            if (state.SkipErrors) {
-                OutputOffsets[state.OutputRowId] = Buffer.Offsets[inputRowId];
-            }
-
-            const ui64 offset = Buffer.Offsets[inputRowId];
+        size_t numberDocuments = 0;
+        size_t messageId = 0;
+        size_t numberMessages = 0;
+        size_t lastMessageId = Buffer.NumberValues;
+        for (auto it = documents.begin(); it != documents.end(); ++it) {
+            auto document = *it;
             CHECK_JSON_ERROR(document.error()) {
-                auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                return TryToParseOneJson(state, status);
+                return handleError(parsingError(TStringBuilder() << "json document was corrupted: " << simdjson::error_message(error)));
             }
-
-            ui16 parsedNonOptional = 0;
-            for (auto item : document.get_object()) {
-                CHECK_JSON_ERROR(item.error()) {
-                    auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                    return TryToParseOneJson(state, status);
-                }
-
-                const auto it = ColumnsIndex.find(item.escaped_key().value());
-                if (it == ColumnsIndex.end()) {
-                    continue;
-                }
-
-                const size_t columnId = it->second;
-                auto& column = Columns[columnId];
-                auto& value = ParsedValues[columnId][state.OutputRowId];
-                bool valueWasSet = bool(value);
-                bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
-                if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
-                    ++parsedNonOptional;
-                }
-                if (Config.SkipErrors && !success) {
-                    auto status = column.GetStatus();
-                    return TryToParseOneJson(state, status);
+            simdjson::ondemand::json_type type;
+            {
+                CHECK_JSON_ERROR(document.type().get(type)) {
+                    return handleError(parsingError(simdjson::error_message(error)));
                 }
             }
-
-            if (Config.SkipErrors && NonOptionalColumnsCount && parsedNonOptional != NonOptionalColumnsCount) {
-                ClearRowBuffer(state.OutputRowId);
-                ++state.ErrorsCount;
-                continue;
+            if (batch && type != simdjson::ondemand::json_type::object && type != simdjson::ondemand::json_type::array) {
+                return parsingError("expected json object or array");
             }
-            state.OutputRowId++;
-        }
+            if (batch) {
+                const char* location = nullptr;
+                {
+                    CHECK_JSON_ERROR(document.current_location().get(location)) {
+                        return parsingError(simdjson::error_message(error));
+                    }
+                }
+                const size_t start = location - values;
+                while (messageId + 1 < Buffer.NumberValues && start >= Buffer.MessageOffsets[messageId + 1]) {
+                    ++messageId;
+                }
+                offset = Buffer.Offsets[messageId];
+                const size_t end = Buffer.MessageOffsets[messageId + 1];
+                // source() includes the closing brace/bracket; inspect it before
+                // consuming any fields. current_index() alone is insufficient:
+                // the first document's index may include leading whitespace.
+                const auto source = it.source();
+                const size_t sourceBegin = source.data() - values;
+                if (start < Buffer.MessageOffsets[messageId] || start >= end || sourceBegin > end || source.size() > end - sourceBegin) {
+                    return parsingError("json document crosses message boundary");
+                }
+                if (lastMessageId != messageId) {
+                    ++numberMessages;
+                    lastMessageId = messageId;
+                }
+            }
+            ++numberDocuments;
+            bool stopMessage = false;
+            auto parseObject = [&](simdjson::simdjson_result<simdjson::ondemand::object> object) -> TStatus {
+                CHECK_JSON_ERROR(object.error()) {
+                    stopMessage = true;
+                    return handleError(parsingError(simdjson::error_message(error)));
+                }
+                const size_t rowId = OutputOffsets.size();
+                EnsureRowCapacity(rowId + 1);
+                size_t parsedNonOptional = 0;
+                bool skipRow = false;
+                bool unrecoverableColumnError = false;
+                for (auto item : object) {
+                    CHECK_JSON_ERROR(item.error()) {
+                        ClearRowBuffer(rowId);
+                        stopMessage = true;
+                        return handleError(parsingError(TStringBuilder() << "json item was corrupted: " << simdjson::error_message(error)));
+                    }
+                    const auto it = ColumnsIndex.find(item.escaped_key().value());
+                    if (it == ColumnsIndex.end()) {
+                        continue;
+                    }
+                    const size_t columnId = it->second;
+                    auto& column = Columns[columnId];
+                    auto& value = ParsedValues[columnId][rowId];
+                    const bool valueWasSet = bool(value);
+                    const bool success = column.ParseJsonValue(offset, rowId, item.value(), value);
+                    if (!column.GetIsOptional() && !valueWasSet) {
+                        ++parsedNonOptional;
+                    }
+                    skipRow |= Config.SkipErrors && !success;
+                    simdjson::ondemand::document& parsedDocument = document.value_unsafe();
+                    if (!success && !parsedDocument.is_alive()) {
+                        // Preserve the column diagnostic, but never continue an
+                        // ondemand stream after its iterator has been abandoned.
+                        unrecoverableColumnError = true;
+                        break;
+                    }
+                }
+                if (Config.SkipErrors && (skipRow || parsedNonOptional != NonOptionalColumnsCount)) {
+                    ClearRowBuffer(rowId);
+                    ++ParsingFailedRowCount;
+                    if (unrecoverableColumnError) {
+                        stopMessage = true;
+                        return TStatus::Success();
+                    }
+                    return TStatus::Success();
+                }
+                OutputOffsets.push_back(offset);
+                if (unrecoverableColumnError) {
+                    stopMessage = true;
+                    return TStatus::Success();
+                }
+                return TStatus::Success();
+            };
 
-        if (state.SkipErrors && (state.OutputRowId + state.ErrorsCount < Buffer.NumberValues)) {
-            if (documents.truncated_bytes()) {
-                size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-                const ui64 offset = Buffer.Offsets[inputRowId];
-                auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json batch truncated bytes, size " << documents.truncated_bytes() << ". Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                return TryToParseOneJson(state, status);
+            if (type == simdjson::ondemand::json_type::array) {
+                for (auto element : document.get_array()) {
+                    CHECK_JSON_ERROR(element.error()) {
+                        return handleError(parsingError(simdjson::error_message(error)));
+                    }
+                    auto status = parseObject(element.get_object());
+                    if (status.IsFail() || stopMessage) {
+                        if (batch && stopMessage) {
+                            return parsingError("json iterator was abandoned");
+                        }
+                        return status;
+                    }
+                }
             } else {
-                state.ErrorsCount = Buffer.NumberValues - state.OutputRowId;
-                return EParsingStatus::Finish;
+                auto status = parseObject(document.get_object());
+                if (status.IsFail() || stopMessage) {
+                    if (batch && stopMessage) {
+                        return parsingError("json iterator was abandoned");
+                    }
+                    return status;
+                }
             }
         }
-        return EParsingStatus::Finish;
+
+        if (const auto truncatedBytes = documents.truncated_bytes()) {
+            return handleError(parsingError(TStringBuilder() << "json batch truncated bytes: " << truncatedBytes));
+        }
+        if (batch && numberMessages != expectedMessages) {
+            return parsingError("message without a complete json document");
+        }
+        if (!numberDocuments) {
+            return handleError(parsingError("expected at least one json object, got empty message"));
+        }
+        return TStatus::Success();
     }
 
-    void ClearRowBuffer(ui16 outputRowId) {
+    void EnsureRowCapacity(size_t required) {
+        if (required <= RowCapacity) {
+            return;
+        }
+        const size_t capacity = std::max(required, 2 * RowCapacity);
+        // Allocate both buffers before moving values: a quota failure must leave
+        // the old spans and object references intact for ClearBuffer().
+        TParserVector<NYql::NUdf::TUnboxedValue> values(Columns.size() * capacity);
+        TParserVector<size_t> rows(Columns.size() * capacity);
+        OutputOffsets.reserve(capacity);
+        for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
+            for (size_t rowId = 0; rowId < RowCapacity; ++rowId) {
+                values[columnId * capacity + rowId] = std::move(ParsedValues[columnId][rowId]);
+            }
+            const auto oldRows = Columns[columnId].GetParsedRows();
+            std::copy_n(oldRows.begin(), Columns[columnId].GetParsedRowsCount(), rows.begin() + columnId * capacity);
+        }
+        ParsedValuesBuffer.swap(values);
+        ParsedRowsIdxBuffer.swap(rows);
+        RowCapacity = capacity;
+        for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
+            ParsedValues[columnId] = std::span(ParsedValuesBuffer).subspan(columnId * capacity, capacity);
+            Columns[columnId].SetParsedRows(std::span(ParsedRowsIdxBuffer).subspan(columnId * capacity, capacity));
+        }
+    }
+
+    void ClearRowBuffer(size_t outputRowId) {
         for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
             if (Columns[columnId].ClearParsedRow(outputRowId)) {
                 Y_DEBUG_ABORT_UNLESS(Columns[columnId].ValidateObjectRefs(ParsedValues[columnId][outputRowId]));
@@ -1198,23 +1326,35 @@ private:
     }
 
     void FillColumnsBuffers() {
+        const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         const auto& consumerColumns = Consumer->GetColumns();
 
-        ColumnsIndex.clear();
-        if (2 * ColumnsIndex.capacity() < consumerColumns.size()) {
-            ColumnsIndex.reserve(consumerColumns.size());
+        if (consumerColumns.size() > ColumnsIndex.size()) {
+            constexpr size_t indexSlotSize = sizeof(decltype(ColumnsIndex)::value_type) + 1;
+            constexpr size_t indexOverhead = 128;
+            ColumnIndexMemory.Reserve(3 * (std::max(ColumnsIndex.capacity(), consumerColumns.size()) + 1) * indexSlotSize + indexOverhead);
         }
 
+        ColumnsIndex.clear();
+        ColumnsIndex.reserve(consumerColumns.size());
         for (ui64 i = 0; i < consumerColumns.size(); ++i) {
             ColumnsIndex.emplace(std::string_view(consumerColumns[i].Name), i);
         }
 
-        ParsedValuesBuffer.resize(consumerColumns.size() * MaxNumberRows);
+        const auto columns = consumerColumns.size();
+        RowCapacity = MaxNumberRows;
+        const auto cells = columns * RowCapacity;
+        ParsedValuesBuffer.resize(cells);
+        ParsedRowsIdxBuffer.resize(cells);
+        Columns.resize(columns);
+        if (MaxNumberRows > OutputOffsets.capacity()) {
+            OutputOffsets.reserve(std::max<size_t>(MaxNumberRows, 2 * OutputOffsets.capacity()));
+        }
         const std::span valuesBufferSpan(ParsedValuesBuffer);
 
         ParsedValues.resize(consumerColumns.size());
         for (ui64 i = 0; i < consumerColumns.size(); ++i) {
-            ParsedValues[i] = valuesBufferSpan.subspan(i * MaxNumberRows, MaxNumberRows);
+            ParsedValues[i] = valuesBufferSpan.subspan(i * RowCapacity, RowCapacity);
         }
     }
 
@@ -1225,17 +1365,20 @@ private:
 private:
     const TJsonParserConfig Config;
     ui16 MaxNumberRows = 0;
+    size_t RowCapacity = 0;
     const TString LogPrefix;
 
-    TVector<ui64> OutputOffsets = {};
-    TVector<TColumnParser> Columns;
-    TVector<ui16> ParsedRowsIdxBuffer;
+    TMemoryQuota ColumnIndexMemory;
+    TMemoryQuota SimdJsonMemory;
+    TParserVector<ui64> OutputOffsets = {};
+    TParserVector<TColumnParser> Columns;
+    TParserVector<size_t> ParsedRowsIdxBuffer;
     absl::flat_hash_map<std::string_view, size_t> ColumnsIndex;
 
     TJsonParserBuffer Buffer;
     simdjson::ondemand::parser Parser;
-    TVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
-    TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
+    TParserVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
+    TParserVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
     NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TDynamicCounters::TCounterPtr PartitionParsingErrors;
     NMonitoring::TDynamicCounters::TCounterPtr ReadGroupParsingErrors;
@@ -1243,18 +1386,20 @@ private:
     ui64 NonOptionalColumnsCount = 0;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters) {
+TValueStatus<ITopicParser::TPtr> CreateJsonParser(
+    IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters) {
     TJsonParser::TPtr parser = MakeIntrusive<TJsonParser>(consumer, config, counters);
-    if (auto status = parser->InitColumnsParsers(); status.IsFail()) {
+    if (auto status = parser->Init(); status.IsFail()) {
         return status;
     }
 
     return ITopicParser::TPtr(parser);
 }
 
-TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonParserSettings& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool skipErrors) {
+TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonParserSettings& parserConfig,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool skipErrors) {
     return {
         .FunctionRegistry = functionRegistry,
         .BatchSize = parserConfig.GetBatchSizeBytes(),
@@ -1265,4 +1410,4 @@ TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonPars
     };
 }
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

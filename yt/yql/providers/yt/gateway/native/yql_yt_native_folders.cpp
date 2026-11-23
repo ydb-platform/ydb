@@ -116,7 +116,7 @@ TFileLinkPtr SaveItemsToTempFile(const TExecContext<IYtGateway::TBatchFolderOpti
         ::SaveMany(out.Get(), item.Type, item.Path, item.Attributes);
     }
     ::SaveSize(out.Get(), 0);
-    out.Destroy();
+    out.reset();
     return CreateFakeFileLink(file, "", true);
 }
 

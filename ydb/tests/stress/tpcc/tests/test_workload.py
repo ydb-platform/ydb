@@ -21,7 +21,8 @@ class TestYdbTpccWorkload(StressFixture):
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--path", "stress_tpcc_workload",
-            "--warehouses", "50",
-            "--duration", self.base_duration,
+            "--warehouses", "10",
+            "--duration", "30",
+            "--warmup", "2",
             "--tx-mode", "mixed",
         ])

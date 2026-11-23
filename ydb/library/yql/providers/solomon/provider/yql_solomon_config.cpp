@@ -1,23 +1,25 @@
 #include "yql_solomon_config.h"
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 namespace NYql {
 
 using namespace NCommon;
 
-TSolomonConfiguration::TSolomonConfiguration()
+TSolomonConfiguration::TSolomonConfiguration(bool strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TSolomonSettings>(SolomonProviderName, TQContext(), strictConfigValidation)
 {
     REGISTER_SETTING(*this, _EnableReading);
     REGISTER_SETTING(*this, _EnableRuntimeListing);
     REGISTER_SETTING(*this, _EnableSolomonClientPostApi);
     REGISTER_SETTING(*this, _TruePointsFindRange);
     REGISTER_SETTING(*this, _MaxListingPageSize);
-    REGISTER_SETTING(*this, Auth)
-        .ValueSetter([this](const TString&, const TString& value) {
-            Auth = value;
-            for (auto& token: Tokens) {
-                token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
-            }
-        });
+    REGISTER_SETTING(*this, Auth).ValueSetter([this](TSolomonSettings& settings, const TString&, const TString& value) {
+        settings.Auth = value;
+        for (auto& token : Tokens) {
+            token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
+        }
+    });
     REGISTER_SETTING(*this, MetricsQueueBatchCountLimit);
     REGISTER_SETTING(*this, MetricsQueuePrefetchSize);
     REGISTER_SETTING(*this, ComputeActorBatchSize);
@@ -33,4 +35,4 @@ TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {
     return std::make_shared<const TSolomonSettings>(*this);
 }
 
-} // NYql
+}   // namespace NYql

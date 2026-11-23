@@ -2,7 +2,11 @@
 
 // todo(gvit): remove
 #include <ydb/core/base/event_filter.h>
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 #include <util/generic/hash_set.h>
+
+#include <memory>
+#include <utility>
 
 class TProgramShouldContinue;
 class IRandomProvider;
@@ -17,6 +21,10 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    class TScanAdmissionControl;
+    namespace NPathAliasing {
+        class TPathNormalizer;
+    }
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
@@ -90,6 +98,7 @@ namespace NKikimrConfig {
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
     class TLongTxServiceConfig;
+    class TUdfStoreConfig;
 }
 
 namespace NKikimrReplication {
@@ -120,6 +129,11 @@ namespace NKikimr {
     class TDynamicControlBoard;
     class TFeatureFlags;
     class TMetricsConfig;
+
+    namespace NWorkloadManager {
+        class IGateway;
+        using IGatewayPtr = std::shared_ptr<IGateway>;
+    }
 }
 
 namespace NKikimr {
@@ -211,6 +225,19 @@ struct TAppData {
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
+    using TPathNormalizerPtr = std::shared_ptr<const NPathAliasing::TPathNormalizer>;
+    // Publish immutable snapshots without changing their ownership type in consumers.
+    TTrueAtomicSharedPtr<TPathNormalizerPtr> PathNormalizer;
+
+    TPathNormalizerPtr GetPathNormalizer() const {
+        auto snapshot = PathNormalizer.atomic_load();
+        return snapshot ? *snapshot : nullptr;
+    }
+
+    void SetPathNormalizer(TPathNormalizerPtr normalizer) {
+        PathNormalizer.atomic_store(MakeTrueAtomicShared<TPathNormalizerPtr>(std::move(normalizer)));
+    }
+
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
     NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
@@ -242,6 +269,7 @@ struct TAppData {
     TIntrusivePtr<NKikimr::TDynamicControlBoard> Dcb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
     TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
+    std::shared_ptr<TScanAdmissionControl> BuildIndexScanAdmission;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
@@ -282,6 +310,7 @@ struct TAppData {
     NKikimrConfig::TDataErasureConfig& ShredConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
+    NWorkloadManager::IGatewayPtr WorkloadManagerGateway;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;
@@ -290,6 +319,7 @@ struct TAppData {
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig& UdfStoreConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AlwaysSetSystemOwner = false;
@@ -343,7 +373,6 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
-    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

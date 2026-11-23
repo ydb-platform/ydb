@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     codec.h
@@ -11,12 +11,12 @@ SRCS(
     parser.h
     in_range.h
     sign.h
-    type_desc.h
     utils.h
 )
 
 PEERDIR(
     util
+    yql/essentials/parser/pg_wrapper/interface/type_desc
     yql/essentials/ast
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
@@ -25,6 +25,9 @@ PEERDIR(
     yql/essentials/providers/common/codec/yt_arrow_converter_interface
 )
 
-YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    type_desc
+)

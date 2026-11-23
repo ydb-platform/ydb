@@ -1,0 +1,9 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Post type annotation, code: 1090
+    <main>:26:1: Error: At function: SqlProject
+        <main>:15:5: Error: At function: SqlProject
+            <main>:19:9: Error: At function: Aggregate
+                <main>:19:9: Error: HoppingWindow time extractor does not match assigned event time (expected: t, got: k)
+

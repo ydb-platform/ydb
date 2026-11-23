@@ -26,7 +26,11 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
       ON ( <index_columns> )
       [COVER ( <cover_columns> )]
       [WITH ( <parameter_name> = <parameter_value>[, ...])]
-    [, ...]
+    [, ...],
+    STATISTICS <statistics_name>
+      ON ( <column_name> [, ...] )
+      [WITH ( <statistics_type> [, ...] )]
+    [, ...],
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
 )
@@ -72,6 +76,10 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 * [Блум-индексы](bloom_skip_index.md),
 * [min_max-индекс](min_max_index.md),
 * [JSON-индексы](json_index.md).
+
+### STATISTICS
+
+Указание столбцов и типов многоколоночной статистики, которую должен собирать [ANALYZE](../analyze.md). Подробнее см. в разделе [{#T}](statistics.md).
 
 ### PRIMARY KEY
 
@@ -226,7 +234,7 @@ WITH (
   );
   ```
 
-  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мебибайт (МиБ). Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 - Создание колоночной таблицы
 
@@ -319,6 +327,7 @@ CREATE TABLE <table_name> (
 
 При создании строковых таблиц возможно задать:
 
+* [Статистику](statistics.md).
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
 * [Полнотекстовый индекс](fulltext_index.md).
@@ -330,6 +339,7 @@ CREATE TABLE <table_name> (
 
 Для колоночных таблиц при их создании возможно задать:
 
+* [Статистику](statistics.md).
 * [Блум-индекс](bloom_skip_index.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).

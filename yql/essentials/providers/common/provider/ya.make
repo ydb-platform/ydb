@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_data_provider_impl.cpp
@@ -6,6 +6,7 @@ SRCS(
     yql_provider.cpp
     yql_provider.h
     yql_provider_names.h
+    yql_provider_names.cpp
 )
 
 PEERDIR(
@@ -14,7 +15,5 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/parser/pg_catalog
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

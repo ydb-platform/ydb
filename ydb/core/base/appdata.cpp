@@ -1,4 +1,5 @@
 #include "appdata.h"
+#include "scan_admission.h"
 #include "tablet_types.h"
 
 #include "defs.h"
@@ -91,6 +92,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig UdfStoreConfig;
 };
 
 TAppData::TAppData(
@@ -120,6 +122,7 @@ TAppData::TAppData(
     , Dcb(new TDynamicControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry())
     , SharedCachePages(new NSharedCache::TSharedCachePages())
+    , BuildIndexScanAdmission(std::make_shared<TScanAdmissionControl>())
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)
@@ -163,9 +166,9 @@ TAppData::TAppData(
     , RecoveryShardConfig(Impl->RecoveryShardConfig)
     , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
     , LongTxServiceConfig(Impl->LongTxServiceConfig)
+    , UdfStoreConfig(Impl->UdfStoreConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
-    , UserFacingTracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}
 
 TAppData::~TAppData()

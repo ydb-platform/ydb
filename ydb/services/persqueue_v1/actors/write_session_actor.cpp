@@ -11,10 +11,12 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/deferred_publish/constants.h>
@@ -23,15 +25,12 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -49,43 +48,6 @@ using ECodec = std::conditional_t<Protocol == EProtocol::PQv1, Ydb::PersQueue::V
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
-
-template <EProtocol Protocol>
-ECodec<Protocol> CodecByName(const TString& codec) {
-    THashMap<TString, ECodec<Protocol>> codecsByName;
-    if constexpr (Protocol == EProtocol::PQv1) {
-        codecsByName = {
-            { "raw",  Ydb::PersQueue::V1::CODEC_RAW  },
-            { "gzip", Ydb::PersQueue::V1::CODEC_GZIP },
-            { "lzop", Ydb::PersQueue::V1::CODEC_LZOP },
-            { "zstd", Ydb::PersQueue::V1::CODEC_ZSTD },
-        };
-    }
-    if constexpr (Protocol == EProtocol::Topic) {
-        codecsByName = {
-            { "raw",  (i32)Ydb::Topic::CODEC_RAW  },
-            { "gzip", (i32)Ydb::Topic::CODEC_GZIP },
-            { "lzop", (i32)Ydb::Topic::CODEC_LZOP },
-            { "zstd", (i32)Ydb::Topic::CODEC_ZSTD },
-        };
-    }
-
-    auto codecIt = codecsByName.find(codec);
-    if (codecIt == codecsByName.end()) {
-        if constexpr (Protocol == EProtocol::PQv1) {
-            return Ydb::PersQueue::V1::CODEC_UNSPECIFIED;
-        }
-        if constexpr (Protocol == EProtocol::Topic) {
-            return (i32)Ydb::Topic::CODEC_UNSPECIFIED;
-        }
-        AFL_ENSURE(false)("reason", "Unsupported codec enum")("codec", codec);
-    }
-    return codecIt->second;
-}
-
-//explicit instantation
-template Ydb::PersQueue::V1::Codec CodecByName<EProtocol::PQv1>(const TString& codec);
-template i32 CodecByName<EProtocol::Topic>(const TString& codec);
 
 template <>
 inline void FillExtraFieldsForDataChunk(
@@ -210,7 +172,8 @@ TWriteSessionActor<Protocol>::TWriteSessionActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
         const NPersQueue::TTopicsListController& topicsController
 )
-    : TRlHelpers({}, request, WRITE_BLOCK_SIZE, false)
+    : TBase(NKikimrServices::PQ_WRITE_PROXY)
+    , TRlHelpers({}, request, WRITE_BLOCK_SIZE, false)
     , Request(request)
     , State(ES_CREATED)
     , SchemeCache(schemeCache)
@@ -248,13 +211,13 @@ TWriteSessionActor<Protocol>::TWriteSessionActor(
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Bootstrap(const TActorContext& ctx) {
-    AFL_ENSURE(Request);
+    YDB_LOG_ENSURE(Request);
 
     Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel, Request->GetWilsonTraceId(), Protocol == EProtocol::PQv1 ? "Topic.WriteSession[migration]" : "Topic.WriteSession");
 
     Request->Attach(ctx.SelfID);
     if (!Request->Read()) {
-        YDB_LOG_INFO_CTX(ctx, "Grpc read failed at start");
+        LOG_I("Grpc read failed at start");
         Die(ctx);
         return;
     }
@@ -265,9 +228,7 @@ void TWriteSessionActor<Protocol>::Bootstrap(const TActorContext& ctx) {
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
     CloseSpans("Done", ev->Get()->Success ? PersQueue::ErrorCode::OK : PersQueue::ErrorCode::BAD_REQUEST);
-    YDB_LOG_INFO_CTX(ctx, "Session v1 grpc closed",
-        {"cookie", Cookie},
-        {"sessionId", OwnerCookie});
+    LOG_I("Session v1 grpc closed");
     Die(ctx);
 }
 
@@ -289,15 +250,11 @@ TString WriteRequestToLog(const TClientMessage& proto) {
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "Session v1 grpc read done",
-        {"cookie", Cookie},
-        {"sessionId", OwnerCookie},
+    LOG_D("Session v1 grpc read done",
         {"success", ev->Get()->Success},
         {"data", WriteRequestToLog(ev->Get()->Record)});
     if (!ev->Get()->Success) {
-        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 grpc read failed");
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
         return;
     }
@@ -325,9 +282,7 @@ void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvReadFinished::TP
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
     if (!ev->Get()->Success) {
-        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 grpc write failed");
         Die(ctx);
     }
 }
@@ -335,9 +290,7 @@ void TWriteSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::T
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Die(const TActorContext& ctx) {
     if (State == ES_DYING) {
-        YDB_LOG_INFO_CTX(ctx, "Session v1 is already DEAD",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 is already DEAD");
         return;
     }
 
@@ -349,9 +302,7 @@ void TWriteSessionActor<Protocol>::Die(const TActorContext& ctx) {
         }
     }
 
-    YDB_LOG_INFO_CTX(ctx, "Session v1 is DEAD",
-        {"cookie", Cookie},
-        {"sessionId", OwnerCookie});
+    LOG_I("Session v1 is DEAD");
 
     ctx.Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
 
@@ -366,15 +317,15 @@ void TWriteSessionActor<Protocol>::Die(const TActorContext& ctx) {
     }
 
     State = ES_DYING;
-    TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
-    TActorBootstrapped<TWriteSessionActor>::Die(ctx);
+    TRlHelpers::PassAway(TBase::SelfId());
+    TBase::Die(ctx);
 }
 
 
 template <EProtocol Protocol>
 bool TWriteSessionActor<Protocol>::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
+    LOG_C("Unhandled exception",
         {"typeName", TypeName(exc)},
         {"exception", exc.what()},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
@@ -406,11 +357,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvPQProxy::TEvDone::TPtr&, const TAct
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
+
     //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
-    AFL_ENSURE(ACL);
+    YDB_LOG_ENSURE(ACL);
     if (ACL->CheckAccess(rights, *Token)) {
         ACLCheckInProgress = false;
         if (FirstACLCheck) {
@@ -423,9 +379,7 @@ void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
             serverMessage.set_status(Ydb::StatusIds::SUCCESS);
             serverMessage.mutable_update_token_response();
             if (!Request->Write(std::move(serverMessage))) {
-                YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
-                    {"cookie", Cookie},
-                    {"sessionId", OwnerCookie});
+                LOG_I("Session v1 grpc write failed");
                 Die(ctx);
             }
         }
@@ -441,6 +395,10 @@ template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        Request->CountResourcePath(event->Request.init_request().path());
+    }
 
     if (State != ES_CREATED) {
         //answer error
@@ -459,6 +417,12 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     if (topic_path.empty()) {
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->NormalizePath(topic_path);
+            InitRequest.set_path(topic_path);
+        }
     }
 
     if constexpr (Protocol == EProtocol::PQv1) {
@@ -489,7 +453,8 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"),
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),
@@ -510,13 +475,11 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
             return !InitRequest.message_group_id().empty() ? InitRequest.message_group_id() : InitRequest.producer_id();
         }
     }();
-    YDB_LOG_INFO_CTX(ctx, "Session request",
-        {"cookie", Cookie},
+    LOG_I("Session request",
         {"initRequest", InitRequest},
         {"peerName", PeerName});
     if (!UseDeduplication) {
-        YDB_LOG_DEBUG_CTX(ctx, "Session request Disable deduplication for empty producer id",
-            {"cookie", Cookie});
+        LOG_D("Session request Disable deduplication for empty producer id");
     }
     LogSession(ctx);
 
@@ -542,13 +505,13 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
     } else {
         if (InitRequest.has_partition_id()) {
             PreferedPartition = InitRequest.partition_id();
-            YDB_LOG_INFO_CTX(ctx, "Session",
+            LOG_I("Session",
                 {"partition", PreferedPartition});
         }
         else if (InitRequest.has_partition_with_generation()) {
             PreferedPartition = InitRequest.partition_with_generation().partition_id();
             ExpectedGeneration = InitRequest.partition_with_generation().generation();
-            YDB_LOG_INFO_CTX(ctx, "Session",
+            LOG_I("Session",
                 {"partition", PreferedPartition},
                 {"generation", ExpectedGeneration});
         }
@@ -641,7 +604,7 @@ void TWriteSessionActor<Protocol>::SetupCounters(const TString& cloudId, const T
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema, NWilson::TTraceId traceId) {
-    YDB_LOG_INFO_CTX(ctx, "Init check schema");
+    LOG_I("Init check schema");
 
     if (!needWaitSchema) {
         ACLCheckInProgress = true;
@@ -655,7 +618,7 @@ void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, boo
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     auto& res = ev->Get()->Result;
-    AFL_ENSURE(res->ResultSet.size() == 1);
+    YDB_LOG_ENSURE(res->ResultSet.size() == 1);
 
     auto& entry = res->ResultSet[0];
     TString errorReason;
@@ -664,16 +627,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    YDB_LOG_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     PQGroupInfo = entry.PQGroupInfo;
     const auto& config = PQGroupInfo->Description;
     Chooser = PQGroupInfo->PartitionChooser;
-    AFL_ENSURE(Chooser);
+    YDB_LOG_ENSURE(Chooser);
     PartitionGraph = PQGroupInfo->PartitionGraph;
-    AFL_ENSURE(PartitionGraph);
+    YDB_LOG_ENSURE(PartitionGraph);
 
-    AFL_ENSURE(config.PartitionsSize() > 0);
-    AFL_ENSURE(config.HasPQTabletConfig());
+    YDB_LOG_ENSURE(config.PartitionsSize() > 0);
+    YDB_LOG_ENSURE(config.HasPQTabletConfig());
     InitialPQTabletConfig = config.GetPQTabletConfig();
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
@@ -701,11 +664,9 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         SetupCounters();
     }
 
-    AFL_ENSURE(entry.SecurityObject);
+    YDB_LOG_ENSURE(entry.SecurityObject);
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
-    YDB_LOG_INFO_CTX(ctx, "Session v1 describe result for acl check",
-        {"cookie", Cookie},
-        {"sessionId", OwnerCookie});
+    LOG_I("Session v1 describe result for acl check");
 
     const auto meteringMode = config.GetPQTabletConfig().GetMeteringMode();
     if (meteringMode != GetMeteringMode().GetOrElse(meteringMode)) {
@@ -720,16 +681,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
             Die(ctx);
             return;
         }
-        AFL_ENSURE(FirstACLCheck);
+        YDB_LOG_ENSURE(FirstACLCheck);
         FirstACLCheck = false;
         DiscoverPartition(ctx);
     } else {
-        AFL_ENSURE(Request->GetYdbToken());
+        YDB_LOG_ENSURE(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()));
+            YDB_LOG_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()));
         } else {
             CheckACL(ctx);
         }
@@ -738,14 +699,62 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
+    if (const auto error = GetWriteModeError(InitialPQTabletConfig)) {
+        CloseSession(error->Reason, ConvertOldCode(error->Code), ctx);
+        return;
+    }
+
     State = ES_WAIT_PARTITION;
 
     if (PartitionChooser) {
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
+    if (ExpectedGeneration && AppData(ctx)->FeatureFlags.GetEnableTopicWriteSessionsInitQuoting()) {
+        State = ES_WAIT_WRITE_SESSION_QUOTA;
+        ctx.Send(
+            NPQ::MakeWriteSessionsQuoterId(),
+            new TEvWriteSessionsQuoter::TEvAcquireQuota(
+                InitialPQTabletConfig.GetYdbDatabasePath(),
+                FullConverter->GetClientsideName(),
+                PreferedPartition,
+                *ExpectedGeneration),
+            0,
+            0,
+            InitSpan.GetTraceId()
+        );
+        return;
+    }
+
+    CreatePartitionChooser(ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+    WriteSessionQuotaWaitTime = ev->Get()->QuotaWaitTime;
+    CreatePartitionChooser(ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr&, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+
+    LOG_E("Write session quota declined");
+
+    CloseSession("Write session quota declined: partition or generation is unavailable",
+                 PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CreatePartitionChooser(const TActorContext& ctx) {
+    State = ES_WAIT_PARTITION;
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    AFL_ENSURE(PQGroupInfo);
+    YDB_LOG_ENSURE(PQGroupInfo);
     const auto& config = PQGroupInfo->Description;
     PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID,
                                                                                     config,
@@ -776,9 +785,7 @@ template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::ProceedPartition(const ui32 partition, const TActorContext& ctx) {
     Partition = partition;
 
-    YDB_LOG_DEBUG_CTX(ctx, "ProceedPartition. session",
-        {"cookie", Cookie},
-        {"sessionId", OwnerCookie},
+    LOG_D("ProceedPartition. session",
         {"partition", Partition},
         {"expectedGeneration", ExpectedGeneration});
 
@@ -819,6 +826,7 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+    opts.WithWriteSessionQuotaWaitTime(WriteSessionQuotaWaitTime);
 
     if constexpr (Protocol == EProtocol::Topic) {
         for (const auto& item : InitRequest.write_session_meta()) {
@@ -924,25 +932,17 @@ void TWriteSessionActor<Protocol>::CloseSession(
         result.set_status(statusCode);
         FillIssue(result.add_issues(), errorCode, errorReason);
 
-        YDB_LOG_INFO_CTX(ctx, "Session v1 error",
-            {"cookie", Cookie},
-            {"reason", errorReason},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 error",
+            {"reason", errorReason});
 
         if (!Request->WriteAndFinish(std::move(result), statusCode)) {
-            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc last write failed",
-                {"cookie", Cookie},
-                {"sessionId", OwnerCookie});
+            LOG_I("Session v1 grpc last write failed");
         }
     } else {
         if (!Request->Finish(statusCode)) {
-            YDB_LOG_INFO_CTX(ctx, "Session v1 double finish call",
-                {"cookie", Cookie},
-                {"sessionId", OwnerCookie});
+            LOG_I("Session v1 double finish call");
         }
-        YDB_LOG_INFO_CTX(ctx, "Session v1 closed",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 closed");
     }
     CloseSpans(errorReason, errorCode);
     Die(ctx);
@@ -968,8 +968,11 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
         init->set_cluster(FullConverter->GetCluster());
         init->set_block_format_version(0);
         if (InitialPQTabletConfig.HasCodecs()) {
-            for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
-                init->add_supported_codecs(CodecByName<Protocol>(codecName));
+            for (const auto codecId : InitialPQTabletConfig.GetCodecs().GetIds()) {
+                const int value = codecId + 1;
+                if (Ydb::PersQueue::V1::Codec_IsValid(value)) {
+                    init->add_supported_codecs(static_cast<Ydb::PersQueue::V1::Codec>(value));
+                }
             }
         }
     } else {
@@ -979,8 +982,8 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
         }
         init->set_partition_id(Partition);
         if (InitialPQTabletConfig.HasCodecs()) {
-            for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
-                init->mutable_supported_codecs()->add_codecs(CodecByName<Protocol>(codecName));
+            for (const auto codecId : InitialPQTabletConfig.GetCodecs().GetIds()) {
+                init->mutable_supported_codecs()->add_codecs(static_cast<ECodec<Protocol>>(codecId + 1));
             }
         }
         init->set_is_batching_supported(NPQ::IsTopicMessagesBatchingEnabled(ctx));
@@ -989,16 +992,12 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
     InitSpan.End();
     InitSpan = {};
 
-    YDB_LOG_INFO_CTX(ctx, "Session inited",
-        {"cookie", Cookie},
+    LOG_I("Session inited",
         {"partition", Partition},
-        {"maxSeqNo", maxSeqNo},
-        {"sessionId", OwnerCookie});
+        {"maxSeqNo", maxSeqNo});
 
     if (!Request->Write(std::move(response))) {
-        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 grpc write failed");
         Die(ctx);
         return;
     }
@@ -1010,9 +1009,7 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
     //init completed; wait for first data chunk
     NextRequestInited = true;
     if (!Request->Read()) {
-        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 grpc read failed");
         Die(ctx);
         return;
     }
@@ -1026,7 +1023,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvInitResult
         return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!result.SessionId && !result.TxId);
+    YDB_LOG_ENSURE(!result.SessionId && !result.TxId);
 
     if (!result.IsSuccess()) {
         const auto& error = result.GetError();
@@ -1059,7 +1056,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccep
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!SentRequests.empty());
+    YDB_LOG_ENSURE(!SentRequests.empty());
     auto writeRequest = std::move(SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
@@ -1079,9 +1076,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccep
     if (!NextRequestInited && BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
         NextRequestInited = true;
         if (!Request->Read()) {
-            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
-                {"cookie", Cookie},
-                {"sessionId", OwnerCookie});
+            LOG_I("Session v1 grpc read failed");
             Die(ctx);
             return;
         }
@@ -1109,7 +1104,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
         batchWriteResponse->add_offsets(res.GetOffset());
         if (!UseDeduplication) {
-            AFL_ENSURE(!res.GetAlreadyWritten());
+            YDB_LOG_ENSURE(!res.GetAlreadyWritten());
         }
         batchWriteResponse->add_already_written(res.GetAlreadyWritten());
         stat->set_queued_in_partition_duration_ms(
@@ -1128,7 +1123,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
-            AFL_ENSURE(UseDeduplication);
+            YDB_LOG_ENSURE(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
         } else if (res.HasWrittenInTx() && res.GetWrittenInTx()) {
             ack->mutable_written_in_tx();
@@ -1221,9 +1216,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
 
         if (!Request->Write(std::move(result))) {
             // TODO: Log gRPC write error code
-            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
-                {"cookie", Cookie},
-                {"sessionId", OwnerCookie});
+            LOG_I("Session v1 grpc write failed");
             Die(ctx);
             return;
         }
@@ -1298,7 +1291,7 @@ void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const 
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (Protocol == EProtocol::Topic) {
-        AFL_ENSURE(!PendingRequests.back()->UserWriteRequests.empty());
+        YDB_LOG_ENSURE(!PendingRequests.back()->UserWriteRequests.empty());
 
         auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
@@ -1421,14 +1414,14 @@ void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx)
 {
-    AFL_ENSURE(request->PartitionWriteRequest);
+    YDB_LOG_ENSURE(request->PartitionWriteRequest);
 
     i64 diff = 0;
     for (const auto& [w] : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
-    AFL_ENSURE(-diff <= (i64)BytesInflight_);
+    YDB_LOG_ENSURE(-diff <= (i64)BytesInflight_);
     const auto byteSize = request->PartitionWriteRequest->Record.ByteSize();
     diff += byteSize;
     request->Span.Attribute("bytes", byteSize);
@@ -1474,9 +1467,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvUpdateToken::TPtr& ev, con
         serverMessage.set_status(Ydb::StatusIds::SUCCESS);
         serverMessage.mutable_update_token_response();
         if (!Request->Write(std::move(serverMessage))) {
-            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc write failed",
-                {"cookie", Cookie},
-                {"sessionId", OwnerCookie});
+            LOG_I("Session v1 grpc write failed");
             Die(ctx);
             return;
         }
@@ -1495,9 +1486,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvUpdateToken::TPtr& ev, con
 
     NextRequestInited = true;
     if (!Request->Read()) {
-        YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
-            {"cookie", Cookie},
-            {"sessionId", OwnerCookie});
+        LOG_I("Session v1 grpc read failed");
         Die(ctx);
         return;
     }
@@ -1505,7 +1494,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvUpdateToken::TPtr& ev, con
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr &ev , const TActorContext& ctx) {
-    YDB_LOG_INFO_CTX(ctx, "Updating token");
+    LOG_I("Updating token");
 
     if (ev->Get()->Authenticated && ev->Get()->InternalToken && !ev->Get()->InternalToken->GetSerializedToken().empty()) {
         UpdateTokenSpan.EndOk();
@@ -1532,6 +1521,11 @@ void TWriteSessionActor<Protocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRe
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        return;
+    }
     RequestNotChecked = true;
 
     if (State != ES_INITED) {
@@ -1582,9 +1576,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TAc
                 const auto& extPublicationId = deferredPublish.ext_publication_id();
                 const auto knownExt = DeferredPublicationExtByInt.FindPtr(intPublicationId);
                 if (knownExt && *knownExt != extPublicationId) {
-                    YDB_LOG_WARN_CTX(ctx, "Deferred publish ext_publication_id mismatch",
-                        {"cookie", Cookie},
-                        {"sessionId", OwnerCookie},
+                    LOG_W("Deferred publish ext_publication_id mismatch",
                         {"intPublicationId", intPublicationId},
                         {"expectedExtPublicationId", *knownExt},
                         {"actualExtPublicationId", extPublicationId});
@@ -1711,11 +1703,9 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TAc
     }
 
     if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
-        AFL_ENSURE(NextRequestInited);
+        YDB_LOG_ENSURE(NextRequestInited);
         if (!Request->Read()) {
-            YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
-                {"cookie", Cookie},
-                {"sessionId", OwnerCookie});
+            LOG_I("Session v1 grpc read failed");
             Die(ctx);
             return;
 
@@ -1744,9 +1734,7 @@ void TWriteSessionActor<Protocol>::LogSession(const TActorContext& ctx) {
     if (DiscoveryConverter && DiscoveryConverter->IsValid()) {
         topic_path = DiscoveryConverter->GetPrintableString();
     }
-    YDB_LOG_INFO_CTX(ctx, "Write session: userAgent=",
-        {"cookie", Cookie},
-        {"sessionId", OwnerCookie},
+    LOG_I("Write session: userAgent=",
         {"userAgent", UserAgent},
         {"ip", PeerName},
         {"proto", ProtoName},
@@ -1787,7 +1775,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TA
                 PendingQuotaRequest->QuotaSpan.EndError("Timeout");
                 PendingQuotaRequest->StartQuotaSpan(); // Start new quota span for second request
                 PendingQuotaRequest->SetSpanParamRequestedQuota();
-                AFL_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                YDB_LOG_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {
                 return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);
             }
@@ -1798,7 +1786,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TA
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::RecheckACL(const TActorContext& ctx) {
     if (State != ES_INITED) {
-        YDB_LOG_ERROR_CTX(ctx, "WriteSessionActor state is wrong. Actual state",
+        LOG_E("WriteSessionActor state is wrong. Actual state",
             {"state", (int)State});
         return CloseSession("erroneous internal state", PersQueue::ErrorCode::ERROR, ctx);
     }

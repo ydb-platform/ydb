@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     library/cpp/yson/node
+    yql/essentials/utils/meta
 )
 
 SRCS(

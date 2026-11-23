@@ -2,9 +2,11 @@
 
 The SDK records metrics only after :func:`ydb.observability.enable_metrics` installs a
 concrete :class:`MetricsProvider` (OpenTelemetry in :mod:`ydb.opentelemetry`, or any
-custom one). Until then every helper is a cheap no-op, so metrics stay independent from
-tracing and safe to call from hot paths — and the SDK never depends on ``opentelemetry``
-being importable.
+custom one). Until then operations, query sessions and pools share no-op
+instrumentation without metric allocations, timers, locks or state tracking. Metrics
+stay independent from tracing, and the SDK never depends on ``opentelemetry`` being
+importable. Enable metrics before creating query sessions or pools whose lifecycle
+should be instrumented.
 
 A provider handles three instrument kinds:
 
@@ -20,13 +22,15 @@ import threading
 import itertools
 import functools
 import inspect
-from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tuple
+import weakref
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tuple, TypeVar, cast
 
 from ydb.observability._endpoint import split_endpoint
 
-CLIENT_OPERATION_DURATION = "db.client.operation.duration"
+CLIENT_OPERATION_DURATION = "ydb.client.operation.duration"
 CLIENT_OPERATION_FAILED = "ydb.client.operation.failed"
 QUERY_SESSION_COUNT = "ydb.query.session.count"
+QUERY_SESSION_CLOSED = "ydb.query.session.closed"
 QUERY_SESSION_CREATE_TIME = "ydb.query.session.create_time"
 QUERY_SESSION_PENDING_REQUESTS = "ydb.query.session.pending_requests"
 QUERY_SESSION_TIMEOUTS = "ydb.query.session.timeouts"
@@ -35,7 +39,7 @@ QUERY_SESSION_MIN = "ydb.query.session.min"
 RETRY_ATTEMPTS = "ydb.client.retry.attempts"
 RETRY_DURATION = "ydb.client.retry.duration"
 
-METRICS_SDK_BUILD_INFO = "ydb-sdk-metrics/0.1.0"
+METRICS_SDK_BUILD_INFO = "ydb-sdk-metrics/0.2.0"
 
 DURATION_BUCKETS_SECONDS = (
     0.001,
@@ -63,8 +67,9 @@ RETRY_DURATION_BUCKETS_SECONDS = (
 )
 ATTEMPT_BUCKETS = (1, 2, 3, 4, 5, 7, 10, 20)
 _UNKNOWN_POOL = "unknown"
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 _pool_name_counter = itertools.count(1)
-_pool_name_lock = threading.Lock()
+_pool_metrics_counter = itertools.count(1)
 _OPERATION_ATTR_KEYS = frozenset(
     {
         "database",
@@ -129,12 +134,18 @@ class NoopMetricsProvider:
 
 _NOOP_PROVIDER = NoopMetricsProvider()
 _provider: MetricsProvider = _NOOP_PROVIDER
+_provider_generation = 0
+_provider_lock = threading.Lock()
 
-# Accumulated state for the asynchronous gauges, owned by the SDK (vendor-neutral) and
-# read by whatever provider is installed via ``observe_gauge``.
+# Trackers created while metrics are active live independently from the current
+# provider. This lets a replacement provider observe their current state and prevents
+# a disable/re-enable cycle from manufacturing negative counts. Objects created while
+# metrics are disabled use shared no-op trackers and never enter these registries.
 _gauge_lock = threading.Lock()
 _session_count_state: Dict[Tuple, int] = {}
 _session_max_state: Dict[Tuple, int] = {}
+_live_session_metrics: "weakref.WeakSet[SessionMetrics]" = weakref.WeakSet()
+_live_pool_metrics: "weakref.WeakSet[QuerySessionPoolMetrics]" = weakref.WeakSet()
 
 
 def is_metrics_enabled() -> bool:
@@ -143,18 +154,32 @@ def is_metrics_enabled() -> bool:
 
 def _observe_session_count() -> List[Tuple[float, Dict[str, Any]]]:
     with _gauge_lock:
-        return [(value, dict(attrs)) for attrs, value in _session_count_state.items()]
+        values = dict(_session_count_state)
+        for session_metrics in _live_session_metrics:
+            attrs = _pool_attrs(session_metrics.pool_name)
+            attrs["ydb.query.session.state"] = session_metrics.state
+            key = tuple(sorted(attrs.items()))
+            values[key] = values.get(key, 0) + 1
+        return [(value, dict(attrs)) for attrs, value in values.items()]
 
 
 def _observe_session_max() -> List[Tuple[float, Dict[str, Any]]]:
     with _gauge_lock:
-        return [(value, dict(attrs)) for attrs, value in _session_max_state.items()]
+        # Preserve the current last-created-wins behavior for duplicate pool names.
+        pools_by_key: Dict[Tuple, Tuple[int, int]] = {}
+        for pool_metrics in _live_pool_metrics:
+            key = tuple(sorted(_pool_attrs(pool_metrics._pool_name).items()))
+            current = (pool_metrics._registration_id, pool_metrics._size)
+            pools_by_key[key] = max(pools_by_key.get(key, (0, 0)), current)
+
+        values = {key: value for key, (_, value) in pools_by_key.items()}
+        values.update(_session_max_state)
+        return [(value, dict(attrs)) for attrs, value in values.items()]
 
 
 def _observe_session_min() -> List[Tuple[float, Dict[str, Any]]]:
     # The SDK never configures a pool minimum, so this is always 0 for every known pool.
-    with _gauge_lock:
-        return [(0, dict(attrs)) for attrs in _session_max_state]
+    return [(0, attrs) for _, attrs in _observe_session_max()]
 
 
 _OBSERVABLE_GAUGES = (
@@ -164,22 +189,43 @@ _OBSERVABLE_GAUGES = (
 )
 
 
-def _set_metrics_provider(provider: Optional[MetricsProvider]) -> None:
-    global _provider
+def _guard_gauge_callback(provider: MetricsProvider, generation: int, callback: GaugeCallback) -> GaugeCallback:
+    def guarded_callback():
+        if _provider is not provider or _provider_generation != generation:
+            return ()
+        observations = callback()
+        if _provider is not provider or _provider_generation != generation:
+            return ()
+        return observations
 
-    _provider = provider if provider is not None else _NOOP_PROVIDER
-    if _provider is not _NOOP_PROVIDER:
-        for name, callback in _OBSERVABLE_GAUGES:
-            _provider.observe_gauge(name, callback)
+    return guarded_callback
+
+
+def _set_metrics_provider(provider: Optional[MetricsProvider]) -> None:
+    global _provider, _provider_generation
+
+    new_provider = provider if provider is not None else _NOOP_PROVIDER
+    with _provider_lock:
+        generation = _provider_generation + 1
+        if new_provider is not _NOOP_PROVIDER:
+            for name, callback in _OBSERVABLE_GAUGES:
+                new_provider.observe_gauge(name, _guard_gauge_callback(new_provider, generation, callback))
+        _provider = new_provider
+        _provider_generation = generation
 
 
 def _reset_metrics_provider() -> None:
-    global _provider
+    _set_metrics_provider(None)
 
-    _provider = _NOOP_PROVIDER
+    # The dictionaries support the low-level record_* helpers. Live pool and session
+    # state is intentionally retained by the weak tracker registries.
     with _gauge_lock:
         _session_count_state.clear()
         _session_max_state.clear()
+
+
+def _get_metrics_provider() -> MetricsProvider:
+    return _provider
 
 
 def is_metrics_operation_name(name: str) -> bool:
@@ -220,7 +266,7 @@ def query_session_pool_name(
 def _metrics_build_info_tokens() -> List[str]:
     """Metrics' contribution to the ``x-ydb-sdk-build-info`` header.
 
-    Returns ``["ydb-sdk-metrics/0.1.0"]`` once a metrics backend is installed,
+    Returns ``["ydb-sdk-metrics/0.2.0"]`` once a metrics backend is installed,
     otherwise an empty list. Aggregated with other features by
     :func:`ydb.observability.sdk_build_info_tokens`.
     """
@@ -269,9 +315,15 @@ class MetricsOperation:
     attached, and accepts only stable operation labels.
     """
 
-    def __init__(self, name: str, attributes: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        attributes: Optional[Dict[str, Any]] = None,
+        provider: Optional[MetricsProvider] = None,
+    ) -> None:
         self._name = name
         self._attributes = _operation_attrs(name, attributes or {})
+        self._provider = provider if provider is not None else _provider
         self._start_time = time.monotonic()
         self._exception: Optional[BaseException] = None
         self._ended = False
@@ -296,12 +348,12 @@ class MetricsOperation:
             self._ended = True
 
         duration = time.monotonic() - self._start_time
-        _provider.record(CLIENT_OPERATION_DURATION, duration, self._attributes)
+        self._provider.record(CLIENT_OPERATION_DURATION, duration, self._attributes)
 
         if self._exception is not None:
             attrs = dict(self._attributes)
             attrs["status_code"] = _response_status_code(self._exception)
-            _provider.add(CLIENT_OPERATION_FAILED, 1, attrs)
+            self._provider.add(CLIENT_OPERATION_FAILED, 1, attrs)
 
     def __enter__(self) -> "MetricsOperation":
         return self
@@ -314,6 +366,8 @@ class MetricsOperation:
 
 
 class _NoopMetricsOperation:
+    __slots__ = ()
+
     def set_error(self, exception: BaseException) -> None:
         pass
 
@@ -321,7 +375,7 @@ class _NoopMetricsOperation:
         pass
 
     def attach_context(self, end_on_exit=True) -> "_NoopMetricsOperationContext":
-        return _NoopMetricsOperationContext(self)
+        return _NOOP_METRICS_OPERATION_CONTEXT
 
     def end(self) -> None:
         pass
@@ -364,12 +418,14 @@ class _MetricsOperationContext:
 
 
 _NOOP_METRICS_OPERATION = _NoopMetricsOperation()
+_NOOP_METRICS_OPERATION_CONTEXT = _NoopMetricsOperationContext(_NOOP_METRICS_OPERATION)
 
 
 def create_metrics_operation(name: str, attributes: Optional[Dict[str, Any]] = None):
-    if _provider is _NOOP_PROVIDER or _operation_name(name) not in _CLIENT_OPERATION_NAMES:
+    provider = _provider
+    if provider is _NOOP_PROVIDER or _operation_name(name) not in _CLIENT_OPERATION_NAMES:
         return _NOOP_METRICS_OPERATION
-    return MetricsOperation(name, attributes)
+    return MetricsOperation(name, attributes, provider)
 
 
 def record_query_session_count(delta: int, pool_name: Optional[str] = None, state: str = "used") -> None:
@@ -429,6 +485,8 @@ def record_retry_metrics(duration: float, attempts: int) -> None:
 
 
 class _NoopContext:
+    __slots__ = ()
+
     def __enter__(self):
         return self
 
@@ -442,12 +500,13 @@ _NOOP_CM = _NoopContext()
 class SessionMetrics:
     """Per-session query-session-count bookkeeping, kept out of the session's own code.
 
-    Every :class:`~ydb.query.session.BaseQuerySession` owns one. It counts the session
-    as open exactly once and decrements the same bucket on close; the pool updates
-    :attr:`state` and :attr:`pool_name` as the session moves between idle and used.
+    Every instrumented :class:`~ydb.query.session.BaseQuerySession` owns one. It
+    registers the session as open exactly once and removes it on close; the pool
+    updates :attr:`state` and :attr:`pool_name` as the session moves between idle and
+    used. Uninstrumented sessions share :data:`_NOOP_SESSION_METRICS` instead.
     """
 
-    __slots__ = ("pool_name", "state", "_counted")
+    __slots__ = ("pool_name", "state", "_counted", "__weakref__")
 
     def __init__(self) -> None:
         self.pool_name: Optional[str] = None
@@ -455,36 +514,73 @@ class SessionMetrics:
         self._counted = False
 
     def count_open(self) -> None:
-        if self._counted:
-            return
-        self._counted = True
-        record_query_session_count(1, self.pool_name, self.state)
+        with _gauge_lock:
+            if self._counted:
+                return
+            self._counted = True
+            _live_session_metrics.add(self)
 
-    def count_closed(self) -> None:
-        if not self._counted:
-            return
-        self._counted = False
-        record_query_session_count(-1, self.pool_name, self.state)
+    def count_closed(self, reason: Optional[str] = None) -> None:
+        with _gauge_lock:
+            if not self._counted:
+                return
+            self._counted = False
+            _live_session_metrics.discard(self)
+            pool_name = self.pool_name
+
+        provider = _provider
+        if provider is not _NOOP_PROVIDER and reason is not None and pool_name is not None:
+            provider.add(
+                QUERY_SESSION_CLOSED,
+                1,
+                {
+                    "ydb.query.session.pool.name": pool_name,
+                    "reason": reason,
+                },
+            )
+
+    def bind(self, pool_name: Optional[str]) -> None:
+        with _gauge_lock:
+            self.pool_name = pool_name
+            self.state = "used"
+
+    def transition(self, new_state: str) -> None:
+        with _gauge_lock:
+            self.state = new_state
 
 
 class _NoopSessionMetrics(SessionMetrics):
     """Class-level default so sessions built bypassing ``__init__`` (in tests) stay safe."""
 
+    __slots__ = ()
+
     def count_open(self) -> None:
         pass
 
-    def count_closed(self) -> None:
+    def count_closed(self, reason: Optional[str] = None) -> None:
+        pass
+
+    def bind(self, pool_name: Optional[str]) -> None:
+        pass
+
+    def transition(self, new_state: str) -> None:
         pass
 
 
 _NOOP_SESSION_METRICS = _NoopSessionMetrics()
 
 
-class _CreateTimer:
-    __slots__ = ("_pool_name", "_start")
+def create_session_metrics() -> SessionMetrics:
+    """Return per-session metrics only when metrics are active at creation time."""
+    return SessionMetrics() if is_metrics_enabled() else _NOOP_SESSION_METRICS
 
-    def __init__(self, pool_name: Optional[str]) -> None:
+
+class _CreateTimer:
+    __slots__ = ("_pool_name", "_provider", "_start")
+
+    def __init__(self, pool_name: Optional[str], provider: MetricsProvider) -> None:
         self._pool_name = pool_name
+        self._provider = provider
         self._start = 0.0
 
     def __enter__(self):
@@ -492,30 +588,36 @@ class _CreateTimer:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        record_query_session_create_time(time.monotonic() - self._start, self._pool_name)
+        self._provider.record(
+            QUERY_SESSION_CREATE_TIME,
+            time.monotonic() - self._start,
+            _pool_attrs(self._pool_name),
+        )
         return False
 
 
 class _PendingTracker:
-    __slots__ = ("_pool_name",)
+    __slots__ = ("_pool_name", "_provider")
 
-    def __init__(self, pool_name: Optional[str]) -> None:
+    def __init__(self, pool_name: Optional[str], provider: MetricsProvider) -> None:
         self._pool_name = pool_name
+        self._provider = provider
 
     def __enter__(self):
-        record_query_session_pending_requests(1, self._pool_name)
+        self._provider.add(QUERY_SESSION_PENDING_REQUESTS, 1, _pool_attrs(self._pool_name))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        record_query_session_pending_requests(-1, self._pool_name)
+        self._provider.add(QUERY_SESSION_PENDING_REQUESTS, -1, _pool_attrs(self._pool_name))
         return False
 
 
 class QuerySessionPoolMetrics:
     """All metric bookkeeping for one query session pool, hidden from the pool code.
 
-    The pool holds one instance and calls semantically named methods; timing and
-    counters live here, and stay cheap no-ops while metrics are disabled.
+    An instrumented pool holds one instance and calls semantically named methods;
+    timing and counters live here. Its registration remains live while metrics are
+    temporarily disabled so a replacement provider can observe an accurate snapshot.
     """
 
     def __init__(self, name: Optional[str], driver, size: int) -> None:
@@ -525,20 +627,27 @@ class QuerySessionPoolMetrics:
             endpoint=getattr(driver_config, "endpoint", None),
             database=getattr(driver_config, "database", None),
         )
-        record_query_session_max(size, self._pool_name)
+        self._size = size
+        self._registration_id = next(_pool_metrics_counter)
+        self._closed = False
+        with _gauge_lock:
+            _live_pool_metrics.add(self)
 
     def attach(self, session) -> None:
         """Bind this pool's label to a freshly created session."""
-        session._session_metrics.pool_name = self._pool_name
-        session._session_metrics.state = "used"
+        if session._session_metrics is _NOOP_SESSION_METRICS:
+            session._session_metrics = SessionMetrics()
+        session._session_metrics.bind(self._pool_name)
 
     def measure_create(self):
         """Context manager recording query session creation time (no-op when disabled)."""
-        return _CreateTimer(self._pool_name) if is_metrics_enabled() else _NOOP_CM
+        provider = _provider
+        return _CreateTimer(self._pool_name, provider) if provider is not _NOOP_PROVIDER else _NOOP_CM
 
     def track_pending(self):
         """Context manager counting a request waiting for a session (no-op when disabled)."""
-        return _PendingTracker(self._pool_name) if is_metrics_enabled() else _NOOP_CM
+        provider = _provider
+        return _PendingTracker(self._pool_name, provider) if provider is not _NOOP_PROVIDER else _NOOP_CM
 
     def on_timeout(self) -> None:
         record_query_session_timeout(self._pool_name)
@@ -550,19 +659,58 @@ class QuerySessionPoolMetrics:
         self._transition(session, "idle")
 
     def _transition(self, session, new_state: str) -> None:
-        session_metrics = session._session_metrics
-        record_query_session_count(-1, self._pool_name, session_metrics.state)
-        record_query_session_count(1, self._pool_name, new_state)
-        session_metrics.state = new_state
+        session._session_metrics.transition(new_state)
 
     def close(self) -> None:
-        remove_query_session_pool_metrics(self._pool_name)
+        with _gauge_lock:
+            if self._closed:
+                return
+            self._closed = True
+            _live_pool_metrics.discard(self)
+
+
+class _NoopQuerySessionPoolMetrics:
+    """Shared pool instrumentation used when metrics are disabled at pool creation."""
+
+    __slots__ = ()
+
+    def attach(self, session) -> None:
+        session._session_metrics = _NOOP_SESSION_METRICS
+
+    def measure_create(self):
+        return _NOOP_CM
+
+    def track_pending(self):
+        return _NOOP_CM
+
+    def on_timeout(self) -> None:
+        pass
+
+    def on_acquired(self, session) -> None:
+        pass
+
+    def on_released(self, session) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+_NOOP_QUERY_SESSION_POOL_METRICS = _NoopQuerySessionPoolMetrics()
+
+
+def create_query_session_pool_metrics(name: Optional[str], driver, size: int):
+    """Create pool instrumentation only when metrics are active."""
+    if not is_metrics_enabled():
+        return _NOOP_QUERY_SESSION_POOL_METRICS
+    return QuerySessionPoolMetrics(name, driver, size)
 
 
 class _RetryMetrics:
-    __slots__ = ("_start", "_attempts")
+    __slots__ = ("_provider", "_start", "_attempts")
 
-    def __init__(self) -> None:
+    def __init__(self, provider: MetricsProvider) -> None:
+        self._provider = provider
         self._start = time.monotonic()
         self._attempts = 0
 
@@ -585,10 +733,11 @@ class _RetryMetrics:
         return counted
 
     def finish(self) -> None:
-        record_retry_metrics(time.monotonic() - self._start, self._attempts)
+        self._provider.record(RETRY_DURATION, time.monotonic() - self._start)
+        self._provider.record(RETRY_ATTEMPTS, self._attempts)
 
 
-def observe_retry_metrics(retry_func: Callable) -> Callable:
+def observe_retry_metrics(retry_func: CallableT) -> CallableT:
     """Decorator recording retry duration and attempt count around a retry helper.
 
     Wraps the retried callee to count attempts and times the whole operation — but only
@@ -599,24 +748,26 @@ def observe_retry_metrics(retry_func: Callable) -> Callable:
 
         @functools.wraps(retry_func)
         async def awrapper(callee, retry_settings=None, *args, **kwargs):
-            if not is_metrics_enabled():
+            provider = _provider
+            if provider is _NOOP_PROVIDER:
                 return await retry_func(callee, retry_settings, *args, **kwargs)
-            metrics = _RetryMetrics()
+            metrics = _RetryMetrics(provider)
             try:
                 return await retry_func(metrics.count(callee), retry_settings, *args, **kwargs)
             finally:
                 metrics.finish()
 
-        return awrapper
+        return cast(CallableT, awrapper)
 
     @functools.wraps(retry_func)
     def wrapper(callee, retry_settings=None, *args, **kwargs):
-        if not is_metrics_enabled():
+        provider = _provider
+        if provider is _NOOP_PROVIDER:
             return retry_func(callee, retry_settings, *args, **kwargs)
-        metrics = _RetryMetrics()
+        metrics = _RetryMetrics(provider)
         try:
             return retry_func(metrics.count(callee), retry_settings, *args, **kwargs)
         finally:
             metrics.finish()
 
-    return wrapper
+    return cast(CallableT, wrapper)

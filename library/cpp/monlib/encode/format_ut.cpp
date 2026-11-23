@@ -67,6 +67,27 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
             EFormat::PROMETHEUS);
     }
 
+    Y_UNIT_TEST(DisableContentEncodingForMonitoring) {
+        const THttpHeaders empty;
+        const THttpHeaders regularRequest({
+            {"Accept", "application/json"},
+        });
+        const THttpHeaders solomonRequest({
+            {"Accept", "application/json, application/x-solomon-spack"},
+        });
+        const THttpHeaders regularResponse({
+            {"Content-Type", "application/json"},
+        });
+        const THttpHeaders solomonResponse({
+            {"Content-Type", "Application/X-Solomon-Multi-Spack; version=1"},
+        });
+
+        UNIT_ASSERT(DisableContentEncoding(empty, regularResponse));
+        UNIT_ASSERT(DisableContentEncoding(regularRequest, regularResponse));
+        UNIT_ASSERT(!DisableContentEncoding(solomonRequest, regularResponse));
+        UNIT_ASSERT(!DisableContentEncoding(regularRequest, solomonResponse));
+    }
+
     Y_UNIT_TEST(FormatToStrFromStr) {
         const std::array<EFormat, 6> formats = {{
             EFormat::UNKNOWN,

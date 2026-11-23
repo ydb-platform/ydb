@@ -33,9 +33,13 @@ public:
             return true;
         }
 
-        if (Ev->Cookie != Replication->GetExpectedSecretResolverCookie()) {
-            YDB_LOG_ERROR_CTX(ctx, "Unexpected cookie",
+        if (!Replication->IsExpectedSecretResolver(Ev->Sender, Ev->Cookie)) {
+            YDB_LOG_DEBUG_CTX(
+                ctx,
+                "Ignore stale secret resolver result",
+                {"sender", Ev->Sender},
                 {"cookie", Ev->Cookie});
+            Replication.Reset();
             return true;
         }
 

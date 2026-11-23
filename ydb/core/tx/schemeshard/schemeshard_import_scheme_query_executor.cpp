@@ -13,6 +13,8 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
+
 using namespace NKikimr::NKqp;
 
 namespace NKikimr::NSchemeShard {
@@ -51,7 +53,6 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             query, // TKqpQueryId
             false, // keep in query cache
             true, // is query action prepare?
-            false, // per statement result
             deadline, // deadline
             kqpCounters.GetDbCounters(Database), // db counters
             GUCSettings, // GUC settings
@@ -74,9 +75,9 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty compile response");
         }
 
-        LOG_D("TSchemeQueryExecutor HandleCompileResponse"
-            << ", self: " << SelfId()
-            << ", status: " << result->Status;
+        YDB_LOG_DEBUG("TSchemeQueryExecutor HandleCompileResponse",
+            {"self", SelfId()},
+            {"status", result->Status},
         );
 
         if (result->Status != Ydb::StatusIds::SUCCESS) {
@@ -114,18 +115,25 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
     }
 
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
-        auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
-            << ", self: " << SelfId()
-            << ", status: " << status;
-        LOG_I(logMessage);
+        YDB_LOG_INFO("TSchemeQueryExecutor Reply",
+            {"self", SelfId()},
+            {"status", status},
+        );
 
         std::visit([&]<typename T>(T& value) {
             if constexpr (std::is_same_v<T, TString>) {
-                logMessage << ", error: " << value;
+                YDB_LOG_DEBUG("TSchemeQueryExecutor Reply",
+                    {"self", SelfId()},
+                    {"status", status},
+                    {"error", value},
+                );
             } else if constexpr (std::is_same_v<T, NKikimrSchemeOp::TModifyScheme>) {
-                logMessage << ", prepared query: " << value.ShortDebugString().Quote();
+                YDB_LOG_DEBUG("TSchemeQueryExecutor Reply",
+                    {"self", SelfId()},
+                    {"status", status},
+                    {"preparedQuery", value.ShortDebugString().Quote()},
+                );
             }
-            LOG_D(logMessage);
             Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(value)));
         }, result);
 
@@ -193,3 +201,5 @@ IActor* CreateSchemeQueryExecutor(NActors::TActorId replyTo, ui64 importId, ui32
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

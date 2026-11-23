@@ -12,9 +12,13 @@ The `export s3` command starts a server-side process of exporting data and schem
 
 {% note warning %}
 
-{% include [export-supported-object-types.md](export-supported-object-types.md) %}
+{% include [export-supported-object-types-s3.md](export-supported-object-types-s3.md) %}
 
-For a simpler export of single row and column tables to an S3-compatible data storage, you can use [external data sources](../../../../concepts/datamodel/external_data_source.md). For more details, see the article [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
+{% endnote %}
+
+{% note info %}
+
+As an alternative, you can export individual tables to an S3-compatible data storage using [external data sources](../../../../concepts/datamodel/external_data_source.md). For more details, see the article [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
 
 {% endnote %}
 
@@ -124,6 +128,8 @@ To get the list of export operations, use the `operation list export/s3` command
 {% include [export-operation-list-tail.md](export-operation-list-tail.md) %}
 
 ## Examples {#examples}
+
+To initialize asynchronous replication, follow the [step-by-step guide to initial synchronization using backup and restore](../../../../devops/async-replication-initial-sync.md). In this scenario, changefeeds must be ready before the export starts.
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

@@ -8,19 +8,18 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/private_client/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <yql/essentials/providers/common/metrics/service_counters.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #include <queue>
 
@@ -31,7 +30,7 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TResultSetWriterActor : public TBaseComputeActor<TResultSetWriterActor> {
+class TResultSetWriterActor: public TBaseComputeActor<TResultSetWriterActor> {
     struct TWriterMeta {
         int64_t Offset = 0;
         TInstant StartTime;
@@ -45,10 +44,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("FetchScriptResult") },
-            { MakeIntrusive<TComputeRequestCounters>("WriteResultSet") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>(
+            { { MakeIntrusive<TComputeRequestCounters>("FetchScriptResult") }, { MakeIntrusive<TComputeRequestCounters>("WriteResultSet") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -56,7 +53,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -66,7 +63,8 @@ public:
         }
     };
 
-    TResultSetWriterActor(const TRunActorParams& params, int64_t resultSetId, const TActorId& parent, const TActorId& connector, const NKikimr::NOperationId::TOperationId& operationId, const ::NMonitoring::TDynamicCounterPtr& counters)
+    TResultSetWriterActor(const TRunActorParams& params, int64_t resultSetId, const TActorId& parent, const TActorId& connector,
+        const NKikimr::NOperationId::TOperationId& operationId, const ::NMonitoring::TDynamicCounterPtr& counters)
         : TBaseComputeActor(counters, "ResultSetWriter")
         , Params(params)
         , ResultSetId(resultSetId)
@@ -74,7 +72,8 @@ public:
         , Connector(connector)
         , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_RESULT_SET_WRITER_ACTOR";
 
@@ -152,7 +151,8 @@ public:
                     {"operationId", OperationId},
                     {"resultSetId", ResultSetId},
                     {"result", splittedResultSets.Issues.ToOneLineString()});
-                Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::INTERNAL_ERROR));
+                Send(Parent,
+                    new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::INTERNAL_ERROR));
                 FailedAndPassAway();
                 return;
             }
@@ -181,7 +181,8 @@ public:
         auto cookie = ev->Cookie;
         auto it = WriterInflight.find(cookie);
         if (it == WriterInflight.end()) {
-            auto errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Internal error. Cookie wasn't found in case of write result reponse";
+            auto errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie
+                                             << " Internal error. Cookie wasn't found in case of write result reponse";
             YDB_LOG_ERROR("[ydb] [ResultWriter]",
                 {"cloudId", Params.CloudId},
                 {"scope", Params.Scope},
@@ -189,7 +190,8 @@ public:
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
                 {"errorMsg", errorMsg});
-            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{errorMsg}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(
+                             ResultSetId, NYql::TIssues{ NYql::TIssue{ errorMsg } }, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
@@ -199,7 +201,8 @@ public:
 
         if (!ev.Get()->Get()->Status.IsSuccess()) {
             writeResultCounters->Error->Inc();
-            TString errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Error writing result for offset " << meta.Offset;
+            TString errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Error writing result for offset "
+                                                << meta.Offset;
             YDB_LOG_ERROR("[ydb] [ResultWriter]",
                 {"cloudId", Params.CloudId},
                 {"scope", Params.Scope},
@@ -207,7 +210,8 @@ public:
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
                 {"errorMsg", errorMsg});
-            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{errorMsg}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(
+                             ResultSetId, NYql::TIssues{ NYql::TIssue{ errorMsg } }, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
@@ -239,7 +243,7 @@ public:
             auto chunk = std::move(ResultChunks.front());
             ResultChunks.pop();
 
-            WriterInflight[Cookie] = {static_cast<int64_t>(chunk.offset()), TInstant::Now()};
+            WriterInflight[Cookie] = { static_cast<int64_t>(chunk.offset()), TInstant::Now() };
             writeResultCounters->InFly->Inc();
             Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)), 0, Cookie++);
         }
@@ -247,7 +251,9 @@ public:
 
     void SendFetchScriptResultRequest() {
         LastProcessedToken = FetchToken;
-        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, NKikimr::NOperationId::TOperationId, int64_t, TString, uint64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, OperationId, ResultSetId, FetchToken, FetchRowsLimit));
+        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse,
+            NKikimr::NOperationId::TOperationId, int64_t, TString, uint64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT),
+            SelfId(), Connector, OperationId, ResultSetId, FetchToken, FetchRowsLimit));
     }
 
     void SendReplyAndPassAway() {
@@ -286,7 +292,7 @@ private:
     std::queue<Fq::Private::WriteTaskResultRequest> ResultChunks;
 };
 
-class TResultWriterActor : public TBaseComputeActor<TResultWriterActor> {
+class TResultWriterActor: public TBaseComputeActor<TResultWriterActor> {
 public:
     enum ERequestType {
         RT_GET_OPERATION,
@@ -295,10 +301,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("GetOperation") },
-            { MakeIntrusive<TComputeRequestCounters>("Ping") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>(
+            { { MakeIntrusive<TComputeRequestCounters>("GetOperation") }, { MakeIntrusive<TComputeRequestCounters>("Ping") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -306,7 +310,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -316,7 +320,9 @@ public:
         }
     };
 
-    TResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NKikimr::NOperationId::TOperationId& operationId, bool operationEntryExpected, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger,
+        const NKikimr::NOperationId::TOperationId& operationId, bool operationEntryExpected,
+        const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "ResultWriter")
         , Params(params)
         , Parent(parent)
@@ -325,7 +331,8 @@ public:
         , OperationId(operationId)
         , OperationEntryExpected(operationEntryExpected)
         , Counters(GetStepCountersSubgroup())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_RESULT_WRITER_ACTOR";
 
@@ -342,17 +349,13 @@ public:
     }
 
     void SendGetOperation() {
-        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), SelfId(), Connector, OperationId));
+        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(
+            Counters.GetCounters(ERequestType::RT_GET_OPERATION), SelfId(), Connector, OperationId));
     }
 
     void WriteNextResultSet() {
         if (CurrentResultSetId < (int64_t)PingTaskRequest.result_set_meta_size()) {
-            Register(new TResultSetWriterActor(Params,
-                                                    CurrentResultSetId++,
-                                                    SelfId(),
-                                                    Connector,
-                                                    OperationId,
-                                                    GetBaseCounters()));
+            Register(new TResultSetWriterActor(Params, CurrentResultSetId++, SelfId(), Connector, OperationId, GetBaseCounters()));
             return;
         }
 
@@ -392,11 +395,11 @@ public:
             return;
         }
 
-        for (const auto& resultSetMeta: ev.Get()->Get()->ResultSetsMeta) {
+        for (const auto& resultSetMeta : ev.Get()->Get()->ResultSetsMeta) {
             auto& meta = *PingTaskRequest.add_result_set_meta();
-            for (const auto& column: resultSetMeta.Columns) {
+            for (const auto& column : resultSetMeta.Columns) {
                 auto& new_column = *meta.add_column();
-                new_column.set_name(TString{column.Name});
+                new_column.set_name(TString{ column.Name });
                 *new_column.mutable_type() = column.Type.GetProto();
             }
         }
@@ -426,7 +429,9 @@ public:
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId});
-            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Move result error. OperationId: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(
+                             NYql::TIssues{ NYql::TIssue{ TStringBuilder{} << "Move result error. OperationId: " << OperationId.ToString() } },
+                             NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -484,14 +489,10 @@ private:
     Fq::Private::PingTaskRequest PingTaskRequest;
 };
 
-std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& params,
-                                                         const TActorId& parent,
-                                                         const TActorId& connector,
-                                                         const TActorId& pinger,
-                                                         const NKikimr::NOperationId::TOperationId& operationId,
-                                                         bool operationEntryExpected,
-                                                         const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+    const TActorId& pinger, const NKikimr::NOperationId::TOperationId& operationId, bool operationEntryExpected,
+    const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TResultWriterActor>(params, parent, connector, pinger, operationId, operationEntryExpected, queryCounters);
 }
 
-}
+}   // namespace NFq

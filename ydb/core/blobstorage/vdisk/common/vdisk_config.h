@@ -120,6 +120,8 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksFresh;
         ui32 HullSstSizeInChunksLevel;
         ui32 HeapAllocatorMaxSstInBytes;
+        // Latched at VDisk start: the feature flag is set and orderNumber < N. A running VDisk does not re-read either.
+        bool UseHeapAllocator = false;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
@@ -235,6 +237,7 @@ namespace NKikimr {
         TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        TControlWrapper SpaceReportPeriodSeconds = TControlWrapper(0, 0, 86400);
         bool UseActorSystemTimeInBSQueue = false;
         ui32 GroupSizeInUnits = 0;
 
@@ -288,6 +291,9 @@ namespace NKikimr {
         TControlWrapper EnableFreshSyncDataThrottling;
         TControlWrapper EnableChecksumReadValidationOnVDisk;
         TControlWrapper EnableChecksumWriteValidationOnVDisk;
+        // Build and check PDisk data sectors in VDisk actors (TFormatContext) instead of the PDisk threads.
+        // Read per request, so either value is safe at any moment.
+        TControlWrapper EnableVDiskSectorPreparation;
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

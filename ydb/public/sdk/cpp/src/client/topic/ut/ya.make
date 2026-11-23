@@ -1,10 +1,13 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-REQUIREMENTS(ram:32 cpu:4)
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/coverage.inc)
+
+REQUIREMENTS(ram:32 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -13,7 +16,9 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/library/persqueue
+    ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 YQL_LAST_ABI_VERSION()
@@ -25,8 +30,13 @@ SRCS(
     deferred_publication_ack_state_ut.cpp
     local_partition_ut.cpp
     producer_deferred_publication_ut.cpp
+    producer_retry_policy_ut.cpp
+    read_session_accounting_ut.cpp
     read_session_credentials_ut.cpp
+    read_session_kafka_timestamps_ut.cpp
+    reset_offset_ut.cpp
     topic_deferred_publish_ut.cpp
+    topic_path_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
     write_session_connect_ut.cpp
@@ -42,6 +52,7 @@ RESOURCE(
 END()
 
 RECURSE_FOR_TESTS(
+    replication
     with_direct_read_ut
     slow
 )

@@ -3,8 +3,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_path.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 
@@ -25,6 +23,8 @@ bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TPro
 bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description);
 
 bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info);
+
+bool IsCpuGuaranteeValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TPathId& resourcePoolPathId, const TResourcePoolInfo::TPtr& info, const TOperationContext& context);
 
 TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType);
 

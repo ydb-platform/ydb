@@ -2,14 +2,17 @@
 #include "helpers/query_executor.h"
 #include "helpers/local.h"
 #include "helpers/writer.h"
-#include "helpers/aggregation.h"
+#include "helpers/test_case.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -1505,6 +1508,198 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
 
+    Y_UNIT_TEST(PatternHint_ComplexLike) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/likeHint` (
+                id Int64 NOT NULL,
+                message String,
+                PRIMARY KEY (id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto inserted = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/likeHint` (id, message) VALUES
+                (1, "xx aaabbb yy"),
+                (2, "bbb aaa"),
+                (3, "nothing")
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        auto run = [&](const TString& query) {
+            const auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' ORDER BY id)"), "[[1]]");
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%AAA%bbb%' ORDER BY id)"), "[[1]]");
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%' ORDER BY id)"), "[[2];[3]]");
+
+        auto ssaOf = [&](const TString& query, const TParams* params = nullptr) {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+            auto it = params
+                ? tableClient.StreamExecuteScanQuery(query, *params, scanSettings).GetValueSync()
+                : tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = CollectStreamResult(it);
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.PlanJson, &plan, true));
+            TString ssa;
+            std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+                if (node.IsMap()) {
+                    for (const auto& [key, value] : node.GetMapSafe()) {
+                        if (key == "SsaProgram") {
+                            ssa += value.GetStringRobust();
+                        }
+                        walk(value);
+                    }
+                } else if (node.IsArray()) {
+                    for (const auto& value : node.GetArraySafe()) {
+                        walk(value);
+                    }
+                }
+            };
+            walk(plan);
+            return ssa;
+        };
+
+        const auto like = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(like.Contains("PatternHint"), like);
+        UNIT_ASSERT_C(like.Contains("\"CaseSensitive\":true") || like.Contains("\"CaseSensitive\": true"), like);
+        const auto ilike = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(ilike.Contains("PatternHint"), ilike);
+        UNIT_ASSERT_C(ilike.Contains("\"CaseSensitive\":false") || ilike.Contains("\"CaseSensitive\": false"), ilike);
+        const auto negated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!negated.Contains("PatternHint"), negated);
+        // OR is one KqpOlapApply. A hint on that kernel would be wrong: true does not
+        // imply either pattern. Each branch would need its own apply before it can carry a hint.
+        const auto disjunction = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' OR message LIKE '%ccc%ddd%')");
+        UNIT_ASSERT_C(!disjunction.Contains("PatternHint"), disjunction);
+        const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%x#_%y%' ESCAPE '#')");
+        UNIT_ASSERT_C(escaped.Contains("PatternHint"), escaped);
+        const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
+        const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", &params);
+        UNIT_ASSERT_C(!parameterized.Contains("PatternHint"), parameterized);
+
+        // Literal=true matches the pattern text, not the LIKE. A hint must not be attached.
+        TStreamExecScanQuerySettings literalSettings;
+        literalSettings.Explain(true);
+        auto literalIt = tableClient.StreamExecuteScanQuery(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, true AS Literal))(message);
+        )", literalSettings).GetValueSync();
+        UNIT_ASSERT_C(literalIt.IsSuccess(), literalIt.GetIssues().ToString());
+        const auto literal = CollectStreamResult(literalIt);
+        UNIT_ASSERT_C(literal.Ast && literal.Ast->Contains("KqpOlapApply"), literal.Ast.GetOrElse(""));
+        TString literalSsa;
+        if (literal.PlanJson) {
+            NJson::TJsonValue literalPlan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*literal.PlanJson, &literalPlan, true));
+            std::function<void(const NJson::TJsonValue&)> walkLiteral = [&](const NJson::TJsonValue& node) {
+                if (node.IsMap()) {
+                    for (const auto& [key, value] : node.GetMapSafe()) {
+                        if (key == "SsaProgram") {
+                            literalSsa += value.GetStringRobust();
+                        }
+                        walkLiteral(value);
+                    }
+                } else if (node.IsArray()) {
+                    for (const auto& value : node.GetArraySafe()) {
+                        walkLiteral(value);
+                    }
+                }
+            };
+            walkLiteral(literalPlan);
+        }
+        UNIT_ASSERT_C(!literalSsa.Contains("PatternHint"), literalSsa);
+
+        const auto regexp = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message REGEXP 'aaa.*bbb')");
+        UNIT_ASSERT_C(!regexp.Contains("PatternHint"), regexp);
+        // LIKE is a plain Bool (false for NULL), so YQL folds COALESCE(match, true) to the bare match,
+        // which keeps its hint. If LIKE ever becomes optional, the COALESCE reaches the parser and gets no hint.
+        const auto coalesceTrue = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE COALESCE(message LIKE '%aaa%bbb%', true))");
+        UNIT_ASSERT_C(coalesceTrue.Contains("PatternHint"), coalesceTrue);
+        // The matched argument must be a column. A concatenation or a cast from a non-string type is not.
+        const auto concatenated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE (message || 'x') LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!concatenated.Contains("PatternHint"), concatenated);
+        const auto castFromInt = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE CAST(id AS String) LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!castFromInt.Contains("PatternHint"), castFromInt);
+        // Positional Re2::Options with only CaseSensitive (10th argument) set still gets a hint.
+        const auto positionalCase = ssaOf(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(
+                CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Uint64?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Bool?), true
+            ))(message);
+        )");
+        UNIT_ASSERT_C(positionalCase.Contains("PatternHint"), positionalCase);
+        UNIT_ASSERT_C(positionalCase.Contains("\"CaseSensitive\":true") || positionalCase.Contains("\"CaseSensitive\": true"), positionalCase);
+
+        auto explainNoHint = [&](const TString& query, const TParams& params) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = tableClient.StreamExecuteScanQuery(query, params, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            const auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(collected.Ast && collected.Ast->Contains("KqpOlapApply"), collected.Ast.GetOrElse(""));
+            TString program;
+            if (collected.PlanJson) {
+                NJson::TJsonValue plan;
+                UNIT_ASSERT(NJson::ReadJsonTree(*collected.PlanJson, &plan, true));
+                std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+                    if (node.IsMap()) {
+                        for (const auto& [key, value] : node.GetMapSafe()) {
+                            if (key == "SsaProgram") {
+                                program += value.GetStringRobust();
+                            }
+                            walk(value);
+                        }
+                    } else if (node.IsArray()) {
+                        for (const auto& value : node.GetArraySafe()) {
+                            walk(value);
+                        }
+                    }
+                };
+                walk(plan);
+            }
+            UNIT_ASSERT_C(!program.Contains("PatternHint"), program);
+        };
+        const auto literalParam = tableClient.GetParamsBuilder().AddParam("$literal").Bool(true).Build().Build();
+        explainNoHint(R"(
+            DECLARE $literal AS Bool;
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, $literal AS Literal))(message);
+        )", literalParam);
+        explainNoHint(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(
+                CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Uint64?), true, CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), true
+            ))(message);
+        )", tableClient.GetParamsBuilder().Build());
+        explainNoHint(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            $safe = Re2::Options(true AS CaseSensitive);
+            $unsafe = Re2::Options(true AS CaseSensitive, true AS Literal);
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, IF(false, $safe, $unsafe))(message);
+        )", tableClient.GetParamsBuilder().Build());
+    }
+
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -1758,6 +1953,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "[[1];[3]]",
         };
 
+        const TString stringContainsIgnoreCaseKernel = "String._yql_AsciiContainsIgnoreCase";
+        const TString fastContainsIgnoreCaseKernel = "OlapKernels._yql_AsciiContainsIgnoreCase";
+
         UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
 
         auto run = [&](const TString& extraPragma, bool expectFastKernel) {
@@ -1780,22 +1978,146 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
                     TStringBuilder() << "ILIKE contains not pushed down. Query: " << query);
                 if (expectFastKernel) {
-                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") != std::string::npos,
+                    UNIT_ASSERT_C(ast->find(fastContainsIgnoreCaseKernel) != std::string::npos,
                         TStringBuilder() << "OlapKernels UDF not used. Query: " << query << " AST: " << *ast);
-                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                    UNIT_ASSERT_C(ast->find(stringContainsIgnoreCaseKernel) == std::string::npos,
                         TStringBuilder() << "String UDF path still used with pragma on. Query: " << query);
                 } else {
-                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                    UNIT_ASSERT_C(ast->find(fastContainsIgnoreCaseKernel) == std::string::npos,
                         TStringBuilder() << "OlapKernels UDF used with pragma off. Query: " << query);
-                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") != std::string::npos,
-                        TStringBuilder() << "UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
+                    UNIT_ASSERT_C(ast->find(stringContainsIgnoreCaseKernel) != std::string::npos,
+                        TStringBuilder() << "String UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
                 }
+                const auto& expectedKernel = expectFastKernel ? fastContainsIgnoreCaseKernel : stringContainsIgnoreCaseKernel;
+                const auto plan = res.GetStats()->GetPlan();
+                UNIT_ASSERT_C(plan->find(Sprintf("Udf(%s)(", expectedKernel.c_str())) != std::string::npos,
+                    TStringBuilder() << "UDF filter is not formatted. Query: " << query << " Plan: " << *plan);
                 CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
             }
         };
 
         run(R"(PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";)", true);
         run("", false);
+    }
+
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfDifferentStringTypes, Utf8Column, NotNullColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto schemeSession = tableClient.CreateSession().GetValueSync().GetSession();
+        UNIT_ASSERT(schemeSession.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                field %s%s,
+                PRIMARY KEY(id)
+            )
+            WITH (STORE = COLUMN);
+        )", Utf8Column ? "Utf8" : "String", NotNullColumn ? " NOT NULL" : ""))
+                        .GetValueSync()
+                        .IsSuccess());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto insertResult = session.ExecuteQuery(Sprintf(R"(
+            INSERT INTO `/Root/foo` (id, field) VALUES
+                (1, "foobar"),
+                (2, "barfoo"),
+                (3, "foo"),
+                (4, %s)
+        )", NotNullColumn ? "\"baz\"" : "NULL"), NYdb::NQuery::TTxControl::NoTx())
+                                      .GetValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues());
+
+        const THashMap<TString, std::pair<TString, TString>> patterns = {
+            {"EqualsIgnoreCase", {"foo", "[[3]]"}},
+            {"StartsWithIgnoreCase", {"foo%", "[[1];[3]]"}},
+            {"EndsWithIgnoreCase", {"%foo", "[[2];[3]]"}},
+            {"StringContainsIgnoreCase", {"%foo%", "[[1];[2];[3]]"}},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(patterns.size(), NOpt::IgnoreCaseSubstringMatchFunctions.size());
+
+        const TString directUdfNode = "KqpOlapUdf";
+
+        auto run = [&](const TString& expectedKernel, const TString& pattern, const TString& expectedResult,
+                       const TString& extraPragma) {
+            const auto query = Sprintf(R"(
+                PRAGMA OptimizeSimpleILike;
+                PRAGMA AnsiLike;
+                %s
+                SELECT id FROM `/Root/foo` WHERE field ILIKE "%s" ORDER BY id;
+            )", extraPragma.c_str(), pattern.c_str());
+            const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                                  NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResult);
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find(directUdfNode) != std::string::npos,
+                          TStringBuilder() << "Expected direct UDF node. Query: " << query << " AST: " << *ast);
+            UNIT_ASSERT_C(ast->find(expectedKernel) != std::string::npos,
+                          TStringBuilder() << "Expected UDF kernel. Query: " << query << " AST: " << *ast);
+        };
+
+        for (const auto& [functionName, kernelName] : NOpt::IgnoreCaseSubstringMatchFunctions) {
+            const auto* test = patterns.FindPtr(functionName);
+            UNIT_ASSERT_C(test, TStringBuilder() << "Missing ILIKE pattern for " << functionName);
+            run(kernelName, test->first, test->second, "");
+        }
+
+        const auto* containsTest = patterns.FindPtr("StringContainsIgnoreCase");
+        UNIT_ASSERT(containsTest);
+        run("OlapKernels._yql_AsciiContainsIgnoreCase", containsTest->first, containsTest->second,
+            "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = \"true\";");
+    }
+
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfUsesIndex, Utf8Column, NotNullColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        const TString script = Sprintf(R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                field %s%s,
+                PRIMARY KEY(id),
+                INDEX idx_field LOCAL USING bloom_ngram_filter ON (field)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = false)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/foo` (TYPE TABLE) SET
+                (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES
+                (1, "foobar"),
+                (2, "barfoo");
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES (3, "foo");
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES (4, %s);
+            ------
+            ONE_COMPACTION
+            ------
+            READ: SELECT COUNT(*) > 0u FROM `/Root/foo/.sys/primary_index_stats` WHERE EntityName = "idx_field";
+            EXPECTED: [[%%true]]
+            ------
+            READ:
+            PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+            SELECT id FROM `/Root/foo` WHERE field ILIKE "%%FOO%%" ORDER BY id;
+            EXPECTED: [[1];[2];[3]]
+            IDX_ND_SKIP_APPROVE: 0, 0, 1
+        )", Utf8Column ? "Utf8" : "String", NotNullColumn ? " NOT NULL" : "", NotNullColumn ? "\"baz\"" : "NULL");
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(settings);
     }
 
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
@@ -2330,6 +2652,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY a
                 LIMIT 1;
             )",
+            // Several projections over the same JSON_VALUE: the column shard computes it once,
+            // but every projection must still be a separate output column of the SSA program.
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT a, JSON_VALUE(jsonDoc1, "$.\"a\"") as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 1.0 as col2
+                FROM `/Root/foo`
+                ORDER BY a;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT col1, col2, col3, COUNT(*) as c
+                FROM `/Root/foo`
+                GROUP BY
+                    JSON_VALUE(jsonDoc1, "$.\"a\"") as col1,
+                    CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 1.0 as col2,
+                    CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 2.0 as col3
+                ORDER BY col1;
+            )",
         };
 
         std::vector<TString> results = {
@@ -2341,7 +2683,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"([[#];[[1.1]];[[2.1]]])",
             R"([[#;#];[[%true];[1.1]];[[%false];[2.1]]])",
             R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])",
-            R"([[1;["a1"]]])"
+            R"([[1;["a1"]]])",
+            R"([[1;["1.1"];[2.1]];[2;["2.1"];[3.1]];[3;#;#]])",
+            R"([[#;#;#;1u];[["1.1"];[2.1];[3.1];1u];[["2.1"];[3.1];[4.1];1u]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -3091,8 +3435,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                YDB_LOG_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
@@ -3105,8 +3449,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root")
@@ -4389,7 +4733,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )");
 
-            AFL_VERIFY(rows.size() == 4)("count", rows.size());
+            YDB_LOG_VERIFY(rows.size() == 4,
+                {"count", rows.size()});
             if (GetUint64(rows[0].at("sum_records_count")) == 0 && GetUint64(rows[1].at("sum_records_count")) == 0 &&
                 GetUint64(rows[2].at("sum_records_count")) == 0 && GetUint64(rows[3].at("sum_records_count")) == 70000) {
                 break;
@@ -4735,6 +5080,57 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     [[1];[2];["value"]]
                 ]
             )", FormatResultSetYson(resultSet));
+        }
+    }
+
+    Y_UNIT_TEST(InsertIntoNullablePKAfterFlagDisabled) {
+        // The flag gates table creation only: a table created with nullable key columns keeps accepting NULL keys
+        // after the flag is turned off, while NOT NULL key columns still reject NULL.
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("pk1").SetType(NScheme::NTypeIds::Int64).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("pk2").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::String).SetNullable(true),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "pk1", "pk2" }).SetSharding({ "pk1" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetAllowNullableColumnsInPK(false);
+
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        {
+            const auto result = client
+                .ExecuteQuery(
+                    R"(INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES (null, 1, "a"), (2, 2, "b"))",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto result = client
+                .ExecuteQuery(
+                    R"(INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES (3, null, "c"))",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "NULL in a NOT NULL key column must be rejected");
+        }
+        {
+            const auto resultSelect = client
+                .ExecuteQuery("SELECT * FROM `/Root/ttt` ORDER BY pk1, pk2", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            NYdb::TResultSetParser parser(resultSelect.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 2);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT(!parser.ColumnParser("pk1").GetOptionalInt64());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk2").GetInt32(), 1);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("pk1").GetOptionalInt64(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk2").GetInt32(), 2);
         }
     }
 
@@ -5427,8 +5823,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )";
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("TRUNCATE TABLE is not supported for column tables"),
                 "Unexpected error message: " << result.GetIssues().ToString());
         }
     }
@@ -5683,6 +6079,729 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(Filter_NotAllUsedFieldsInResultSet) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, resource_id FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 5;
+            )")
+            .SetExpectedReply("[[5;#]]")
+            .AddExpectedPlanOptions("KqpOlapFilter");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(ResultTL_FilterL_Limit2) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedLimit(2);
+        TestOlapTable({ testCase });
+    }
+
+    Y_UNIT_TEST(ResultTL_FilterL_OrderT_Limit2) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                ORDER BY timestamp
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker().SetExpectedLimit(2);
+        TestOlapTable({ testCase });
+    }
+
+    Y_UNIT_TEST(ResultT_FilterL_Limit2) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("KqpOlapExtractMembers")
+            .MutableLimitChecker().SetExpectedLimit(2);
+        TestOlapTable({ testCase });
+    }
+
+    Y_UNIT_TEST(ResultT_FilterL_OrderT_Limit2) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                ORDER BY timestamp
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("KqpOlapExtractMembers")
+            .MutableLimitChecker().SetExpectedLimit(2);
+        TestOlapTable({ testCase });
+    }
+
+    Y_UNIT_TEST(ResultL_FilterL_OrderL_Limit2) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level > 1
+                ORDER BY level
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter");
+
+        TestOlapTable({ testCase });
+    }
+
+    Y_UNIT_TEST(NoErrorOnLegacyPragma) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                PRAGMA Kikimr.KqpPushOlapProcess = "false";
+                SELECT id, resource_id FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 5;
+            )")
+            .SetExpectedReply("[[5;#]]")
+            .AddExpectedPlanOptions("KqpOlapFilter");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(BlocksRead) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                PRAGMA UseBlocks;
+                PRAGMA Kikimr.OptEnableOlapPushdown = "false";
+
+                SELECT
+                    id, resource_id
+                FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 5;
+            )")
+            .SetExpectedReply("[[5;#]]");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_GetValue) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .SetExpectedReply(R"([[1;["val1"];#]])");
+        TestTableWithNulls({testCase});
+    }
+
+    Y_UNIT_TEST(Json_GetValue_Minus) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.'col-abc'"), JSON_VALUE(jsondoc, "$.'col-abc'") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.'col-abc'") = "val-abc" AND id = 1;
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .SetExpectedReply(R"([[1;["val-abc"];#]])");
+
+        TestTableWithNulls({testCase});
+    }
+
+    Y_UNIT_TEST(Json_GetValue_ToString) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.col1" RETURNING String) = "val1" AND id = 1;
+            )")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[1;["val1"];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_GetValue_ToInt) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 1;
+            )")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[1;[16];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(JsonDoc_GetValue) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsondoc, "$.col1") = "val1" AND id = 6;
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .SetExpectedReply(R"([[6;#;["val1"]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(JsonDoc_GetValue_ToString) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
+            )")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[6;#;["val1"]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(JsonDoc_GetValue_ToInt) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int"), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 6;
+            )")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[6;#;[16]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Exists) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    JSON_EXISTS(jsonval, "$.col1") AND level = 1;
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+            .SetExpectedReply(R"([[1;[%true];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(JsonDoc_Exists) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    JSON_EXISTS(jsondoc, "$.col1") AND id = 6;
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+            .SetExpectedReply(R"([[6;#;[%true]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Query) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_QUERY(jsonval, "$.col1" WITH UNCONDITIONAL WRAPPER),
+                    JSON_QUERY(jsondoc, "$.col1" WITH UNCONDITIONAL WRAPPER)
+                FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .AddExpectedPlanOptions("Udf")
+            .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(MixedJsonAndOlapApply) {
+        TOlapTestCase testCase;
+        //(R"({"col1": "val1", "col-abc": "val-abc", "obj": {"obj_col2_int": 16}})"
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.\"col-abc\"") FROM `/Root/tableWithNulls`
+                WHERE id = 1
+                    AND  JSON_VALUE(jsonval, "$.col1") = "val1"
+                    AND  JSON_VALUE(jsonval, "$.\"col-abc\"") ilike "%A%b%"
+                    AND JSON_EXISTS(jsonval, "$.obj.obj_col2_int")
+
+            )")
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+            .AddExpectedPlanOptions("KqpOlapApply")
+            .SetExpectedReply(R"([[1;["val-abc"]]])")
+        ;
+
+        TestTableWithNulls({testCase});
+    }
+
+    // JSON_VALUE must be computed by the column shard (`KqpOlapJsonValue`) and only its value must be passed
+    // into `KqpOlapApply`, instead of the whole JSON column.
+    Y_UNIT_TEST(JsonValuePushedIntoOlapApply) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        const auto countOccurrences = [](const TString& text, const TString& pattern) {
+            ui32 count = 0;
+            for (size_t pos = text.find(pattern); pos != TString::npos; pos = text.find(pattern, pos + 1)) {
+                ++count;
+            }
+            return count;
+        };
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+            // Each JSON_VALUE of the predicate is computed once by `KqpOlapJsonValue` and shared by all `KqpOlapApply` callables.
+            ui32 ExpectedJsonValues;
+        };
+
+        const std::vector<TCase> cases = {
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.\"col-abc\"") ILIKE "%A%b%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsondoc, "$.\"col-abc\"") ILIKE "%A%b%"
+                    ORDER BY id;
+                )",
+                R"([[6];[7];[8];[9];[10]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE CAST(JSON_VALUE(jsonval, "$.obj.obj_col2_int") AS Int32) + 1 > 16 AND id < 3
+                    ORDER BY id;
+                )",
+                R"([[1];[2]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") || JSON_VALUE(jsonval, "$.\"col-abc\"") LIKE "val1%abc" AND id > 3
+                    ORDER BY id;
+                )",
+                R"([[4];[5]])",
+                2
+            },
+            // The following predicates contain no UDF applies at all: `KqpOlapApply` lambda consists of plain MKQL
+            // callables (`Coalesce`, `If`, `Concat`, comparison) over the external arguments.
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE COALESCE(JSON_VALUE(jsonval, "$.missing"), "dflt") = "dflt"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE IF(JSON_VALUE(jsonval, "$.col1") = "val1", 1, 0) = 1
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") || JSON_VALUE(jsonval, "$.\"col-abc\"") = "val1val-abc"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                2
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != TString::npos, "Predicate is not pushed down. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") != TString::npos, "Predicate is not pushed by KqpOlapApply. Query: " << testCase.Query);
+            UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "KqpOlapJsonValue"), testCase.ExpectedJsonValues,
+                "Unexpected number of KqpOlapJsonValue callables. Query: " << testCase.Query);
+            // Only `id` is selected, so JSON must not be processed outside of `KqpOlapJsonValue` at all.
+            UNIT_ASSERT_C(ast.find("Json2.") == TString::npos,
+                "JSON is processed by Json2 UDF instead of KqpOlapJsonValue. Query: " << testCase.Query);
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+        }
+    }
+
+    // The same JSON_VALUE used by several pushed predicates (separate `KqpOlapApply` callables, native comparisons,
+    // or twice inside a single callable) is a single `KqpOlapJsonValue` node in the AST (CSEE) and gives correct results.
+    Y_UNIT_TEST(JsonValueUsedBySeveralPushedPredicates) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        const auto countOccurrences = [](const TString& text, const TString& pattern) {
+            ui32 count = 0;
+            for (size_t pos = text.find(pattern); pos != TString::npos; pos = text.find(pattern, pos + 1)) {
+                ++count;
+            }
+            return count;
+        };
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+            ui32 ExpectedJsonValues;
+            ui32 ExpectedOlapApplies;
+        };
+
+        // "col1" is "val1" in the JSON of rows 1..5.
+        const std::vector<TCase> cases = {
+            {
+                // Two Re2-based conjuncts over the same JSON_VALUE.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") ILIKE "%V%1%" AND JSON_VALUE(jsonval, "$.col1") ILIKE "%a%l%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/2
+            },
+            {
+                // Mixed: a Re2-based conjunct and a `CAST` conjunct over the same JSON_VALUE, plus a different JSON_VALUE.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") ILIKE "%V%1%"
+                        AND CAST(JSON_VALUE(jsonval, "$.col1") AS String) ILIKE "%a%l%"
+                        AND JSON_VALUE(jsonval, "$.\"col-abc\"") ILIKE "%A%b%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/2,
+                /*expectedOlapApplies=*/3
+            },
+            {
+                // Native comparison and `KqpOlapApply` over the same JSON_VALUE (different filter levels).
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND JSON_VALUE(jsonval, "$.col1") ILIKE "%a%l%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/1
+            },
+            {
+                // Two native comparisons over the same JSON_VALUE.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") = "val1" OR JSON_VALUE(jsonval, "$.col1") = "val2"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/0
+            },
+            {
+                // The same JSON_VALUE on both sides of a native comparison.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") = JSON_VALUE(jsonval, "$.col1")
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/0
+            },
+            {
+                // The same JSON_VALUE twice inside a single `KqpOlapApply`.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") || JSON_VALUE(jsonval, "$.col1") ILIKE "VAL1val1"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/1
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+
+            UNIT_ASSERT_C(ast.find("Json2.") == TString::npos,
+                "JSON is processed by Json2 UDF instead of KqpOlapJsonValue. Query: " << testCase.Query);
+            UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "(KqpOlapApply "), testCase.ExpectedOlapApplies,
+                "Unexpected number of KqpOlapApply callables. Query: " << testCase.Query);
+            // Identical expression nodes are merged (CSEE), so the AST contains each distinct JSON_VALUE once.
+            UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "(KqpOlapJsonValue "), testCase.ExpectedJsonValues,
+                "Unexpected number of KqpOlapJsonValue callables in AST. Query: " << testCase.Query);
+        }
+    }
+
+    // `KqpOlapJsonValue` kernel differs from `JsonValue` with an explicit RETURNING type (e.g. it does not support dates
+    // and uses lenient `SqlValueConvertToUtf8` instead of strict `SqlValueUtf8` for Utf8 / String) and ignores
+    // ON EMPTY / ON ERROR defaults, so such JSON_VALUE must be computed inside `KqpOlapApply` lambda via `Json2` UDFs
+    // both when it is compared natively and when it is an argument of some other pushed expression.
+    Y_UNIT_TEST(JsonValueWithReturningTypeIsNotPushedAsOlapJsonValue) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+        };
+
+        // "obj_col2_int" is a number 16 in the JSON.
+        const std::vector<TCase> cases = {
+            {
+                // Strict `SqlValueUtf8` returns NULL for a number, so nothing must match.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING String) ILIKE "%1%6%"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                // Explicit RETURNING Utf8 also means strict `SqlValueUtf8` (unlike JSON_VALUE without RETURNING).
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Utf8) ILIKE "%1%6%"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                // Kernel does not support date types at all.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE CAST(JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Date) AS Utf8) LIKE "1970%17"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE CAST(JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int32) AS Utf8) ILIKE "%1%6%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+            // Native comparisons: the same semantics must be preserved when JSON_VALUE is compared directly.
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Utf8) LIKE "%16%"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING String) = "16"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int32) = 16
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+            {
+                // `KqpOlapJsonValue` returns NULL on empty result, so DEFAULT ON EMPTY must not be pushed as well.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.missing" DEFAULT "dflt" ON EMPTY) = "dflt" AND id <= 5
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+            {
+                // PASSING variables are not supported by `KqpOlapJsonValue`.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1" PASSING "unused"u AS v) = "val1"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") != TString::npos, "Predicate is not pushed by KqpOlapApply. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
+                "JSON_VALUE with RETURNING type or non-default options must not be pushed as KqpOlapJsonValue. Query: " << testCase.Query);
+        }
+
+        // The same applies to the projection pushdown.
+        {
+            const TString query = R"(
+                SELECT JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Utf8) FROM `/Root/tableWithNulls` WHERE id = 1;
+            )";
+            auto explainResult = StreamExplainQuery(query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), R"([[#]])");
+
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
+                "JSON_VALUE with RETURNING type must not be pushed as KqpOlapJsonValue projection. Query: " << query);
+        }
+
+        {
+            const TString query = R"(
+                SELECT id FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.obj" DEFAULT "none" ON ERROR) = "none" AND id <= 5
+                ORDER BY id;
+            )";
+            auto explainResult = StreamExplainQuery(query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), R"([[1];[2];[3];[4];[5]])");
+
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
+                "JSON_VALUE with DEFAULT ON ERROR must not be pushed as KqpOlapJsonValue. Query: " << query);
+        }
+    }
+
+    // Pushing JSON_VALUE as `KqpOlapJsonValue` before `KqpOlapApply` must not widen the set of predicates which are pushed down:
+    // these predicates have never been pushed and are still computed by KQP (via `Json2` UDFs) over the whole JSON column.
+    Y_UNIT_TEST(JsonValueExternalArgsDoNotWidenPushdown) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+        };
+
+        const std::vector<TCase> cases = {
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") IS NULL AND id < 8
+                    ORDER BY id;
+                )",
+                R"([[6];[7]])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsondoc, "$.col1") IS NOT NULL
+                    ORDER BY id;
+                )",
+                R"([[6];[7];[8];[9];[10]])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") IN ("val1", "val2")
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos, "Unexpected KqpOlapJsonValue pushdown. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") == TString::npos, "Unexpected KqpOlapApply pushdown. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("Json2.") != TString::npos, "JSON_VALUE is expected to be computed by KQP. Query: " << testCase.Query);
+        }
+    }
+
+    Y_UNIT_TEST(BlockGenericSelectAll) {
+        TOlapTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    id, resource_id, level
+                FROM `/Root/tableWithNulls`
+                WHERE level != 5 OR level IS NULL
+                ORDER BY id, resource_id, level;
+            )")
+            .AddExpectedPlanOptions("KqpBlockReadOlapTableRanges")
+            .AddExpectedPlanOptions("WideFromBlocks")
+            .SetExpectedReply(R"([[1;#;[1]];[2;#;[2]];[3;#;[3]];[4;#;[4]];[6;["6"];#];[7;["7"];#];[8;["8"];#];[9;["9"];#];[10;["10"];#]])");
+
+        TestTableWithNulls({ testCase }, /* generic */ true);
     }
 
 }

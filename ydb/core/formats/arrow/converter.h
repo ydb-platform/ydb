@@ -13,7 +13,7 @@ class IRowWriter {
 public:
     virtual ~IRowWriter() = default;
 
-    // NOTE: This method must copy cells data to its own strorage
+    // The cells point into the batch and the converter's pool: valid only during the call.
     virtual void AddRow(const TConstArrayRef<TCell>& cells) = 0;
 };
 

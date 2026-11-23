@@ -1,5 +1,9 @@
 #pragma once
 
+#include "page_pool_constants.h"
+#include "system_mmap.h"
+#include "tracked_mmap.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/yexception.h>
@@ -8,6 +12,7 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
+#include <functional>
 #include <stack>
 #include <queue>
 
@@ -19,11 +24,13 @@
 namespace NKikimr {
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
-// By default the default allocator is not used unless PROFILE_MEMORY_ALLOCATIONS is defined.
-// Call this method once at the start of the process - to enable usage of default allocator.
 void UseDefaultAllocator();
+bool IsDefaultAllocatorUsed();
+#else
+consteval bool IsDefaultAllocatorUsed() {
+    return false;
+}
 #endif
-void UseDefaultArrowAllocator();
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
@@ -49,29 +56,10 @@ public:
     virtual ~TMemoryLimitExceededException() = default;
 };
 
-class TSystemMmap {
-public:
-    void* Mmap(size_t size);
-    int Munmap(void* addr, size_t size) noexcept;
-
-    static TSystemMmap& GetInstance();
-};
-
-class TFakeMmap {
-public:
-    std::function<void*(size_t size)> OnMmap;
-    std::function<void(void* addr, size_t size)> OnMunmap;
-
-    void* Mmap(size_t size);
-    int Munmap(void* addr, size_t size) noexcept;
-
-    static TFakeMmap& GetInstance();
-};
-
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 class TAlignedPagePoolImpl {
 public:
-    static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
+    static constexpr ui64 POOL_PAGE_SIZE = PoolPageSize;
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
@@ -238,15 +226,6 @@ public:
         IsMemoryYellowZoneForcefullyChanged_ = true;
     }
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-    static bool IsDefaultAllocatorUsed();
-#else
-    static consteval bool IsDefaultAllocatorUsed() {
-        return false;
-    }
-#endif
-    static bool IsDefaultArrowAllocatorUsed();
-
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size);
@@ -313,23 +292,21 @@ protected:
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void* GetAlignedPage(ui64 size);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void* GetAlignedPage();
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void ReleaseAlignedPage(void* mem, ui64 size);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void ReleaseAlignedPage(void* mem);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 i64 GetTotalMmapedBytes();
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 i64 GetTotalFreeListBytes();
-
-size_t GetMemoryMapsCount();
 
 } // namespace NKikimr

@@ -51,18 +51,15 @@ IR::TypeTuple ConvertToRuntimeTypeTuple(TRange<EWebAssemblyValueType> types)
     return IR::TypeTuple(wavmTypes.data(), wavmTypes.size());
 }
 
-TWebAssemblyRuntimeType GetTypeId(
-    bool intrinsic,
-    EWebAssemblyValueType returnType,
-    TRange<EWebAssemblyValueType> argumentTypes)
+TWebAssemblyRuntimeType GetTypeId(bool intrinsic, EWebAssemblyValueType returnType, TRange<EWebAssemblyValueType> argumentTypes)
 {
     auto wavmReturnType = ConvertToRuntimeTypeTuple(returnType);
     auto wavmArgumentTypes = ConvertToRuntimeTypeTuple(argumentTypes);
     const auto wavmCallingConvention = intrinsic ? IR::CallingConvention::intrinsic : IR::CallingConvention::wasm;
     auto functionType = IR::FunctionType(wavmReturnType, wavmArgumentTypes, wavmCallingConvention);
-    return TWebAssemblyRuntimeType{std::bit_cast<void*>(functionType.getEncoding().impl)};
+    return TWebAssemblyRuntimeType{ std::bit_cast<void*>(functionType.getEncoding().impl) };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

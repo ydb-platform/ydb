@@ -18,9 +18,10 @@ def parse_args():
     )
     parser.add_argument("--port", type=int, required=True, help="HTTP port to listen on")
     parser.add_argument("--token", type=str, default=DEFAULT_TOKEN, help="IAM token to return")
-    parser.add_argument("--token-from-env", type=str, help="Use IAM token from environment (preferred for secret passing)")
-    parser.add_argument("--expires-in", type=int, default=DEFAULT_EXPIRES_IN,
-                        help="Token TTL in seconds")
+    parser.add_argument(
+        "--token-from-env", type=str, help="Use IAM token from environment (preferred for secret passing)"
+    )
+    parser.add_argument("--expires-in", type=int, default=DEFAULT_EXPIRES_IN, help="Token TTL in seconds")
     return parser.parse_args()
 
 
@@ -37,11 +38,13 @@ def make_handler(token, expires_in):
                 self.send_error(400, "Metadata-Flavor: Google header required")
                 return
 
-            body = json.dumps({
-                "access_token": token,
-                "expires_in": expires_in,
-                "token_type": "Bearer",
-            }).encode("utf-8")
+            body = json.dumps(
+                {
+                    "access_token": token,
+                    "expires_in": expires_in,
+                    "token_type": "Bearer",
+                }
+            ).encode("utf-8")
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

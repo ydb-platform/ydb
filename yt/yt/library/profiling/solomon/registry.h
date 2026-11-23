@@ -18,7 +18,7 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NProfiling {
 
@@ -169,7 +169,7 @@ private:
     std::function<int(TStringBuf)> GridFactor_;
     TWeakProfiler SelfProfiler_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, DynamicTagsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, DynamicTagsLock_);
     std::vector<TTag> DynamicTags_;
 
     std::atomic<bool> Disabled_ = false;

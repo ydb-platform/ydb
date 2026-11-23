@@ -39,6 +39,7 @@ namespace NKikimr {
             const TActorId &notifyId,
             const TActorId &parentId,
             const TActorId &skeletonId,
+            TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
             THullDsSnap &&fullSnap,
             ui64 confirmedLsn,
             ui64 maxInFly);

@@ -39,6 +39,12 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (Self->State == TShardState::Ready) {
+            // SchemeShard must stabilize topology before installing a database
+            // fence. TEvSplitAck has no rejection status, so fail closed on a
+            // protocol violation instead of acknowledging a split we did not do.
+            Y_ENSURE(!Self->IsDatabaseFrozen(),
+                "Cannot start split/merge while database is frozen"
+                << ": tabletId# " << Self->TabletID() << " opId# " << opId);
             Self->SrcAckSplitTo.insert(Ev->Sender);
             Self->SrcSplitOpId = opId;
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
@@ -113,14 +119,18 @@ public:
 };
 
 void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
-    if (State == TShardState::SplitSrcWaitForNoTxInFlight) {
-        ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
-        ui64 immediateTxInFly = ImmediateInFly();
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
-        SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
-        if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
-            Execute(CreateTxStartSplit(), ctx);
-        }
+    const bool waitingForTransactions = State == TShardState::SplitSrcWaitForNoTxInFlight;
+    const bool restartingSnapshot = State == TShardState::SplitSrcMakeSnapshot && !SplitSnapshotStarted;
+    if (!waitingForTransactions && !restartingSnapshot) {
+        return;
+    }
+
+    const ui64 txInFly = TxInFly() + VolatileTxManager.GetTxInFlight();
+    const ui64 immediateTxInFly = ImmediateInFly();
+    SetCounter(COUNTER_SPLIT_SRC_WAIT_TX_IN_FLY, txInFly);
+    SetCounter(COUNTER_SPLIT_SRC_WAIT_IMMEDIATE_TX_IN_FLY, immediateTxInFly);
+    if (txInFly == 0 && immediateTxInFly == 0 && !Pipeline.HasWaitingSchemeOps()) {
+        Execute(CreateTxStartSplit(), ctx);
     }
 }
 
@@ -147,16 +157,49 @@ public:
 
         Y_ENSURE(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
 
+        bool hasCdcStreams = false;
+        for (const auto& [_, table] : Self->GetUserTables()) {
+            hasCdcStreams |= !table->CdcStreams.empty();
+        }
+        if (hasCdcStreams) {
+            // The source may keep publishing persisted CDC records after the
+            // snapshot is captured. A later source timecast update must not
+            // expose a write that the destination can still read past.
+            // Drain the future-write window before capturing the snapshot and
+            // transfer a persistent read floor, not just the write edge.
+            if (Self->MediatorStateWaiting) {
+                return true;
+            }
+            const ui64 writeStep = Self->GetSnapshotManager().GetImmediateWriteEdge().Step;
+            if (writeStep > Self->GetMaxObservedStep()) {
+                Self->WaitPlanStep(writeStep);
+                // The shared timecast entry may have advanced while subscribing.
+                if (writeStep > Self->GetMaxObservedStep()) {
+                    return true;
+                }
+            }
+        }
+
         Self->SplitStarted = true;
 
-        // We need to remove all locks first, making sure persistent uncommitted
-        // changes are not borrowed by new shards. Otherwise those will become
-        // unaccounted for.
+        // We need to remove all locks that we won't be transferring to dst shards first,
+        // making sure their uncommitted changes are not borrowed by new shards.
         if (!Self->SysLocksTable().GetLocks().empty()) {
+            const bool lockTransferEnabled = AppData(ctx)
+                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+            auto lockTransferPredicate = [lockTransferEnabled](const TLockInfo& lock) {
+                return lockTransferEnabled
+                    && !lock.IsBroken()
+                    && lock.IsPersistent() && lock.GetReadTables().empty();
+            };
+
             auto countBefore = Self->SysLocksTable().GetLocks().size();
             TDataShardLocksDb locksDb(*Self, txc);
             TSetupSysLocks guardLocks(*Self, &locksDb);
             for (auto& pr : Self->SysLocksTable().GetLocks()) {
+                if (lockTransferPredicate(*pr.second)) {
+                    continue;
+                }
                 Self->SysLocksTable().EraseLock(pr.first);
                 if (pr.second->IsPersistent()) {
                     // Don't erase more than one persistent lock at a time
@@ -170,9 +213,72 @@ public:
                                                Nothing(), victimQuerySpanIds);
             }
             auto countAfter = Self->SysLocksTable().GetLocks().size();
-            Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
-            Self->Execute(Self->CreateTxStartSplit(), ctx);
-            return true;
+
+            if (countAfter < countBefore) {
+                // Still removing locks, re-execute.
+                Self->Execute(Self->CreateTxStartSplit(), ctx);
+                return true;
+            }
+
+            Y_ENSURE(countAfter == countBefore);
+            // All remaining locks are those that we want to transfer.
+            // Collect them for the snapshot.
+            Self->SrcLocksToTransfer.clear();
+            for (const auto& pr : Self->SysLocksTable().GetLocks()) {
+                const TLockInfo& lock = *pr.second;
+                Y_ENSURE(lockTransferPredicate(lock));
+
+                auto& srcLockInfo = Self->SrcLocksToTransfer.emplace_back();
+                srcLockInfo.SetLockId(lock.GetLockId());
+                srcLockInfo.SetLockNodeId(lock.GetLockNodeId());
+                srcLockInfo.SetGeneration(lock.GetGeneration());
+                srcLockInfo.SetCounter(lock.GetRawCounter());
+                srcLockInfo.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
+                srcLockInfo.SetFlags(ui64(lock.GetFlags()));
+
+                auto writeSeqNumStateToProto = [](const TWriteSeqNumState& state, auto* proto) {
+                    proto->SetWriterIndex(state.WriterIndex);
+                    proto->SetWriteSeqNum(state.WriteSeqNum);
+                    if (!state.SerializedResult.empty()) {
+                        proto->SetSerializedResult(state.SerializedResult);
+                    }
+                };
+
+                for (const auto& [_, state] : lock.GetWriteSeqNumStates()) {
+                    if (state.WriteSeqNum == 0) {
+                        continue;
+                    }
+                    writeSeqNumStateToProto(state, srcLockInfo.AddWriteSeqNumStates());
+                }
+
+                // Forward grandparent ancestor locks (multi-hop split/merge)
+                for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
+                    auto& proto = *srcLockInfo.AddAncestorLocks();
+                    proto.SetTabletId(tabletId);
+                    proto.SetGeneration(ancestorLock.Generation);
+                    proto.SetCounter(ancestorLock.Counter);
+                    proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
+                    proto.SetFlags(ui64(ancestorLock.Flags));
+                    for (const auto& [_, state] : ancestorLock.WriteSeqNumStates) {
+                        if (state.WriteSeqNum == 0) {
+                            continue;
+                        }
+                        writeSeqNumStateToProto(state, proto.AddWriteSeqNumStates());
+                    }
+                }
+
+                for (const auto& pathId : lock.GetWriteTables()) {
+                    pathId.ToProto(srcLockInfo.AddWriteTables());
+                }
+
+                lock.ForAllConflicts([&](TLockInfo* otherLock) {
+                    if (Self->SysLocksTable().GetLocks().contains(otherLock->GetLockId())) {
+                        srcLockInfo.AddConflicts(otherLock->GetLockId());
+                    }
+                }, ELockConflictFlags::BreakThemOnOurCommit);
+            }
+        } else {
+            Self->SrcLocksToTransfer.clear();
         }
 
         ui64 opId = Self->SrcSplitOpId;
@@ -223,6 +329,15 @@ public:
             if (ti.second->ShadowTid) {
                 tablesToSnapshot.push_back(ti.second->ShadowTid);
             }
+        }
+
+        if (hasCdcStreams) {
+            // All page-faulting work is finished. Persist the floor in the same
+            // transaction that captures it, so a retry cannot lose the update.
+            // Preserve visibility of the transferred writes without closing the
+            // whole observed step to subsequent immediate writes.
+            Self->GetSnapshotManager().PromoteCompleteEdge(
+                Self->GetSnapshotManager().GetImmediateWriteEdge().Step, txc);
         }
 
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
@@ -366,6 +481,8 @@ public:
                     tableSnapshot->SetTableId(localTableId);
                     TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody);
                     tableSnapshot->SetSnapshotData(compressedBody);
+                    TSnapshotManager::SerializeRemovedRowVersions(txc.DB.GetRemovedRowVersions(localTableId),
+                        *tableSnapshot->MutableRemovedRowVersions());
                 }
             }
 
@@ -376,8 +493,11 @@ public:
                     snapshot->SetMinWriteVersionTxId(minVersion.TxId);
                 }
 
-                snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
-                snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
+                // Cleanup can advance while the snapshot is being flushed.
+                // Transfer its current watermark together with current removals.
+                const auto lowWatermark = Max(SnapContext->LowWatermark, Self->GetSnapshotManager().GetLowWatermark());
+                snapshot->SetMvccLowWatermarkStep(lowWatermark.Step);
+                snapshot->SetMvccLowWatermarkTxId(lowWatermark.TxId);
                 snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
                 snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
                 snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);
@@ -412,6 +532,11 @@ public:
 
                 if (sourceOffsetsBytes > 0) {
                     snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes);
+                }
+
+                // Attach qualifying persistent write-only locks as ancestor locks for dst
+                for (const auto& ancestorLock : Self->SrcLocksToTransfer) {
+                    *snapshot->AddLocks() = ancestorLock;
                 }
 
                 // Persist snapshot data so that it can be sent if this datashard restarts

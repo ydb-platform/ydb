@@ -31,7 +31,9 @@
 #include "src/core/lib/gprpp/construct_destruct.h"
 #include "src/core/lib/promise/activity.h"
 #include "src/core/lib/promise/detail/promise_factory.h"
+#include "src/core/lib/promise/detail/status.h"
 #include "src/core/lib/promise/poll.h"
+#include "src/core/lib/promise/status_flag.h"
 #include "src/core/lib/promise/trace.h"
 
 namespace grpc_core {
@@ -46,7 +48,14 @@ struct Done;
 
 template <>
 struct Done<y_absl::Status> {
-  static y_absl::Status Make() { return y_absl::OkStatus(); }
+  static y_absl::Status Make(bool cancelled) {
+    return cancelled ? y_absl::CancelledError() : y_absl::OkStatus();
+  }
+};
+
+template <>
+struct Done<StatusFlag> {
+  static StatusFlag Make(bool cancelled) { return StatusFlag(!cancelled); }
 };
 
 template <typename Reader, typename Action>
@@ -107,7 +116,7 @@ class ForEach {
   };
 
   TString DebugTag() {
-    return y_absl::StrCat(Activity::current()->DebugTag(), " FOR_EACH[0x",
+    return y_absl::StrCat(GetContext<Activity>()->DebugTag(), " FOR_EACH[0x",
                         reinterpret_cast<uintptr_t>(this), "]: ");
   }
 
@@ -128,7 +137,7 @@ class ForEach {
         reading_next_ = false;
         return PollAction();
       } else {
-        return Done<Result>::Make();
+        return Done<Result>::Make(p->cancelled());
       }
     }
     return Pending();
@@ -140,7 +149,7 @@ class ForEach {
     }
     auto r = in_action_.promise();
     if (auto* p = r.value_if_ready()) {
-      if (p->ok()) {
+      if (IsStatusOk(*p)) {
         Destruct(&in_action_);
         Construct(&reader_next_, reader_.Next());
         reading_next_ = true;

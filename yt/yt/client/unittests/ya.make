@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    chaos_lease_ut.cpp
     check_schema_compatibility_ut.cpp
     check_type_compatibility_ut.cpp
     chunk_replica_ut.cpp
@@ -33,6 +34,7 @@ SRCS(
     schema_ut.cpp
     table_consumer_ut.cpp
     table_mount_cache_ut.cpp
+    table_reader_timing_statistics_ut.cpp
     unordered_reader_ut.cpp
     unversioned_row_ut.cpp
     validate_logical_type_ut.cpp

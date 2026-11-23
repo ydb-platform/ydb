@@ -1,25 +1,20 @@
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <ydb/services/workload_manager/common/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
-
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-
-#include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/services/workload_manager/common/events.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NWorkloadManager {
 
 inline constexpr TDuration FUTURE_WAIT_TIMEOUT = TDuration::Seconds(60);
-
 
 // Query runner
 
@@ -56,7 +51,7 @@ struct TQueryRunnerResult {
 struct TQueryRunnerResultAsync {
     NThreading::TFuture<TQueryRunnerResult> AsyncResult;
     NActors::TActorId QueryRunnerActor;
-    NActors::TActorId EdgeActor;  // Receives events about progress from QueryRunnerActor
+    NActors::TActorId EdgeActor;   // Receives events about progress from QueryRunnerActor
 
     TQueryRunnerResult GetResult(TDuration timeout = FUTURE_WAIT_TIMEOUT) const;
     NThreading::TFuture<void> GetFuture() const;
@@ -105,24 +100,26 @@ struct TYdbSetupSettings {
     TString GetServerlessTenantName() const;
 };
 
-class IYdbSetup : public TThrRefBase {
+class IYdbSetup: public TThrRefBase {
 public:
     // Cluster helpers
     virtual void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) = 0;
 
-    virtual NYdb::NTable::TTableClient GetTableClient(
-        NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const = 0;
+    virtual NYdb::NTable::TTableClient GetTableClient(NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const = 0;
 
     // Scheme queries helpers
     virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
-    virtual void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const = 0;
-    virtual THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const = 0;
+    virtual void ExecuteSchemeQuery(
+        const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const = 0;
+    virtual THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path,
+        NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const = 0;
     virtual void WaitPoolAccess(const TString& userSID, ui32 access, const TString& poolId = "") const = 0;
 
     // Generic query helpers
     virtual TQueryRunnerResult ExecuteQuery(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
     virtual TQueryRunnerResultAsync ExecuteQueryAsync(const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings()) const = 0;
-    virtual void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
+    virtual void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(),
+        TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
 
     // Async query execution actions
     virtual void WaitQueryExecution(const TQueryRunnerResultAsync& query, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
@@ -135,7 +132,8 @@ public:
     virtual void CreateResourcePool(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& settings) const = 0;
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const = 0;
-    virtual void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
+    virtual void WaitPoolHandlersCount(
+        i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
     virtual void WaitForClassifierPropagation() const = 0;
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
@@ -156,6 +154,7 @@ public:
         ui64 GrpcPort = 0;
         ui32 NodeIdx = 0;
     };
+
     virtual TTenantInfo GetDedicatedTenantInfo() const = 0;
     virtual TTenantInfo GetSharedTenantInfo() const = 0;
     virtual TTenantInfo GetServerlessTenantInfo() const = 0;
@@ -185,7 +184,8 @@ struct TSampleQueries {
     template <typename TResult>
     static void CheckNotFound(const TResult& result, const TString& poolId) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions");
     }
 
     struct TSelect42 {
@@ -198,9 +198,8 @@ struct TSampleQueries {
             NKqp::CompareYson("[[42]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         }
     };
-
 };
 
-void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex = 0);
+void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex = 0, const TString& poolId = {});
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

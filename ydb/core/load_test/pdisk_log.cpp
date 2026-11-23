@@ -286,6 +286,7 @@ class TPDiskLogWriterLoadTestActor : public TActorBootstrapped<TPDiskLogWriterLo
     TDuration DelayBeforeMeasurements;
     i32 OwnerInitInProgress = 0;
     ui32 HarakiriInFlight = 0;
+    ui32 InitializingWorkerIdx = 0;
 
     TReallyFastRng32 Rng;
 
@@ -363,8 +364,8 @@ public:
             for (auto& worker : Workers) {
                 AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                         Sprintf("PDiskWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
-                SendRequest(ctx, worker->GetYardInit(PDiskGuid));
             }
+            InitWorker(ctx);
         } else {
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Send TEvRegisterPDiskLoadActor");
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
@@ -379,7 +380,15 @@ public:
                 << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << (ui32)msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
-            SendRequest(ctx, worker->GetYardInit(PDiskGuid));
+        }
+        InitWorker(ctx);
+    }
+
+    void InitWorker(const TActorContext& ctx) {
+        // YardInitResult has no VDisk ID or request cookie. Keep one initial YardInit
+        // in flight and associate its result with InitializingWorkerIdx.
+        if (InitializingWorkerIdx < Workers.size()) {
+            SendRequest(ctx, Workers[InitializingWorkerIdx]->GetYardInit(PDiskGuid));
         }
     }
 
@@ -398,18 +407,18 @@ public:
                 << " Owner# " << (ui32)msg->PDiskParams->Owner
                 << " OwnerRound# " << msg->PDiskParams->OwnerRound);
 
-        for (auto& worker : Workers) {
-            if (!worker->PDiskParams) {
-                worker->PDiskParams = std::move(msg->PDiskParams);
-                worker->OwnerRound = Max(worker->OwnerRound, worker->PDiskParams->OwnerRound);
-                auto logRead = worker->GetLogRead();
-                Y_ABORT_UNLESS(logRead);
-                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# "
-                        << (ui32)worker->PDiskParams->Owner << " going to send first TEvLogRead# " << logRead->ToString());
-                SendRequest(ctx, std::move(logRead));
-                break;
-            }
-        }
+        Y_ABORT_UNLESS(InitializingWorkerIdx < Workers.size());
+        auto& worker = Workers[InitializingWorkerIdx];
+        Y_ABORT_UNLESS(!worker->PDiskParams);
+        worker->PDiskParams = std::move(msg->PDiskParams);
+        worker->OwnerRound = Max(worker->OwnerRound, worker->PDiskParams->OwnerRound);
+        auto logRead = worker->GetLogRead();
+        Y_ABORT_UNLESS(logRead);
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# "
+                << (ui32)worker->PDiskParams->Owner << " going to send first TEvLogRead# " << logRead->ToString());
+        SendRequest(ctx, std::move(logRead));
+        ++InitializingWorkerIdx;
+        InitWorker(ctx);
     }
 
     void Handle(NPDisk::TEvReadLogResult::TPtr& ev, const TActorContext& ctx) {

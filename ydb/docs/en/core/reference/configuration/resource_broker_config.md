@@ -13,7 +13,7 @@ Different types of activities (background operations, [TTL](../../concepts/ttl.m
 | `queue_backup`            | 2 | — | [Backup](../../devops/backup-and-recovery/index.md#s3) operations.                |
 | `queue_restore`           | 10 | — | [Restore from backup](../../devops/backup-and-recovery/index.md#s3) operations.     |
 | `queue_build_index`       | 10 | — | [Online secondary index creation](../../concepts/query_execution/secondary_indexes.md#index-add) operations.   |
-| `queue_cdc_initial_scan` | 4 | — | [Initial table scan](../../concepts/cdc.md#initial-scan) operations.             |
+| `queue_cdc_initial_scan` | 2 | — | [Initial table scan](../../concepts/cdc.md#initial-scan) operations.             |
 
 {% note info %}
 

@@ -5,9 +5,9 @@
 
 #include <list>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
-#include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/span.h"
@@ -54,7 +54,7 @@ private:
   std::unordered_map<CollectorHandle *, LastReportedMetrics> last_reported_metrics_;
 
   // Lock while building metrics
-  mutable opentelemetry::common::SpinLockMutex lock_;
+  mutable std::mutex lock_;
   const AggregationConfig *aggregation_config_;
   opentelemetry::common::SystemTimestamp last_delta_collection_ts_;
   bool has_last_delta_collection_ts_ = false;

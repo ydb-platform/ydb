@@ -1,0 +1,14 @@
+PRAGMA YqlSelect = 'disable';
+
+$r = AsList(AsStruct(0L AS id), AsStruct(1L AS id), AsStruct(2L AS id), AsStruct(3L AS id));
+$s = AsList(AsStruct(0L AS id), AsStruct(2L AS id), AsStruct(3L AS id), AsStruct(4L AS id));
+$t = AsList(AsStruct(0L AS id), AsStruct(2L AS id), AsStruct(5L AS id));
+
+SELECT *
+FROM AS_TABLE($r) AS R
+INNER JOIN AS_TABLE($s) AS S ON R.id = S.id;
+
+SELECT *
+FROM AS_TABLE($r) AS R
+INNER JOIN AS_TABLE($s) AS S ON R.id = S.id
+INNER JOIN AS_TABLE($t) AS T ON R.id = T.id;

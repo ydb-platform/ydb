@@ -1,0 +1,18 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run Python 3",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/platform/python/ymake_python3/resources.json",
+            "executable": [
+                "bin",
+                "python3"
+            ],
+            "params": {
+                "match_root": "YMAKE_PYTHON3",
+                "use_bundle": true
+            }
+        }
+    }
+}

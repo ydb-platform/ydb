@@ -59,10 +59,6 @@ public:
             }
         }
 
-        YT_TLOG_DEBUG("Type registered")
-            .With("TypeName", typeDescriptor->GetName())
-            .WithFormat("TypeTag", "%x", typeDescriptor->GetTag());
-
         EmplaceOrCrash(
             UniverseDescriptor_.TypeTagToDescriptor_,
             typeDescriptor->GetTag(),
@@ -71,7 +67,12 @@ public:
 
     const TUniverseDescriptor& GetUniverseDescriptor() override
     {
-        if (!Sealed_.exchange(true)) {
+        if (!Sealed_.load(std::memory_order::relaxed) && !Sealed_.exchange(true)) {
+            for (const auto& [typeTag, typeDescriptor] : UniverseDescriptor_.TypeTagToDescriptor_) {
+                YT_TLOG_DEBUG("Type registered")
+                    .With("TypeName", typeDescriptor->GetName())
+                    .WithFormat("TypeTag", "%x", typeTag);
+            }
             YT_TLOG_INFO("Type registry is sealed");
         }
         return UniverseDescriptor_;

@@ -2,7 +2,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -19,6 +20,18 @@
 
 
 namespace NKikimr::NKqp {
+
+class TExecutionTrace;
+class IQueryQuotaManager;
+
+struct TKqpStatsReportingSettings {
+    bool WithProgressStats = false;
+    bool CollectCurrentQueryStats = false;
+    TMaybe<NYql::NDq::TReportStatsSettings> RemoteReportStatsSettings;
+    TMaybe<NYql::NDq::TReportStatsSettings> LocalReportStatsSettings;
+};
+
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod);
 
 class TKqpPlanner {
 
@@ -48,9 +61,10 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
-        const bool WithProgressStats;
+        const TKqpStatsReportingSettings& StatsReportingSettings;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
+        const TExecutionTrace* Trace = nullptr;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
         const ui64 MkqlMemoryLimit;
@@ -66,8 +80,9 @@ public:
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
         const TMaybe<size_t> BufferPageAllocSize;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-        const TActorId& CheckpointCoordinator;
+        const bool EnableCheckpoints;
         const bool EnableWatermarks;
+        IKqpStreamingQueryController* StreamingQuery = nullptr;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -98,16 +113,17 @@ public:
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    TString ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
+    std::unique_ptr<IEventHandle> ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
+    NYql::NDqProto::TDqTask* SerializeTaskForExecution(const TTask& task);
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
     void PrepareCheckpoints();
-    void SendReadyStateToCheckpointCoordinator();
+    void SendReadyState();
 
 private:
     const ui64 TxId;
@@ -118,11 +134,12 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
-    const bool WithProgressStats;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
+    const TExecutionTrace* Trace;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst = 0;
     TVector<TTaskResourceEstimation> ResourceEstimations;
@@ -142,15 +159,16 @@ private:
     TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-    TIntrusivePtr<NRm::TTxState> TxInfo;
+    std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     const TMaybe<size_t> BufferPageAllocSize;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-    TActorId CheckpointCoordinatorId;
+    bool EnableCheckpoints;
     const bool EnableWatermarks;
-    bool CheckpointsReadyStateSent = false;
+    IKqpStreamingQueryController* const StreamingQuery;
+    bool ReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
     THashMap<ui32, TActorId> ResultChannels;

@@ -202,7 +202,7 @@ protected:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     THashSet<int> Keys_;
     int TotalAdded_ = 0;
     int TotalRemoved_ = 0;
@@ -1762,7 +1762,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     std::uniform_int_distribution<int> capacityDistribution(static_cast<int>(cacheSize * 0.5), static_cast<int>(cacheSize * 1.5));
     std::uniform_real_distribution<double> youngerSizeFractionDistribution(0.0, 1.0);
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
 
     std::vector<TCountingSlruCache::TInsertCookie> activeInsertCookies;
 
@@ -1844,8 +1844,9 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                     auto valueFuture = cookie.GetValue();
                     ASSERT_TRUE(static_cast<bool>(valueFuture));
                     if (valueFuture.IsSet()) {
-                        ASSERT_TRUE(WaitForFast(valueFuture).IsOK());
-                        auto value = WaitForFast(valueFuture).Value();
+                        const auto& valueOrError = valueFuture.GetOrCrash();
+                        ASSERT_TRUE(valueOrError.IsOK());
+                        const auto& value = valueOrError.Value();
                         ASSERT_EQ(lastInsertedValues[value->GetKey()].Lock(), value);
                     } else {
                         // The value insertion is in progress, so lastInsertedValues must contain nullptr

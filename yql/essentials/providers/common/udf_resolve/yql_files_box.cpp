@@ -50,6 +50,7 @@ TString TFilesBox::MakeLinkFrom(const TString& source, const TString& filename) 
         }
         Mapping_.emplace(source, path);
     }
+    Links_.push_back(path);
     return path;
 }
 
@@ -57,8 +58,13 @@ TString TFilesBox::GetDir() const {
     return Dir_;
 }
 
+const TVector<TString>& TFilesBox::GetLinks() const {
+    return Links_;
+}
+
 void TFilesBox::Destroy() {
     Mapping_.clear();
+    Links_.clear();
     Dir_.ForceDelete();
 }
 

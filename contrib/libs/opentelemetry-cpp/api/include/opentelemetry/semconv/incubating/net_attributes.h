@@ -168,7 +168,7 @@ static constexpr const char *kInet = "inet";
 static constexpr const char *kInet6 = "inet6";
 
 /**
-  Unix domain socket path
+  UNIX domain socket path
  */
 static constexpr const char *kUnix = "unix";
 

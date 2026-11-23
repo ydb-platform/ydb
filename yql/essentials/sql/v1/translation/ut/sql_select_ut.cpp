@@ -883,3 +883,123 @@ Y_UNIT_TEST(RejectsBothFusionLambdas) {
 }
 
 } // Y_UNIT_TEST_SUITE(HybridRankFusionLambda)
+
+Y_UNIT_TEST_SUITE(SelectExplicitPositions) {
+
+Y_UNIT_TEST(OrderByEmptyAction) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+    ExpectFailWithError(
+        "SELECT * FROM plato.t ORDER BY key DESC, EMPTY_ACTION;",
+        "<main>:1:42: Error: Unable to ORDER BY constant expression\n",
+        settings);
+}
+
+Y_UNIT_TEST(OrderByEmptyActionOnSeparateLine) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+    ExpectFailWithError(
+        "SELECT * FROM plato.t\nORDER BY key DESC,\n    EMPTY_ACTION;",
+        "<main>:3:5: Error: Unable to ORDER BY constant expression\n",
+        settings);
+}
+
+Y_UNIT_TEST(AnyWithoutJoin) {
+    ExpectFailWithError(
+        "SELECT *\nFROM ANY\n    plato.Input;",
+        "<main>:2:6: Error: ANY is not allowed without JOIN\n");
+}
+
+Y_UNIT_TEST(CrossJoinConstraint) {
+    ExpectFailWithError(
+        "SELECT * FROM plato.Input AS a\nCROSS JOIN plato.Input AS b\n    ON a.key = b.key;",
+        "<main>:3:5: Error: Cross join should not have ON or USING expression\n");
+}
+
+Y_UNIT_TEST(JoinWithoutConstraint) {
+    ExpectFailWithError(
+        "SELECT * FROM plato.Input AS a\n    INNER JOIN\n        plato.Input AS b;",
+        "<main>:2:5: Error: Expected ON or USING expression\n");
+}
+
+Y_UNIT_TEST(DuplicateQualifiedAsterisk) {
+    ExpectFailWithError(
+        "SELECT a.*,\n    a.* FROM plato.Input AS a;",
+        "<main>:2:5: Error: Unable to use twice same qualified asterisk. Invalid source: a\n");
+}
+
+Y_UNIT_TEST(LimitBeforeUnion) {
+    ExpectFailWithError(
+        "SELECT 1\n    LIMIT 1\nUNION ALL SELECT 2;",
+        "<main>:2:5: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
+}
+
+Y_UNIT_TEST(AnonymousTableWithContextHints) {
+    ExpectFailWithError(
+        "USE plato;\n$input = SELECT 1 AS value;\nPRAGMA DirectRead;\nSELECT * FROM @$input;",
+        "<main>:4:15: Error: Hints are not supported for anonymous tables\n");
+}
+
+Y_UNIT_TEST(EmptyQualifiedWithoutColumn) {
+    ExpectFailWithError(
+        "SELECT * WITHOUT a.\n    `` FROM plato.Input AS a;",
+        "<main>:2:5: Error: Empty column name is not allowed\n");
+}
+
+Y_UNIT_TEST(RejectedHintAfterWatermarkFromSeveralHints) {
+    ExpectFailWithError(
+        "SELECT * FROM (VALUES (1)) WITH (\n    WATERMARK = 1,\n    zlock,\n    xlock);",
+        "<main>:4:5: Error: Hint 'xlock' requires a table\n");
+}
+
+Y_UNIT_TEST(TableHintKeysAndValuesKeepTheirPositions) {
+    const auto result = SqlToYql("SELECT * FROM plato.Input WITH (\n"
+                                 "    zeta_setting = \"old\",\n"
+                                 "        flag,\n"
+                                 "  alpha = \"first\",\n"
+                                 "    zeta_setting = \"last\");");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    const auto assertPosition = [&](TStringBuf content, ui32 row, ui32 column) {
+        const auto* quote = FindNodeByChildAtomContent(result.Root, 1, content);
+        UNIT_ASSERT_C(quote, content);
+        const auto& position = quote->GetChild(1)->GetPosition();
+        UNIT_ASSERT_VALUES_EQUAL_C(position.Row, row, content);
+        UNIT_ASSERT_VALUES_EQUAL_C(position.Column, column, content);
+    };
+
+    assertPosition("zetasetting", 5, 5);
+    assertPosition("last", 5, 20);
+    assertPosition("flag", 3, 9);
+    assertPosition("alpha", 4, 3);
+    assertPosition("first", 4, 11);
+}
+
+Y_UNIT_TEST(ContextOnlyTableHintUsesSourcePosition) {
+    const auto result = SqlToYql("PRAGMA DirectRead;\nSELECT * FROM plato.Input;");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    const auto* quote = FindNodeByChildAtomContent(result.Root, 1, "directread");
+    UNIT_ASSERT(quote);
+    const auto& position = quote->GetChild(1)->GetPosition();
+    UNIT_ASSERT_VALUES_EQUAL(position.Row, 2);
+    UNIT_ASSERT_VALUES_EQUAL(position.Column, 15);
+}
+
+Y_UNIT_TEST(WatermarkOptionRetainsOriginalKeyPosition) {
+    const auto result = SqlToYql("SELECT * FROM (VALUES (1)) WITH (\n"
+                                 "    WATERMARK = ts,\n"
+                                 "        WATERMARK_LAG = \"5\",\n"
+                                 "    watermarklag = \"10\");");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    const auto* quote = FindNodeByChildAtomContent(result.Root, 1, "watermarklag");
+    UNIT_ASSERT(quote);
+    const auto& position = quote->GetChild(1)->GetPosition();
+    UNIT_ASSERT_VALUES_EQUAL(position.Row, 3);
+    UNIT_ASSERT_VALUES_EQUAL(position.Column, 9);
+}
+
+} // Y_UNIT_TEST_SUITE(SelectExplicitPositions)

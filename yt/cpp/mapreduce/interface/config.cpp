@@ -243,6 +243,8 @@ void TConfig::Reset()
     ForceIpV4 = GetBool("YT_FORCE_IPV4");
     ForceIpV6 = GetBool("YT_FORCE_IPV6");
     UseHosts = GetBool("YT_USE_HOSTS", true);
+    UseTLS = false;
+    PreferHttps = GetBool("YT_PREFER_HTTPS");
 
     LoadToken();
     LoadSpec();
@@ -251,6 +253,7 @@ void TConfig::Reset()
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
     CacheUploadDeduplicationThreshold = 10_MB;
+    LockFileStorage = false;
 
     RetryCount = Max(GetInt("YT_RETRY_COUNT", 10), 1);
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);
@@ -421,6 +424,8 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("global_tx_id").Value(config.GlobalTxId)
         .Item("force_ipv4").Value(config.ForceIpV4)
         .Item("force_ipv6").Value(config.ForceIpV6)
+        .Item("use_tls").Value(config.UseTLS)
+        .Item("prefer_https").Value(config.PreferHttps)
         .Item("use_hosts").Value(config.UseHosts)
         .Item("host_list_update_interval").Value(config.HostListUpdateInterval.ToString())
         .Item("spec").Value(config.Spec)
@@ -455,6 +460,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("cache_upload_deduplication_mode")
             .Value(TEnumTraits<EUploadDeduplicationMode>::ToString(config.CacheUploadDeduplicationMode))
         .Item("cache_upload_deduplication_threshold").Value(config.CacheUploadDeduplicationThreshold)
+        .Item("lock_file_storage").Value(config.LockFileStorage)
         .Item("mount_sandbox_in_tmpfs").Value(config.MountSandboxInTmpfs)
         .Item("api_file_path_options").Value(config.ApiFilePathOptions)
         .Item("use_abortable_response").Value(config.UseAbortableResponse)
@@ -503,6 +509,8 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("global_tx_id", config.GlobalTxId);
     DESERIALIZE_ITEM("force_ipv4", config.ForceIpV4);
     DESERIALIZE_ITEM("force_ipv6", config.ForceIpV6);
+    DESERIALIZE_ITEM("use_tls", config.UseTLS);
+    DESERIALIZE_ITEM("prefer_https", config.PreferHttps);
     DESERIALIZE_ITEM("use_hosts", config.UseHosts);
     DESERIALIZE_ITEM("host_list_update_interval", config.HostListUpdateInterval);
     DESERIALIZE_ITEM("spec", config.Spec);
@@ -536,6 +544,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("cache_lock_timeout_per_gb", config.CacheLockTimeoutPerGb);
     DESERIALIZE_ITEM("cache_upload_deduplication_mode", config.CacheUploadDeduplicationMode);
     DESERIALIZE_ITEM("cache_upload_deduplication_threshold", config.CacheUploadDeduplicationThreshold);
+    DESERIALIZE_ITEM("lock_file_storage", config.LockFileStorage);
     DESERIALIZE_ITEM("mount_sandbox_in_tmpfs", config.MountSandboxInTmpfs);
     DESERIALIZE_ITEM("api_file_path_options", config.ApiFilePathOptions);
     DESERIALIZE_ITEM("use_abortable_response", config.UseAbortableResponse);

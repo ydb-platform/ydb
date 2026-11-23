@@ -6,7 +6,7 @@
 
 {% endnote %}
 
-## Подготовьте окружение {# deployment-preparation}
+## Подготовьте окружение {#deployment-preparation}
 
 Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).
 
@@ -19,7 +19,7 @@ mkdir -p inventory/group_vars/ydb
 mkdir files
 ```
 
-## Создайте конфигурационный файл Ansible {# ansible-creat-config}
+## Создайте конфигурационный файл Ansible {#ansible-creat-config}
 
 Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для целевой среды развёртывания. Подробности в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
 
@@ -269,7 +269,7 @@ plugin: ydb_platform.ydb.ydb_inventory
 ydb_config: "files/config.yaml"
   ```
 
-## Разверните кластер {{ ydb-short-name }} {# cluster-deployment}
+## Разверните кластер {{ ydb-short-name }} {#cluster-deployment}
 
 После завершения всех описанных выше подготовительных действий фактическое первоначальное развёртывание кластера сводится к выполнению следующей команды из рабочей директории:
 
@@ -303,9 +303,9 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `db`) и начального [пользователя](../../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
+В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../../concepts/glossary.md#scheme-root) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `db`) и начального [пользователя](../../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
 
-## Дополнительные шаги {# additional-steps}
+## Дополнительные шаги {#additional-steps}
 
 Самый простой способ исследовать только что развёрнутый кластер — использовать [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md), работающий на порту 8765 каждого сервера. Если нет прямого доступа к порту из браузера, можно настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
 

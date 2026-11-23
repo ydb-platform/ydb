@@ -12,32 +12,27 @@ TString TCoordinatorId::ToString() const {
     return ss.Str();
 }
 
-void TCoordinatorId::PrintTo(IOutputStream& out) const
-{
+void TCoordinatorId::PrintTo(IOutputStream& out) const {
     out << GraphId << "." << Generation;
 }
 
-size_t TCheckpointIdHash::operator ()(const TCheckpointId& checkpointId)
+size_t TCheckpointIdHash::operator()(const TCheckpointId& checkpointId)
 {
     return MultiHash(checkpointId.CoordinatorGeneration, checkpointId.SeqNo);
 }
 
-} // namespace NFq
+}   // namespace NFq
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<>
-void Out<NFq::TCoordinatorId>(
-    IOutputStream& out,
-    const NFq::TCoordinatorId& coordinatorId)
+template <>
+void Out<NFq::TCoordinatorId>(IOutputStream& out, const NFq::TCoordinatorId& coordinatorId)
 {
     coordinatorId.PrintTo(out);
 }
 
-template<>
-void Out<NFq::TCheckpointId>(
-    IOutputStream& out,
-    const NFq::TCheckpointId& checkpointId)
+template <>
+void Out<NFq::TCheckpointId>(IOutputStream& out, const NFq::TCheckpointId& checkpointId)
 {
     out << checkpointId.CoordinatorGeneration << ":" << checkpointId.SeqNo;
 }

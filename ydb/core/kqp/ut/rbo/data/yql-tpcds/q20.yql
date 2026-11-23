@@ -16,16 +16,16 @@ SELECT
             i_class
     ) AS revenueratio
 FROM
-    `/Root/test/ds/catalog_sales`
+    `catalog_sales`
 ,
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 WHERE
     cs_item_sk == i_item_sk
     AND i_category IN ('Jewelry', 'Sports', 'Books')
     AND cs_sold_date_sk == d_date_sk
-    AND d_date BETWEEN CAST('2001-01-12' AS Date) AND (
+    AND CAST(d_date AS Date) BETWEEN CAST('2001-01-12' AS Date) AND (
         CAST('2001-01-12' AS Date) + DateTime::IntervalFromDays(30)
     )
 GROUP BY

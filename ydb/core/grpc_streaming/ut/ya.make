@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/grpc_streaming)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 SRCS(
@@ -12,6 +10,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/grpc_streaming/ut/grpc
     ydb/core/testlib/default
+    ydb/library/testlib/common
 )
 
 YQL_LAST_ABI_VERSION()

@@ -59,6 +59,9 @@ class THashCalculator {
     std::unique_ptr<Poly1305Vec> Poly;
     alignas(16) ui8 Key[32] = {'p', 'o', 'l', 'y', '1', '3', '0', '5', 'V', 'e', 'c', 'K', 'e', 'y', '1',
         'D', 'u', 'm', 'm', 'y', 'C', 'o', 'n', 's', 't', 'a', 'n', 't', 'V', 'a'};
+
+    void EnsurePoly();
+
 public:
     THashCalculator();
     void SetKey(const ui8 *key, ui32 sizeBytes);

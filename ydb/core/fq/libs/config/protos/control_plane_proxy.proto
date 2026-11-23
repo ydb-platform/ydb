@@ -13,10 +13,17 @@ message TAccessServiceConfig {
 }
 
 message TControlPlaneProxyConfig {
+    message TStreamingQueryAccess {
+        // When enabled, only listed folders can create streaming queries, including SAVE.
+        bool Enabled = 1;
+        repeated string AllowedFolderIds = 2;
+    }
+
     bool Enabled = 1;
     string RequestTimeout = 2;
     bool EnablePermissions = 3;
     string MetricsTtl = 4;
     string ConfigRetryPeriod = 31;
     TAccessServiceConfig AccessService = 32;
+    TStreamingQueryAccess StreamingQueryAccess = 33;
 }

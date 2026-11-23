@@ -79,7 +79,7 @@ public:
     virtual size_t EstimateSize() const = 0;
     virtual void AddAggregations(TSelectBuilder&) = 0;
     virtual void Merge(const TVector<NYdb::TValue>& aggColumns) = 0;
-    // nullopt == "no statistic for this table"; the caller stores no row at all.
+    // nullopt if the collected statistic is unusable.
     virtual std::optional<TString> ExtractData(const TVector<NYdb::TValue>& aggColumns) = 0;
     virtual ~IMultiColumnStatisticEval() = default;
 };

@@ -410,8 +410,8 @@ namespace NCompTable {
 
     TChunkCompressor::TChunkCompressor(bool highQuality, const TCompressorTable& table)
         : HighQuality(highQuality)
+        , Compressor(std::make_unique<TDataCompressor>(table))
     {
-        Compressor.Reset(new TDataCompressor(table));
     }
 
     void TChunkCompressor::Compress(TStringBuf data, TVector<char>* rslt) const {
@@ -426,8 +426,8 @@ namespace NCompTable {
 
     TChunkDecompressor::TChunkDecompressor(bool highQuality, const TCompressorTable& table)
         : HighQuality(highQuality)
+        , Decompressor(std::make_unique<TDataDecompressor>(table))
     {
-        Decompressor.Reset(new TDataDecompressor(table));
     }
 
     void TChunkDecompressor::Decompress(TStringBuf data, TVector<char>* rslt) const {

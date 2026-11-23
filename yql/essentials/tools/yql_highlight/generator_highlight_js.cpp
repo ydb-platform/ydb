@@ -75,7 +75,7 @@ NJson::TJsonValue ToHighlightJSPattern(const TUnit& unit, const TRangePattern& p
     NJson::TJsonMap json;
     json["className"] = ToHighlightJSClass(unit.Kind);
     json["begin"] = RE2::QuoteMeta(pattern.BeginPlain);
-    json["end"] = RE2::QuoteMeta(pattern.EndPlain);
+    json["end"] = pattern.EndRegex();
     if (pattern.EscapeRegex) {
         json["contains"].AppendValue(NJson::TJsonMap{
             {"begin", *pattern.EscapeRegex},

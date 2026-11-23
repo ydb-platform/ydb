@@ -1,0 +1,47 @@
+[options]
+work_mode = "sys"
+library = "Pango"
+version = "1.0"
+min_cfg_version = "1.40"
+single_version_file = "."
+girs_directories = ["../../gir-files"]
+
+external_libraries = [
+    "GLib",
+    "GObject",
+]
+
+ignore = [
+    "Pango.VERSION_MAJOR",
+    "Pango.VERSION_MICRO",
+    "Pango.VERSION_MINOR",
+    "Pango.VERSION_STRING",
+]
+
+[[object]]
+name = "Pango.Attribute"
+status = "generate"
+    [[object.function]]
+    name = "get_type"
+    version = "1.44"
+
+[[object]]
+name = "Pango.AttrIterator"
+status = "generate"
+    [[object.function]]
+    name = "get_type"
+    version = "1.44"
+
+[[object]]
+name = "Pango.Coverage"
+status = "generate"
+    [[object.function]]
+    name = "get_type"
+    version = "1.44"
+
+[[object]]
+name = "Pango.ScriptIter"
+status = "generate"
+    [[object.function]]
+    name = "get_type"
+    version = "1.44"

@@ -1,5 +1,5 @@
-#include "yql_s3_provider_impl.h"
 #include "yql_s3_listing_strategy.h"
+#include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -9,15 +9,14 @@
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
+#include <util/generic/size_literals.h>
+#include <util/string/join.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/url_builder.h>
-
-#include <util/generic/size_literals.h>
-#include <util/string/join.h>
 
 namespace NYql {
 
@@ -29,7 +28,7 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("userschema")) {
             settings.erase(it);
-            return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
+            return { item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr() };
         }
     }
 
@@ -77,23 +76,17 @@ struct TGeneratedColumnsConfig {
     TExprNode::TPtr SchemaTypeNode;
 };
 
-class TS3IODiscoveryTransformer : public TGraphTransformerBase {
+class TS3IODiscoveryTransformer: public TGraphTransformerBase {
 public:
     TS3IODiscoveryTransformer(TS3State::TPtr state)
         : State_(std::move(state))
-        , ListerFactory_(NS3Lister::MakeS3ListerFactory(
-              State_->Configuration->MaxInflightListsPerQuery,
-              State_->Configuration->ListingCallbackThreadCount,
-              State_->Configuration->ListingCallbackPerThreadQueueSize,
-              State_->Configuration->RegexpCacheSize,
-              State_->ActorSystem))
-        , ListingStrategy_(MakeS3ListingStrategy(
-              State_->Gateway,
-              State_->GatewayRetryPolicy,
-              ListerFactory_,
-              State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
-              State_->Configuration->MaxInflightListsPerQuery,
-              State_->Configuration->AllowLocalFiles)) {
+        , ListerFactory_(
+              NS3Lister::MakeS3ListerFactory(State_->Configuration->MaxInflightListsPerQuery, State_->Configuration->ListingCallbackThreadCount,
+                  State_->Configuration->ListingCallbackPerThreadQueueSize, State_->Configuration->RegexpCacheSize, State_->ActorSystem))
+        , ListingStrategy_(MakeS3ListingStrategy(State_->Gateway, State_->GatewayRetryPolicy, ListerFactory_,
+              State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery, State_->Configuration->MaxInflightListsPerQuery,
+              State_->Configuration->AllowLocalFiles))
+    {
     }
 
     void Rewind() final {
@@ -163,8 +156,8 @@ private:
         return AllFuture_;
     }
 
-    TStatus ApplyDirectoryListing(const TDqSourceWrap& source, const TPendingRequests& pendingRequests,
-        const TVector<TListRequest>& requests, TNodeOnNodeOwnedMap& replaces, TExprContext& ctx)
+    TStatus ApplyDirectoryListing(const TDqSourceWrap& source, const TPendingRequests& pendingRequests, const TVector<TListRequest>& requests,
+        TNodeOnNodeOwnedMap& replaces, TExprContext& ctx)
     {
         TS3ParseSettings parse = source.Input().Maybe<TS3ParseSettings>().Cast();
         TExprNodeList newPaths;
@@ -173,9 +166,7 @@ private:
         for (auto generatedPathsPack : parse.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(
-                generatedPathsPack.Data().Literal().Value(),
-                FromString<bool>(generatedPathsPack.IsText().Literal().Value()),
-                directories);
+                generatedPathsPack.Data().Literal().Value(), FromString<bool>(generatedPathsPack.IsText().Literal().Value()), directories);
 
             YQL_ENSURE(dirIndex + directories.size() <= requests.size());
             NS3Details::TPathList listedPaths;
@@ -189,14 +180,10 @@ private:
                 const auto& listResult = it->second.GetValue();
                 if (listResult.index() == 1) {
                     const auto& error = std::get<NS3Lister::TListError>(listResult);
-                    YQL_CLOG(INFO, ProviderS3)
-                        << "Discovery " << req.S3Request.Url << req.S3Request.Pattern
-                        << " error " << error.Issues.ToString();
+                    YQL_CLOG(INFO, ProviderS3) << "Discovery " << req.S3Request.Url << req.S3Request.Pattern << " error "
+                                               << error.Issues.ToString();
                     std::for_each(
-                        error.Issues.begin(),
-                        error.Issues.end(),
-                        std::bind(
-                            &TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
+                        error.Issues.begin(), error.Issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
                     return TStatus::Error;
                 }
 
@@ -219,6 +206,7 @@ private:
             bool isTextEncoded;
             NS3Details::PackPathsList(listedPaths, packedPaths, isTextEncoded);
 
+            // clang-format off
             newPaths.emplace_back(
                 Build<TS3Path>(ctx, generatedPathsPack.Pos())
                     .Data<TCoString>()
@@ -232,7 +220,9 @@ private:
                     .ExtraColumns(generatedPathsPack.ExtraColumns())
                     .Done().Ptr()
             );
+            // clang-format on
 
+            // clang-format off
             extraValuesItems.emplace_back(
                 ctx.Builder(generatedPathsPack.ExtraColumns().Pos())
                     .Callable("Replicate")
@@ -243,11 +233,13 @@ private:
                     .Seal()
                     .Build()
             );
+            // clang-format on
         }
 
         YQL_ENSURE(dirIndex == requests.size());
 
         if (newPaths.empty()) {
+            // clang-format off
             replaces.emplace(source.Raw(),
                 ctx.Builder(source.Pos())
                     .Callable("List")
@@ -257,24 +249,25 @@ private:
                     .Seal()
                     .Build()
             );
+            // clang-format on
             return TStatus::Ok;
         }
 
         auto newExtraValues = ctx.NewCallable(source.Pos(), "OrderedExtend", std::move(extraValuesItems));
         auto newInput = Build<TS3ParseSettings>(ctx, parse.Pos())
-            .InitFrom(parse)
-            .Paths(ctx.NewList(parse.Paths().Pos(), std::move(newPaths)))
-            .Settings(RemoveSetting(parse.Settings().Cast().Ref(), "directories", ctx))
-            .Done();
+                            .InitFrom(parse)
+                            .Paths(ctx.NewList(parse.Paths().Pos(), std::move(newPaths)))
+                            .Settings(RemoveSetting(parse.Settings().Cast().Ref(), "directories", ctx))
+                            .Done();
 
         YQL_ENSURE(source.Settings());
-        replaces.emplace(source.Raw(),
-            Build<TDqSourceWrap>(ctx, source.Pos())
-                .InitFrom(source)
-                .Input(newInput)
-                .Settings(ReplaceSetting(source.Settings().Cast().Ref(), source.Pos(), "extraColumns", newExtraValues, ctx))
-                .Done().Ptr()
-        );
+        replaces.emplace(
+            source.Raw(), Build<TDqSourceWrap>(ctx, source.Pos())
+                              .InitFrom(source)
+                              .Input(newInput)
+                              .Settings(ReplaceSetting(source.Settings().Cast().Ref(), source.Pos(), "extraColumns", newExtraValues, ctx))
+                              .Done()
+                              .Ptr());
         return TStatus::Ok;
     }
 
@@ -282,6 +275,7 @@ private:
         TString Name;
         TMaybe<NUdf::EDataSlot> Type;
         TString Value;
+
         bool operator<(const TExtraColumnValue& other) const {
             return std::tie(Name, Type, Value) < std::tie(other.Name, other.Type, other.Value);
         }
@@ -315,7 +309,9 @@ private:
             TExprNode::TListType pathNodes;
 
             TStringBuilder path;
-            object.ForEachChild([&path](const TExprNode& child){ path << child.Head().Tail().Head().Content() << " "; });
+            object.ForEachChild([&path](const TExprNode& child) {
+                path << child.Head().Tail().Head().Content() << " ";
+            });
 
             TMap<TMaybe<TVector<TExtraColumnValue>>, NS3Details::TPathList> pathsByExtraValues;
             const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;
@@ -335,22 +331,18 @@ private:
                 const NS3Lister::TListResult& listResult = it->second.GetValue();
                 if (listResult.index() == 1) {
                     const auto& error = std::get<NS3Lister::TListError>(listResult);
-                    YQL_CLOG(INFO, ProviderS3)
-                        << "Discovery " << req.S3Request.Url << req.S3Request.Pattern
-                        << " error " << error.Issues.ToString();
+                    YQL_CLOG(INFO, ProviderS3) << "Discovery " << req.S3Request.Url << req.S3Request.Pattern << " error "
+                                               << error.Issues.ToString();
                     std::for_each(
-                        error.Issues.begin(),
-                        error.Issues.end(),
-                        std::bind(
-                            &TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
+                        error.Issues.begin(), error.Issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
                     return TStatus::Error;
                 }
 
                 const auto& listEntries = std::get<NS3Lister::TListEntries>(listResult);
                 if (listEntries.Size() == 0 && !NS3::HasWildcards(req.S3Request.Pattern)) {
                     // request to list particular files that are missing
-                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
-                        TStringBuilder() << "Object " << req.S3Request.Pattern << " doesn't exist."));
+                    ctx.AddError(
+                        TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " << req.S3Request.Pattern << " doesn't exist."));
                     return TStatus::Error;
                 }
 
@@ -367,32 +359,33 @@ private:
                         specific->Compression = setting->Tail().Content();
                     }
                 }
-                auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0.0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(), TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(), EStorageType::NA, specific);
+                auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0.0, 0.0,
+                    TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(), TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(), EStorageType::NA,
+                    specific);
                 State_->Types->SetStats(read.DataSource().Raw(), stats);
 
-                for (auto& entry: listEntries.Objects) {
+                for (auto& entry : listEntries.Objects) {
                     TMaybe<TVector<TExtraColumnValue>> extraValues;
                     if (generatedColumnsConfig) {
-                        extraValues = ExtractExtraColumnValues(
-                            req, generatedColumnsConfig, entry.MatchedGlobs);
+                        extraValues = ExtractExtraColumnValues(req, generatedColumnsConfig, entry.MatchedGlobs);
                     }
 
                     auto& pathList = pathsByExtraValues[extraValues];
-                    pathList.emplace_back(NS3Details::TPath{entry.Path, entry.Size, false, pathList.size()});
+                    pathList.emplace_back(NS3Details::TPath{ entry.Path, entry.Size, false, pathList.size() });
                     readSize += entry.Size;
                 }
-                for (auto& entry: listEntries.Directories) {
+                for (auto& entry : listEntries.Directories) {
                     TMaybe<TVector<TExtraColumnValue>> extraValues;
                     if (generatedColumnsConfig) {
-                        extraValues = ExtractExtraColumnValues(
-                            req, generatedColumnsConfig, entry.MatchedGlobs);
+                        extraValues = ExtractExtraColumnValues(req, generatedColumnsConfig, entry.MatchedGlobs);
                     }
 
                     auto& pathList = pathsByExtraValues[extraValues];
-                    pathList.emplace_back(NS3Details::TPath{entry.Path, 0, true, pathList.size()});
+                    pathList.emplace_back(NS3Details::TPath{ entry.Path, 0, true, pathList.size() });
                 }
 
-                YQL_CLOG(INFO, ProviderS3) << "Pattern " << req.S3Request.Pattern << " has " << listEntries.Size() << " items with total size " << readSize;
+                YQL_CLOG(INFO, ProviderS3) << "Pattern " << req.S3Request.Pattern << " has " << listEntries.Size() << " items with total size "
+                                           << readSize;
             }
 
             for (const auto& [extraValues, pathList] : pathsByExtraValues) {
@@ -402,14 +395,17 @@ private:
                     YQL_ENSURE(generatedColumnsConfig->SchemaTypeNode);
 
                     for (auto& ev : *extraValues) {
+                        // clang-format off
                         auto resultType = ctx.Builder(object.Pos())
                             .Callable("StructMemberType")
                                 .Add(0, generatedColumnsConfig->SchemaTypeNode)
                                 .Atom(1, ev.Name)
                             .Seal()
                             .Build();
+                        // clang-format on
                         TExprNode::TPtr value;
                         if (ev.Type.Defined()) {
+                            // clang-format off
                             value = ctx.Builder(object.Pos())
                                 .Callable("StrictCast")
                                     .Callable(0, "Data")
@@ -419,22 +415,11 @@ private:
                                     .Add(1, resultType)
                                 .Seal()
                                 .Build();
+                            // clang-format on
                         } else {
-                            value = ctx.Builder(object.Pos())
-                                .Callable("DataOrOptionalData")
-                                    .Add(0, resultType)
-                                    .Atom(1, ev.Value)
-                                .Seal()
-                                .Build();
+                            value = ctx.Builder(object.Pos()).Callable("DataOrOptionalData").Add(0, resultType).Atom(1, ev.Value).Seal().Build();
                         }
-                        extraColumnsAsStructArgs.push_back(
-                            ctx.Builder(object.Pos())
-                                .List()
-                                    .Atom(0, ev.Name)
-                                    .Add(1, value)
-                                .Seal()
-                                .Build()
-                        );
+                        extraColumnsAsStructArgs.push_back(ctx.Builder(object.Pos()).List().Atom(0, ev.Name).Add(1, value).Seal().Build() );
                     }
                 }
 
@@ -444,6 +429,7 @@ private:
                 bool isTextFormat;
                 NS3Details::PackPathsList(pathList, packedPaths, isTextFormat);
 
+                // clang-format off
                 pathNodes.emplace_back(
                     Build<TS3Path>(ctx, object.Pos())
                         .Data<TCoString>()
@@ -457,18 +443,13 @@ private:
                         .ExtraColumns(extraColumns)
                     .Done().Ptr()
                 );
+                // clang-format on
             }
 
             const auto settingsPos = read.Ref().Child(4)->Pos();
             auto userSchema = ExtractSchema(settings);
             if (pathNodes.empty()) {
-                auto data = ctx.Builder(read.Pos())
-                    .Callable("List")
-                        .Callable(0, "ListType")
-                            .Add(0, userSchema.front())
-                        .Seal()
-                    .Seal()
-                    .Build();
+                auto data = ctx.Builder(read.Pos()).Callable("List").Callable(0, "ListType").Add(0, userSchema.front()).Seal().Seal().Build();
                 if (userSchema.back()) {
                     data = ctx.NewCallable(read.Pos(), "AssumeColumnOrder", { data, userSchema.back() });
                 }
@@ -496,37 +477,28 @@ private:
                     pathPatternVariant = NS3Lister::ES3PatternVariant::PathPattern;
                 }
 
+                settings.push_back(ctx.NewList(settingsPos, {
+                                                                ctx.NewAtom(settingsPos, "pathpattern"), ctx.NewAtom(settingsPos, pathPattern),
+                                                            }));
                 settings.push_back(ctx.NewList(
-                    settingsPos,
-                    {
-                        ctx.NewAtom(settingsPos, "pathpattern"),
-                        ctx.NewAtom(settingsPos, pathPattern),
-                    }));
-                settings.push_back(ctx.NewList(
-                    settingsPos,
-                    {
-                        ctx.NewAtom(settingsPos, "pathpatternvariant"),
-                        ctx.NewAtom(settingsPos, ToString(pathPatternVariant)),
-                    }));
+                    settingsPos, {
+                                     ctx.NewAtom(settingsPos, "pathpatternvariant"), ctx.NewAtom(settingsPos, ToString(pathPatternVariant)),
+                                 }));
             }
 
             TExprNode::TPtr s3Object;
+            // clang-format off
             s3Object = Build<TS3Object>(ctx, object.Pos())
                     .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
                     .Format(std::move(format))
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
+            // clang-format on
 
-            auto row = Build<TCoArgument>(ctx, read.Pos())
-                .Name("row")
-                .Done();
-            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
-                .Args({row})
-                .Body<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
-                .Done().Ptr();
-            
+            auto row = Build<TCoArgument>(ctx, read.Pos()).Name("row").Done();
+            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos()).Args({ row }).Body<TCoBool>().Literal().Build("true") .Build() .Done().Ptr();
+
+            // clang-format off
             replaces.emplace(node, userSchema.back() ?
                 Build<TS3ReadObject>(ctx, read.Pos())
                     .World(read.World())
@@ -545,20 +517,19 @@ private:
                     .Path(ctx.NewAtom(object.Pos(), path))
                     .FilterPredicate(emptyPredicate)
                 .Done().Ptr());
+            // clang-format on
         }
 
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
     }
 
     static TVector<TExtraColumnValue> ExtractExtraColumnValues(
-        const TListRequest& req,
-        const TGeneratedColumnsConfig* generatedColumnsConfig,
-        const std::vector<TString>& matchedGlobs) {
+        const TListRequest& req, const TGeneratedColumnsConfig* generatedColumnsConfig, const std::vector<TString>& matchedGlobs) {
         auto extraValues = TVector<TExtraColumnValue>{};
         if (!req.ColumnValues.empty()) {
             // explicit partitioning
             YQL_ENSURE(req.ColumnValues.size() == generatedColumnsConfig->Columns.size());
-            for (auto& cv: req.ColumnValues) {
+            for (auto& cv : req.ColumnValues) {
                 TExtraColumnValue value;
                 value.Name = cv.Name;
                 value.Type = cv.Type;
@@ -577,7 +548,8 @@ private:
         return extraValues;
     }
 
-    static bool ValidateProjection(TPositionHandle pos, const TPathGeneratorPtr& generator, const TVector<TString>& partitionedBy, TExprContext& ctx) {
+    static bool ValidateProjection(
+        TPositionHandle pos, const TPathGeneratorPtr& generator, const TVector<TString>& partitionedBy, TExprContext& ctx) {
         const TSet<TString> partitionedBySet(partitionedBy.begin(), partitionedBy.end());
         TSet<TString> projectionSet;
         const auto& config = generator->GetConfig();
@@ -590,8 +562,9 @@ private:
         }
 
         if (projectionSet != partitionedBySet) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Column set in partitioned_by doesn't match column set in projection: {"
-                << JoinSeq(",", partitionedBySet) << "} != {" << JoinSeq(",", projectionSet) << "}"));
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                                                          << "Column set in partitioned_by doesn't match column set in projection: {"
+                                                          << JoinSeq(",", partitionedBySet) << "} != {" << JoinSeq(",", projectionSet) << "}"));
             return false;
         }
         return true;
@@ -614,41 +587,32 @@ private:
         }
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
-        auto resultSetLimitPerPath = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery);
+        auto resultSetLimitPerPath =
+            std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery);
         if (!s3ParseSettings.Paths().Empty()) {
             resultSetLimitPerPath /= s3ParseSettings.Paths().Size();
         }
-        resultSetLimitPerPath =
-            std::min(resultSetLimitPerPath,
-                     State_->Configuration->MaxDiscoveryFilesPerDirectory.Get().GetOrElse(
-                         State_->Configuration->MaxListingResultSizePerPhysicalPartition));
+        resultSetLimitPerPath = std::min(resultSetLimitPerPath, State_->Configuration->MaxDiscoveryFilesPerDirectory.Get().GetOrElse(
+                                                                    State_->Configuration->MaxListingResultSizePerPhysicalPartition));
 
         for (auto path : s3ParseSettings.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
 
             YQL_CLOG(DEBUG, ProviderS3) << "directories size: " << directories.size();
-            for (auto & dir: directories) {
-                YQL_CLOG(DEBUG, ProviderS3)
-                    << "directory: path{" << dir.Path << "} size {" << dir.Size << "}";
+            for (auto& dir : directories) {
+                YQL_CLOG(DEBUG, ProviderS3) << "directory: path{" << dir.Path << "} size {" << dir.Size << "}";
 
-                auto req = TListRequest{.S3Request{
-                    .Url = url,
-                    .Credentials = credentials,
-                    .Pattern = NS3::NormalizePath(
-                        TStringBuilder() << dir.Path << "/" << effectiveFilePattern),
+                auto req = TListRequest{ .S3Request{ .Url = url, .Credentials = credentials,
+                    .Pattern = NS3::NormalizePath(TStringBuilder() << dir.Path << "/" << effectiveFilePattern),
                     .PatternType = NS3Lister::ES3PatternType::Wildcard,
-                    .Prefix = dir.Path}};
+                    .Prefix = dir.Path } };
 
-                auto future = ListingStrategy_->List(
-                    req.S3Request,
-                    TS3ListingOptions{
-                        .IsPartitionedDataset = false,
+                auto future = ListingStrategy_->List(req.S3Request,
+                    TS3ListingOptions{ .IsPartitionedDataset = false,
                         .IsConcurrentListing =
-                            State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
-                                State_->Configuration->AllowConcurrentListings),
-                        .MaxResultSet = resultSetLimitPerPath});
-
+                            State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(State_->Configuration->AllowConcurrentListings),
+                        .MaxResultSet = resultSetLimitPerPath });
 
                 RequestsByNode_[source.Raw()].push_back(req);
                 PendingRequests_[req] = future;
@@ -681,7 +645,7 @@ private:
             if (!slot) {
                 continue;
             }
-            columns[TString{name->Content()}] = *slot;
+            columns[TString{ name->Content() }] = *slot;
         }
         return columns;
     }
@@ -712,11 +676,11 @@ private:
                     return false;
                 }
                 if (!uniqs.emplace(column->Content()).second) {
-                    ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
+                    ctx.AddError(TIssue(
+                        ctx.GetPosition(column->Pos()), TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
                     return false;
                 }
                 partitionedBy.push_back(ToString(column->Content()));
-
             }
         }
 
@@ -749,7 +713,8 @@ private:
             return false;
         }
         if (TString errorString = NS3::ValidateWildcards(filePattern)) {
-            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "File pattern '" << filePattern << "' contains invalid wildcard: " << errorString));
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
+                TStringBuilder() << "File pattern '" << filePattern << "' contains invalid wildcard: " << errorString));
             return false;
         }
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
@@ -757,7 +722,9 @@ private:
         TVector<TString> paths;
         const auto& object = read.Arg(2).Ref();
         YQL_ENSURE(object.IsCallable("MrTableConcat"));
-        object.ForEachChild([&paths](const TExprNode& child){ paths.push_back(ToString(child.Head().Tail().Head().Content())); });
+        object.ForEachChild([&paths](const TExprNode& child) {
+            paths.push_back(ToString(child.Head().Tail().Head().Content()));
+        });
 
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
@@ -770,11 +737,8 @@ private:
             config.Columns = partitionedBy;
             config.SchemaTypeNode = schema->ChildPtr(1);
             if (!projection.empty()) {
-                config.Generator = CreatePathGenerator(
-                    projection,
-                    partitionedBy,
-                    GetDataSlotColumns(*schema, ctx),
-                    State_->Configuration->GeneratorPathsLimit);
+                config.Generator =
+                    CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(*schema, ctx), State_->Configuration->GeneratorPathsLimit);
                 if (!ValidateProjection(projectionPos, config.Generator, partitionedBy, ctx)) {
                     return false;
                 }
@@ -784,7 +748,8 @@ private:
 
         for (const auto& path : paths) {
             if (TString errorString = NS3::ValidateWildcards(path)) {
-                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path '" << path << "' contains invalid wildcard: " << errorString));
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path '" << path << "' contains invalid wildcard: " << errorString));
                 return false;
             }
 
@@ -792,15 +757,11 @@ private:
             TVector<TListRequest> reqs;
 
             auto isConcurrentListingEnabled =
-                State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
-                    State_->Configuration->AllowConcurrentListings);
-            auto req = TListRequest{
-                .S3Request{.Url = url, .Credentials = credentials},
-                .FilePattern = effectiveFilePattern,
-                .Options{
-                    .IsConcurrentListing = isConcurrentListingEnabled,
-                    .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery)
-                }};
+                State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(State_->Configuration->AllowConcurrentListings);
+            auto req = TListRequest{ .S3Request{ .Url = url, .Credentials = credentials }, .FilePattern = effectiveFilePattern,
+                .Options{ .IsConcurrentListing = isConcurrentListingEnabled,
+                    .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery,
+                        State_->Configuration->MaxDirectoriesAndFilesPerQuery) } };
 
             if (partitionedBy.empty() || !config.Generator) {
                 auto error = NS3::BuildS3FilePattern(path, filePattern, config.Columns, req.S3Request);
@@ -822,8 +783,7 @@ private:
                     // Pattern will be directory path
                     req.S3Request.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path);
                     req.S3Request.PatternType = NS3Lister::ES3PatternType::Wildcard;
-                    req.S3Request.Prefix = req.S3Request.Pattern.substr(
-                        0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
+                    req.S3Request.Prefix = req.S3Request.Pattern.substr(0, NS3::GetFirstWildcardPos(req.S3Request.Pattern));
                     req.Options.IsPartitionedDataset = true;
                     reqs.push_back(req);
                 }
@@ -840,9 +800,8 @@ private:
                     NThreading::TFuture<NS3Lister::TListResult> future;
                     if (config.Generator) {
                         // postpone actual directory listing (will do it after path pruning)
-                        NS3Lister::TListEntries entries{
-                            std::vector<NS3Lister::TObjectListEntry>{0},
-                            std::vector<NS3Lister::TDirectoryListEntry>{1}};
+                        NS3Lister::TListEntries entries{ std::vector<NS3Lister::TObjectListEntry>{ 0 },
+                            std::vector<NS3Lister::TDirectoryListEntry>{ 1 } };
                         entries.Directories.back().Path = req.S3Request.Pattern;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
@@ -866,7 +825,7 @@ private:
         if (it != S3Credentials_.end()) {
             return it->second;
         }
-        return S3Credentials_.insert({token, TS3Credentials(State_->CredentialsFactory, token)}).first->second;
+        return S3Credentials_.insert({ token, TS3Credentials(State_->CredentialsFactory, token) }).first->second;
     }
 
     const TS3State::TPtr State_;
@@ -880,10 +839,10 @@ private:
     NThreading::TFuture<void> AllFuture_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreateS3IODiscoveryTransformer(TS3State::TPtr state) {
     return THolder(new TS3IODiscoveryTransformer(std::move(state)));
 }
 
-} // namespace NYql
+}   // namespace NYql

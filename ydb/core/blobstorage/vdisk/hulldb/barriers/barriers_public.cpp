@@ -2,6 +2,7 @@
 #include "barriers_tree.h"
 #include "barriers_essence.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h>
 
 namespace NKikimr {
     namespace NBarriers {
@@ -29,6 +30,7 @@ namespace NKikimr {
         TBarriersDs::TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
             : TBase(settings, std::move(arena))
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
+            , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
                 TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
                 settings.HullCtx->VCtx->VDiskLogPrefix,
@@ -42,6 +44,7 @@ namespace NKikimr {
                 std::shared_ptr<TRopeArena> arena)
             : TBase(settings, pb, entryPointLsn, std::move(arena))
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
+            , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
                 TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
                 settings.HullCtx->VCtx->VDiskLogPrefix,
@@ -71,6 +74,26 @@ namespace NKikimr {
         void TBarriersDs::LoadCompleted() {
             TBase::LoadCompleted();
             BuildMemView();
+        }
+
+        void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
+            if (CollectByCompleteDeletionBlock) {
+                MemView->MarkTabletDeleted(tabletId);
+            }
+        }
+
+        void TBarriersDs::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
+            if (CollectByCompleteDeletionBlock) {
+                MemView->MarkTabletsDeleted(tabletIds);
+            }
+        }
+
+        void TBarriersDs::UpdateMemView(const TBarriersSst &sst) {
+            Y_VERIFY_S(sst.IsLoaded(), VDiskLogPrefix);
+            TBarriersSst::TMemIterator it(&sst);
+            for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                MemView->Update(it.GetCurKey(), it.GetMemRec());
+            }
         }
 
         TBarriersDsSnapshot TBarriersDs::GetSnapshot(TActorSystem *as) {

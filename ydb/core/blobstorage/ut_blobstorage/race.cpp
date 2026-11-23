@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/activity.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <optional>
 
@@ -266,5 +267,149 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
 Y_UNIT_TEST_SUITE(GroupReconfigurationRace) {
     Y_UNIT_TEST(Test_block42) {
         RunGroupReconfigurationRaceTest(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(RestartedEncryptedPutKeepsData) {
+        // Without a tenant key the proxy of an encrypted group refuses puts and gets.
+        const ui8 keyData[32] = "restarted put test key";
+        const TEncryptionKey key{
+            .Key = {keyData, sizeof(keyData)},
+            .Version = 1,
+            .Id = "tenant key",
+        };
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Encryption = true,
+            .ConfigPreprocessor = [&](ui32 /*nodeId*/, TNodeWardenConfig& config) { config.TenantKey = key; },
+        });
+        auto& runtime = env.Runtime;
+        env.CreateBoxAndPool(2, 1);
+        env.Sim(TDuration::Minutes(1));
+        const ui32 groupId = env.GetGroups().front();
+
+        TString data = TString::Uninitialized(1000);
+        for (size_t i = 0; i < data.size(); ++i) {
+            data[i] = 'a' + i % 26;
+        }
+        const ui64 tabletId = 100500;
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+        const TActorId edge = runtime->AllocateEdgeActor(1);
+
+        // Hold the VDisk puts of this blob until the group is reconfigured, so that they are answered with RACE and
+        // the proxy restarts the put after it has encrypted the buffer. Puts of other tablets, such as the
+        // controller's log, must go on.
+        auto isTestBlob = [&](const NKikimrProto::TLogoBlobID& blobId) {
+            return LogoBlobIDFromLogoBlobID(blobId).TabletID() == tabletId;
+        };
+        bool hold = true;
+        ui32 restartedPuts = 0;
+        auto countRestart = [&](IEventHandle& ev) {
+            const auto *put = ev.Get<TEvBlobStorage::TEvPut>();
+            if (put->Id.TabletID() == tabletId && put->RestartCounter) {
+                ++restartedPuts;
+            }
+        };
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        std::unique_ptr<IEventHandle> putResult;
+        runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvBunchOfEvents: // the put actor restarts its puts as a bunch
+                    for (const auto& item : ev->Get<TEvBlobStorage::TEvBunchOfEvents>()->Bunch) {
+                        if (item->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                            countRestart(*item);
+                        }
+                    }
+                    break;
+                case TEvBlobStorage::EvVPut:
+                    if (hold && isTestBlob(ev->Get<TEvBlobStorage::TEvVPut>()->Record.GetBlobID())) {
+                        held.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                    break;
+                case TEvBlobStorage::EvVMultiPut: {
+                    const auto& record = ev->Get<TEvBlobStorage::TEvVMultiPut>()->Record;
+                    if (hold && record.ItemsSize() && isTestBlob(record.GetItems(0).GetBlobID())) {
+                        held.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvPut:
+                    countRestart(*ev);
+                    break;
+                case TEvBlobStorage::EvPutResult:
+                    if (ev->GetRecipientRewrite() == edge) {
+                        putResult = std::move(ev);
+                        return false;
+                    }
+                    break;
+            }
+            return true;
+        };
+
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!putResult, "the put finished before the reconfiguration, Status# "
+            << NKikimrProto::EReplyStatus_Name(putResult->Get<TEvBlobStorage::TEvPutResult>()->Status)
+            << " ErrorReason# " << putResult->Get<TEvBlobStorage::TEvPutResult>()->ErrorReason);
+        UNIT_ASSERT(!held.empty());
+
+        // Move one VDisk of the group to the other PDisk of its node.
+        const auto config = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *slot = nullptr;
+        for (const auto& x : config.GetVSlot()) {
+            if (x.GetGroupId() == groupId) {
+                slot = &x;
+                break;
+            }
+        }
+        UNIT_ASSERT(slot);
+        const NKikimrBlobStorage::TBaseConfig::TPDisk *target = nullptr;
+        for (const auto& pdisk : config.GetPDisk()) {
+            if (pdisk.GetNodeId() == slot->GetVSlotId().GetNodeId() && pdisk.GetPDiskId() != slot->GetVSlotId().GetPDiskId()) {
+                target = &pdisk;
+                break;
+            }
+        }
+        UNIT_ASSERT(target);
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+        reassign->SetGroupId(groupId);
+        reassign->SetGroupGeneration(slot->GetGroupGeneration());
+        reassign->SetFailRealmIdx(slot->GetFailRealmIdx());
+        reassign->SetFailDomainIdx(slot->GetFailDomainIdx());
+        reassign->SetVDiskIdx(slot->GetVDiskIdx());
+        reassign->MutableTargetPDiskId()->SetNodeId(target->GetNodeId());
+        reassign->MutableTargetPDiskId()->SetPDiskId(target->GetPDiskId());
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.Sim(TDuration::Seconds(10));
+
+        hold = false;
+        for (auto& [nodeId, ev] : held) {
+            runtime->Send(ev.release(), nodeId);
+        }
+        held.clear();
+        for (ui32 i = 0; i < 60 && !putResult; ++i) {
+            env.Sim(TDuration::Seconds(1));
+        }
+        runtime->FilterFunction = {};
+        UNIT_ASSERT(putResult);
+        UNIT_ASSERT_VALUES_EQUAL(putResult->Get<TEvBlobStorage::TEvPutResult>()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_C(restartedPuts, "the put was not restarted");
+
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead));
+        });
+        const auto getResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_EQUAL(getResult->Get()->Responses[0].Buffer.ConvertToString(), data);
     }
 }

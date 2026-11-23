@@ -44,6 +44,8 @@ void TJaegerTracerConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("collector_channel_config", &TThis::CollectorChannelConfig)
         .Optional();
+    registrar.Parameter("collector_headers", &TThis::CollectorHeaders)
+        .Default();
 
     // 10K nodes x 128 KB / 15s == 85mb/s
     registrar.Parameter("flush_period", &TThis::FlushPeriod)
@@ -86,6 +88,7 @@ TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDyna
 {
     auto config = New<TJaegerTracerConfig>();
     config->CollectorChannelConfig = CollectorChannelConfig;
+    config->CollectorHeaders = CollectorHeaders;
     if (dynamicConfig->CollectorChannel) {
         config->CollectorChannelConfig = dynamicConfig->CollectorChannel;
     }

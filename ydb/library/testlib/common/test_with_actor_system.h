@@ -10,7 +10,7 @@
 
 namespace NTestUtils {
 
-class TTestWithActorSystemFixture : public NUnitTest::TBaseFixture {
+class TTestWithActorSystemFixture: public NUnitTest::TBaseFixture {
 public:
     struct TSettings {
         TDuration WaitTimeout = TDuration::Seconds(20);
@@ -39,4 +39,4 @@ private:
     NActors::TActivationContext* PrevActorCtx;
 };
 
-} // namespace NTestUtils
+}   // namespace NTestUtils

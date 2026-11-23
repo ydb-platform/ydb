@@ -103,7 +103,8 @@ void TYtPoller::WatchLoop()
         try {
             rawBatchRequest->ExecuteBatch();
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Exception while executing batch request: %v", ex.what());
+            YT_TLOG_ERROR("Exception while executing batch request")
+                .With("Error", ex.what());
         }
 
         for (auto it = InProgress_.begin(); it != InProgress_.end();) {

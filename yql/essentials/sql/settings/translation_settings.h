@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+
 #include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -21,6 +23,10 @@ class IAutoParamBuilderFactory;
 } // namespace NYql
 
 namespace NSQLTranslation {
+
+// Provider pragmas have a provider or cluster prefix. SQL pragmas have no prefix,
+// except for the case-insensitive "yson." prefix.
+bool IsTranslatorLevelPragma(TStringBuf name);
 
 constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
 constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
@@ -114,6 +120,7 @@ struct TTranslationSettings {
     TString File;
     bool EnableGenericUdfs;
     ui16 SyntaxVersion;
+    TMaybe<TString> Syntax;
     bool AnsiLexer;
     bool Antlr4Parser; // TODO(YQL-19017): remove.
     bool PgParser;
@@ -124,13 +131,15 @@ struct TTranslationSettings {
     bool WarnOnV0;
     bool TestAntlr4; // TODO(YQL-19017): remove.
     TMaybe<size_t> MaxParseTreeDepth;
+    ui32 GroupByLimit = 64;
+    ui32 GroupByCubeLimit = 5;
     ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
-    const NYql::IUdfMeta* UdfMeta = nullptr;
+    const NYql::TUdfMeta* UdfMeta = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;
@@ -150,6 +159,9 @@ struct TTranslationSettings {
     bool ValidateViewStatement = true;
 
     TVector<TString> ExtraSystemColumnPrefixes;
+
+    bool StrictConfigValidation = false;
+    NYql::TProjectSettings ProjectSettings;
 };
 
 struct TParsedSettings {
@@ -157,6 +169,7 @@ struct TParsedSettings {
     bool HasSyntaxV1 = false;
     bool HasAnsiLexer = false;
     bool HasPgParser = false;
+    TMaybe<TString> Syntax;
 
     bool ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const;
 };

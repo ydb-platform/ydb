@@ -1,20 +1,17 @@
-#include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_settings.h>
+#include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <util/system/env.h>
-
 #include <google/protobuf/util/message_differencer.h>
-
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/system/env.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <ydb/library/actors/core/log.h>
 
 namespace NFq {
 
@@ -31,11 +28,12 @@ const size_t YdbRowSizeLimit = 500;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFixture : public NUnitTest::TBaseFixture {
+class TFixture: public NUnitTest::TBaseFixture {
 public:
     TFixture()
         : Alloc(__LOCATION__)
-    {}
+    {
+    }
 
     TStateStoragePtr GetStateStorage(const char* tablePrefix, bool enableCompression = false) {
         NConfig::TCheckpointCoordinatorConfig config;
@@ -59,9 +57,7 @@ public:
     // Count the total number of rows in the `states` table for the given
     // graph_id + checkpoint. Unlike CountStates (which groups by task_id),
     // this returns the raw row count, confirming blob_seq_num partitioning.
-    ui64 CountStatesTableRows(
-        const TString& graphId,
-        const TCheckpointId& checkpointId)
+    ui64 CountStatesTableRows(const TString& graphId, const TCheckpointId& checkpointId)
     {
         Y_ENSURE(YdbConnection, "YdbConnection is not initialized");
         auto tablePathPrefix = YdbConnection->GetTablePathPrefix();
@@ -85,13 +81,9 @@ public:
         )", tablePathPrefix.c_str());
 
         ui64 result = 0;
-        auto future = YdbConnection->GetTableClient()->RetryOperation(
-            [query, paramsBuilder, &result](ISession::TPtr session) {
-                return session->ExecuteDataQuery(
-                    query,
-                    ISession::TTxControl::BeginAndCommitTx(),
-                    paramsBuilder
-                ).Apply([&result](const NThreading::TFuture<NYdb::NTable::TDataQueryResult>& f) {
+        auto future = YdbConnection->GetTableClient()->RetryOperation([query, paramsBuilder, &result](ISession::TPtr session) {
+            return session->ExecuteDataQuery(query, ISession::TTxControl::BeginAndCommitTx(), paramsBuilder)
+                .Apply([&result](const NThreading::TFuture<NYdb::NTable::TDataQueryResult>& f) {
                     const auto& r = f.GetValue();
                     if (r.IsSuccess()) {
                         NYdb::TResultSetParser parser(r.GetResultSet(0));
@@ -101,7 +93,7 @@ public:
                     }
                     return NYdb::TStatus(r);
                 });
-            });
+        });
         future.GetValueSync();
         return result;
     }
@@ -133,9 +125,7 @@ public:
     }
 
     NYql::NDq::TComputeActorState MakeIncrementState(
-        const std::map<TString, TString>& snapshot,
-        const std::map<TString, TString>& increment,
-        const std::set<TString>& deleted)
+        const std::map<TString, TString>& snapshot, const std::map<TString, TString>& increment, const std::set<TString>& deleted)
     {
         if (!snapshot.empty()) {
             return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(snapshot, 0));
@@ -143,11 +133,7 @@ public:
         return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeIncrementState(increment, deleted, 0));
     }
 
-    void SaveState(
-        TStateStoragePtr storage,
-        ui64 taskId,
-        const TString& graphId,
-        const TCheckpointId& checkpointId,
+    void SaveState(TStateStoragePtr storage, ui64 taskId, const TString& graphId, const TCheckpointId& checkpointId,
         const NYql::NDq::TComputeActorState& state)
     {
         auto [size, issues] = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
@@ -156,12 +142,9 @@ public:
     }
 
     NYql::NDq::TComputeActorState GetState(
-        TStateStoragePtr storage,
-        const ui64 taskId,
-        const TString& graphId,
-        const TCheckpointId& checkpointId)
+        TStateStoragePtr storage, const ui64 taskId, const TString& graphId, const TCheckpointId& checkpointId)
     {
-        auto [states, issues] = storage->GetState({taskId}, graphId, checkpointId).GetValueSync();
+        auto [states, issues] = storage->GetState({ taskId }, graphId, checkpointId).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
         UNIT_ASSERT(!states.empty());
         return states[0];
@@ -173,7 +156,7 @@ public:
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
         UNIT_ASSERT(size > 0);
 
-        auto [states, getIssues] = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
+        auto [states, getIssues] = storage->GetState({ 1 }, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
         UNIT_ASSERT(!states.empty());
         CheckEquals(state, states[0]);
@@ -211,295 +194,292 @@ private:
     IYdbConnection::TPtr YdbConnection;
 };
 
-
-} // namespace
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_UNIT_TEST_SUITE(TStateStorageTest) {
+Y_UNIT_TEST_SUITE(TStateStorageTest){
 
     Y_UNIT_TEST_F(ShouldSaveGetOldSmallState, TFixture)
-    {
-        ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(4));
-    }
-
-    Y_UNIT_TEST_F(ShouldSaveGetOldSmallState2Tasks, TFixture)
-    {
-        TString result;
-        auto state1 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'a'), 0);
-        auto state2 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'b'), 0);
-        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state1.AsStringRef());
-        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state2.AsStringRef());
-        NYql::NDq::TComputeActorState state;
-        state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
-        ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", state);
-    }
-
-    Y_UNIT_TEST_F(ShouldSaveGetOldBigState, TFixture)
-    {
-        ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(YdbRowSizeLimit * 4));
-    }
-
-    Y_UNIT_TEST_F(ShouldSaveGetIncrementSmallState, TFixture)
-    {
-        ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(10));
-    }
-
-    Y_UNIT_TEST_F(ShouldSaveGetIncrementBigState, TFixture)
-    {
-        ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));
-    }
-
-    Y_UNIT_TEST_F(ShouldNotGetNonExistendState, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldNotGetNonExistendState");
-        auto getResult = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(!getResult.second.Empty());
-        UNIT_ASSERT(getResult.first.empty());
-    }
-
-    Y_UNIT_TEST_F(ShouldCountStates, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldCountStates");
-
-        storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(3, "graph1", CheckpointId1, MakeIncrementState(YdbRowSizeLimit * 3)).GetValueSync();
-
-        auto [count, issues] = storage->CountStates("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(count, 3);
-    }
-
-    Y_UNIT_TEST_F(ShouldCountStatesNonExistentCheckpoint, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldCountStatesNonExistentCheckpoint");
-
-        auto [count, issues] = storage->CountStates("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(count, 0);
-    }
-
-    Y_UNIT_TEST_F(ShouldDeleteNoCheckpoints, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldDeleteNoCheckpoints");
-
-        storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(3, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-
-        auto issues = storage->DeleteCheckpoints("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-
-        auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 3);
-    }
-
-    Y_UNIT_TEST_F(ShouldDeleteNoCheckpoints2, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldDeleteNoCheckpoints2");
-
-        storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(3, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-
-        auto issues = storage->DeleteCheckpoints("graph2", CheckpointId2).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-
-        auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 3);
-    }
-
-    Y_UNIT_TEST_F(ShouldDeleteCheckpoints, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldDeleteCheckpoints");
-
-        storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(3, "graph1", CheckpointId1, MakeIncrementState(YdbRowSizeLimit * 4)).GetValueSync();
-
-        storage->SaveState(1, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
-
-        storage->SaveState(1, "graph1", CheckpointId3, MakeStateFromBlob(4)).GetValueSync();
-
-        // delete
-        auto issues = storage->DeleteCheckpoints("graph1", CheckpointId2).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-
-        auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
-
-        countResult = storage->CountStates("graph1", CheckpointId2).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 2);
-
-        // next delete
-        issues = storage->DeleteCheckpoints("graph1", CheckpointId4).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-
-        countResult = storage->CountStates("graph1", CheckpointId2).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
-        countResult = storage->CountStates("graph1", CheckpointId3).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
-    }
-
-    Y_UNIT_TEST_F(ShouldDeleteGraph, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldDeleteCheckpoints");
-
-        storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(3, "graph1", CheckpointId1, MakeIncrementState(YdbRowSizeLimit * 3)).GetValueSync();
-
-        storage->SaveState(1, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
-        storage->SaveState(2, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
-
-        storage->SaveState(1, "graph1", CheckpointId3, MakeStateFromBlob(4)).GetValueSync();
-
-        auto issues = storage->DeleteGraph("graph1").GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-
-        auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
-        countResult = storage->CountStates("graph1", CheckpointId2).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
-        countResult = storage->CountStates("graph1", CheckpointId3).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
-    }
-
-    Y_UNIT_TEST_F(ShouldIssueErrorOnWrongGetStateParams, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnWrongGetStateParams");
-
-        auto getResult = storage->GetState({}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(!getResult.second.Empty());
-        UNIT_ASSERT(getResult.first.empty());
-
-        getResult = storage->GetState({1, 1}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(!getResult.second.Empty());
-        UNIT_ASSERT(getResult.first.empty());
-    }
-
-    Y_UNIT_TEST_F(ShouldIssueErrorOnNonExistentState, TFixture) {
-        auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnNonExistentState");
-
-        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-        UNIT_ASSERT(size > 0);
-
-        auto getResult = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(getResult.second.Empty());
-        UNIT_ASSERT(!getResult.first.empty());
-
-        getResult = storage->GetState({1, 2}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(!getResult.second.Empty());
-        UNIT_ASSERT(getResult.first.empty());
-    }
-
-    Y_UNIT_TEST_F(ShouldGetMultipleStates, TFixture)
-    {
-        auto storage = GetStateStorage("TStateStorageTestShouldGetMultipleStates");
-
-        auto state1 = MakeStateFromBlob(10);
-        auto state2 = MakeIncrementState(10);
-        auto state3 = MakeStateFromBlob(YdbRowSizeLimit * 6);
-        auto state4 = MakeIncrementState(YdbRowSizeLimit * 3);
-
-        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, state1).GetValueSync();
-        UNIT_ASSERT(issues.Empty());
-        UNIT_ASSERT(size > 0);
-        issues = storage->SaveState(42, "graph1", CheckpointId1, state2).GetValueSync().second;
-        UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(7, "graph1", CheckpointId1, state3).GetValueSync().second;
-        UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(13, "graph1", CheckpointId1, state4).GetValueSync().second;
-        UNIT_ASSERT(issues.Empty());
-
-        auto [states, getIssues] = storage->GetState({1, 42, 7, 13}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
-        UNIT_ASSERT_VALUES_EQUAL(states.size(), 4);
-
-        CheckEquals(state1, states[0]);
-        CheckEquals(state2, states[1]);
-        CheckEquals(state3, states[2]);
-        CheckEquals(state4, states[3]);
-
-        // in different order
-        auto [states2, getIssues2] = storage->GetState({42, 1, 13, 7}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT(getIssues2.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(states2.size(), 4);
-        CheckEquals(state2, states2[0]);
-        CheckEquals(state1, states2[1]);
-        CheckEquals(state4, states2[2]);
-        CheckEquals(state3, states2[3]);
-    }
-
-    Y_UNIT_TEST_F(ShouldLoadLastSnapshot, TFixture)
-    {
-        auto storage = GetStateStorage("ShouldLoadLastSnapshot");
-
-        auto state1 = MakeIncrementState({{"key1", "value1"}, {"key2", "value2"}}, {}, {});
-        auto state2 = MakeIncrementState({{"key1", "value1"}, {"key2", "value2"}}, {}, {});
-
-        SaveState(storage, 1, "graph1", CheckpointId1, state1);
-        SaveState(storage, 1, "graph1", CheckpointId2, state2);
-
-        auto state = GetState(storage, 1, "graph1", CheckpointId2);
-        CheckEquals(state, state2);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotGetNonExistendSnaphotState, TFixture)
-    {
-        auto storage = GetStateStorage("ShouldNotGetNonExistendSnaphotState");
-        auto state = MakeIncrementState({}, {{"key1", "value1-new"}, {"key3", "value3"}}, {"key2"});
-        SaveState(storage, 1, "graph1", CheckpointId4, state);
-
-        auto [states, issues] = storage->GetState({1}, "graph1", CheckpointId4).GetValueSync();
-        UNIT_ASSERT(!issues.Empty());
-        UNIT_ASSERT(states.empty());
-    }
-
-    Y_UNIT_TEST_F(ShouldLoadIncrementSnapshot, TFixture)
-    {
-        auto storage = GetStateStorage("ShouldLoadIncrementSnapshot");
-
-        auto state1 = MakeIncrementState({{"key1", "value1"}, {"key2", "value2"}}, {}, {});
-        auto state2 = MakeIncrementState({}, {{"key1", "value1-new"}, {"key3", "value3"}}, {"key2"});
-        auto value4 = TString(YdbRowSizeLimit*3, 'x');
-        auto state3 = MakeIncrementState({}, {{"key4", value4}}, {});
-        auto state4 = MakeIncrementState({}, {{"key5", "value5"}}, {});
-
-        SaveState(storage, 1, "graph1", CheckpointId1, state1);
-        SaveState(storage, 1, "graph1", CheckpointId2, state2);
-        SaveState(storage, 1, "graph1", CheckpointId3, state3);
-        SaveState(storage, 1, "graph1", CheckpointId4, state4);
-
-        auto expected = MakeIncrementState({{"key1", "value1-new"}, {"key3", "value3"}, {"key4", value4}}, {}, {});
-
-        auto actual = GetState(storage, 1, "graph1", CheckpointId3);
-        CheckEquals(expected, actual);
-    }
-
-
-    Y_UNIT_TEST_F(ShouldSaveGetCompressedState, TFixture)
-    {
-        auto storage = GetStateStorage("ShouldSaveGetCompressedState", /* enableCompression */ true);
-        const size_t stateSize = YdbRowSizeLimit + 42;
-        TString blob(stateSize, 'a');
-        auto originalState = MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));
-
-        auto [size, saveIssues] = storage->SaveState(1, "graph1", CheckpointId1, originalState).GetValueSync();
-        UNIT_ASSERT_C(saveIssues.Empty(), saveIssues.ToString());
-        UNIT_ASSERT_GT(size, 0u);
-
-        auto [states, getIssues] = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
-        UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
-        UNIT_ASSERT_VALUES_EQUAL(states.size(), 1u);
-        CheckEquals(originalState, states[0]);
-
-        UNIT_ASSERT_VALUES_EQUAL(CountStatesTableRows("graph1", CheckpointId1), 1);
-    }
-
-};
-
-} // namespace NFq
+        { ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(4));
+}   // namespace NFq
+
+Y_UNIT_TEST_F(ShouldSaveGetOldSmallState2Tasks, TFixture)
+{
+    TString result;
+    auto state1 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'a'), 0);
+    auto state2 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'b'), 0);
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state1.AsStringRef());
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state2.AsStringRef());
+    NYql::NDq::TComputeActorState state;
+    state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
+    ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", state);
+}
+
+Y_UNIT_TEST_F(ShouldSaveGetOldBigState, TFixture)
+{
+    ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(YdbRowSizeLimit * 4));
+}
+
+Y_UNIT_TEST_F(ShouldSaveGetIncrementSmallState, TFixture)
+{
+    ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(10));
+}
+
+Y_UNIT_TEST_F(ShouldSaveGetIncrementBigState, TFixture)
+{
+    ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));
+}
+
+Y_UNIT_TEST_F(ShouldNotGetNonExistendState, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldNotGetNonExistendState");
+    auto getResult = storage->GetState({ 1 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(!getResult.second.Empty());
+    UNIT_ASSERT(getResult.first.empty());
+}
+
+Y_UNIT_TEST_F(ShouldCountStates, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldCountStates");
+
+    storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(3, "graph1", CheckpointId1, MakeIncrementState(YdbRowSizeLimit * 3)).GetValueSync();
+
+    auto [count, issues] = storage->CountStates("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+    UNIT_ASSERT_VALUES_EQUAL(count, 3);
+}
+
+Y_UNIT_TEST_F(ShouldCountStatesNonExistentCheckpoint, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldCountStatesNonExistentCheckpoint");
+
+    auto [count, issues] = storage->CountStates("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+    UNIT_ASSERT_VALUES_EQUAL(count, 0);
+}
+
+Y_UNIT_TEST_F(ShouldDeleteNoCheckpoints, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldDeleteNoCheckpoints");
+
+    storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(3, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+
+    auto issues = storage->DeleteCheckpoints("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+
+    auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 3);
+}
+
+Y_UNIT_TEST_F(ShouldDeleteNoCheckpoints2, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldDeleteNoCheckpoints2");
+
+    storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(3, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+
+    auto issues = storage->DeleteCheckpoints("graph2", CheckpointId2).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+
+    auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 3);
+}
+
+Y_UNIT_TEST_F(ShouldDeleteCheckpoints, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldDeleteCheckpoints");
+
+    storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(3, "graph1", CheckpointId1, MakeIncrementState(YdbRowSizeLimit * 4)).GetValueSync();
+
+    storage->SaveState(1, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
+
+    storage->SaveState(1, "graph1", CheckpointId3, MakeStateFromBlob(4)).GetValueSync();
+
+    // delete
+    auto issues = storage->DeleteCheckpoints("graph1", CheckpointId2).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+
+    auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
+
+    countResult = storage->CountStates("graph1", CheckpointId2).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 2);
+
+    // next delete
+    issues = storage->DeleteCheckpoints("graph1", CheckpointId4).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+
+    countResult = storage->CountStates("graph1", CheckpointId2).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
+    countResult = storage->CountStates("graph1", CheckpointId3).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
+}
+
+Y_UNIT_TEST_F(ShouldDeleteGraph, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldDeleteCheckpoints");
+
+    storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(3, "graph1", CheckpointId1, MakeIncrementState(YdbRowSizeLimit * 3)).GetValueSync();
+
+    storage->SaveState(1, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
+    storage->SaveState(2, "graph1", CheckpointId2, MakeStateFromBlob(4)).GetValueSync();
+
+    storage->SaveState(1, "graph1", CheckpointId3, MakeStateFromBlob(4)).GetValueSync();
+
+    auto issues = storage->DeleteGraph("graph1").GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+
+    auto countResult = storage->CountStates("graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
+    countResult = storage->CountStates("graph1", CheckpointId2).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
+    countResult = storage->CountStates("graph1", CheckpointId3).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
+}
+
+Y_UNIT_TEST_F(ShouldIssueErrorOnWrongGetStateParams, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnWrongGetStateParams");
+
+    auto getResult = storage->GetState({}, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(!getResult.second.Empty());
+    UNIT_ASSERT(getResult.first.empty());
+
+    getResult = storage->GetState({ 1, 1 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(!getResult.second.Empty());
+    UNIT_ASSERT(getResult.first.empty());
+}
+
+Y_UNIT_TEST_F(ShouldIssueErrorOnNonExistentState, TFixture) {
+    auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnNonExistentState");
+
+    auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+    UNIT_ASSERT(size > 0);
+
+    auto getResult = storage->GetState({ 1 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(getResult.second.Empty());
+    UNIT_ASSERT(!getResult.first.empty());
+
+    getResult = storage->GetState({ 1, 2 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(!getResult.second.Empty());
+    UNIT_ASSERT(getResult.first.empty());
+}
+
+Y_UNIT_TEST_F(ShouldGetMultipleStates, TFixture)
+{
+    auto storage = GetStateStorage("TStateStorageTestShouldGetMultipleStates");
+
+    auto state1 = MakeStateFromBlob(10);
+    auto state2 = MakeIncrementState(10);
+    auto state3 = MakeStateFromBlob(YdbRowSizeLimit * 6);
+    auto state4 = MakeIncrementState(YdbRowSizeLimit * 3);
+
+    auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, state1).GetValueSync();
+    UNIT_ASSERT(issues.Empty());
+    UNIT_ASSERT(size > 0);
+    issues = storage->SaveState(42, "graph1", CheckpointId1, state2).GetValueSync().second;
+    UNIT_ASSERT(issues.Empty());
+    issues = storage->SaveState(7, "graph1", CheckpointId1, state3).GetValueSync().second;
+    UNIT_ASSERT(issues.Empty());
+    issues = storage->SaveState(13, "graph1", CheckpointId1, state4).GetValueSync().second;
+    UNIT_ASSERT(issues.Empty());
+
+    auto [states, getIssues] = storage->GetState({ 1, 42, 7, 13 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(states.size(), 4);
+
+    CheckEquals(state1, states[0]);
+    CheckEquals(state2, states[1]);
+    CheckEquals(state3, states[2]);
+    CheckEquals(state4, states[3]);
+
+    // in different order
+    auto [states2, getIssues2] = storage->GetState({ 42, 1, 13, 7 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT(getIssues2.Empty());
+    UNIT_ASSERT_VALUES_EQUAL(states2.size(), 4);
+    CheckEquals(state2, states2[0]);
+    CheckEquals(state1, states2[1]);
+    CheckEquals(state4, states2[2]);
+    CheckEquals(state3, states2[3]);
+}
+
+Y_UNIT_TEST_F(ShouldLoadLastSnapshot, TFixture)
+{
+    auto storage = GetStateStorage("ShouldLoadLastSnapshot");
+
+    auto state1 = MakeIncrementState({ { "key1", "value1" }, { "key2", "value2" } }, {}, {});
+    auto state2 = MakeIncrementState({ { "key1", "value1" }, { "key2", "value2" } }, {}, {});
+
+    SaveState(storage, 1, "graph1", CheckpointId1, state1);
+    SaveState(storage, 1, "graph1", CheckpointId2, state2);
+
+    auto state = GetState(storage, 1, "graph1", CheckpointId2);
+    CheckEquals(state, state2);
+}
+
+Y_UNIT_TEST_F(ShouldNotGetNonExistendSnaphotState, TFixture)
+{
+    auto storage = GetStateStorage("ShouldNotGetNonExistendSnaphotState");
+    auto state = MakeIncrementState({}, { { "key1", "value1-new" }, { "key3", "value3" } }, { "key2" });
+    SaveState(storage, 1, "graph1", CheckpointId4, state);
+
+    auto [states, issues] = storage->GetState({ 1 }, "graph1", CheckpointId4).GetValueSync();
+    UNIT_ASSERT(!issues.Empty());
+    UNIT_ASSERT(states.empty());
+}
+
+Y_UNIT_TEST_F(ShouldLoadIncrementSnapshot, TFixture)
+{
+    auto storage = GetStateStorage("ShouldLoadIncrementSnapshot");
+
+    auto state1 = MakeIncrementState({ { "key1", "value1" }, { "key2", "value2" } }, {}, {});
+    auto state2 = MakeIncrementState({}, { { "key1", "value1-new" }, { "key3", "value3" } }, { "key2" });
+    auto value4 = TString(YdbRowSizeLimit * 3, 'x');
+    auto state3 = MakeIncrementState({}, { { "key4", value4 } }, {});
+    auto state4 = MakeIncrementState({}, { { "key5", "value5" } }, {});
+
+    SaveState(storage, 1, "graph1", CheckpointId1, state1);
+    SaveState(storage, 1, "graph1", CheckpointId2, state2);
+    SaveState(storage, 1, "graph1", CheckpointId3, state3);
+    SaveState(storage, 1, "graph1", CheckpointId4, state4);
+
+    auto expected = MakeIncrementState({ { "key1", "value1-new" }, { "key3", "value3" }, { "key4", value4 } }, {}, {});
+
+    auto actual = GetState(storage, 1, "graph1", CheckpointId3);
+    CheckEquals(expected, actual);
+}
+
+Y_UNIT_TEST_F(ShouldSaveGetCompressedState, TFixture)
+{
+    auto storage = GetStateStorage("ShouldSaveGetCompressedState", /* enableCompression */ true);
+    const size_t stateSize = YdbRowSizeLimit + 42;
+    TString blob(stateSize, 'a');
+    auto originalState = MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));
+
+    auto [size, saveIssues] = storage->SaveState(1, "graph1", CheckpointId1, originalState).GetValueSync();
+    UNIT_ASSERT_C(saveIssues.Empty(), saveIssues.ToString());
+    UNIT_ASSERT_GT(size, 0u);
+
+    auto [states, getIssues] = storage->GetState({ 1 }, "graph1", CheckpointId1).GetValueSync();
+    UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(states.size(), 1u);
+    CheckEquals(originalState, states[0]);
+
+    UNIT_ASSERT_VALUES_EQUAL(CountStatesTableRows("graph1", CheckpointId1), 1);
+}
+}
+;
+
+}   // namespace NFq

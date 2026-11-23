@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import time
 from hamcrest import assert_that
 
 from ydb.core.protos.cms_pb2 import EAvailabilityMode
@@ -8,7 +7,6 @@ from ydb.core.protos.cms_pb2 import EAvailabilityMode
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
-from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
@@ -27,14 +25,10 @@ class AbstractLocalClusterTest(object):
         nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
-                                             additional_log_configs={'CMS': LogLevels.DEBUG}
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
-        # CMS will not let disable state storage
-        # nodes for first 2 minutes
-        time.sleep(120)
-        cms.request_increase_ratio_limit(cls.cluster.client)
+        utils.configure_cms_and_wait(cls.cluster, cls.mode)
         host = cls.cluster.nodes[1].host
         mon_port = cls.cluster.nodes[1].mon_port
         cls.swagger_client = SwaggerClient(host, mon_port)

@@ -1,0 +1,10 @@
+/* custom error: Cannot create table MissingOutput after another modification of the same path in this epoch */
+USE plato;
+
+CREATE TABLE MissingOutput (
+    a String NOT NULL
+);
+
+CREATE TABLE MissingOutput (
+    a String NOT NULL
+);

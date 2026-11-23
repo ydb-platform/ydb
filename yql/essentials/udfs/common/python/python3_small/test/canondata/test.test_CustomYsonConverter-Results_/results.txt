@@ -1,0 +1,51 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TupleType";
+                                    [
+                                        [
+                                            "DataType";
+                                            "Int64"
+                                        ];
+                                        [
+                                            "OptionalType";
+                                            [
+                                                "DataType";
+                                                "Yson"
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "1";
+                            [
+                                {
+                                    "abc" = {
+                                        "$type" = "int64";
+                                        "$value" = "1"
+                                    }
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

@@ -5,6 +5,8 @@ SRCS(
     folder_service.h
     folder_service_transitional.h
     iam_token_service.h
+    operation_service.h
+    service_control_service.h
     user_account_service.h
 )
 

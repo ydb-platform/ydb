@@ -2160,6 +2160,85 @@ Y_UNIT_TEST(ReturningIndexedWithSmallChannelBuffer) {
     }
 }
 
+Y_UNIT_TEST_TWIN(InsertConflictWithReturning, EnableIndexStreamWrite) {
+    TKikimrRunner kikimr(TKikimrSettings(GetAppConfig(EnableIndexStreamWrite)));
+
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {
+        const auto resultCreate = session.ExecuteSchemeQuery(Q_(R"(
+            CREATE TABLE `/Root/ReturningConflictTable` (
+                key Uint64,
+                value Utf8,
+                PRIMARY KEY (key)
+            );
+        )")).GetValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+    }
+
+    {
+        const auto result = session.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES (101u, "original");
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        // Single conflicting row: INSERT must fail with the key conflict, and the failed
+        // query must not deliver the RETURNING row (the row was never written).
+        auto it = kikimr.GetQueryClient().StreamExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES (101u, "new") RETURNING *;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        size_t deliveredRows = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED,
+                    part.GetIssues().ToString());
+                UNIT_ASSERT(!part.HasResultSet());
+                break;
+            }
+            deliveredRows += part.ExtractResultSet().RowsCount();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(deliveredRows, 0);
+    }
+
+    {
+        // Multiple rows with one conflict: no partial RETURNING rows may be delivered either.
+        auto it = kikimr.GetQueryClient().StreamExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES
+                (1u, "ok"), (101u, "conflict"), (102u, "ok2")
+            RETURNING *;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        size_t deliveredRows = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED,
+                    part.GetIssues().ToString());
+                UNIT_ASSERT(!part.HasResultSet());
+                break;
+            }
+            deliveredRows += part.ExtractResultSet().RowsCount();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(deliveredRows, 0);
+    }
+
+    {
+        // The conflicting row must not be written, the original one must survive.
+        const auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT key, value FROM `/Root/ReturningConflictTable` ORDER BY key;
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[[101u];["original"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

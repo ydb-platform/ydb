@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <util/generic/yexception.h>
+#include <util/stream/output.h>
 
 using namespace NYdb;
 using namespace NYdb::NTest;
@@ -316,6 +317,162 @@ TEST(GrpcIamCredentialsProvider, RetriesTransientFailure) {
     EXPECT_GT(iamStub.GetRequestCount(), 1);
 
     server.Stop();
+}
+
+namespace {
+
+using TOAuthProvider = TIamOAuthCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+
+template <typename TPredicate>
+bool WaitUntil(TPredicate&& predicate, std::chrono::milliseconds timeout) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!predicate()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return true;
+}
+
+int64_t NowSeconds() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// A provider whose first token is already minted and whose refresh is due in `refreshIn`.
+// The refresh starts RequestTimeout before the token expires, so expires_at = now + refreshIn + RequestTimeout.
+struct TRefreshingProviderFixture {
+    TIamTokenServiceStub IamStub;
+    TIamGrpcServer Server{&IamStub};
+    std::shared_ptr<TSimpleCoreFacility> Facility = std::make_shared<TSimpleCoreFacility>();
+    std::shared_ptr<TOAuthProvider> Provider;
+    TIamOAuth Params;
+
+    void Start(TDuration requestTimeout, TDuration refreshIn) {
+        ASSERT_TRUE(Server.Start());
+        Params = MakeOAuthParams(Server.Endpoint());
+        Params.RequestTimeout = requestTimeout;
+        Params.RefreshPeriod = TDuration::Hours(1);
+        // +1 rounds the truncated wall clock up so the refresh never starts earlier than refreshIn.
+        IamStub.SetResponseToken("token-1", NowSeconds() + 1 + (refreshIn + requestTimeout).Seconds());
+
+        Provider = std::make_shared<TOAuthProvider>(Params, Facility);
+        auto future = Provider->GetAuthInfoAsync();
+        ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+        ASSERT_EQ(future.GetValue(), "token-1");
+        ASSERT_EQ(IamStub.GetRequestCount(), 1);
+    }
+
+    // Returns the steady_clock time at which the IAM mock saw the first refresh request.
+    std::chrono::steady_clock::time_point WaitForRefreshRequest() {
+        const int before = IamStub.GetRequestCount();
+        EXPECT_TRUE(WaitUntil([&] { return IamStub.GetRequestCount() > before; }, std::chrono::seconds(30)))
+            << "provider should have started refreshing the token";
+        return std::chrono::steady_clock::now();
+    }
+
+    ~TRefreshingProviderFixture() {
+        Provider.reset();
+        Server.Stop();
+    }
+};
+
+} // namespace
+
+// Outage during refresh shorter than the retry budget (2 * RequestTimeout): the provider keeps
+// retrying with backoff and picks up the new token once IAM is back.
+TEST(GrpcIamCredentialsProvider, RecoversFromOutageWithinRetryBudget) {
+    TRefreshingProviderFixture fx;
+    fx.Start(TDuration::Seconds(1), TDuration::Seconds(1));
+
+    fx.IamStub.SetStatus(grpc::Status(grpc::StatusCode::UNAVAILABLE, "iam is down"));
+    fx.WaitForRefreshRequest();
+
+    // Outage of ~0.5s, well inside the 2s budget.
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    fx.IamStub.SetResponseToken("token-2");
+    fx.IamStub.SetStatus(grpc::Status::OK);
+
+    auto future = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(15)));
+    EXPECT_EQ(future.GetValue(), "token-2");
+}
+
+// Outage during refresh longer than the retry budget (2 * RequestTimeout), after which IAM fully
+// recovers. A refreshing provider should eventually mint a token again instead of staying dead.
+TEST(GrpcIamCredentialsProvider, RecoversFromOutageExceedingRetryBudget) {
+    const TDuration requestTimeout = TDuration::Seconds(1);
+    TRefreshingProviderFixture fx;
+    fx.Start(requestTimeout, TDuration::Seconds(1));
+
+    fx.IamStub.SetStatus(grpc::Status(grpc::StatusCode::UNAVAILABLE, "iam is down"));
+    const auto outageStart = fx.WaitForRefreshRequest();
+
+    // Wait until the provider gives up: the auth future becomes ready with an exception.
+    auto failedFuture = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(failedFuture.Wait(TDuration::Seconds(30)))
+        << "provider neither minted a token nor failed within 30s of IAM outage";
+    const auto failedAt = std::chrono::steady_clock::now();
+    EXPECT_THROW(failedFuture.GetValue(), yexception);
+
+    const auto outage = std::chrono::duration_cast<std::chrono::milliseconds>(failedAt - outageStart);
+    Cerr << "IAM outage of " << outage.count() << "ms exhausted the retry budget (2 * RequestTimeout = "
+         << 2 * requestTimeout.MilliSeconds() << "ms) after " << fx.IamStub.GetRequestCount() - 1
+         << " failed refresh attempts" << Endl;
+    // The terminal failure requires now >= RetryDeadline_ = refreshStart + 2 * RequestTimeout
+    // (RetryDeadline_ is stamped slightly before the mock sees the first request, hence the slack).
+    EXPECT_GE(outage.count(), static_cast<int64_t>(2 * requestTimeout.MilliSeconds()) - 500);
+
+    // IAM is back. The next cycle starts after TERMINAL_FAILURE_RETRY_DELAY (10s).
+    const int requestsBeforeRecovery = fx.IamStub.GetRequestCount();
+    fx.IamStub.SetResponseToken("token-2");
+    fx.IamStub.SetStatus(grpc::Status::OK);
+
+    const bool retriedAfterRecovery = WaitUntil(
+        [&] { return fx.IamStub.GetRequestCount() > requestsBeforeRecovery; },
+        std::chrono::seconds(30));
+    Cerr << "after IAM recovery the provider " << (retriedAfterRecovery ? "retried" : "never retried") << Endl;
+
+    auto future = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(30)));
+    EXPECT_TRUE(retriedAfterRecovery) << "provider never contacted IAM again after the outage ended";
+    EXPECT_NO_THROW({
+        EXPECT_EQ(future.GetValue(), "token-2");
+    }) << "GetAuthInfoAsync() keeps throwing although IAM has recovered";
+    EXPECT_TRUE(fx.Provider->IsValid());
+}
+
+// A single non-retryable status (e.g. PERMISSION_DENIED for a temporarily revoked grant) during
+// refresh, after which IAM serves tokens again.
+TEST(GrpcIamCredentialsProvider, RecoversAfterTerminalStatusDuringRefresh) {
+    TRefreshingProviderFixture fx;
+    fx.Start(TDuration::Seconds(1), TDuration::Seconds(1));
+
+    fx.IamStub.SetStatus(grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "grant revoked"));
+    fx.WaitForRefreshRequest();
+
+    auto failedFuture = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(failedFuture.Wait(TDuration::Seconds(10)));
+    EXPECT_THROW(failedFuture.GetValue(), yexception);
+    Cerr << "PERMISSION_DENIED during refresh failed the provider after "
+         << fx.IamStub.GetRequestCount() - 1 << " refresh attempt(s)" << Endl;
+
+    const int requestsBeforeRecovery = fx.IamStub.GetRequestCount();
+    fx.IamStub.SetResponseToken("token-2");
+    fx.IamStub.SetStatus(grpc::Status::OK);
+
+    const bool retriedAfterRecovery = WaitUntil(
+        [&] { return fx.IamStub.GetRequestCount() > requestsBeforeRecovery; },
+        std::chrono::seconds(30));
+    Cerr << "after grant restore the provider " << (retriedAfterRecovery ? "retried" : "never retried") << Endl;
+
+    auto future = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(30)));
+    EXPECT_TRUE(retriedAfterRecovery) << "provider never contacted IAM again after PERMISSION_DENIED";
+    EXPECT_NO_THROW({
+        EXPECT_EQ(future.GetValue(), "token-2");
+    }) << "GetAuthInfoAsync() keeps throwing although IAM has recovered";
 }
 
 TEST(GrpcIamCredentialsProvider, DoesNotRetryTerminalFailure) {

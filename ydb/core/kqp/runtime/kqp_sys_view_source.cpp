@@ -140,6 +140,7 @@ public:
             hFunc(TEvKqpCompute::TEvScanInitActor, Handle);
             hFunc(TEvKqpCompute::TEvScanData, Handle);
             hFunc(TEvKqpCompute::TEvScanError, Handle);
+            hFunc(TEvKqpCompute::TEvScanWarning, Handle);
             default:
                 YDB_LOG_WARN("TKqpSysViewSource Unexpected",
                     {"selfId", SelfId()},
@@ -190,14 +191,6 @@ private:
         const Ydb::StatusIds::StatusCode status = msg.GetStatus();
         IssuesFromMessage(msg.GetIssues(), issues);
 
-        if (status == Ydb::StatusIds::SUCCESS) {
-            ScanWarnings.AddIssues(issues);
-            YDB_LOG_WARN("TKqpSysViewSource Got partial compile cache scan",
-                {"selfId", SelfId()},
-                {"warning", issues.ToOneLineString()});
-            return;
-        }
-
         YDB_LOG_ERROR("TKqpSysViewSource Got scan error",
             {"selfId", SelfId()},
             {"status", Ydb::StatusIds::StatusCode_Name(status)},
@@ -207,16 +200,13 @@ private:
             NYql::NDq::YdbStatusToDqStatus(status, NYql::NDq::EStatusCompatibilityLevel::WithUnauthorized)));
     }
 
-    void MaybeForwardScanWarnings() {
-        if (ScanWarningsSent || ScanWarnings.Empty()) {
-            return;
-        }
-        ScanWarningsSent = true;
-        YDB_LOG_WARN("TKqpSysViewSource Forwarding compile cache scan warnings",
+    void Handle(TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+        const auto& issues = ev->Get()->Issues;
+        YDB_LOG_WARN("TKqpSysViewSource Got system view scan warning",
             {"selfId", SelfId()},
-            {"compute", ScanWarnings.ToOneLineString()});
-        Send(ComputeActorId, new NYql::NDq::IDqComputeActorAsyncInput::TEvAsyncInputError(
-            InputIndex, ScanWarnings, NYql::NDqProto::StatusIds::UNSPECIFIED));
+            {"issues", issues.ToOneLineString()});
+        // Forward before the final data batch, including when it has no rows.
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NDqProto::StatusIds::UNSPECIFIED));
     }
 
     // IDqComputeActorAsyncInput implementation
@@ -269,10 +259,6 @@ private:
 
         finished = ScanFinished && BufferedRows.empty();
 
-        if (finished) {
-            MaybeForwardScanWarnings();
-        }
-
         // Request more data if we still have room and scan is not finished
         if (!ScanFinished && ScanActorId) {
             Send(ScanActorId, new TEvKqpCompute::TEvScanDataAck(BufferSize));
@@ -314,9 +300,6 @@ private:
 
     TDeque<TOwnedCellVec> BufferedRows;
     bool ScanFinished = false;
-    NYql::TIssues ScanWarnings;
-    bool ScanWarningsSent = false;
-
     TDqAsyncStats IngressStats;
 
     static constexpr ui64 BufferSize = 8_MB;

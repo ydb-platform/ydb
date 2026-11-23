@@ -11,6 +11,7 @@ from ydb.tools.ydb_bench.benchmarks.registry import (
     MetricDefinition,
 )
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.linux_telemetry import CPU_METRIC_NAMES
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import parse_generic_total_metrics
 
 DIMENSIONS = (
@@ -78,8 +79,9 @@ def summarize_metrics(repetition_rows, benchmark, metric_names=None, metric_aggr
     for key in sorted(grouped):
         rows = grouped[key]
         expected_keys = set(rows[0])
-        if any(set(row) != expected_keys for row in rows[1:]):
+        if any(set(row) - set(CPU_METRIC_NAMES) != expected_keys - set(CPU_METRIC_NAMES) for row in rows[1:]):
             raise BenchmarkError("workload repetitions returned inconsistent metric keys")
+        expected_keys = set.intersection(*(set(row) for row in rows))
         if "transactions" in expected_keys and any(row["transactions"] == 0 for row in rows):
             continue
         record = {"affinity_mode": "roles"}

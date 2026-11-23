@@ -64,6 +64,32 @@ Y_UNIT_TEST(SerializeDistint) {
     CheckSerializeUnique<TDistinctConstraintNode>();
 }
 
+template <class TConstraint>
+void CheckHashGrouping() {
+    TExprContext ctx;
+    for (const auto& [leftYson, rightYson] : {
+             std::pair{"[[a;b]]", "[[[a;b]]]"},
+             std::pair{"[[a];[b;c]]", "[[a;b];[c]]"},
+             std::pair{"[[[a;b];c]]", "[[a;[b;c]]]"},
+             std::pair{"[[[[a];[b;c]]]]", "[[[[a;b];[c]]]]"},
+         }) {
+        const auto left = ctx.MakeConstraint<TConstraint>(NYT::NodeFromYsonString(leftYson));
+        const auto right = ctx.MakeConstraint<TConstraint>(NYT::NodeFromYsonString(rightYson));
+        UNIT_ASSERT(!left->Equals(*right));
+        UNIT_ASSERT_UNEQUAL(left->GetHash(), right->GetHash());
+        UNIT_ASSERT_EQUAL(left, ctx.MakeConstraint<TConstraint>(left->ToYson()));
+        UNIT_ASSERT_EQUAL(right, ctx.MakeConstraint<TConstraint>(right->ToYson()));
+    }
+}
+
+Y_UNIT_TEST(UniqueHashGrouping) {
+    CheckHashGrouping<TUniqueConstraintNode>();
+}
+
+Y_UNIT_TEST(DistinctHashGrouping) {
+    CheckHashGrouping<TDistinctConstraintNode>();
+}
+
 Y_UNIT_TEST(SerializeEmpty) {
     TExprContext ctx;
     auto c = ctx.MakeConstraint<TEmptyConstraintNode>();
@@ -176,6 +202,69 @@ Y_UNIT_TEST(SerializeConstrainSet) {
     UNIT_ASSERT_EQUAL(s, s3);
 }
 
+Y_UNIT_TEST(StreamingAliasesSerialization) {
+    using TPath = TPartOfConstraintBase::TPathType;
+    using TPaths = TPartOfConstraintBase::TSetType;
+    TExprContext ctx;
+    TConstraintSet constraints;
+    const auto streaming = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"t"}, TPaths{TPath{"t"}, TPath{"event_time"}});
+    constraints.AddConstraint(streaming);
+    const auto serialized = constraints.ToYson();
+    UNIT_ASSERT_EQUAL(ctx.MakeConstraintSet(serialized), constraints);
+
+    TExprContext otherCtx;
+    const auto restored = otherCtx.MakeConstraintSet(serialized).GetConstraint<TStreamingConstraintNode>();
+    UNIT_ASSERT(restored);
+    UNIT_ASSERT(restored->Equals(*streaming));
+    UNIT_ASSERT(restored->IsEventTimePath(TPath{"t"}));
+    UNIT_ASSERT(restored->IsEventTimePath(TPath{"event_time"}));
+    UNIT_ASSERT(!restored->IsEventTimePath(TPath{"other"}));
+    UNIT_ASSERT(restored->GetEventTime() == streaming->GetEventTime());
+
+    for (const TStringBuf yson : {"#", "\"t\"", R"(["nested";"t"])", "[]"}) {
+        const auto node = NYT::NodeFromYsonString(yson);
+        const auto legacy = ctx.MakeConstraint<TStreamingConstraintNode>(node);
+        UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(legacy->ToYson()), NYT::NodeToCanonicalYsonString(node));
+    }
+}
+
+Y_UNIT_TEST(StreamingAliasesFilterRenameCommon) {
+    using TPath = TPartOfConstraintBase::TPathType;
+    using TPaths = TPartOfConstraintBase::TSetType;
+    TExprContext ctx;
+    const auto streaming = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"t"}, TPaths{TPath{"t"}, TPath{"event_time"}});
+    const auto single = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"event_time"});
+    UNIT_ASSERT(streaming->Includes(*single));
+    UNIT_ASSERT(!single->Includes(*streaming));
+    UNIT_ASSERT(streaming != ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"t"}));
+    UNIT_ASSERT_EQUAL(streaming->MakeCommon(single, ctx), single);
+    UNIT_ASSERT_EQUAL(single->MakeCommon(streaming, ctx), single);
+    UNIT_ASSERT_EQUAL(streaming->FilterFields(ctx, [](const TPath& path) { return path == TPath{"event_time"}; }), single);
+    const auto renamed = streaming->RenameFields(ctx, [](const TPath& path) {
+        return std::vector<TPath>{path == TPath{"t"} ? TPath{"renamed"} : path};
+    });
+    UNIT_ASSERT(renamed->GetEventTime() == TMaybe<TPath>(TPath{"renamed"}));
+    UNIT_ASSERT(renamed->IsEventTimePath(TPath{"event_time"}));
+    UNIT_ASSERT(!renamed->IsEventTimePath(TPath{"t"}));
+
+    TPaths references{TPath{"event_time"}, TPath{"other"}};
+    streaming->FilterUncompleteReferences(references);
+    UNIT_ASSERT_EQUAL(references, TPaths{TPath{"event_time"}});
+    const auto unrelated = ctx.MakeConstraint<TStreamingConstraintNode>(TPath{"other"});
+    UNIT_ASSERT_EQUAL(streaming->MakeCommon(unrelated, ctx), ctx.MakeConstraint<TStreamingConstraintNode>());
+}
+
+Y_UNIT_TEST(StreamingAliasesRejectBadSerialization) {
+    TExprContext ctx;
+    for (const TStringBuf yson : {
+             R"({"event_time"="t";"aliases"=["other"]})",
+             R"({"event_time"="t";"aliases"=#})",
+             R"({"event_time"="t"})",
+         }) {
+        UNIT_ASSERT_EXCEPTION(ctx.MakeConstraint<TStreamingConstraintNode>(NYT::NodeFromYsonString(yson)), NYql::TYqlPanic);
+    }
+}
+
 Y_UNIT_TEST(DeserializeBadConstrainSet) {
     TExprContext ctx;
     UNIT_ASSERT_EXCEPTION(
@@ -190,4 +279,90 @@ Y_UNIT_TEST(DeserializeBadConstrainSet) {
 }
 } // Y_UNIT_TEST_SUITE(TSerializeConstrains)
 
+} // namespace NYql
+
+namespace NYql {
+Y_UNIT_TEST_SUITE(TConstraintHashRegression) {
+void CheckDistinctHashes(const TConstraintNode* left, const TConstraintNode* right) {
+    UNIT_ASSERT(!left->Equals(*right));
+    UNIT_ASSERT_UNEQUAL(left->GetHash(), right->GetHash());
+}
+
+Y_UNIT_TEST(SortedGrouping) {
+    TExprContext ctx;
+    CheckDistinctHashes(
+        ctx.MakeConstraint<TSortedConstraintNode>(NYT::NodeFromYsonString("[[[a];%true];[[b];%true]]")),
+        ctx.MakeConstraint<TSortedConstraintNode>(NYT::NodeFromYsonString("[[[a;b];%true]]")));
+}
+
+Y_UNIT_TEST(SortedPaths) {
+    TExprContext ctx;
+    CheckDistinctHashes(
+        ctx.MakeConstraint<TSortedConstraintNode>(NYT::NodeFromYsonString("[[[a;b];%true]]")),
+        ctx.MakeConstraint<TSortedConstraintNode>(NYT::NodeFromYsonString("[[[[a;b]];%true]]")));
+}
+
+Y_UNIT_TEST(SortedDirection) {
+    TExprContext ctx;
+    using TPath = TPartOfConstraintBase::TPathType;
+    using TPaths = TPartOfConstraintBase::TSetType;
+    for (const auto& path : {TPath{}, TPath{""}, TPath{"a"}}) {
+        const auto ascending = ctx.MakeConstraint<TSortedConstraintNode>(TSortedConstraintNode::TContainerType{{TPaths{path}, true}});
+        const auto descending = ctx.MakeConstraint<TSortedConstraintNode>(TSortedConstraintNode::TContainerType{{TPaths{path}, false}});
+        CheckDistinctHashes(ascending, descending);
+        UNIT_ASSERT_EQUAL(ascending, ctx.MakeConstraint<TSortedConstraintNode>(ascending->ToYson()));
+        UNIT_ASSERT_EQUAL(descending, ctx.MakeConstraint<TSortedConstraintNode>(descending->ToYson()));
+    }
+}
+
+Y_UNIT_TEST(ChoppedGrouping) {
+    TExprContext ctx;
+    CheckDistinctHashes(
+        ctx.MakeConstraint<TChoppedConstraintNode>(NYT::NodeFromYsonString("[[a;b];c]")),
+        ctx.MakeConstraint<TChoppedConstraintNode>(NYT::NodeFromYsonString("[a;[b;c]]")));
+}
+
+Y_UNIT_TEST(ChoppedPaths) {
+    TExprContext ctx;
+    CheckDistinctHashes(
+        ctx.MakeConstraint<TChoppedConstraintNode>(NYT::NodeFromYsonString("[[a;b]]")),
+        ctx.MakeConstraint<TChoppedConstraintNode>(NYT::NodeFromYsonString("[[[a;b]]]")));
+}
+
+template <class TOriginal>
+void CheckPartOf(TStringBuf originalYson) {
+    TExprContext ctx;
+    using TPart = TPartOfConstraintNode<TOriginal>;
+    using TPath = TPartOfConstraintBase::TPathType;
+    const auto original = ctx.MakeConstraint<TOriginal>(NYT::NodeFromYsonString(originalYson));
+    CheckDistinctHashes(
+        ctx.MakeConstraint<TPart>(typename TPart::TMapType{{original, {{TPath{"a"}, TPath{"b", "c"}}}}}),
+        ctx.MakeConstraint<TPart>(typename TPart::TMapType{{original, {{TPath{"a", "b"}, TPath{"c"}}}}}));
+}
+
+Y_UNIT_TEST(PartOfSorted) {
+    CheckPartOf<TSortedConstraintNode>("[[[[b;c];c];%true]]");
+}
+Y_UNIT_TEST(PartOfChopped) {
+    CheckPartOf<TChoppedConstraintNode>("[[[b;c];c]]");
+}
+Y_UNIT_TEST(PartOfUnique) {
+    CheckPartOf<TUniqueConstraintNode>("[[[[b;c];c]]]");
+}
+Y_UNIT_TEST(PartOfDistinct) {
+    CheckPartOf<TDistinctConstraintNode>("[[[[b;c];c]]]");
+}
+Y_UNIT_TEST(PartOfStreaming) {
+    CheckPartOf<TStreamingConstraintNode>("{event_time=c;aliases=[c;[b;c]]}");
+}
+
+Y_UNIT_TEST(MultiInheritedCollision) {
+    TExprContext ctx;
+    TConstraintSet left;
+    TConstraintSet right;
+    left.AddConstraint(ctx.MakeConstraint<TChoppedConstraintNode>(NYT::NodeFromYsonString("[[a;b]]")));
+    right.AddConstraint(ctx.MakeConstraint<TChoppedConstraintNode>(NYT::NodeFromYsonString("[[[a;b]]]")));
+    CheckDistinctHashes(ctx.MakeConstraint<TMultiConstraintNode>(0U, left), ctx.MakeConstraint<TMultiConstraintNode>(0U, right));
+}
+} // Y_UNIT_TEST_SUITE(TConstraintHashRegression)
 } // namespace NYql

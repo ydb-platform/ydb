@@ -1,14 +1,25 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <memory_controller.h>
 #include <memory_controller_config.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <util/generic/scope.h>
+
+#ifdef _linux_
+#include <sys/resource.h>
+#endif
 
 namespace NKikimr::NMemory {
 
@@ -27,15 +38,49 @@ void UpsertRows(TServer::TPtr server, TActorId sender, ui32 keyFrom = 0, ui32 ke
     ExecSQL(server, sender, query);
 }
 
+// Bare-runtime tests need a provider they can drive without a whole server
+struct TFixedProcessMemoryInfoProvider : public IProcessMemoryInfoProvider {
+    TProcessMemoryInfo Get() const override {
+        return ProcessMemoryInfo;
+    }
+
+    TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, {}, {}, {}, {}};
+};
+
+// A memory controller on a bare runtime, driven through the provider and edge actors
+struct TControllerFixture {
+    TTestBasicRuntime Runtime;
+    TIntrusivePtr<TFixedProcessMemoryInfoProvider> Provider = MakeIntrusive<TFixedProcessMemoryInfoProvider>();
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CountersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    TActorId MemoryController;
+
+    explicit TControllerFixture(const NKikimrConfig::TMemoryControllerConfig& config) {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        MemoryController = Runtime.Register(CreateMemoryController(
+            TDuration::Seconds(1), TIntrusivePtr<IProcessMemoryInfoProvider>(Provider), config, TResourceBrokerConfig{}, CountersRoot));
+        Runtime.EnableScheduleForActor(MemoryController);
+        NActors::TDispatchOptions bootstrapOptions;
+        bootstrapOptions.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        Runtime.DispatchEvents(bootstrapOptions);
+        Counters = GetServiceCounters(CountersRoot, "utils")->GetSubgroup("component", "memory_controller");
+    }
+
+    i64 Counter(const TString& name, bool derivative = false) const {
+        return Counters->GetCounter(name, derivative)->Val();
+    }
+
+    TIntrusivePtr<IMemoryConsumer> Register(TActorId registrant, EMemoryConsumerKind kind) {
+        Runtime.Send(new IEventHandle(MemoryController, registrant, new TEvConsumerRegister(kind)));
+        return Runtime.GrabEdgeEvent<TEvConsumerRegistered>(registrant)->Get()->Consumer;
+    }
+
+    void Tick() {
+        Runtime.SimulateSleep(TDuration::Seconds(2));
+    }
+};
+
 class TWithMemoryControllerServer : public TServer {
-    struct TProcessMemoryInfoProvider : public IProcessMemoryInfoProvider {
-        TProcessMemoryInfo Get() const override {
-            return ProcessMemoryInfo;
-        }
-
-        TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, {}, {}, {}, {}};
-    };
-
 public:
     TWithMemoryControllerServer(const TServerSettings& settings)
         : TServer(settings, false)
@@ -54,7 +99,7 @@ public:
 
 private:
     void PreInitialize() {
-        ProcessMemoryInfoProvider = MakeIntrusive<TProcessMemoryInfoProvider>();
+        ProcessMemoryInfoProvider = MakeIntrusive<TFixedProcessMemoryInfoProvider>();
         ProcessMemoryInfo = &ProcessMemoryInfoProvider->ProcessMemoryInfo;
 
         // copy-paste from TMemoryControllerInitializer::InitializeServices
@@ -90,12 +135,45 @@ private:
     }
 
 private:
-    TIntrusivePtr<TProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
+    TIntrusivePtr<TFixedProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
 public:
     THolder<TSharedPageCacheCounters> SharedPageCacheCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> MemoryControllerCounters;
     TProcessMemoryInfo* ProcessMemoryInfo;
+};
+
+// A killable registrant for the death-detection test; edge actors never die
+class TStubRegistrant : public TActorBootstrapped<TStubRegistrant> {
+public:
+    TStubRegistrant(TActorId controller, EMemoryConsumerKind kind, TIntrusivePtr<IMemoryConsumer>* out)
+        : Controller(controller)
+        , Kind(kind)
+        , Out(out)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Controller, new TEvConsumerRegister(Kind));
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvConsumerRegistered, Handle);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+private:
+    void Handle(TEvConsumerRegistered::TPtr& ev) {
+        *Out = ev->Get()->Consumer;
+    }
+
+private:
+    const TActorId Controller;
+    const EMemoryConsumerKind Kind;
+    TIntrusivePtr<IMemoryConsumer>* const Out;
 };
 
 }
@@ -140,6 +218,31 @@ Y_UNIT_TEST(Counters) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/CGroupLimit")->Val(), 100_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/HardLimit")->Val(), 100_MB);
 }
+
+#ifdef _linux_
+Y_UNIT_TEST(Counters_MemMapsUnavailable) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Stats/MemMapsCount")->Val(), 0);
+
+    rlimit saved;
+    UNIT_ASSERT_VALUES_EQUAL(getrlimit(RLIMIT_NOFILE, &saved), 0);
+    rlimit noFiles = saved;
+    noFiles.rlim_cur = 0;
+    UNIT_ASSERT_VALUES_EQUAL(setrlimit(RLIMIT_NOFILE, &noFiles), 0);
+    Y_DEFER { setrlimit(RLIMIT_NOFILE, &saved); };
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/MemMapsCount")->Val(), 0);
+}
+#endif
 
 Y_UNIT_TEST(Counters_HardLimit) {
     TPortManager pm;
@@ -370,7 +473,8 @@ Y_UNIT_TEST(MemTable) {
     memoryControllerConfig->SetHardLimitBytes(200_MB);
     memoryControllerConfig->SetMemTableMinPercent(0);
     memoryControllerConfig->SetMemTableMaxPercent(100);
-    memoryControllerConfig->SetMemTableMinBytes(100_KB);
+    // Leave room for system-table memtables, which share the node-wide limit.
+    memoryControllerConfig->SetMemTableMinBytes(1_MB);
     memoryControllerConfig->SetMemTableMaxBytes(10_MB);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
@@ -380,26 +484,36 @@ Y_UNIT_TEST(MemTable) {
     InitRoot(server, sender);
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
-    UpsertRows(server, sender);
+    // Generate enough rows to exceed the low limit without a large VALUES expression.
+    ExecSQL(server, sender, R"(
+        $rows = ListMap(ListFromRange(0u, 20000u), ($key) -> {
+            RETURN AsStruct($key AS key, $key AS value);
+        });
+        UPSERT INTO `/Root/table-1` SELECT * FROM AS_TABLE($rows);
+    )");
 
     runtime.SimulateSleep(TDuration::Seconds(2));
     UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB));
-    UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
+    UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_MB));
 
     server->ProcessMemoryInfo->AllocatedMemory = 1000_MB;
-    runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(100_KB));
-    UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
+    // Consumption is refreshed on a controller tick after asynchronous compactions finish.
+    runtime.WaitFor("MemTable consumption below limit", [&] {
+        return server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val() <= static_cast<i64>(1_MB);
+    }, TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(1_MB));
+    UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_MB));
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));
 }
 
-Y_UNIT_TEST(ResourceBroker) {
+Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
     using namespace NResourceBroker;
 
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetQueryExecutionLimitPercent(15);
@@ -418,12 +532,16 @@ Y_UNIT_TEST(ResourceBroker) {
 
     InitRoot(server, sender);
 
+    // With the memory in the compute scheduler the queue of the queries is only for the services other than the queries
+    // (see TKqpResourceManager), its limit is still the one of the query execution; the query execution is taken out of
+    // the activities limit
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 150_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 150_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(),
+        EnableComputeSchedulerMemory ? 300_MB - 150_MB : 300_MB);
 
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), senderSubscriber, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true)));
@@ -436,7 +554,8 @@ Y_UNIT_TEST(ResourceBroker) {
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 75_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 150_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(),
+        EnableComputeSchedulerMemory ? 150_MB - 75_MB : 150_MB);
 
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(senderSubscriber);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
@@ -448,13 +567,58 @@ Y_UNIT_TEST(ResourceBroker) {
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 13_MB);
 }
 
-Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
+// The query execution is taken out of the activities limit, the rest is the limit of the resource broker: it's never
+// empty by default
+Y_UNIT_TEST(DefaultQueryExecutionLimitIsLessThanActivitiesLimit) {
+    const NKikimrConfig::TMemoryControllerConfig config;
+    UNIT_ASSERT_LT(GetQueryExecutionLimitBytes(config, 1000_MB), GetActivitiesLimitBytes(config, 1000_MB));
+}
+
+// The query execution limit is not less than the activities limit - a misconfiguration: it's not taken out of the
+// activities limit, otherwise the resource broker would get no memory at all
+Y_UNIT_TEST(ResourceBroker_QueryExecutionLimitNotLessThanActivitiesLimit) {
     using namespace NResourceBroker;
 
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableComputeSchedulerMemory(true);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetActivitiesLimitPercent(30);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(40);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    InitRoot(server, sender);
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 400_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB);
+
+    // the misconfiguration is fixed - the query execution is taken out again
+    memoryControllerConfig->SetQueryExecutionLimitPercent(10);
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    request->Record.MutableConfig()->MutableMemoryControllerConfig()->CopyFrom(*memoryControllerConfig);
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(), sender, request.Release()));
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB - 100_MB);
+}
+
+Y_UNIT_TEST_TWIN(ResourceBroker_ConfigLimit, EnableComputeSchedulerMemory) {
+    using namespace NResourceBroker;
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetQueryExecutionLimitPercent(15);
@@ -476,11 +640,14 @@ Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
 
     InitRoot(server, sender);
 
+    // With the memory in the compute scheduler the explicit limit of the queue of the queries is kept for the services
+    // other than the queries, but it doesn't override the limit of the query execution anymore
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 999_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 999_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(),
+        EnableComputeSchedulerMemory ? 75_MB : 999_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 1000_MB);
 
     server->ProcessMemoryInfo->CGroupLimit = 200_MB;
@@ -488,7 +655,8 @@ Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 999_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 999_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(),
+        EnableComputeSchedulerMemory ? 30_MB : 999_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 1000_MB);
 
     // ensure that other settings are not affected:
@@ -689,6 +857,206 @@ Y_UNIT_TEST(ColumnShardCaches_Config) {
     server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
     checkMemoryLimits();
+}
+
+Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {
+    // Min != Max for SharedCache, so the searched coefficient is what turns its limit
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetSharedCacheMinBytes(20_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    config.SetMemTableMinBytes(10_MB);
+    config.SetMemTableMaxBytes(10_MB);
+    config.SetQueryExecutionLimitBytes(50_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId sender = fixture.Runtime.AllocateEdgeActor();
+    auto sharedCacheConsumer = fixture.Register(sender, EMemoryConsumerKind::SharedCache);
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, sender, new TEvMemTableRegister(1)));
+    auto memTableConsumer = fixture.Runtime.GrabEdgeEvent<TEvMemTableRegistered>(sender)->Get()->Consumer;
+    sharedCacheConsumer->SetConsumption(30_MB);
+    memTableConsumer->SetConsumption(7_MB);
+
+    // Nothing else allocated: the whole elastic range fits, so the search saturates at 1 - 2^-20
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/Coefficient"), 999999046);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 62914520);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(sender)->Get()->LimitBytes, 62914520);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation"), 31457240);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
+
+    // Foreign allocation leaves less than the minimums demand: the search bottoms out and the limit is the minimum
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 120_MB;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/Coefficient"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation"), 0);
+
+    // Interior point: the 100 MB target utilization minus 53 MB of other memory and the 10 MB memtable leaves 37 MB
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 90_MB;
+    fixture.Tick();
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Stats/Coefficient") / 1e9, (37.0 - 20.0) / 40.0, 1e-5);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit") / double(1_MB), 37.0, 0.01);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation") / double(1_MB), 7.0, 0.01);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
+}
+
+Y_UNIT_TEST(ConsumerReportClamp) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+    auto consumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesBlobCache);
+
+    // An invalid report that breaks both invariants is clamped where MC reads it
+    consumer->SetReport({.Used = 100_MB, .Demand = 10_MB, .Reclaimable = 500_MB});
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Consumption"), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Demand"), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Reclaimable"), 100_MB);
+}
+
+Y_UNIT_TEST(SetConsumptionForwardsDegradedReport) {
+    struct TRecorder : public IMemoryConsumer {
+        TConsumerReport Last;
+
+        void SetReport(TConsumerReport report) override {
+            Last = report;
+        }
+    };
+
+    auto recorder = MakeIntrusive<TRecorder>();
+    recorder->SetConsumption(42);
+    UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Used, 42);
+    UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Demand, 42);
+    UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Reclaimable, 0);
+}
+
+Y_UNIT_TEST(ConsumerKindSumsRegistrants) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    // Min == Max pins the kind limit to 60 MB, so the shares are exact regardless of the coefficient
+    config.SetSharedCacheMinBytes(60_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId first = fixture.Runtime.AllocateEdgeActor();
+    const TActorId second = fixture.Runtime.AllocateEdgeActor();
+    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::SharedCache);
+    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::SharedCache);
+    UNIT_ASSERT(firstConsumer.Get() != secondConsumer.Get());
+
+    firstConsumer->SetReport({.Used = 10_MB, .Demand = 30_MB, .Reclaimable = 5_MB});
+    secondConsumer->SetConsumption(20_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reclaimable"), 5_MB);
+
+    // Demand fits the 60 MB limit: each registrant gets its demand plus half of the 10 MB left over
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(first)->Get()->LimitBytes, 35_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(second)->Get()->LimitBytes, 25_MB);
+
+    // The unregistered entry leaves the sum and the survivor gets the whole limit back
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, second, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 10_MB);
+    // Skip the queued pre-unregister limits; every tick keeps producing one, so the drain must be bounded
+    ui64 lastLimit = 0;
+    for (size_t attempt = 0; attempt < 5 && lastLimit != 60_MB; ++attempt) {
+        lastLimit = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(first)->Get()->LimitBytes;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lastLimit, 60_MB);
+}
+
+Y_UNIT_TEST(DeadRegistrantLeavesTheSum) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+
+    TIntrusivePtr<IMemoryConsumer> doomedConsumer;
+    const TActorId doomed = fixture.Runtime.Register(new TStubRegistrant(fixture.MemoryController, EMemoryConsumerKind::SharedCache, &doomedConsumer));
+    auto survivorConsumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+    fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT(doomedConsumer);
+
+    doomedConsumer->SetConsumption(25_MB);
+    survivorConsumer->SetConsumption(5_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 30_MB);
+
+    // The poisoned registrant stops existing; the next tracked limit send detects the death
+    fixture.Runtime.Send(new IEventHandle(doomed, TActorId(), new TEvents::TEvPoison));
+    fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerRegistrantDeaths", true), 1);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 5_MB);
+}
+
+Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId owner = fixture.Runtime.AllocateEdgeActor();
+    auto consumer = fixture.Register(owner, EMemoryConsumerKind::SharedCache);
+    consumer->SetReport({.Used = 30_MB, .Demand = 40_MB, .Reclaimable = 10_MB});
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reclaimable"), 10_MB);
+
+    // A stale unregister from an actor that no longer owns the kind changes nothing
+    const TActorId stranger = fixture.Runtime.AllocateEdgeActor();
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, stranger, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+
+    // The owner's unregister takes its bytes out of the accounting and zeroes the gauges of the removed kind
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, owner, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reclaimable"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+
+    // Writes through the unregistered object no longer reach MC
+    consumer->SetConsumption(5_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+}
+
+Y_UNIT_TEST(QueryExecutionConsumer) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetSharedCacheMinBytes(20_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    config.SetMemTableMinBytes(10_MB);
+    config.SetMemTableMaxBytes(10_MB);
+    config.SetQueryExecutionLimitBytes(50_MB);
+    TControllerFixture fixture(config);
+
+    // The allocated memory includes 30 MB of the shared cache and 20 MB of the queries
+    auto sharedCacheConsumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+    sharedCacheConsumer->SetConsumption(30_MB);
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 90_MB;
+    fixture.Tick();
+    const auto sharedCacheLimit = fixture.Counter("Consumer/SharedCache/Limit");
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+
+    const TActorId queries = fixture.Runtime.AllocateEdgeActor();
+    auto queriesConsumer = fixture.Register(queries, EMemoryConsumerKind::QueryExecution);
+    queriesConsumer->SetConsumption(20_MB);
+    fixture.Tick();
+
+    // The reported memory moves from the other consumption to the consumers, so the elastic limits don't change
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), sharedCacheLimit);
+
+    // The reported consumption replaces the global page pool estimation, the limit stays fixed
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Consumption"), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Limit"), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(queries)->Get()->LimitBytes, 50_MB);
 }
 }
 

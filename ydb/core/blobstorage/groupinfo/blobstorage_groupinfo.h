@@ -1,9 +1,12 @@
 #pragma once
 
 #include "defs.h"
+#include "blobstorage_groupinfo_mirror3dc_state.h"
+
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -34,9 +37,9 @@ namespace NBlobMapper {
     class TMirror3dcMapper;
 } // NBlobMapper
 
-static constexpr ui8 MaxHandoffNodes = 6;
-static constexpr ui8 MaxNodesPerBlob = 10;
-static constexpr ui8 MaxTotalPartCount = 7;
+static constexpr ui8 MaxHandoffNodes = TBlobStorageGroupType::MaxHandoffNodes;
+static constexpr ui8 MaxNodesPerBlob = TBlobStorageGroupType::MaxSubgroupSize;
+static constexpr ui8 MaxTotalPartCount = TErasureType::MaxTotalParts;
 static constexpr ui8 MaxVDisksInGroup = 32;
 
 // mapper interface forward declaration
@@ -202,7 +205,9 @@ public:
             TString DataInfo;
         };
 
-        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
+        // maxRestores limits ErasureRestore calls; zero means unlimited.
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator,
+            ui32 maxRestores = 0) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -338,12 +343,15 @@ public:
     // DYNAMIC INFO
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDynamicInfo {
+        using EFailRealmState = EMirror3dcFailRealmState;
+
         // blobstorage group id
         const TGroupId GroupId;
         // blobstorage group generation
         const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
+        TMirror3dcGroupState Mirror3dcState;
 
         TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
@@ -359,16 +367,61 @@ public:
     const IQuorumChecker& GetQuorumChecker() const;
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
+    TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
+        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+            return NKikimrBlobStorage::TDataCenterState::INCLUDED;
+        }
+        return Dynamic.Mirror3dcState.FailRealmStates.at(failRealmIdx);
+    }
+    const TMirror3dcGroupState& GetMirror3dcState() const {
+        return Dynamic.Mirror3dcState;
+    }
+    bool IsFailRealmIncluded(ui32 failRealmIdx) const {
+        return IsIncluded(GetFailRealmState(failRealmIdx));
+    }
+    bool IsFailRealmReadable(ui32 failRealmIdx) const {
+        return IsReadable(GetFailRealmState(failRealmIdx));
+    }
+    bool IsWriteTargetRealm(ui32 failRealmIdx) const {
+        EMirror3dcFailRealmState role = GetFailRealmState(failRealmIdx);
+        if (!IsRecovering(role)) {
+            return IsIncluded(role);
+        }
+        // A single-realm write always fits in Included. Other recovery layouts need R.
+        auto layouts = GetMirror3dcGroupLayouts(GetMirror3dcState().State);
+        return layouts && layouts->Write != EMirror3dcLayout::LAYOUT_2;
+    }
+    bool IsFailRealmExcluded(ui32 failRealmIdx) const {
+        return IsExcluded(GetFailRealmState(failRealmIdx));
+    }
+    bool IsFailRealmRecovering(ui32 failRealmIdx) const {
+        return IsRecovering(GetFailRealmState(failRealmIdx));
+    }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }
     ui64 GetGroupKeyNonce() const { return GroupKeyNonce; }
     const TCypherKey* GetCypherKey() const { return &Key; }
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
+    // groups of the piles this bridged group has its parts in, in order of pile ids (absent piles are skipped)
     const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
     std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
     TBridgePileId GetBridgePileId() const { return BridgePileId; }
+    // inline pile is the bridged group that serves as one of its own piles (this is the case for groups of the cluster
+    // converted from non-bridged one), so it has both the bridge proxy part and its own topology with VDisks
+    bool IsInlinePile() const { return IsBridged() && BridgeProxyGroupId == GroupID; }
+    // generate info of the inline pile as seen by its own DS proxy: parsed as an ordinary pile while retaining bridge
+    // metadata in the Group protobuf for propagation through VDisk to NodeWarden
+    TIntrusivePtr<TBlobStorageGroupInfo> MakeInlinePileView() const;
+    // is this the info generated by MakeInlinePileView()
+    bool IsInlinePileView() const { return !IsBridged() && BridgeProxyGroupId == GroupID; }
+    // does decommission block writes to the physical part of the group; VDisks of the group and bridge proxy (for piles
+    // not knowing about decommission of their bridge proxy group) enforce it
+    bool DecommitBlocksWrites() const;
+    // is the garbage collection command a hard barrier issued by assimilation of the decommitted group, which passes through
+    // the decommission write fence
+    static bool IsAssimilationBarrier(bool hard, ui32 recordGeneration) { return hard && recordGeneration == Max<ui32>(); }
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
@@ -479,6 +532,12 @@ private:
     friend class NBlobMapper::TMirror3dcMapper;
     const TFailDomain& GetFailDomain(const TVDiskID& vdisk) const;
     const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const;
+
+    // inline pile view copies the fields one by one, as the group info can't be copied as a whole (that would copy its
+    // reference counter); a field added to this class must be added there too, unless it is a bridge proxy one (like
+    // BridgeGroupIds) that the view must not have
+    struct TInlinePileViewTag {};
+    TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag);
 
 public:
     // blobstorage group id

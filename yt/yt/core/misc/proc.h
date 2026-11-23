@@ -10,6 +10,7 @@
 
 #include <yt/yt/core/misc/fs.h>
 
+#include <optional>
 #include <vector>
 
 namespace NYT {
@@ -187,6 +188,10 @@ void SetUid(int uid);
 std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
 
 int GetFileDescriptorCount();
+
+//! Return the soft RLIMIT_NOFILE value of the current process.
+//! Return null when the limit is infinite, when getrlimit fails, or on non-UNIX platforms.
+std::optional<i64> GetFileDescriptorLimit();
 
 //! Return true iff ytserver was started with root permissions (e.g. via sudo or with suid bit).
 bool HasRootPermissions();

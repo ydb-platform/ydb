@@ -30,10 +30,9 @@ bool TBehavioursId::RemoveId(const TString& id) {
     return true;
 }
 
-
 void TEventsCollector::Initialized(const TString& initId) {
     std::map<TBehavioursId, TEventsWaiter> movedEvents;
-    for (auto it = Events.begin(); it != Events.end(); ) {
+    for (auto it = Events.begin(); it != Events.end();) {
         auto m = it->first;
         if (!m.RemoveId(initId)) {
             ++it;
@@ -56,7 +55,6 @@ void TEventsCollector::Initialized(const TString& initId) {
     }
 }
 
-
 void TRegistrationData::InitializationFinished(const TString& initId) {
     auto it = InRegistration.find(initId);
     Y_ABORT_UNLESS(it != InRegistration.end());
@@ -73,7 +71,6 @@ void TRegistrationData::InitializationFinished(const TString& initId) {
     if (initId == NInitializer::TDBInitialization::GetTypeId()) {
         EventsWaiting->TryResendOne();
     }
-
 }
 
 void TRegistrationData::SetInitializationSnapshot(NFetcher::ISnapshot::TPtr s) {
@@ -99,4 +96,4 @@ void TRegistrationData::NoInitializationSnapshot() {
     EventsWaiting->TryResendOne();
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

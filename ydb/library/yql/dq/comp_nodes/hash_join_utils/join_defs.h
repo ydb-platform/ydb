@@ -133,6 +133,8 @@ using TBuckets = TMKQLVector<TBucket>;
 using TPairOfBuckets = TMKQLVector<TSides<TBucket>>;
 bool IsBucketSpilled(const TSides<TBucket>& bucket);
 
+constexpr ui32 Log2Buckets = 6;
+
 enum class PageSpillingAlready {
     InMemoryYet,
     SpillingInProcess,

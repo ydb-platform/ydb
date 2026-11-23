@@ -5,7 +5,6 @@
 
 #include <optional>
 
-
 namespace NKikimr::NWorkloadManager {
 
 ///
@@ -15,7 +14,6 @@ namespace NKikimr::NWorkloadManager {
 /// - Otherwise, returns true iff at least one operation in `phyQuery`
 ///   performs a full scan on a table whose path matches `predicate`.
 ///
-bool MatchesFullScan(const std::optional<NResourcePool::TRegexPredicate>& predicate,
-                   const NKqpProto::TKqpPhyQuery& phyQuery);
+bool MatchesFullScan(const std::optional<NResourcePool::TRegexPredicate>& predicate, const NKqpProto::TKqpPhyQuery& phyQuery);
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

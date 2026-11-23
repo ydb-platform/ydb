@@ -76,7 +76,7 @@ public:
         LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
-                .Path = GetProtoRequest()->path(),
+                .Path = NormalizeTopicPath(GetProtoRequest()->path()),
                 .Database = GetDatabase(),
                 .UserToken = GetUserToken(),
                 .AccessRights = NACLib::EAccessRights::DescribeSchema,
@@ -102,7 +102,8 @@ private:
         const auto* consumer = NPQ::GetConsumer(
             ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
             consumerName);
-        AFL_ENSURE(consumer)("consumer", consumerName);
+        YDB_LOG_ENSURE(consumer,
+            {"consumer", consumerName});
 
         Ydb::StatusIds::StatusCode status;
         TString error;

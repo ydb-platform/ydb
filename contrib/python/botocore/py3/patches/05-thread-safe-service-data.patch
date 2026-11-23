@@ -1,0 +1,72 @@
+--- contrib/python/botocore/py3/botocore/loaders.py	(index)
++++ contrib/python/botocore/py3/botocore/loaders.py	(working tree)
+@@ -104,6 +104,7 @@ which don't represent the actual service api.
+ import collections
+ import logging
+ import os
++import threading
+ 
+ from botocore import BOTOCORE_ROOT
+ from botocore.compat import HAS_GZIP, OrderedDict, json, six
+@@ -204,6 +205,7 @@ class JSONFileLoader:
+ class HybridJsonLoader(JSONFileLoader):
+ 
+     type_data_cache = collections.defaultdict(lambda: collections.defaultdict(set))
++    _type_data_lock = threading.Lock()
+ 
+     arcadia_resources_path = (
+         'contrib/python/awscli/awscli/data/',
+@@ -213,17 +215,25 @@ class HybridJsonLoader(JSONFileLoader):
+ 
+     @classmethod
+     def collect_service_data(cls):
++        # The cache is shared by every loader of the process: it is filled aside and published whole, so another
++        # thread never sees a part of it.
+         if cls.type_data_cache:
+             return
+ 
+-        for res in resource.resfs_files():
+-            res = six.ensure_str(res)
+-            if res.startswith(cls.arcadia_resources_path):
+-                splitted_path = res.split('/data/')[1].split('/')
+-                if len(splitted_path) >= 3:
+-                    service_name, version, type_name = splitted_path[:3]
+-                    type_name = type_name.replace('.json.gz', '').replace('.json', '')
+-                    cls.type_data_cache[type_name][service_name].add(version)
++        with cls._type_data_lock:
++            if cls.type_data_cache:
++                return
++
++            type_data = collections.defaultdict(lambda: collections.defaultdict(set))
++            for res in resource.resfs_files():
++                res = six.ensure_str(res)
++                if res.startswith(cls.arcadia_resources_path):
++                    splitted_path = res.split('/data/')[1].split('/')
++                    if len(splitted_path) >= 3:
++                        service_name, version, type_name = splitted_path[:3]
++                        type_name = type_name.replace('.json.gz', '').replace('.json', '')
++                        type_data[type_name][service_name].add(version)
++            cls.type_data_cache = type_data
+ 
+     @classmethod
+     def read_from_resources(cls, file_path):
+@@ -383,7 +393,7 @@ class Loader:
+ 
+         # SQS-119
+         HybridJsonLoader.collect_service_data()
+-        services = services.union(HybridJsonLoader.type_data_cache[type_name].keys())
++        services = services.union(HybridJsonLoader.type_data_cache.get(type_name, {}).keys())
+ 
+         return sorted(services)
+ 
+@@ -439,7 +449,9 @@ class Loader:
+ 
+         # SQS-119
+         HybridJsonLoader.collect_service_data()
+-        known_api_versions = known_api_versions.union(HybridJsonLoader.type_data_cache[type_name][service_name])
++        known_api_versions = known_api_versions.union(
++            HybridJsonLoader.type_data_cache.get(type_name, {}).get(service_name, ())
++        )
+ 
+         if not known_api_versions:
+             raise DataNotFoundError(data_path=service_name)

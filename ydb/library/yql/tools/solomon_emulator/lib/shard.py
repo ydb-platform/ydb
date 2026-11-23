@@ -137,7 +137,7 @@ class Shard(object):
         matching_metrics = self.get_matching_metrics(selectors)
         for metric in matching_metrics:
             for key, value in metric.labels.items():
-                if (key not in selectors):
+                if key not in selectors:
                     result.add(key)
 
         return list(result)
@@ -150,10 +150,7 @@ class Shard(object):
             label_names.append(key)
 
         for name in label_names:
-            all_label_values[name] = {
-                "values": set(),
-                "absent": False
-            }
+            all_label_values[name] = {"values": set(), "absent": False}
 
         matching_metrics = self.get_matching_metrics(selectors)
         for metric in matching_metrics:
@@ -169,12 +166,9 @@ class Shard(object):
         result = []
         for name, data in all_label_values.items():
             if len(data["values"]) > 1:
-                result.append({
-                    "name": name,
-                    "absent": data["absent"],
-                    "truncated": False,
-                    "values": list(data["values"])
-                })
+                result.append(
+                    {"name": name, "absent": data["absent"], "truncated": False, "values": list(data["values"])}
+                )
 
         return (result, len(matching_metrics))
 
@@ -190,7 +184,10 @@ class Shard(object):
             result.append({"labels": labels, "type": metric.kind})
 
         if len(matching_metrics) > 1000:
-            return (None, "Too many lines for one listing request, should be under 2k, have: {}".format(len(matching_metrics)))
+            return (
+                None,
+                "Too many lines for one listing request, should be under 2k, have: {}".format(len(matching_metrics)),
+            )
 
         return (sorted(result, key=lambda x: str(x)), None)
 
@@ -209,7 +206,12 @@ class Shard(object):
 
         matching_metrics = self.get_matching_metrics(selectors)
         if len(matching_metrics) != 1:
-            return (result, "Invalid amount of metrics matching selectors, should be 1, have: {}, selectors = {}".format(len(matching_metrics), selectors))
+            return (
+                result,
+                "Invalid amount of metrics matching selectors, should be 1, have: {}, selectors = {}".format(
+                    len(matching_metrics), selectors
+                ),
+            )
 
         metric = matching_metrics[0]
 
@@ -227,7 +229,7 @@ class Shard(object):
                     values.append(value)
                     count += 1
 
-        if (count > 10000):
+        if count > 10000:
             return (result, "Invalid number of point in one request, should be under 10000, have: {}".format(count))
 
         result["labels"] = labels

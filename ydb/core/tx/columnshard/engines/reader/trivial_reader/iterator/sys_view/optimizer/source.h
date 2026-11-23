@@ -17,11 +17,13 @@ private:
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
 
     virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
+        YDB_LOG_VERIFY(!UsedRawBytes);
         UsedRawBytes = 0;
     }
 
 public:
+    virtual NColumnShard::TInternalPathId GetPathId() const override;
+
     TSourceData(const ui32 sourceIdx, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule,
         std::vector<NStorageOptimizer::TTaskDescription>&& tasks, const NColumnShard::TSchemeShardLocalPathId& externalPathId,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
@@ -30,6 +32,9 @@ public:
         , OptimizerTasks(std::move(tasks))
         , ExternalPathId(externalPathId)
     {
+        if (context->GetReadMetadata()->IsSortedScanWithLimit()) {
+            std::sort(OptimizerTasks.begin(), OptimizerTasks.end());
+        }
     }
 };
 

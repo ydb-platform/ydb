@@ -6,15 +6,9 @@ import yatest.common
 
 from ydb.tests.fq.tools.kqprun import KqpRun
 
-from yql_utils import (
-    get_supported_providers,
-    is_xfail,
-    log,
-    normalize_source_code_path)
+from yql_utils import get_supported_providers, is_xfail, log, normalize_source_code_path
 
-from test_utils import (
-    get_config,
-    pytest_generate_tests_for_run)
+from test_utils import get_config, pytest_generate_tests_for_run
 
 DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
 
@@ -60,13 +54,15 @@ def test(suite, case, cfg, solomon_emulator):
 
     validate_sql(sql_query)
 
-    kqprun = KqpRun(config_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_config.conf'),
-                    scheme_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_scheme.sql'))
+    kqprun = KqpRun(
+        config_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_config.conf'),
+        scheme_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_scheme.sql'),
+    )
     yqlrun_res = kqprun.yql_exec(
         yql_program=sql_query,
         var_templates=['SOLOMON_HTTP_ENDPOINT', 'SOLOMON_GRPC_ENDPOINT'],
         verbose=True,
-        check_error=not xfail
+        check_error=not xfail,
     )
 
     if xfail:

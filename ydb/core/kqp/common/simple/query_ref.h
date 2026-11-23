@@ -1,20 +1,20 @@
 #pragma once
-#include "query_ast.h"
 #include "settings.h"
+
+#include <map>
+#include <memory>
 
 namespace NKikimr::NKqp {
 
 struct TKqpQueryRef {
-    TKqpQueryRef(const TString& text, std::shared_ptr<std::map<TString, Ydb::Type>> parameterTypes = {}, const TMaybe<TQueryAst>& astResult = {})
+    TKqpQueryRef(const TString& text, std::shared_ptr<std::map<TString, Ydb::Type>> parameterTypes = {})
         : Text(text)
         , ParameterTypes(parameterTypes)
-        , AstResult(astResult)
     {}
 
     // Text is owned by TKqpQueryId
     const TString& Text;
     std::shared_ptr<std::map<TString, Ydb::Type>> ParameterTypes;
-    TMaybe<TQueryAst> AstResult;
 };
 
 } // namespace NKikimr::NKqp

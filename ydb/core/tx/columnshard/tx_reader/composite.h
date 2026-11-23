@@ -21,11 +21,23 @@ private:
         return true;
     }
 
+    virtual void DoAddNamePrefix(const TString& prefix) override {
+        for (auto&& i : Children) {
+            i->AddNamePrefix(prefix);
+        }
+    }
+
+    virtual void DoSetOrbit(NLWTrace::TOrbit& orbit) override {
+        for (auto&& i : Children) {
+            i->SetOrbit(orbit);
+        }
+    }
+
 public:
     using TBase::TBase;
 
     void AddChildren(const std::shared_ptr<ITxReader>& reader) {
-        AFL_VERIFY(!GetIsStarted());
+        YDB_LOG_VERIFY(!GetIsStarted());
         reader->AddNamePrefix(GetStageName() + "/");
         Children.emplace_back(reader);
     }

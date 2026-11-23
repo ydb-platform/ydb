@@ -193,6 +193,8 @@ namespace {
        : public NActors::TActorCoroImpl
        , public NActors::TInterconnectLoggingBase
     {
+        struct TExPoison {};
+
         NActors::TInterconnectProxyCommon::TPtr Common;
         const TActorId SelfVirtualId;
         const TActorId PeerVirtualId;
@@ -265,17 +267,31 @@ namespace {
         }
 
         void Run() override {
-            SetPrefix(Sprintf("RdmaSync %s [node %" PRIu32 " %s]",
-                SelfActorId.ToString().data(), PeerNodeId, Incoming ? "incoming" : "outgoing"));
+            SetPrefix(YDB_LOG_CREATE_MESSAGE(
+                {"selfActorKind", "RdmaSync"},
+                {"selfActorId", SelfActorId},
+                {"nodeId", PeerNodeId},
+                {"direction", Incoming ? "incoming" : "outgoing"}));
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting rdma sync actor",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"});
 
+            try {
+                RunImpl();
+            } catch (const TExPoison&) {
+                PollerToken.Reset();
+            }
+        }
+
+    private:
+        void RunImpl() {
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId),
                 new TSessionCreatorDelegate(SelfActorId, Qp, Cq, PeerNodeId));
-            auto ev = TActorCoroImpl::WaitForEvent();
+            auto ev = WaitForEvent();
             auto* result = static_cast<TSessionCreatorDelegate*>(ev->GetBase());
             if (const TString* error = result->GetError()) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to create rdma sync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"session", error->data()});
                 Finish(*error);
@@ -289,6 +305,7 @@ namespace {
             ui64 peerStartSyncChecksum = 0;
             if (!DoStart(peerStartSync, localStartSyncChecksum, peerStartSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA StartSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -300,6 +317,7 @@ namespace {
             const TMonotonic rdmaStart = TActivationContext::Monotonic();
             if (!DoData(peerStartSync, peerStartSyncChecksum, localDataSync, localDataSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA DataSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -310,6 +328,7 @@ namespace {
             ui64 peerDataSyncChecksum = 0;
             if (!DoReceiveData(localStartSyncChecksum, peerDataSync, peerDataSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive DataSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -320,6 +339,7 @@ namespace {
             ui64 localAckSyncChecksum = 0;
             if (!DoAck(peerDataSyncChecksum, localAckSync, localAckSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA AckSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -331,6 +351,7 @@ namespace {
             TMonotonic peerAckReceivedAt;
             if (!DoReceiveAck(localDataSyncChecksum, peerAckSync, peerAckSyncChecksum, peerAckReceivedAt, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive AckSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -340,6 +361,7 @@ namespace {
 
             if (!DoSwitchToTransitionMode(session.get(), error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to switch RDMA session to data",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"mode", error.data()});
                 Finish(std::move(error));
@@ -348,6 +370,7 @@ namespace {
 
             if (!DoFin(peerAckSyncChecksum, rdmaRtt, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA FinSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -356,6 +379,7 @@ namespace {
 
             if (!DoReceiveFin(localAckSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive FinSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -366,7 +390,14 @@ namespace {
             Send(Creator, new TEvRdmaSyncResult(std::move(session)));
         }
 
-    private:
+        THolder<IEventHandle> WaitForEvent() {
+            auto ev = TActorCoroImpl::WaitForEvent();
+            if (ev && ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                throw TExPoison();
+            }
+            return ev;
+        }
+
         void Finish(TString error) {
             PollerToken.Reset();
             Send(Creator, new TEvRdmaSyncResult(std::move(error)));
@@ -382,7 +413,7 @@ namespace {
                 return false;
             }
 
-            auto ev = TActorCoroImpl::WaitForEvent();
+            auto ev = WaitForEvent();
             if (!ev || ev->GetTypeRewrite() != TEvPollerRegisterResult::EventType) {
                 error = Sprintf("unexpected event while waiting for TEvPollerRegisterResult: 0x%08" PRIx32,
                     ev ? ev->GetTypeRewrite() : 0);
@@ -401,7 +432,7 @@ namespace {
         bool Y_NO_INLINE WaitPoller(bool read, bool write, const char* state, TString& error) {
             if (!PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
                 for (;;) {
-                    auto ev = TActorCoroImpl::WaitForEvent();
+                    auto ev = WaitForEvent();
                     if (!ev) {
                         error = Sprintf("unable to wait for TEvPollerReady in %s", state);
                         return false;
@@ -647,7 +678,7 @@ namespace {
                     return true;
                 }
 
-                if (!HandleEvent(TActorCoroImpl::WaitForEvent(), error)) {
+                if (!HandleEvent(WaitForEvent(), error)) {
                     return false;
                 }
             }
@@ -1007,6 +1038,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA StartSync exchanged",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"featureMask", peerStartSync.GetFeatureMask()});
 
@@ -1051,6 +1083,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA DataSync received",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"payloadSize", dataSync.GetPayload().size()});
 
@@ -1090,6 +1123,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA AckSync received",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"});
 
             return true;
@@ -1099,7 +1133,7 @@ namespace {
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), new TSwitchToTransitionModeDelegate(session));
 
             for (;;) {
-                auto ev = TActorCoroImpl::WaitForEvent();
+                auto ev = WaitForEvent();
                 if (!ev) {
                     error = "unable to wait switch to transition mode result";
                     return false;
@@ -1142,6 +1176,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA FinSync received",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"rdmaRtt", finSync.GetRdmaRtt()});
 

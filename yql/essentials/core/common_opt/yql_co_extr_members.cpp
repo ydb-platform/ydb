@@ -15,6 +15,7 @@ using namespace NNodes;
 TExprNode::TPtr ApplyExtractMembersToTake(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoTake take(node);
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    // clang-format off
     return Build<TCoTake>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(take.Input())
@@ -22,11 +23,13 @@ TExprNode::TPtr ApplyExtractMembersToTake(const TExprNode::TPtr& node, const TEx
         .Build()
         .Count(take.Count())
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToSkip(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoSkip skip(node);
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    // clang-format off
     return Build<TCoSkip>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(skip.Input())
@@ -34,18 +37,21 @@ TExprNode::TPtr ApplyExtractMembersToSkip(const TExprNode::TPtr& node, const TEx
         .Build()
         .Count(skip.Count())
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToExtend(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
     TExprNode::TListType inputs;
     for (auto& child: node->Children()) {
+        // clang-format off
         inputs.emplace_back(ctx.Builder(child->Pos())
             .Callable(TCoExtractMembers::CallableName())
                 .Add(0, child)
                 .Add(1, members)
             .Seal()
             .Build());
+        // clang-format on
     }
 
     return ctx.NewCallable(node->Pos(), node->Content(), std::move(inputs));
@@ -103,12 +109,14 @@ TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr
 
     YQL_CLOG(DEBUG, Core) << "Push ExtractMembers over " << self.CallableName() << logSuffix;
     auto newInput = ctx.NewCallable(self.Pos(), "ExtractMembers", { filterInput.Ptr(), MakeAtomList(self.Pos(), innerExtracted, ctx) });
+    // clang-format off
     auto newFilter = ctx.Builder(self.Pos())
         .Callable(self.CallableName())
             .Add(0, ctx.WrapByCallableIf(hasAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(newInput)))
             .Add(1, MakeAtomList(self.Pos(), filteredMembers, ctx))
         .Seal()
         .Build();
+    // clang-format on
     return ctx.NewCallable(self.Pos(), "ExtractMembers", { newFilter, members });
 }
 
@@ -141,18 +149,22 @@ TExprNode::TPtr ApplyExtractMembersToSortOrPruneKeys(const TExprNode::TPtr& node
     }
     if (fieldSubset && allExist) {
         YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+        // clang-format off
         auto result = ctx.Builder(node->Pos())
             .Callable(node->Content())
             .Seal()
             .Build();
+        // clang-format on
 
         TExprNode::TListType children;
+        // clang-format off
         children.push_back(ctx.Builder(node->Pos())
             .Callable(TCoExtractMembers::CallableName())
                 .Add(0, node->HeadPtr())
                 .Add(1, members)
             .Seal()
             .Build());
+        // clang-format on
         if (nodeIsSort) {
             children.push_back(node->ChildPtr(1));
         }
@@ -172,28 +184,34 @@ TExprNode::TPtr ApplyExtractMembersToSortOrPruneKeys(const TExprNode::TPtr& node
         }
 
         TExprNode::TListType children;
+        // clang-format off
         children.push_back(ctx.Builder(node->Pos())
             .Callable(TCoExtractMembers::CallableName())
                 .Add(0, node->HeadPtr())
                 .Add(1, ctx.NewList(members->Pos(), std::move(totalExtracted)))
             .Seal()
             .Build());
+        // clang-format on
         if (nodeIsSort) {
             children.push_back(node->ChildPtr(1));
         }
         children.push_back(ctx.DeepCopyLambda(keyExtractorLambda.Ref()));
 
+        // clang-format off
         auto internalPartOfExtractMembers = ctx.Builder(node->Pos())
             .Callable(node->Content())
             .Seal()
             .Build();
+        // clang-format on
 
+        // clang-format off
         return ctx.Builder(node->Pos())
             .Callable(TCoExtractMembers::CallableName())
                 .Add(0, ctx.ChangeChildren(*internalPartOfExtractMembers, std::move(children)))
                 .Add(1, members)
             .Seal()
             .Build();
+        // clang-format on
     }
     return {};
 }
@@ -239,10 +257,12 @@ TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExp
     if (fieldSubset && allExist) {
         YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
         auto children = node->ChildrenList();
+        // clang-format off
         children[TCoTopBase::idx_Input] = Build<TCoExtractMembers>(ctx, top.Pos())
             .Input(top.Input())
             .Members(members)
             .Done().Ptr();
+        // clang-format on
         children[TCoTopBase::idx_KeySelectorLambda] = ctx.DeepCopyLambda(top.KeySelectorLambda().Ref());
         return ctx.ChangeChildren(*node, std::move(children));
     }
@@ -258,17 +278,21 @@ TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExp
         }
 
         auto children = node->ChildrenList();
+        // clang-format off
         children[TCoTopBase::idx_Input] = Build<TCoExtractMembers>(ctx, top.Pos())
             .Input(top.Input())
             .Members(ctx.NewList(members->Pos(), std::move(totalExtracted)))
             .Done().Ptr();
+        // clang-format on
         children[TCoTopBase::idx_KeySelectorLambda] = ctx.DeepCopyLambda(top.KeySelectorLambda().Ref());
         auto updatedTop = ctx.ChangeChildren(*node, std::move(children));
 
+        // clang-format off
         return Build<TCoExtractMembers>(ctx, top.Pos())
             .Input(updatedTop)
             .Members(members)
             .Done().Ptr();
+        // clang-format on
     }
     return {};
 }
@@ -312,6 +336,7 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
         if (body.Maybe<TCoListIf>() || body.Maybe<TCoOptionalIf>()) {
             TVector<TExprBase> tuples;
             for (const auto& member : members->ChildrenList()) {
+                // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, flatmap.Pos())
                     .Name(member)
                     .Value<TCoMember>()
@@ -319,29 +344,37 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
                         .Name(member)
                         .Build()
                     .Done();
+                // clang-format on
 
                 tuples.push_back(tuple);
             }
 
+            // clang-format off
             extracted = Build<TCoAsStruct>(ctx, flatmap.Pos())
                 .Add(tuples)
                 .Done();
+            // clang-format on
         } else {
+            // clang-format off
             extracted = Build<TCoExtractMembers>(ctx, flatmap.Pos())
                 .Input(conditional.Value())
                 .Members(members)
                 .Done();
+            // clang-format on
         }
 
         newBody = ctx.ChangeChild(conditional.Ref(), TCoConditionalValueBase::idx_Value, extracted.Cast().Ptr());
     } else {
+        // clang-format off
         newBody = Build<TCoExtractMembers>(ctx, flatmap.Pos())
             .Input(flatmap.Lambda().Body())
             .Members(members)
             .Done();
+        // clang-format on
     }
 
     if (flatmap.Maybe<TCoOrderedFlatMap>()) {
+        // clang-format off
         return Build<TCoOrderedFlatMap>(ctx, flatmap.Pos())
             .Input(flatmap.Input())
             .Lambda()
@@ -353,7 +386,9 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
                 .Build()
             .Done()
             .Ptr();
+        // clang-format on
     } else {
+        // clang-format off
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .Input(flatmap.Input())
             .Lambda()
@@ -365,17 +400,21 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
                 .Build()
             .Done()
             .Ptr();
+        // clang-format on
     }
 }
 
 TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoPartitionByKeyBase part(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    // clang-format off
     auto newBody = Build<TCoExtractMembers>(ctx, part.Pos())
         .Input(part.ListHandlerLambda().Body())
         .Members(members)
         .Done();
+    // clang-format on
 
+    // clang-format off
     return Build<TCoPartitionByKeyBase>(ctx, part.Pos())
         .CallableName(node->Content())
         .Input(part.Input())
@@ -391,16 +430,20 @@ TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node,
         .SortKeySelectorLambda(part.SortKeySelectorLambda())
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     const TCoChopper chopper(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    // clang-format off
     auto newBody = Build<TCoExtractMembers>(ctx, chopper.Handler().Pos())
         .Input(chopper.Handler().Body())
         .Members(members)
         .Done();
+    // clang-format on
 
+    // clang-format off
     return Build<TCoChopper>(ctx, chopper.Pos())
         .Input(chopper.Input())
         .KeyExtractor(chopper.KeyExtractor())
@@ -415,6 +458,7 @@ TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const 
         .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
@@ -458,6 +502,7 @@ TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, co
         }
     }
 
+    // clang-format off
     return Build<TCoMapJoinCore>(ctx, mapJoin.Pos())
         .LeftInput<TCoExtractMembers>()
             .Input(mapJoin.LeftInput())
@@ -472,6 +517,7 @@ TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, co
         .LeftKeysColumnNames(mapJoin.LeftKeysColumnNames())
         .RightKeysColumnNames(mapJoin.RightKeysColumnNames())
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
@@ -618,6 +664,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         }
 
         newCalcs.emplace_back(
+            // clang-format off
             Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
                 .Keys(calc.Keys())
                 .SortSpec(calc.SortSpec())
@@ -626,6 +673,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
                 .SessionColumns(ctx.NewList(calc.SessionColumns().Pos(), std::move(newSessionColumns)))
                 .Done().Ptr()
         );
+            // clang-format on
     }
 
     // keep input fields
@@ -644,23 +692,29 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         usedExprList.push_back(ctx.NewAtom(node->Pos(), x));
     }
 
+    // clang-format off
     auto newInput = Build<TCoExtractMembers>(ctx, node->Pos())
         .Input(input)
         .Members(ctx.NewList(node->Pos(), std::move(usedExprList)))
         .Done()
         .Ptr();
+    // clang-format on
 
+    // clang-format off
     auto calcOverWindow = Build<TCoCalcOverWindowGroup>(ctx, node->Pos())
         .Input(newInput)
         .Calcs(ctx.NewList(node->Pos(), std::move(newCalcs)))
         .Done().Ptr();
+    // clang-format on
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    // clang-format off
     return Build<TCoExtractMembers>(ctx, node->Pos())
         .Input(calcOverWindow)
         .Members(members)
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
@@ -756,36 +810,43 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         for (const auto& x : usedFields) {
             usedExprList.push_back(ctx.NewAtom(aggr.Pos(), x));
         }
+        // clang-format off
         newInput = Build<TCoExtractMembers>(ctx, aggr.Pos())
             .Input(aggr.Input())
             .Members(ctx.NewList(aggr.Pos(), std::move(usedExprList)))
             .Done();
+        // clang-format on
     }
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    // clang-format off
     return Build<TCoAggregate>(ctx, aggr.Pos())
         .InitFrom(aggr)
         .Input(newInput)
         .Settings(ReplaceSetting(aggr.Settings().Ref(), members->Pos(), "output_columns", members, ctx))
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoCollect collect(node);
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    // clang-format off
     return Build<TCoCollect>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(collect.Input())
             .Members(members)
         .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     const TCoMapNext mapNext(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
 
+    // clang-format off
     return Build<TCoMapNext>(ctx, mapNext.Pos())
         .Input(mapNext.Input())
         .Lambda()
@@ -801,6 +862,7 @@ TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const 
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExprNode::TPtr members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
@@ -811,6 +873,7 @@ TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExp
     }
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    // clang-format off
     auto output = Build<TCoChain1Map>(ctx, chain1Map.Pos())
         .Input(chain1Map.Input())
         .InitHandler()
@@ -835,12 +898,15 @@ TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExp
                 .Build()
             .Build()
         .Done().Ptr();
+    // clang-format on
 
     if (allMembers != members) {
+        // clang-format off
         output = Build<TCoExtractMembers>(ctx, chain1Map.Pos())
             .Input(output)
             .Members(members)
             .Done().Ptr();
+        // clang-format on
     }
 
     return output;
@@ -857,6 +923,7 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
     }
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    // clang-format off
     auto output = Build<TCoCondense1>(ctx, condense1.Pos())
         .Input(condense1.Input())
         .InitHandler()
@@ -882,12 +949,15 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
                 .Build()
             .Build()
         .Done().Ptr();
+    // clang-format on
 
     if (allMembers != members) {
+        // clang-format off
         output = Build<TCoExtractMembers>(ctx, condense1.Pos())
             .Input(output)
             .Members(members)
             .Done().Ptr();
+        // clang-format on
     }
 
     return output;
@@ -897,6 +967,7 @@ TExprNode::TPtr ApplyExtractMembersToCombineCore(const TExprNode::TPtr& node, co
     const TCoCombineCore core(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
 
+    // clang-format off
     return Build<TCoCombineCore>(ctx, core.Pos())
         .InitFrom(core)
         .FinishHandler()
@@ -912,6 +983,7 @@ TExprNode::TPtr ApplyExtractMembersToCombineCore(const TExprNode::TPtr& node, co
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, const TExprNode::TPtr& members, bool isFlat, TExprContext& ctx, TStringBuf logSuffix) {
@@ -927,12 +999,14 @@ TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, cons
 TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoTableSource tableSource(node);
     YQL_CLOG(DEBUG, Core) << "Propagate ExtractMembers over " << node->Content() << logSuffix;
+    // clang-format off
     return Build<TCoTableSource>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(tableSource.Input())
             .Members(members)
         .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToSqlCombine(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
@@ -943,18 +1017,23 @@ TExprNode::TPtr ApplyExtractMembersToSqlCombine(const TExprNode::TPtr& node, con
     const auto usingBody = usingLambda.Body();
     TMaybeNode<TExprBase> newUsing;
     if (usingBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+        // clang-format off
         newUsing = Build<TCoFilterMembers>(ctx, node->Pos())
             .Input(usingBody)
             .Members(members)
             .Done();
+        // clang-format on
     } else {
+        // clang-format off
         newUsing = Build<TCoExtractMembers>(ctx, node->Pos())
             .Input(usingBody)
             .Members(members)
             .Done();
+        // clang-format on
     }
 
     const auto usingArgs = usingLambda.Args();
+    // clang-format off
     return Build<TCoSqlCombine>(ctx, node->Pos())
         .InitFrom(sqlCombine)
         .UsingLambda()
@@ -967,11 +1046,13 @@ TExprNode::TPtr ApplyExtractMembersToSqlCombine(const TExprNode::TPtr& node, con
                 .Build()
             .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoWithWorld withWorld(node);
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over WithWorld" << logSuffix;
+    // clang-format off
     return Build<TCoWithWorld>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(withWorld.Input())
@@ -979,6 +1060,7 @@ TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, cons
         .Build()
         .World(withWorld.World())
         .Done().Ptr();
+    // clang-format on
 }
 
 

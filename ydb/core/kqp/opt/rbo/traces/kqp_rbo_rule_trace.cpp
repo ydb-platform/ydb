@@ -19,15 +19,11 @@ constexpr ui32 HtmlTraceProps =
     ERuleProperties::RequireTypes |
     ERuleProperties::RequireMetadata |
     ERuleProperties::RequireStatistics |
-    ERuleProperties::RequireLiveness |
-    ERuleProperties::RequireNameConstraints |
-    ERuleProperties::RequireAliases;
+    ERuleProperties::RequireLiveness;
 
 constexpr ui32 HtmlRuleTraceRefreshProps =
     ERuleProperties::RequireParents |
-    ERuleProperties::RequireLiveness |
-    ERuleProperties::RequireNameConstraints |
-    ERuleProperties::RequireAliases;
+    ERuleProperties::RequireLiveness;
 
 constexpr ui32 HtmlPlanOpts =
     EPrintPlanOptions::PrintFullMetadata |
@@ -42,8 +38,7 @@ void ComputeHtmlTraceProps(TOpRoot& root, TRBOContext& ctx, TStringBuf stageName
 }
 
 void RefreshHtmlRuleTraceProps(TOpRoot& root, TRBOContext& ctx, TStringBuf stageName) {
-    // Per-rule trace must not add type/stat requirements: some stages intentionally
-    // repair temporary map/alias inconsistencies with a later rule in the same stage.
+    // Per-rule trace must not add type/stat requirements to intermediate plans.
     ComputeRequiredProps(root, HtmlRuleTraceRefreshProps, ctx, TStringBuilder() << stageName << " HTML trace");
 }
 

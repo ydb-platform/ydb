@@ -9,7 +9,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
-#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -169,6 +169,74 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     )";
     Y_UNIT_TEST_STRING_VARIATOR(QuotedFilterVariants, scriptQuotedFilterVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+    // Complex JSON paths are processed on compaction and query. The second portion encodes `a`
+    // and `slash/key` differently to verify both decode to the first portion's keys.
+    TString scriptComplexPathVariants = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2$$);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$0|1|1024$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES
+            (1u, JsonDocument(@@{"a":{"b":"nested"},"a.b":"flat","a[0]":{"b":"literal"},"a":[{"b":"array"}],"":{"x":"empty"},
+                "q\"u":{"b":"quote"},"slash/key":{"b":"slash"},"?":{"x":"question"}}@@));
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES
+            (1u, JsonDocument(@@{"\u0061":{"b":"merged_nested"},"a.b":"merged_flat","a[0]":{"b":"merged_literal"},"\u0061":[{"b":"merged_array"}],"":{"x":"merged_empty"},
+                "q\"u":{"b":"merged_quote"},"slash\/key":{"b":"merged_slash"},"?":{"x":"merged_question"}}@@));
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a.b") = "merged_nested";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a\".\"b\"") = "merged_nested";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.'a'.'b'") = "merged_nested";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b\"") = "merged_flat";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a[0]\".b") = "merged_literal";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a[0].b") = "merged_array";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"\".x") = "merged_empty";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, @@$."q\"u".b@@) = "merged_quote";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, @@$."slash/key".b@@) = "merged_slash";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"?\".x") = "merged_question";
+        EXPECTED: [[1u]]
+
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(ComplexPathVariants, scriptComplexPathVariants) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
@@ -1682,6 +1750,47 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                      .GetValueSync();
         UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_C(result.GetIssues().ToOneLineString().contains("unsupported dense encoding version"), result.GetIssues().ToOneLineString());
+    }
+
+    // YDBBUGS-934: one TestInit row makes Kind = "TestInit" a one-value predicate, so OR skips the JSON_VALUE assembler
+    // after the shared filter fetch already stored the Stats fetcher. The projection must still return the full Stats value.
+    // SIMPLE and TRIVIAL both use IDataSource::DoApplyPendingFetcher; the plain column stays PLAIN so it does not reset the reader.
+    TString scriptDuplicateStatsFetch = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Id Uint64 NOT NULL,
+            Kind Utf8 NOT NULL,
+            Success Uint32 NOT NULL,
+            Stats JsonDocument,
+            PRIMARY KEY (Id)
+        )
+        PARTITION BY HASH(Id)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`$$SIMPLE|TRIVIAL$$`)
+        ------
+        SCHEMA:
+        $$ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`)|ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)$$
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES
+            (1u, "TestInit", 1u, JsonDocument('{"aggregation_level":"none","note":"init-a"}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES
+            (3u, "Stability", 0u, JsonDocument('{"aggregation_level":"aggregate","note":"stab-yes"}')),
+            (4u, "Stability", 1u, JsonDocument('{"aggregation_level":"aggregate","note":"stab-success"}')),
+            (5u, "Stability", 0u, JsonDocument('{"aggregation_level":"row","note":"stab-no"}'))
+        ------
+        READ: SELECT Id, Kind, Stats FROM `/Root/ColumnTable` WHERE Kind = "TestInit" OR (JSON_VALUE(Stats, "$.aggregation_level") = "aggregate" AND Success = 0) ORDER BY Id;
+        EXPECTED: [[1u;"TestInit";["{\"aggregation_level\":\"none\",\"note\":\"init-a\"}"]];[3u;"Stability";["{\"aggregation_level\":\"aggregate\",\"note\":\"stab-yes\"}"]]]
+
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(DuplicateStatsFetch, scriptDuplicateStatsFetch) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
 }

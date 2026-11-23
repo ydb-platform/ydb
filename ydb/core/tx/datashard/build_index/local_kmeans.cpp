@@ -118,6 +118,7 @@ protected:
     Ydb::Table::VectorIndexSettings DeferredSettings;
     ui32 DeferredRounds = 0;
     std::vector<std::pair<ui32, double>> TmpClusters;
+    std::vector<bool> EmptyClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -162,7 +163,7 @@ public:
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
+        const auto data = MakeUploadDataColumns(table, embedding, request.GetDataColumns(), request.GetIndexType());
         ScanTags = MakeScanTags(table, embedding, data, toBuild,
             EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
@@ -395,6 +396,10 @@ protected:
 
     void StartNewPrefix()
     {
+        if (Clusters) {
+            FormLevelRows();
+            Clusters->Clear();
+        }
         State = EState::SAMPLE;
         Lead.Valid = true;
         Lead.Key = TSerializedCellVec(Prefix.GetCells()); // seek to (prefix, inf)
@@ -404,9 +409,6 @@ protected:
         IsPrefixRowsValid = true;
         PrefixRows.Clear();
         Sampler.Finish();
-        if (Clusters) {
-            Clusters->Clear();
-        }
     }
 
     bool FinishPrefix()
@@ -475,7 +477,8 @@ protected:
 
         if (State == EState::KMEANS) {
             if (Clusters->NextRound()) {
-                FormLevelRows();
+                EmptyClusters.clear();
+                EmptyClusters.resize(Clusters->GetClusters().size(), true);
                 State = UploadState;
                 return false; // do UPLOAD_*
             } else {
@@ -593,11 +596,13 @@ protected:
                 foreign = row.at(IsForeignPos).AsValue<bool>();
             }
             for (auto& [pos, distance]: TmpClusters) {
+                EmptyClusters[pos] = false;
                 AddRowToDataWithForeign(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, foreign, distance, isPostingLevel);
                 foreign = true;
             }
         } else {
             for (auto& [pos, _]: TmpClusters) {
+                EmptyClusters[pos] = false;
                 AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
             }
         }
@@ -629,7 +634,9 @@ protected:
             || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
 
         for (NTable::TPos pos = 0; const auto& row : Clusters->GetClusters()) {
-            AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
+            if (!EmptyClusters[pos]) {
+                AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
+            }
             ++pos;
         }
     }
@@ -719,7 +726,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         if (request.GetTabletId() != TabletID()) {
             badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
         }
-        if (!IsStateActive()) {
+        if (!IsStateActive() || IsUserTableWriteBlocked()) {
             badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
         }
         const auto pathId = TPathId::FromProto(request.GetPathId());
@@ -749,8 +756,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("At least one cluster should be requested");
         }
 
         const auto parentFrom = request.GetParentFrom();
@@ -843,4 +850,3 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

@@ -341,9 +341,15 @@ private:
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
-                const auto& cols = tableDesc->Metadata->Columns;
-
                 TColumnOrder columnOrder;
+                if (auto select = readTable.Select().Maybe<TCoAtomList>()) {
+                    for (const auto& column : select.Cast()) {
+                        columnOrder.AddColumn(column.StringValue());
+                    }
+                    return Types.SetColumnOrder(node.Ref(), columnOrder, ctx);
+                }
+
+                const auto& cols = tableDesc->Metadata->Columns;
                 size_t buildInProgressColumns = 0;
 
                 for (const auto& name : tableDesc->Metadata->ColumnOrder) {

@@ -44,6 +44,8 @@ message TKqpPhyInternalBinding {
         PARAM_RANDOM_NUMBER = 5;
         PARAM_RANDOM = 6;
         PARAM_RANDOM_UUID = 7;
+        PARAM_INDEX_VALIDATION_SNAPSHOT_STEP = 8;
+        PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID = 9;
     };
 
     EType Type = 1;
@@ -813,6 +815,14 @@ message TKqpTableOp {
     uint32 Operation = 3;
 };
 
+message TKqpIndexValidationInfo {
+    TKqpTableInfo.TId BaseTableId = 1;
+    string Name = 2;
+    uint64 LocalPathId = 3;
+    uint64 PathOwnerId = 4;
+    uint64 SchemaVersion = 5;
+}
+
 message TKqpPhyQuery {
     enum EType {
         TYPE_UNSPECIFIED = 0;
@@ -848,4 +858,5 @@ message TKqpPhyQuery {
     optional EIsolationLevel DefaultTxMode = 19;
     optional bool DisablePessimisticLocks = 20;
     optional uint64 MaxTasksPerStage = 21;
+    repeated TKqpIndexValidationInfo IndexValidations = 22;
 }

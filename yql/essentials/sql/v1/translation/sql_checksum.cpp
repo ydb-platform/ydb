@@ -79,4 +79,25 @@ TNodePtr TChecksumTranslation::Build(const TRule_checksum_table_stmt& rule) {
     return BuildChecksumTable(pos, table, Ctx_.Scoped);
 }
 
+TNodePtr TChecksumTranslation::Build(const TRule_check_index_stmt& rule) {
+    if (Ctx_.ParallelModeCount > 0) {
+        Error() << "CHECK TABLE INDEX statement is not supported in parallel mode";
+        return nullptr;
+    }
+
+    Ctx_.BodyPart();
+    Token(rule.GetToken1());
+    const auto pos = Ctx_.Pos();
+    TTableRef table;
+    if (!SimpleTableRefCoreImpl(rule.GetRule_simple_table_ref_core3(), table)) {
+        return nullptr;
+    }
+    auto indexName = Id(rule.GetRule_an_id5(), *this);
+    if (indexName.empty()) {
+        Error() << "Index name must not be empty";
+        return nullptr;
+    }
+    return BuildCheckIndex(pos, table, Ctx_.Scoped, indexName);
+}
+
 } // namespace NSQLTranslationV1

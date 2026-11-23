@@ -435,8 +435,22 @@ public:
 
     void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
+    bool IsIndexValidation() const {
+        return PreparedQuery && PreparedQuery->GetPhysicalQuery().IndexValidationsSize();
+    }
+
+    bool BufferIndexValidationResult() const {
+        // ExecuteQuery can publish one buffered result with the terminal response.
+        const auto type = GetType();
+        return (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+                || type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY)
+            && IsIndexValidation() && PreparedQuery->GetPhysicalQuery().ResultBindingsSize() == 1;
+    }
+
+    bool CheckingIndexValidationResult = false;
+
     bool NeedCheckTableVersions() const {
-        return CompileStats.FromCache;
+        return CompileStats.FromCache || IsIndexValidation();
     }
 
     TString ExtractQueryText() const {

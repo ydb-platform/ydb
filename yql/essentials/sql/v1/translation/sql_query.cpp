@@ -1760,6 +1760,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, node);
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore75: {
+            auto node = TChecksumTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core75().GetRule_check_index_stmt1());
+            if (!node) {
+                return false;
+            }
+            AddStatementToBlocks(blocks, node);
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }

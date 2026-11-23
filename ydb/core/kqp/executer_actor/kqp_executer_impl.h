@@ -165,6 +165,9 @@ public:
             TraceStats.emplace(ExecuterSpan.GetTraceId().GetVerbosity(), CollectFullStats(Request.StatsMode));
         }
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
+        if (Request.BufferResult) {
+            TasksGraph.GetMeta().StreamResult = false;
+        }
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;

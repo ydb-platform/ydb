@@ -14,12 +14,13 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-class TChecksumTableNode final: public TAstListNode {
+class TTableReadStatementNode final: public TAstListNode {
 public:
-    TChecksumTableNode(TPosition pos, const TTableRef& table, TScopedStatePtr scoped)
+    TTableReadStatementNode(TPosition pos, const TTableRef& table, TScopedStatePtr scoped, TString indexName = {})
         : TAstListNode(pos)
         , Table_(table)
         , Scoped_(std::move(scoped))
+        , IndexName_(std::move(indexName))
         , FakeSource_(BuildFakeSource(pos))
     {
     }
@@ -28,7 +29,7 @@ public:
         Y_UNUSED(src);
 
         if (Table_.Service != KikimrProviderName && Table_.Service != YdbProviderName) {
-            ctx.Error(Pos_) << "CHECKSUM TABLE is unsupported for " << Table_.Service << " tables";
+            ctx.Error(Pos_) << StatementName() << " is unsupported for " << Table_.Service << " tables";
             return false;
         }
 
@@ -72,8 +73,11 @@ public:
             return false;
         }
 
+        auto read = IndexName_.empty()
+            ? Y("KiChecksumTable!", "world", source, keys, Q(options))
+            : Y("KiCheckIndex!", "world", source, keys, BuildQuotedAtom(Pos_, IndexName_));
         Add("block", Q(Y(
-                         Y("let", "x", Y("KiChecksumTable!", "world", source, keys, Q(options))),
+                         Y("let", "x", read),
                          Y("let", "world", Y(TString(LeftName), "x")),
                          Y("let", "output", Y(TString(RightName), "x")),
                          Y("let", "world", writeResult),
@@ -83,17 +87,26 @@ public:
     }
 
     TPtr DoClone() const final {
-        ythrow yexception() << "Cloning CHECKSUM TABLE is not supported";
+        ythrow yexception() << "Cloning " << StatementName() << " is not supported";
     }
 
 private:
+    TStringBuf StatementName() const {
+        return IndexName_.empty() ? "CHECKSUM TABLE" : "CHECK TABLE INDEX";
+    }
+
     TTableRef Table_;
     TScopedStatePtr Scoped_;
+    TString IndexName_;
     TSourcePtr FakeSource_;
 };
 
 TNodePtr BuildChecksumTable(TPosition pos, const TTableRef& table, TScopedStatePtr scoped) {
-    return new TChecksumTableNode(pos, table, std::move(scoped));
+    return new TTableReadStatementNode(pos, table, std::move(scoped));
+}
+
+TNodePtr BuildCheckIndex(TPosition pos, const TTableRef& table, TScopedStatePtr scoped, const TString& indexName) {
+    return new TTableReadStatementNode(pos, table, std::move(scoped), indexName);
 }
 
 } // namespace NSQLTranslationV1

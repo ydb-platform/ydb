@@ -329,6 +329,13 @@ bool TQueryData::AddMkqlParam(const TString& name, const NKikimrMiniKQL::TType& 
 std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TQueryData::GetInternalBindingValue(
     const NKqpProto::TKqpPhyParamBinding& paramBinding)
 {
+    const auto type = paramBinding.GetInternalBinding().GetType();
+    using TBinding = NKqpProto::TKqpPhyInternalBinding;
+    if (type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP || type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID) {
+        YQL_ENSURE(IndexValidationSnapshot, "Index validation snapshot is unavailable");
+        const auto [step, txId] = *IndexValidationSnapshot;
+        return {TypeEnv().GetUi64Lazy(), TUnboxedValuePod(type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP ? step : txId)};
+    }
     return AllocState->GetInternalBindingValue(paramBinding);
 }
 
@@ -492,6 +499,7 @@ NDqProto::TData TQueryData::SerializeParamValue(const TString& name) {
 }
 
 void TQueryData::Clear() {
+    IndexValidationSnapshot.reset();
     {
         auto g = TypeEnv().BindAllocator();
         Params.clear();

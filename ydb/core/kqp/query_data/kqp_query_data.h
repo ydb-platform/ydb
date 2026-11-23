@@ -182,6 +182,8 @@ public:
 
 class TQueryData : NMiniKQL::ITerminator {
 private:
+    std::optional<std::pair<ui64, ui64>> IndexValidationSnapshot;
+
     using TTypedUnboxedValue = std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue>;
     using TNamedUnboxedValue = std::pair<const TString, TTypedUnboxedValue>;
 
@@ -250,6 +252,10 @@ public:
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv);
     void PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
         NMiniKQL::TTypeEnvironment& txTypeEnv);
+    void SetIndexValidationSnapshot(ui64 step, ui64 txId) {
+        IndexValidationSnapshot.emplace(step, txId);
+    }
+
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
     void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);

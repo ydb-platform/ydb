@@ -165,6 +165,10 @@ NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::st
         bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER;
     } else if (type == "RandomUuid"sv) {
         bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_UUID;
+    } else if (type == "KqpIndexValidationSnapshotStep") {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP;
+    } else if (type == "KqpIndexValidationSnapshotTxId") {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID;
     }
 
     YQL_ENSURE(bindingType != NKqpProto::TKqpPhyInternalBinding::PARAM_UNSPECIFIED,

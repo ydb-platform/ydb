@@ -98,6 +98,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     if (rollbackTx)
         return false;
+    if (physicalQuery.IndexValidationsSize())
+        return true;
     if (!commitTx)
         return true;
 

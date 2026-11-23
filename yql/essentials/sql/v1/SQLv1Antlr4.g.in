@@ -92,6 +92,7 @@ sql_stmt_core:
   | drop_symlink_stmt
   | kill_session_stmt
   | checksum_table_stmt
+  | check_index_stmt
 ;
 
 expr:
@@ -1264,6 +1265,7 @@ analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
 
 checksum_table_stmt: CHECKSUM TABLE simple_table_ref_core with_table_settings?;
+check_index_stmt: CHECK TABLE simple_table_ref_core INDEX an_id;
 
 alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action+;
 alter_sequence_action:

@@ -2276,6 +2276,14 @@ TStatus AnnotateKqpStreamEnumerate(const TExprNode::TPtr& node, TExprContext& ct
     return TStatus::Ok;
 }
 
+TStatus AnnotateIndexValidationSnapshot(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 0, ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->ChildrenSize() != 3 && node->ChildrenSize() != 5) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "FulltextAnalyze requires 3 or 5 arguments"));
@@ -4191,6 +4199,7 @@ public:
         AddHandler({TKqpProgram::CallableName()}, Hndl(&AnnotateKqpProgram));
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
+        AddHandler({"KqpIndexValidationSnapshotStep", "KqpIndexValidationSnapshotTxId"}, Hndl(&AnnotateIndexValidationSnapshot));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
         AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));
         AddHandler({TKqpStreamingAggregation::CallableName()}, Hndl(&TKiTypeAnnotationTransformer::HandleStreamingAggregation));

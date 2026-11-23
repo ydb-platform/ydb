@@ -990,8 +990,24 @@ public:
             return;
         }
 
+        if (QueryState->CheckingIndexValidationResult) {
+            QueryState->CheckingIndexValidationResult = false;
+            if (!QueryState->EnsureTableVersions(*response)) {
+                InvalidateQuery();
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Index schema changed during validation");
+                return;
+            }
+            ReplySuccess();
+            return;
+        }
+
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
+            if (QueryState->IsIndexValidation()) {
+                InvalidateQuery();
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Index schema changed before validation");
+                return;
+            }
             if (QueryState->QueryPhysicalGraph) {
                 // Query recompilation is not allowed with restore physical graph request
                 ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Restore query state failed, table versions are not the same");
@@ -1466,9 +1482,11 @@ public:
     Ydb::Table::TransactionControl GetTxControlWithImplicitTx() {
         if (!QueryState->ImplicitTxId) {
             Ydb::Table::TransactionSettings settings;
-            const auto isolation = QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode() != NKqpProto::ISOLATION_LEVEL_UNDEFINED
-                ? QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode()
-                : [&]() {
+            auto isolation = QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode();
+            if (QueryState->IsIndexValidation()) {
+                isolation = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+            } else if (isolation == NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
+                isolation = [&]() {
                     switch (Settings.TableService.GetDefaultTxMode()) {
                     case NKikimrConfig::TTableServiceConfig::SerializableRW:
                         return NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
@@ -1485,6 +1503,7 @@ public:
                             << "Unknown DefaultTxMode";
                     }
                 }();
+            }
             switch (isolation) {
                 case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
                     settings.mutable_serializable_read_write();
@@ -1538,7 +1557,7 @@ public:
 
     bool PrepareQueryTransaction() {
         const bool hasTxControl = QueryState->HasTxControl();
-        if (hasTxControl || QueryState->HasImplicitTx()) {
+        if (hasTxControl || QueryState->HasImplicitTx() || QueryState->IsIndexValidation()) {
             const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetTxControlWithImplicitTx();
 
             QueryState->Commit = txControl.commit_tx();
@@ -1657,6 +1676,12 @@ public:
     bool PrepareQueryContext() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
+            return false;
+        }
+        if (QueryState->IsIndexValidation()
+            && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO)
+        {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "CHECK TABLE INDEX requires a SnapshotRO transaction");
             return false;
         }
         if (!ApplyMvccVersion()) {
@@ -1882,6 +1907,7 @@ public:
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
             if (Y_LIKELY(queryState->PreparedQuery)) {
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
+                request.BufferResult = queryState->BufferIndexValidationResult();
                 request.AllowTrailingResults = (resultSetsCount == 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
                 request.DisablePessimisticLocks =
@@ -2119,6 +2145,16 @@ public:
         return true;
     }
 
+    void FinishExecution() {
+        if (QueryState->IsIndexValidation()) {
+            QueryState->CheckingIndexValidationResult = true;
+            auto ev = QueryState->BuildNavigateKeySet();
+            Send(MakeSchemeCacheID(), ev.release(), 0, 0, QueryState->KqpSessionSpan.GetTraceId());
+            return;
+        }
+        ReplySuccess();
+    }
+
     void ExecuteOrDefer() {
         bool haveWork = QueryState->PreparedQuery &&
                 QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()
@@ -2133,7 +2169,7 @@ public:
                 ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
                 return;
             }
-            ReplySuccess();
+            FinishExecution();
             return;
         }
 
@@ -2141,6 +2177,15 @@ public:
         if (AdministrativeTerminationReason) {
             ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
             return;
+        }
+
+        if (QueryState->IsIndexValidation()) {
+            const auto snapshot = QueryState->TxCtx->GetSnapshot();
+            if (!snapshot.IsValid()) {
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Index validation snapshot is unavailable");
+                return;
+            }
+            QueryState->QueryData->SetIndexValidationSnapshot(snapshot.Step, snapshot.TxId);
         }
 
         TKqpPhyTxHolder::TConstPtr tx;
@@ -2164,7 +2209,7 @@ public:
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
-            ReplySuccess();
+            FinishExecution();
         }
     }
 
@@ -2287,7 +2332,7 @@ public:
                 literal = false;
             } else if (!tx) {
                 // Commit is no-op
-                ReplySuccess();
+                FinishExecution();
                 return true;
             }
         }
@@ -3109,7 +3154,8 @@ public:
                     if (status == Ydb::StatusIds::SCHEME_ERROR &&
                         executionType != TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme)
                     {
-                        status = Ydb::StatusIds::ABORTED;
+                        status = QueryState->IsIndexValidation()
+                            ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::ABORTED;
                     }
 
                     break;
@@ -3118,8 +3164,8 @@ public:
                     break;
             }
 
-            if (status == Ydb::StatusIds::ABORTED && QueryState->ExternalMvccVersion) {
-                // A new attempt cannot restore a caller-owned snapshot that is no longer readable.
+            if (status == Ydb::StatusIds::ABORTED && (QueryState->ExternalMvccVersion || QueryState->IsIndexValidation())) {
+                // A new attempt cannot restore the snapshot used by these reads.
                 for (const auto& issue : issues) {
                     WalkThroughIssues(issue, false, [&](const TIssue& nested, ui16) {
                         if (nested.GetCode() == TIssuesIds::KIKIMR_PRECONDITION_FAILED) {
@@ -3565,7 +3611,9 @@ public:
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
-                    if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
+                    if (QueryState->BufferIndexValidationResult()
+                        || QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i)))
+                    {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
                             QueryState->GetFormatsSettings(), {});

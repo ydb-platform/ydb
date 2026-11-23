@@ -2361,6 +2361,7 @@ Y_UNIT_TEST(Analyze) {
 Y_UNIT_TEST(ChecksumTable) {
     TCases cases = {
         {"checkSUM table my_table", "CHECKSUM TABLE my_table;\n"},
+        {"check table `/Root/Articles` index `by_payload`", "CHECK TABLE `/Root/Articles` INDEX `by_payload`;\n"},
         {"checksum table plato.`some/path` with(ALGORITHM=\"Sha256\")",
          "CHECKSUM TABLE plato.`some/path` WITH (ALGORITHM = 'Sha256');\n"},
         {"checksum table $table with (algorithm='CityHash128',)",

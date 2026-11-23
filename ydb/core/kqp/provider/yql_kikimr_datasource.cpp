@@ -1,3 +1,4 @@
+#include "check_index.h"
 #include "read_attributes_utils.h"
 #include "rewrite_io_utils.h"
 #include "yql_kikimr_provider_impl.h"
@@ -152,6 +153,24 @@ TExprNode::TPtr RewriteChecksumTable(const TExprNode::TPtr& input, TTypeAnnotati
     return ctx.NewCallable(pos, "Cons!", {ctx.NewCallable(pos, "Left!", {read}), checksum});
 }
 
+constexpr TStringBuf CheckIndexSetting = "checkIndex";
+
+TExprNode::TPtr RewriteCheckIndex(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 4, ctx) || !EnsureAtom(*input->Child(3), ctx)) {
+        return nullptr;
+    }
+    const auto pos = input->Pos();
+    auto setting = ctx.NewList(pos, {ctx.NewAtom(pos, CheckIndexSetting), input->ChildPtr(3)});
+    auto read = ctx.NewCallable(pos, "Read!", {input->ChildPtr(0), input->ChildPtr(1), input->ChildPtr(2),
+        ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, {setting})});
+    ctx.Step.Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+    return read;
+}
+
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
 public:
     TKiSourceIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
@@ -162,6 +181,10 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         if (input->IsCallable(TKiChecksumTable::CallableName())) {
             output = RewriteChecksumTable(input, Types, ctx);
+            return output ? TStatus::Repeat : TStatus::Error;
+        }
+        if (input->IsCallable(TKiCheckIndex::CallableName())) {
+            output = RewriteCheckIndex(input, ctx);
             return output ? TStatus::Repeat : TStatus::Error;
         }
         return TKiSourceVisitorTransformer::DoTransform(input, output, ctx);
@@ -818,7 +841,8 @@ public:
         if (node.IsCallable(TKiReadTable::CallableName()) ||
             node.IsCallable(TKiReadTableScheme::CallableName()) ||
             node.IsCallable(TKiReadTableList::CallableName()) ||
-            node.IsCallable(TKiChecksumTable::CallableName()))
+            node.IsCallable(TKiChecksumTable::CallableName()) ||
+            node.IsCallable(TKiCheckIndex::CallableName()))
         {
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
         }
@@ -927,6 +951,17 @@ public:
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             YQL_ENSURE(tableDesc.Metadata);
+            if (const auto check = read->ChildrenSize() > TKiReadTable::idx_Settings
+                    ? GetSetting(*read->Child(TKiReadTable::idx_Settings), CheckIndexSetting) : nullptr)
+            {
+                if (!EnsureTupleSize(*check, 2, ctx) || !EnsureAtom(*check->Child(1), ctx)) {
+                    return nullptr;
+                }
+                if (node->IsCallable(RightName)) {
+                    return BuildCheckIndex(*read, tableDesc, check->Child(1)->Content(), *SessionCtx, Types, ctx);
+                }
+                return read->ChildPtr(0);
+            }
             if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard &&
                 read->ChildrenSize() > TKiReadTable::idx_Settings)
             {

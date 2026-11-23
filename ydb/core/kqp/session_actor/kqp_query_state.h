@@ -10,6 +10,7 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -76,6 +77,11 @@ public:
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
+        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(
+            AppData()->FeatureFlags.GetDisablePgCompatibility()
+            && !(ev->Get()->IsInternalCall()
+                && ev->Get()->GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && IsAnalyzeRequest(ev->Get()->GetRequestType()))))
         , StartTime(TInstant::Now())
         , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
@@ -185,6 +191,7 @@ public:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
     bool IsWarmupCompilation_ = false;
+    const bool DisablePgCompatibility_;
 
     TInstant StartTime;
     TInstant ContinueTime;
@@ -242,6 +249,10 @@ public:
     i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
+
+    bool GetDisablePgCompatibility() const {
+        return DisablePgCompatibility_;
+    }
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {

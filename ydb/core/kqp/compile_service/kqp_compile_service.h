@@ -7,6 +7,8 @@
 
 #include <util/system/spinlock.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NPathAliasing {
 class TPathNormalizer;
@@ -109,6 +111,7 @@ public:
     TKqpCompileResult::TConstPtr Find(
         const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>& query,
+        bool disablePgCompatibility,
         TKqpTempTablesState::TConstPtr tempTablesState,
         bool promote,
         const NACLib::TSID& userSid,
@@ -143,7 +146,7 @@ public:
     void Clear();
 
 private:
-    TKqpCompileResult::TConstPtr FindByUidImpl(const TString& uid, bool promote);
+    TKqpCompileResult::TConstPtr FindByUidImpl(const TString& uid, bool promote, std::optional<bool> disablePgCompatibility = std::nullopt);
     TKqpCompileResult::TConstPtr FindByQueryImpl(const TKqpQueryId& query, bool promote);
     bool EraseByUidImpl(const TString& uid);
 
@@ -151,6 +154,7 @@ private:
         return Index.size();
     }
 
+    void EraseQueryIndex(const TKqpCompileResult& compileResult);
     void InsertQuery(const TKqpCompileResult::TConstPtr& compileResult);
 
     void DecBytes(ui64 bytes) {

@@ -251,6 +251,7 @@ bool TKqpQueryState::TryGetFromCache(
     auto compileResult = cache.Find(
         uid,
         query,
+        GetDisablePgCompatibility(),
         TempTablesState,
         keepInCache,
         UserToken->GetUserSID(),
@@ -321,7 +322,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
         isQueryActionPrepare, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
-        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks);
+        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks, GetDisablePgCompatibility());
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
@@ -367,7 +368,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
-        false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics());
+        false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics(), GetDisablePgCompatibility());
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -424,7 +425,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(),
-        false, std::move(splitCtx), std::move(compileExpr), false, settings.UsePessimisticLocks);
+        false, std::move(splitCtx), std::move(compileExpr), false, settings.UsePessimisticLocks, GetDisablePgCompatibility());
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {

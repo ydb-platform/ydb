@@ -54,6 +54,7 @@ bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
         UserSid == other.UserSid &&
         Text == other.Text &&
         Settings == other.Settings &&
+        DisablePgCompatibility == other.DisablePgCompatibility &&
         !QueryParameterTypes == !other.QueryParameterTypes &&
         GUCSettings == other.GUCSettings)) {
         return false;
@@ -91,7 +92,8 @@ TString TKqpQueryId::SerializeToString() const {
         << "DatabaseId: " << DatabaseId << ", "
         << "UserSid: " << UserSid << ", "
         << "Text: " << EscapeC(Text) << ", "
-        << "Settings: " << Settings.SerializeToString() << ", ";
+        << "Settings: " << Settings.SerializeToString() << ", "
+        << "DisablePgCompatibility: " << DisablePgCompatibility << ", ";
     if (QueryParameterTypes) {
         result << "QueryParameterTypes: [";
         for (const auto& param : *QueryParameterTypes) {

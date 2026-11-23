@@ -4181,25 +4181,10 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
-        Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
-=======
-        if (CountersPublishingEnabled) {
-            TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
-            Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-                CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
-                FollowerId));
-        }
->>>>>>> 3bb354fc9c0 (LOGBROKER-10828 Fix)
-=======
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
             CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
             FollowerId));
->>>>>>> 9265992f407 (LOGBROKER-10828 Fix)
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);

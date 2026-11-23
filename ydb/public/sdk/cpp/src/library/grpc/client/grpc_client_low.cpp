@@ -198,7 +198,7 @@ void TChannelPool::GetStubsHolderLocked(
 void TChannelPool::DeleteChannel(const std::string& channelId) {
     std::unique_lock writeLock(RWMutex_);
     auto poolIt = Pool_.find(channelId);
-    if (poolIt != Pool_.end()) {
+    if (poolIt != Pool_.end() && !poolIt->second.IsPinned()) {
         EraseFromQueueByTime(poolIt->second.GetLastUseTime(), channelId);
         Pool_.erase(poolIt);
     }
@@ -212,11 +212,18 @@ void TChannelPool::Clear() {
 
 void TChannelPool::DeleteExpiredStubsHolders() {
     std::unique_lock writeLock(RWMutex_);
-    auto lastExpired = LastUsedQueue_.lower_bound(Now() - ExpireTime_);
-    for (auto i = LastUsedQueue_.begin(); i != lastExpired; ++i){
-        Pool_.erase(i->second);
+    const auto now = Now();
+    while (!LastUsedQueue_.empty() && LastUsedQueue_.begin()->first < now - ExpireTime_) {
+        auto entry = LastUsedQueue_.extract(LastUsedQueue_.begin());
+        auto channel = Pool_.find(entry.mapped());
+        if (channel->second.IsPinned()) {
+            channel->second.SetLastUseTime(now);
+            entry.key() = now;
+            LastUsedQueue_.insert(std::move(entry));
+        } else {
+            Pool_.erase(channel);
+        }
     }
-    LastUsedQueue_.erase(LastUsedQueue_.begin(), lastExpired);
 }
 
 void TChannelPool::EraseFromQueueByTime(const TInstant& lastUseTime, const std::string& channelId) {

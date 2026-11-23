@@ -692,6 +692,10 @@ void TGRpcConnectionsImpl::SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConf
 }
 
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
+    return ListEndpoints(std::move(dbState), {});
+}
+
+TAsyncListEndpointsResult TGRpcConnectionsImpl::ListEndpoints(TDbDriverStatePtr dbState, TRpcRequestSettings rpcSettings) {
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
 
@@ -707,7 +711,6 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
             promise.SetValue(std::move(val));
         };
 
-    TRpcRequestSettings rpcSettings;
     rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
     rpcSettings.IncludeObservabilityInBuildInfo = true;
 

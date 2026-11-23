@@ -55,8 +55,20 @@ TDbDriverState::TDbDriverState(
     , Log(Client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    if (DiscoveryMode == EDiscoveryMode::Eds && !Database.empty()
+        && GetBalancingPolicyType() != TBalancingPolicy::TImpl::EPolicyType::UsePreferablePileState) {
+        EndpointPool.EnableWatch();
+    }
+#endif
     EndpointPool.SetStatCollector(StatCollector);
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
+}
+
+TDbDriverState::~TDbDriverState() {
+    if (auto watch = EndpointWatchContext.lock()) {
+        watch->Cancel();
+    }
 }
 
 void TDbDriverState::InitCredentials(
@@ -241,7 +253,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                         ? std::move(credentialsProviderFactory)
                         : CreateInsecureCredentialsProviderFactory());
 
-                if (discoveryMode != EDiscoveryMode::Off) {
+                if (discoveryMode != EDiscoveryMode::Off && !strongState->EndpointPool.UsesWatch()) {
                     DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
                 }
             } catch (...) {
@@ -259,7 +271,9 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         }
     }
 
-    if (strongState->DiscoveryMode != EDiscoveryMode::Off) {
+    if (strongState->EndpointPool.UsesWatch()) {
+        DiscoveryClient_->StartEndpointWatch(strongState);
+    } else if (strongState->DiscoveryMode != EDiscoveryMode::Off) {
         auto updateResult = strongState->EndpointPool.UpdateAsync();
         if (updateResult.second) {
             auto cb = [strongState](const NThreading::TFuture<TEndpointUpdateResult>&) {

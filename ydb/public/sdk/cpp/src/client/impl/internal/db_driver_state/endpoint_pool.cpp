@@ -12,7 +12,89 @@ TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, IInternalC
     , BalancingPolicy_(client->GetBalancingSettings())
 {}
 
+void TEndpointPool::EnableWatch() {
+    UsesWatch_ = true;
+    DiscoveryPromise_ = NThreading::NewPromise<TEndpointUpdateResult>();
+    TransportUpdatePending_ = true;
+}
+
+void TEndpointPool::PauseWatch() {
+    // Close admissions before cancelling established streams to let Topic recovery wait for the destination.
+    {
+        std::lock_guard guard(Mutex_);
+        if (!DiscoveryPromise_.Initialized()) {
+            DiscoveryPromise_ = NThreading::NewPromise<TEndpointUpdateResult>();
+        }
+        TransportUpdatePending_ = true;
+    }
+    auto removed = Install({}, TEndpointElectorSafe::EPenalties::Reset);
+    decltype(WatchStreams_) retiring;
+    {
+        std::lock_guard guard(Mutex_);
+        retiring.swap(WatchStreams_);
+    }
+    for (auto& entry : retiring) {
+        if (auto stream = entry.second.lock()) {
+            stream->Cancel();
+        }
+    }
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    Client_->DeleteChannels(removed);
+#endif
+}
+
+void TEndpointPool::PublishWatchResult(TListEndpointsResult result) {
+    TEndpointUpdateResult update;
+    if (result.DiscoveryStatus.Ok() && result.Result.endpoints().empty()) {
+        result.DiscoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, "Discovery returned an empty endpoint assignment");
+    }
+    update.DiscoveryStatus = std::move(result.DiscoveryStatus);
+    update.Removed = Install(update.DiscoveryStatus.Ok() ? result.Result : Ydb::Discovery::ListEndpointsResult{},
+        TEndpointElectorSafe::EPenalties::Reset);
+    std::vector<NYdbGrpc::IQueueClientContextPtr> cancelled;
+    NThreading::TPromise<TEndpointUpdateResult> promise;
+    {
+        std::lock_guard guard(Mutex_);
+        WatchStatus_ = update.DiscoveryStatus;
+        DiscoveryPromise_.Swap(promise);
+        TransportUpdatePending_ = false;
+        std::erase_if(WatchStreams_, [&](const auto& entry) {
+            auto context = entry.second.lock();
+            if (!context) {
+                return true;
+            }
+            if (!Elector_.GetEndpoint(TEndpointKey(entry.first, 0), true)) {
+                cancelled.push_back(std::move(context));
+                return true;
+            }
+            return false;
+        });
+    }
+    for (const auto& context : cancelled) {
+        context->Cancel();
+    }
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    Client_->DeleteChannels(update.Removed);
+#endif
+    if (promise.Initialized()) {
+        promise.SetValue(std::move(update));
+    }
+}
+
+bool TEndpointPool::RegisterWatchStream(const std::string& endpoint, const NYdbGrpc::IQueueClientContextPtr& context) {
+    std::lock_guard guard(Mutex_);
+    if (TransportUpdatePending_ || !Elector_.GetEndpoint(TEndpointKey(endpoint, 0), true)) {
+        return false;
+    }
+    std::erase_if(WatchStreams_, [](const auto& entry) { return entry.second.expired(); });
+    WatchStreams_.emplace_back(endpoint, context);
+    return true;
+}
+
 TEndpointPool::~TEndpointPool() {
+    if (UsesWatch_) {
+        return;
+    }
     try {
         NThreading::TFuture<TEndpointUpdateResult> future;
         {
@@ -33,6 +115,10 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     NThreading::TFuture<TEndpointUpdateResult> future;
     {
         std::lock_guard guard(Mutex_);
+        if (UsesWatch_) {
+            return {DiscoveryPromise_.Initialized() ? DiscoveryPromise_.GetFuture()
+                : NThreading::MakeFuture(TEndpointUpdateResult{{}, WatchStatus_}), false};
+        }
         if (reason == EUpdateReason::TransportFailure) {
             ++TransportGeneration_;
             TransportUpdatePending_ = true;

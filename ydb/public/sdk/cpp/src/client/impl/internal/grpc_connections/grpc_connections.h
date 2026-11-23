@@ -196,7 +196,13 @@ public:
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         pending = WithPooledChannel(UsesDiscoveredEndpoint<TService>(*dbState, endpointPolicy) ? dbState : nullptr,
-            clientConfig, [&](NYdbGrpc::TStubsHolder& holder) { conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder); });
+            clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
+                conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder);
+                if (dbState->EndpointPool.UsesWatch() && !UsesDiscoveredEndpoint<TService>(*dbState, endpointPolicy)) {
+                    std::lock_guard guard(dbState->BootstrapPinMutex);
+                    dbState->BootstrapPin = holder.Pin();
+                }
+            });
         if (pending.Initialized()) {
             return {nullptr, TEndpointKey{}};
         }
@@ -735,19 +741,30 @@ public:
                         return;
                     }
 
+                    if (dbState->EndpointPool.UsesWatch() && UsesDiscoveredEndpoint<TService>(*dbState, requestSettings.EndpointPolicy)) {
+                        context = context->CreateContext();
+                        if (!context || !dbState->EndpointPool.RegisterWatchStream(endpoint.GetEndpoint(), context)) {
+                            RunStreamCallback(connectedCallback, TPlainStatus(EStatus::UNAVAILABLE, "Endpoint retired before stream start"),
+                                nullptr, DriverScope_);
+                            return;
+                        }
+                    }
+
                     dbState->StatCollector.IncGRpcInFlight();
                     dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                    auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint, policy = requestSettings.EndpointPolicy, driverScope = DriverScope_]
-                        (TGrpcStatus grpcStatus, TProcessor processor) {
+                    auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint, policy = requestSettings.EndpointPolicy, context, driverScope = DriverScope_]
+                        (TGrpcStatus grpcStatus, TProcessor processor) mutable {
                             dbState->StatCollector.DecGRpcInFlight();
                             dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                             if (grpcStatus.Ok()) {
                                 Y_ABORT_UNLESS(processor);
-                                auto finishedCallback = [dbState, endpoint, policy] (TGrpcStatus grpcStatus) {
+                                auto finishedCallback = [weak = std::weak_ptr<TDbDriverState>(dbState), endpoint, policy, context] (TGrpcStatus grpcStatus) {
                                     if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
-                                        OnEndpointError<TService>(dbState, endpoint, policy, grpcStatus);
+                                        if (auto state = weak.lock()) {
+                                            OnEndpointError<TService>(state, endpoint, policy, grpcStatus);
+                                        }
                                     }
                                 };
                                 processor->AddFinishedCallback(std::move(finishedCallback));
@@ -776,7 +793,10 @@ public:
             }, dbState, requestSettings, context);
     }
 
+    void StartEndpointWatch(TDbDriverStatePtr state) override;
+    NThreading::TFuture<void> WatchEndpoints(std::weak_ptr<TDbDriverState> state, IQueueClientContextPtr context);
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
+    TAsyncListEndpointsResult ListEndpoints(TDbDriverStatePtr dbState, TRpcRequestSettings rpcSettings);
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
@@ -869,7 +889,7 @@ private:
                     TEndpointKey{},
                     DriverScope_);
             } else {
-                if (dbState->DiscoveryMode == EDiscoveryMode::Async) {
+                if (dbState->DiscoveryMode == EDiscoveryMode::Async || dbState->DiscoveryMode == EDiscoveryMode::Eds) {
                     int64_t newVal;
                     int64_t val;
                     do {
@@ -896,7 +916,7 @@ private:
                                update, started, refreshing, driverScope = DriverScope_](TWaitResult waitError) mutable {
                     driverScope->RunGuarded(
                         [&] {
-                            if (dbState->DiscoveryMode == EDiscoveryMode::Async) {
+                            if (dbState->DiscoveryMode == EDiscoveryMode::Async || dbState->DiscoveryMode == EDiscoveryMode::Eds) {
                                 --QueuedRequests_;
                             }
                             if (waitError) {
@@ -917,7 +937,10 @@ private:
                                 return;
                             }
                             if (!refreshing) {
-                                if (status.Ok()) {
+                                if (status.Ok() && dbState->EndpointPool.UsesWatch()) {
+                                    callback(TPlainStatus(EStatus::UNAVAILABLE, "No matching endpoint in the current assignment"),
+                                        TConnection{}, TEndpointKey{});
+                                } else if (status.Ok()) {
                                     WithServiceConnection<TService>(std::move(callback), dbState, settings, context);
                                 } else {
                                     callback(TPlainStatus(status.Status, std::move(status.Issues)), TConnection{}, TEndpointKey{});

@@ -5,6 +5,8 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <grpcpp/server_builder.h>
+#include <ydb/public/api/grpc/draft/xds/codec/codec.h>
+#include <ydb/public/api/grpc/draft/xds/eds.grpc.pb.h>
 #if defined(_unix_)
 #include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
 #include <util/network/socket.h>
@@ -150,6 +152,24 @@ namespace {
         TDriver Driver{TDriverConfig().SetEndpoint(Address(DiscoveryPort)).SetDatabase("/Root").SetMaxQueuedRequests(1)};
     };
 
+    class TWatchService : public envoy::service::endpoint::v3::YdbDraft::EndpointDiscoveryService::Service {
+    public:
+        using TStream = grpc::ServerReaderWriter<Ydb::Xds::DiscoveryResponse, Ydb::Xds::DiscoveryRequest>;
+        using THandler = std::function<grpc::Status(grpc::ServerContext*, TStream*)>;
+
+        explicit TWatchService(THandler handler)
+            : Handler(std::move(handler))
+        {}
+
+        grpc::Status StreamEndpoints(grpc::ServerContext* context, TStream* stream) override {
+            ++Attempts;
+            return Handler(context, stream);
+        }
+
+        THandler Handler;
+        std::atomic_uint Attempts = 0;
+    };
+
     class TTableService: public Ydb::Table::V1::TableService::Service {
     public:
         grpc::Status BulkUpsert(grpc::ServerContext*, const Ydb::Table::BulkUpsertRequest*,
@@ -231,6 +251,105 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(EndpointRediscovery) {
+    Y_UNIT_TEST(WatchPermissionDeniedDoesNotFallBackToListEndpoints) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        const auto dataPort = ports.GetPort();
+        TDiscovery discovery(dataPort);
+        TTableService table;
+        auto data = StartServer(dataPort, table);
+        TWatchService eds([](auto*, auto* stream) {
+            Ydb::Xds::DiscoveryRequest request;
+            stream->Read(&request);
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "database access denied");
+        });
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(Address(port), grpc::InsecureServerCredentials());
+        builder.RegisterService(&eds);
+        builder.RegisterService(&discovery);
+        auto bootstrap = builder.BuildAndStart();
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::Eds));
+        NTable::TTableClient client(driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        auto status = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(discovery.Calls.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 0);
+        UNIT_ASSERT(eds.Attempts.load() > 0);
+    }
+
+    Y_UNIT_TEST(WatchFallsBackOnMissingMethod) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        const auto dataPort = ports.GetPort();
+        TDiscovery discovery(dataPort);
+        TTableService table;
+        auto data = StartServer(dataPort, table);
+        auto bootstrap = StartServer(port, discovery);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Eds));
+        NTable::TTableClient client(driver);
+        auto result = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(discovery.Calls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST(IdleWatchReplacesSourceWithoutClosingItsListener) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        const auto sourcePort = ports.GetPort();
+        const auto targetPort = ports.GetPort();
+        TTableService source, target;
+        auto liveSource = StartServer(sourcePort, source);
+        auto liveTarget = StartServer(targetPort, target);
+        auto switched = NThreading::NewPromise<void>();
+        auto acknowledged = NThreading::NewPromise<void>();
+        auto firstAck = NThreading::NewPromise<void>();
+        TWatchService eds([&](auto* context, auto* stream) {
+            Ydb::Xds::DiscoveryRequest request;
+            if (!stream->Read(&request) || request.resource_names_size() != 1 || request.resource_names(0) != "/Root"
+                || request.type_url() != NEds::TypeUrl || !request.version_info().empty() || !request.response_nonce().empty()
+                || !context->client_metadata().contains("x-ydb-database")) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "invalid subscription");
+            }
+            for (const auto member : {sourcePort, targetPort}) {
+                Ydb::Discovery::ListEndpointsResult result;
+                auto* endpoint = result.add_endpoints();
+                endpoint->set_address("127.0.0.1");
+                endpoint->set_port(member);
+                Ydb::Xds::DiscoveryResponse response;
+                NEds::Encode(result, "/Root", ToString(member), "nonce-" + ToString(member), response);
+                if (!stream->Write(response) || !stream->Read(&request) || request.version_info() != response.version_info()
+                    || request.response_nonce() != response.nonce() || request.has_error_detail()) {
+                    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing assignment ACK");
+                }
+                if (member == sourcePort) {
+                    firstAck.TrySetValue();
+                    if (!switched.GetFuture().Wait(TDuration::Seconds(10))) {
+                        return grpc::Status::CANCELLED;
+                    }
+                }
+            }
+            acknowledged.TrySetValue();
+            stream->Read(&request); // driver teardown cancels the idle watch
+            return grpc::Status::OK;
+        });
+        auto bootstrap = StartServer(port, eds);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Eds));
+        NTable::TTableClient client(driver);
+        const auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync(); };
+        UNIT_ASSERT(firstAck.GetFuture().Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(upsert().IsSuccess());
+        switched.SetValue();
+        UNIT_ASSERT(acknowledged.GetFuture().Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(upsert().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(eds.Attempts.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
+    }
+
     Y_UNIT_TEST(BulkUpsertTransportLoss) {
         TSwitch<TTableService> servers;
         NTable::TTableClient client(servers.Driver);

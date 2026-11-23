@@ -38,6 +38,11 @@ public:
         IInternalClient* client
     );
 
+    ~TDbDriverState();
+    std::weak_ptr<NYdbGrpc::IQueueClientContext> EndpointWatchContext;
+    std::mutex BootstrapPinMutex;
+    std::shared_ptr<void> BootstrapPin;
+
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();

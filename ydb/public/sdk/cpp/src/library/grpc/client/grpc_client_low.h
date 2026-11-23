@@ -562,6 +562,19 @@ public:
         }
     }
 
+    std::shared_ptr<void> Pin() {
+        std::unique_lock guard(RWMutex_);
+        if (!Pin_) {
+            Pin_ = std::make_shared<char>();
+        }
+        return Pin_;
+    }
+
+    // Caller holds the channel pool's exclusive lock, excluding Pin().
+    bool IsPinned() const {
+        return Pin_.use_count() > 1;
+    }
+
     const TInstant& GetLastUseTime() const {
         return LastUsed_;
     }
@@ -570,6 +583,7 @@ public:
         LastUsed_ = time;
     }
 private:
+    std::shared_ptr<void> Pin_;
     TInstant LastUsed_ = Now();
     std::shared_mutex RWMutex_;
     std::unordered_map<TypeInfoRef, std::shared_ptr<void>, THasher, TEqualTo> Stubs_;
@@ -1322,6 +1336,9 @@ private:
 
             if (ok) {
                 status = Status;
+                for (const auto& [name, value] : Context.GetServerTrailingMetadata()) {
+                    status.ServerTrailingMetadata.emplace(std::string(name.begin(), name.end()), std::string(value.begin(), value.end()));
+                }
             } else if (Cancelled) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Stream cancelled");
             } else {
@@ -1380,11 +1397,6 @@ private:
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
-                for (const auto& [name, value] : Context.GetServerTrailingMetadata()) {
-                    status.ServerTrailingMetadata.emplace(
-                        std::string(name.begin(), name.end()),
-                        std::string(value.begin(), value.end()));
-                }
             }
             RunGuarded([&] {
                 readCallback(std::move(status));

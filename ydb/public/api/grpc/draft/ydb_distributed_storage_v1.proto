@@ -17,4 +17,10 @@ service DistributedStorageService {
 
     // Starts relocation of a dynamic or static VDisk.
     rpc ReassignVDisk(Ydb.DistributedStorage.ReassignVDiskRequest) returns (Ydb.DistributedStorage.ReassignVDiskResponse);
+
+    // Sets the in-memory target invariant for groups in a storage pool.
+    rpc SetPoolRedundancy(Ydb.DistributedStorage.SetPoolRedundancyRequest) returns (Ydb.DistributedStorage.SetPoolRedundancyResponse);
+
+    // Changes the target availability of one data center in the storage configuration.
+    rpc ChangeDataCenterState(Ydb.DistributedStorage.ChangeDataCenterStateRequest) returns (Ydb.DistributedStorage.ChangeDataCenterStateResponse);
 }

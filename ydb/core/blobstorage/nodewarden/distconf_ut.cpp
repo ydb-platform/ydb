@@ -4472,6 +4472,9 @@ selector_config: []
             SetMetadataDiskGuid(nodeId, *ev);
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
                 TVDiskID disk = VDiskIDFromVDiskID(ev->Get<TEvBlobStorage::TEvVStatus>()->Record.GetVDiskID());
+                if (disk.GroupGeneration == generation + 2) {
+                    return false; // Hold the new INV2 repair at startup confirmation.
+                }
                 UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, generation);
                 if (repair) {
                     ++healthQueries;
@@ -4489,6 +4492,7 @@ selector_config: []
             }
             if (ev->GetTypeRewrite() == TPropose::EventType && ++proposals == 1) {
                 const auto *msg = ev->Get<TPropose>();
+                UNIT_ASSERT(msg->Next.State == TState::DC_FAILURE_INV1);
                 replay = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender,
                     new TPropose(msg->GroupId, msg->Generation, msg->Next), 0, ev->Cookie);
             }
@@ -4515,24 +4519,56 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(proposals, 0);
         replicated = true;
         auto currentGeneration = [&] { return fixture.Metadata(1).GetCommittedStorageConfig().GetGeneration(); };
-        UNIT_ASSERT(SimUntil(runtime, [&] { return currentGeneration() > committed.GetGeneration(); }));
+        UNIT_ASSERT(SimUntil(runtime, [&] { return currentGeneration() == committed.GetGeneration() + 2; }));
         const auto promoted = fixture.Metadata(1).GetCommittedStorageConfig();
         CheckDurableConfigConverges(fixture, promoted);
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
             promoted.GetFingerprint());
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGeneration(), committed.GetGeneration() + 1);
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGeneration(), committed.GetGeneration() + 2);
         const auto& serviceSet = promoted.GetBlobStorageConfig().GetServiceSet();
         const auto& group = serviceSet.GetGroups(0);
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
-        UNIT_ASSERT(group.GetMirror3dcState() == TState::DC_FAILURE_INV1);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 2);
+        UNIT_ASSERT(group.GetMirror3dcState() == TState::DC_FAILURE_INV2_PENDING);
         UNIT_ASSERT(group.GetRings(2).GetState() == TRole::EXCLUDED);
         for (const auto& disk : serviceSet.GetVDisks()) {
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), generation + 1);
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetVDiskID().GetGroupGeneration(), generation + 2);
         }
         UNIT_ASSERT(replay);
         runtime.Send(replay.release(), fixture.Root().NodeId());
         replyRepair(generation);
         UNIT_ASSERT(!SimUntil(runtime, [&] { return currentGeneration() != promoted.GetGeneration(); }, TDuration::Seconds(15)));
+    }
+
+    auto MakeDataCenterChange(const TString& name, bool takeDown, bool dryRun = false) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *change = request->Record.MutableChangeDataCenterState();
+        change->SetName(name);
+        change->SetTakeDown(takeDown);
+        change->SetDryRun(dryRun);
+        return request;
+    }
+
+    Y_UNIT_TEST(DataCenterTakedownDryRunValidatesWithoutApplying) {
+        TCommitConfirmationFixture fixture;
+        fixture.UseMirror3dcGroup();
+        fixture.Start();
+        const TActorId root = fixture.Root();
+        const auto dryRun = InvokeKeeper(fixture.Runtime, root, MakeDataCenterChange("dc-3", true, true));
+        UNIT_ASSERT(!dryRun->Get()->Record.HasAppliedDataCenterStates());
+        const auto unchanged = QueryKeeper(fixture.Runtime, root).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.GetGeneration(), fixture.Config.GetGeneration());
+        UNIT_ASSERT(!unchanged.HasDataCenterStates());
+
+        auto checkRejected = [&](const TString& name, bool takeDown, bool dryRun) {
+            const TActorId client = fixture.Runtime.AllocateEdgeActor(root.NodeId());
+            auto request = MakeDataCenterChange(name, takeDown, dryRun);
+            fixture.Runtime.Send(new IEventHandle(root, client, request.release()), root.NodeId());
+            auto result = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(client);
+            UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        };
+        checkRejected("unknown-dc", true, false);
+        checkRejected("unknown-dc", true, true);
+        checkRejected("dc-3", false, true);
     }
 
     Y_UNIT_TEST(StaticDataCenterOperationWaitsForBscSnapshotAck) {
@@ -4544,6 +4580,7 @@ selector_config: []
         runtime.RegisterService(MakeTabletResolverID(), runtime.Register(new TIgnoreActor, 1));
         TActorId client = runtime.AllocateEdgeActor(1);
         TActorId handler;
+        TActorId controllerPipe;
         NKikimrBlobStorage::TDataCenterStates snapshot;
         ui32 requests = 0;
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
@@ -4568,6 +4605,7 @@ selector_config: []
                 const auto& command = event->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest().GetCommand(0);
                 UNIT_ASSERT(command.HasDefineDataCenterStates());
                 handler = event->Sender;
+                controllerPipe = event->GetRecipientRewrite();
                 snapshot.MutableDataCenter()->CopyFrom(command.GetDefineDataCenterStates().GetDataCenter());
                 ++requests;
                 return false;
@@ -4584,23 +4622,31 @@ selector_config: []
         auto *dc = request->Record.MutableApplyDataCenterStates()->AddDataCenter();
         dc->SetName("dc-3");
         dc->SetState(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
+        dc = request->Record.MutableApplyDataCenterStates()->AddDataCenter();
+        dc->SetName("dc-1");
+        dc->SetState(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
         UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 1 || response; }));
         UNIT_ASSERT_C(!response, response->DebugString());
         UNIT_ASSERT(SimUntil(runtime, [&] {
             return fixture.Metadata(1).GetCommittedStorageConfig().GetDataCenterStates().SerializeAsString() == snapshot.SerializeAsString();
         }));
+        const TActorId firstPipe = controllerPipe;
         acknowledge(false);
-        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 2; }));
+        runtime.Send(new IEventHandle(firstPipe, client, new TEvents::TEvPoisonPill()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 2 || response; }));
         UNIT_ASSERT(!response);
+        UNIT_ASSERT(controllerPipe != firstPipe);
         acknowledge(true);
         UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().SerializeAsString(), snapshot.SerializeAsString());
+        const auto preview = InvokeKeeper(runtime, fixture.Root(), MakeDataCenterChange("dc-3", true, true));
+        UNIT_ASSERT(!preview->Get()->Record.HasAppliedDataCenterStates());
+        UNIT_ASSERT_VALUES_EQUAL(requests, 2);
         response.reset();
         TString previousSnapshot = snapshot.SerializeAsString();
-        request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableApplyDataCenterStates(); // return the pending DC
+        request = MakeDataCenterChange("dc-3", false);
         runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
         UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 3; }));
         UNIT_ASSERT_VALUES_EQUAL(snapshot.SerializeAsString(), previousSnapshot); // first acknowledge the prior snapshot
@@ -4614,7 +4660,23 @@ selector_config: []
         UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
         UNIT_ASSERT_VALUES_EQUAL(ui32(response->GetStatus()), ui32(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK));
         UNIT_ASSERT(response->HasAppliedDataCenterStates());
-        UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().DataCenterSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().GetDataCenter(0).GetName(), "dc-1");
+        UNIT_ASSERT(response->GetAppliedDataCenterStates().GetDataCenter(0).GetState() == NKikimrBlobStorage::TDataCenterState::INCLUDED);
+
+        // A retried rejoin still waits for BSC, without proposing a second generation.
+        ui64 generation = QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration();
+        response.reset();
+        request = MakeDataCenterChange("dc-3", false);
+        runtime.Send(new IEventHandle(fixture.Root(), client, request.release()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return requests == 5 || response; }));
+        UNIT_ASSERT(!response);
+        acknowledge(true);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+        UNIT_ASSERT(response->HasAppliedDataCenterStates());
+        UNIT_ASSERT_VALUES_EQUAL(response->GetAppliedDataCenterStates().SerializeAsString(), snapshot.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), generation);
     }
 
     Y_UNIT_TEST(UpdateConfigCannotPromoteStaticMirror3dcGroup) {

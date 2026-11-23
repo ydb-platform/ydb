@@ -415,6 +415,13 @@ message TEvNodeConfigInvokeOnRoot {
         bool SkipBscValidation = 1;
     }
 
+    // Update one entry in the current DC policy at the root, preserving other entries.
+    message TChangeDataCenterState {
+        string Name = 1;
+        optional bool TakeDown = 2;
+        bool DryRun = 3; // validate takedown without committing or reconciling the policy
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -447,6 +454,7 @@ message TEvNodeConfigInvokeOnRoot {
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
         TRollbackBridge RollbackBridge = 33;
         TDataCenterStates ApplyDataCenterStates = 34;
+        TChangeDataCenterState ChangeDataCenterState = 35;
     }
 }
 

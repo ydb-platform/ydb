@@ -10,5 +10,7 @@ namespace NKikimr::NGRpcService {
 
     void DoStreamStorageState(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
     void DoReassignVDisk(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoSetPoolRedundancy(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoChangeDataCenterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
 } // namespace NKikimr::NGRpcService

@@ -1,3 +1,4 @@
+* Added `ydb admin storage datacenter takedown` and `rejoin` to set the target availability of a data center selected with `--datacenter-name`. Use `takedown --dry-run` to validate the policy change without applying it.
 * Added support for exporting table data in Apache Parquet format with the `ydb export s3` command. Added the `--file-format` option to select the data file format and `--parquet-row-group-size` to set the number of rows per Parquet row group.
 * `ydb operation get` displays returned operation data even when the operation status indicates failure, while retaining a nonzero exit code. When metadata is unavailable, pretty output shows only common operation fields.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.

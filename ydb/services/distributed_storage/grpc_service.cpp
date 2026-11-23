@@ -39,6 +39,8 @@ void TDistributedStorageGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr 
                                EEmptyDatabaseMode::EmptyDatabaseAllowed, COMMON, ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,
                                GRpcRequestProxyId_, CQ_, nullptr, nullptr);
     SETUP_DISTRIBUTED_STORAGE_METHOD(ReassignVDisk, DoReassignVDisk, RLMODE(Rps), DISTRIBUTED_STORAGE_REASSIGNVDISK, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_DISTRIBUTED_STORAGE_METHOD(SetPoolRedundancy, DoSetPoolRedundancy, RLMODE(Rps), DISTRIBUTED_STORAGE_SETPOOLREDUNDANCY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_DISTRIBUTED_STORAGE_METHOD(ChangeDataCenterState, DoChangeDataCenterState, RLMODE(Rps), DISTRIBUTED_STORAGE_CHANGEDATACENTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #undef SETUP_DISTRIBUTED_STORAGE_METHOD
 }

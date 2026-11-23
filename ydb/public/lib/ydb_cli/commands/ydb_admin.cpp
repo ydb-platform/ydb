@@ -119,7 +119,7 @@ TCommandAdmin::TCommandAdmin()
                          NDynamicConfig::TCommandFlagsOverrides{.Dangerous = false, .OnlyExplicitProfile = false},
                          false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());
-    AddHiddenCommand(std::make_unique<NStorageConfig::TCommandStorageConfig>(false));
+    AddCommand(std::make_unique<NStorageConfig::TCommandStorageConfig>(false));
     AddCommand(std::make_unique<NCluster::TCommandCluster>());
     AddCommand(std::make_unique<TCommandNode>());
     AddCommand(std::make_unique<TCommandDatabase>());

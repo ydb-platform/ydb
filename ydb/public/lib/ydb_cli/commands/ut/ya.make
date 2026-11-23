@@ -8,6 +8,7 @@ PEERDIR(
 SRCS(
     bridge_ut.cpp
     cluster_ut.cpp
+    storage_datacenter_ut.cpp
     oidc_credentials_ut.cpp
     completion_ut.cpp
 )

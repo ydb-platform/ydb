@@ -113,6 +113,8 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
 
     {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
     {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},
+    {"DistributedStorage.SetPoolRedundancy", ERequestType::DISTRIBUTED_STORAGE_SETPOOLREDUNDANCY},
+    {"DistributedStorage.ChangeDataCenterState", ERequestType::DISTRIBUTED_STORAGE_CHANGEDATACENTERSTATE},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

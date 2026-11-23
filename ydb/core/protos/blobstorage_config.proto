@@ -748,6 +748,13 @@ message TDefineDataCenterStates {
     repeated TDataCenterStates.TDataCenter DataCenter = 1;
 }
 
+// In-memory target for ordinary mirror-3-dc groups in this pool.
+message TSetPoolRedundancy {
+    string PoolName = 1;
+    uint32 TargetInvariant = 2;
+    optional uint32 ExpectedGeneration = 3;
+}
+
 // Clear the states and publish a new generation of every dynamic mirror-3-dc group (test use only).
 // Set the persisted group state and physical realm roles; IgnoreGroupFailModelChecks bypasses transition validation.
 message TDefineGroupState {
@@ -820,6 +827,7 @@ message TConfigRequest {
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
             TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
+            TSetPoolRedundancy SetPoolRedundancy = 68;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

@@ -1,0 +1,8 @@
+[Unit]
+Description=Map the test stand's dedicated partitions to nine PDisks
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/ydb-dc/pdisks.env
+ExecStart=/usr/bin/python3 -I /opt/ydb/dc-admin/map_pdisks.py ${PDISK_SECTORS} $PARTUUIDS

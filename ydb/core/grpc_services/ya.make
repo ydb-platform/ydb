@@ -192,6 +192,7 @@ PEERDIR(
     ydb/core/backup/common
     ydb/core/backup/regexp
     ydb/core/base
+    ydb/core/blobstorage/base
     ydb/core/control/lib
     ydb/core/counters_info
     ydb/core/discovery

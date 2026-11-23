@@ -166,6 +166,7 @@ namespace NKikimr::NStorage {
         static constexpr ui64 DataCenterTimeoutCookie = 4;
         TMonotonic DataCenterReconciliationDeadline;
         bool DataCenterPreflight = false;
+        bool DataCenterRetryScheduled = false;
         bool WaitingForConfigValidation = false;
 
         TActorId ControllerPipeId;
@@ -254,8 +255,9 @@ namespace NKikimr::NStorage {
 
         void AdvanceGeneration();
         void StartDataCenterReconciliation();
+        void RetryDataCenterReconciliation();
         void SendDataCenterSnapshot();
-        void ApplyDataCenterStates(const NKikimrBlobStorage::TDataCenterStates& command);
+        void ApplyDataCenterStates(const TQuery& command);
         void PromoteStaticGroup(const TPromoteStaticGroup& op);
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);

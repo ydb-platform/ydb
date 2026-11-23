@@ -266,6 +266,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
         if (ev->Cookie == DataCenterRetryCookie) {
+            DataCenterRetryScheduled = false;
             if (DataCenterReconciliationDeadline) {
                 SendDataCenterSnapshot();
             }
@@ -768,12 +769,21 @@ namespace NKikimr::NStorage {
         DataCenterReconciliationDeadline = TActivationContext::Monotonic() + TDuration::Minutes(10);
         TActivationContext::Schedule(DataCenterReconciliationDeadline, new IEventHandle(TEvents::TSystem::Wakeup, 0,
             SelfId(), {}, nullptr, DataCenterTimeoutCookie));
-        ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
-            NTabletPipe::TClientRetryPolicy::WithRetries()));
         SendDataCenterSnapshot();
     }
 
+    void TInvokeRequestHandlerActor::RetryDataCenterReconciliation() {
+        if (!std::exchange(DataCenterRetryScheduled, true)) {
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                SelfId(), {}, nullptr, DataCenterRetryCookie));
+        }
+    }
+
     void TInvokeRequestHandlerActor::SendDataCenterSnapshot() {
+        if (!ControllerPipeId) {
+            ControllerPipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(),
+                NTabletPipe::TClientRetryPolicy::WithRetries()));
+        }
         auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto *command = request->Record.MutableRequest()->AddCommand()->MutableDefineDataCenterStates();
         command->MutableDataCenter()->CopyFrom(Self->StorageConfig->GetDataCenterStates().GetDataCenter());
@@ -805,6 +815,9 @@ namespace NKikimr::NStorage {
 
         if (msg.Status != NKikimrProto::OK) {
             ControllerPipeId = {};
+            if (DataCenterReconciliationDeadline && !DataCenterPreflight) {
+                return RetryDataCenterReconciliation();
+            }
             throw TExError() << "Failed to connect to BSC with " << msg.Status;
         }
     }
@@ -821,6 +834,9 @@ namespace NKikimr::NStorage {
             {"serverId", msg.ServerId});
 
         ControllerPipeId = {};
+        if (DataCenterReconciliationDeadline && !DataCenterPreflight) {
+            return RetryDataCenterReconciliation();
+        }
         throw TExError() << "Pipe to BSC disconnected";
     }
 
@@ -849,9 +865,7 @@ namespace NKikimr::NStorage {
         const auto& response = ev->Get()->Record.GetResponse();
         if (DataCenterReconciliationDeadline) {
             if (!response.GetSuccess()) {
-                TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
-                    SelfId(), {}, nullptr, DataCenterRetryCookie));
-                return;
+                return RetryDataCenterReconciliation();
             }
             std::expected<TDataCenterStates, TString> applied = ParseDataCenterStates(response.GetAppliedDataCenterStates());
             std::expected<TDataCenterStates, TString> desired = ParseDataCenterStates(Self->StorageConfig->GetDataCenterStates());

@@ -10,7 +10,12 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
-#include <grpcpp/grpcpp.h>
+#include <grpcpp/channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
+#include <grpcpp/support/channel_arguments.h>
+#include <grpcpp/support/status.h>
 
 #include <chrono>
 #include <format>

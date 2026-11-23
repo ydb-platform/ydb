@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
 
 #include <util/stream/output.h>
-#include <util/string/printf.h>
+#include <util/stream/str.h>
 
 #include <tuple>
 

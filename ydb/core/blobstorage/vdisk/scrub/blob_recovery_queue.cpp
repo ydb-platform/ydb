@@ -1,5 +1,6 @@
 #include "blob_recovery_impl.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
@@ -47,6 +48,8 @@ namespace NKikimr {
             Send(queue.QueueActorId, ev->Get()->Clone());
         }
         Info = ev->Get()->NewInfo;
+        // The read fail model can change without a queue reconnecting.
+        EvaluateConnectionQuorum();
     }
 
     void TBlobRecoveryActor::Handle(TEvProxyQueueState::TPtr ev) {
@@ -69,7 +72,9 @@ namespace NKikimr {
                 connected |= {&Info->GetTopology(), vdiskId};
             }
         }
-        IsConnected = Info->GetQuorumChecker().CheckFailModelForGroup(~connected);
+        IsConnected = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            ? TMirror3dcWriteQuorumChecker::CheckReadFailModelForGroup(*Info, ~connected)
+            : Info->GetQuorumChecker().CheckFailModelForGroup(~connected);
         if (IsConnected) {
             SendPendingQueries();
         }

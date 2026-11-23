@@ -197,9 +197,7 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         NKikimrBlobStorage::TPDiskFilter proto;
         proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
         proto.AddProperty()->SetKind(7);
-        auto legacy = TFilter::Parse(7, 11, proto);
-        legacy.SerializedFilter.Clear();
-        f.Update({}, {legacy});
+        f.Update({}, {TFilter::Parse(7, 11, proto)}); // Legacy table.
         f.InsertV2(proto.SerializeAsString()); // V2 without Location still has to be deleted from V2.
         proto.MutableProperty()->SwapElements(0, 1);
         f.InsertV2(proto.SerializeAsString());
@@ -210,7 +208,7 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT(f.V2Keys().empty());
     }
 
-    Y_UNIT_TEST(LegacyFiltersCanBeReadAndRewrittenInV2) {
+    Y_UNIT_TEST(LegacyReadAndWriteAfterUpgrade) {
         TFixture f;
         f.Transaction([&] {
             f.Db.Materialize<TLegacySchema>();
@@ -222,26 +220,39 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         UNIT_ASSERT_VALUES_EQUAL(f.Database.GetScheme().GetTableInfo(122)->KeyColumns.size(), 6);
 
         auto original = MakeFilter(NKikimrBlobStorage::ROT);
-        original.SerializedFilter.Clear();
         original.SharedWithOs = false;
         original.ReadCentric = true;
         original.Kind = 3;
         const TFilters oldFilters{original};
         CheckFilters(f.Load(7, 11), oldFilters);
 
-        // Reapplying the pool configuration replaces the legacy row with the full protobuf in V2.
-        NKikimrBlobStorage::TPDiskFilter proto;
-        TBlobStorageController::Serialize(&proto, *f.Load(7, 11).begin());
-        const auto rewritten = TFilter::Parse(7, 11, proto);
+        // A current controller writes a filter with nullable key fields. The old
+        // reader must see it, and its prefix scan must not abort after upgrade.
         const auto added = MakeFilter(NKikimrBlobStorage::SSD);
-        const TFilters newFilters{rewritten, added};
+        const TFilters newFilters{original, added};
         f.Update(oldFilters, newFilters);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 2);
-        CheckFilters(f.Load(7, 11), newFilters);
+        f.Transaction([&] {
+            f.Db.Materialize<TLegacySchema>();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 2);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
+
+        // Stable can change the filters after downgrade; a subsequent upgrade
+        // must read those changes, rather than resurrecting a separate copy.
+        f.Transaction([&] {
+            f.Db.Table<TLegacyTable>().Key(7, 11, i32(NKikimrBlobStorage::ROT), false, true, 3).Delete();
+            f.Db.Table<TLegacyTable>().Key(7, 11, i32(NKikimrBlobStorage::ROT), true, false, 5).Update();
+        });
+        original.SharedWithOs = true;
+        original.ReadCentric = false;
+        original.Kind = 5;
+        f.Transaction([&] {
+            f.Db.Materialize<Schema>();
+        });
+        CheckFilters(f.Load(7, 11), {original, added});
     }
 
-    Y_UNIT_TEST(FiltersPersistThroughUpdatesAndPoolMoves) {
+    Y_UNIT_TEST(LocationFiltersPersistAndSwitchTables) {
         TFixture f;
         f.Transaction([&] {
             f.Db.Materialize<Schema>();
@@ -254,8 +265,8 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         const TFilters all{unrestricted, dc1, dc2, emptyDataCenter};
         f.Update({}, all);
         CheckFilters(f.Load(7, 11), all);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 4);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 3);
 
         const TFilters located{dc1, dc2};
         f.Update(all, located);
@@ -265,8 +276,8 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
         const TFilters plain{unrestricted};
         f.Update(f.Load(7, 11), plain);
         CheckFilters(f.Load(7, 11), plain);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<Schema::BoxStoragePoolPDiskFilterV2>(7, 11), 0);
 
         f.Update(plain, located);
         CheckFilters(f.Load(7, 11), located);

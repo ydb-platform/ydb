@@ -1616,7 +1616,11 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TPDiskFilter did not specify Type property";
             }
 
-            filter.SerializedFilter = serialized ? *serialized : proto.SerializeAsString();
+            // Keep plain filters readable by pre-V2 builds. Loaded V2 rows must retain their original keys.
+            if (serialized || filter.Location || filter.HasUnknownRequiredProperty
+                    || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
+                filter.SerializedFilter = serialized ? *serialized : proto.SerializeAsString();
+            }
             return filter;
         }
 

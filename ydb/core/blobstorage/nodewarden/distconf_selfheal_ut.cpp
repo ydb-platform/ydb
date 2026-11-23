@@ -39,11 +39,16 @@ void CheckReassignCancellation(ui32 phase) {
     }
 
     // UnbecomeRoot and a superseding selfheal request cancel this actor with
-    // Poison. It must die quietly, including after applying the replacement
-    // while its final timer is still pending.
+    // Poison. It must give the caller its only reply, an error, as nothing
+    // else replies to the request, and die, including after applying the
+    // replacement while its final timer is still pending.
     runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPoison), 1);
     runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPing,
         IEventHandle::FlagTrackDelivery), 1);
+    auto result = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRootResult>(edge, false);
+    UNIT_ASSERT_C(result->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+        result->Get()->Record.DebugString());
+    UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 123);
     auto undelivered = runtime.WaitForEdgeActorEvent<TEvents::TEvUndelivered>(edge);
     UNIT_ASSERT_VALUES_EQUAL(undelivered->Get()->SourceType, TEvents::TEvPing::EventType);
     UNIT_ASSERT_VALUES_EQUAL(undelivered->Get()->Reason, TEvents::TEvUndelivered::ReasonActorUnknown);
@@ -285,6 +290,10 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
         setup.ExpectRequest(true);
         setup.ReplyOK();
         setup.Runtime.Send(new IEventHandle(setup.Selfheal, setup.Client, new TEvents::TEvPoison), 1);
+        const auto result = setup.Runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRootResult>(setup.Client, false);
+        UNIT_ASSERT_C(result->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 42);
         setup.Runtime.Schedule(TDuration::Seconds(3),
             new IEventHandle(setup.NodeWarden, setup.Client, new TEvents::TEvWakeup), nullptr, 1);
         setup.Runtime.WaitForEdgeActorEvent<TEvents::TEvWakeup>(setup.NodeWarden);

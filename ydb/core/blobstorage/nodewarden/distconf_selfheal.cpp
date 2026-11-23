@@ -180,11 +180,12 @@ namespace NKikimr::NStorage {
 
     TStateStorageSelfhealActor::TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
         , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig,
-        bool prepareCurrentConfig)
+        bool prepareCurrentConfig, TActorId sessionId)
         : WaitForConfigStep(waitForConfigStep > TDuration::Seconds(0) && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
         , StateStorageReconfigurationStep(NONE)
         , Sender(sender)
         , Cookie(cookie)
+        , SessionId(sessionId)
         , CurrentConfig(currentConfig)
         , TargetConfig(targetConfig)
         , PrepareCurrentConfig(prepareCurrentConfig)
@@ -271,7 +272,11 @@ namespace NKikimr::NStorage {
         if (!errorReason.empty()) {
             record->SetErrorReason(errorReason);
         }
-        TActivationContext::Send(new IEventHandle(Sender, SelfId(), ev.release(), 0, Cookie));
+        auto handle = std::make_unique<IEventHandle>(Sender, SelfId(), ev.release(), 0, Cookie);
+        if (SessionId) {
+            handle->Rewrite(TEvInterconnect::EvForward, SessionId);
+        }
+        TActivationContext::Send(handle.release());
         PassAway();
     }
 
@@ -328,17 +333,19 @@ namespace NKikimr::NStorage {
 
     STFUNC(TStateStorageSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
-            cFunc(TEvents::TSystem::Poison, PassAway);
+            // the newer self-heal stops this one; the caller waits for its only reply
+            cFunc(TEvents::TSystem::Poison, [this] { Finish(TResult::ERROR, "superseded by a newer self-heal"); });
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )
     }
 
     TStateStorageReassignNodeSelfhealActor::TStateStorageReassignNodeSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
-        , ui32 nodeFrom, ui32 nodeTo, bool needReconfigSS, bool needReconfigSSB, bool needReconfigSB)
+        , ui32 nodeFrom, ui32 nodeTo, bool needReconfigSS, bool needReconfigSSB, bool needReconfigSB, TActorId sessionId)
         : WaitForConfigStep(waitForConfigStep > TDuration::Seconds(0) && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
         , Sender(sender)
         , Cookie(cookie)
+        , SessionId(sessionId)
         , NodeFrom(nodeFrom)
         , NodeTo(nodeTo)
         , NeedReconfigSS(needReconfigSS)
@@ -375,7 +382,11 @@ namespace NKikimr::NStorage {
         if (!errorReason.empty()) {
             record->SetErrorReason(errorReason);
         }
-        TActivationContext::Send(new IEventHandle(Sender, SelfId(), ev.release(), 0, Cookie));
+        auto handle = std::make_unique<IEventHandle>(Sender, SelfId(), ev.release(), 0, Cookie);
+        if (SessionId) {
+            handle->Rewrite(TEvInterconnect::EvForward, SessionId);
+        }
+        TActivationContext::Send(handle.release());
         PassAway();
     }
 
@@ -408,7 +419,8 @@ namespace NKikimr::NStorage {
 
     STFUNC(TStateStorageReassignNodeSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
-            cFunc(TEvents::TSystem::Poison, PassAway);
+            // the newer self-heal stops this one; the caller waits for its only reply
+            cFunc(TEvents::TSystem::Poison, [this] { Finish(TResult::ERROR, "superseded by a newer self-heal"); });
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )

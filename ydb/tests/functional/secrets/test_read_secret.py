@@ -33,6 +33,13 @@ def stub(ydb_endpoint):
         yield ydb_secret_v1_pb2_grpc.SecretServiceStub(channel)
 
 
+@pytest.fixture
+def driver(ydb_client, ydb_database):
+    admin_driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+    admin_driver.wait(timeout=10)
+    return admin_driver
+
+
 def create_secret_with_private_acl(driver, path, value, owner):
     with ydb.QuerySessionPool(driver) as pool:
         pool.execute_with_retries(f"CREATE SECRET `{path}` WITH (value = '{value}')")
@@ -41,8 +48,7 @@ def create_secret_with_private_acl(driver, path, value, owner):
     driver.scheme_client.modify_permissions(path, permissions)
 
 
-def test_read_requires_use_on_database_root(stub, ydb_database, ydb_client):
-    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+def test_read_requires_use_on_database_root(stub, ydb_database, driver):
     driver.scheme_client.modify_permissions(
         ydb_database,
         ydb.ModifyPermissionsSettings().grant_permissions(USER, ["ydb.database.connect"]),
@@ -59,12 +65,12 @@ def test_read_requires_use_on_database_root(stub, ydb_database, ydb_client):
             assert not operation.HasField("result")
 
 
-def test_cluster_administrator_without_database_use_cannot_read(stub, ydb_database, ydb_client):
-    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+def test_cluster_administrator_without_database_use_cannot_read(stub, ydb_database, driver):
     path = f"{ydb_database}/secret"
     create_secret_with_private_acl(driver, path, "test-value", ADMIN)
     root_acl = ydb.ModifyPermissionsSettings().clear_permissions().change_owner(USER)
-    root_acl.grant_permissions(ADMIN, ["ydb.database.connect", DESCRIBE_SCHEMA])
+    # The ydb_database fixture drops the database as ADMIN after this test.
+    root_acl.grant_permissions(ADMIN, ["ydb.database.connect", "ydb.database.drop", DESCRIBE_SCHEMA])
     root_acl.to_pb().interrupt_inheritance = True
     driver.scheme_client.modify_permissions(ydb_database, root_acl)
 
@@ -74,8 +80,7 @@ def test_cluster_administrator_without_database_use_cannot_read(stub, ydb_databa
     assert not denied.HasField("result")
 
 
-def test_admin_read_rejects_missing_secret_and_directory(stub, ydb_database, ydb_client):
-    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+def test_admin_read_rejects_missing_secret_and_directory(stub, ydb_database, driver):
     directory = f"{ydb_database}/directory"
     driver.scheme_client.make_directory(directory)
     for path in (f"{ydb_database}/missing", directory, "/Root/another_database/secret"):
@@ -91,8 +96,7 @@ def test_admin_read_rejects_missing_secret_and_directory(stub, ydb_database, ydb
 
 
 @pytest.mark.parametrize("value", ["test-value", ""])
-def test_database_use_requires_describe_schema(stub, ydb_database, ydb_client, value):
-    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+def test_database_use_requires_describe_schema(stub, ydb_database, driver, value):
     path = f"{ydb_database}/secret"
     create_secret_with_private_acl(driver, path, value, ADMIN)
     driver.scheme_client.modify_permissions(
@@ -112,8 +116,7 @@ def test_database_use_requires_describe_schema(stub, ydb_database, ydb_client, v
     assert result.value == value.encode()
 
 
-def test_describe_schema_is_checked_per_secret_and_after_revoke(stub, ydb_database, ydb_client):
-    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+def test_describe_schema_is_checked_per_secret_and_after_revoke(stub, ydb_database, driver):
     first, second = f"{ydb_database}/first", f"{ydb_database}/second"
     create_secret_with_private_acl(driver, first, "first-value", USER)
     create_secret_with_private_acl(driver, second, "second-value", USER)
@@ -143,8 +146,7 @@ def test_describe_schema_is_checked_per_secret_and_after_revoke(stub, ydb_databa
     assert not after_revoke.HasField("result")
 
 
-def test_read_rechecks_database_use_after_revoke(stub, ydb_database, ydb_client):
-    driver = ydb_client(ydb_database, credentials=ydb.AuthTokenCredentials(ADMIN))
+def test_read_rechecks_database_use_after_revoke(stub, ydb_database, driver):
     path = f"{ydb_database}/secret"
     create_secret_with_private_acl(driver, path, "test-value", ADMIN)
     driver.scheme_client.modify_permissions(

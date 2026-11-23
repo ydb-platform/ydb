@@ -108,6 +108,7 @@ class TestYmqActionAudit(get_test_with_sqs_tenant_installation(YandexCloudSqsTes
             headers['X-Request-Id'] = request_id
             if forwarded_for is not None:
                 headers['X-Forwarded-For'] = f'{forwarded_for}, 198.51.100.7'
+                # Internal context names sent as HTTP headers must also be ignored.
                 headers['sourceAddress'] = forwarded_for
                 headers['auditRemoteAddress'] = forwarded_for
                 headers['peerName'] = forwarded_for

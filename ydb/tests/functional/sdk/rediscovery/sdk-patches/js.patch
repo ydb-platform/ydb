@@ -347,10 +347,10 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  		channels: new Map(),
  		pinnedChannels: new Map(),
 diff --git a/packages/core/src/endpoints/endpoints-state.test.ts b/packages/core/src/endpoints/endpoints-state.test.ts
-index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf33852fb3367 100644
+index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..09ac9c488e2f7c93eaf706c01d09b27a8d2db6d9 100644
 --- a/packages/core/src/endpoints/endpoints-state.test.ts
 +++ b/packages/core/src/endpoints/endpoints-state.test.ts
-@@ -170,6 +170,49 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
+@@ -170,6 +170,47 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
  	expect(h.ctx.byNodeId.get(2n)!.subState).toBe('retired')
  })
  
@@ -369,7 +369,7 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf338
 +	])
 +})
 +
-+test('replacement of the whole watched assignment closes direct pins from the previous cluster', () => {
++test('same-generation gateway replacement preserves a direct pin until the replica switches', () => {
 +	let h = toReady([ep(1)])
 +	step(h, {
 +		type: 'endpoints.pin',
@@ -389,19 +389,17 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf338
 +		pileStates: [],
 +		authoritative: true,
 +	})
++	expect(h.ctx.pinned.has(99n)).toBe(true)
++	step(h, { type: 'endpoints.discovery.watch_lost' })
 +	expect(h.ctx.pinned.size).toBe(0)
-+	expect(h.effects).toContainEqual({
-+		type: 'endpoints.effect.close_channel',
-+		nodeId: 99n,
-+		store: 'pinned',
-+	})
++	expect(h.effects).toContainEqual({ type: 'endpoints.effect.close_channel', nodeId: 99n })
 +})
 +
  test('a reappearing retired node is revived in place, never closed', () => {
  	let h = toReady([ep(1), ep(2)])
  	step(h, round([ep(1)])) // node 2 retired
 diff --git a/packages/core/src/endpoints/endpoints-state.ts b/packages/core/src/endpoints/endpoints-state.ts
-index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4ccc64b6c32 100644
+index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802ca8ecb3c 100644
 --- a/packages/core/src/endpoints/endpoints-state.ts
 +++ b/packages/core/src/endpoints/endpoints-state.ts
 @@ -154,8 +154,10 @@ export type TimerRef = { which: TimerName }
@@ -415,7 +413,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  			endpoints: DiscoveredEndpoint[]
  			selfLocation: string
  			pileStates: PileState[]
-@@ -384,14 +386,35 @@ let rejectEmptyRound = function rejectEmptyRound(
+@@ -384,9 +386,12 @@ let rejectEmptyRound = function rejectEmptyRound(
  // from `computeRoundDiff`; the loop below only mutates the registry.
  let applyRound = function applyRound(
  	ctx: EndpointsCtx,
@@ -431,30 +429,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  	runtime: EndpointsTransitionRuntime
  ): EndpointsEffect[] {
  	let { added, retired } = computeRoundDiff(ctx.byNodeId, endpoints)
- 	let effects: EndpointsEffect[] = []
- 
-+	if (authoritative && ctx.pinned.size && ctx.byNodeId.size) {
-+		let addresses = new Map(endpoints.map((ep) => [ep.nodeId, `${ep.host}:${ep.port}`]))
-+		let overlaps = endpoints.some(
-+			(ep) => ctx.byNodeId.get(ep.nodeId)?.address === addresses.get(ep.nodeId)
-+		)
-+		for (let id of ctx.pinned.keys()) {
-+			let previous = ctx.byNodeId.get(id)
-+			if (!overlaps || (previous && previous.address !== addresses.get(id))) {
-+				ctx.pinned.delete(id)
-+				effects.push({
-+					type: 'endpoints.effect.close_channel',
-+					nodeId: id,
-+					store: 'pinned',
-+				})
-+			}
-+		}
-+	}
-+
- 	// Mutate: add new entries, revive retired, un-ban pessimized, refresh dial info.
- 	for (let ep of endpoints) {
- 		let existing = ctx.byNodeId.get(ep.nodeId)
-@@ -441,10 +464,18 @@ let applyRound = function applyRound(
+@@ -441,10 +446,18 @@ let applyRound = function applyRound(
  		}
  	}
  
@@ -476,7 +451,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  	}
  
  	// Emit the add/retire outputs from the single-sourced diff.
-@@ -614,6 +645,18 @@ export let endpointsTransition = function endpointsTransition(
+@@ -614,6 +627,18 @@ export let endpointsTransition = function endpointsTransition(
  		return terminate(ctx, new Error('Endpoints closed'), runtime)
  	}
  
@@ -495,7 +470,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  	if (state !== 'closed' && event.type === 'endpoints.invalidate') {
  		return applyInvalidate(ctx, event.nodeId, runtime)
  	}
-@@ -637,13 +680,7 @@ export let endpointsTransition = function endpointsTransition(
+@@ -637,13 +662,7 @@ export let endpointsTransition = function endpointsTransition(
  			switch (event.type) {
  				case 'endpoints.discovery.round_succeeded': {
  					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
@@ -510,7 +485,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  					effects.push({
  						type: 'endpoints.effect.timer.schedule',
  						which: 'discovery_interval',
-@@ -687,13 +724,7 @@ export let endpointsTransition = function endpointsTransition(
+@@ -687,13 +706,7 @@ export let endpointsTransition = function endpointsTransition(
  					// would retire every node and black-hole balanced RPCs until the
  					// next interval while the state still reads 'ready'.
  					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)

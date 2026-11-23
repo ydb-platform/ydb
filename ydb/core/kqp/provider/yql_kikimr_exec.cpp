@@ -2171,12 +2171,6 @@ public:
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
-                                    if (!IsLiteralDefaultValue(constraint.Value().Cast())) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                            "Column addition with a DEFAULT expression is not supported"));
-                                        return SyncError();
-                                    }
-
                                     columnBuild->SetColumnName(TString(columnName));
                                     auto err = FillLiteralProto(constraint.Value().Cast(), actualType, *columnBuild->mutable_default_from_literal());
                                     if (err) {

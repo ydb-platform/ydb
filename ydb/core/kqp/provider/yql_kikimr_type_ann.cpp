@@ -993,7 +993,7 @@ namespace {
     }
 
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
-        TCoNameValueTuple constraint, bool& needEval, bool isAddColumn = false)
+        TCoNameValueTuple constraint, bool& needEval, const TExprNode* defaultSource, bool isAddColumn = false)
     {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
@@ -1009,7 +1009,6 @@ namespace {
 
             // Preserve the existing constant folding before checking for a literal.
             // Nonconstant expressions must stay unevaluated, including during coercion.
-            const TExprNode* defaultSource = FindDefaultSourceConstraint(columnTuple);
             const bool preserveSourceExpression = defaultSource && ShouldPreserveDefaultExpression(constrValue);
 
             if (auto status = ValidateDefaultColumn(type, defaultType, constraint.Value().Cast(), constraint.Pos(),
@@ -1775,9 +1774,10 @@ private:
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                const auto* defaultSource = FindDefaultSourceConstraint(columnTuple);
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, defaultSource)) {
                         return TStatus::Error;
                     }
 
@@ -2522,9 +2522,12 @@ private:
                     columnMeta.Name = name;
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                        const auto* defaultSource = SessionCtx->Config().FeatureFlags.GetEnableDefaultFromExpression()
+                            ? FindDefaultSourceConstraint(columnTuple)
+                            : nullptr;
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, /* isAddColumn */ true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, defaultSource, /* isAddColumn */ true)) {
                                 return TStatus::Error;
                             }
 

@@ -226,7 +226,8 @@ Y_UNIT_TEST_SUITE(ScrubFast) {
         env.Sim(TDuration::Seconds(10));
         const auto info = env.GetGroupInfo(groupId);
         UNIT_ASSERT_GT(info->GroupGeneration, initialInfo->GroupGeneration);
-        UNIT_ASSERT_VALUES_EQUAL(info->GetMirror3dcState().State, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info->GetMirror3dcState().State),
+            static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2));
 
         const auto [nodeId, pdiskId, slotId] = DecomposeVDiskServiceId(target);
         const auto& pdisk = env.PDiskMockStates.at({nodeId, pdiskId});

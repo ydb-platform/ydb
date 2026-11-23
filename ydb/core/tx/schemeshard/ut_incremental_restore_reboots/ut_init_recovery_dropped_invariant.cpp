@@ -1057,16 +1057,51 @@ Y_UNIT_TEST_SUITE(TInitRecoveryDroppedInvariantTests) {
             )
         )", restoreId, QuoteMiniKQLString(progress.SerializeAsString()).c_str()));
         WriteRestoreItem(runtime, restoreId, 42);
-        TBlockEvents<TEvPrivate::TEvProgressIncrementalRestore> blocked(runtime);
+        TVector<TEvPrivate::TEvProgressIncrementalRestore::TPtr> blocked;
+        IEventHandle* unblockedProgress = nullptr;
+        ui32 blockedProgressCount = 0;
+        // Scheduled progress has no sender; TBlockEvents tries to resolve its
+        // actor name when logging and cannot capture these timer events.
+        auto progressObserver = runtime.AddObserver<TEvPrivate::TEvProgressIncrementalRestore>(
+            [&](TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev) {
+                if (ev.Get() == unblockedProgress) {
+                    unblockedProgress = nullptr;
+                    return;
+                }
+                ++blockedProgressCount;
+                blocked.emplace_back(std::move(ev));
+            });
         const bool removed = terminal && allReported;
         for (ui32 reboot = 0; reboot != 2; ++reboot) {
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
             CheckRestoreRows(runtime, restoreId, removed ? 0 : 1, removed ? 0 : 1, 0);
+            if (reboot == 0 && unexpectedSuccess && !terminal) {
+                runtime.WaitFor("recovered restore progress", [&] { return !blocked.empty(); });
+                auto progress = std::move(blocked.back());
+                blocked.pop_back();
+                unblockedProgress = progress.Get();
+                const auto blockedBefore = blockedProgressCount;
+                const auto nodeIdx = progress->GetRecipientRewrite().NodeId() - runtime.GetFirstNodeId();
+                runtime.Send(progress.Release(), nodeIdx, /* viaActorSystem */ true);
+                // The next tick proves recovered progress ran before the reboot.
+                // Keep that tick blocked while shard 43 is unanswered.
+                runtime.WaitFor("next restore progress tick", [&] {
+                    return !unblockedProgress && blockedProgressCount > blockedBefore;
+                });
+            }
             runtime.RunCall([&] {
                 UNIT_ASSERT_VALUES_EQUAL(ss->IncrementalRestoreOperationToState.contains(childId), !removed);
                 UNIT_ASSERT_VALUES_EQUAL(ss->TxIdToIncrementalRestore.contains(childId.GetTxId()), !removed);
                 if (!removed) {
-                    UNIT_ASSERT(!ss->IncrementalRestoreStates.at(restoreId).CompletedOperations.contains(childId));
+                    const auto& state = ss->IncrementalRestoreStates.at(restoreId);
+                    UNIT_ASSERT(!state.CompletedOperations.contains(childId));
+                    UNIT_ASSERT(state.InProgressOperations.contains(childId));
+                    if (unexpectedSuccess) {
+                        const auto& child = state.TableOperations.at(childId);
+                        UNIT_ASSERT(child.ExpectedShards.contains(TShardIdx(TTestTxConfig::SchemeShard, 43)));
+                        UNIT_ASSERT(!child.CompletedShards.contains(TShardIdx(TTestTxConfig::SchemeShard, 43)));
+                        UNIT_ASSERT(!child.FailedShards.contains(TShardIdx(TTestTxConfig::SchemeShard, 43)));
+                    }
                 }
                 return true;
             });

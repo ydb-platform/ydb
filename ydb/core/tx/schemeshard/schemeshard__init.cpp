@@ -6166,15 +6166,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             for (ui64 localId : protoOp.GetFailedShardLocalIds()) {
                                 tableOp.FailedShards.insert(TShardIdx(ssTablet, localId));
                             }
-                            // Equal reply counts do not prove that every expected
-                            // shard answered: legacy rows may contain unexpected IDs.
-                            bool isComplete = !tableOp.ExpectedShards.empty() && !tableOp.HasFailures();
-                            for (const auto& shard : tableOp.ExpectedShards) {
-                                if (!tableOp.CompletedShards.contains(shard)) {
-                                    isComplete = false;
-                                    break;
-                                }
-                            }
+                            const bool isComplete = tableOp.AllShardsComplete() && !tableOp.HasFailures();
                             if (isComplete) {
                                 state.CompletedOperations.insert(subOpId);
                             } else {
@@ -6807,13 +6799,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return true;
                 }
                 const auto* tableOp = state->TableOperations.FindPtr(childId);
-                if (!tableOp || tableOp->ExpectedShards.empty()) {
+                if (!tableOp || !tableOp->AllShardsComplete()) {
                     return true;
-                }
-                for (const auto& shard : tableOp->ExpectedShards) {
-                    if (!tableOp->CompletedShards.contains(shard) && !tableOp->FailedShards.contains(shard)) {
-                        return true;
-                    }
                 }
             }
         }

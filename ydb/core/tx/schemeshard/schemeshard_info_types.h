@@ -4420,8 +4420,16 @@ struct TIncrementalRestoreState {
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
         bool AllShardsComplete() const {
-            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
-                    !ExpectedShards.empty();
+            if (ExpectedShards.empty()) {
+                return false;
+            }
+            // Unexpected or overlapping replies cannot replace a missing expected shard.
+            for (const auto& shard : ExpectedShards) {
+                if (!CompletedShards.contains(shard) && !FailedShards.contains(shard)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         bool HasFailures() const {

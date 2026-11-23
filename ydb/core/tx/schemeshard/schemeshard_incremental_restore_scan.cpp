@@ -383,12 +383,7 @@ private:
 
             if (isPathA) {
                 const auto& tableOp = tableOpIt->second;
-                const size_t recordedShards =
-                    tableOp.CompletedShards.size() + tableOp.FailedShards.size();
-                const bool allShardsReported = recordedShards >= tableOp.ExpectedShards.size()
-                    && !tableOp.ExpectedShards.empty();
-
-                if (!allShardsReported) {
+                if (!tableOp.AllShardsComplete()) {
                     stillInProgress.insert(opId);
                     continue;
                 }
@@ -440,7 +435,7 @@ private:
                             const auto& tableOp = tableOpIt->second;
                             const size_t recordedShards =
                                 tableOp.CompletedShards.size() + tableOp.FailedShards.size();
-                            if (recordedShards < tableOp.ExpectedShards.size()) {
+                            if (!tableOp.ExpectedShards.empty() && !tableOp.AllShardsComplete()) {
                                 YDB_LOG_WARN_CTX(ctx, "Sub-op exited Operations with incomplete shard results recorded; treating as failure",
                                     {"opId", opId},
                                     {"recordedShards", recordedShards},

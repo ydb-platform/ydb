@@ -165,25 +165,32 @@ Y_UNIT_TEST_SUITE(CdcZstdCompression) {
         UNIT_ASSERT_VALUES_EQUAL(heartbeatChunk.GetCodec(), 0);
     }
 
-    Y_UNIT_TEST(SharedContextMatchesOneShotFrame) {
+    Y_UNIT_TEST(ThreadLocalContextMatchesOneShotFrame) {
         const auto table = MakeTable();
         const auto record = MakeRecord(
             TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(MakeValueBytes(2048)).SerializeAsString());
         const auto raw = RawJson(*record);
-        const auto expected = ReferenceCompress(raw, DefaultCdcZstdCompressionLevel);
+        const auto fast = ReferenceCompress(raw, DefaultCdcZstdCompressionLevel);
+        const auto level3 = ReferenceCompress(raw, 3);
+        UNIT_ASSERT_VALUES_UNEQUAL(fast, level3);
 
-        auto opts = JsonOpts(NKikimrSchemeOp::ECdcStreamCompressionZstd);
-        opts.ZstdContext = MakeIntrusive<TCdcZstdContext>();
-        std::unique_ptr<IChangeRecordSerializer> first(CreateChangeRecordSerializer(opts));
-        std::unique_ptr<IChangeRecordSerializer> second(CreateChangeRecordSerializer(opts));
-        for (auto* serializer : {first.get(), second.get()}) {
+        // Both serializers run on this thread and therefore share its context.
+        // Switching the level and compressing again must still match a fresh frame.
+        std::unique_ptr<IChangeRecordSerializer> first(CreateChangeRecordSerializer(JsonOpts(
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)));
+        std::unique_ptr<IChangeRecordSerializer> second(CreateChangeRecordSerializer(JsonOpts(
+            NKikimrSchemeOp::ECdcStreamCompressionZstd, 3)));
+        const auto check = [&](IChangeRecordSerializer& serializer, const TString& expected) {
             TCmdWrite cmd;
-            serializer->Serialize(cmd, *record);
+            serializer.Serialize(cmd, *record);
             UNIT_ASSERT_VALUES_EQUAL(cmd.GetUncompressedSize(), static_cast<i32>(raw.size()));
             const auto chunk = ParseChunk(cmd.GetData());
             UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
             UNIT_ASSERT_VALUES_EQUAL(chunk.GetData(), expected);
-        }
+        };
+        check(*first, fast);
+        check(*second, level3);
+        check(*first, fast);
     }
 
     Y_UNIT_TEST(ExplicitLevelOverridesDefault) {

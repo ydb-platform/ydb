@@ -38,14 +38,16 @@
 
 namespace NKikimr::NDataShard {
 
-struct TCdcZstdContext::TState {
+namespace {
+
+struct TCdcThreadZstdContext {
     struct TFreeZstdContext {
         static void Destroy(ZSTD_CCtx* context) noexcept {
             ZSTD_freeCCtx(context);
         }
     };
 
-    ZSTD_CCtx* Get() const {
+    ZSTD_CCtx* Get() {
         if (!Context) {
             Context.Reset(ZSTD_createCCtx());
             Y_ENSURE(Context, "Cannot allocate zstd compression context");
@@ -53,20 +55,25 @@ struct TCdcZstdContext::TState {
         return Context.Get();
     }
 
-    mutable THolder<ZSTD_CCtx, TFreeZstdContext> Context;
+    size_t Compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int level) {
+        const size_t written = ZSTD_compressCCtx(Get(), dst, dstCapacity, src, srcSize, level);
+        Y_ENSURE(!ZSTD_isError(written), "zstd compress failed: " << ZSTD_getErrorName(written));
+        return written;
+    }
+
+    THolder<ZSTD_CCtx, TFreeZstdContext> Context;
 };
 
-TCdcZstdContext::TCdcZstdContext()
-    : State(new TState)
-{}
-
-TCdcZstdContext::~TCdcZstdContext() = default;
-
-size_t TCdcZstdContext::Compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int level) const {
-    const size_t written = ZSTD_compressCCtx(State->Get(), dst, dstCapacity, src, srcSize, level);
-    Y_ENSURE(!ZSTD_isError(written), "zstd compress failed: " << ZSTD_getErrorName(written));
-    return written;
+// One context per OS thread. A mailbox can move between executor workers, so
+// this address must not be stored on a serializer. ZSTD_compressCCtx starts a
+// new frame and resets parameters on every call. The context is created on the
+// first payload that is actually compressed on this thread.
+TCdcThreadZstdContext& ThreadZstdContext() {
+    static thread_local TCdcThreadZstdContext context;
+    return context;
 }
+
+} // namespace
 
 class TBaseSerializer: public IChangeRecordSerializer {
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
@@ -136,8 +143,7 @@ public:
 
 protected:
     // Creating a zstd context repeats CPU feature detection, which dominates
-    // short CDC rows. The sender shares one context; a serializer without one
-    // keeps a private context for tests.
+    // short CDC rows. Every serializer on this OS thread reuses one context.
     void SetCompressedPayload(NKikimrPQClient::TDataChunk& data, TString payload) const {
         switch (Opts.Compression) {
         case NKikimrSchemeOp::ECdcStreamCompressionNone:
@@ -151,7 +157,7 @@ protected:
             const size_t bound = ZSTD_compressBound(payload.size());
             Y_ENSURE(!ZSTD_isError(bound), "zstd compress bound failed: " << ZSTD_getErrorName(bound));
             TString compressed = TString::Uninitialized(bound);
-            const size_t written = CompressionContext().Compress(
+            const size_t written = ThreadZstdContext().Compress(
                 compressed.begin(), compressed.size(),
                 payload.data(), payload.size(),
                 ResolvedCompressionLevel());
@@ -196,17 +202,6 @@ private:
         return appData->DataShardConfig.GetCdcZstdMinPayloadBytes();
     }
 
-    TCdcZstdContext& CompressionContext() const {
-        if (Opts.ZstdContext) {
-            return *Opts.ZstdContext;
-        }
-        if (!PrivateContext) {
-            PrivateContext = MakeIntrusive<TCdcZstdContext>();
-        }
-        return *PrivateContext;
-    }
-
-    mutable TCdcZstdContext::TPtr PrivateContext;
     mutable TMaybe<ui32> PendingUncompressedSize;
 
 }; // TBaseSerializer

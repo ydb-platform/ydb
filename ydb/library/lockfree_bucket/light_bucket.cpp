@@ -10,11 +10,6 @@ namespace {
 constexpr ui64 NsPerSecond = 1'000'000'000;
 
 static_assert(std::atomic<ui64>::is_always_lock_free && std::atomic<i64>::is_always_lock_free);
-static_assert(std::atomic_ref<ui64>::is_always_lock_free && std::atomic_ref<i64>::is_always_lock_free);
-
-i64 CapacityLimit(ui64 capacity) {
-    return static_cast<i64>(std::min<ui64>(capacity, std::numeric_limits<i64>::max()));
-}
 
 struct TUpdate {
     i64 Balance;
@@ -29,7 +24,7 @@ ui64 SaturateToUi64(double value) {
     return static_cast<ui64>(value);
 }
 
-TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, ui64 volume,
+TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, double rate, i64 capacity, ui64 volume,
         TLockFreeLightBucket::EDebtLimit debtLimit) {
     i64 minBalance = std::numeric_limits<i64>::min();
     if (debtLimit == TLockFreeLightBucket::EDebtLimit::TwiceCapacity && capacity <= std::numeric_limits<i64>::max() / 2) {
@@ -37,7 +32,7 @@ TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, 
     }
     // A lower capacity can forgive some of the debt at the start of this interval.
     previousBalance = std::max(previousBalance, minBalance);
-    const ui64 refill = SaturateToUi64(static_cast<double>(elapsedNs) * static_cast<double>(rate) / NsPerSecond);
+    const ui64 refill = SaturateToUi64(static_cast<double>(elapsedNs) * rate / NsPerSecond);
 
     i64 replenishedBalance;
     if (__builtin_add_overflow(previousBalance, refill, &replenishedBalance) || replenishedBalance > capacity) {
@@ -50,7 +45,7 @@ TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, 
         redNs = elapsedNs;
     } else if (previousBalance < 0) {
         // Refill reached zero, so the rate is positive.
-        const double recoveryNs = -static_cast<double>(previousBalance) * NsPerSecond / static_cast<double>(rate);
+        const double recoveryNs = -static_cast<double>(previousBalance) * NsPerSecond / rate;
         redNs = std::min(elapsedNs, SaturateToUi64(std::ceil(recoveryNs)));
     }
 
@@ -62,6 +57,26 @@ TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, 
 }
 
 } // namespace
+
+ui64 TLockFreeLightBucket::TFullState::ElapsedTicks(ui64 now) const {
+    return std::max(now, Timestamp) - Timestamp;
+}
+
+ui32 TLockFreeLightBucket::TCompactState::ElapsedTicks(ui32 now) const {
+    // Unsigned subtraction handles a wrap. Within half a cycle, a larger delta is a stale reading.
+    const ui32 elapsed = now - Timestamp;
+    if (elapsed > std::numeric_limits<i32>::max()) {
+        return 0;
+    }
+    return elapsed;
+}
+
+i64 TLockFreeLightBucket::CapacityLimit(ui64 capacity) {
+    if constexpr (HasFullState) {
+        return static_cast<i64>(std::min<ui64>(capacity, std::numeric_limits<i64>::max()));
+    }
+    return static_cast<i64>(std::min<ui64>(capacity / TCompactState::Scale, std::numeric_limits<i32>::max()));
+}
 
 ui64 TLockFreeLightBucket::NowNs() const {
     if (TimeProvider) {
@@ -76,52 +91,50 @@ TLockFreeLightBucket::TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSec
     , DebtLimit(debtLimit)
     , Capacity(CapacityLimit(capacityLimit))
     , Rate(volumePerSecond)
-    , State{CapacityLimit(capacityLimit), NowNs()}
-{}
+{
+    if constexpr (HasFullState) {
+        FullState = {CapacityLimit(capacityLimit), NowNs()};
+    } else {
+        CompactState = {static_cast<i32>(CapacityLimit(capacityLimit)), static_cast<ui32>(NowNs() / TCompactState::Scale)};
+    }
+}
 
-void TLockFreeLightBucket::Take(ui64 volume) {
-    const ui64 nowNs = NowNs();
+template<class TState>
+void TLockFreeLightBucket::Update(TState& storage, ui64 volume) {
+    using TTimestamp = decltype(TState::Timestamp);
+    using TBalance = decltype(TState::Balance);
     // Reading a new setting acquires the setter's preceding Take(0).
     // The balance CAS orders withdrawals by its own modification order. The
     // additive counters publish no other data and can be sampled independently.
-    const auto calculate = [&](i64 balance, ui64 elapsedNs) {
-        return Calculate(balance, elapsedNs, Rate.load(std::memory_order_acquire),
-            Capacity.load(std::memory_order_acquire), volume, DebtLimit);
-    };
-
+    const ui64 withdrawal = volume / TState::Scale;
+    const std::atomic_ref<TState> state(storage);
+    TState previous = state.load(std::memory_order_acquire);
+    TState next;
     TUpdate update;
     ui64 elapsedNs;
-    if constexpr (std::atomic_ref<TState>::is_always_lock_free) {
-        const std::atomic_ref<TState> state(State);
-        TState previous = state.load(std::memory_order_acquire);
-        TState next;
-        do {
-            next.TimestampNs = std::max(previous.TimestampNs, nowNs);
-            elapsedNs = next.TimestampNs - previous.TimestampNs;
-            update = calculate(previous.Balance, elapsedNs);
-            next.Balance = update.Balance;
-        } while (!state.compare_exchange_weak(previous, next, std::memory_order_release, std::memory_order_acquire));
-    } else {
-        // Claim each interval once. A stalled writer may apply its refill and
-        // withdrawal out of timestamp order, but never holds up other writers.
-        const std::atomic_ref<ui64> timestamp(State.TimestampNs);
-        ui64 fromNs = timestamp.load(std::memory_order_acquire);
-        while (fromNs < nowNs && !timestamp.compare_exchange_weak(fromNs, nowNs,
-                std::memory_order_release, std::memory_order_acquire)) {
-        }
-        elapsedNs = std::max(fromNs, nowNs) - fromNs;
-        const std::atomic_ref<i64> balance(State.Balance);
-        i64 previous = balance.load(std::memory_order_acquire);
-        update = calculate(previous, elapsedNs);
-        // A competing write wins the balance. We still own the elapsed interval.
-        balance.compare_exchange_strong(previous, update.Balance, std::memory_order_release, std::memory_order_acquire);
-    }
+    do {
+        const TTimestamp now = static_cast<TTimestamp>(NowNs() / TState::Scale);
+        const TTimestamp elapsed = previous.ElapsedTicks(now);
+        next.Timestamp = previous.Timestamp + elapsed;
+        elapsedNs = static_cast<ui64>(elapsed) * TState::Scale;
+        const double rate = static_cast<double>(Rate.load(std::memory_order_acquire)) / TState::Scale;
+        update = Calculate(previous.Balance, elapsedNs, rate, Capacity.load(std::memory_order_acquire), withdrawal, DebtLimit);
+        next.Balance = static_cast<TBalance>(std::max<i64>(update.Balance, std::numeric_limits<TBalance>::min()));
+    } while (!state.compare_exchange_weak(previous, next, std::memory_order_release, std::memory_order_acquire));
 
     if (update.RedNs > 0) {
         RedNs.fetch_add(update.RedNs, std::memory_order_relaxed);
     }
     if (elapsedNs > update.RedNs) {
         GreenNs.fetch_add(elapsedNs - update.RedNs, std::memory_order_relaxed);
+    }
+}
+
+void TLockFreeLightBucket::Take(ui64 volume) {
+    if constexpr (HasFullState) {
+        Update(FullState, volume);
+    } else {
+        Update(CompactState, volume);
     }
 }
 

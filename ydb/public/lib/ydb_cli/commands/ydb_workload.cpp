@@ -24,6 +24,7 @@
 #include <ydb/library/workload/vector/vector.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -448,8 +449,11 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
     settings.NotExistsIsOk(true);
     settings.CreateProgressBar(true);
     for (const auto& path : pathsToDelete) {
+        if (NormalizePath("/" + TString(path)).empty()) {
+            throw TMisuseException() << "Cannot remove the database root";
+        }
         Cout << "Remove path " << path << "..."  << Endl;
-        auto fullPath = config.Database + "/" + path.c_str();
+        auto fullPath = config.Database.StartsWith('/') ? config.Database + "/" + path.c_str() : TString(path);
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
@@ -462,10 +466,12 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
 
 void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
     path.RNextTok('/');
-    if (!path) {
+    if (!path || NormalizePath("/" + TString(path)).empty()) {
         return;
     }
-    auto fullPath = std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend());
+    auto fullPath = config.Database.StartsWith('/')
+        ? std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend())
+        : std::string(path.cbegin(), path.cend());
     auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
     if (lsResult.IsSuccess() && lsResult.GetChildren().empty() && lsResult.GetEntry().Type == NScheme::ESchemeEntryType::Directory) {
         Cout << "Folder " << path << " is empty, remove it..." << Endl;

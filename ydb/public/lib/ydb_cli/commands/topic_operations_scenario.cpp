@@ -153,7 +153,7 @@ void TTopicOperationsScenario::DropTable(const TString& database, const TString&
 {
     NTable::TTableClient client(*Driver);
     auto session = GetSession(client);
-    auto result = session.DropTable(database + "/" + table).GetValueSync();
+    auto result = session.DropTable(database.StartsWith('/') ? database + "/" + table : table).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 

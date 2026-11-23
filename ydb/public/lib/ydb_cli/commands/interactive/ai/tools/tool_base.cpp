@@ -54,11 +54,14 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
 
 TDatabaseToolBase::TDatabaseToolBase(const TString& database, const NJson::TJsonValue& parametersSchema, const TString& description)
     : TBase(parametersSchema, description)
-    , Database(CanonizeYdbPath(database))
+    , Database(database.StartsWith('/') ? CanonizeYdbPath(database) : database)
 {}
 
 TString TDatabaseToolBase::CanonizePath(const TString& path) const {
     auto result = Strip(path);
+    if (!Database.StartsWith('/')) {
+        return result.empty() ? "." : TString(result);
+    }
     auto canonical = CanonizeYdbPath(result);
     if (!result.StartsWith('/') || !canonical.StartsWith(Database)) {
         // If path starts with '/' but not with Database prefix, assume it is relative to Database.

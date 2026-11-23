@@ -1597,7 +1597,7 @@ namespace NKikimr::NBsController {
                             throw TExError() << "Location already set";
                         }
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
-                            throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
+                            throw TExError() << "Location requires current string fields; legacy numeric fields are not supported";
                         }
                         // An empty location imposes no matching constraint.
                         if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {

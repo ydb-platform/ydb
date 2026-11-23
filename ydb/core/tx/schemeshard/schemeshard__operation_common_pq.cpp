@@ -501,7 +501,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        bootstrapConfig = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context) ? BuildKeyRangeCdcBootstrapConfig(*table, context) : BuildRangelessCdcBootstrapConfig(*table, context);
+        bootstrapConfig = IsKeyRangeHeartbeatsStream(topicPath.Parent().Base()->PathId, context)
+            ? BuildKeyRangeCdcBootstrapConfig(*table, context)
+            : BuildRangelessCdcBootstrapConfig(*table, context);
     }
 
     // Common parts of the pass, shared by all shard messages by refcount

@@ -23,14 +23,18 @@ index d587624005d2a63f9f069a61d3e9452901895f2f..7dfde467d7cc70c9e0475349978bf79a
       - Credentials instance. Falls back to :class:`~ydb.AnonymousCredentials` if ``None``.
 diff --git a/ydb/_long_poll.py b/ydb/_long_poll.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..6c119c8605d4ed5c50b36e5e935630709a1c3c6e
+index 0000000000000000000000000000000000000000..fc8cdf1c9675b5994f455ee33141fcd7b50b8c0f
 --- /dev/null
 +++ b/ydb/_long_poll.py
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,92 @@
 +"""Conditional ListEndpoints on the driver's bootstrap channel."""
 +
++import asyncio
 +import threading
++from contextlib import contextmanager
 +from itertools import cycle
++
++import grpc
 +
 +from . import _apis, connection, resolver
 +from .aio import connection as aio_connection
@@ -44,6 +48,7 @@ index 0000000000000000000000000000000000000000..6c119c8605d4ed5c50b36e5e93563070
 +        self.alternates = cycle(alternates + [config.endpoint]) if alternates else None
 +        self.generation = None
 +        self.active = None
++        self.refresh_pending = False
 +        self.lock = threading.Lock()
 +
 +    def next_bootstrap(self):
@@ -52,7 +57,7 @@ index 0000000000000000000000000000000000000000..6c119c8605d4ed5c50b36e5e93563070
 +    def options(self):
 +        headers = [("x-ydb-discovery-long-poll", "1")]
 +        timeout = self.config.discovery_request_timeout
-+        if self.generation is not None:
++        if self.generation is not None and not self.refresh_pending:
 +            headers.append(("x-ydb-if-route-generation", str(self.generation)))
 +            timeout = max(45, timeout)
 +        return headers, timeout
@@ -74,34 +79,46 @@ index 0000000000000000000000000000000000000000..6c119c8605d4ed5c50b36e5e93563070
 +            if self.active is not None:
 +                self.active.cancel()
 +
-+    def poll(self, stopped):
-+        headers, timeout = self.options()
-+        meta = connection._construct_metadata(self.config, None) + headers
++    def refresh(self):
++        with self.lock:
++            self.refresh_pending = True
++            if self.active is not None and self.active.cancel():
++                self.active = None
++
++    @contextmanager
++    def _request(self, rpc, metadata, stopped):
 +        with self.lock:
 +            if stopped():
 +                raise RuntimeError("Driver stopped")
-+            self.active = _apis.DiscoveryService.Stub(self.bootstrap._channel).ListEndpoints.future(
-+                resolver._list_endpoints_request_factory(self.config), metadata=meta, timeout=timeout
++            headers, timeout = self.options()
++            self.refresh_pending = False
++            self.active = call = rpc(
++                resolver._list_endpoints_request_factory(self.config), metadata=metadata + headers, timeout=timeout
 +            )
-+            call = self.active
 +        try:
-+            return self.result(call.result(), call.initial_metadata(), call.trailing_metadata())
++            yield call
++        except (grpc.FutureCancelledError, asyncio.CancelledError):
++            # Only refresh() clears an active RPC after successfully cancelling it.
++            with self.lock:
++                if self.active is call or stopped():
++                    raise
 +        finally:
 +            with self.lock:
 +                self.active = None
 +
++    def poll(self, stopped):
++        while True:
++            metadata = connection._construct_metadata(self.config, None)
++            rpc = _apis.DiscoveryService.Stub(self.bootstrap._channel).ListEndpoints.future
++            with self._request(rpc, metadata, stopped) as call:
++                return self.result(call.result(), call.initial_metadata(), call.trailing_metadata())
++
 +    async def poll_async(self, stopped):
-+        headers, timeout = self.options()
-+        meta = await aio_connection._construct_metadata(self.config, None) + headers
-+        if stopped():
-+            raise RuntimeError("Driver stopped")
-+        self.active = call = _apis.DiscoveryService.Stub(self.bootstrap._channel).ListEndpoints(
-+            resolver._list_endpoints_request_factory(self.config), metadata=meta, timeout=timeout
-+        )
-+        try:
-+            return self.result(await call, await call.initial_metadata(), await call.trailing_metadata())
-+        finally:
-+            self.active = None
++        while True:
++            metadata = await aio_connection._construct_metadata(self.config, None)
++            rpc = _apis.DiscoveryService.Stub(self.bootstrap._channel).ListEndpoints
++            with self._request(rpc, metadata, stopped) as call:
++                return self.result(await call, await call.initial_metadata(), await call.trailing_metadata())
 diff --git a/ydb/_topic_reader/topic_reader_asyncio.py b/ydb/_topic_reader/topic_reader_asyncio.py
 index 74e9bca7fddc0bb7c471106a260856a937e7d871..f056bb42f2a4082d0e76d83fa409cf9f285efcc6 100644
 --- a/ydb/_topic_reader/topic_reader_asyncio.py
@@ -359,7 +376,7 @@ index e5875f2dbc002b13cab509926005a0d604d17bec..a75233cc2cc21745627c0f5075934162
      async def _dispatch_loop(self, stream):
          while not self._closed and self._stream is stream:
 diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
-index 150274368d9238a9969df34306c6142c6b40f4e4..b965eb7d6a7cdb51da9e4791063c492775ca84dc 100644
+index 150274368d9238a9969df34306c6142c6b40f4e4..7ffb64127bf0cd3af645cde9e6800138c1a9e55b 100644
 --- a/ydb/aio/pool.py
 +++ b/ydb/aio/pool.py
 @@ -81,7 +81,10 @@ class ConnectionsCache(_ConnectionsCache):
@@ -387,7 +404,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..b965eb7d6a7cdb51da9e4791063c4927
  
      def notify_disconnected(self) -> None:
 +        if self._watch:
-+            self._watch.cancel()
++            self._watch.refresh()
          self._wake_up_event.set()
  
      def _emergency_retry_interval(self) -> float:
@@ -488,16 +505,27 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..b965eb7d6a7cdb51da9e4791063c4927
          try:
              await asyncio.wait_for(self._discovery_task, timeout=timeout)
          except asyncio.TimeoutError:
-@@ -305,6 +365,8 @@ class ConnectionPool(IConnectionPool):
+@@ -305,9 +365,16 @@ class ConnectionPool(IConnectionPool):
  
      def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
          async def __wrapper__() -> None:
-+            if self._driver_config.use_long_poll and not self._store.start_draining(connection):
-+                return
-             await connection.close()
-             if self._discovery:
-                 self._discovery.notify_disconnected()
-@@ -352,7 +414,7 @@ class ConnectionPool(IConnectionPool):
+-            await connection.close()
+-            if self._discovery:
+-                self._discovery.notify_disconnected()
++            if self._driver_config.use_long_poll:
++                if not self._store.start_draining(connection):
++                    return
++                if self._discovery:
++                    self._discovery.notify_disconnected()
++                await connection.close()
++            else:
++                await connection.close()
++                if self._discovery:
++                    self._discovery.notify_disconnected()
+ 
+         return __wrapper__
+ 
+@@ -352,7 +419,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
          except BaseException:
@@ -684,14 +712,15 @@ index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6
      def set_database(self, database: str) -> "DriverConfig":
 diff --git a/ydb/long_poll_test.py b/ydb/long_poll_test.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41cc66f617
+index 0000000000000000000000000000000000000000..5f7662e851613f541a43660354738d486c12cbd5
 --- /dev/null
 +++ b/ydb/long_poll_test.py
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,403 @@
 +import asyncio
 +from concurrent.futures import ThreadPoolExecutor
 +from contextlib import contextmanager
 +from pathlib import Path
++from types import SimpleNamespace
 +import threading
 +
 +from ydb._long_poll import LongPoll
@@ -711,6 +740,9 @@ index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41
 +        self.requests = []
 +        self.unary_started = threading.Event()
 +        self.unary_finish = threading.Event()
++        self.subscribed = threading.Event()
++        self.server_cancel = threading.Event()
++        self.stale_refresh = False
 +
 +    def ListEndpoints(self, request, context):
 +        headers = dict(context.invocation_metadata())
@@ -718,10 +750,13 @@ index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41
 +        if not self.legacy:
 +            previous = headers.get("x-ydb-if-route-generation")
 +            while context.is_active() and previous == str(1 + self.cut.is_set()):
-+                threading.Event().wait(0.01)
++                self.subscribed.set()
++                if self.server_cancel.wait(0.01):
++                    context.abort(grpc.StatusCode.CANCELLED, "lost bootstrap subscription")
 +        generation = 1 + self.cut.is_set()
 +        if not self.legacy:
-+            context.set_trailing_metadata((("x-ydb-route-generation", str(generation)),))
++            reply_generation = 0 if self.stale_refresh and previous is None else generation
++            context.set_trailing_metadata((("x-ydb-route-generation", str(reply_generation)),))
 +        result = _apis.ydb_discovery.ListEndpointsResult()
 +        result.endpoints.add(address="127.0.0.1", port=self.ports[generation - 1], node_id=1)
 +        response = _apis.ydb_discovery.ListEndpointsResponse()
@@ -866,7 +901,7 @@ index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41
 +
 +
 +@pytest.mark.parametrize("async_driver", [False, True])
-+@pytest.mark.parametrize("action", ["finish", "cutover", "stop"])
++@pytest.mark.parametrize("action", ["finish", "cutover", "stop", "stale_refresh"])
 +def test_rpc_failure_allows_concurrent_call_until_route_retirement(async_driver, action):
 +    async def run():
 +        async def call(fn, *args):
@@ -877,31 +912,41 @@ index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41
 +            driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
 +            try:
 +                await call(driver.wait, 5)
++                assert await asyncio.to_thread(replicas.subscribed.wait, 3)
 +                (source,) = driver._store.values()
 +                healthy = asyncio.create_task(
 +                    call(driver, _apis.ydb_query.CreateSessionRequest(), _apis.QueryService.Stub, "CreateSession")
 +                )
 +                assert await asyncio.to_thread(replicas.unary_started.wait, 3)
++                replicas.stale_refresh = action == "stale_refresh"
 +                failing = asyncio.create_task(
 +                    call(driver, _apis.ydb_query.BeginTransactionRequest(), _apis.QueryService.Stub, "BeginTransaction")
 +                )
 +                try:
-+                    for _ in range(100):
-+                        if source.closing:
++                    expected = [None, "1", None] if replicas.stale_refresh else [None, "1", None, "1"]
++                    for _ in range(150):
++                        if len(replicas.requests) >= len(expected):
 +                            break
 +                        await asyncio.sleep(0.01)
-+                    assert source.closing
++                    assert [r.get("x-ydb-if-route-generation") for r in replicas.requests[: len(expected)]] == expected
++                    if not replicas.stale_refresh:
++                        (refreshed,) = driver._store.values()
++                        assert refreshed is not source and refreshed.endpoint == source.endpoint
++                        assert not healthy.done()
 +                    if action == "finish":
 +                        replicas.unary_finish.set()
 +                        assert (await healthy).session_id == "old"
 +                    else:
 +                        if action == "cutover":
 +                            replicas.cut.set()
-+                        else:
++                        elif action == "stop":
 +                            await call(driver.stop)
 +                        with pytest.raises(ydb.Error):
 +                            await asyncio.wait_for(healthy, 3)
 +                        await assert_socket_closed(replicas.ports[0])
++                        if replicas.stale_refresh:
++                            owner = driver._discovery if async_driver else driver._discovery_thread
++                            assert owner._watch.generation == 1 and not driver._store.values()
 +                    with pytest.raises(ydb.Error):
 +                        await asyncio.wait_for(failing, 3)
 +                finally:
@@ -909,6 +954,65 @@ index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41
 +                    await asyncio.gather(healthy, failing, return_exceptions=True)
 +            finally:
 +                await call(driver.stop)
++
++    asyncio.run(run())
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++def test_remote_conditional_cancellation_retires_route(async_driver):
++    async def run():
++        with services(False) as (replicas, endpoint):
++            config = ydb.DriverConfig(endpoint, "/database", use_long_poll=True, credentials=ydb.AnonymousCredentials())
++            driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
++            try:
++                assert await asyncio.to_thread(replicas.subscribed.wait, 3)
++                assert driver._store.values()
++                replicas.server_cancel.set()
++                await assert_socket_closed(replicas.ports[0])
++                assert not driver._store.values()
++            finally:
++                if async_driver:
++                    await driver.stop()
++                else:
++                    await asyncio.to_thread(driver.stop)
++
++    asyncio.run(run())
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++def test_refresh_while_poll_prepares_credentials(async_driver, monkeypatch):
++    from ydb import connection
++    from ydb.aio import connection as aio_connection
++
++    async def run():
++        with services(False) as (replicas, endpoint):
++            config = ydb.DriverConfig(endpoint, "/database", use_long_poll=True, credentials=ydb.AnonymousCredentials())
++            channel = (grpc.aio if async_driver else grpc).insecure_channel(endpoint)
++            watch = LongPoll(config, SimpleNamespace(_channel=channel))
++            watch.generation = 1
++            replicas.cut.set()  # Even an erroneously conditional request will return immediately.
++
++            def metadata(*args):
++                watch.refresh()
++                return []
++
++            async def aio_metadata(*args):
++                return metadata(*args)
++
++            try:
++                if async_driver:
++                    monkeypatch.setattr(aio_connection, "_construct_metadata", aio_metadata)
++                    result, generation = await watch.poll_async(lambda: False)
++                else:
++                    monkeypatch.setattr(connection, "_construct_metadata", metadata)
++                    result, generation = await asyncio.to_thread(watch.poll, lambda: False)
++                assert result.endpoints and generation == 2
++                assert [r.get("x-ydb-if-route-generation") for r in replicas.requests] == [None]
++            finally:
++                if async_driver:
++                    await channel.close()
++                else:
++                    channel.close()
 +
 +    asyncio.run(run())
 +
@@ -1016,7 +1120,7 @@ index 0000000000000000000000000000000000000000..afb234ec552d05720b48d42d955dae41
 +        for server in servers:
 +            server.stop(0).wait()
 diff --git a/ydb/pool.py b/ydb/pool.py
-index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..ec58aeec38b25e830f1ea1b60b59eb76cac8d1df 100644
+index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..7aa5ac9343708cdcad2e99acffde520dc2df47ec 100644
 --- a/ydb/pool.py
 +++ b/ydb/pool.py
 @@ -3,6 +3,7 @@ from __future__ import annotations
@@ -1085,7 +1189,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..ec58aeec38b25e830f1ea1b60b59eb76
  
      def notify_disconnected(self) -> None:
 +        if self._watch:
-+            self._watch.cancel()
++            self._watch.refresh()
          self._send_wake_up()
  
      def _send_wake_up(self) -> None:

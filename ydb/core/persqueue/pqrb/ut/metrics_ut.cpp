@@ -63,6 +63,16 @@ Y_UNIT_TEST_TWIN(DisableMonitoringMetrics, initiallyDisabled) {
     const auto edge = runtime.AllocateEdgeActor();
     runtime.Register(new TRunMetricsTest(edge, [&](const TActorContext& ctx) {
         auto root = AppData(ctx)->Counters;
+        auto exportMetrics = [&] {
+            TExportedMetrics exported;
+            // GetServiceCounters also registers utils/CounterLookups, which is not a topic metric.
+            for (const auto* service : {"topics", "topics_serverless", "sqs", "ymq_public"}) {
+                if (auto group = root->FindSubgroup("counters", service)) {
+                    group->Accept("counters", service, exported);
+                }
+            }
+            return exported;
+        };
         TDatabaseInfo database;
         database.DatabasePath = "/Root";
         const TString topicPath = "/Root/topic";
@@ -82,8 +92,7 @@ Y_UNIT_TEST_TWIN(DisableMonitoringMetrics, initiallyDisabled) {
 
         TTopicMetricsHandler handler;
         handler.Initialize(config, database, topicPath, ctx);
-        TExportedMetrics initial;
-        root->Accept("", "", initial);
+        const auto initial = exportMetrics();
         UNIT_ASSERT_VALUES_EQUAL(initial.Counters.empty(), initiallyDisabled);
         UNIT_ASSERT_VALUES_EQUAL(initial.Histograms == 0, initiallyDisabled);
 
@@ -122,8 +131,7 @@ Y_UNIT_TEST_TWIN(DisableMonitoringMetrics, initiallyDisabled) {
             UNIT_ASSERT_VALUES_EQUAL(handler.GetPartitionMetrics().at(0).UsedReserveSize, round * 10);
 
             // Accept uses the same traversal (including expiration) as monitoring encoders.
-            TExportedMetrics exported;
-            root->Accept("", "", exported);
+            const auto exported = exportMetrics();
             if (disabled) {
                 UNIT_ASSERT_C(exported.Counters.empty(), "Disabled metrics are still exported");
                 UNIT_ASSERT_VALUES_EQUAL(exported.Histograms, 0);

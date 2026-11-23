@@ -14,7 +14,6 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/testlib/helpers.h>
 
 #include <regex>
 
@@ -855,102 +854,6 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 } // Y_UNIT_TEST_SUITE(PQCountersSimple)
 
 Y_UNIT_TEST_SUITE(PQCountersLabeled) {
-    Y_UNIT_TEST_TWIN(DisableLabeledMetrics, firstClass) {
-        TTestContext tc;
-        TFinalizer finalizer(tc);
-        bool activeZone = false;
-        tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClass);
-        tc.Runtime->SetScheduledLimit(10000);
-
-        ui64 tabletUpdates = 0;
-        ui64 labeledUpdates = 0;
-        ui64 labeledDrops = 0;
-        auto observer = tc.Runtime->AddObserver([&](IEventHandle::TPtr& handle) {
-            auto& event = *handle;
-            switch (event.GetTypeRewrite()) {
-                case TEvTabletCounters::EvTabletAddCounters:
-                    if (event.Get<TEvTabletCounters::TEvTabletAddCounters>()->TabletID == tc.TabletId) {
-                        ++tabletUpdates;
-                    }
-                    break;
-                case TEvTabletCounters::EvTabletAddLabeledCounters:
-                    if (event.Get<TEvTabletCounters::TEvTabletAddLabeledCounters>()->TabletID == tc.TabletId) {
-                        if (event.Get<TEvTabletCounters::TEvTabletAddLabeledCounters>()->LabeledCounters->GetDrop()) {
-                            ++labeledDrops;
-                        } else {
-                            ++labeledUpdates;
-                        }
-                    }
-                    break;
-            }
-        });
-
-        auto config = MakePQTabletConfig(
-            {.deleteTime = 3600, .partitions = 1},
-            {{.Name = "client", .Important = true}}, *tc.Runtime, 1);
-        const auto applyConfig = [&] {
-            SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
-                tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
-        };
-        const auto checkStoredCounters = [&](bool enabled) {
-            auto request = MakeHolder<TEvTabletCounters::TEvTabletCountersRequest>();
-            request->Record.AddTabletIds(tc.TabletId);
-            tc.Runtime->Send(new IEventHandle(MakeTabletCountersAggregatorID(tc.Runtime->GetNodeId()),
-                tc.Edge, request.Release()));
-            auto response = tc.Runtime->GrabEdgeEvent<TEvTabletCounters::TEvTabletCountersResponse>(tc.Edge);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.CountersInfoSize(), 1);
-            const auto& counters = response->Get()->Record.GetCountersInfo(0);
-            UNIT_ASSERT(counters.HasExecutorCounters());
-            UNIT_ASSERT(counters.HasAppCounters());
-            if (!firstClass) {
-                auto labeledRequest = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersRequest>();
-                labeledRequest->Record.SetTabletType(TTabletTypes::PersQueue);
-                tc.Runtime->Send(new IEventHandle(MakeTabletCountersAggregatorID(tc.Runtime->GetNodeId()),
-                    tc.Edge, labeledRequest.Release()));
-                auto labeledResponse = tc.Runtime->GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>(tc.Edge);
-                UNIT_ASSERT_VALUES_EQUAL(labeledResponse->Get()->Record.LabeledCountersByGroupSize() > 0, enabled);
-            }
-        };
-
-        applyConfig();
-        CmdWrite(0, "enabled", TestData(), tc, false);
-        tc.Runtime->SimulateSleep(TDuration::Seconds(30));
-        UNIT_ASSERT(tabletUpdates > 0);
-        UNIT_ASSERT(labeledUpdates > 0);
-        checkStoredCounters(true);
-
-        config.SetVersion(config.GetVersion() + 1);
-        config.SetMetricsLevel(METRICS_LEVEL_DISABLED);
-        applyConfig();
-        // Drain events sent before the config was applied.
-        tc.Runtime->SimulateSleep(TDuration::Seconds(1));
-        tabletUpdates = labeledUpdates = 0;
-        CmdWrite(0, "disabled", TestData(), tc, false);
-        tc.Runtime->SimulateSleep(TDuration::Seconds(30));
-        UNIT_ASSERT(tabletUpdates > 0);
-        UNIT_ASSERT_VALUES_EQUAL(labeledUpdates, 0);
-        UNIT_ASSERT(labeledDrops > 0);
-        checkStoredCounters(false);
-
-        // The persisted metrics level must suppress labeled counters after a reboot too.
-        tabletUpdates = 0;
-        RebootTablet(*tc.Runtime, tc.TabletId, tc.Edge);
-        CmdWrite(0, "after-reboot", TestData(), tc, false);
-        tc.Runtime->SimulateSleep(TDuration::Seconds(30));
-        UNIT_ASSERT(tabletUpdates > 0);
-        UNIT_ASSERT_VALUES_EQUAL(labeledUpdates, 0);
-        checkStoredCounters(false);
-
-        config.SetVersion(config.GetVersion() + 1);
-        config.SetMetricsLevel(METRICS_LEVEL_OBJECT);
-        applyConfig();
-        CmdWrite(0, "re-enabled", TestData(), tc, false);
-        tc.Runtime->SimulateSleep(TDuration::Seconds(30));
-        UNIT_ASSERT(tabletUpdates > 0);
-        UNIT_ASSERT(labeledUpdates > 0);
-        checkStoredCounters(true);
-    }
-
     void CompareJsons(const TString& inputStr, const TString& referenceStr) {
         NJson::TJsonValue referenceJson;
         UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(referenceStr), &referenceJson));

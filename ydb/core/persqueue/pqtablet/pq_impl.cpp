@@ -1104,24 +1104,6 @@ void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
-    if (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DISABLED) {
-        auto it = CounterEventsInflight.find(group);
-        if (it != CounterEventsInflight.end() && it->second.RefCount() <= 1) {
-            // Drop previously published labeled counters once, without touching tablet counters.
-            auto counters = MakeHolder<TTabletLabeledCountersBase>();
-            counters->SetGroup(group);
-            counters->SetDrop();
-            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                counters->SetDatabasePath(Config.GetYdbDatabasePath());
-            }
-            ctx.Send(MakeTabletCountersAggregatorID(ctx.SelfID.NodeId()),
-                new TEvTabletCounters::TEvTabletAddLabeledCounters(
-                    it->second, TabletID(), TTabletTypes::PersQueue, counters.Release()));
-            CounterEventsInflight.erase(it);
-        }
-        return;
-    }
-
     if (CounterEventsInflight[group].RefCount() <= 1) {
         if (CounterEventsInflight[group].RefCount() == 0) {
             CounterEventsInflight[group] = new TEvTabletCounters::TInFlightCookie;

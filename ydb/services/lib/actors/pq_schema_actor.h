@@ -353,11 +353,17 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    AFL_ENSURE(response.ListNodeEntry)
-                        ("path", GetTopicPath())("database", TActorBase::Database);
-                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
-                        ("path", GetTopicPath())("database", TActorBase::Database)
-                        ("children", response.ListNodeEntry->Children.size());
+                    if (!response.ListNodeEntry || response.ListNodeEntry->Children.size() != 1) {
+                        YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "CDC stream implementation topic is temporarily unavailable",
+                            {"path", GetTopicPath()},
+                            {"database", TActorBase::Database},
+                            {"hasListNodeEntry", bool(response.ListNodeEntry)},
+                            {"childrenCount", response.ListNodeEntry ? response.ListNodeEntry->Children.size() : 0});
+                        AddIssue(FillIssue("CDC stream implementation topic is temporarily unavailable",
+                            Ydb::PersQueue::ErrorCode::ERROR));
+                        RespondWithCode(Ydb::StatusIds::UNAVAILABLE);
+                        return true;
+                    }
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {
@@ -603,7 +609,17 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    if (!response.ListNodeEntry || response.ListNodeEntry->Children.size() != 1) {
+                        YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "CDC stream implementation topic is temporarily unavailable",
+                            {"path", GetTopicPath()},
+                            {"database", TBase::Database},
+                            {"hasListNodeEntry", bool(response.ListNodeEntry)},
+                            {"childrenCount", response.ListNodeEntry ? response.ListNodeEntry->Children.size() : 0});
+                        AddIssue(FillIssue("CDC stream implementation topic is temporarily unavailable",
+                            Ydb::PersQueue::ErrorCode::ERROR));
+                        RespondWithCode(Ydb::StatusIds::UNAVAILABLE);
+                        return true;
+                    }
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
                     SendDescribeProposeRequest(true);
                     return true;

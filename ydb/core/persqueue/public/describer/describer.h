@@ -22,7 +22,8 @@ enum class EStatus {
     Unauthorized,
     UnauthorizedWithDescribeAccess,
     BadRequest,
-    UnknownError
+    UnknownError,
+    Unavailable
 };
 
 

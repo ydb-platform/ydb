@@ -235,6 +235,12 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
                 continue;
             }
 
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::Unavailable) {
+                // Reconnect the whole session instead of silently dropping this topic.
+                return CloseSession(NPQ::NDescriber::Description(original, topicInfo.Status),
+                    PersQueue::ErrorCode::ERROR, ctx);
+            }
+
             // Metacache looks up the legacy primary path first and, on a miss,
             // retries the modern path under LbUserDatabaseRoot/account.
             if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {

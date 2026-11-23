@@ -1,4 +1,5 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
+#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
 
 #include <ydb/core/base/path.h>
@@ -192,6 +193,40 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), streamPath);
             UNIT_ASSERT_VALUES_EQUAL(converter->GetOriginalPath(), streamPath);
+        }
+
+        Y_UNIT_TEST_TWIN(UnavailableCdcClosesSession, withHealthyTopic) {
+            const TString streamPath = "/Root/table/stream";
+            const TString healthyPath = "/Root/topic";
+            TEnv env(true, [&](TNavigate&, TNavigate::TEntry& entry) {
+                if (EntryPath(entry) == streamPath) {
+                    entry.Status = TNavigate::EStatus::Ok;
+                    entry.Kind = TNavigate::EKind::KindCdcStream;
+                    auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
+                    self->Info.SetName("stream");
+                    entry.Self = self;
+                } else if (EntryPath(entry) == healthyPath) {
+                    FillTopic(entry, 10, [](NKikimrPQ::TPQTabletConfig& config) {
+                        config.SetYdbDatabasePath("/Root");
+                    });
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), streamPath + "/streamImpl");
+                    SetNotFound(entry);
+                }
+            });
+
+            NPersQueue::TTopicNamesConverterFactory factory(true, "/Root", "");
+            TVector<NPersQueue::TDiscoveryConverterPtr> converters{
+                factory.MakeDiscoveryConverter(streamPath, Nothing(), "", "/Root")
+            };
+            if (withHealthyTopic) {
+                converters.push_back(factory.MakeDiscoveryConverter(healthyPath, Nothing(), "", "/Root"));
+            }
+            env.Start(MakeTopics(converters));
+
+            const auto* result = env.WaitClose();
+            UNIT_ASSERT_VALUES_EQUAL(result->ErrorCode, Ydb::PersQueue::ErrorCode::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(ConvertPersQueueInternalCodeToStatus(result->ErrorCode), Ydb::StatusIds::UNAVAILABLE);
         }
 
         Y_UNIT_TEST(LegacyMissFallsBackToModernPath) {

@@ -190,6 +190,8 @@ private:
                         return Ydb::StatusIds::SCHEME_ERROR;
                     case NDescriber::EStatus::BadRequest:
                         return Ydb::StatusIds::BAD_REQUEST;
+                    case NDescriber::EStatus::Unavailable:
+                        return Ydb::StatusIds::UNAVAILABLE;
                     case NDescriber::EStatus::UnknownError:
                         return Ydb::StatusIds::INTERNAL_ERROR;
                     default:

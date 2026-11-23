@@ -466,6 +466,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         dbRestorePath = Join('/', databasePath, dbRestorePath);
     }
 
+    dbRestorePath = TPathSplitUnix(dbRestorePath).Reconstruct();
+
     // Find first existing path on the way from the dbRestorePath to the root of the cluster.
     TPathSplitUnix dbPathSplit(dbRestorePath);
     if (dbPathSplit.empty()) {
@@ -797,6 +799,12 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     TString dbPath;
     if (settings.Database_.has_value()) {
         dbPath = *settings.Database_;
+        if (!dbPath.StartsWith('/')) {
+            if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
+                return result;
+            }
+            dbPath = Join('/', ClusterRootPath, dbPath);
+        }
     } else {
         // Get database path from dump and adjust it to the cluster
         dbPath = dbDesc.path();

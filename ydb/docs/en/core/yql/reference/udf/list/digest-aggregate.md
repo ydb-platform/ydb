@@ -6,6 +6,12 @@ To do this, calculate checksums for the required data in the original table and 
 
 `DigestAggregate` calculates a checksum for rows selected by a SQL query. The query can filter rows, choose columns, or calculate a separate checksum for each group. For an entire table, use [`CHECKSUM TABLE`](../../syntax/checksum-table.md).
 
+{% note info %}
+
+Queries using `DigestAggregate` require the `enable_checksum_table` flag to be enabled. The flag is disabled by default. Before running a query, [check feature availability](../../../../reference/configuration/feature_flags.md#check-availability) in the cluster configuration for your database.
+
+{% endnote %}
+
 ## Prepare the query {#factory}
 
 1. Choose a SQL query from the [Examples](#examples) section. The first query calculates a checksum of a selected column for one customer; the second returns a separate checksum for each customer. Set the table, columns, and filtering or grouping conditions in the chosen query.

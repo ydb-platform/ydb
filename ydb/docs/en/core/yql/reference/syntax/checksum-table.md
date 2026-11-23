@@ -2,6 +2,12 @@
 
 `CHECKSUM TABLE` calculates a checksum: a short string that represents the data in a table. Use it to check whether a copy or restored table has the same contents as the original.
 
+{% note info %}
+
+Queries using `CHECKSUM TABLE` require the `enable_checksum_table` flag to be enabled. The flag is disabled by default. Before running a query, [check feature availability](../../../reference/configuration/feature_flags.md#check-availability) in the cluster configuration for your database.
+
+{% endnote %}
+
 To calculate the checksum of `my_table`, run:
 
 ```yql

@@ -1,10 +1,17 @@
 # DigestAggregate
 
-`DigestAggregate` calculates a checksum for rows selected by a query. Use it when you need to filter rows, choose columns, or calculate a separate checksum for each group. For an entire table, use [`CHECKSUM TABLE`](../../syntax/checksum-table.md).
+After copying or restoring data, you may need to check selected rows or columns, such as the data for one customer.
+
+To do this, calculate checksums for the required data in the original table and its copy using the same query, then compare the results.
+
+`DigestAggregate` calculates a checksum for rows selected by a SQL query. The query can filter rows, choose columns, or calculate a separate checksum for each group. For an entire table, use [`CHECKSUM TABLE`](../../syntax/checksum-table.md).
 
 ## Prepare the query {#factory}
 
-Paste the helper code below, then the SQL query from one of the [examples](#examples). Run them together. The helper defines `$DigestFactory`, which tells [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by) how to calculate the checksum.
+1. Choose an appropriate [example](#examples) and set the table, columns, and filtering or grouping conditions for your task.
+2. Add the `$DigestFactory` definition from the block below before the query. Copy it unchanged: the helper tells [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by) how to calculate the checksum.
+3. Run the helper definition and the query together as one script.
+4. Repeat the check for the copy using the same query settings and compare the `algorithm`, `count`, `hash`, and `version` fields in the results.
 
 {% cut "Helper definition: copy this block unchanged" %}
 

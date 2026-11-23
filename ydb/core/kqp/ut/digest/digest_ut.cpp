@@ -191,7 +191,8 @@ Y_UNIT_TEST_SUITE(Digest) {
 
     Y_UNIT_TEST(ChecksumFeatureFlagCheckedAtExecution) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         auto client = kikimr.GetQueryClient();
         auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
@@ -213,12 +214,21 @@ Y_UNIT_TEST_SUITE(Digest) {
             const auto enabled = prepared.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(enabled.IsSuccess(), enabled.GetIssues().ToString());
 
+            auto enabledScan = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            CompareYson(FormatResultSetYson(enabled.GetResultSet(0)), StreamResultToYson(enabledScan));
+
             flags.SetEnableChecksumTable(false);
             appData.UpdateRuntimeFlags(flags);
             const auto disabled = prepared.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(disabled.GetStatus(), EStatus::PRECONDITION_FAILED, disabled.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(disabled.GetIssues().ToString(), "CHECKSUM TABLE is disabled");
+
+            auto disabledScan = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            StreamResultToYson(disabledScan, false, EStatus::PRECONDITION_FAILED, "CHECKSUM TABLE is disabled");
         }
+
+        auto scan = tableClient.StreamExecuteScanQuery("SELECT COUNT(*) FROM digest_a;").GetValueSync();
+        CompareYson("[[3u]]", StreamResultToYson(scan));
 
         const auto scalar = session.ExecuteDataQuery("SELECT Digest::CityHash(StablePickle(TableRow())) FROM digest_a;",
             TTxControl::BeginTx().CommitTx()).GetValueSync();

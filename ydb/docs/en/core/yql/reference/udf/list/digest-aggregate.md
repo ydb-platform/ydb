@@ -8,7 +8,7 @@ To do this, calculate checksums for the required data in the original table and 
 
 ## Prepare the query {#factory}
 
-1. Choose an appropriate [example](#examples) and set the table, columns, and filtering or grouping conditions for your task.
+1. Choose a SQL query from the [Examples](#examples) section. The first query calculates a checksum of a selected column for one customer; the second returns a separate checksum for each customer. Set the table, columns, and filtering or grouping conditions in the chosen query.
 2. Add the `$DigestFactory` definition from the block below before the query. Copy it unchanged: the helper tells [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by) how to calculate the checksum.
 3. Run the helper definition and the query together as one script.
 4. Repeat the check for the copy using the same query settings and compare the `algorithm`, `count`, `hash`, and `version` fields in the results.

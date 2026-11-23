@@ -1,6 +1,30 @@
 #include "counters.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+
 namespace NPersQueue {
+
+void CountTopicPathWithDatabasePrefix(TStringBuf database, TStringBuf originalPath, TStringBuf resolvedPath) {
+    if (!originalPath.StartsWith('/') || originalPath == resolvedPath || database.empty() || !NKikimr::HasAppData()) {
+        return;
+    }
+
+    const auto databasePath = NKikimr::CanonizePath(TString{database});
+    const auto topicPath = NKikimr::CanonizePath(TString{originalPath});
+    auto isUnderDatabase = [&](TStringBuf path) {
+        return path.SkipPrefix(databasePath) && (path.empty() || path.StartsWith('/'));
+    };
+    if (databasePath.empty() || databasePath == "/" || isUnderDatabase(topicPath) || !isUnderDatabase(resolvedPath)) {
+        return;
+    }
+
+    if (auto counters = NKikimr::AppData()->Counters) {
+        NKikimr::GetServiceCounters(counters, "pqproxy|pathResolution", false)
+            ->GetSubgroup("database", databasePath)
+            ->GetCounter("AbsolutePathWithDatabasePrefix", true)->Inc();
+    }
+}
 
 ::NMonitoring::TDynamicCounterPtr GetCounters(::NMonitoring::TDynamicCounterPtr counters,
                                             const TString& subsystem, const TTopicConverterPtr& topic)

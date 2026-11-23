@@ -27,7 +27,6 @@ struct TKqpPartitionedExecuterSettings {
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
-    ui32 StatementResultIndex;
     std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
     const TGUCSettings::TPtr& GUCSettings;
     const TShardIdToTableInfoPtr& ShardIdToTableInfo;

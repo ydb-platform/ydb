@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -2974,8 +2973,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(DdlWithExplicitTransaction) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -3034,303 +3031,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(Ddl_Dml) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-
-        {
-            // DDl + DML with implicit transaction
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE TestDdlDml2 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdlDml2 (Key, Value1, Value2) VALUES (1, "1", "1");
-                SELECT * FROM TestDdlDml2;
-                ALTER TABLE TestDdlDml2 DROP COLUMN Value2;
-            )", TTxControl::NoTx(), NoRetryExecuteQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (1, "1");
-                SELECT * FROM TestDdlDml2;
-                UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (2, "2");
-                SELECT * FROM TestDdlDml2;
-                CREATE TABLE TestDdlDml33 (
-                    Key Uint64,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            CompareYson(R"([[[1u];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdlDml2;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdlDml33;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-
-            result = db.ExecuteQuery(R"(
-                CREATE TABLE TestDdlDml4 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-                UPSERT INTO TestDdlDml4 (Key, Value1, Value2) VALUES (1, "1", "2");
-                SELECT * FROM TestDdlDml4;
-                UPSERT INTO TestDdlDml4 (Key, Value1) VALUES (2, "2");
-                SELECT * FROM TestDdlDml5;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdlDml4;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
-            // Base test with ddl and dml statements
-            auto result = db.ExecuteQuery(R"(
-                DECLARE $name AS Text;
-                $a = (SELECT * FROM TestDdl1);
-                CREATE TABLE TestDdl1 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-                UPSERT INTO TestDdl1 (Key, Value) VALUES (1, "One");
-                CREATE TABLE TestDdl2 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-                UPSERT INTO TestDdl1 (Key, Value) VALUES (2, "Two");
-                SELECT * FROM $a;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdl1 (Key, Value) VALUES (3, "Three");
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl1;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                CREATE TABLE TestDdl1 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Check failed: path: '/Root/TestDdl1', error: path exist"));
-
-            result = db.ExecuteQuery(R"(
-                CREATE TABLE TestDdl2 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdl2 SELECT * FROM TestDdl1;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-        }
-
-        {
-            // Test with query with error
-            auto result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl2;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdl2 (Key, Value) VALUES (4, "Four");
-                CREATE TABLE TestDdl3 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-                UPSERT INTO TestDdl2 (Key, Value) VALUES (5, "Five");
-                CREATE TABLE TestDdl2 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-                CREATE TABLE TestDdl4 (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Check failed: path: '/Root/TestDdl2', error: path exist"));
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl2;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl3;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl4;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Cannot find table 'db.[/Root/TestDdl4]'"));
-        }
-
-        {
-            // Check result sets
-            auto result = db.ExecuteQuery(R"(
-                $a = (SELECT * FROM TestDdl1);
-                SELECT * FROM $a;
-                UPSERT INTO TestDdl1 (Key, Value) VALUES (4, "Four");
-                SELECT * FROM $a;
-                CREATE TABLE TestDdl4 (
-                    Key Uint64,
-                    Value Uint64,
-                    PRIMARY KEY (Key)
-                );
-                UPSERT INTO TestDdl4 (Key, Value) VALUES (1, 1);
-                SELECT * FROM TestDdl4;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[4u];["Four"]]])", FormatResultSetYson(result.GetResultSet(1)));
-            CompareYson(R"([[[1u];[1u]]])", FormatResultSetYson(result.GetResultSet(2)));
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdl2 SELECT * FROM TestDdl1;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-        }
-
-        {
-            // Check EVALUATE FOR
-            auto result = db.ExecuteQuery(R"(
-                EVALUATE FOR $i IN AsList(1, 2, 3) DO BEGIN
-                    SELECT $i;
-                    SELECT $i;
-                END DO;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            // Check parser errors
-            auto result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdl4 (Key, Value) VALUES (2, 2);
-                SELECT * FROM $a;
-                UPSERT INTO TestDdl4 (Key, Value) VALUES (3, 3);
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Unknown name: $a"));
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl4;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];[1u]]])", FormatResultSetYson(result.GetResultSet(0)));
-
-            result = db.ExecuteQuery(R"(
-                UPSERT INTO TestDdl4 (Key, Value) VALUES (2, 2);
-                UPSERT INTO TestDdl4 (Key, Value) VALUES (3, "3");
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl4;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([[[1u];[1u]]])", FormatResultSetYson(result.GetResultSet(0)));
-
-            result = db.ExecuteQuery(R"(
-                CREATE TABLE TestDdl5 (
-                    Key Uint64,
-                    Value Uint64,
-                    PRIMARY KEY (Key)
-                );
-                UPSERT INTO TestDdl5 (Key, Value) VALUES (1, 1);
-                UPSERT INTO TestDdl5 (Key, Value) VALUES (3, "3");
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToOneLineString().contains("Error: Failed to convert 'Value': String to Optional<Uint64>"));
-
-            result = db.ExecuteQuery(R"(
-                SELECT * FROM TestDdl5;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
-    Y_UNIT_TEST(CTASWithoutPerStatement) {
+    Y_UNIT_TEST(CTASStatementRestrictions) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting})
@@ -3338,8 +3039,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .SetEnableTempTables(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -3356,7 +3055,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().contains("Several CTAS statement can't be used without per-statement mode."),
+                result.GetIssues().ToString().contains("Multiple CTAS statements in one query are not supported."),
                 result.GetIssues().ToString());
         }
 
@@ -3370,7 +3069,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString().contains("CTAS cannot be combined with other statements."),
                 result.GetIssues().ToString());
         }
 
@@ -3384,7 +3083,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().contains("CTAS statement can't be used with other statements without per-statement mode."),
+                result.GetIssues().ToString().contains("CTAS cannot be combined with other statements."),
                 result.GetIssues().ToString());
         }
 
@@ -3405,50 +3104,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[1u;"1";"1"]])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
-    Y_UNIT_TEST(SeveralCTAS) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-
-        {
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE Table1 (
-                    PRIMARY KEY (Key)
-                ) AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
-                CREATE TABLE Table2 (
-                    PRIMARY KEY (Key)
-                ) AS SELECT 2u AS Key, "2" AS Value1, "2" AS Value2;
-                CREATE TABLE Table3 (
-                    PRIMARY KEY (Key)
-                ) AS SELECT * FROM Table2 UNION ALL SELECT * FROM Table1;
-            )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            auto result = db.ExecuteQuery(R"(
-                SELECT * FROM Table1 ORDER BY Key;
-                SELECT * FROM Table2 ORDER BY Key;
-                SELECT * FROM Table3 ORDER BY Key;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
-            CompareYson(R"([[1u;"1";"1"]])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[2u;"2";"2"]])", FormatResultSetYson(result.GetResultSet(1)));
-            // Also empty now(
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
         }
     }
 
@@ -3492,173 +3147,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 result.GetIssues().ToString());
         }
      }
-
-    Y_UNIT_TEST(CheckIsolationLevelFroPerStatementMode) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        {
-            // 1 ddl statement
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE Test1 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            NYdb::NTable::TDescribeTableResult describe = session.DescribeTable("/Root/Test1").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            // 2 ddl statements
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE Test2 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-                CREATE TABLE Test3 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-
-            NYdb::NTable::TDescribeTableResult describe1 = session.DescribeTable("/Root/Test2").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe1.GetStatus(), EStatus::SUCCESS);
-            NYdb::NTable::TDescribeTableResult describe2 = session.DescribeTable("/Root/Test3").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe2.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            // 1 dml statement
-            auto result = db.ExecuteQuery(R"(
-                SELECT * FROM Test1;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-        }
-
-        {
-            // 2 dml statements
-            auto result = db.ExecuteQuery(R"(
-                SELECT * FROM Test2;
-                SELECT * FROM Test3;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-        }
-
-        {
-            // 1 ddl 1 dml statements
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE Test4 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-                SELECT * FROM Test4;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-            NYdb::NTable::TDescribeTableResult describe = session.DescribeTable("/Root/Test4").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            // 1 dml 1 ddl statements
-            auto result = db.ExecuteQuery(R"(
-                SELECT * FROM Test4;
-                CREATE TABLE Test5 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-            NYdb::NTable::TDescribeTableResult describe = session.DescribeTable("/Root/Test5").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            // 1 ddl 1 dml 1 ddl 1 dml statements
-            auto result = db.ExecuteQuery(R"(
-                CREATE TABLE Test6 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-                SELECT * FROM Test6;
-                CREATE TABLE Test7 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-                SELECT * FROM Test7;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-            NYdb::NTable::TDescribeTableResult describe1 = session.DescribeTable("/Root/Test6").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe1.GetStatus(), EStatus::SUCCESS);
-            NYdb::NTable::TDescribeTableResult describe2 = session.DescribeTable("/Root/Test7").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe2.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            // 1 dml 1 ddl 1 dml 1 ddl statements
-            auto result = db.ExecuteQuery(R"(
-                SELECT * FROM Test7;
-                CREATE TABLE Test8 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-                SELECT * FROM Test8;
-                CREATE TABLE Test9 (
-                    Key Uint64,
-                    Value1 String,
-                    Value2 String,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
-            NYdb::NTable::TDescribeTableResult describe1 = session.DescribeTable("/Root/Test8").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe1.GetStatus(), EStatus::SUCCESS);
-            NYdb::NTable::TDescribeTableResult describe2 = session.DescribeTable("/Root/Test9").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe2.GetStatus(), EStatus::SUCCESS);
-        }
-    }
 
     Y_UNIT_TEST(TableSink_ReplaceFromSelectOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -6199,11 +5687,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ExecuteQueryOnlyComments, PerStatementExecution) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableAstCache(true);
-        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST(ExecuteQueryOnlyComments) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         const TVector<TString> queries = {
@@ -6246,32 +5731,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(!result.IsSuccess(), query << ": " << result.GetIssues().ToString());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
                 query << ": " << result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(ParseStatementsPreservesSyntaxErrors) {
-        const TVector<TString> queries = {
-            "/* Unterminated comment",
-            "-- comment\nSELECT (1 + );",
-            "SELECT 1;\n/* Unterminated comment",
-        };
-        for (const auto& query : queries) {
-            TKqpTranslationSettingsBuilder settingsBuilder(NYql::EKikimrQueryType::Query, "cluster", query,
-                NSQLTranslation::EBindingsMode::DISABLED, {});
-            const auto wholeQuery = ParseStatements(query, /*syntax=*/{}, /*isSql=*/true,
-                settingsBuilder, /*perStatementExecution=*/false);
-            const auto perStatement = ParseStatements(query, /*syntax=*/{}, /*isSql=*/true,
-                settingsBuilder, /*perStatementExecution=*/true);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(wholeQuery.size(), 1, query);
-            UNIT_ASSERT_VALUES_EQUAL_C(perStatement.size(), 1, query);
-            const auto& expected = *wholeQuery.front().Ast;
-            const auto& actual = *perStatement.front().Ast;
-            UNIT_ASSERT_C(!expected.IsOk(), query << ": " << expected.Issues.ToString());
-            UNIT_ASSERT_C(!actual.IsOk(), query << ": " << actual.Issues.ToString());
-            UNIT_ASSERT_C(!expected.Issues.Empty(), query);
-            // The formatted issues include positions, severity, codes and nested diagnostics.
-            UNIT_ASSERT_VALUES_EQUAL_C(actual.Issues.ToString(), expected.Issues.ToString(), query);
         }
     }
 

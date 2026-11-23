@@ -2,6 +2,8 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <util/generic/vector.h>
+
 namespace NKikimr::NCdcAggregator {
 
 struct TCdcAggregatorSchema : NIceDb::Schema {
@@ -34,7 +36,16 @@ struct TCdcAggregatorSchema : NIceDb::Schema {
         using TColumns = TableColumns<VersionStep, VersionTxId, Data>;
     };
 
-    using TTables = SchemaTables<State, Sources, Heartbeats>;
+    struct PartitioningChanges : Table<4> {
+        struct ParentDataShardId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct OperationId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct ChildDataShardIds : Column<3, NScheme::NTypeIds::String> { using Type = TVector<ui64>; };
+
+        using TKey = TableKey<ParentDataShardId, OperationId>;
+        using TColumns = TableColumns<ParentDataShardId, OperationId, ChildDataShardIds>;
+    };
+
+    using TTables = SchemaTables<State, Sources, Heartbeats, PartitioningChanges>;
 
     using TSettings = SchemaSettings<
         ExecutorLogBatching<true>,

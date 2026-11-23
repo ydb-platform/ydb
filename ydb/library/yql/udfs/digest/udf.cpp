@@ -7,6 +7,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 
 namespace {
 
@@ -254,7 +255,7 @@ private:
         auto result = builder->NewArray(4, fields);
         fields[Fields_.Algorithm] = builder->NewString(GetAlgorithmName(state.GetAlgorithm()));
         fields[Fields_.Count] = NUdf::TUnboxedValuePod(state.GetCount());
-        fields[Fields_.Hash] = builder->NewString(state.GetHashBytes());
+        fields[Fields_.Hash] = builder->NewString(HexEncode(state.GetHashBytes()));
         fields[Fields_.Version] = NUdf::TUnboxedValuePod(TState::Version);
         return result;
     }

@@ -14,9 +14,9 @@ $check = ($algorithm, $first, $second, $expected) -> {
 };
 
 SELECT
-    $check("CityHash64", 18446744073709551615ul, 1ul, $zero8) AS city64,
+    $check("CityHash64", 18446744073709551615ul, 1ul, "0000000000000000") AS city64,
     $check("CityHash128", AsTuple(18446744073709551615ul, 0ul), AsTuple(1ul, 0ul),
-        "\x00\x00\x00\x00\x00\x00\x00\x01" || $zero8) AS city128,
+        "00000000000000010000000000000000") AS city128,
     $check("Sha256", $zero8 || $zero8 || $zero8 || $ones8,
         $zero8 || $zero8 || $zero8 || "\x00\x00\x00\x00\x00\x00\x00\x01",
-        $zero8 || $zero8 || "\x00\x00\x00\x00\x00\x00\x00\x01" || $zero8) AS sha256;
+        "0000000000000000000000000000000000000000000000010000000000000000") AS sha256;

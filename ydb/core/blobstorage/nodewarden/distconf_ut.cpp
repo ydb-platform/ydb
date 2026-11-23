@@ -4358,6 +4358,61 @@ selector_config: []
         }
     }
 
+    Y_UNIT_TEST(StateStorageSelectionRejectedBeforePropose) {
+        TCommitConfirmationFixture fixture;
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        const TActorId root = fixture.Root();
+        const TActorId edge = runtime.AllocateEdgeActor(root.NodeId());
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        ui32 writes = 0;
+        ui32 proposals = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            writes += ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType;
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                proposals += ev->Get<NStorage::TEvNodeConfigScatter>()->Record.HasProposeStorageConfig();
+            }
+            return true;
+        };
+
+        const char* names[] = {"StateStorage", "StateStorageBoard", "SchemeBoard"};
+        for (ui32 section : xrange<ui32>(3)) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto* config = request->Record.MutableUpdateConfig()->MutableConfig();
+            config->CopyFrom(fixture.Config);
+            auto* ss = section == 0 ? config->MutableStateStorageConfig()
+                : section == 1 ? config->MutableStateStorageBoardConfig() : config->MutableSchemeBoardConfig();
+            auto* group = ss->MutableRing();
+            group->SetNToSelect(9);
+            for (ui32 ringIndex : xrange<ui32>(3)) {
+                auto* ring = group->AddRing();
+                for (ui32 node : xrange<ui32>(1, 4)) {
+                    ring->AddNode(ringIndex * 3 + node);
+                }
+            }
+            response.reset();
+            runtime.Send(new IEventHandle(root, edge, request.release()), root.NodeId());
+            UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+            UNIT_ASSERT_C(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+                response->DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), names[section]);
+            UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "must be in [1, 3]");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(proposals, 0);
+        const auto current = QueryKeeper(runtime, root).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(current.GetGeneration(), fixture.Config.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(current.GetFingerprint(), fixture.Config.GetFingerprint());
+        for (ui32 nodeId : {1u, 2u, 3u}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(),
+                fixture.Config.GetFingerprint());
+        }
+    }
+
     void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {
         TCommitConfirmationFixture fixture;
         auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();

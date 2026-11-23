@@ -226,11 +226,11 @@ public:
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         Exporter = exporter.DetachResult().release();
         auto initialState = Exporter->Prepare(Driver.get(), MakeRowSchema());
-        AFL_VERIFY(initialState.Scan == NTable::EScan::Feed);
+        YDB_LOG_VERIFY(initialState.Scan == NTable::EScan::Feed);
 
         NTable::TLead lead;
         auto seekState = Exporter->Seek(lead, 0);
-        AFL_VERIFY(seekState == NTable::EScan::Feed);
+        YDB_LOG_VERIFY(seekState == NTable::EScan::Feed);
         LastActivityTime = TInstant::Now();
         ScheduleDiagnostics();
         Become(&TThis::StateMain);
@@ -331,7 +331,9 @@ public:
             {"txId", msg.TxId},
             {"status", static_cast<ui8>(msg.Status)});
         auto it = S3Uploads.find(msg.TxId);
-        AFL_VERIFY(it != S3Uploads.end())("tx_id", msg.TxId)("event", "ChangeS3UploadStatus without prior StoreS3UploadId");
+        YDB_LOG_VERIFY(it != S3Uploads.end(),
+            {"txId", msg.TxId},
+            {"event", "ChangeS3UploadStatus without prior StoreS3UploadId"});
         it->second.Status = msg.Status;
         it->second.Error = std::move(msg.Error);
         it->second.Parts = std::move(msg.Parts);
@@ -494,7 +496,7 @@ public:
             // and repeats the Ready/Feed handshake with the existing uploader.
             NTable::TLead lead;
             LastState = Exporter->Seek(lead, 0);
-            AFL_VERIFY(LastState == NTable::EScan::Feed);
+            YDB_LOG_VERIFY(LastState == NTable::EScan::Feed);
             Send(SubscriberActorId, new TEvPrivate::TEvBackupExportReset(Generation));
             return;
         }

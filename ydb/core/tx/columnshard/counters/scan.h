@@ -97,12 +97,12 @@ public:
         }
 
         void Add(const EIntervalStatus status) const {
-            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            YDB_LOG_VERIFY((ui32)status < ValuesByStatus.size());
             ValuesByStatus[(ui32)status]->Add(1);
         }
 
         void Remove(const EIntervalStatus status) const {
-            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            YDB_LOG_VERIFY((ui32)status < ValuesByStatus.size());
             ValuesByStatus[(ui32)status]->Sub(1);
         }
     };
@@ -178,17 +178,17 @@ private:
 
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
-        AFL_VERIFY(SubColumnCounters);
+        YDB_LOG_VERIFY(SubColumnCounters);
         return SubColumnCounters;
     }
 
     const std::shared_ptr<TDuplicateFilteringCounters>& GetDuplicateFilteringCounters() const {
-        AFL_VERIFY(DuplicateFilteringCounters);
+        YDB_LOG_VERIFY(DuplicateFilteringCounters);
         return DuplicateFilteringCounters;
     }
 
     const std::shared_ptr<TSimpleDuplicateFilteringCounters>& GetSimpleDuplicateFilteringCounters() const {
-        AFL_VERIFY(SimpleDuplicateFilteringCounters);
+        YDB_LOG_VERIFY(SimpleDuplicateFilteringCounters);
         return SimpleDuplicateFilteringCounters;
     }
 
@@ -334,7 +334,7 @@ public:
     }
 
     void OnScanFinished(const EStatusFinish status, const TDuration d) const {
-        AFL_VERIFY((ui32)status < ScanDurationByStatus.size());
+        YDB_LOG_VERIFY((ui32)status < ScanDurationByStatus.size());
         ScanDurationByStatus[(ui32)status]->Collect(d.MilliSeconds());
         ScansFinishedByStatus[(ui32)status]->Add(1);
     }
@@ -405,13 +405,13 @@ public:
     TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
         : Counter(counter)
     {
-        AFL_VERIFY(Counter);
+        YDB_LOG_VERIFY(Counter);
         Counter->Inc();
     }
 
     ~TCounterGuard() {
         if (Counter) {
-            AFL_VERIFY(Counter->Dec() >= 0);
+            YDB_LOG_VERIFY(Counter->Dec() >= 0);
         }
     }
 };
@@ -458,7 +458,7 @@ public:
     void OnSkipGraphNode(const ui32 nodeId) const {
         if (SkipNodesCount.size()) {
             auto it = SkipNodesCount.find(nodeId);
-            AFL_VERIFY(it != SkipNodesCount.end());
+            YDB_LOG_VERIFY(it != SkipNodesCount.end());
             it->second->Inc();
         }
     }
@@ -466,7 +466,7 @@ public:
     void OnExecuteGraphNode(const ui32 nodeId) const {
         if (ExecuteNodesCount.size()) {
             auto it = ExecuteNodesCount.find(nodeId);
-            AFL_VERIFY(it != ExecuteNodesCount.end());
+            YDB_LOG_VERIFY(it != ExecuteNodesCount.end());
             it->second->Inc();
         }
     }

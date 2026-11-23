@@ -12,9 +12,9 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
     SwitchStage(EStage::WaitData, EStage::WaitData);
     auto data = ev->Get()->ArrowBatch;
-    AFL_VERIFY(!!data || ev->Get()->Finished);
+    YDB_LOG_VERIFY(!!data || ev->Get()->Finished);
     if (data) {
-        AFL_VERIFY(ScanActorId);
+        YDB_LOG_VERIFY(ScanActorId);
         const auto status = RestoreTask->OnDataChunk(data);
         if (status.IsSuccess()) {
             TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, 1, 1), NActors::IEventHandle::FlagTrackDelivery);
@@ -46,7 +46,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
         {"event", "init_actor"});
     LastAck = std::nullopt;
-    AFL_VERIFY(!ScanActorId);
+    YDB_LOG_VERIFY(!ScanActorId);
     auto& msg = ev->Get()->Record;
     ScanActorId = ActorIdFromProto(msg.GetScanActorId());
     if (!CheckActivity()) {

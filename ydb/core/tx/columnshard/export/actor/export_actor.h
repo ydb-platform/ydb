@@ -108,7 +108,7 @@ public:
                     TBase::StateInProgress(ev);
             }
         } catch (...) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
 

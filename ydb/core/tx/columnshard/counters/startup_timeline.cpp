@@ -26,7 +26,7 @@ void TStartupTimeline::OnExecutorActivated() {
 }
 
 void TStartupTimeline::OnTxInitSchemaFinished() {
-    AFL_VERIFY(ExecutorActivatedInstant);
+    YDB_LOG_VERIFY(ExecutorActivatedInstant);
     TxInitSchemaFinishInstant = TMonotonic::Now();
     const TDuration txInitSchema = TxInitSchemaFinishInstant - *ExecutorActivatedInstant;
     Counters.OnTxInitSchemaFinished(txInitSchema);
@@ -48,7 +48,7 @@ void TStartupTimeline::OnTxInitFinished() {
 }
 
 void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
-    AFL_VERIFY(ExecutorActivatedInstant);
+    YDB_LOG_VERIFY(ExecutorActivatedInstant);
     const TMonotonic now = TMonotonic::Now();
     Counters.OnSwitchToWork(now - *ExecutorActivatedInstant, now - CreateInstant);
     const TDuration switchToWork = now - TxInitFinishInstant;

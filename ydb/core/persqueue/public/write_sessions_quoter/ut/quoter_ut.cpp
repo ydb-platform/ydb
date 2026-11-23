@@ -40,6 +40,7 @@ protected:
 void TWriteSessionsQuoterTest::SetUp(NUnitTest::TTestContext&) {
     TTestActorRuntime::TEgg egg;
     egg.App0 = new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr);
+    egg.App0->FeatureFlags.SetEnableTopicWriteSessionsInitQuoting(true);
     egg.App0->PQConfig.SetWriteSessionsInitRps(1);
     Runtime.Initialize(std::move(egg));
     Quoter = Runtime.Register(CreateWriteSessionsQuoter());

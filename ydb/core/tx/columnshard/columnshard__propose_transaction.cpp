@@ -24,7 +24,7 @@ public:
         : TBase(self)
         , Ev(ev)
     {
-        AFL_VERIFY(!!Ev);
+        YDB_LOG_VERIFY(!!Ev);
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& /* ctx */) override {
@@ -52,7 +52,7 @@ public:
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
             } else {
-                AFL_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
+                YDB_LOG_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
             if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
                 if (record.HasSubDomainPathId()) {
@@ -86,8 +86,8 @@ public:
 
     virtual void Complete(const TActorContext& ctx) override {
         auto& record = Proto(Ev->Get());
-        AFL_VERIFY(!!TxOperator);
-        AFL_VERIFY(!!TxInfo);
+        YDB_LOG_VERIFY(!!TxOperator);
+        YDB_LOG_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
         YDB_LOG_CREATE_CONTEXT(
             {"tabletId", Self->TabletID()},

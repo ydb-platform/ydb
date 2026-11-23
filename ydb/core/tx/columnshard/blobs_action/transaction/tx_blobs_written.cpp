@@ -27,19 +27,19 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
 
     for (auto&& writeResult : Pack.GetWriteResults()) {
         const auto& writeMeta = writeResult.GetWriteMeta();
-        AFL_VERIFY(!writeMeta.HasLongTxId());
+        YDB_LOG_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         if (!PackBehaviour) {
             PackBehaviour = op->GetBehaviour();
         } else {
-            AFL_VERIFY(PackBehaviour == op->GetBehaviour());
+            YDB_LOG_VERIFY(PackBehaviour == op->GetBehaviour());
         }
     }
-    AFL_VERIFY(!!PackBehaviour);
+    YDB_LOG_VERIFY(!!PackBehaviour);
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     const ui64 firstPKColumnId = Self->TablesManager.GetIndexInfo(*CommitSnapshot).GetPKFirstColumnId();
     for (auto&& portion : Pack.MutablePortions()) {
-        AFL_VERIFY(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetType() == NOlap::EPortionType::Written);
+        YDB_LOG_VERIFY(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetType() == NOlap::EPortionType::Written);
         auto* constructor =
             static_cast<NOlap::TWrittenPortionInfoConstructor*>(&portion.GetPortionInfoConstructor()->MutablePortionConstructor());
         constructor->SetInsertWriteId(granule.BuildNextInsertWriteId());
@@ -63,7 +63,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         if (!operationIds.emplace(op->GetWriteId()).second) {
             continue;
         }
-        AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetPathId().InternalPathId, minReadSnapshot));
+        YDB_LOG_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetPathId().InternalPathId, minReadSnapshot));
         Y_ABORT_UNLESS(op->GetStatus() == EOperationStatus::Started);
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             op->OnWriteFinish(txc, {}, true);
@@ -151,7 +151,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         const auto& writeMeta = writeResult.GetWriteMeta();
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            AFL_VERIFY(CommitSnapshot);
+            YDB_LOG_VERIFY(CommitSnapshot);
             Self->OperationsManager->CommitTransactionOnComplete(*Self, 0, op->GetLockId(), *CommitSnapshot);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         } else {
@@ -180,7 +180,7 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TAct
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();
         writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
-        AFL_VERIFY(!writeMeta.HasLongTxId());
+        YDB_LOG_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
 

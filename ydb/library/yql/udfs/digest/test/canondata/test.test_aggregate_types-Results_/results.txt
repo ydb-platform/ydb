@@ -123,25 +123,19 @@
                         [
                             "CityHash64";
                             "1";
-                            [
-                                "pTIMIyXBcLI="
-                            ];
+                            "A5320C2325C170B2";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "1";
-                            [
-                                "2Gu+yjzaDNQtUViNCEEH6g=="
-                            ];
+                            "D86BBECA3CDA0CD42D51588D084107EA";
                             "1"
                         ];
                         [
                             "Sha256";
                             "1";
-                            [
-                                "slJXEqFDMX0g0i3VM88cbEwChSO9YSdkyD5c4kwzKHY="
-                            ];
+                            "B2525712A143317D20D22DD533CF1C6C4C028523BD612764C83E5CE24C332876";
                             "1"
                         ]
                     ]
@@ -274,25 +268,19 @@
                         [
                             "CityHash64";
                             "2";
-                            [
-                                "NNivq/ptYa8="
-                            ];
+                            "34D8AFABFA6D61AF";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "2";
-                            [
-                                "SjK2qdkDDuMNrjkZPYQUDg=="
-                            ];
+                            "4A32B6A9D9030EE30DAE39193D84140E";
                             "1"
                         ];
                         [
                             "Sha256";
                             "2";
-                            [
-                                "4K1k0ZFjHKvZngqz4JR+Y/01yYtkD3IB6KN35OVTFEk="
-                            ];
+                            "E0AD64D191631CABD99E0AB3E0947E63FD35C98B640F7201E8A377E4E5531449";
                             "1"
                         ]
                     ]
@@ -425,25 +413,19 @@
                         [
                             "CityHash64";
                             "4";
-                            [
-                                "eY/ApJZiBjw="
-                            ];
+                            "798FC0A49662063C";
                             "1"
                         ];
                         [
                             "CityHash128";
                             "4";
-                            [
-                                "OzMd1YsomP3z4XYxVw+BZg=="
-                            ];
+                            "3B331DD58B2898FDF3E17631570F8166";
                             "1"
                         ];
                         [
                             "Sha256";
                             "4";
-                            [
-                                "4tX2g+oyH7EdjtAQ/Cbah36wRI2bRec3wDEmsJBTHBo="
-                            ];
+                            "E2D5F683EA321FB11D8ED010FC26DA877EB0448D9B45E737C03126B090531C1A";
                             "1"
                         ]
                     ]

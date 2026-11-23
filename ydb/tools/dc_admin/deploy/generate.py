@@ -109,6 +109,13 @@ def render(out, nodes, dynamic, affinities):
     units.mkdir()
     (out / "config.yaml").write_text(yaml.safe_dump(config(nodes), sort_keys=False))
     (out / "nodes.json").write_text(json.dumps(nodes, indent=2) + "\n")
+    # sudoers matches the entire argument string. Bound each argument to one of the nine static units.
+    sudoers = []
+    for length in range(1, len(nodes) + 1):
+        names = " ".join(["ydb_dc[1-3]_node[1-3].service"] * length)
+        for action in ("start", "stop"):
+            sudoers.append(f"ydb ALL=(root) NOPASSWD: /usr/bin/systemctl {action} {names}")
+    (out / "sudoers").write_text("\n".join(sudoers) + "\n")
     for i in range(1, 10 + dynamic):
         directory = f"{DATA}/node-{i}"
         argv = [f"{BIN}/ydbd", "server", f"--config-dir={directory}", "--node-domain=Root", "--mon-address=::1"]

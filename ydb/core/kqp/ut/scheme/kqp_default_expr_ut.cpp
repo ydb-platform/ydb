@@ -2282,7 +2282,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         UNIT_ASSERT_C(literal.HasDefaultFromLiteral(), literal.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(literal.GetDefaultFromLiteral().value().uint64_value(), 8u);
         const auto dropped = fixture.ColumnDesc("/Root/TestTable", "c");
-        UNIT_ASSERT_VALUES_EQUAL(dropped.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_C(dropped.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            dropped.ShortDebugString());
         fixture.Exec("UPSERT INTO TestTable (k) VALUES (1), (2);");
         fixture.Check("SELECT k, a, b, c FROM TestTable ORDER BY k;", "[[1;[42u];#;[9u]];[2;[50u];[8u];#]]");
     }
@@ -2444,7 +2445,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
         fixture.RestartSchemeShard("/Root/TestTable");
         const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_C(column.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            column.ShortDebugString());
         fixture.Check("INSERT INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;#]]");
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[7u]];[2;[42u]];[3;#]]");
         fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1;[7u]];[2;[42u]];[3;#]]");
@@ -2556,7 +2558,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec(ClearWithNull ? "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT NULL;"
                                    : "ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
         const auto col = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT_VALUES_EQUAL(col.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_C(col.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            col.ShortDebugString());
         const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
         UNIT_ASSERT_C(ddl.find("DEFAULT") == std::string::npos, ddl);
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
@@ -2596,8 +2599,10 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
         const auto nullable = fixture.ColumnDesc("/Root/TestTable", "v");
         const auto required = fixture.ColumnDesc("/Root/TestTable", "required");
-        UNIT_ASSERT_VALUES_EQUAL(nullable.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
-        UNIT_ASSERT_VALUES_EQUAL(required.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_C(nullable.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            nullable.ShortDebugString());
+        UNIT_ASSERT_C(required.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            required.ShortDebugString());
         UNIT_ASSERT(!nullable.GetNotNull());
         UNIT_ASSERT(required.GetNotNull());
         fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", "Missing not null column in input: required");

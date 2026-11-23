@@ -572,7 +572,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         const auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto* column = FindColumn(describe, "a");
         UNIT_ASSERT(column);
-        UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_C(column->GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            column->ShortDebugString());
         CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
     }
 
@@ -754,7 +755,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
             auto describe = DescribePath(runtime, "/MyRoot/Table");
             const auto* column = FindColumn(describe, "ts");
             UNIT_ASSERT(column);
-            UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+            UNIT_ASSERT_C(column->GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+                column->ShortDebugString());
         };
         checkNoDefault();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -791,7 +793,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         const auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto* column = FindColumn(describe, "ts");
         UNIT_ASSERT(column);
-        UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_C(column->GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET,
+            column->ShortDebugString());
     }
 
     Y_UNIT_TEST(AlterSetDefaultExpressionOnGeneratedRejected) {

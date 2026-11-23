@@ -384,8 +384,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusInvalidParameter, result->Get()->Error);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "replicating tables with DEFAULT expressions is not supported");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Replica").GetStatus(),
-            static_cast<ui32>(NKikimrScheme::StatusPathDoesNotExist));
+        const auto replica = env.GetDescription("/Root/Replica");
+        UNIT_ASSERT_VALUES_EQUAL_C(replica.GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist, replica.ShortDebugString());
         const auto describe = env.GetDescription("/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(describe.GetPathDescription().GetTable().GetColumns(1)
             .GetDefaultFromExpression().SerializeAsString(), expression->SerializeAsString());

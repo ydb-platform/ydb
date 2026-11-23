@@ -36,7 +36,8 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     EReplicationMode mode = EReplicationMode::ReadOnly,
     EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
     TReplication::EState desiredState = TReplication::EState::Ready,
-    bool switchover = false);
+    bool switchover = false,
+    const TString& streamName = {});
 IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
     const TString& database, const TPathId& pathId,
     ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,

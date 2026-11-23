@@ -47,6 +47,36 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
     }
 
+    void StampProvenance(TEnv<>& env, const TString& path,
+            const TMaybe<TString>& sourceDatabase,
+            const TMaybe<TVector<TString>>& feeds)
+    {
+        const auto schemeShardId = env.GetSchemeshardId(path);
+        static std::atomic<ui64> nextTxId{200500};
+        const ui64 txId = nextTxId++;
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        env.GetPathId(path).ToProto(tx.MutableAlterTable()->MutablePathId());
+        auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+        FillReplicationConfig(config, EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        if (sourceDatabase) {
+            config.SetSnapshotSourceDatabase(*sourceDatabase);
+        }
+        if (feeds) {
+            config.SetSnapshotFeedsKnown(true);
+            for (const auto& name : *feeds) {
+                config.AddSnapshotReplicationFeeds(name);
+            }
+        }
+        auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(schemeShardId, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted, result->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
+    }
+
     void CheckTableReplica(
             const TTestTableDescription& tableDesc,
             const NKikimrSchemeOp::TTableDescription& replicatedDesc,
@@ -518,6 +548,101 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             UNIT_ASSERT(!result->Get()->IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "expected IMPORTED");
         }
+    }
+
+    Y_UNIT_TEST(SnapshotProvenance) {
+        struct TCase {
+            TMaybe<TVector<TString>> Feeds;
+            const char* Expect; // nullptr: the attach succeeds
+        };
+        const TCase cases[] = {
+            // Nothing recorded: refused. A check that passes when it cannot see anything is
+            // indistinguishable from no check at all.
+            {Nothing(), "records no async replication provenance"},
+            // Looked and found no feed: the snapshot predates replication.
+            {TVector<TString>{}, "records no async replication feed"},
+            {TVector<TString>{"stream-x"}, nullptr},
+            {TVector<TString>{"stream-someone-else"}, "records no async replication feed"},
+            // Fan-out: membership, not equality, so other targets' feeds are inert.
+            {TVector<TString>{"stream-someone-else", "stream-x", "stream-y"}, nullptr},
+        };
+
+        for (const auto& [feeds, expect] : cases) {
+            NTestHelpers::TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableAsyncReplicationSnapshotProvenance(true);
+            TEnv env(flags);
+
+            auto table = TTestTableDescription{
+                .Name = "Source",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}},
+                .ReplicationConfig = Nothing(),
+            };
+            env.CreateTable("/Root", *MakeTableDescription(table));
+            table.Name = "Dst";
+            env.CreateTable("/Root", *MakeTableDescription(table));
+            StampProvenance(env, "/Root/Dst", Nothing(), feeds);
+
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row,
+                false, TReplication::EState::Ready, false, "stream-x"));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+
+            if (expect) {
+                UNIT_ASSERT_C(!result->Get()->IsSuccess(), result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, expect);
+            } else {
+                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotProvenanceSkippedForIndexTable) {
+        NTestHelpers::TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableAsyncReplicationSnapshotProvenance(true);
+        TEnv env(flags);
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        table.Name = "Dst";
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        StampProvenance(env, "/Root/Dst", TString("/Root"), TVector<TString>{"base-table-feed"});
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::IndexTable,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row,
+            false, TReplication::EState::Ready, false, "stream-x"));
+        auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+    }
+
+    Y_UNIT_TEST(SnapshotProvenanceIgnoredWhenDisabled) {
+        TEnv env;
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        table.Name = "Dst";
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        StampProvenance(env, "/Root/Dst", TString("/Root/other"), TVector<TString>{});
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row,
+            false, TReplication::EState::Ready, false, "stream-x"));
+        auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
     }
 
     Y_UNIT_TEST_TWIN(ReplicaOwnership, TableOwnership) {

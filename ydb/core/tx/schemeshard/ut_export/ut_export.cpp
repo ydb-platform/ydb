@@ -5454,6 +5454,92 @@ state: STATE_ENABLED
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetSourceDatabase(), "/MyRoot");
     }
 
+    Y_UNIT_TEST(AsyncReplicationFeedsRecordedInMetadata) {
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port());
+
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+
+        const TVector<TString> changefeeds = {
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "repl_feed"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                    UserAttributes { Key: "__async_replication" Value: "true" }
+                }
+            )",
+            R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "user_feed"
+                    Mode: ECdcStreamModeUpdate
+                    Format: ECdcStreamFormatJson
+                    State: ECdcStreamStateReady
+                }
+            )",
+        };
+
+        Run(Runtime(), Env(), TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", changefeeds);
+
+        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/metadata.json"));
+        const auto& feeds = metadata.GetAsyncReplicationFeeds();
+        UNIT_ASSERT_C(feeds, "enumerated, so present: absent would disable the check");
+        UNIT_ASSERT_VALUES_EQUAL(feeds->size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL((*feeds)[0], "repl_feed");
+
+        UNIT_ASSERT(!HasS3File("/repl_feed/changefeed_description.pb"));
+        UNIT_ASSERT(HasS3File("/user_feed/changefeed_description.pb"));
+    }
+
+    Y_UNIT_TEST(NoAsyncReplicationFeedsIsRecordedAsKnownEmpty) {
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port());
+
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+
+        Run(Runtime(), Env(), TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS);
+
+        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/metadata.json"));
+        const auto& feeds = metadata.GetAsyncReplicationFeeds();
+        UNIT_ASSERT_C(feeds, "known-and-empty must be distinguishable from unknown");
+        UNIT_ASSERT(feeds->empty());
+    }
+
     Y_UNIT_TEST(SchemaMapping) {
         RunS3({
             R"(

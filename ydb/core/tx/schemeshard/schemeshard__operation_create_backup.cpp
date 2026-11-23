@@ -1,10 +1,56 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
 
+#include <ydb/core/backup/common/omit_backup.h>
+
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+namespace {
+
+// A feed covers the exported data only if it existed when that data was read. The boundary is the
+// copy's creation, which holds only for the copy an export makes: a direct backup scans a live
+// table long after it was created, and judging against that would refuse feeds the backup is in
+// fact covered by. Derived on every proposal, as BackupSettings persists neither field.
+void FillAsyncReplicationFeeds(NKikimrSchemeOp::TBackupTask& backup, const TPath& targetPath,
+        const TTableInfo& table, TOperationContext& context)
+{
+    backup.ClearAsyncReplicationFeeds();
+    backup.ClearAsyncReplicationFeedsKnown();
+
+    const auto snapshot = TVirtualTimestamp(
+        targetPath.Base()->StepCreated, targetPath.Base()->CreateTxId);
+    if (!table.IsBackup || !snapshot) {
+        return;
+    }
+
+    backup.SetAsyncReplicationFeedsKnown(true);
+    for (const auto& cdcStream : backup.GetTable().GetTable().GetCdcStreams()) {
+        // A disabled stream generates no change records, so it covers nothing.
+        if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled) {
+            continue;
+        }
+        const bool isReplicationFeed = AnyOf(cdcStream.GetUserAttributes(), [](const auto& attr) {
+            return attr.GetKey() == NBackup::ASYNC_REPLICATION_ATTRIBUTE;
+        });
+        if (!isReplicationFeed) {
+            continue;
+        }
+        const auto* stream = context.SS->PathsById.FindPtr(TPathId::FromProto(cdcStream.GetPathId()));
+        if (!stream) {
+            continue;
+        }
+        if (!(snapshot < TVirtualTimestamp((*stream)->StepCreated, (*stream)->CreateTxId))) {
+            backup.AddAsyncReplicationFeeds(cdcStream.GetName());
+        }
+    }
+}
+
+} // namespace
 
 struct TBackup {
     static constexpr const char* Name() {
@@ -71,9 +117,11 @@ struct TBackup {
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
-        backup.SetSourceDatabase(TPath::Init(pathId, context.SS).GetDomainPathString());
+        const TPath targetPath = TPath::Init(pathId, context.SS);
+        backup.SetSourceDatabase(targetPath.GetDomainPathString());
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
+        FillAsyncReplicationFeeds(backup, targetPath, *table, context);
 
         const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {

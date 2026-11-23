@@ -13,6 +13,34 @@ Y_UNIT_TEST_SUITE(BackupMetadataTest) {
         metadata.SetSourceDatabase("/Root/tenant/database");
         UNIT_ASSERT_VALUES_EQUAL(TMetadata::Deserialize(metadata.Serialize()).GetSourceDatabase(), "/Root/tenant/database");
     }
+
+    Y_UNIT_TEST(AsyncReplicationFeeds) {
+        {
+            TMetadata metadata;
+            UNIT_ASSERT(!TMetadata::Deserialize(metadata.Serialize()).GetAsyncReplicationFeeds());
+            UNIT_ASSERT(!TMetadata::Deserialize(R"({"version": 1})").GetAsyncReplicationFeeds());
+        }
+        {
+            TMetadata metadata;
+            metadata.MarkAsyncReplicationFeedsKnown();
+            const auto feeds = TMetadata::Deserialize(metadata.Serialize()).GetAsyncReplicationFeeds();
+            UNIT_ASSERT(feeds);
+            UNIT_ASSERT(feeds->empty());
+        }
+        {
+            TMetadata metadata;
+            metadata.AddAsyncReplicationFeed("stream-0cf0a4b1");
+            metadata.AddAsyncReplicationFeed("stream-7f3ad200");
+            const auto feeds = TMetadata::Deserialize(metadata.Serialize()).GetAsyncReplicationFeeds();
+            UNIT_ASSERT(feeds);
+            UNIT_ASSERT_VALUES_EQUAL(feeds->size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL((*feeds)[0], "stream-0cf0a4b1");
+            UNIT_ASSERT_VALUES_EQUAL((*feeds)[1], "stream-7f3ad200");
+        }
+        UNIT_ASSERT(TMetadata::Deserialize(
+            R"({"version": 1, "async_replication_feeds": ["s"], "future_key": 7})")
+            .GetAsyncReplicationFeeds());
+    }
 }
 
 Y_UNIT_TEST_SUITE(PathsNormalizationTest) {

@@ -1426,7 +1426,7 @@ TLocksUpdate::TWriteSeqNumUpdate::TResult TLocksUpdate::TWriteSeqNumUpdate::Clas
             }
         }
         if (duplicate) {
-            // Operation's ShardsPath is a prefix of existing ShardsPath and it's writeSeqNum is already known => duplicate
+            // A stored branch is a prefix of the operation's path and covers its WSN.
             EchoLocks[key].insert(table);
             return {EStatus::Duplicate, {}, duplicate->SerializedResult};
         }

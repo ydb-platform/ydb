@@ -87,10 +87,10 @@ index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff7427aafe2ea291c64f3f39d0ee5302
              BooleanSupplier hook = settings.getPessimizationHook();
 diff --git a/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc68177cae
+index 0000000000000000000000000000000000000000..b21b2775f3737d32e48638d7ce95cb43af38a4fd
 --- /dev/null
 +++ b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,322 @@
 +package tech.ydb.core.impl;
 +
 +import java.time.Duration;
@@ -221,7 +221,7 @@ index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc
 +                                active.cancel("Discovery attempt failed", e);
 +                                active = null;
 +                            }
-+                            retry();
++                            retry(null);
 +                        }
 +                    }
 +                }
@@ -229,9 +229,18 @@ index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc
 +        }
 +    }
 +
-+    private void retry() {
++    static Long cutoverGeneration(Long floor, Status status, Metadata trailers) {
++        Long cut = generation(trailers);
++        return floor != null && status.getCode() == Status.Code.UNAVAILABLE && cut != null
++                && Long.compareUnsigned(cut, floor) > 0 ? cut : null;
++    }
++
++    private void retry(Long cut) {
 +        discovery.invalidate();
-+        requireCurrent = true;
++        requireCurrent = floor != null && cut == null;
++        if (cut != null) {
++            floor = cut;
++        }
 +        int wait = delayMs == 0 ? 0 : ThreadLocalRandom.current().nextInt(delayMs / 2, delayMs + 1);
 +        delayMs = Math.min(2000, Math.max(100, delayMs * 2));
 +        schedule(this::watch, wait);
@@ -301,11 +310,7 @@ index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc
 +                        schedule(EdsDiscovery.this::unary, 0);
 +                        return;
 +                    }
-+                    Long cut = generation(trailers);
-+                    if (floor != null && cut != null && Long.compareUnsigned(cut, floor) > 0) {
-+                        floor = cut;
-+                    }
-+                    retry();
++                    retry(cutoverGeneration(floor, status, trailers));
 +                }
 +            }
 +        }, headers());
@@ -353,7 +358,7 @@ index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc
 +                            LOG.warn("Invalid ListEndpoints result", e);
 +                        }
 +                    }
-+                    retry();
++                    retry(null);
 +                }
 +            }
 +        }, headers());
@@ -650,16 +655,18 @@ index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..24a1b84b5b8f0b6b5986cc40eab89aa4
              return CompletableFuture.completedFuture(Boolean.TRUE);
 diff --git a/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f106d9be29c1d4ae9d9fc95add63fdd1598a6c6c
+index 0000000000000000000000000000000000000000..4e51151a63d530ef6c114866e4d2cba6b9fa6399
 --- /dev/null
 +++ b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,57 @@
 +package tech.ydb.core.impl;
 +
 +import com.google.protobuf.Any;
 +import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 +import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 +import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
++import io.grpc.Metadata;
++import io.grpc.Status;
 +import org.junit.Assert;
 +import org.junit.Test;
 +
@@ -685,6 +692,22 @@ index 0000000000000000000000000000000000000000..f106d9be29c1d4ae9d9fc95add63fdd1
 +        group.getLbEndpointsBuilder(0).getEndpointBuilder().getAddressBuilder().getSocketAddressBuilder()
 +                .setPortValue(2136);
 +        Assert.assertThrows(IllegalArgumentException.class, () -> EdsDiscovery.decode(database, response(assignment)));
++    }
++
++    @Test
++    public void cutoverRequiresANewerUniqueGenerationOnUnavailable() {
++        Metadata.Key<String> generation = Metadata.Key.of("x-ydb-route-generation", Metadata.ASCII_STRING_MARSHALLER);
++        Metadata trailers = new Metadata();
++        Assert.assertNull(EdsDiscovery.cutoverGeneration(11L, Status.UNAVAILABLE, trailers));
++        trailers.put(generation, "11");
++        Assert.assertNull(EdsDiscovery.cutoverGeneration(11L, Status.UNAVAILABLE, trailers));
++        trailers.removeAll(generation);
++        trailers.put(generation, "12");
++        Assert.assertEquals(Long.valueOf(12), EdsDiscovery.cutoverGeneration(11L, Status.UNAVAILABLE, trailers));
++        Assert.assertNull(EdsDiscovery.cutoverGeneration(null, Status.UNAVAILABLE, trailers));
++        Assert.assertNull(EdsDiscovery.cutoverGeneration(11L, Status.INTERNAL, trailers));
++        trailers.put(generation, "13");
++        Assert.assertNull(EdsDiscovery.cutoverGeneration(11L, Status.UNAVAILABLE, trailers));
 +    }
 +
 +    private static DiscoveryResponse response(ClusterLoadAssignment.Builder assignment) {

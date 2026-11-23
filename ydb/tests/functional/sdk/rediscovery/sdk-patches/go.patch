@@ -164,10 +164,10 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..8455a89587d7504d5301da53ba9ffa8f
  			return nil, xerrors.WithStackTrace(err)
 diff --git a/internal/balancer/eds.go b/internal/balancer/eds.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765ddb38f57
+index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80becc9b7025f
 --- /dev/null
 +++ b/internal/balancer/eds.go
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,250 @@
 +package balancer
 +
 +import (
@@ -215,6 +215,7 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +				assigned, err = b.watchEDS(ctx, cc, &floor, func() { first(nil) })
 +				if !assigned && status.Code(err) == codes.Unimplemented {
 +					err = b.unaryEDS(ctx, cc, &floor)
++					floor.requireCurrent = floor.managed && err != nil
 +					if err == nil {
 +						first(nil)
 +						delay = b.discoveryConfig.Interval()
@@ -268,7 +269,9 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +	if err != nil {
 +		return nil, err
 +	}
-+	ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-require-current-route", "1")
++	if floor.requireCurrent {
++		ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-require-current-route", "1")
++	}
 +	if floor.managed {
 +		ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-min-route-generation", strconv.FormatUint(floor.generation, 10))
 +	}
@@ -276,8 +279,21 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +}
 +
 +type edsRoute struct {
-+	managed    bool
-+	generation uint64
++	managed        bool
++	generation     uint64
++	requireCurrent bool
++}
++
++func (r *edsRoute) watchClosed(err error, trailers metadata.MD) {
++	r.requireCurrent = r.managed
++	values := trailers.Get("x-ydb-route-generation")
++	if !r.managed || status.Code(err) != codes.Unavailable || len(values) != 1 {
++		return
++	}
++	if cut, err := strconv.ParseUint(values[0], 10, 64); err == nil && cut > r.generation {
++		r.generation = cut
++		r.requireCurrent = false
++	}
 +}
 +
 +func routeGeneration(md metadata.MD, floor edsRoute) (edsRoute, error) {
@@ -293,11 +309,19 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +	if err != nil || g < floor.generation {
 +		return floor, fmt.Errorf("invalid or stale discovery route generation")
 +	}
-+	return edsRoute{managed: true, generation: g}, nil
++	floor.managed = true
++	floor.generation = g
++	return floor, nil
 +}
 +
-+func (b *Balancer) watchEDS(ctx context.Context, cc *grpc.ClientConn, floor *edsRoute, ready func()) (bool, error) {
-+	ctx, err := b.discoveryEDSContext(ctx, *floor)
++func (b *Balancer) watchEDS(ctx context.Context, cc *grpc.ClientConn, floor *edsRoute, ready func()) (assigned bool, err error) {
++	var trailers metadata.MD
++	defer func() {
++		if assigned || status.Code(err) != codes.Unimplemented {
++			floor.watchClosed(err, trailers)
++		}
++	}()
++	ctx, err = b.discoveryEDSContext(ctx, *floor)
 +	if err != nil {
 +		return false, err
 +	}
@@ -316,6 +340,7 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +	if err = stream.Send(req); err != nil {
 +		if err == io.EOF {
 +			_, err = stream.Recv()
++			trailers = stream.Trailer()
 +		}
 +		return false, err
 +	}
@@ -324,16 +349,10 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +	if genErr == nil {
 +		*floor = generation
 +	}
-+	assigned := false
 +	for {
 +		r, err := stream.Recv()
 +		if err != nil {
-+			vals := stream.Trailer().Get("x-ydb-route-generation")
-+			if len(vals) == 1 {
-+				if g, e := strconv.ParseUint(vals[0], 10, 64); e == nil && floor.managed && g > floor.generation {
-+					floor.generation = g
-+				}
-+			}
++			trailers = stream.Trailer()
 +			return assigned, err
 +		}
 +		if genErr != nil {
@@ -363,6 +382,10 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +			ready()
 +		}
 +		if err = stream.Send(req); err != nil {
++			if err == io.EOF {
++				_, err = stream.Recv()
++				trailers = stream.Trailer()
++			}
 +			return assigned, err
 +		}
 +	}
@@ -397,16 +420,21 @@ index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765
 +}
 diff --git a/internal/balancer/eds_test.go b/internal/balancer/eds_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..5c0d7d31788999c6af5b544ab9590e78df22d8cb
+index 0000000000000000000000000000000000000000..5a71256ad14be0272e1b53e7ba603b026eae2138
 --- /dev/null
 +++ b/internal/balancer/eds_test.go
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,59 @@
 +package balancer
 +
 +import (
++	"context"
 +	"testing"
 +
++	"github.com/stretchr/testify/require"
++	"github.com/ydb-platform/ydb-go-sdk/v3/config"
++	"google.golang.org/grpc/codes"
 +	"google.golang.org/grpc/metadata"
++	"google.golang.org/grpc/status"
 +)
 +
 +func TestEDSRouteFloorSurvivesRollbackAndMissingHeaders(t *testing.T) {
@@ -422,6 +450,37 @@ index 0000000000000000000000000000000000000000..5c0d7d31788999c6af5b544ab9590e78
 +	}
 +	if _, err := routeGeneration(nil, zero); err == nil {
 +		t.Fatal("forgot managed route at generation zero")
++	}
++}
++
++func TestEDSRouteRetryHeaders(t *testing.T) {
++	b := &Balancer{driverConfig: config.New()}
++	headers := func(route edsRoute) metadata.MD {
++		ctx, err := b.discoveryEDSContext(context.Background(), route)
++		require.NoError(t, err)
++		md, _ := metadata.FromOutgoingContext(ctx)
++		return md
++	}
++	require.Empty(t, headers(edsRoute{}).Get("x-ydb-require-current-route"))
++	for _, test := range []struct {
++		code    codes.Code
++		stamp   []string
++		floor   string
++		current []string
++	}{
++		{codes.Unavailable, []string{"12"}, "12", nil},
++		{codes.Unavailable, nil, "11", []string{"1"}},
++		{codes.Unavailable, []string{"11"}, "11", []string{"1"}},
++		{codes.Unavailable, []string{"10"}, "11", []string{"1"}},
++		{codes.Unavailable, []string{"12", "13"}, "11", []string{"1"}},
++		{codes.Unavailable, []string{"bogus"}, "11", []string{"1"}},
++		{codes.Internal, []string{"12"}, "11", []string{"1"}},
++	} {
++		route := edsRoute{managed: true, generation: 11}
++		route.watchClosed(status.Error(test.code, "closed"), metadata.MD{"x-ydb-route-generation": test.stamp})
++		md := headers(route)
++		require.Equal(t, []string{test.floor}, md.Get("x-ydb-min-route-generation"))
++		require.Equal(t, test.current, md.Get("x-ydb-require-current-route"))
 +	}
 +}
 diff --git a/internal/discovery/config/config.go b/internal/discovery/config/config.go

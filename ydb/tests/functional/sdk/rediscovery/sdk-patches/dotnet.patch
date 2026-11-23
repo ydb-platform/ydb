@@ -357,10 +357,10 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..9e42316ddb820be086e08c63439d2008
          _credentialsProvider = credentialsProvider;
 diff --git a/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..8deaab334bfbaa70913c7f964912e6d73e41a9c9
+index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058fbca988e
 --- /dev/null
 +++ b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,235 @@
 +using System.Globalization;
 +using Google.Protobuf;
 +using Grpc.Core;
@@ -424,6 +424,7 @@ index 0000000000000000000000000000000000000000..8deaab334bfbaa70913c7f964912e6d7
 +        var delayMs = 0;
 +        while (!stop.IsCancellationRequested)
 +        {
++            ulong? cutover = null;
 +            try
 +            {
 +                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(stop);
@@ -480,10 +481,7 @@ index 0000000000000000000000000000000000000000..8deaab334bfbaa70913c7f964912e6d7
 +                }
 +                catch (RpcException error)
 +                {
-+                    if (_routeFloor.HasValue && Generation(error.Trailers) is { } cut)
-+                    {
-+                        _routeFloor = Math.Max(cut, _routeFloor.Value);
-+                    }
++                    cutover = CutoverGeneration(_routeFloor, error);
 +                    throw;
 +                }
 +            }
@@ -493,7 +491,8 @@ index 0000000000000000000000000000000000000000..8deaab334bfbaa70913c7f964912e6d7
 +            }
 +            if (stop.IsCancellationRequested) { return; }
 +
-+            _requireCurrent = true;
++            _requireCurrent = _routeFloor.HasValue && !cutover.HasValue;
++            _routeFloor = cutover ?? _routeFloor;
 +            await RetireRoute().ConfigureAwait(false);
 +            if (delayMs > 0)
 +            {
@@ -530,6 +529,10 @@ index 0000000000000000000000000000000000000000..8deaab334bfbaa70913c7f964912e6d7
 +        if (_requireCurrent) { headers.Add("x-ydb-require-current-route", "1"); }
 +        return options;
 +    }
++
++    internal static ulong? CutoverGeneration(ulong? floor, RpcException error) =>
++        error.StatusCode == Grpc.Core.StatusCode.Unavailable && Generation(error.Trailers) is { } cut && cut > floor
++            ? cut : null;
 +
 +    private static ulong? Generation(GrpcMetadata headers)
 +    {
@@ -717,6 +720,39 @@ index e74e4d66e32673d97e0fdc0e4a3882131bddcb9f..8e8cf0b4d30328e20b1b53e3429ae0a3
      <PackageReference Include="Ydb.Protos" Version="1.4.0" />
      <PackageReference Include="Portable.BouncyCastle" Version="1.9.0" />
      <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.5.0" />
+diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/EdsCutoverTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/EdsCutoverTests.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d0d0603a2bf19ebb061a1a5e598a65c6c17d664a
+--- /dev/null
++++ b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/EdsCutoverTests.cs
+@@ -0,0 +1,27 @@
++using Grpc.Core;
++using Xunit;
++using GrpcStatusCode = Grpc.Core.StatusCode;
++
++namespace Ydb.Sdk.Ado.Tests.Internal;
++
++public class EdsCutoverTests
++{
++    [Theory]
++    [InlineData(GrpcStatusCode.Unavailable, "12", null, 12)]
++    [InlineData(GrpcStatusCode.Unavailable, null, null, null)]
++    [InlineData(GrpcStatusCode.Unavailable, "11", null, null)]
++    [InlineData(GrpcStatusCode.Unavailable, "10", null, null)]
++    [InlineData(GrpcStatusCode.Unavailable, "bad", null, null)]
++    [InlineData(GrpcStatusCode.Unavailable, "12", "13", null)]
++    [InlineData(GrpcStatusCode.Internal, "12", null, null)]
++    public void OnlyANewerUniqueStampOnUnavailableAllowsFloorOnlyRetry(
++        GrpcStatusCode status, string? first, string? second, int? expected)
++    {
++        var trailers = new Grpc.Core.Metadata();
++        if (first != null) { trailers.Add("x-ydb-route-generation", first); }
++        if (second != null) { trailers.Add("x-ydb-route-generation", second); }
++        var error = new RpcException(new Grpc.Core.Status(status, "closed"), trailers);
++        Assert.Equal((ulong?)expected, Driver.CutoverGeneration(11, error));
++        Assert.Null(Driver.CutoverGeneration(null, error));
++    }
++}
 diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs
 index 99f6cb6b309ba1c34ca2417243451a052a44e554..0f126a0506b4c99ad92fb3d7405803a3b62409eb 100644
 --- a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs

@@ -370,4 +370,5 @@ message TFeatureFlags {
     // the legacy zeroing behaviour that undercounted the consumed
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
 }

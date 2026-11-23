@@ -8,6 +8,8 @@ namespace NKikimrSchemeOp {
 
 namespace NKikimr::NReplication::NController {
 
+struct TTopicMirrorSettings;
+
 enum class EReplicationMode {
     ReadOnly,
 };
@@ -35,5 +37,10 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
     TReplication::EState desiredState = TReplication::EState::Ready,
     bool switchover = false);
+
+IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+    const TString& database, const TPathId& pathId,
+    ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
+    TTopicMirrorSettings&& topicMirror);
 
 }

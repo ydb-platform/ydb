@@ -1,5 +1,48 @@
 # SDK rediscovery after a database switchover
 
+## Managed EDS cutover
+
+The EDS fixture switches the bootstrap route while the old data nodes stay healthy. It ends only the database's `StreamEndpoints` RPC. A new watch receives a complete assignment from the selected replica. The C++ functional test checks both a generation-stamped close and a fixed gRPC `UNAVAILABLE` close. The latter makes the driver request a current-route check from the balancer.
+
+Run the native server and C++ tests from the repository root.
+
+```sh
+./ya make --build relwithdebinfo -tA ydb/tests/functional/sdk/rediscovery
+```
+
+For the seven SDKs maintained outside this repository, `sdk-patches/sources.json` pins each public source revision. The following command creates one checkout per SDK with the source changes staged. Each destination directory must be new.
+
+```sh
+cd ydb/tests/functional/sdk/rediscovery
+python3 sdk-patches/prepare.py /tmp/ydb-eds-sdks
+```
+
+| SDK | Draft opt-in |
+| --- | --- |
+| C++ | `TDriverConfig::SetDiscoveryMode(EDiscoveryMode::Eds)` |
+| Go | `ydb.WithEndpointDiscoveryStream()` |
+| Python (sync and asyncio) | `use_eds=True` |
+| Java | `GrpcTransportBuilder.withEdsDiscovery()` |
+| JavaScript | Driver option `'ydb.sdk.enable_eds': true` |
+| .NET | `EnableEdsDiscovery=true` |
+| PHP | `'discovery' => true, 'eds' => true` |
+| Rust | Connection string parameter `use_discovery=eds` |
+
+Build each probe against its patched checkout. For example, use a local Go module replacement and the probe’s `eds` build tag.
+
+```sh
+cp -R clients/go /tmp/ydb-eds-go-probe
+(cd /tmp/ydb-eds-go-probe && go mod edit -replace github.com/ydb-platform/ydb-go-sdk/v3=/tmp/ydb-eds-sdks/go && go mod tidy && go build -tags eds -o probe .)
+python3 run_eds_probe.py --database /Root/tenant \
+  --replica localhost:2136 http://localhost:8765 \
+  --replica localhost:3136 http://localhost:9765 -- /tmp/ydb-eds-go-probe/probe
+```
+
+The runner requires Python 3.11+, grpcio and two isolated plaintext YDB tenants with the same path and EDS support. It runs the supplied Scheme probe in both directions, compares each server's ListDirectory counters and checks whether the bootstrap TCP peer stays the same. On Linux it also samples established sockets to the three test listeners. Concurrent workloads on those tenants affect the counters.
+
+## Transport-disconnect experiment
+
+
 This test keeps a single driver running while a stable discovery address changes from one YDB database to another. Two advertised addresses initially reach the source. After the first successful operation, the fixture drops the selected TCP transport during the next unary RPC, or disconnects the established Topic stream. The second cached source address stays healthy. Both backends run real YDB services.
 
 A passing driver fetches the destination addresses, completes another operation through the destination within four seconds, and sends no new RPC to a surviving source address. The fixture also checks the peak number of open client connections to its discovery and data listeners. The four-second default is below the C++ driver's five-second periodic check.
@@ -24,6 +67,23 @@ Run the build command from the corresponding client directory. Set up a Python 3
 | php | `composer install` with PHP 8 and the grpc, bcmath and curl extensions | scheme |
 | python | Use the fixture virtual environment | scheme, topic-read, topic-write |
 | rust | `cargo build` with Rust 1.88+ | scheme |
+
+### Build the JavaScript and Rust probes with the EDS patches
+
+Prepare the SDK checkouts using `sdk-patches/prepare.py`. The commands below use
+`JS_SDK` and `RUST_SDK` for their absolute paths and run from this fixture directory.
+
+```sh
+(cd "$JS_SDK" && npm ci && npm run build -- --filter=@ydbjs/topic)
+cp clients/javascript/main.mjs "$JS_SDK/rediscovery-probe.mjs"
+cargo build --manifest-path clients/rust/Cargo.toml --config "patch.crates-io.ydb.path='${RUST_SDK}/ydb'"
+```
+
+Set `YDB_EDS_DISCOVERY=1` for the patched SDKs. Run
+`node "$JS_SDK/rediscovery-probe.mjs"` or `clients/rust/target/debug/ydb-rediscovery-probe`.
+Both probes support `YDB_PROBE=scheme`, `topic-read` and `topic-write`.
+Set `YDB_TOPIC_PATH`, `YDB_CONSUMER` or `YDB_PRODUCER` to isolate concurrent Topic runs.
+The Scheme probe uses released SDKs with the installation commands above when EDS is disabled.
 
 ## Run
 

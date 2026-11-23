@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+from pathlib import Path
 import time
 from urllib.request import urlopen
 
@@ -20,6 +21,33 @@ def requests_completed(monitor, database):
         and row["labels"].get("sensor") == "total"
         and row["labels"].get("database") == database
     )
+
+
+def established_sockets(pid, ports):
+    """Count this probe's Linux TCP sockets to the three test listeners."""
+    root = Path("/proc") / str(pid)
+    if not (root / "net/tcp").exists():
+        return None
+    try:
+        sockets = set()
+        for fd in (root / "fd").iterdir():
+            try:
+                name = os.readlink(fd)
+            except FileNotFoundError:
+                continue
+            if name.startswith("socket:["):
+                sockets.add(name[8:-1])
+        count = 0
+        for table in ("tcp", "tcp6"):
+            path = root / "net" / table
+            if path.exists():
+                for line in path.read_text().splitlines()[1:]:
+                    fields = line.split()
+                    if fields[3] == "01" and fields[9] in sockets and int(fields[2].rsplit(":", 1)[1], 16) in ports:
+                        count += 1
+        return count
+    except (FileNotFoundError, PermissionError):
+        return None
 
 
 async def successes(process, count):
@@ -40,6 +68,7 @@ async def run_direction(database, source, destination, command, timeout, balance
                 env=dict(os.environ, YDB_ENDPOINT=address, YDB_DATABASE=database,
                          YDB_PROBE="scheme", YDB_EDS_DISCOVERY="1", YDB_DISCOVERY_MODE="eds"),
             )
+            sampler = None
             try:
                 async with asyncio.timeout(timeout):
                     target, original_peer, _ = await route.subscriptions.get()
@@ -47,6 +76,16 @@ async def run_direction(database, source, destination, command, timeout, balance
                     await successes(process, 3)
                     old_count = requests_completed(source[1], database)
                     first_count = requests_completed(destination[1], database)
+                    ports = {int(value.rsplit(":", 1)[1]) for value in (address, source[0], destination[0])}
+                    before_sockets = established_sockets(process.pid, ports)
+                    samples = []
+                    async def sample():
+                        while True:
+                            current = established_sockets(process.pid, ports)
+                            if current is not None:
+                                samples.append(current)
+                            await asyncio.sleep(0.025)
+                    sampler = asyncio.create_task(sample())
                     started = time.monotonic()
                     route.switch(1)
                     while True:
@@ -60,6 +99,7 @@ async def run_direction(database, source, destination, command, timeout, balance
                     recovered_count = requests_completed(destination[1], database)
                     while requests_completed(destination[1], database) < recovered_count + 3:
                         await successes(process, 1)
+                    after_sockets = established_sockets(process.pid, ports)
                     final_src = requests_completed(source[1], database)
                     final_dst = requests_completed(destination[1], database)
                     if final_src != after_cutover or final_dst <= first_count:
@@ -69,8 +109,13 @@ async def run_direction(database, source, destination, command, timeout, balance
                     print(json.dumps(dict(source=source[0], destination=destination[0], seconds=round(elapsed, 3),
                                           old_calls_during_cutover=after_cutover - old_count,
                                           old_calls_after_recovery=final_src - after_cutover,
-                                          destination_calls=final_dst - first_count, bootstrap_peer=peer)), flush=True)
+                                          destination_calls=final_dst - first_count, bootstrap_peer=peer,
+                                          sockets_before=before_sockets, sockets_after=after_sockets,
+                                          sockets_sampled_peak=max(samples, default=None))), flush=True)
             finally:
+                if sampler is not None:
+                    sampler.cancel()
+                    await asyncio.gather(sampler, return_exceptions=True)
                 if process.returncode is None:
                     process.kill()
                 await process.wait()

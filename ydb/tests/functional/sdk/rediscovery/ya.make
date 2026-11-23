@@ -5,7 +5,10 @@ REQUIREMENTS(cpu:4 ram:12)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
-TEST_SRCS(test_eds_cutover.py)
+TEST_SRCS(
+    test_eds_cutover.py
+    test_eds_server.py
+)
 PY_SRCS(eds_balancer.py)
 
 DEPENDS(

@@ -334,6 +334,57 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTopicWriteMode) {
+    Y_UNIT_TEST(ReadRestrictionsCloseSession) {
+        for (const auto size : {16u, 600u * 1024}) {
+            TWriteModeEnv env;
+            env.Create(false);
+            const TString data(size, 'x');
+            auto writer = env.Client.CreateSimpleBlockingWriteSession(env.WriteSettings());
+            UNIT_ASSERT(writer->Write(data, 1, std::nullopt, TDuration::Seconds(10)));
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+
+            auto checkRead = [&](const TString& mode) {
+                auto reader = env.Client.CreateReadSession(TReadSessionSettings().ConsumerName(CONSUMER)
+                    .AppendTopics(TTopicReadSettings(TOPIC)).RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+                const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+                while (TInstant::Now() < deadline) {
+                    UNIT_ASSERT_C(reader->WaitEvent().Wait(deadline - TInstant::Now()), "Read session did not respond");
+                    auto event = reader->GetEvent(false);
+                    UNIT_ASSERT(event);
+                    if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                        start->Confirm();
+                    } else if (auto* stop = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                        stop->Confirm();
+                    } else if (auto* received = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                        UNIT_ASSERT_VALUES_EQUAL(mode, AVAILABLE);
+                        UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().front().GetOffset(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().front().GetData(), data);
+                        UNIT_ASSERT(reader->Close(TDuration::Seconds(10)));
+                        return;
+                    } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                        UNIT_ASSERT_C(mode != AVAILABLE, closed->DebugString());
+                        const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
+                        const auto reason = mode == UNAVAILABLE
+                            ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
+                        UNIT_ASSERT_VALUES_EQUAL_C(closed->GetStatus(), expected, closed->DebugString());
+                        UNIT_ASSERT_STRING_CONTAINS(closed->GetIssues().ToString(), reason);
+                        return;
+                    }
+                }
+                UNIT_FAIL("Read session neither returned data nor closed");
+            };
+
+            checkRead(AVAILABLE);
+            for (const auto& mode : {UNAVAILABLE, PROHIBITED}) {
+                env.Alter(false, {{WRITE_MODE, mode}});
+                checkRead(mode);
+                env.Alter(false, {{WRITE_MODE, AVAILABLE}});
+                checkRead(AVAILABLE);
+            }
+        }
+    }
+
     Y_UNIT_TEST(AbortTransactionAfterChangingWriteMode) {
         for (const auto size : {16u, 600u * 1024}) {
             TWriteModeEnv env;

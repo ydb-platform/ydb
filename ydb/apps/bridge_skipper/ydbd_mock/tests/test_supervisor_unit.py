@@ -1,5 +1,6 @@
 """Supervisor process bookkeeping that needs no running cluster."""
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -10,6 +11,97 @@ from unittest import mock
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import supervisor
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology
+
+
+class PilePathsTest(unittest.TestCase):
+    def test_path_like_pile_names_stay_local_and_have_distinct_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "run")
+            os.makedirs(run)
+            names = ["pile1", "", ".", "..", "%", "%2E", "../../foreign",
+                     os.path.join(root, "absolute"), "a/b", "a\\b", "пайл", "pile%1", "pile one", "__pile_1"]
+            Topology(names, 1).save(os.path.join(run, "topology.yaml"))
+            with open(os.path.join(run, "cluster.json"), "w") as config:
+                json.dump({"argv_prefix": ["mock"]}, config)
+            cluster = supervisor.Cluster(run)
+            states, events, logs, pids = [], [], [], []
+
+            def spawn(argv, stdout, **kwargs):
+                state = argv[argv.index("--state-dir") + 1]
+                event = argv[argv.index("--log-events") + 1]
+                self.assertEqual(os.path.commonpath([run, os.path.abspath(state)]), run)
+                self.assertEqual(os.path.commonpath([run, os.path.abspath(event)]), run)
+                self.assertEqual(os.path.commonpath([run, os.path.abspath(stdout.name)]), run)
+                states.append(state)
+                events.append(event)
+                logs.append(stdout.name)
+                stdout.write("child log\n")
+                with open(event, "w") as sink:
+                    sink.write('{"seq": 1, "kind": "start"}\n')
+                proc = mock.Mock(pid=100 + len(states))
+                proc.poll.return_value = None
+                return proc
+
+            with mock.patch.object(supervisor.subprocess, "Popen", side_effect=spawn):
+                for name in names:
+                    cluster.spawn(name)
+                    self.assertEqual(cluster.log_tail(name), "child log\n")
+                    self.assertEqual(supervisor.read_events(cluster, name), [{"seq": 1, "kind": "start"}])
+                    pids.append(cluster.pid(name))
+            for paths in (states, events, logs, pids):
+                self.assertEqual(len(set(paths)), len(names), paths)
+            for name in names:
+                supervisor._remove_pid_file(cluster, name)
+                self.assertIsNone(cluster.pid(name))
+            self.assertEqual(os.listdir(os.path.join(run, "pids")), [])
+            self.assertEqual(states[0], os.path.join(run, "state", "pile1"))
+
+    def test_existing_literal_pid_logs_and_events_still_load(self):
+        with tempfile.TemporaryDirectory() as run:
+            names = ["pile%1", "pile one", "пайл"]
+            Topology(names, 1).save(os.path.join(run, "topology.yaml"))
+            for directory in ("pids", "logs"):
+                os.makedirs(os.path.join(run, directory))
+            for name in names:
+                with open(os.path.join(run, "pids", name + ".pid"), "w") as sink:
+                    sink.write("42")
+                with open(os.path.join(run, "logs", name + ".log"), "w") as sink:
+                    sink.write("existing log")
+                with open(os.path.join(run, "logs", name + ".events.jsonl"), "w") as sink:
+                    sink.write('{"seq": 17}\n')
+            cluster = supervisor.Cluster(run)
+            for name in names:
+                self.assertEqual(cluster.pid(name), 42)
+                self.assertEqual(cluster.log_tail(name), "existing log")
+                self.assertEqual(supervisor.read_events(cluster, name), [{"seq": 17}])
+
+    def test_fresh_up_cleans_owned_files_and_preserves_foreign_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "run")
+            foreign = os.path.join(root, "foreign")
+            os.makedirs(foreign)
+            outside = [os.path.join(foreign, "replica.json"), foreign + ".events.jsonl"]
+            for path in outside:
+                with open(path, "w") as sink:
+                    sink.write("foreign sentinel")
+            owned = [os.path.join(run, "state", "__pile_0", "replica.json"),
+                     os.path.join(run, "logs", "__pile_0.events.jsonl")]
+            for path in owned:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w") as sink:
+                    sink.write("old owned file")
+            topology = os.path.join(root, "input.yaml")
+            Topology(["../../foreign", "safe"], 1).save(topology)
+            cluster = supervisor.Cluster(run)
+            args = supervisor.build_parser().parse_args(["up", "--fresh", "--topology", topology])
+            with mock.patch.object(cluster, "alive", return_value=False), mock.patch.object(
+                    cluster, "spawn"), mock.patch.object(cluster, "wait_responsive"), mock.patch.object(
+                    supervisor, "_print"):
+                supervisor.cmd_up(cluster, args)
+            for path in outside:
+                with open(path) as source:
+                    self.assertEqual(source.read(), "foreign sentinel")
+            self.assertFalse(any(os.path.exists(path) for path in owned))
 
 
 class PidIdentityTest(unittest.TestCase):
@@ -254,6 +346,111 @@ class SupervisorRegressionTest(unittest.TestCase):
                 cluster.request = lambda *args, **kwargs: {}
                 supervisor.cmd_heal(cluster, argparse.Namespace())
             self.assertEqual(cluster._macros(), [])
+
+    def test_lost_keeper_split_reply_can_be_healed_after_reloading_supervisor(self):
+        with tempfile.TemporaryDirectory() as run:
+            topology = Topology(["pile1", "pile2"], 3)
+            topology.save(os.path.join(run, "topology.yaml"))
+            labels = [node.label for node in topology.pile("pile1").nodes]
+            unavailable = {label: label == labels[0] for label in labels}
+            cluster = supervisor.Cluster(run)
+
+            def request(pile, method, path, body=None):
+                if path == "/state":
+                    return {"nodes": [{"label": label, "faults": {"unavailable": on}}
+                                      for label, on in unavailable.items()]}
+                if path == "/control":
+                    unavailable.update({label: True for label in labels})
+                    raise supervisor.SupervisorError("reply lost after applying keeper split")
+                return {}
+
+            cluster.request = request
+            with mock.patch.object(supervisor, "_scenario"):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "reply lost"):
+                    supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
+            self.assertTrue(all(unavailable.values()))
+            retried = supervisor.Cluster(run)
+            retried.request = request
+            with mock.patch.object(supervisor, "_scenario"):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "reply lost"):
+                    supervisor.cmd_keeper_split(retried, argparse.Namespace(pile="pile1"))
+            self.assertEqual(retried._macros(), [
+                {"kind": "keeper_split", "pile": "pile1", "already": [labels[0]]}])
+            recovered = supervisor.Cluster(run)
+            recovered.live_piles = lambda: ["pile1"]
+            recovered.alive = lambda pile: True
+
+            def heal(pile, method, path, body):
+                if path == "/control":
+                    unavailable[body["label"]] = body["on"]
+                return {}
+
+            recovered.request = heal
+            with mock.patch.object(supervisor, "_scenario"):
+                supervisor.cmd_heal(recovered, argparse.Namespace())
+            self.assertEqual(unavailable, {label: label == labels[0] for label in labels})
+            self.assertEqual(recovered._macros(), [])
+
+    def test_undelivered_keeper_split_reports_intent_and_can_be_revived_or_healed(self):
+        for heal_first in (False, True):
+            with self.subTest(heal_first=heal_first), tempfile.TemporaryDirectory() as run:
+                topology = Topology(["pile1", "pile2"], 3)
+                topology.save(os.path.join(run, "topology.yaml"))
+                unavailable = {node.label: False for node in topology.pile("pile1").nodes}
+                cluster = supervisor.Cluster(run)
+
+                def request(pile, method, path, body=None):
+                    if path == "/state":
+                        return {"nodes": [{"label": label, "faults": {"unavailable": on}}
+                                          for label, on in unavailable.items()]}
+                    raise supervisor.SupervisorError("instance died before receiving the fault")
+
+                cluster.request = request
+                with self.assertRaises(supervisor.PartialMutationError) as failed:
+                    supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
+                self.assertFalse(any(unavailable.values()))
+                self.assertTrue(failed.exception.report["uncertain"])
+                self.assertTrue(failed.exception.report["recorded_intent"])
+                for hint in ("revive", "heal"):
+                    self.assertIn(hint, failed.exception.report["recovery"])
+                    self.assertIn(hint, str(failed.exception))
+
+                recovered = supervisor.Cluster(run)
+                running = False
+                recovered.alive = lambda pile: running
+                recovered.live_piles = lambda: ["pile1"] if running else []
+
+                def restored_request(pile, method, path, body):
+                    if path == "/control":
+                        labels = unavailable if body.get("all") else [body["label"]]
+                        unavailable.update({label: body["on"] for label in labels})
+                    return {}
+
+                def spawn(pile):
+                    nonlocal running
+                    running = True
+                    return mock.Mock()
+
+                recovered.request = restored_request
+                with mock.patch.object(supervisor, "_scenario"), mock.patch.object(
+                        recovered, "spawn", side_effect=spawn), mock.patch.object(recovered, "wait_responsive"):
+                    if heal_first:
+                        supervisor.cmd_heal(recovered, argparse.Namespace())
+                    supervisor.cmd_revive(recovered, argparse.Namespace(pile="pile1"))
+                    self.assertEqual(list(unavailable.values()), [not heal_first] * len(unavailable))
+                    supervisor.cmd_heal(recovered, argparse.Namespace())
+                self.assertFalse(any(unavailable.values()))
+                self.assertEqual(recovered._macros(), [])
+
+    def test_keeper_split_record_failure_does_not_apply_fault(self):
+        with tempfile.TemporaryDirectory() as run:
+            Topology(["pile1", "pile2"], 3).save(os.path.join(run, "topology.yaml"))
+            cluster = supervisor.Cluster(run)
+            with mock.patch.object(cluster, "request", return_value={"nodes": []}) as request, mock.patch.object(
+                    cluster, "_save_macros", side_effect=OSError("could not save macro")):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "could not save macro"):
+                    supervisor.cmd_keeper_split(cluster, argparse.Namespace(pile="pile1"))
+            request.assert_called_once_with("pile1", "GET", "/state")
 
     def test_reset_cancels_every_attempted_barrier_and_preserves_prepare_error(self):
         class FakeCluster:

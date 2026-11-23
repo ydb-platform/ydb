@@ -1515,6 +1515,9 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
 
     NACLib::TDiffACL diffACL;
     diffACL.ClearAccess();
+    // A present input describes the complete ACL state. Treat an omitted field as
+    // false and apply it explicitly.
+    diffACL.SetInterruptInheritance(in->interrupt_inheritance());
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
@@ -1546,6 +1549,16 @@ void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
         errStr = descr; \
         return false; \
     }
+
+bool TupleContainsPgType(const Ydb::Type& type) {
+    for (const auto& element : type.tuple_type().elements()) {
+        const auto& item = element.has_optional_type() ? element.optional_type().item() : element;
+        if (item.has_pg_type()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // NOTE: TCell's can reference memory from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,

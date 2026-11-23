@@ -4,8 +4,8 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
-#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/warmup/warmup.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
@@ -193,6 +193,9 @@
 #include <ydb/library/signal_backtrace/signal_backtrace.h>
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+
+#include <arrow/memory_pool.h>
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
@@ -1586,9 +1589,9 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
 
     if (allocConfig.GetEnableDefaultAllocator()) {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
+        NKikimr::SetArrowAllocator(arrow::default_memory_pool());
         NKikimr::UseDefaultAllocator();
 #endif
-        NKikimr::UseDefaultArrowAllocator();
     }
 
 }
@@ -2218,6 +2221,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
 
+    sil->AddServiceInitializer(new TWriteSessionsQuoterInitializer(runConfig));
     sil->AddServiceInitializer(new TTopicDeferredPublishRegistryInitializer(runConfig));
 
     if (serviceMask.EnablePersQueueDirectReadCache) {

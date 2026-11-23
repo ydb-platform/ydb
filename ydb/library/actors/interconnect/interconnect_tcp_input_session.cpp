@@ -96,9 +96,8 @@ namespace NActors {
         // In most cases we will have one wr per cred
         std::unique_ptr<IIbVerbsBuilder> verbsBuilder = CreateIbVerbsBuilder(creds.CredsSize());
 
-        ui32 mrOffset = 0;
-
-        auto curMemReg = pendingEvent.RdmaBuffers.front();
+        // Resume writing at the offset saved when credentials for this payload were split across RDMA_READ commands.
+        ui32 mrOffset = pendingEvent.RdmaBufferOffset;
 
         TMonotonic curTime = TMonotonic::Now();
         auto reply = [notify, channel, curTime](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
@@ -111,12 +110,20 @@ namespace NActors {
             return TRdmaReadReqOk{};
         }
 
+        if (pendingEvent.RdmaBuffers.empty()) {
+            return TRdmaReadReqFormatError{};
+        }
+
+        auto curMemReg = pendingEvent.RdmaBuffers.front();
+
         for (const auto& cred : creds.GetCreds()) {
 
             ui32 credOffset = 0;
             NActorsInterconnect::TRdmaCred credCopy = cred;
             do {
-                Y_DEBUG_ABORT_UNLESS(!pendingEvent.RdmaBuffers.empty());
+                if (pendingEvent.RdmaBuffers.empty() || mrOffset >= curMemReg.GetSize()) {
+                    return TRdmaReadReqFormatError{};
+                }
 
                 credCopy.SetAddress(cred.GetAddress() + credOffset);
                 credCopy.SetSize(std::min(cred.GetSize() - credOffset, (ui64)curMemReg.GetSize() - mrOffset));
@@ -162,6 +169,8 @@ namespace NActors {
                 }
             } while (credOffset < cred.GetSize());
         }
+
+        pendingEvent.RdmaBufferOffset = mrOffset;
 
         auto err = cq->DoWrBatchAsync(pendingEvent.RdmaReadContext->Qp, std::move(verbsBuilder));
         if (err) {
@@ -255,7 +264,10 @@ namespace NActors {
 
         XXH3_64bits_reset(&XxhashXdcState);
 
-        SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
+        SetPrefix(YDB_LOG_CREATE_MESSAGE(
+                {"selfActorKind", "InputSession"},
+                {"selfActorId", SelfId()},
+                {"nodeId", NodeId}));
 
         // Dead-peer watchdog and session-side periodic ping are a single logical user-space liveness mechanism.
         // They must be switched off together; otherwise one actor may still assume legacy liveness while the
@@ -267,10 +279,12 @@ namespace NActors {
         }
         if (RdmaQp) {
             YDB_LOG_DEBUG("InputSession created, rdma qp",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"num", RdmaQp->GetQpNum()});
         } else {
             YDB_LOG_DEBUG("InputSession created",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICIS01"});
         }
         LastReceiveTimestamp = TActivationContext::Monotonic();
@@ -361,11 +375,13 @@ namespace NActors {
             WorkingStateImpl(ev);
         } catch (const TExReestablishConnection& ex) {
             YDB_LOG_DEBUG("ReestablishConnection",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICIS09"},
                 {"reason", ex.Reason});
             termEv = std::make_unique<TEvSocketDisconnect>(std::move(ex.Reason));
         } catch (const TExDestroySession& ex) {
             YDB_LOG_DEBUG("DestroySession",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICIS13"},
                 {"reason", ex.Reason});
             termEv.reset(TInterconnectSessionTCP::NewEvTerminate(std::move(ex.Reason)));
@@ -427,6 +443,7 @@ namespace NActors {
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
             YDB_LOG_ERROR("Rdma IO failed",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"source", ev->Get()->Event->GetErrSource().data()},
                 {"errCode", ev->Get()->Event->GetErrCode()});
@@ -441,6 +458,7 @@ namespace NActors {
     void TInputSessionTCP::ReceiveDataMainChannelRdma(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
         if (!ev->Get()->IsSuccess()) {
             YDB_LOG_ERROR("RDMA RECEIVE failed",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"source", ev->Get()->GetErrSource().data()},
                 {"errCode", ev->Get()->GetErrCode()});
@@ -470,6 +488,7 @@ namespace NActors {
         ui64 numDataBytes = 0;
 
         YDB_LOG_DEBUG("ReceiveData called",
+            {"logPrefix", LogPrefix},
             {"marker", "ICIS02"});
 
         bool enoughCpu = true;
@@ -586,12 +605,14 @@ namespace NActors {
             }
             if (!PayloadSize && Checksum != ChecksumExpected) {
                 YDB_LOG_ERROR("Payload checksum error",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIS10"});
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
         }
         if (PayloadSize >= 65536) {
             YDB_LOG_CRIT("Payload is way too big",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICIS07"});
             throw TExDestroySession{TDisconnectReason::FormatError()};
         }
@@ -619,6 +640,7 @@ namespace NActors {
             Y_DEBUG_ABORT_UNLESS(expectedMin <= expectedMax);
             if (CurrentSerial ? serial != CurrentSerial + 1 : (serial == 0 || serial > expectedMin)) {
                 YDB_LOG_CRIT("Packet serial number mismatch",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIS06"},
                     {"serial", serial},
                     {"expectedMin", expectedMin},
@@ -667,6 +689,7 @@ namespace NActors {
             }
             if (Checksum != ChecksumExpected) { // validate payload checksum
                 YDB_LOG_ERROR("Payload checksum error",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIS04"});
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
@@ -676,10 +699,12 @@ namespace NActors {
             TChannelPart part;
             if (!Payload.ExtractFrontPlain(&part, sizeof(part))) {
                 YDB_LOG_CRIT("Missing TChannelPart header in payload",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIS14"});
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             } else if (Payload.GetSize() < part.Size) {
                 YDB_LOG_CRIT("Payload format error",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIS08"},
                     {"channelPart", part});
                 throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -705,6 +730,7 @@ namespace NActors {
 
                 if (part.Size != sizeof(v2)) {
                     YDB_LOG_CRIT("Incorrect last part of an event",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICIS11"});
                     throw TExDestroySession{TDisconnectReason::FormatError()};
                 }
@@ -826,11 +852,13 @@ namespace NActors {
                     const ui64 alignment = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     if (headroom == Max<ui64>() || size == Max<ui64>() || tailroom == Max<ui64>() || alignment == Max<ui64>()) {
                         YDB_LOG_CRIT("XDC command format error",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS00"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     if (!IsXdcSectionGeometryInRange(size, headroom, tailroom, alignment)) {
                         YDB_LOG_CRIT("XDC section geometry out of range",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS20"},
                             {"size", size},
                             {"headroom", headroom},
@@ -843,6 +871,7 @@ namespace NActors {
                         auto& pendingEvent = context.PendingEvents.back();
                         if (!FitsXdcDeclaredLimit(size, pendingEvent.DeclaredSize, EventMaxByteSize)) {
                             YDB_LOG_CRIT("XDC declared size exceeds the maximum event size",
+                                {"logPrefix", LogPrefix},
                                 {"marker", "ICIS21"},
                                 {"declaredSize", pendingEvent.DeclaredSize},
                                 {"size", size});
@@ -860,6 +889,7 @@ namespace NActors {
                             auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 YDB_LOG_CRIT("Unable to allocate rcbuf for section",
+                                    {"logPrefix", LogPrefix},
                                     {"marker", "ICRDMA"},
                                     {"sz", size},
                                     {"useRdma", isRdma});
@@ -893,6 +923,7 @@ namespace NActors {
                     const size_t cmdLen = sizeof(ui16) + ((Params.Encryption || (cmd == EXdcCommand::PUSH_DATA_NO_CHECKSUMS)) ? 0 : sizeof(ui32));
                     if (static_cast<size_t>(end - ptr) < cmdLen) {
                         YDB_LOG_CRIT("XDC command format error",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS18"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
@@ -900,6 +931,7 @@ namespace NActors {
                     const ui16 size = ReadUnaligned<ui16>(ptr);
                     if (!size) {
                         YDB_LOG_CRIT("XDC empty payload",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS03"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
@@ -930,6 +962,7 @@ namespace NActors {
                         // find buffers and acquire data buffer pointers
                         if (context.FetchBuffers(channel, size, XdcInputQ) == -1) {
                             YDB_LOG_CRIT("FetchBuffers: end of buffers",
+                                {"logPrefix", LogPrefix},
                                 {"marker", "ICIS28"});
                             throw TExDestroySession{TDisconnectReason::FormatError()};
                         }
@@ -945,6 +978,7 @@ namespace NActors {
                     using namespace NInterconnect::NRdma;
                     if (!RdmaQp || !RdmaCq) {
                         YDB_LOG_CRIT("Unexpected XDC RDMA_READ command without RDMA QP",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS22"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
@@ -955,6 +989,7 @@ namespace NActors {
                     TQueuePair::TQpState res = qp.GetState(false);
                     if (std::holds_alternative<TQueuePair::TQpErr>(res)) {
                         YDB_LOG_ERROR("Unable to get qp state",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"},
                             {"qpNum", qp.GetQpNum()},
                             {"err", std::get<TQueuePair::TQpErr>(res).Err});
@@ -964,6 +999,7 @@ namespace NActors {
                     Y_ABORT_UNLESS(qpState);
                     if (!TQueuePair::IsRtsState(*qpState)) {
                         YDB_LOG_ERROR("Qp is not ready, unable to submit rdma READ",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"},
                             {"qpNum", qp.GetQpNum()},
                             {"state", qpState->State});
@@ -972,6 +1008,7 @@ namespace NActors {
 
                     if (ptr + sizeof(ui16) > end) {
                         YDB_LOG_CRIT("XDC command format error, no cred size",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
@@ -980,12 +1017,14 @@ namespace NActors {
                     ptr += sizeof(ui16);
                     if (!credsSerializedSize) {
                         YDB_LOG_CRIT("XDC RDMA_READ command with zero size",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     if (ptr + credsSerializedSize + sizeof(ui32) > end) {
                         YDB_LOG_CRIT("XDC command format error, invalid cred data",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICRDMA"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
@@ -1002,12 +1041,19 @@ namespace NActors {
 
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
-                    if (std::holds_alternative<ICq::TBusy>(err)) {
+                    if (std::holds_alternative<TReceiveContext::TPerChannelContext::TRdmaReadReqFormatError>(err)) {
+                        YDB_LOG_CRIT("RDMA_READ error: invalid receive buffer state",
+                            {"logPrefix", LogPrefix},
+                            {"marker", "ICIS22"});
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    } else if (std::holds_alternative<ICq::TBusy>(err)) {
                         YDB_LOG_CRIT("RDMA_READ error: can not allocate cq work request: busy",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS20"});
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     } else if (std::holds_alternative<ICq::TErr>(err)) {
                         YDB_LOG_CRIT("RDMA_READ error: can not allocate cq work request: error",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS21"});
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
@@ -1022,6 +1068,7 @@ namespace NActors {
             }
 
             YDB_LOG_CRIT("Unexpected XDC command",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICIS15"});
             throw TExDestroySession{TDisconnectReason::FormatError()};
         }
@@ -1115,6 +1162,7 @@ namespace NActors {
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
                     YDB_LOG_CRIT("Unprocessed payload remains after shuffling",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICIS19"},
                         {"descrType", descr.Type},
                         {"internalPayloadSize", pendingEvent.InternalPayload.size()},
@@ -1134,6 +1182,7 @@ namespace NActors {
 #if IC_FORCE_HARDENED_PACKET_CHECKS
             if (descr.Len != payload.GetSize()) {
                 YDB_LOG_CRIT("Event length mismatch",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIS17"},
                     {"descrType", descr.Type},
                     {"expected", payload.GetSize()},
@@ -1149,6 +1198,7 @@ namespace NActors {
                 }
                 if (checksum != descr.Checksum) {
                     YDB_LOG_CRIT("Event checksum error",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICIS05"},
                         {"descrType", descr.Type});
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
@@ -1157,6 +1207,7 @@ namespace NActors {
             if (rdmaReadChecksum) {
                 if (*rdmaReadChecksum != *pendingEvent.RdmaReadCumulativeCheckSum) {
                     YDB_LOG_CRIT("Event rdma checksum error",
+                        {"logPrefix", LogPrefix},
                         {"marker", "ICIS05"},
                         {"descrType", descr.Type});
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
@@ -1178,6 +1229,7 @@ namespace NActors {
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
                 Metrics->IncScopeErrors();
                 YDB_LOG_CRIT("Event dropped due to scope error",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICIC03"},
                     {"peerNodeId", NodeId},
                     {"peer", Metrics->GetHumanFriendlyPeerHostName().data()},
@@ -1225,6 +1277,7 @@ namespace NActors {
             }
 
             YDB_LOG_DEBUG("Read",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICIS12"},
                 {"recvres", recvres},
                 {"num", num},
@@ -1238,6 +1291,7 @@ namespace NActors {
                         : Sprintf("socket: %s", strerror(-recvres));
 
                     YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT_NETWORK, message,
+                        {"logPrefix", LogPrefix},
                         {"selfNodeId", ::NActors::TActivationContext::AsActorContext().SelfID.NodeId()},
                         {"peerNodeId", NodeId},
                     );
@@ -1515,6 +1569,7 @@ namespace NActors {
                     }
                     if (XdcCurrentChecksum != *expected) {
                         YDB_LOG_ERROR("Payload checksum error",
+                            {"logPrefix", LogPrefix},
                             {"marker", "ICIS16"});
                         throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                     }

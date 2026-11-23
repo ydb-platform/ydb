@@ -177,6 +177,46 @@ static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId
     UNIT_ASSERT_VALUES_EQUAL((int)rec.GetSuccess(), (int)success);
 }
 
+static void SubmitOwnedTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
+           ui64 id, ui64 cpu, const TString &type, ui64 tabletId, ui32 followerId = 0)
+{
+    auto event = MakeHolder<TEvResourceBroker::TEvSubmitTask>(id,
+                                                              "task-" + ToString(id),
+                                                              TResourceValues{{cpu, 0}},
+                                                              type,
+                                                              5,
+                                                              nullptr);
+    event->SetOwner(tabletId, followerId);
+    runtime.Send(new IEventHandle(broker, sender, event.Release()));
+}
+
+static THashMap<TString, TEvResourceBroker::TQueueUsage> GetQueueUsage(TTestActorRuntime &runtime, TActorId broker, TActorId sender)
+{
+    runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvQueueUsageRequest));
+    auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvQueueUsageResponse>(sender);
+    THashMap<TString, TEvResourceBroker::TQueueUsage> result;
+    for (auto &queue : answer->Get()->Queues) {
+        result[queue.Name] = queue;
+    }
+    return result;
+}
+
+// Formats usage as sorted "tablet.follower:waiting/running" entries.
+static TString FormatTabletUsage(const TEvResourceBroker::TQueueUsage &usage)
+{
+    TMap<std::pair<ui64, ui32>, std::pair<ui64, ui64>> sorted;
+    for (const auto &tablet : usage.Tablets) {
+        sorted[{tablet.TabletId, tablet.FollowerId}] = {tablet.Waiting, tablet.Running};
+    }
+    TStringBuilder result;
+    for (const auto &[key, value] : sorted) {
+        if (!result.empty())
+            result << " ";
+        result << key.first << "." << key.second << ":" << value.first << "/" << value.second;
+    }
+    return result;
+}
+
 static TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) {
     runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest));
     auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(sender);
@@ -184,6 +224,302 @@ static TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime
 }
 
 Y_UNIT_TEST_SUITE(TResourceBroker) {
+
+    Y_UNIT_TEST(StrictMemoryRejectsOversizeAndWaitsForAvailableMemory) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* queue = config.MutableQueues(3);
+        queue->SetStrictMemoryLimit(true);
+        queue->MutableLimit()->SetMemory(100);
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+        SubmitTask(runtime, broker, sender, 1, 1, 101, "scan", 5);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        SubmitTask(runtime, broker, sender, 2, 1, 60, "scan", 5);
+        WaitForResourceAllocation(runtime, 2);
+        SubmitTask(runtime, broker, sender, 3, 1, 60, "scan", 5);
+        // This round trip ensures task 3 was processed without granting it.
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 1, 60, 0, 1, 1);
+        FinishTask(runtime, broker, sender, 2);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 3);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 2, 0, 0);
+        queue->MutableLimit()->SetMemory(1000);
+        CheckConfigure(runtime, broker, sender, config, true);
+        SubmitTask(runtime, broker, sender, 4, 1, 501, "scan", 5);
+        WaitForError(runtime, 4, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        SubmitTask(runtime, broker, sender, 5, 1, 400, "unknown", 5);
+        WaitForResourceAllocation(runtime, 5);
+        SubmitTask(runtime, broker, sender, 6, 1, 200, "scan", 5);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 2, 1, 0);
+        FinishTask(runtime, broker, sender, 5);
+        WaitForResourceAllocation(runtime, 6);
+        FinishTask(runtime, broker, sender, 6);
+    }
+
+    Y_UNIT_TEST(StrictMemoryUpdateRejectsOversizeWithoutChangingTask) {
+        for (const bool resubmit : {false, true}) {
+            TTestBasicRuntime runtime;
+            SetupTabletServices(runtime);
+            const auto sender = runtime.AllocateEdgeActor();
+            auto config = MakeTestConfig();
+            auto* queue = config.MutableQueues(3);
+            queue->SetStrictMemoryLimit(true);
+            queue->MutableLimit()->SetMemory(100);
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            const auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+            WaitForBootstrap(runtime);
+            auto cookie = MakeIntrusive<TThrRefBase>();
+            if (!resubmit) {
+                SubmitTask(runtime, broker, sender, 2, 1, 100, "scan", 5);
+                WaitForResourceAllocation(runtime, 2);
+            }
+            SubmitTask(runtime, broker, sender, 1, 1, 40, "scan", 5, cookie);
+            if (resubmit) {
+                WaitForResourceAllocation(runtime, 1, cookie);
+                UpdateTask(runtime, broker, sender, 1, 0, 0, 5, "scan");
+            }
+            GetInstantResourceBroker(runtime, broker, sender);
+            queue->MutableLimit()->SetMemory(40);
+            CheckConfigure(runtime, broker, sender, config, true);
+            UpdateTask(runtime, broker, sender, 1, 1, 80, 5, "scan", resubmit);
+            TAutoPtr<IEventHandle> handle;
+            const auto* rejected = runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvTaskOperationError>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->TaskId, 1);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->Status.Code, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->Cookie, cookie);
+            UNIT_ASSERT(rejected->Status.MemoryLimit);
+            UNIT_ASSERT_VALUES_EQUAL(*rejected->Status.MemoryLimit, 40);
+            CheckCounters(counters, "queue", "queue_scan", resubmit ? 0 : 1, resubmit ? 0 : 100, 0, resubmit ? 0 : 1, 1);
+            if (resubmit) {
+                // An existing payload must remain accounted even above the new limit.
+                UpdateTask(runtime, broker, sender, 1, 0, 60, 5, "scan");
+                GetInstantResourceBroker(runtime, broker, sender);
+                CheckCounters(counters, "queue", "queue_scan", 0, 60, 0, 0, 1);
+            }
+            // Rejection preserves the original task and cookie for a smaller retry.
+            UpdateTask(runtime, broker, sender, 1, 1, 20, 5, "scan", resubmit);
+            if (!resubmit) {
+                FinishTask(runtime, broker, sender, 2);
+            }
+            WaitForResourceAllocation(runtime, 1, cookie);
+            FinishTask(runtime, broker, sender, 1);
+            GetInstantResourceBroker(runtime, broker, sender);
+            CheckCounters(counters, "queue", "queue_scan", 0, 0, resubmit ? 1 : 2, 0, 0);
+        }
+    }
+
+    Y_UNIT_TEST(StrictMemoryWaitPreservesFairnessAcrossQueues) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* queue = config.MutableQueues(3);
+        queue->SetStrictMemoryLimit(true);
+        queue->SetWeight(100);
+        queue->MutableLimit()->SetMemory(500);
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+        SubmitTask(runtime, broker, sender, 1, 1, 400, "unknown", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 2, 1, 200, "scan", 5);
+        SubmitTask(runtime, broker, sender, 3, 1, 50, "compaction0", 5);
+        // A task that needs only CPU can still run while memory accumulates.
+        SubmitTask(runtime, broker, sender, 4, 1, 0, "compaction1", 5);
+        WaitForResourceAllocation(runtime, 4);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 1, 0);
+        CheckCounters(counters, "queue", "queue_compaction0", 0, 0, 0, 1, 0);
+        FinishTask(runtime, broker, sender, 1);
+        WaitForResourceAllocation(runtime, 2);
+        WaitForResourceAllocation(runtime, 3);
+        for (ui64 id : {2, 3, 4}) {
+            FinishTask(runtime, broker, sender, id);
+        }
+    }
+
+    Y_UNIT_TEST(StrictQueueLimitReductionRejectsOversizedTaskAndUnblocksNextTask) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* queue = config.MutableQueues(3);
+        queue->SetStrictMemoryLimit(true);
+        queue->MutableLimit()->SetMemory(100);
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+
+        SubmitTask(runtime, broker, sender, 1, 1, 100, "scan", 5);
+        WaitForResourceAllocation(runtime, 1);
+        const auto cookie = MakeIntrusive<TThrRefBase>();
+        SubmitTask(runtime, broker, sender, 2, 1, 80, "scan", 5, cookie);
+        SubmitTask(runtime, broker, sender, 3, 1, 40, "scan", 10);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 1, 100, 0, 2, 1);
+
+        queue->MutableLimit()->SetMemory(40);
+        CheckConfigure(runtime, broker, sender, config, true);
+        TAutoPtr<IEventHandle> handle;
+        const auto* rejected = runtime.GrabEdgeEventRethrow<TEvResourceBroker::TEvTaskOperationError>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->TaskId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Cookie, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Status.Code, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        UNIT_ASSERT(rejected->Status.MemoryLimit);
+        UNIT_ASSERT_VALUES_EQUAL(*rejected->Status.MemoryLimit, 40);
+        CheckCounters(counters, "queue", "queue_scan", 1, 100, 0, 1, 1);
+
+        FinishTask(runtime, broker, sender, 1);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 3);
+        SubmitTask(runtime, broker, sender, 2, 1, 40, "scan", 5, cookie);
+        WaitForResourceAllocation(runtime, 2, cookie);
+        FinishTask(runtime, broker, sender, 2);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 3, 0, 0);
+    }
+
+    Y_UNIT_TEST(StrictTaskAboveReducedGlobalCapacityDoesNotBlockOtherQueues) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* queue = config.MutableQueues(3);
+        queue->SetStrictMemoryLimit(true);
+        queue->SetWeight(100);
+        queue->MutableLimit()->SetMemory(500);
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+        SubmitTask(runtime, broker, sender, 1, 1, 400, "unknown", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 2, 1, 200, "scan", 5);
+        config.MutableResourceLimit()->SetMemory(100);
+        CheckConfigure(runtime, broker, sender, config, true);
+        WaitForError(runtime, 2, TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED);
+        SubmitTask(runtime, broker, sender, 3, 1, 50, "compaction0", 5);
+        FinishTask(runtime, broker, sender, 1);
+        WaitForResourceAllocation(runtime, 3);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 0, 0);
+        FinishTask(runtime, broker, sender, 3);
+    }
+
+    Y_UNIT_TEST(LegacyScansBypassMemoryBlockedTaskInStrictQueue) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto config = MakeTestConfig();
+        auto* queue = config.MutableQueues(3);
+        queue->SetStrictMemoryLimit(true);
+        queue->MutableLimit()->SetMemory(100);
+        queue->MutableLimit()->SetCpu(4);
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(config, counters));
+        WaitForBootstrap(runtime);
+        SubmitTask(runtime, broker, sender, 1, 1, 60, "scan", 5);
+        WaitForResourceAllocation(runtime, 1);
+        SubmitTask(runtime, broker, sender, 2, 1, 60, "scan", 5);
+        SubmitTask(runtime, broker, sender, 3, 1, 0, "scan", 10);
+        SubmitTask(runtime, broker, sender, 4, 1, 0, "scan", 11);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 3, 60, 0, 1, 3);
+        WaitForResourceAllocation(runtime, 3);
+        WaitForResourceAllocation(runtime, 4);
+        FinishTask(runtime, broker, sender, 1);
+        WaitForResourceAllocation(runtime, 2);
+        for (ui64 id : {2, 3, 4}) {
+            FinishTask(runtime, broker, sender, id);
+        }
+    }
+
+    Y_UNIT_TEST(CancelledManagedSubmissionDoesNotAllocateResources) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+        auto owner = std::make_shared<int>(0);
+        auto event = MakeHolder<TEvResourceBroker::TEvSubmitTask>(1, "cancelled", TResourceValues{{1, 100}}, "scan", 5, nullptr);
+        event->Task.KeepOnClientDeath = true;
+        event->Task.OwnerLease = owner;
+        owner.reset();
+        runtime.Send(new IEventHandle(broker, sender, event.Release()));
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(ManagedReservationSurvivesClientDeathAndQueuedCancel) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+        auto submit = [&](ui64 id) {
+            auto event = new TEvResourceBroker::TEvSubmitTask(id, "managed", {{400, 100}}, "scan", 5, nullptr);
+            event->Task.KeepOnClientDeath = true;
+            runtime.Send(new IEventHandle(broker, sender, event));
+        };
+        submit(1);
+        WaitForResourceAllocation(runtime, 1);
+        submit(2);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvNotifyActorDied));
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 400, 100, 0, 0, 1);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(2, true)));
+        WaitForError(runtime, 2, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);
+    }
+
+    Y_UNIT_TEST(CancellationErrorsPreserveTaskOwnership) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto other = runtime.AllocateEdgeActor();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+        SubmitTask(runtime, broker, sender, 1, 1, 100, "scan", 5);
+        WaitForResourceAllocation(runtime, 1);
+        runtime.Send(new IEventHandle(broker, other, new TEvResourceBroker::TEvFinishTask(1, true)));
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        auto rb = GetInstantResourceBroker(runtime, broker, sender);
+        UNIT_ASSERT(!rb->FinishTaskInstant({1, true}, other));
+        CheckCounters(counters, "queue", "queue_scan", 1, 100, 0, 0, 1);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(1, true)));
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        UNIT_ASSERT(!rb->FinishTaskInstant({1, true}, sender));
+        FinishTask(runtime, broker, sender, 1);
+        WaitForError(runtime, 1, TEvResourceBroker::TStatus::UNKNOWN_TASK);
+        UNIT_ASSERT(!rb->FinishTaskInstant({1, false}, sender));
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 1, 0, 0);
+        SubmitTask(runtime, broker, sender, 2, 400, 100, "scan", 5);
+        WaitForResourceAllocation(runtime, 2);
+        SubmitTask(runtime, broker, sender, 3, 1, 100, "scan", 5);
+        runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvFinishTask(3, true)));
+        WaitForError(runtime, 3, TEvResourceBroker::TStatus::TASK_IN_QUEUE);
+        UNIT_ASSERT(!rb->FinishTaskInstant({3, true}, sender));
+        CheckCounters(counters, "queue", "queue_scan", 400, 100, 1, 1, 1);
+        FinishTask(runtime, broker, sender, 2);
+        WaitForResourceAllocation(runtime, 3);
+        FinishTask(runtime, broker, sender, 3);
+        GetInstantResourceBroker(runtime, broker, sender);
+        CheckCounters(counters, "queue", "queue_scan", 0, 0, 3, 0, 0);
+    }
 
     Y_UNIT_TEST(TestErrors) {
         TTestBasicRuntime runtime;
@@ -669,6 +1005,98 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         WaitForResourceAllocation(runtime, 4);
         // Get resources for task-3.
         WaitForResourceAllocation(runtime, 3);
+    }
+
+    Y_UNIT_TEST(TestQueueUsage) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+
+        auto now = Now();
+        runtime.UpdateCurrentTime(now);
+        TActorId sender1 = runtime.AllocateEdgeActor();
+        TActorId sender2 = runtime.AllocateEdgeActor();
+        TActorId sender3 = runtime.AllocateEdgeActor();
+
+        ::NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto config = MakeTestConfig();
+        for (auto &queue : *config.MutableQueues()) {
+            if (queue.GetName() == "queue_scan") {
+                queue.MutableLimit()->SetResource(0, 2);
+            }
+        }
+        auto broker = CreateResourceBrokerActor(config, counters);
+        auto brokerId = runtime.Register(broker);
+        WaitForBootstrap(runtime);
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(usage.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(usage["queue_scan"].Limit, 2);
+            UNIT_ASSERT_VALUES_EQUAL(usage["queue_default"].Limit, 400);
+            UNIT_ASSERT(usage["queue_scan"].Tablets.empty());
+        }
+
+        // Tablet 100 submits 3 scans, follower 1 of tablet 200 submits one more,
+        // and one task has no owner. Only 2 scans can run at a time.
+        SubmitOwnedTask(runtime, brokerId, sender1, 1, 1, "scan", 100);
+        SubmitOwnedTask(runtime, brokerId, sender1, 2, 1, "scan", 100);
+        SubmitOwnedTask(runtime, brokerId, sender1, 3, 1, "scan", 100);
+        SubmitOwnedTask(runtime, brokerId, sender2, 4, 1, "scan", 200, 1);
+        SubmitTask(runtime, brokerId, sender2, 5, 1, 0, "scan", 5);
+        // Owned task in another queue.
+        SubmitOwnedTask(runtime, brokerId, sender2, 6, 10, "compaction0", 200, 1);
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "100.0:1/2 200.1:1/0");
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_compaction0"]), "200.1:0/10");
+        }
+
+        // Finishing task-1 lets task-3 run.
+        now += TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(now);
+        FinishTask(runtime, brokerId, sender1, 1);
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "100.0:0/2 200.1:1/0");
+        }
+
+        // Resubmitting an in-fly task makes it wait again.
+        UpdateTask(runtime, brokerId, sender2, 6, 10, 0, 5, "compaction0", true);
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            // Queue has nothing else running, so the task is started again immediately.
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_compaction0"]), "200.1:0/10");
+        }
+
+        // Tablet 100 dies: its tasks are removed, task-4 and task-5 start.
+        now += TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(now);
+        runtime.Send(new IEventHandle(brokerId, sender1, new TEvResourceBroker::TEvNotifyActorDied));
+
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "200.1:0/1");
+        }
+
+        // Reconfiguration keeps usage consistent.
+        CheckConfigure(runtime, brokerId, sender3, config, true);
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT_VALUES_EQUAL(FormatTabletUsage(usage["queue_scan"]), "200.1:0/1");
+        }
+
+        now += TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(now);
+        FinishTask(runtime, brokerId, sender2, 4);
+        FinishTask(runtime, brokerId, sender2, 6);
+        {
+            auto usage = GetQueueUsage(runtime, brokerId, sender3);
+            UNIT_ASSERT(usage["queue_scan"].Tablets.empty());
+            UNIT_ASSERT(usage["queue_compaction0"].Tablets.empty());
+        }
     }
 
     Y_UNIT_TEST(TestAutoTaskId) {

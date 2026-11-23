@@ -69,10 +69,12 @@ feature_flags:
 | `enable_json_index` | [JSON indexes](../../dev/json-indexes.md) to speed up search in JSON fields |
 | `enable_json_index_auto_select` | Automatic selection of [JSON indexes](../../dev/json-indexes.md) when executing queries |
 | `enable_fulltext_index` | [Full-text index](../../dev/fulltext-indexes.md) for full-text search |
+| `enable_fulltext_index_row_id` | [Full-text indexes](../../dev/fulltext-indexes.md#primary-key) on tables with a non-integer or composite primary key via `__ydb_row_id` |
 | `enable_local_bloom_filter_index` | [Local Bloom index](../../dev/bloom-skip-indexes.md#types) of type `bloom_filter` |
 | `enable_local_bloom_ngram_filter_index` | [Local Bloom index](../../dev/bloom-skip-indexes.md#types) of type `bloom_ngram_filter` |
 | `enable_local_min_max_index` | [Local min_max index](../../dev/min_max-skip-index.md) |
 | `enable_topic_autopartitioning_for_cdc` | [Auto-partitioning of topics](../../concepts/cdc.md#topic-partitions) in CDC for row tables |
+| `enable_online_add_unique_index` | [Building a unique secondary index](../../concepts/query_execution/secondary_indexes.md#index-add) on an existing table without blocking writes during the build |
 | `enable_access_to_index_impl_tables` | Ability to [specify the number of replicas](../../yql/reference/syntax/alter_table/indexes.md) for a secondary index |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for change feeds (changefeed) in backup and restore operations |
 | `enable_view_export` | Support for views (`VIEW`) in backup and restore operations |

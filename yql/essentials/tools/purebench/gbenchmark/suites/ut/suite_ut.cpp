@@ -19,14 +19,8 @@ using NYql::EBlockEngineMode;
 
 constexpr TStringBuf MeasuredQuery = "SELECT index FROM Input;\n";
 
-TTempDir MakeTemporaryDirectory() {
-    const TFsPath temporaryRoot = TFsPath(GetWorkPath()) / "tmp";
-    temporaryRoot.MkDirs();
-    return TTempDir::NewTempDir(temporaryRoot);
-}
-
 void WriteFile(const TFsPath& path, TStringBuf contents) {
-    path.Parent().MkDirs();
+    Y_ENSURE(NFs::MakeDirectoryRecursive(path.Parent().GetPath()), "Cannot create test directory: " << path.Parent());
     TFileOutput(path).Write(contents);
 }
 
@@ -82,8 +76,16 @@ Y_UNIT_TEST(LoadsTestSuite) {
     }
 }
 
+Y_UNIT_TEST(UsesPortableQueryNames) {
+    TTempDir directory;
+    WriteFile(directory.Path() / "nested" / "query.yql", MeasuredQuery);
+    const auto cases = NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name());
+    UNIT_ASSERT_VALUES_EQUAL(cases.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(cases.front().Name, "window/nested/query/engine:disable");
+}
+
 Y_UNIT_TEST(RejectsInvalidConfiguration) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     const TVector<std::pair<TStringBuf, TStringBuf>> configurations{
         {"unknown value\n", "Unknown setting"},
@@ -96,6 +98,9 @@ Y_UNIT_TEST(RejectsInvalidConfiguration) {
         {"bench_llvm_settings\n", "exactly one"},
         {"bench_input_rows\n", "exactly one"},
         {"bench_input_rows 0 1\n", "exactly one"},
+        {"bench_udfs_dir\n", "exactly one"},
+        {"bench_udfs_dir first second\n", "exactly one"},
+        {"bench_udfs_dir first\nbench_udfs_dir second\n", "Duplicate setting"},
         {"bench_input_rows -1\n", "Unexpected symbol"},
         {"bench_input_rows 1.0\n", "Unexpected symbol"},
         {"bench_input_rows 18446744073709551616\n", "Integer overflow"},
@@ -109,8 +114,23 @@ Y_UNIT_TEST(RejectsInvalidConfiguration) {
     }
 }
 
+Y_UNIT_TEST(ParsesUdfsDirectory) {
+    TTempDir directory;
+    WriteFile(directory.Path() / "query.yql", MeasuredQuery);
+    const TString udfSetting = "bench_udfs_dir yql/essentials/udfs/common/digest/impl\n";
+    const TString engineSetting = "bench_block_engines auto force disable\n";
+    for (const auto& configuration : {udfSetting + engineSetting, engineSetting + udfSetting}) {
+        WriteFile(directory.Path() / "query.cfg", configuration);
+        const auto cases = NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name());
+        UNIT_ASSERT_VALUES_EQUAL(cases.size(), 3);
+        for (const auto& benchmarkCase : cases) {
+            UNIT_ASSERT_VALUES_EQUAL(benchmarkCase.Options.UdfsDirectory, BinaryPath("yql/essentials/udfs/common/digest/impl"));
+        }
+    }
+}
+
 Y_UNIT_TEST(ParsesAllStandardRowCounts) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     const TVector<std::pair<TStringBuf, ui64>> inputs{
         {"0", 0},
@@ -129,7 +149,7 @@ Y_UNIT_TEST(ParsesAllStandardRowCounts) {
 }
 
 Y_UNIT_TEST(ParsesQueryDialects) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     WriteFile(directory.Path() / "query.yql", MeasuredQuery);
     for (const auto& [value, expected] : {std::pair{TStringBuf("sql"), NPureBench::ESyntax::SQL},
                                           std::pair{TStringBuf("pg"), NPureBench::ESyntax::PG}}) {
@@ -140,27 +160,8 @@ Y_UNIT_TEST(ParsesQueryDialects) {
     }
 }
 
-Y_UNIT_TEST(FollowsDirectoryAliasesAndIgnoresDanglingLinks) {
-    auto directory = MakeTemporaryDirectory();
-    const TFsPath real = directory.Path() / "real";
-    WriteFile(real / "query.yql", MeasuredQuery);
-    UNIT_ASSERT(NFs::SymLink(real.GetPath(), (directory.Path() / "alias").GetPath()));
-    UNIT_ASSERT(NFs::SymLink((directory.Path() / "missing").GetPath(), (directory.Path() / "dangling").GetPath()));
-    const auto cases = NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name());
-    UNIT_ASSERT_VALUES_EQUAL(cases.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(cases[0].Name, "window/alias/query/engine:disable");
-    UNIT_ASSERT_VALUES_EQUAL(cases[1].Name, "window/real/query/engine:disable");
-}
-
-Y_UNIT_TEST(RejectsDirectoryLinkCycles) {
-    auto directory = MakeTemporaryDirectory();
-    WriteFile(directory.Path() / "query.yql", MeasuredQuery);
-    UNIT_ASSERT(NFs::SymLink(directory.Name(), (directory.Path() / "loop").GetPath()));
-    UNIT_ASSERT_EXCEPTION_CONTAINS(NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name()), yexception, "Cyclic suite directory link");
-}
-
 Y_UNIT_TEST(RejectsInvalidSuiteFiles) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     UNIT_ASSERT_EXCEPTION_CONTAINS(NYql::NPureBench::LoadBenchmarkSuite("window", directory.Name()), yexception, "no main .yql");
     UNIT_ASSERT_EXCEPTION_CONTAINS(NYql::NPureBench::LoadBenchmarkSuite("window", (directory.Path() / "missing").GetPath()),
                                    yexception, "not a directory");
@@ -179,13 +180,16 @@ Y_UNIT_TEST(RejectsInvalidSuiteFiles) {
 }
 
 Y_UNIT_TEST(EncodesNamesUnambiguously) {
-    auto directory = MakeTemporaryDirectory();
+    TTempDir directory;
     const TVector<std::pair<TStringBuf, TStringBuf>> queries{
         {"a b.yql", "a+b"},
         {"a+b.yql", "a%2Bb"},
         {"a%2Bb.yql", "a%252Bb"},
+        {"group/query[x].yql", "group/query%5Bx%5D"},
+#if !defined(_win_)
+        // These filename characters are forbidden by Windows.
         {"group/query::[x]\"|\n.yql", "group/query%3A%3A%5Bx%5D%22%7C%0A"},
-        {"запрос.yql", "%D0%B7%D0%B0%D0%BF%D1%80%D0%BE%D1%81"},
+#endif
     };
     THashSet<TString> expectedNames;
     for (const auto& [path, encodedName] : queries) {

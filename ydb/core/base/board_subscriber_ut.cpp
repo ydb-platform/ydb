@@ -103,6 +103,15 @@ public:
     void KeepInfoFromOtherRingGroup();
     void IgnoreWriteOnlyRingGroupOnLookup();
     void ReturnNotAvailableWithoutReadableRingGroup();
+    void LookupCollectsDelayedReplica();
+    void LookupWithUnavailableReplica();
+    void LookupWithSilentReplica();
+    void LookupWithoutQuorum();
+    void LookupWaitsForLateQuorum();
+    void LookupLosesQuorumWhileCollecting();
+    void CheckLookupWithMissingReplica(bool silent, bool quorum);
+    void ResubscribeAfterReplicaShutdown();
+    void ResubscribeAfterUndeliveredReconnect();
 
 protected:
     THolder<TTestBasicRuntime> Context;
@@ -117,7 +126,15 @@ class TBoardSubscriberTest : public TBoardSubscriberTestBase {
     UNIT_TEST(ReconnectReplica);
     UNIT_TEST(RepublishAfterReplicaShutdown);
     UNIT_TEST(RepublishAfterInitialUndelivery);
+    UNIT_TEST(LookupCollectsDelayedReplica);
+    UNIT_TEST(LookupWithUnavailableReplica);
+    UNIT_TEST(LookupWithSilentReplica);
+    UNIT_TEST(LookupWithoutQuorum);
+    UNIT_TEST(LookupWaitsForLateQuorum);
+    UNIT_TEST(LookupLosesQuorumWhileCollecting);
     UNIT_TEST(DropByDisconnect);
+    UNIT_TEST(ResubscribeAfterReplicaShutdown);
+    UNIT_TEST(ResubscribeAfterUndeliveredReconnect);
     UNIT_TEST_SUITE_END();
 };
 
@@ -345,6 +362,93 @@ void TBoardSubscriberTestBase::NotAvailableByShutdown() {
 
     auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
     UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
+}
+
+// One replica of a live subscription shuts down, its node staying connected; the two others keep the subscription
+// alive. The subscription must try that replica again rather than leave it out for good.
+void TBoardSubscriberTestBase::ResubscribeAfterReplicaShutdown() {
+    const TVector<TActorId> replicas = ResolveReplicas();
+    const TActorId replica = replicas[0];
+
+    struct TLookupSent {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+    TVector<TLookupSent> lookups; // sent to the replica
+    TTestBasicRuntime::TEventObserverHolder observer = Context->AddObserver<TEvStateStorage::TEvReplicaBoardLookup>(
+        [&](TEvStateStorage::TEvReplicaBoardLookup::TPtr& ev) {
+            if (ev->Recipient == replica) {
+                lookups.push_back({ev->Sender, ev->Cookie});
+            }
+        });
+
+    const TActorId edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+    {
+        TEvStateStorage::TEvBoardInfo::TPtr event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(
+            edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lookups.size(), 1);
+
+    // the shutdown comes with the cookie of the lookup it answers
+    Context->Send(new IEventHandle(lookups.front().Sender, replica, new TEvStateStorage::TEvReplicaShutdown(), 0,
+        lookups.front().Cookie), 1, true);
+    Context->WaitFor("another lookup of the replica", [&] { return lookups.size() > 1; }, TDuration::Seconds(30));
+}
+
+// One replica of a live subscription shuts down, and the lookup of the reconnect is undelivered, as when the replica
+// actor is not registered yet; the node stays connected. The subscription must try the replica again, and the replica,
+// registered by then, must answer that lookup.
+void TBoardSubscriberTestBase::ResubscribeAfterUndeliveredReconnect() {
+    const TVector<TActorId> replicas = ResolveReplicas();
+    const TActorId replica = replicas[0];
+
+    struct TLookupSent {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+    TVector<TLookupSent> lookups; // sent to the replica
+    bool undelivered = false;
+    TTestBasicRuntime::TEventObserverHolder observer = Context->AddObserver<TEvStateStorage::TEvReplicaBoardLookup>(
+        [&](TEvStateStorage::TEvReplicaBoardLookup::TPtr& ev) {
+            if (ev->Recipient != replica) {
+                return;
+            }
+            lookups.push_back({ev->Sender, ev->Cookie});
+            if (lookups.size() == 2) {
+                // the lookup of the reconnect finds no replica actor
+                undelivered = true;
+                Context->Send(new IEventHandle(ev->Sender, replica, new TEvents::TEvUndelivered(
+                    TEvStateStorage::TEvReplicaBoardLookup::EventType, TEvents::TEvUndelivered::ReasonActorUnknown), 0,
+                    ev->Cookie), 1, true);
+                ev.Reset();
+            }
+        });
+    ui32 answers = 0; // of the replica to the lookups after the undelivered one
+    TTestBasicRuntime::TEventObserverHolder infos = Context->AddObserver<TEvStateStorage::TEvReplicaBoardInfo>(
+        [&](TEvStateStorage::TEvReplicaBoardInfo::TPtr& ev) {
+            if (undelivered && lookups.size() > 2 && ev->Recipient == lookups.back().Sender
+                    && ev->Cookie == lookups.back().Cookie) {
+                ++answers;
+            }
+        });
+
+    const TActorId edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+    {
+        TEvStateStorage::TEvBoardInfo::TPtr event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(
+            edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lookups.size(), 1);
+
+    Context->Send(new IEventHandle(lookups.front().Sender, replica, new TEvStateStorage::TEvReplicaShutdown(), 0,
+        lookups.front().Cookie), 1, true);
+    Context->WaitFor("the lookup of the reconnect", [&] { return undelivered; }, TDuration::Seconds(30));
+    Context->WaitFor("another lookup of the replica after the undelivered one", [&] { return lookups.size() > 2; },
+        TDuration::Seconds(30));
+    Context->WaitFor("the answer of the replica", [&] { return answers > 0; }, TDuration::Seconds(10));
 }
 
 void TBoardSubscriberTestBase::ReconnectReplica() {
@@ -638,6 +742,138 @@ void TBoardSubscriberTestBase::ReturnNotAvailableWithoutReadableRingGroup() {
     auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeLookup);
     UNIT_ASSERT_EQUAL(result->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Path, "path");
+}
+
+void TBoardSubscriberTestBase::LookupCollectsDelayedReplica() {
+    const auto replicas = ResolveReplicas();
+    const auto edge = Context->AllocateEdgeActor();
+    size_t publishAcks = 0;
+    auto ackObserver = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublishAck>(
+        [&](TEvStateStorage::TEvReplicaBoardPublishAck::TPtr&) { ++publishAcks; });
+    const auto common = CreatePublisher("path", "common", edge, 0);
+    Context->WaitFor("common publication", [&] { return publishAcks == 3; });
+
+    // Two recently restarted replicas have only a subset of the publications.
+    auto previousObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaBoardPublish::EventType
+                && ev->Recipient != replicas.back()) {
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+    const auto unique = CreatePublisher("path", "unique", edge, 0);
+    Context->WaitFor("unique publication", [&] { return publishAcks == 4; });
+    Context->SetObserverFunc(previousObserver);
+
+    NActors::TBlockEvents<TEvStateStorage::TEvReplicaBoardInfo> delayedReply(
+        *Context, [&](const TEvStateStorage::TEvReplicaBoardInfo::TPtr& ev) {
+            return ev->Sender.NodeId() == replicas.back().NodeId();
+        });
+    size_t replies = 0;
+    auto replyObserver = Context->AddObserver<TEvStateStorage::TEvBoardInfo>(
+        [&](TEvStateStorage::TEvBoardInfo::TPtr&) { ++replies; });
+    CreateLookup("path", edge, EBoardLookupMode::SecondWithAllReplies, 0);
+    Context->WaitFor("replica response or early completion", [&] { return delayedReply.size() == 1 || replies != 0; });
+    Context->SimulateSleep(TDuration::MilliSeconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(replies, 0);
+
+    delayedReply.Stop().Unblock();
+    auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edge);
+    UNIT_ASSERT_EQUAL(result->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->InfoEntries.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->InfoEntries.at(common).Payload, "common");
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->InfoEntries.at(unique).Payload, "unique");
+}
+
+void TBoardSubscriberTestBase::CheckLookupWithMissingReplica(bool silent, bool quorum) {
+    const auto replicas = ResolveReplicas();
+    const auto edge = Context->AllocateEdgeActor();
+    size_t publishAcks = 0;
+    auto ackObserver = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublishAck>(
+        [&](TEvStateStorage::TEvReplicaBoardPublishAck::TPtr&) { ++publishAcks; });
+    const auto publisher = CreatePublisher("path", "test", edge, 0);
+    Context->WaitFor("publication", [&] { return publishAcks == 3; });
+
+    auto previousObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaBoardLookup::EventType
+                && (ev->Recipient == replicas.back() || (!quorum && ev->Recipient == replicas[1]))) {
+            if (!silent) {
+                Context->Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::ReasonActorUnknown),
+                    0, ev->Cookie), 0);
+            }
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+    CreateLookup("path", edge, EBoardLookupMode::SecondWithAllReplies, 0);
+    auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edge, TDuration::Seconds(2));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_EQUAL(result->Get()->Status, quorum
+        ? TEvStateStorage::TEvBoardInfo::EStatus::Ok
+        : TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
+    if (quorum) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->InfoEntries.at(publisher).Payload, "test");
+    }
+    Context->SetObserverFunc(previousObserver);
+}
+
+void TBoardSubscriberTestBase::LookupWithUnavailableReplica() {
+    CheckLookupWithMissingReplica(false, true);
+}
+
+void TBoardSubscriberTestBase::LookupWithSilentReplica() {
+    CheckLookupWithMissingReplica(true, true);
+}
+
+void TBoardSubscriberTestBase::LookupWithoutQuorum() {
+    CheckLookupWithMissingReplica(false, false);
+}
+
+void TBoardSubscriberTestBase::LookupWaitsForLateQuorum() {
+    const auto edge = Context->AllocateEdgeActor();
+    size_t publishAcks = 0;
+    auto ackObserver = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublishAck>(
+        [&](TEvStateStorage::TEvReplicaBoardPublishAck::TPtr&) { ++publishAcks; });
+    const auto publisher = CreatePublisher("path", "test", edge, 0);
+    Context->WaitFor("publication", [&] { return publishAcks == 3; });
+
+    NActors::TBlockEvents<TEvStateStorage::TEvReplicaBoardInfo> delayedReplies(*Context);
+    size_t replies = 0;
+    auto replyObserver = Context->AddObserver<TEvStateStorage::TEvBoardInfo>(
+        [&](TEvStateStorage::TEvBoardInfo::TPtr&) { ++replies; });
+    CreateLookup("path", edge, EBoardLookupMode::SecondWithAllReplies, 0);
+    Context->WaitFor("replica responses", [&] { return delayedReplies.size() == 3; });
+    Context->SimulateSleep(TDuration::MilliSeconds(1500));
+    UNIT_ASSERT_VALUES_EQUAL(replies, 0);
+
+    delayedReplies.Stop().Unblock();
+    auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edge);
+    UNIT_ASSERT_EQUAL(result->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->InfoEntries.at(publisher).Payload, "test");
+}
+
+void TBoardSubscriberTestBase::LookupLosesQuorumWhileCollecting() {
+    const auto replicas = ResolveReplicas();
+    const auto edge = Context->AllocateEdgeActor();
+    size_t publishAcks = 0;
+    auto ackObserver = Context->AddObserver<TEvStateStorage::TEvReplicaBoardPublishAck>(
+        [&](TEvStateStorage::TEvReplicaBoardPublishAck::TPtr&) { ++publishAcks; });
+    CreatePublisher("path", "test", edge, 0);
+    Context->WaitFor("publication", [&] { return publishAcks == 3; });
+
+    NActors::TBlockEvents<TEvStateStorage::TEvReplicaBoardInfo> delayedReply(
+        *Context, [&](const TEvStateStorage::TEvReplicaBoardInfo::TPtr& ev) {
+            return ev->Sender.NodeId() == replicas.back().NodeId();
+        });
+    const auto lookup = CreateLookup("path", edge, EBoardLookupMode::SecondWithAllReplies, 0);
+    Context->WaitFor("delayed replica response", [&] { return delayedReply.size() == 1; });
+    Context->SimulateSleep(TDuration::MilliSeconds(10));
+    Send(lookup, edge, new TEvInterconnect::TEvNodeDisconnected(replicas.front().NodeId()), 0);
+
+    auto result = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edge, TDuration::Seconds(2));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_EQUAL(result->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
 }
 
 } // NKikimr

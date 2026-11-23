@@ -138,6 +138,7 @@ message TPersQueuePartitionRequest {
         optional string Owner = 1 [default = "default"];
         optional bool Force = 2 [ default = true];
         optional bool RegisterIfNotExists = 3 [default = true];
+        optional int64 QuotaWaitTimeMs = 4;
     }
 
     message TCmdReserveBytes {

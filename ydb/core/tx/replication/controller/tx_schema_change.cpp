@@ -8,11 +8,15 @@
 #include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
 namespace {
+
+using TFamily = NKikimrReplication::TSchemaChange::TFamily;
 
 bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
     if (!schema.HasVersion() || !schema.GetSourceSchemaVersion()) {
@@ -32,6 +36,15 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
 
             if (!IsValidCompression(family.GetCompression()) || !IsValidCacheMode(family.GetCacheMode())) {
                 return false;
+            }
+
+            if (family.HasCompressionLevel()) {
+                if (family.GetCompression() != TFamily::COMPRESSION_ZSTD) {
+                    return false;
+                }
+                if (family.GetCompressionLevel() > static_cast<ui32>(ZSTD_maxCLevel())) {
+                    return false;
+                }
             }
 
             if (family.HasMedia() && family.GetMedia().empty()) {
@@ -496,8 +509,8 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 continue;
             }
 
-            const auto sourcePath = CanonizePath(target->GetSrcPath());
-            const auto parentPath = CanonizePath(TString(ExtractParent(target->GetSrcPath())));
+            const auto sourcePath = target->GetSrcIndexPath();
+            const auto parentPath = CanonizePath(TString(ExtractParent(sourcePath)));
             if (parentPath != tablePath || retained.contains(sourcePath)) {
                 continue;
             }
@@ -1037,7 +1050,9 @@ public:
                     const auto src = CanonizePath(ChildPath(SplitPath(base->GetSrcPath()), index.GetName()));
                     bool exists = false;
                     for (const auto* target : replication->GetTargets()) {
-                        exists |= CanonizePath(target->GetSrcPath()) == src;
+                        exists |= target->GetKind() == TReplication::ETargetKind::IndexTable
+                            && target->GetDstState() != TReplication::EDstState::Removing
+                            && target->GetSrcIndexPath() == src;
                     }
                     if (exists) {
                         continue;
@@ -1045,7 +1060,7 @@ public:
 
                     const auto dst = CanonizePath(ChildPath(SplitPath(base->GetDstPath()),
                         {index.GetName(), "indexImplTable"}));
-                    auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst);
+                    auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst, false);
                     const auto tid = replication->AddTarget(TReplication::ETargetKind::IndexTable, config);
                     replication->FindTarget(tid)->SetIndexBuild(true);
                     auto& build = Self->IndexBuilds[{key.first, tid}];

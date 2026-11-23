@@ -21,6 +21,13 @@ Y_UNIT_TEST(DropSymlinkDoesntWorkOnOldLangVersion) {
                         settings);
 }
 
+Y_UNIT_TEST(SymlinkRequiresCluster) {
+    ExpectFailWithError("CREATE SYMLINK\n    link TO target;",
+                        "<main>:2:5: Error: No cluster name given and no default cluster is selected\n");
+    ExpectFailWithError("DROP SYMLINK\n    link;",
+                        "<main>:2:5: Error: No cluster name given and no default cluster is selected\n");
+}
+
 Y_UNIT_TEST(CreateSymlink) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
@@ -714,7 +721,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )sql", "<main>:5:33: Error: SOURCE_TYPE requires key\n");
+            )sql", "<main>:3:58: Error: SOURCE_TYPE requires key\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -1106,11 +1113,11 @@ Y_UNIT_TEST(TopicBadRequests) {
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
         )", /*expectOk=*/false,
-              {"3:68: Error: BAD_OPTION: unknown option for consumer"});
+              {"3:55: Error: BAD_OPTION: unknown option for consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
         )", /*expectOk=*/false,
-              {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
+              {"3:74: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metrics_level = "");
         )", /*expectOk=*/false,
@@ -1138,7 +1145,7 @@ Y_UNIT_TEST(TopicBadRequests) {
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
         )", /*expectOk=*/false,
-              {"5:59: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
+              {"5:47: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (availability_period = 3600));
         )", /*expectOk=*/false,
@@ -1227,6 +1234,13 @@ Y_UNIT_TEST(AlterResourcePool) {
     VerifyProgram(res, elementStat, verifyLine);
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(ResourcePoolSettingValuePosition) {
+    ExpectFailWithError("USE plato; CREATE RESOURCE POOL pool WITH (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
+    ExpectFailWithError("USE plato; ALTER RESOURCE POOL pool SET (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
 }
 
 Y_UNIT_TEST(DropResourcePool) {
@@ -1362,7 +1376,7 @@ Y_UNIT_TEST(CreateBackupCollectionWithBadArguments) {
                 CREATE BACKUP COLLECTION TestCollection WITH (
                     INT_SETTING=1
                 );
-            )sql", "<main>:4:21: Error: INT_SETTING value should be a string literal\n");
+            )sql", "<main>:4:33: Error: INT_SETTING value should be a string literal\n");
 }
 
 Y_UNIT_TEST(AlterBackupCollection) {
@@ -1499,6 +1513,13 @@ Y_UNIT_TEST(AlterResourcePoolClassifier) {
     VerifyProgram(res, elementStat, verifyLine);
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(ResourcePoolClassifierSettingValuePosition) {
+    ExpectFailWithError("USE plato; CREATE RESOURCE POOL CLASSIFIER classifier WITH (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
+    ExpectFailWithError("USE plato; ALTER RESOURCE POOL CLASSIFIER classifier SET (setting =\n    TRUE);",
+                        "<main>:2:5: Error: SETTING value should be a string literal or integer\n");
 }
 
 Y_UNIT_TEST(DropResourcePoolClassifier) {
@@ -1690,7 +1711,7 @@ Y_UNIT_TEST(SystemColumnPrefixesArePassedToProvider) {
     NSQLTranslation::TTranslationSettings settings;
     settings.ExtraSystemColumnPrefixes = {"__ydb_row_id", "__internal_"};
     const auto result = SqlToYqlWithMode("CHECKSUM TABLE plato.Input;", NSQLTranslation::ESqlMode::QUERY,
-                                         10, "kikimr", EDebugOutput::None, false, settings);
+                                         10, "kikimr", EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
     const auto ast = GetPrettyPrint(result);
     UNIT_ASSERT_STRING_CONTAINS(ast, "KiChecksumTable!");
@@ -1762,6 +1783,19 @@ Y_UNIT_TEST(RejectsViewAndSubqueryDefinitions) {
 } // Y_UNIT_TEST_SUITE(ChecksumTable)
 
 Y_UNIT_TEST_SUITE(Transfer) {
+Y_UNIT_TEST(SettingsErrorPositions) {
+    const TString create = "USE plato; CREATE TRANSFER transfer FROM topic TO tab USING ($x) -> { RETURN $x; } WITH (\n";
+    ExpectFailWithError(create + "    UNKNOWN =\n        'value');",
+                        "<main>:2:5: Error: Unknown transfer setting: UNKNOWN\n");
+    ExpectFailWithError(create + "    STATE =\n        'paused');",
+                        "<main>:2:5: Error: STATE is not supported in CREATE\n");
+    ExpectFailWithError(create + "    METRICS_LEVEL = 'default',\n    METRICS_LEVEL = 'object');",
+                        "<main>:3:5: Error: Duplicate transfer setting: METRICS_LEVEL\n");
+    ExpectFailWithError(create + "    METRICS_LEVEL =\n        -1);",
+                        "<main>:3:9: Error: Invalid numeric value for metrics_value: negative numbers are not allowed\n");
+    ExpectFailWithError("USE plato; ALTER TRANSFER transfer SET (\n    CONSUMER =\n        'consumer');",
+                        "<main>:2:5: Error: CONSUMER is not supported in ALTER\n");
+}
 
 Y_UNIT_TEST(Lambda) {
     NYql::TAstParseResult res = SqlToYql(R"( use plato;

@@ -1,3 +1,17 @@
+* Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
+
+* Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
+
+* Added `TOperation::HasMetadata()` to check whether operation metadata is available.
+
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
+* Added optional `ClientTimeout` and `Deadline` settings to `TOperationClient::Get()` without cancelling the server operation or changing defaults.
+
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
+
+* Added support for tablet reassignment operation IDs.
+
 ## v3.27.0
 
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.

@@ -53,7 +53,7 @@ public:
 
         for (auto& shard : txState->Shards) {
             const TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-            AFL_VERIFY(shard.TabletType == ETabletType::ColumnShard);
+            YDB_LOG_VERIFY(shard.TabletType == ETabletType::ColumnShard);
             auto txShardString = update->GetShardTxBodyString((ui64)tabletId, seqNo);
             auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                 update->GetShardTransactionKind(),
@@ -90,6 +90,13 @@ public:
     {
         IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType,
              TEvColumnShard::TEvProposeTransactionResult::EventType});
+    }
+
+    // ColumnShard can report completion before this schemeshard has applied the plan step.
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "TEvNotifyTxCompletionResult triggered early");
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
+        return false;
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {

@@ -12,13 +12,18 @@ class ITranslator: public TThrRefBase {
 public:
     ~ITranslator() override = default;
 
+    // Checks the name without emitting diagnostics. The active translator validates values.
+    // Another translator or provider may accept a rejected setting.
+    // The caller must report settings rejected by every component when strict validation is enabled.
+    virtual bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma& pragma) const = 0;
+
     virtual ILexer::TPtr MakeLexer(const TTranslationSettings& settings) = 0;
     virtual NYql::TAstParseResult TextToAst(const TString& query, const TTranslationSettings& settings,
                                             NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) = 0;
     virtual google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
                                                      NYql::TIssues& issues, size_t maxErrors, const TTranslationSettings& settings) = 0;
     virtual NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
-                                                      const TSQLHints& hints, const TTranslationSettings& settings) = 0;
+                                                      const TParsedTokenList& tokens, const TTranslationSettings& settings) = 0;
     virtual TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const TTranslationSettings& settings,
                                                          NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) = 0;
 };

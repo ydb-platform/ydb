@@ -76,7 +76,7 @@ class TShardIdToTableInfo {
 public:
     const TTableInfo& Get(ui64 shardId) const {
         const auto* result = GetPtr(shardId);
-        AFL_ENSURE(result);
+        YDB_LOG_ENSURE(result);
         return *result;
     }
 
@@ -92,7 +92,7 @@ public:
         const TStringBuf pathBuf = *stringsIter;
         auto infoIter = ShardIdToInfo.find(shardId);
         if (infoIter != std::end(ShardIdToInfo)) {
-            AFL_ENSURE(infoIter->second.IsOlap == isOlap);
+            YDB_LOG_ENSURE(infoIter->second.IsOlap == isOlap);
             infoIter->second.Pathes.insert(pathBuf);
         } else {
             ShardIdToInfo.emplace(
@@ -513,12 +513,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
 // Whether the mode promises that all reads of a transaction observe the same state.
 bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
-
-bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
-bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
 

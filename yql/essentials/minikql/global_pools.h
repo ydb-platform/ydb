@@ -43,7 +43,7 @@ public:
     }
 
     void* DoMmap(size_t size) {
-        Y_DEBUG_ABORT_UNLESS(!TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed(), "No memory maps allowed while using default allocator");
+        Y_DEBUG_ABORT_UNLESS(!IsDefaultAllocatorUsed(), "No memory maps allowed while using default allocator");
 
         auto result = Provider_.Mmap(size);
         if (Y_UNLIKELY(!result)) {

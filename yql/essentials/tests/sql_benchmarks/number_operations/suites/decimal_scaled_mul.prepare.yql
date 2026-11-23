@@ -1,0 +1,4 @@
+SELECT
+    CAST(index AS Decimal(22, 9)) AS scaled_left,
+    CAST(index / 2 AS Decimal(22, 9)) AS scaled_right
+FROM Input;

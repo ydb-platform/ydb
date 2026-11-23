@@ -38,18 +38,18 @@ public:
     TPortionMetaConstructor(const TPortionMeta& meta);
 
     const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
-        AFL_VERIFY(FirstAndLastPK);
+        YDB_LOG_VERIFY(FirstAndLastPK);
         return *FirstAndLastPK;
     }
 
     ui64 GetTotalBlobBytes() const {
-        AFL_VERIFY(ColumnBlobBytes);
-        AFL_VERIFY(IndexBlobBytes);
+        YDB_LOG_VERIFY(ColumnBlobBytes);
+        YDB_LOG_VERIFY(IndexBlobBytes);
         return *ColumnBlobBytes + *IndexBlobBytes;
     }
 
     ui32 GetSlices() const {
-        AFL_VERIFY(NumSlices);
+        YDB_LOG_VERIFY(NumSlices);
         return *NumSlices;
     }
 

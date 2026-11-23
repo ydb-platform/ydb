@@ -1,16 +1,28 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include <yt/yt/library/profiling/sensor.h>
+#include <yt/yt/core/misc/collection_helpers.h>
+
+#include <yt/yt/core/ytree/fluent.h>
+
 #include <yt/yt/library/profiling/impl.h>
 #include <yt/yt/library/profiling/producer.h>
+#include <yt/yt/library/profiling/sensor.h>
 
 #include <yt/yt/library/profiling/solomon/registry.h>
 #include <yt/yt/library/profiling/solomon/remote.h>
 
+#include <library/cpp/monlib/encode/json/json.h>
+
+#include <library/cpp/monlib/encode/spack/spack_v1.h>
+
 #include <library/cpp/yt/memory/ref_counted.h>
 
+#include <util/stream/str.h>
+
 #include <util/string/join.h>
+
+#include <exception>
 
 namespace NYT::NProfiling {
 namespace {
@@ -419,6 +431,31 @@ TEST(TSolomonRegistryTest, HistogramWithBigCounterValues)
     ASSERT_EQ(result.front(), 4e9);
 }
 
+TEST(TSolomonRegistryTest, GaugeAndRateHistogramCollection)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TProfiler profiler(impl, "/d");
+
+    auto gaugeHistogram = profiler.GaugeHistogram("/gauge_histogram", {1.0});
+    auto rateHistogram = profiler.RateHistogram("/rate_histogram", {1.0});
+
+    gaugeHistogram.Add(0.5, 2);
+    rateHistogram.Add(0.5, 3);
+
+    auto result = CollectSensors(impl).Histograms;
+
+    auto gaugeIt = result.find("yt.d.gauge_histogram{}");
+    ASSERT_NE(gaugeIt, result.end());
+    ASSERT_EQ(gaugeIt->second->Count(), 2u);
+    EXPECT_EQ(gaugeIt->second->Value(0), 2u);
+
+    auto rateIt = result.find("yt.d.rate_histogram{}");
+    ASSERT_NE(rateIt, result.end());
+    ASSERT_EQ(rateIt->second->Count(), 2u);
+    EXPECT_EQ(rateIt->second->Value(0), 3u);
+}
+
 TEST(TSolomonRegistryTest, SparseCounters)
 {
     auto impl = New<TSolomonRegistry>();
@@ -793,7 +830,7 @@ TEST(TSolomonRegistryTest, CounterTagsBug)
     impl->ProcessRegistrations();
 }
 
-TEST(TSolomonRegistryTest, TestRemoteTransfer)
+TEST(TSolomonRegistryTest, RemoteTransfer)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -840,7 +877,33 @@ TEST(TSolomonRegistryTest, TestRemoteTransfer)
     ASSERT_TRUE(sensors.Counters.empty());
 }
 
-TEST(TSolomonRegistryTest, TestRemoteTransferWithDistinctTags)
+TEST(TSolomonRegistryTest, RemoteTransferUnknownPolicyPreservesDetach)
+{
+    auto source = New<TSolomonRegistry>();
+    source->SetWindowSize(12);
+    auto counter = TProfiler(source, "/r").Counter("/c");
+    counter.Increment(1);
+    source->Collect();
+    auto dump = source->DumpSensors();
+
+    auto destination = New<TSolomonRegistry>();
+    destination->SetWindowSize(12);
+    destination->Collect();
+    TRemoteRegistry remote(destination.Get());
+    remote.Transfer(dump);
+    ASSERT_EQ(GetOrCrash(ReadSensors(destination).Counters, "yt.r.c{}"), 1);
+
+    auto* unknownCube = dump.add_cubes();
+    unknownCube->set_name("/unknown");
+    unknownCube->set_summary_policy(0x80);
+
+    destination->Collect();
+    ASSERT_THROW(remote.Transfer(dump), std::exception);
+    remote.Detach();
+    EXPECT_TRUE(ReadSensors(destination).Counters.empty());
+}
+
+TEST(TSolomonRegistryTest, RemoteTransferWithDistinctTags)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -964,10 +1027,12 @@ TEST_P(TRenameTest, RenameTag)
     result = CollectSensors(impl);
     ASSERT_EQ(result.Counters.size(), 4u);
 
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{}"));
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store}"));
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=default}"));
-    ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;location_id=store0;device=sdb;model=M5100;medium=default}"));
+    ASSERT_EQ(result.Counters.at("yt.d.bytes_read{}"), 1);
+    ASSERT_EQ(result.Counters.at("yt.d.bytes_read{location_type=store}"), 1);
+    ASSERT_EQ(result.Counters.at("yt.d.bytes_read{location_type=store;medium=default}"), 1);
+    ASSERT_EQ(
+        result.Counters.at("yt.d.bytes_read{location_type=store;location_id=store0;device=sdb;model=M5100;medium=default}"),
+        1);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1432,6 +1497,241 @@ TEST(TRemoteRegistryTest, TransferDisableSensorsRenameFalse)
     auto sensors = ReadSensors(impl);
     ASSERT_EQ(1, sensors.Counters["foo.bar{}"]);
     ASSERT_TRUE(sensors.Counters.find("/foo/bar{}") == sensors.Counters.end());
+}
+
+TEST(TSummaryCountTest, PolicyConflicts)
+{
+    EXPECT_TRUE(CheckSummaryPolicy(ESummaryPolicy::Count));
+    EXPECT_TRUE(CheckSummaryPolicy(ESummaryPolicy::Sum | ESummaryPolicy::Count));
+    EXPECT_TRUE(CheckSummaryPolicy(ESummaryPolicy::Count | ESummaryPolicy::OmitNameLabelSuffix));
+    EXPECT_FALSE(CheckSummaryPolicy(ESummaryPolicy::All | ESummaryPolicy::Count));
+    EXPECT_FALSE(CheckSummaryPolicy(ESummaryPolicy::Sum | ESummaryPolicy::Count | ESummaryPolicy::OmitNameLabelSuffix));
+}
+
+TEST(TSummaryCountTest, CountReadValuesIsUnsigned)
+{
+    auto registry = New<TSolomonRegistry>();
+    registry->SetWindowSize(12);
+    auto summary = TProfiler(registry, "", "").Summary("summary");
+    for (int index = 0; index < 3; ++index) {
+        summary.Record(2.0);
+    }
+    registry->Collect();
+
+    TReadOptions options;
+    options.SummaryPolicy = ESummaryPolicy::Count;
+    auto value = NYTree::BuildYsonNodeFluently()
+        .Do([&] (NYTree::TFluentAny fluent) {
+            registry->ReadRecentSensorValues("summary", {}, options, fluent);
+        });
+    ASSERT_EQ(value->GetType(), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(value->AsUint64()->GetValue(), 3u);
+}
+
+struct TSummaryWindowConsumer
+    : public TTestMetricConsumer
+{
+    THashMap<std::string, std::vector<std::pair<TInstant, double>>> Points;
+
+    void OnDouble(TInstant time, double value) override
+    {
+        Points[FormatName()].emplace_back(time, value);
+    }
+};
+
+TSummaryWindowConsumer ReadSummaryWindow(
+    const TSolomonRegistryPtr& registry,
+    i64 firstIteration,
+    int slotCount,
+    int gridSeconds,
+    int groupSize,
+    bool spack,
+    int lingerWindowSize = 20)
+{
+    TReadOptions options;
+    options.DisableSensorsRename = true;
+    options.EnableSolomonAggregationWorkaround = true;
+    options.LingerWindowSize = lingerWindowSize;
+    // Counter conversion must not change Summary's per-window units.
+    options.ConvertCountersToRateGauge = true;
+    options.RateDenominator = gridSeconds * groupSize;
+    for (int slot = 0; slot < slotCount; slot += groupSize) {
+        std::vector<int> indices;
+        for (int offset = 0; offset < groupSize; ++offset) {
+            indices.push_back(registry->IndexOf(firstIteration + slot + offset));
+        }
+        options.Times.emplace_back(std::move(indices), TInstant::Seconds(120 + gridSeconds * slot));
+    }
+
+    TStringStream body;
+    auto encoder = spack
+        ? NMonitoring::EncoderSpackV1(&body, NMonitoring::ETimePrecision::SECONDS, NMonitoring::ECompression::IDENTITY)
+        : NMonitoring::BufferedEncoderJson(&body);
+    encoder->OnStreamBegin();
+    registry->ReadSensors(options, encoder.Get());
+    encoder->OnStreamEnd();
+    encoder->Close();
+
+    TSummaryWindowConsumer consumer;
+    if (spack) {
+        TStringInput input(body.Str());
+        NMonitoring::DecodeSpackV1(&input, &consumer, "sensor");
+    } else {
+        NMonitoring::DecodeJson(body.Str(), &consumer, "sensor");
+    }
+    return consumer;
+}
+
+class TSummaryImplementationTest
+    : public testing::TestWithParam<bool>
+{ };
+
+TEST_P(TSummaryImplementationTest, CountAccumulatesAcrossCollectionTicks)
+{
+    auto registry = New<TSolomonRegistry>();
+    registry->SetWindowSize(12);
+    registry->SetGridFactor([] (TStringBuf name) { return name == "avg" ? 4 : 1; });
+    auto summary = TProfiler(registry, "", "").WithDense().WithHot(GetParam()).Summary(
+        "avg",
+        ESummaryPolicy::Sum | ESummaryPolicy::Count);
+    registry->Collect();
+    for (int tick = 1; tick <= 4; ++tick) {
+        for (int index = 0; index < tick; ++index) {
+            summary.Record(2.0);
+        }
+        registry->Collect();
+    }
+    auto values = ReadSummaryWindow(registry, /*firstIteration*/ 1, /*slotCount*/ 1, /*gridSeconds*/ 20, /*groupSize*/ 1, /*spack*/ false).Points;
+    ASSERT_EQ(values.size(), 2u);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.sum{}")[0].second, 20.0);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.count{}")[0].second, 10.0);
+}
+
+INSTANTIATE_TEST_SUITE_P(SimpleAndPerCpu, TSummaryImplementationTest, testing::Bool());
+
+class TSummaryEncodingTest
+    : public testing::TestWithParam<bool>
+{ };
+
+TEST_P(TSummaryEncodingTest, CountExportedThroughEncoders)
+{
+    const bool spack = GetParam();
+    auto registry = New<TSolomonRegistry>();
+    registry->SetWindowSize(12);
+    auto summary = TProfiler(registry, "", "").WithDense().Summary(
+        "avg",
+        ESummaryPolicy::Sum | ESummaryPolicy::Count);
+    for (int index = 0; index < 3; ++index) {
+        summary.Record(2.0);
+    }
+    registry->Collect();
+    registry->Collect();
+
+    auto fine = ReadSummaryWindow(registry, /*firstIteration*/ 0, /*slotCount*/ 2, /*gridSeconds*/ 15, /*groupSize*/ 1, spack).Points;
+    ASSERT_EQ(fine.size(), 2u);
+    const auto& sums = GetOrCrash(fine, "avg.sum{}");
+    const auto& counts = GetOrCrash(fine, "avg.count{}");
+    ASSERT_EQ(sums.size(), 2u);
+    ASSERT_EQ(counts.size(), sums.size());
+    for (int slot = 0; slot < 2; ++slot) {
+        EXPECT_EQ(sums[slot].first, counts[slot].first);
+        EXPECT_DOUBLE_EQ(sums[slot].second, slot == 0 ? 6.0 : 0.0);
+        EXPECT_DOUBLE_EQ(counts[slot].second, slot == 0 ? 3.0 : 0.0);
+    }
+
+    auto coarse = ReadSummaryWindow(registry, /*firstIteration*/ 0, /*slotCount*/ 2, /*gridSeconds*/ 15, /*groupSize*/ 2, spack).Points;
+    ASSERT_EQ(coarse.size(), 2u);
+    ASSERT_EQ(GetOrCrash(coarse, "avg.sum{}").size(), 1u);
+    ASSERT_EQ(GetOrCrash(coarse, "avg.count{}").size(), 1u);
+    EXPECT_DOUBLE_EQ(GetOrCrash(coarse, "avg.sum{}")[0].second, 6.0);
+    EXPECT_DOUBLE_EQ(GetOrCrash(coarse, "avg.count{}")[0].second, 3.0);
+}
+
+INSTANTIATE_TEST_SUITE_P(JsonAndSpack, TSummaryEncodingTest, testing::Bool());
+
+TEST(TSummaryCountTest, CountPolicyPreservesSparseZeroFiltering)
+{
+    auto registry = New<TSolomonRegistry>();
+    registry->SetWindowSize(12);
+    auto summary = TProfiler(registry, "", "").WithSparse().Summary("avg", ESummaryPolicy::Sum | ESummaryPolicy::Count);
+    auto collect = [&] {
+        registry->Collect();
+        return ReadSummaryWindow(registry, registry->GetNextIteration() - 1, /*slotCount*/ 1, /*gridSeconds*/ 15, /*groupSize*/ 1, /*spack*/ false, /*lingerWindowSize*/ 2).Points;
+    };
+    EXPECT_TRUE(collect().empty());
+    summary.Record(0.0);
+    EXPECT_TRUE(collect().empty());
+
+    summary.Record(2.0);
+    auto values = collect();
+    ASSERT_EQ(values.size(), 2u);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.sum{}")[0].second, 2.0);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.count{}")[0].second, 1.0);
+    for (int index = 0; index < 2; ++index) {
+        values = collect();
+        ASSERT_EQ(values.size(), 2u);
+        EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.sum{}")[0].second, 0.0);
+        EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.count{}")[0].second, 0.0);
+    }
+    EXPECT_TRUE(collect().empty());
+    summary.Record(0.0);
+    EXPECT_TRUE(collect().empty());
+
+    summary.Record(3.0);
+    values = collect();
+    ASSERT_EQ(values.size(), 2u);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.sum{}")[0].second, 3.0);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.count{}")[0].second, 1.0);
+}
+
+class TSummaryAggregationLabelsTest
+    : public testing::TestWithParam<bool>
+{ };
+
+TEST_P(TSummaryAggregationLabelsTest, CountAggregationLabels)
+{
+    const bool extended = GetParam();
+    auto registry = New<TSolomonRegistry>();
+    registry->SetWindowSize(12);
+    auto summary = TProfiler(registry, "", "").Summary("avg", ESummaryPolicy::Sum | ESummaryPolicy::Count);
+    for (int index = 0; index < 3; ++index) {
+        summary.Record(2.0);
+    }
+    registry->Collect();
+    TReadOptions options;
+    options.MarkAggregates = true;
+    options.EnableSolomonAggregates = extended;
+    options.Times = {{{registry->IndexOf(0)}, TInstant::Seconds(15)}};
+    TTestMetricConsumer consumer;
+    registry->ReadSensors(options, &consumer);
+    ASSERT_EQ(consumer.Gauges.size(), 2u);
+    auto suffix = extended ? "{yt_aggr=sum}"s : "{yt_aggr=1}"s;
+    EXPECT_DOUBLE_EQ(GetOrCrash(consumer.Gauges, "avg.sum" + suffix), 6.0);
+    EXPECT_DOUBLE_EQ(GetOrCrash(consumer.Gauges, "avg.count" + suffix), 3.0);
+}
+
+INSTANTIATE_TEST_SUITE_P(LegacyAndExtended, TSummaryAggregationLabelsTest, testing::Bool());
+
+TEST(TSummaryCountTest, CountSurvivesRemoteTransfer)
+{
+    auto source = New<TSolomonRegistry>();
+    source->SetWindowSize(12);
+    auto summary = TProfiler(source, "", "").WithDense().Summary("avg", ESummaryPolicy::Sum | ESummaryPolicy::Count);
+    for (int index = 0; index < 9; ++index) {
+        summary.Record(0.0);
+    }
+    source->Collect();
+    auto dump = source->DumpSensors();
+
+    auto destination = New<TSolomonRegistry>();
+    destination->SetWindowSize(12);
+    destination->Collect();
+    TRemoteRegistry remote(destination.Get());
+    remote.Transfer(dump);
+    auto values = ReadSummaryWindow(destination, /*firstIteration*/ 0, /*slotCount*/ 1, /*gridSeconds*/ 15, /*groupSize*/ 1, /*spack*/ false).Points;
+    ASSERT_EQ(values.size(), 2u);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.sum{}")[0].second, 0.0);
+    EXPECT_DOUBLE_EQ(GetOrCrash(values, "avg.count{}")[0].second, 9.0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

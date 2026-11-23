@@ -2,6 +2,10 @@ LIBRARY()
 
 SRCS(
     vocabulary.cpp
+    c3i.cpp
+    c3t.cpp
+    defs.cpp
+    pipeline.cpp
 )
 
 PEERDIR(

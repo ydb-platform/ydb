@@ -22,7 +22,7 @@ TEST(TCubeTest, GaugeProjections)
     auto it = p.find(TTagIdList{ 1 });
     ASSERT_TRUE(it != p.end());
 
-    EXPECT_EQ(4.0, it->second.Values[0]);
+    EXPECT_EQ(4.0, (*it)->Values[0]);
 
     cube.StartIteration();
     cube.Remove({ 1 });
@@ -56,7 +56,72 @@ TEST(TCubeTest, Rollup)
     auto it = cube.GetProjections().find(TTagIdList{});
     ASSERT_TRUE(it != cube.GetProjections().end());
 
-    ASSERT_EQ(it->second.Rollup, static_cast<i64>(51 - 12 / 2));
+    ASSERT_EQ((*it)->Rollup, static_cast<i64>(51 - 12 / 2));
+}
+
+TEST(TCubeTest, ProjectionCookieStableAcrossRehash)
+{
+    TCube<i64> cube(/*windowSize*/ 12, /*nextIteration*/ 0);
+
+    TProjectionSet projections;
+    projections.Resize(1);
+    projections.SetEnabled(false);
+
+    auto cookie = cube.AddAll(TTagIdSet(projections, TTagIdList{1}));
+    for (int tagId = 2; tagId < 10'000; ++tagId) {
+        cube.AddAll(TTagIdSet(projections, TTagIdList{tagId}));
+    }
+
+    cube.StartIteration();
+    cube.UpdateAll(cookie, 7);
+    cube.FinishIteration();
+
+    auto it = cube.GetProjections().find(TTagIdList{1});
+    ASSERT_NE(it, cube.GetProjections().end());
+    EXPECT_EQ((*it)->Values[0], 7);
+}
+
+TEST(TCubeTest, RemoveAllKeepsSharedProjection)
+{
+    TCube<i64> cube(/*windowSize*/ 12, /*nextIteration*/ 0);
+
+    TProjectionSet projections;
+    projections.Resize(1);
+    projections.SetEnabled(false);
+    TTagIdSet tagSet(projections, TTagIdList{1});
+
+    auto firstCookie = cube.AddAll(tagSet);
+    auto secondCookie = cube.AddAll(tagSet);
+    ASSERT_EQ(cube.GetProjections().size(), 1u);
+
+    cube.RemoveAll(std::move(firstCookie));
+    ASSERT_EQ(cube.GetProjections().size(), 1u);
+
+    cube.StartIteration();
+    cube.UpdateAll(secondCookie, 7);
+    cube.FinishIteration();
+
+    auto it = cube.GetProjections().find(TTagIdList{1});
+    ASSERT_NE(it, cube.GetProjections().end());
+    EXPECT_EQ((*it)->Values[0], 7);
+
+    cube.RemoveAll(std::move(secondCookie));
+    EXPECT_TRUE(cube.GetProjections().empty());
+}
+
+TEST(TCubeTest, RejectsProjectionCookieFromAnotherCube)
+{
+    TCube<i64> firstCube(/*windowSize*/ 12, /*nextIteration*/ 0);
+    TCube<i64> secondCube(/*windowSize*/ 12, /*nextIteration*/ 0);
+
+    TProjectionSet projections;
+    projections.Resize(1);
+    projections.SetEnabled(false);
+    TTagIdSet tagSet(projections, TTagIdList{1});
+
+    auto cookie = firstCube.AddAll(tagSet);
+    EXPECT_DEATH({ secondCube.UpdateAll(cookie, 1); }, "cookie.OwnerCubeId_ == CubeId_");
+    EXPECT_DEATH({ secondCube.RemoveAll(std::move(cookie)); }, "cookie.OwnerCubeId_ == CubeId_");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

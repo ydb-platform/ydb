@@ -187,6 +187,7 @@ namespace NLongTxService {
             TString DatabaseName;
             TVector<TAcquireSnapshotUserRequest> UserRequests;
             TVector<TAcquireSnapshotBeginTxRequest> BeginTxRequests;
+            ui32 FreshnessRetries = 0;
         };
 
         struct TDatabaseSnapshotState {
@@ -320,6 +321,7 @@ namespace NLongTxService {
                 EvReconnect,
                 EvSnapshotMaintenance,
                 EvRunDeadlockDetection,
+                EvAcquireSnapshotRetry,
             };
 
             struct TEvCommitFinished : public TEventLocal<TEvCommitFinished, EvCommitFinished> {
@@ -360,6 +362,14 @@ namespace NLongTxService {
                 TEvAcquireSnapshotFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
                     : Status(status)
                     , Issues(std::move(issues))
+                { }
+            };
+
+            struct TEvAcquireSnapshotRetry : public TEventLocal<TEvAcquireSnapshotRetry, EvAcquireSnapshotRetry> {
+                const ui64 RequestId;
+
+                explicit TEvAcquireSnapshotRetry(ui64 requestId)
+                    : RequestId(requestId)
                 { }
             };
 
@@ -459,6 +469,7 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvAcquireReadSnapshot, Handle);
                 hFunc(TEvPrivate::TEvAcquireSnapshotFlush, Handle);
                 hFunc(TEvPrivate::TEvAcquireSnapshotFinished, Handle);
+                hFunc(TEvPrivate::TEvAcquireSnapshotRetry, Handle);
                 hFunc(TEvLongTxService::TEvRegisterLock, Handle);
                 hFunc(TEvLongTxService::TEvUnregisterLock, Handle);
                 hFunc(TEvLongTxService::TEvSubscribeLock, Handle);
@@ -488,8 +499,11 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvAttachColumnShardWrites::TPtr& ev);
         void Handle(TEvLongTxService::TEvAttachColumnShardWritesResult::TPtr& ev);
         void Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev);
+        void RegisterRequestedSnapshot(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev, const TString& databaseName);
+        ui64 GetOldestAllowedSnapshotStep() const;
         void Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev);
         void Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& ev);
+        void Handle(TEvPrivate::TEvAcquireSnapshotRetry::TPtr& ev);
         void Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev);
@@ -530,6 +544,7 @@ namespace NLongTxService {
         void StartCommitActor(TTransaction& tx);
         void ScheduleAcquireSnapshot(const TString& databaseName, TDatabaseSnapshotState& state);
         void StartAcquireSnapshotActor(const TString& databaseName, TDatabaseSnapshotState& state);
+        void StartAcquireSnapshotAttempt(ui64 requestId, const TString& databaseName);
 
     private:
         const TString& GetDatabaseNameOrLegacyDefault(const TString& databaseName);

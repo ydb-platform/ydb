@@ -48,5 +48,6 @@ END()
 
 RECURSE(
     abi
+    async_runtime/fixture
     object_framework
 )

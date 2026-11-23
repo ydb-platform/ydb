@@ -48,8 +48,6 @@ SRCS(
     group_mapper.h
     group_metrics_exchange.cpp
     group_state.cpp
-    group_state_actor.cpp
-    group_state.h
     impl.h
     indir.h
     init_scheme.cpp
@@ -99,6 +97,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/nodewarden
+    ydb/core/blobstorage/syncer
     ydb/core/blob_depot
     ydb/core/engine/minikql
     ydb/core/protos

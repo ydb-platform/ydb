@@ -574,7 +574,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
     }
 
     Y_UNIT_TEST(SecondaryIndex_PgKey) {
-        TKikimrRunner kikimr = GetKikimrRunner();
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

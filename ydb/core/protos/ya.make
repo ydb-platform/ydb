@@ -53,6 +53,7 @@ SRCS(
     counters_backup.proto
     counters_blob_depot.proto
     counters_bs_controller.proto
+    counters_cdc_aggregator.proto
     counters_cms.proto
     counters_columnshard.proto
     counters_coordinator.proto
@@ -138,6 +139,7 @@ SRCS(
     pqevents_global.proto
     profiler.proto
     query_stats.proto
+    reassign_tablets.proto
     recoveryshard_config.proto
     replication.proto
     resource_broker.proto

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
 #include <yql/essentials/core/services/yql_plan.h>
@@ -51,6 +53,7 @@ public:
         TString runner);
 
     void SetIssueReportTarget(const TString& reportTarget);
+    void SetProjectSettings(TProjectSettings settings);
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
     void SetVolatileResults();
@@ -87,12 +90,13 @@ public:
 
 private:
     TString IssueReportTarget_;
+    TProjectSettings ProjectSettings_;
     const bool UseRepeatableRandomAndTimeProviders_;
     bool UseUnrepeatableRandom_ = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
-    TLangVersion LangVer_ = UnknownLangVersion;
+    TMaybe<TLangVersion> LangVer_;
     TLangVersion MaxLangVer_ = UnknownLangVersion;
     bool VolatileResults_ = false;
     TUserDataTable UserDataTable_;
@@ -327,10 +331,7 @@ public:
         OperationOptions_.QueryName = name;
     }
 
-    void SetOperationAttrsYson(const TString& attrs) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-        OperationOptions_.AttrsYson = attrs;
-    }
+    void SetOperationAttrsYson(const TString& attrs);
 
     void SetParametersYson(const TString& parameters);
 
@@ -409,7 +410,8 @@ private:
         const TQContext& qContext,
         THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
         TString bridgeBinaryPath,
-        NSQLTranslation::TTranslatorsRegistry translatorsRegistry);
+        NSQLTranslation::TTranslatorsRegistry translatorsRegistry,
+        TProjectSettings projectSettings);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -493,7 +495,9 @@ private:
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
     bool StrictConfigValidation_ = false;
+    TProjectSettings ProjectSettings_;
     TString BridgeBinaryPath_;
+    THashSet<TString> AcceptedSqlProjectSettings_;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
     TMaybe<TString> ExternalQueryAst_;
@@ -522,6 +526,7 @@ private:
 };
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);
+TProjectSettings ProjectSettingsFromQContext(const TQContext& context);
 THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context);
 
 bool HasFullCapture(const IQReaderPtr& reader);

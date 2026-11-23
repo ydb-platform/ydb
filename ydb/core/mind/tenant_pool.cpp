@@ -12,6 +12,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/mon/mon.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

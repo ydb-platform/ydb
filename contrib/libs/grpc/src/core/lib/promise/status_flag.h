@@ -31,8 +31,18 @@
 
 namespace grpc_core {
 
-struct Failure {};
-struct Success {};
+struct Failure {
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, Failure) {
+    sink.Append("failed");
+  }
+};
+struct Success {
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, Success) {
+    sink.Append("ok");
+  }
+};
 
 inline bool IsStatusOk(Failure) { return false; }
 inline bool IsStatusOk(Success) { return true; }
@@ -71,10 +81,30 @@ class StatusFlag {
   bool ok() const { return value_; }
 
   bool operator==(StatusFlag other) const { return value_ == other.value_; }
+  TString ToString() const { return value_ ? "ok" : "failed"; }
+
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, StatusFlag flag) {
+    if (flag.ok()) {
+      sink.Append("ok");
+    } else {
+      sink.Append("failed");
+    }
+  }
 
  private:
   bool value_;
 };
+
+inline bool operator==(StatusFlag flag, Failure) { return !flag.ok(); }
+inline bool operator==(Failure, StatusFlag flag) { return !flag.ok(); }
+inline bool operator==(StatusFlag flag, Success) { return flag.ok(); }
+inline bool operator==(Success, StatusFlag flag) { return flag.ok(); }
+
+inline bool operator!=(StatusFlag flag, Failure) { return flag.ok(); }
+inline bool operator!=(Failure, StatusFlag flag) { return flag.ok(); }
+inline bool operator!=(StatusFlag flag, Success) { return !flag.ok(); }
+inline bool operator!=(Success, StatusFlag flag) { return !flag.ok(); }
 
 inline bool IsStatusOk(const StatusFlag& flag) { return flag.ok(); }
 
@@ -149,6 +179,14 @@ class ValueOrFailure {
   bool operator==(const ValueOrFailure& other) const {
     return value_ == other.value_;
   }
+
+  bool operator!=(const ValueOrFailure& other) const {
+    return value_ != other.value_;
+  }
+
+  bool operator==(const T& other) const { return value_ == other; }
+
+  bool operator!=(const T& other) const { return value_ != other; }
 
  private:
   y_absl::optional<T> value_;

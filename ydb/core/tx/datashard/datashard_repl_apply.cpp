@@ -254,6 +254,13 @@ public:
         }
 
         const auto& userTable = *it->second;
+        if (!userTable.IsIncrementalRestore() && !userTable.IsReplicated()) {
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                "Table is not replicated");
+            return true;
+        }
         if (tableId.GetSchemaVersion() != 0 && userTable.GetTableSchemaVersion() != tableId.GetSchemaVersion()) {
             TString error = TStringBuilder()
                 << "DataShard " << Self->TabletID() << " has table "
@@ -470,6 +477,7 @@ public:
             if (collector) {
                 userDb.AddCommitTxId(tableId, writeTxId);
             }
+            Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, TRowVersion::Min(), writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
             if (!MvccVersion) {
@@ -481,6 +489,7 @@ public:
                 throw TNotReadyTabletException();
             }
             txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccVersion);
+            Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, *MvccVersion);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 

@@ -118,10 +118,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                     return;
                 }
                 NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                AFL_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
+                YDB_LOG_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
 
 
-                AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
+                YDB_LOG_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
                 if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     hasInsert = true;
                     ++readPhases;
@@ -188,108 +188,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     // commit.
     // NOTE: In case of read from single shard, we won't take snapshot.
     return readPhases > 1;
-}
-
-bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
-    for (const auto &tx : physicalQuery.GetTransactions()) {
-        for (const auto &stage : tx.GetStages()) {
-            for (const auto &tableOp : stage.GetTableOps()) {
-                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage) {
-    for (const auto& sink : stage.GetSinks()) {
-        if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-            NKikimrKqp::TKqpTableSinkSettings settings;
-            YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-            return settings.GetIsOlap();
-        }
-    }
-    for (const auto& transform : stage.GetOutputTransforms()) {
-        if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-            NKikimrKqp::TKqpTableSinkSettings settings;
-            YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-            return settings.GetIsOlap();
-        }
-    }
-    return false;
-}
-
-bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
-    for (const auto &tx : physicalQuery.GetTransactions()) {
-        for (const auto &stage : tx.GetStages()) {
-            if (HasOlapTableWriteInStage(stage)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
-    for (const auto &tx : physicalQuery.GetTransactions()) {
-        for (const auto &stage : tx.GetStages()) {
-            for (const auto &source : stage.GetSources()) {
-                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource){
-                    return true;
-                }
-
-                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    return true;
-                }
-            }
-            for (const auto &tableOp : stage.GetTableOps()) {
-                switch (tableOp.GetTypeCase()) {
-                    case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                        return true;
-                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-                        break;
-                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-                    default:
-                        YQL_ENSURE(false, "unexpected type");
-                }
-            }
-        }
-    }
-    return false;
-}
-
-bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
-    for (const auto &tx : physicalQuery.GetTransactions()) {
-        for (const auto &stage : tx.GetStages()) {
-            for (const auto &tableOp : stage.GetTableOps()) {
-                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows
-                    || tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                    AFL_ENSURE(false);
-                }
-            }
-
-            for (const auto& sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    return !settings.GetIsOlap();
-                }
-            }
-
-            for (const auto& transform : stage.GetOutputTransforms()) {
-                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    return !settings.GetIsOlap();
-                }
-            }
-        }
-    }
-    return false;
 }
 
 bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit) {
@@ -380,7 +278,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 }
 
                 if (settings.GetNeedLookup() && tableModifiedBefore) {
-                    AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+                    YDB_LOG_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                     return true;
                 }
 
@@ -414,8 +312,8 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             }
 
             for (const auto& transform : stage.GetOutputTransforms()) {
-                AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
-                AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                YDB_LOG_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                YDB_LOG_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                 NKikimrKqp::TKqpTableSinkSettings settings;
                 YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 

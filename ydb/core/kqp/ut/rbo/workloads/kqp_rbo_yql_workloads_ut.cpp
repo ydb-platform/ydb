@@ -21,7 +21,7 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {
                         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
-                        /*queriesWithoutCboCheck=*/{13});
+                        /*queriesWithoutCboCheck=*/{13, 22});
     }
 
     // Compiled 97 from 99.

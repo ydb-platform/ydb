@@ -1024,6 +1024,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         del = ", ";
     }
 
+    if (familyDesc.HasColumnCodecLevel()) {
+        Stream << del << "COMPRESSION_LEVEL = " << familyDesc.GetColumnCodecLevel();
+        del = ", ";
+    }
+
     if (cacheMode) {
         Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
@@ -2203,28 +2208,6 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
 
             if (bloomFilter.HasFalsePositiveProbability()) {
                 json[NIndexParameters::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
-            }
-
-            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
-            Stream << ");";
-            break;
-        }
-        case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
-            const auto& maxIndex = indexDesc.GetMaxIndex();
-            Stream << "ALTER OBJECT ";
-            EscapeName(fullPath, Stream);
-            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
-            Stream << indexDesc.GetName();
-            Stream << ", TYPE=MAX, ";
-            Stream << "FEATURES=";
-            NJson::TJsonValue json;
-
-            if (maxIndex.HasColumnId()) {
-                const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json[NIndexParameters::ColumnName] = columnName;
-            } else {
-                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
-                    TStringBuilder() << "ColumnId have to be in MAX index description");
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);

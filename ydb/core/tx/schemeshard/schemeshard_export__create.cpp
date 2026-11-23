@@ -158,6 +158,9 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for exports");
+        }
         {
             TPath::TChecker checks = domainPath.Check();
             checks
@@ -381,6 +384,11 @@ private:
 
                     auto childPath = path.Child(childName);
                     if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
+                        continue;
+                    }
+                    // An async index may lag behind the base table snapshot. Restore it by building
+                    // from the exported table data instead of exporting its impl table.
+                    if (childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {

@@ -151,12 +151,6 @@ namespace NKikimr {
                 return false;
             }
 
-            if (familySettings.has_compression_level()) {
-                *code = Ydb::StatusIds::BAD_REQUEST;
-                *error = "Field `COMPRESSION_LEVEL` is not supported for OLTP tables";
-                return false;
-            }
-
             auto* family = MutableNamedFamily(familySettings.name());
 
             if (familySettings.has_data()) {
@@ -170,9 +164,14 @@ namespace NKikimr {
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+                    family->ClearColumnCodecLevel();
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+                    family->ClearColumnCodecLevel();
+                    break;
+                case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
                     break;
                 default:
                     *code = Ydb::StatusIds::BAD_REQUEST;
@@ -181,6 +180,10 @@ namespace NKikimr {
                         << (ui32)familySettings.compression()
                         << " in column family '" << familySettings.name() << "'";
                     return false;
+            }
+
+            if (familySettings.has_compression_level()) {
+                family->SetColumnCodecLevel(familySettings.compression_level());
             }
 
             switch (familySettings.keep_in_memory()) {
@@ -232,27 +235,6 @@ namespace NKikimr {
                         << (ui32)familySettings.cache_mode()
                         << " in column family '" << familySettings.name() << "'";
                     return false;
-            }
-
-            return true;
-        }
-
-        bool ValidateColumnFamilies(
-                Ydb::StatusIds::StatusCode* code,
-                TString* error) const
-        {
-            if (PartitionConfig->ColumnFamiliesSize() == 0) {
-                // No column families defined, perfectly ok
-                return true;
-            }
-
-            for (size_t index = 0; index < PartitionConfig->ColumnFamiliesSize(); ++index) {
-                auto columnFamily = PartitionConfig->GetColumnFamilies(index);
-                if (columnFamily.HasColumnCodecLevel()) {
-                    *code = Ydb::StatusIds::BAD_REQUEST;
-                    *error = "Field `COMPRESSION_LEVEL` is not supported for OLTP tables";
-                    return false;
-                }
             }
 
             return true;

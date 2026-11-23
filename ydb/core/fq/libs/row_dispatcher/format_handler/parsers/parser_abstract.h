@@ -7,6 +7,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
+#include <optional>
 #include <span>
 
 namespace NFq::NRowDispatcher {
@@ -32,6 +33,11 @@ public:
     virtual TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) = 0;
 
     virtual std::span<const ui64> GetOffsets() const = 0;
+
+    // Progress of the input batch, including messages that produced no rows.
+    // Available during OnParsedData(), like GetOffsets().
+    virtual std::optional<ui64> GetLastMessageOffset() const = 0;
+
     virtual TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) = 0;
 
     virtual void FillStatistics(TFormatHandlerStatistic& statistic) = 0;

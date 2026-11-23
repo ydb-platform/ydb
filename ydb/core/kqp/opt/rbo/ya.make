@@ -24,6 +24,7 @@ SRCS(
     remove_redundant_sorts.cpp
     analysis/logical_liveness.cpp
     explain/kqp_connection_explain.cpp
+    explain/kqp_explain_context.cpp
     explain/kqp_expression_explain.cpp
     explain/kqp_operator_explain.cpp
     explain/kqp_plan_to_json.cpp
@@ -46,21 +47,34 @@ PEERDIR(
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/rbo/eval
     ydb/core/kqp/opt/rbo/html_log
-    ydb/core/kqp/opt/rbo/rules
     ydb/core/kqp/opt/rbo/physical_conversion
+    ydb/core/kqp/opt/rbo/rules
+    ydb/core/kqp/provider
+    ydb/core/kqp/query_plan
+    ydb/core/kqp/tracing
+    ydb/library/formats/arrow/protos
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
-    ydb/core/kqp/provider
-    ydb/core/kqp/tracing
-    ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
+    yql/essentials/public/decimal
+    yql/essentials/types/uuid
+    yql/essentials/utils
 )
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE(
+    eval
+)
+
+RECURSE_FOR_TESTS(
+    ut
+    explain/ut
+    eval/ut
+)

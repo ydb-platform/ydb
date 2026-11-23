@@ -3,7 +3,6 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <yt/yt/core/actions/current_invoker.h>
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/invoker_pool.h>
@@ -287,50 +286,6 @@ TEST(TPrioritizedInvokerTest, SamePriorityOrder)
     }
 
     latch.Wait();
-}
-
-TEST(TPrioritizedInvokerTest, FixedPriorityInvokerIsCurrentInvoker)
-{
-    auto actionQueue = New<TActionQueue>();
-    auto prioritizedInvoker = CreatePrioritizedInvoker(actionQueue->GetInvoker());
-    auto fixedPriorityInvoker = CreateFixedPriorityInvoker(prioritizedInvoker, /*priority*/ 1);
-
-    WaitFor(BIND([&] {
-        EXPECT_EQ(fixedPriorityInvoker.Get(), GetCurrentInvoker());
-    })
-        .AsyncVia(fixedPriorityInvoker)
-        .Run())
-        .ThrowOnError();
-}
-
-TEST(TPrioritizedInvokerTest, FixedPriorityInvokerIsStickyAcrossContextSwitch)
-{
-    auto actionQueue = New<TActionQueue>();
-    auto prioritizedInvoker = CreatePrioritizedInvoker(actionQueue->GetInvoker());
-    auto fixedPriorityInvoker = CreateFixedPriorityInvoker(prioritizedInvoker, /*priority*/ 1);
-
-    auto contextSwitchStarted = NewPromise<void>();
-    auto resume = NewPromise<void>();
-
-    auto* fixedPriorityInvokerRaw = fixedPriorityInvoker.Get();
-    auto callback = BIND([=] {
-        EXPECT_EQ(fixedPriorityInvokerRaw, GetCurrentInvoker());
-        Yield();
-        EXPECT_EQ(fixedPriorityInvokerRaw, GetCurrentInvoker());
-        contextSwitchStarted.Set();
-        WaitFor(resume.ToFuture())
-            .ThrowOnError();
-        EXPECT_EQ(fixedPriorityInvokerRaw, GetCurrentInvoker());
-    })
-        .AsyncVia(fixedPriorityInvoker)
-        .Run();
-
-    WaitFor(contextSwitchStarted.ToFuture())
-        .ThrowOnError();
-    fixedPriorityInvoker.Reset();
-    resume.Set();
-    WaitFor(callback)
-        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

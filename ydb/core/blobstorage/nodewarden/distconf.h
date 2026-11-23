@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/syncer/group_state.h>
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -398,6 +399,12 @@ namespace NKikimr::NStorage {
         void StartStateStorageSelfHealRefresh();
         void CancelStateStorageSelfHealRefresh();
 
+        TActorId StaticGroupStateActor;
+        THashMap<ui32, ui32> StaticGroupRepairGenerations;
+        void RefreshStaticGroupRepairs();
+        void StopStaticGroupRepairs();
+        void Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr ev);
+
         // root node operation
         enum class ERootState {
             INITIAL,       // possible binding, no scepter, no operation in progress
@@ -579,6 +586,8 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void UpdateQuorums();
+        // the nodes bound to this one, directly or through others
+        std::vector<TNodeIdentifier> GetConnectedNodes() const;
         void ReconcileNodeRole();
         void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();
@@ -586,7 +595,8 @@ namespace NKikimr::NStorage {
         void HandleErrorTimeout();
         void UndoCurrentPropositionNodeChange(TProposition& proposition);
         void ProcessGather(TEvGather *res);
-        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
+        // the nodes bound make quorum of the config, the global one or the one of the pile when it is given
+        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId pileId = {}) const;
         bool ObserveConfigGeneration(const NKikimrBlobStorage::TStorageConfig& config);
 
         struct TProcessCollectConfigsResult {
@@ -765,10 +775,19 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig Config;
         };
 
+        struct TPromoteStaticGroup {
+            TActorId Sender;
+            ui64 Cookie;
+            ui32 GroupId;
+            ui32 Generation;
+            TMirror3dcGroupConfiguration Next;
+        };
+
         using TInvokeQuery = std::variant<
             TInvokeExternalOperation,
             TCollectConfigsAndPropose,
-            TProposeConfig
+            TProposeConfig,
+            TPromoteStaticGroup
         >;
 
         struct TInvokeOperation {
@@ -997,10 +1016,11 @@ namespace NKikimr::NStorage {
         // the bridged cluster may be rolled back: groups lose their bridge state while nodes run, the cluster state goes
         // away
         BridgeFeatureLevelRollback = 5,
+        BridgeFeatureLevelHotStandby = 6,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelRollback;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelHotStandby;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
@@ -1057,6 +1077,10 @@ namespace NKikimr::NStorage {
     // that requests routed by older group state are refused by VDisks.
     void ResetStaticGroupPileParts(NKikimrBlobStorage::TStorageConfig *config, const std::vector<TBridgePileId>& pileIds,
         ui64 becameUnsyncedGeneration);
+
+    // Applies DC availability to ordinary static mirror-3-dc groups on a private config copy.
+    bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
+        const NKikimrBlobStorage::TDataCenterStates& command);
 
 } // NKikimr::NStorage
 

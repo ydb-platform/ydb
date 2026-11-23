@@ -10,6 +10,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/rpc_export_base.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -37,6 +39,7 @@
 #include <library/cpp/testing/hook/hook.h>
 
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
@@ -59,6 +62,20 @@ namespace {
 
     using NKikimr::EBackupTestDataFormat;
     namespace TEvKesus = NKikimr::NKesus::TEvKesus;
+
+    template <typename TRpc>
+    typename TRpc::TResponse CallOperationRpc(TTestBasicRuntime& runtime,
+            typename TRpc::TRequest request, const TString& userSID = {})
+    {
+        TMaybe<TString> token;
+        if (userSID) {
+            token = NACLib::TUserToken(userSID, TVector<TString>{}).SerializeAsString();
+        }
+        auto future = NKikimr::NRpcService::DoLocalRpc<TRpc>(
+            std::move(request), "/MyRoot", token, runtime.GetActorSystem(0));
+        runtime.WaitFor("operation RPC response", [&] { return future.HasValue() || future.HasException(); });
+        return future.GetValueSync();
+    }
 
     const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
         switch (format) {
@@ -1045,55 +1062,139 @@ namespace {
             return DescribePath(Runtime(), "/MyRoot/Coordination").GetPathDescription().GetKesus().GetKesusTabletId();
         }
 
-        void AddExportKesusResource(ui64 tabletId, const TString& path, bool root = true) {
-            auto request = MakeHolder<TEvKesus::TEvAddQuoterResource>();
-            auto* resource = request->Record.MutableResource();
-            resource->SetResourcePath(path);
-            auto* config = resource->MutableHierarchicalDRRResourceConfig();
+        template <typename TResult, typename TRequest>
+        void SendKesusRequest(ui64 tabletId, THolder<TRequest> request) {
+            const auto sender = Runtime().AllocateEdgeActor();
+            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto response = Runtime().GrabEdgeEventRethrow<TResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.DebugString());
+        }
+
+        static NKikimrKesus::TStreamingQuoterResource MakeExportKesusResource(const TString& path, bool root = true) {
+            NKikimrKesus::TStreamingQuoterResource resource;
+            resource.SetResourcePath(path);
+            auto* config = resource.MutableHierarchicalDRRResourceConfig();
             if (root) {
                 config->SetMaxUnitsPerSecond(100);
                 config->SetMaxBurstSizeCoefficient(1.5);
                 config->SetPrefetchCoefficient(0.4);
                 config->SetPrefetchWatermark(0.6);
-                auto* metering = resource->MutableAccountingConfig();
+                auto* metering = resource.MutableAccountingConfig();
                 metering->SetReportPeriodMs(5000);
                 metering->SetAccountPeriodMs(1000);
                 metering->SetCollectPeriodSec(30);
                 metering->SetProvisionedUnitsPerSecond(25);
-            } else if (path.EndsWith("grandchild")) {
-                config->SetImmediatelyFillUpTo(-123);
-                config->MutableReplicatedBucket()->SetReportIntervalMs(321);
             }
-            const auto sender = Runtime().AllocateEdgeActor();
-            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-            auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvAddQuoterResourceResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
-                response->Get()->Record.DebugString());
+            return resource;
+        }
+
+        void AddExportKesusResource(ui64 tabletId, const NKikimrKesus::TStreamingQuoterResource& resource) {
+            auto request = MakeHolder<TEvKesus::TEvAddQuoterResource>();
+            *request->Record.MutableResource() = resource;
+            SendKesusRequest<TEvKesus::TEvAddQuoterResourceResult>(tabletId, std::move(request));
+        }
+
+        void AddExportKesusResource(ui64 tabletId, const TString& path, bool root = true) {
+            AddExportKesusResource(tabletId, MakeExportKesusResource(path, root));
+        }
+
+        void DeleteExportKesusResource(ui64 tabletId, const TString& path) {
+            auto request = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
+            request->Record.SetResourcePath(path);
+            SendKesusRequest<TEvKesus::TEvDeleteQuoterResourceResult>(tabletId, std::move(request));
+        }
+
+        void SetExportKesusResourceLimit(ui64 tabletId, const TString& path, double limit) {
+            auto request = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
+            request->Record.MutableResource()->SetResourcePath(path);
+            request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(limit);
+            SendKesusRequest<TEvKesus::TEvUpdateQuoterResourceResult>(tabletId, std::move(request));
         }
 
         void AddExportKesusSemaphore(ui64 tabletId, const TString& name, ui64 limit, const TString& data = {}) {
-            const auto sender = Runtime().AllocateEdgeActor();
-            Runtime().SendToPipe(tabletId, sender, new TEvKesus::TEvCreateSemaphore("/MyRoot/Coordination", name, limit, data),
-                0, GetPipeConfigWithRetries());
-            const auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvCreateSemaphoreResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
-                response->Get()->Record.DebugString());
+            SendKesusRequest<TEvKesus::TEvCreateSemaphoreResult>(tabletId,
+                MakeHolder<TEvKesus::TEvCreateSemaphore>("/MyRoot/Coordination", name, limit, data));
         }
 
-        TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources() {
-            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+        void DeleteExportKesusSemaphore(ui64 tabletId, const TString& name) {
+            SendKesusRequest<TEvKesus::TEvDeleteSemaphoreResult>(tabletId,
+                MakeHolder<TEvKesus::TEvDeleteSemaphore>("/MyRoot/Coordination", name, false));
+        }
+
+        template <typename TReadFile>
+        static TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources(
+            const NBackup::TMetadata& metadata, const TReadFile& readFile)
+        {
             UNIT_ASSERT(metadata.GetRateLimiterResources());
             TVector<Ydb::RateLimiter::Resource> resources;
             for (const auto& entry : *metadata.GetRateLimiterResources()) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix,
+                    Sprintf("rate_limiter_resources/%03u", ui32(resources.size() + 1)));
                 Ydb::RateLimiter::CreateResourceRequest request;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_rate_limiter.pb"), &request));
+                UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(
+                    readFile(entry.ExportPrefix + "/create_rate_limiter.pb"), &request), entry.ExportPrefix);
                 UNIT_ASSERT(request.coordination_node_path().empty());
                 UNIT_ASSERT(request.resource().resource_path().empty());
                 auto& resource = resources.emplace_back(std::move(*request.mutable_resource()));
                 resource.set_resource_path(entry.ResourcePath);
             }
             return resources;
+        }
+
+        TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources() {
+            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+            return ReadExportedKesusResources(metadata, [&](const TString& path) {
+                return GetS3FileContent("/coordination/" + path);
+            });
+        }
+
+        template <typename TReadFile>
+        static TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> ReadExportedKesusSemaphores(
+            const NBackup::TMetadata& metadata, const TReadFile& readFile)
+        {
+            UNIT_ASSERT(metadata.GetSemaphores());
+            TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> semaphores;
+            for (const auto& entry : *metadata.GetSemaphores()) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, Sprintf("semaphores/%03u", ui32(semaphores.size() + 1)));
+                auto& semaphore = semaphores.emplace_back();
+                UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(
+                    readFile(entry.ExportPrefix + "/create_semaphore.pb"), &semaphore), entry.ExportPrefix);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), entry.Name);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+            }
+            return semaphores;
+        }
+
+        TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> ReadExportedKesusSemaphores() {
+            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+            return ReadExportedKesusSemaphores(metadata, [&](const TString& path) {
+                return GetS3FileContent("/coordination/" + path);
+            });
+        }
+
+        static void CheckExportedKesusSemaphore(const Ydb::Coordination::SessionRequest::CreateSemaphore& semaphore,
+            const TString& name, ui64 limit, const TString& data = {})
+        {
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), name);
+            UNIT_ASSERT_VALUES_EQUAL_C(semaphore.limit(), limit, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(semaphore.data(), data, name);
+        }
+
+        static void CheckExportedKesusResource(const Ydb::RateLimiter::Resource& resource, bool root) {
+            if (root) {
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 100);
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_burst_size_coefficient(), 1.5);
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_coefficient(), 0.4);
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_watermark(), 0.6);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().report_period_ms(), 5000);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().meter_period_ms(), 1000);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().collect_period_sec(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().provisioned_units_per_second(), 25);
+            } else {
+                // Inherited settings must remain unset, rather than becoming explicit limits.
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 0);
+            }
         }
 
         void TestKesusExport(bool isFs, bool empty, bool encrypted) {
@@ -1108,7 +1209,10 @@ namespace {
                 AddExportKesusResource(tabletId, "a");
                 AddExportKesusResource(tabletId, "a/z", false);
                 AddExportKesusResource(tabletId, "a/a", false);
-                AddExportKesusResource(tabletId, "a/a/grandchild", false);
+                auto grandchild = MakeExportKesusResource("a/a/grandchild", false);
+                grandchild.MutableHierarchicalDRRResourceConfig()->SetImmediatelyFillUpTo(-123);
+                grandchild.MutableHierarchicalDRRResourceConfig()->MutableReplicatedBucket()->SetReportIntervalMs(321);
+                AddExportKesusResource(tabletId, grandchild);
                 AddExportKesusResource(tabletId, "semaphores");
                 // Valid resource paths must not be interpreted as filesystem paths.
                 AddExportKesusResource(tabletId, ".");
@@ -1198,39 +1302,16 @@ namespace {
 
             const TString metadataText = readPlaintext("metadata.json");
             const auto metadata = NBackup::TMetadata::Deserialize(metadataText);
-            UNIT_ASSERT(metadata.GetRateLimiterResources());
-            const auto& entries = *metadata.GetRateLimiterResources();
+            const auto resources = ReadExportedKesusResources(metadata, readPlaintext);
             const TVector<TString> expectedPaths = empty
                 ? TVector<TString>{}
                 : TVector<TString>{".", "..", "../escaped", "a", "a/a", "a/a/grandchild",
                     "a/create_rate_limiter.pb", "a/z", "metadata.json", "rate_limiter_resources", "semaphores", "z"};
-            UNIT_ASSERT_VALUES_EQUAL(entries.size(), expectedPaths.size());
-            TVector<Ydb::RateLimiter::Resource> resources;
-            for (size_t i = 0; i < entries.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(entries[i].ResourcePath, expectedPaths[i]);
-                UNIT_ASSERT_VALUES_EQUAL(entries[i].ExportPrefix, Sprintf("rate_limiter_resources/%03u", ui32(i + 1)));
-                Ydb::RateLimiter::CreateResourceRequest request;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    readPlaintext(entries[i].ExportPrefix + "/create_rate_limiter.pb"), &request));
-                UNIT_ASSERT(request.coordination_node_path().empty());
-                UNIT_ASSERT(request.resource().resource_path().empty());
-                resources.emplace_back(std::move(*request.mutable_resource()));
-            }
+            UNIT_ASSERT_VALUES_EQUAL(resources.size(), expectedPaths.size());
             for (size_t i = 0; i < resources.size(); ++i) {
                 const auto& resource = resources[i];
-                if (!expectedPaths[i].Contains('/')) {
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 100);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_burst_size_coefficient(), 1.5);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_coefficient(), 0.4);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_watermark(), 0.6);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().report_period_ms(), 5000);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().meter_period_ms(), 1000);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().collect_period_sec(), 30);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().provisioned_units_per_second(), 25);
-                } else {
-                    // Inherited settings must remain unset, rather than becoming explicit limits.
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 0);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(resource.resource_path(), expectedPaths[i]);
+                CheckExportedKesusResource(resource, !expectedPaths[i].Contains('/'));
                 if (expectedPaths[i] == "a/a/grandchild") {
                     const auto& leaf = resource.hierarchical_drr();
                     UNIT_ASSERT(leaf.has_immediately_fill_up_to());
@@ -1240,21 +1321,12 @@ namespace {
                 }
             }
 
-            UNIT_ASSERT(metadata.GetSemaphores());
-            const auto& semaphores = *metadata.GetSemaphores();
+            const auto semaphores = ReadExportedKesusSemaphores(metadata, readPlaintext);
             UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), empty ? 0 : 2);
             UNIT_ASSERT_VALUES_EQUAL(semaphoreRequests, 1);
             for (ui32 i = 0; i < semaphores.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(semaphores[i].ExportPrefix,
-                    Sprintf("semaphores/%03u", i + 1));
-                Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    readPlaintext(semaphores[i].ExportPrefix + "/create_semaphore.pb"), &semaphore));
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), semaphores[i].Name);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), i ? "/absolute/name" : "../binary");
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), i ? Max<ui64>() : 3);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), i ? TString() : TString("a\0\xffz", 4));
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+                CheckExportedKesusSemaphore(semaphores[i], i ? "/absolute/name" : "../binary",
+                    i ? Max<ui64>() : 3, i ? TString() : TString("a\0\xffz", 4));
             }
 
             CheckPermissions(readPlaintext("permissions.pb"), [](const auto& permissions) {
@@ -1329,36 +1401,17 @@ namespace {
             const auto resources = ReadExportedKesusResources();
             UNIT_ASSERT_VALUES_EQUAL(resources.size(), empty ? 1 : 3);
             UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
-            UNIT_ASSERT_VALUES_EQUAL(NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"))
-                .GetSemaphores()->size(), 1);
+            const auto semaphores = ReadExportedKesusSemaphores();
+            UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), 1);
+            CheckExportedKesusSemaphore(semaphores.front(), "A", 1, "semaphore data");
 
-            const auto sender = Runtime().AllocateEdgeActor();
-            auto request = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
-            request->Record.SetResourcePath("A");
-            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-            auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
-
-            auto deleteSemaphore = MakeHolder<TEvKesus::TEvDeleteSemaphore>();
-            deleteSemaphore->Record.SetKesusPath("/MyRoot/Coordination");
-            deleteSemaphore->Record.SetName("A");
-            Runtime().SendToPipe(tabletId, sender, deleteSemaphore.Release(), 0, GetPipeConfigWithRetries());
-            const auto deletedSemaphore = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteSemaphoreResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(deletedSemaphore->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            DeleteExportKesusResource(tabletId, "A");
+            DeleteExportKesusSemaphore(tabletId, "A");
 
             if (!empty) {
-                auto remove = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
-                remove->Record.SetResourcePath("Z");
-                Runtime().SendToPipe(tabletId, sender, remove.Release(), 0, GetPipeConfigWithRetries());
-                auto removed = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
-                UNIT_ASSERT_VALUES_EQUAL(removed->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+                DeleteExportKesusResource(tabletId, "Z");
                 AddExportKesusResource(tabletId, "C");
-                auto update = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
-                update->Record.MutableResource()->SetResourcePath("B");
-                update->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(200);
-                Runtime().SendToPipe(tabletId, sender, update.Release(), 0, GetPipeConfigWithRetries());
-                auto updated = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvUpdateQuoterResourceResult>(sender);
-                UNIT_ASSERT_VALUES_EQUAL(updated->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+                SetExportKesusResourceLimit(tabletId, "B", 200);
             }
 
             const TString oldMetadata = GetS3FileContent("/coordination/metadata.json");
@@ -1388,9 +1441,7 @@ namespace {
             }
             // Files beyond the new resource list remain in storage and must be ignored.
             UNIT_ASSERT(HasS3File(Sprintf("/coordination/rate_limiter_resources/%03u/create_rate_limiter.pb", empty ? 1u : 3u)));
-            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
-            UNIT_ASSERT(metadata.GetSemaphores());
-            UNIT_ASSERT(metadata.GetSemaphores()->empty());
+            UNIT_ASSERT(ReadExportedKesusSemaphores().empty());
             UNIT_ASSERT(HasS3File("/coordination/semaphores/001/create_semaphore.pb"));
             UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/metadata.json.sha256"),
                 NBackup::ComputeChecksum(GetS3FileContent("/coordination/metadata.json")));
@@ -1531,18 +1582,50 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(resources.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
             if constexpr (semaphores) {
-                const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
-                UNIT_ASSERT(metadata.GetSemaphores());
-                UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
-                const auto& entry = metadata.GetSemaphores()->front();
-                UNIT_ASSERT_VALUES_EQUAL(entry.Name, "lock");
-                Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_semaphore.pb"), &semaphore));
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "lock");
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), "data");
+                const auto descriptions = ReadExportedKesusSemaphores();
+                UNIT_ASSERT_VALUES_EQUAL(descriptions.size(), 1);
+                CheckExportedKesusSemaphore(descriptions.front(), "lock", 2, "data");
             }
+        }
+
+        void TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
+            Env();
+            ui64 txId = 100;
+            const auto topic = NDescUT::TSimpleTopic(0, 0);
+            auto description = topic.GetPrivateProto();
+            description.MutablePQTabletConfig()->SetWriteMode(mode);
+
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", description.DebugString());
+            Env().TestWaitNotification(Runtime(), txId);
+            TestExport(Runtime(), ++txId, "/MyRoot", topic.GetExportRequest(S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            Ydb::Topic::CreateTopicRequest exported;
+            const auto content = GetS3FileContent(topic.GetPath());
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
+            const auto value = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE ? "unavailable"
+                : mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ? "prohibited" : "available";
+            UNIT_ASSERT(exported.attributes().contains("_write_mode"));
+            UNIT_ASSERT_VALUES_EQUAL(exported.attributes().at("_write_mode"), value);
+
+            TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "Topic_0"
+                        destination_path: "/MyRoot/RestoredTopic"
+                    }
+                }
+            )", S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
+            const auto& config = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+            UNIT_ASSERT(config.HasWriteMode());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetWriteMode()), static_cast<int>(mode));
         }
 
         void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
@@ -2418,7 +2501,12 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         });
         const ui64 exportId = StartCompletionMarkerExport();
         Runtime().WaitFor("operation marker upload", [&] { return !markers.empty(); });
+        auto cancelObserver = Runtime().AddObserver<TEvExport::TEvCancelExportRequest>([](auto& ev) {
+            ev->Get()->Record.SetUserSID("canceller@builtin");
+        });
         TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+        const auto entry = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!entry.HasCancelRequestedBy());
         markers.Stop().Unblock();
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -4355,6 +4443,13 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+        const ui64 exportId = txId;
+        auto cancelObserver = Runtime().AddObserver<TEvExport::TEvCancelExportRequest>([](auto& ev) {
+            ev->Get()->Record.SetUserSID("canceller@builtin");
+        });
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        const auto completed = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!completed.HasCancelRequestedBy());
     }
 
     struct TWaitExportItemStateDelayFunc {
@@ -4418,6 +4513,14 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected schema upload failure");
+        auto cancelObserver = Runtime().AddObserver<TEvExport::TEvCancelExportRequest>([](auto& ev) {
+            ev->Get()->Record.SetUserSID("canceller@builtin");
+        });
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        const auto cancelled = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry();
+        UNIT_ASSERT(!cancelled.HasCancelRequestedBy());
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.GetIssues(0).message(), entry.GetIssues(0).message());
 
         poison.Stop().Unblock();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
@@ -4488,10 +4591,19 @@ partitioning_settings {
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(CancelledExportEndTime) {
+    Y_UNIT_TEST_TWIN(CancelledExportEndTime, Authenticated) {
         Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
+        const TString creator = "creator@builtin";
+        const TString canceller = "canceller@builtin";
+        const TString retryCaller = "retry@builtin";
+        NACLib::TDiffACL acl;
+        for (const auto& sid : {canceller, retryCaller}) {
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead | NACLib::GenericWrite, sid);
+        }
+        TestModifyACL(Runtime(), ++txId, "/", "MyRoot", acl.SerializeAsString(), "");
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -4520,7 +4632,7 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", S3Port()), creator);
         const ui64 exportId = txId;
 
         Runtime().AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
@@ -4542,13 +4654,62 @@ partitioning_settings {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        using TCancelRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::CancelOperationRequest, Ydb::Operations::CancelOperationResponse>;
+        using TGetRpc = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>;
+        using TListRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::ListOperationsRequest, Ydb::Operations::ListOperationsResponse>;
+        const auto operationId = NKikimr::NOperationId::ProtoToString(
+            NKikimr::NGRpcService::TExportConv::MakeOperationId(exportId, NKikimrExport::TExport::kExportToS3Settings));
+        Ydb::Operations::CancelOperationRequest cancelRequest;
+        cancelRequest.set_id(operationId);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, "denied@builtin").status(),
+            Ydb::StatusIds::UNAUTHORIZED);
+        const auto before = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!before.HasCancelRequestedBy());
+
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest,
+            Authenticated ? canceller : TString()).status(), Ydb::StatusIds::SUCCESS);
 
         auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         auto entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), creator);
+        UNIT_ASSERT_VALUES_EQUAL(entry.HasCancelRequestedBy(), Authenticated);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetCancelRequestedBy(), Authenticated ? canceller : TString());
+
+        auto checkOperation = [&](const Ydb::Operations::Operation& operation, bool ready) {
+            UNIT_ASSERT_VALUES_EQUAL(operation.id(), operationId);
+            UNIT_ASSERT_VALUES_EQUAL(operation.ready(), ready);
+            UNIT_ASSERT_VALUES_EQUAL(operation.status(), ready ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(operation.created_by(), creator);
+            UNIT_ASSERT_VALUES_EQUAL(operation.cancel_requested_by(), Authenticated ? canceller : TString());
+        };
+        auto checkApi = [&](bool ready) {
+            Ydb::Operations::GetOperationRequest get;
+            get.set_id(operationId);
+            checkOperation(CallOperationRpc<TGetRpc>(Runtime(), get, canceller).operation(), ready);
+            Ydb::Operations::ListOperationsRequest list;
+            list.set_kind("export/s3");
+            const auto response = CallOperationRpc<TListRpc>(Runtime(), list, canceller);
+            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.operations_size(), 1);
+            checkOperation(response.operations(0), ready);
+        };
+        checkApi(false);
+        Runtime().AdvanceCurrentTime(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        checkApi(false);
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        checkApi(false);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        checkApi(false);
 
         Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
@@ -4563,6 +4724,11 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+        checkApi(true);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        checkApi(true);
     }
 
     // Based on CompletedExportEndTime
@@ -4899,7 +5065,7 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 
-    Y_UNIT_TEST(TablePermissions) {
+    Y_UNIT_TEST_TWIN(TablePermissions, InterruptInheritance) {
         EnvOptions().EnablePermissionsExport(true);
         Env(); // Init test env
         ui64 txId = 100;
@@ -4914,6 +5080,9 @@ partitioning_settings {
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        if (InterruptInheritance) {
+            diffACL.SetInterruptInheritance(true);
+        }
         TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -4931,7 +5100,7 @@ partitioning_settings {
 
         auto* permissions = S3Mock().GetData().FindPtr("/permissions.pb");
         UNIT_ASSERT(permissions);
-        CheckPermissions(*permissions, CreateProtoComparator(R"(
+        CheckPermissions(*permissions, CreateProtoComparator(Sprintf(R"(
             actions {
               change_owner: "user@builtin"
             }
@@ -4941,7 +5110,8 @@ partitioning_settings {
                 permission_names: "ydb.generic.use"
               }
             }
-        )"));
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "")));
     }
 
     Y_UNIT_TEST(Checksums) {
@@ -5558,22 +5728,16 @@ state: STATE_ENABLED
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         const auto metadata = NBackup::TMetadata::Deserialize(readFile("metadata.json"));
-        UNIT_ASSERT(metadata.GetRateLimiterResources());
-        const auto& resources = *metadata.GetRateLimiterResources();
+        const auto resources = ReadExportedKesusResources(metadata, readFile);
         const TVector<TString> expectedPaths = {"semaphores", "semaphores/001", "semaphores/001/create_semaphore.pb"};
         UNIT_ASSERT_VALUES_EQUAL(resources.size(), expectedPaths.size());
         for (ui32 i = 0; i < resources.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(resources[i].ResourcePath, expectedPaths[i]);
-            UNIT_ASSERT_VALUES_EQUAL(resources[i].ExportPrefix, Sprintf("rate_limiter_resources/%03u", i + 1));
-            Ydb::RateLimiter::CreateResourceRequest resource;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                readFile(resources[i].ExportPrefix + "/create_rate_limiter.pb"), &resource));
-            UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), i ? 0 : 100);
+            UNIT_ASSERT_VALUES_EQUAL(resources[i].resource_path(), expectedPaths[i]);
+            CheckExportedKesusResource(resources[i], i == 0);
         }
-        UNIT_ASSERT(metadata.GetSemaphores());
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->front().Name, "lock");
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->front().ExportPrefix, "semaphores/001");
+        const auto semaphores = ReadExportedKesusSemaphores(metadata, readFile);
+        UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), 1);
+        CheckExportedKesusSemaphore(semaphores.front(), "lock", 1, "data");
         UNIT_ASSERT_VALUES_EQUAL(readFile("semaphores/001/create_semaphore.pb"), oldSemaphore);
 
         results.Unblock();
@@ -5630,18 +5794,10 @@ state: STATE_ENABLED
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(requestCount, 1);
-        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
-        UNIT_ASSERT(metadata.GetSemaphores());
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->at(0).Name, "A");
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->at(1).Name, "B");
-        for (const auto& entry : *metadata.GetSemaphores()) {
-            Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_semaphore.pb"), &semaphore));
-            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), entry.Name);
-            UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), entry.Name == "A" ? 1 : 2);
-        }
+        const auto semaphores = ReadExportedKesusSemaphores();
+        UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), 2);
+        CheckExportedKesusSemaphore(semaphores[0], "A", 1);
+        CheckExportedKesusSemaphore(semaphores[1], "B", 2);
     }
 
     Y_UNIT_TEST(KesusConnectionFailuresRespectDeadline) {
@@ -5863,6 +6019,76 @@ state: STATE_ENABLED
       TestTopic();
     }
 
+    Y_UNIT_TEST_TWIN(TopicReplicationConsumerExportImport, replication) {
+        Env();
+        ui64 txId = 100;
+        const TString attribute = "_ydb_replication_consumer";
+        const auto topic = NDescUT::TSimpleTopic(0, 2);
+        auto description = topic.GetPrivateProto();
+        auto* consumer = description.MutablePQTabletConfig()->MutableConsumers(1);
+        consumer->SetType(replication
+            ? NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+            : NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+        const auto replicationConsumer = consumer->GetName();
+
+        TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", description.DebugString());
+        Env().TestWaitNotification(Runtime(), txId);
+        TestExport(Runtime(), ++txId, "/MyRoot", topic.GetExportRequest(S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        Ydb::Topic::CreateTopicRequest exported;
+        const auto content = GetS3FileContent(topic.GetPath());
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
+        const auto it = exported.attributes().find(attribute);
+        if (replication) {
+            UNIT_ASSERT_C(it != exported.attributes().end(), content);
+            UNIT_ASSERT_VALUES_EQUAL(it->second, replicationConsumer);
+        } else {
+            UNIT_ASSERT_C(it == exported.attributes().end(), content);
+        }
+
+        TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "Topic_0"
+                    destination_path: "/MyRoot/RestoredTopic"
+                }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
+        const auto& consumers = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 2);
+        ui32 replicationConsumers = 0;
+        for (const auto& restoredConsumer : consumers) {
+            if (restoredConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                ++replicationConsumers;
+                UNIT_ASSERT_VALUES_EQUAL(restoredConsumer.GetName(), replicationConsumer);
+            } else {
+                UNIT_ASSERT_C(restoredConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING,
+                    restoredConsumer.DebugString());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicationConsumers, replication ? 1 : 0);
+    }
+
+    Y_UNIT_TEST(TopicWriteAvailableExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+    }
+
+    Y_UNIT_TEST(TopicWriteUnavailableExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(TopicWriteProhibitedExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED);
+    }
+
     Y_UNIT_TEST(TopicWithPermissionsExport) {
       TestTopic(true);
     }
@@ -5875,7 +6101,7 @@ state: STATE_ENABLED
       TestTopic(true, 5, 4);
     }
 
-    Y_UNIT_TEST(SystemViewWithPermissionsExport) {
+    Y_UNIT_TEST_TWIN(SystemViewWithPermissionsExport, InterruptInheritance) {
         Env();
         ui64 txId = 100;
 
@@ -5885,6 +6111,9 @@ state: STATE_ENABLED
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+        if (InterruptInheritance) {
+            diffACL.SetInterruptInheritance(true);
+        }
         TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
         Env().TestWaitNotification(Runtime(), txId);
 
@@ -5913,7 +6142,7 @@ state: STATE_ENABLED
             TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
 
         const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
-        CheckPermissions(permissions, CreateProtoComparator(R"(
+        CheckPermissions(permissions, CreateProtoComparator(Sprintf(R"(
             actions {
               change_owner: "user0@builtin"
             }
@@ -5923,7 +6152,8 @@ state: STATE_ENABLED
                 permission_names: "ydb.generic.use"
               }
             }
-        )"));
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "")));
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {
@@ -6133,9 +6363,20 @@ state: STATE_ENABLED
         };
         checkMarker("/data_complete.json");
         checkMarker("/export_complete.json");
+        const bool materialized = indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        const auto metadata = NBackup::TMetadata::Deserialize(s3Mock.GetData().at("/metadata.json"));
+        UNIT_ASSERT(metadata.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->empty(), !materialized);
         for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
-            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
-            checkMarker(TStringBuilder() << "/index/" << implTable << "/data_complete.json");
+            const TString prefix = TStringBuilder() << "/index/" << implTable << "/";
+            if (materialized) {
+                UNIT_ASSERT(s3Mock.GetData().FindPtr(prefix + "scheme.pb"));
+                checkMarker(prefix + "data_complete.json");
+            } else {
+                for (const auto& [key, value] : s3Mock.GetData()) {
+                    UNIT_ASSERT_C(!key.StartsWith(prefix), key);
+                }
+            }
         }
 
         // Round-trip: import back and verify impl tables exist on the imported table.
@@ -6239,6 +6480,119 @@ state: STATE_ENABLED
               Type: EIndexTypeGlobalAsync
             }
         )");
+    }
+
+    void AsyncIndexExport(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 port, bool encrypted, bool syncIndex) {
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        const TString syncIndexDesc = syncIndex ? R"(
+            IndexDescription {
+              Name: "z_sync"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobal
+            }
+        )" : "";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "a_async"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalAsync
+            }
+            %s
+        )", syncIndexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const TString encryptionSettings = encrypted ? R"(
+            encryption_settings {
+              encryption_algorithm: "AES-128-GCM"
+              symmetric_key { key: "0123456789012345" }
+            }
+        )" : "";
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              source_path: "/MyRoot"
+              destination_prefix: "Backup"
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Table"
+              }
+              %s
+            }
+        )", port, encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const auto readFile = [&](const TString& name) {
+            const auto& content = s3Mock.GetData().at("/Backup/Table/" + name + (encrypted ? ".enc" : ""));
+            if (!encrypted) {
+                return content;
+            }
+            const auto [data, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey("0123456789012345"), TBuffer(content.data(), content.size()));
+            return TString(data.Data(), data.Size());
+        };
+
+        // Keep index definitions, but only list and upload the synchronous index data.
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(readFile("scheme.pb"), &scheme));
+        UNIT_ASSERT_VALUES_EQUAL(scheme.indexes_size(), syncIndex ? 2 : 1);
+        const auto metadata = NBackup::TMetadata::Deserialize(readFile("metadata.json"));
+        UNIT_ASSERT(metadata.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetIndexes()->size(), syncIndex ? 1 : 0);
+        if (syncIndex) {
+            const auto& index = metadata.GetIndexes()->front();
+            UNIT_ASSERT_VALUES_EQUAL(index.ImplTablePrefix, "z_sync/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, encrypted ? "001" : "z_sync/indexImplTable");
+            readFile(index.ExportPrefix + "/scheme.pb");
+        }
+        for (const auto& [key, value] : s3Mock.GetData()) {
+            UNIT_ASSERT_C(!key.StartsWith("/Backup/Table/a_async/") && !key.StartsWith("/Backup/Table/002/"), key);
+            if (!syncIndex) {
+                UNIT_ASSERT_C(!key.StartsWith("/Backup/Table/001/"), key);
+            }
+        }
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              index_population_mode: INDEX_POPULATION_MODE_IMPORT
+              source_prefix: "Backup"
+              destination_path: "/MyRoot/Restored"
+              %s
+            }
+        )", port, encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/Table/a_async"), {
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+        if (syncIndex) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/Table/z_sync"), {
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+            });
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationMixed) {
+        EnvOptions().EnableIndexMaterialization(true);
+        AsyncIndexExport(Env(), Runtime(), S3Mock(), S3Port(), false, true);
+    }
+
+    Y_UNIT_TEST(IndexMaterializationAsyncEncrypted) {
+        EnvOptions().EnableIndexMaterialization(true);
+        AsyncIndexExport(Env(), Runtime(), S3Mock(), S3Port(), true, false);
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
@@ -6783,6 +7137,7 @@ WITH (
             PQTabletConfig {
                 RequireAuthRead: false
                 RequireAuthWrite: false
+                WriteMode: WRITE_PROHIBITED
                 AbcId: 123
                 AbcSlug: "abc_slug"
                 FederationAccount: "federation_account"
@@ -6954,6 +7309,9 @@ WITH (
         // RequireAuthWrite: false -> _allow_unauthenticated_write: true
         UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
+
+        UNIT_ASSERT(attrs.contains("_write_mode"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_write_mode"), "prohibited");
 
         UNIT_ASSERT(attrs.contains("_abc_id"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");

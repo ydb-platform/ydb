@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/query_plan/query_plan.h>
+
 #include "kqp_rbo_context.h"
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
@@ -164,8 +166,6 @@ void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode = ELivenessMode::Loca
 const TUnorderedIUs& GetLiveIn(const IOperator* op, ui32 childIndex);
 const TUnorderedIUs& GetLiveOut(const IOperator* op);
 
-TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
-TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -605,6 +605,7 @@ class TestViewer(object):
 
         replace_with_values.update({'CpuUsage',
                                     'DiskSpaceUsage',
+                                    'DiskSpaceQuotaUsage',
                                     'Address',
                                     'Port',
                                     'port',
@@ -1233,6 +1234,35 @@ class TestViewer(object):
         for name in cls.databases_and_no_database:
             result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
         return result
+
+    @classmethod
+    def test_viewer_tenantinfo_disk_space_quota(cls):
+        # not canonized: usage depends on the data written by other tests
+        for name in cls.databases:
+            tenants = []
+            for _ in range(15):
+                result = cls.get_viewer("/viewer/tenantinfo", {'database': name, 'storage': 'true'})
+                tenants = [t for t in result.get('TenantInfo', []) if t.get('Name') == name]
+                if tenants and 'DiskSpaceQuotaUsage' in tenants[0]:
+                    break
+                time.sleep(1)
+            assert tenants, "no TenantInfo for %s in /viewer/tenantinfo response" % name
+            tenant = tenants[0]
+            usage = tenant.get('DiskSpaceQuotaUsage')
+            assert usage is not None, "no DiskSpaceQuotaUsage for %s: %s" % (name, tenant)
+            assert usage.get('Mode') == 'MODE_OVERALL', usage
+            entries = usage.get('Entries', [])
+            assert len(entries) == 1, usage
+            assert 'Usage' in entries[0], usage
+            assert int(entries[0].get('SoftQuota', 0)) == 0, usage
+            assert int(entries[0].get('HardQuota', 0)) == 0, usage
+            # DomainState contains only the flags that are set, and nothing blocks writes here
+            for flag in ('DiskQuotaExceeded', 'StorageSpaceExhausted', 'SmallBlobsQuotaExceeded'):
+                assert not tenant.get('DomainState', {}).get(flag, False), tenant['DomainState']
+            # no quotas configured, so there is no limit
+            for tables_storage in tenant.get('TablesStorage', []):
+                for key in ('Limit', 'SoftQuota', 'HardQuota'):
+                    assert key not in tables_storage, tenant['TablesStorage']
 
     @classmethod
     def test_viewer_healthcheck(cls):
@@ -2393,6 +2423,7 @@ class TestViewer(object):
             {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'true'},
             {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'false'},
             {'fields_required': 'VDisks,NodeId', 'include_ddisks': 'true'},
+            {'fields_required': 'DDisks,NodeId'},
             {'storage': 'true', 'include_ddisks': 'true', 'fields_required': 'NodeId'},
             {'fields_required': 'all', 'all_whiteboard_fields': 'true',
              'offload_merge': 'false', 'dump_original_node_batches': 'true'},
@@ -2418,14 +2449,13 @@ class TestViewer(object):
             fields_available = response.get('FieldsAvailable')
             assert fields_available, (extra, 'FieldsAvailable missing or empty', response)
             max_hidden_bit = max(strict_database_hidden_node_fields)
-            assert len(fields_available) > max_hidden_bit, (
-                extra, 'FieldsAvailable too short', len(fields_available), max_hidden_bit, fields_available)
+            fields_required = response['FieldsRequired']
+            assert len(fields_available) == len(fields_required) == max_hidden_bit + 1, (
+                extra, 'Expected legacy field masks', fields_available, fields_required)
             for field_bit in strict_database_hidden_node_fields:
                 assert fields_available[-(field_bit + 1)] == '0', (extra, fields_available, field_bit)
-                fields_required = response['FieldsRequired']
                 assert fields_required[-(field_bit + 1)] == '0', (extra, fields_required, field_bit)
             for node in response.get('Nodes', []):
-                # DDisks share the VDisks permission gate and have no separate field bit.
                 assert 'DDisks' not in node, (extra, node)
                 assert 'MaxClockSkewPeerId' not in node.get('SystemState', {}), (extra, node)
                 for json_key in strict_database_hidden_node_fields.values():

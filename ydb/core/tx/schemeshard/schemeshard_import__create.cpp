@@ -3,6 +3,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
+#include "schemeshard_import_kesus_restorer.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
 #include "schemeshard_xxport__helpers.h"
@@ -14,11 +15,11 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/compatibility/compatibility.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
@@ -281,6 +282,9 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for imports");
+        }
         {
             TPath::TChecker checks = domainPath.Check();
             checks
@@ -390,6 +394,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         Y_ABORT_UNLESS(importInfo != nullptr);
 
         importInfo->SanitizedToken = request.GetSanitizedToken();
+        importInfo->CanRestoreRateLimiterMetering = request.GetCanRestoreRateLimiterMetering();
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateImport(db, *importInfo);
@@ -507,10 +512,12 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
     TEvPrivate::TEvImportSchemaMappingReady::TPtr SchemaMappingResult = nullptr;
     TEvPrivate::TEvImportSchemeQueryResult::TPtr SchemeQueryResult = nullptr;
+    TEvPrivate::TEvImportKesusResult::TPtr KesusResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
+    TVector<std::pair<ui64, ui32>> KesusRestorersToStart;
 
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
@@ -535,6 +542,12 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , SchemeQueryResult(ev)
+    {
+    }
+
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportKesusResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , KesusResult(ev)
     {
     }
 
@@ -575,6 +588,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnSchemaMappingResult(txc, ctx);
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc, ctx);
+        } else if (KesusResult) {
+            OnKesusResult(txc, ctx);
         } else if (AllocateResult) {
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
@@ -590,11 +605,92 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TImport::TTxProgress: DoComplete");
+        // The helper may mutate Kesus immediately. Start only after its destination and
+        // immutable input have been committed to SchemeShard's database.
+        for (const auto& [id, itemIdx] : KesusRestorersToStart) {
+            const auto it = Self->Imports.find(id);
+            if (it == Self->Imports.end() || it->second->State != EState::Waiting) {
+                continue;
+            }
+            auto& importInfo = *it->second;
+            auto& item = importInfo.Items.at(itemIdx);
+            if (item.State != EState::CreateSchemeObject || item.KesusRestorer) {
+                continue;
+            }
+            const ui32 retries = std::visit([](const auto& settings) {
+                return settings.number_of_retries();
+            }, importInfo.Settings);
+            item.KesusRestorer = ctx.Register(CreateKesusRestorer(
+                Self->SelfId(), id, itemIdx, item.DstPathId,
+                *item.Kesus, retries));
+            Self->RunningImportKesusRestorers.emplace(item.KesusRestorer);
+        }
     }
 
 private:
+    bool CreateKesus(TImportInfo& importInfo, ui32 itemIdx, TTxId txId, TString& error) {
+        auto& item = importInfo.Items.at(itemIdx);
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+        item.SubState = ESubState::Proposed;
+        auto propose = CreateKesusPropose(Self, txId, importInfo, itemIdx, error);
+        if (!propose) {
+            return false;
+        }
+        Send(Self->SelfId(), std::move(propose));
+        return true;
+    }
+
+    void StartKesusRestore(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        auto& item = importInfo->Items.at(itemIdx);
+        if (!item.Kesus || !item.Kesus->has_node()) {
+            return CancelAndPersist(db, importInfo, itemIdx, "Missing persisted coordination node contents", "invalid Kesus import state");
+        }
+        item.WaitTxId = InvalidTxId;
+        // No scheme transaction allocation is pending while the helper restores contents.
+        item.SubState = ESubState::Proposed;
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
+        if (!item.KesusRestorer) {
+            KesusRestorersToStart.emplace_back(importInfo->Id, itemIdx);
+        }
+    }
+
+    void OnKesusResult(TTransactionContext& txc, const TActorContext& ctx) {
+        const auto& message = *KesusResult->Get();
+        const auto it = Self->Imports.find(message.ImportId);
+        if (it == Self->Imports.end() || it->second->State != EState::Waiting
+            || message.ItemIdx >= it->second->Items.size())
+        {
+            return;
+        }
+        auto importInfo = it->second;
+        auto& item = importInfo->Items.at(message.ItemIdx);
+        if (item.State != EState::CreateSchemeObject || item.KesusRestorer != KesusResult->Sender) {
+            return;
+        }
+        Self->RunningImportKesusRestorers.erase(std::exchange(item.KesusRestorer, {}));
+        NIceDb::TNiceDb db(txc.DB);
+        if (!message.Success) {
+            return CancelAndPersist(db, importInfo, message.ItemIdx, message.Error, "cannot restore coordination node contents");
+        }
+        item.State = EState::Done;
+        Self->PersistImportItemState(db, *importInfo, message.ItemIdx);
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllDone(stateCounts)) {
+            importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
+        } else if (AllDoneOrWaiting(stateCounts)) {
+            RetrySchemeObjectsCreation(*importInfo, db, ctx);
+        }
+        Self->PersistImportState(db, *importInfo);
+        SendNotificationsIfFinished(importInfo);
+        if (importInfo->IsFinished()) {
+            Self->EraseEncryptionKey(db, *importInfo);
+            AuditLogImportEnd(*importInfo.Get(), Self);
+        }
+    }
+
     void GetScheme(TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -640,36 +736,117 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    // An index of such a type built from the restored data may differ from the source one
+    // (clustering, fulltext segment compaction), so its impl table stays importing and the
+    // replication refuses to attach it.
+    static bool IsBuiltIndexType(NKikimrSchemeOp::EIndexType type) {
+        switch (type) {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Tables that are marked as imported together with the item's table. An impl table is marked
+    // together with its whole index, and the index impl tables are marked by the base table item
+    // only: an impl table alter creates a new index version, and the index schema version must match
+    // every impl table version, so they are all altered in one transaction.
     TVector<TPathId> GetImportItemTablePaths(const TImportInfo& importInfo, ui32 itemIdx) const {
         const auto& item = importInfo.Items.at(itemIdx);
-        TVector<TPathId> result{item.DstPathId};
-        THashSet<TPathId> childTables;
-        for (auto childIdx : item.ChildItems) {
-            childTables.insert(importInfo.Items.at(childIdx).DstPathId);
+        const auto path = TPath::Init(item.DstPathId, Self);
+
+        if (path.Parent().IsTableIndex()) {
+            return {};
         }
 
-        const auto path = TPath::Init(item.DstPathId, Self);
+        // An index restored from the dump was created together with its table, while one built from
+        // the restored data was created by the builder in a separate transaction.
+        const auto tableCreateTxId = path.Base()->CreateTxId;
+
+        TVector<TPathId> result{item.DstPathId};
         for (const auto& [name, indexId] : path.Base()->GetChildren()) {
             const auto index = TPath::Init(indexId, Self);
-            if (index.IsDeleted() || (!index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
-                    && !index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique))) {
+            if (index.IsDeleted() || !index.IsTableIndex({}, false)) {
                 continue;
             }
-            const auto impl = index.Child(NTableIndex::ImplTable);
-            // Materialized indexes finalize through their own items. Built indexes
-            // have no item and finalize together with their source table.
-            if (impl.IsResolved() && !impl.IsDeleted() && !childTables.contains(impl.Base()->PathId)
-                    && Self->Tables.at(impl.Base()->PathId)->IsAsyncReplica()) {
-                result.push_back(impl.Base()->PathId);
+            const auto& indexInfo = Self->Indexes.at(index.Base()->PathId);
+            if (!NTableIndex::HasReplicatedImplTables(indexInfo->Type)) {
+                continue;
+            }
+            const bool builtInImport = index.Base()->CreateTxId != tableCreateTxId;
+            if (IsBuiltIndexType(indexInfo->Type) && builtInImport) {
+                // Its impl tables stay importing, so the replication refuses to attach the index.
+                continue;
+            }
+            for (const auto& implTable : NTableIndex::GetImplTables(indexInfo->Type, indexInfo->IndexKeys)) {
+                const auto impl = index.Child(TString{implTable});
+                if (!impl.IsResolved() || impl.IsDeleted() || !Self->Tables.contains(impl.Base()->PathId)) {
+                    continue;
+                }
+                if (Self->Tables.at(impl.Base()->PathId)->IsAsyncReplica()) {
+                    result.push_back(impl.Base()->PathId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    TVector<TPathId> GetImportItemTablesToFinalize(const TImportInfo& importInfo, ui32 itemIdx) const {
+        TVector<TPathId> result;
+        for (const auto& pathId : GetImportItemTablePaths(importInfo, itemIdx)) {
+            if (!TPath::Init(pathId, Self).IsUnderOperation() &&
+                Self->Tables.at(pathId)->ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
+                result.push_back(pathId);
             }
         }
         return result;
     }
 
+    static bool AreChildItemsDone(const TImportInfo& importInfo, const TImportInfo::TItem& item) {
+        return AllOf(item.ChildItems, [&](ui32 childIdx) {
+            return childIdx < importInfo.Items.size()
+                && importInfo.Items.at(childIdx).State == EState::Done;
+        });
+    }
+
+    void FinishFinalizeImport(TImportInfo& importInfo, ui32 itemIdx, NIceDb::TNiceDb& db) {
+        auto& item = importInfo.Items.at(itemIdx);
+        if (item.ReplicationConfig) {
+            item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        }
+        item.State = EState::Done;
+        Self->PersistImportItemState(db, importInfo, itemIdx);
+    }
+
+    // A child item has been imported, so its base table may be ready to finalize now.
+    void KickParentFinalize(TImportInfo& importInfo, ui32 itemIdx) {
+        for (ui32 parentIdx : xrange(importInfo.Items.size())) {
+            const auto& parent = importInfo.Items.at(parentIdx);
+            if (parentIdx == itemIdx || parent.State != EState::FinalizeImport
+                || parent.WaitTxId != InvalidTxId
+                || !AreChildItemsDone(importInfo, parent))
+            {
+                continue;
+            }
+            if (std::find(parent.ChildItems.begin(), parent.ChildItems.end(), itemIdx) != parent.ChildItems.end()) {
+                AllocateTxId(importInfo, parentIdx);
+            }
+        }
+    }
+
     void FinalizeImport(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
         auto& item = importInfo.Items.at(itemIdx);
         auto propose = MakeModifySchemeTransaction(Self, txId, importInfo);
-        for (const auto& pathId : GetImportItemTablePaths(importInfo, itemIdx)) {
+        for (const auto& pathId : GetImportItemTablesToFinalize(importInfo, itemIdx)) {
             const auto& table = Self->Tables.at(pathId);
             auto& tx = *propose->Record.AddTransaction();
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
@@ -687,12 +864,19 @@ private:
     void FinishImportItem(TImportInfo& importInfo, ui32 itemIdx) {
         auto& item = importInfo.Items.at(itemIdx);
         // An unspecified store type denotes a row table, just as in CreateTablePropose.
-        if (item.Table && item.Table->store_type() != Ydb::Table::STORE_TYPE_COLUMN
-                && Self->Tables.at(item.DstPathId)->IsImportingReplica()) {
-            item.State = EState::FinalizeImport;
-            AllocateTxId(importInfo, itemIdx);
-        } else {
+        if (!item.Table || item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN ||
+            !Self->Tables.at(item.DstPathId)->IsImportingReplica())
+        {
             item.State = EState::Done;
+        } else if (TPath::Init(item.DstPathId, Self).Parent().IsTableIndex()) {
+            // Index impl tables are marked together with their base table: it waits for all of them.
+            item.State = EState::Done;
+        } else {
+            item.State = EState::FinalizeImport;
+            // The whole table is marked only when all its impl tables have been imported.
+            if (AreChildItemsDone(importInfo, item)) {
+                AllocateTxId(importInfo, itemIdx);
+            }
         }
     }
 
@@ -1170,6 +1354,10 @@ private:
             Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
             Self->RunningImportSchemeQueryExecutors.erase(schemeQueryExecutor);
         }
+        if (auto restorer = std::exchange(item.KesusRestorer, {})) {
+            Send(restorer, new TEvents::TEvPoisonPill());
+            Self->RunningImportKesusRestorers.erase(restorer);
+        }
     }
 
     void Cancel(TImportInfo& importInfo, ui32 itemIdx, TStringBuf marker) {
@@ -1334,6 +1522,17 @@ private:
                 break;
             }
         }
+
+        // An item resumed after a restart may be finished already (e.g. its finalization was
+        // applied before the restart), so the import may be done without any notification.
+        if (importInfo->State == EState::Waiting && AllDone(CountItemsByState(importInfo->Items))) {
+            importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
+
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistImportState(db, *importInfo);
+            SendNotificationsIfFinished(importInfo);
+        }
     }
 
     void Resume(TImportInfo::TPtr importInfo, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
@@ -1358,13 +1557,31 @@ private:
                     }
                     break;
 
-                case EState::DropPlaceholder:
                 case EState::CreateSchemeObject:
+                    if (item.Kesus && item.WaitTxId == InvalidTxId && item.DstPathId) {
+                        // Creation has completed. Reconcile contents using the saved
+                        // identity, even if the previous helper's reply was lost.
+                        StartKesusRestore(db, importInfo, itemIdx);
+                        break;
+                    }
+                    [[fallthrough]];
+                case EState::DropPlaceholder:
                 case EState::Transferring:
                 case EState::BuildIndexes:
                 case EState::CreateChangefeed:
                 case EState::FinalizeImport:
                     if (item.WaitTxId == InvalidTxId) {
+                        if (item.State == EState::FinalizeImport) {
+                            // Nothing to mark (already done by a retry) or the impl tables are still
+                            // being imported: the base table is finalized once all of them are done.
+                            if (GetImportItemTablesToFinalize(*importInfo, itemIdx).empty()) {
+                                FinishFinalizeImport(*importInfo, itemIdx, db);
+                                break;
+                            }
+                            if (!AreChildItemsDone(*importInfo, item)) {
+                                break;
+                            }
+                        }
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(*importInfo, itemIdx);
                         } else {
@@ -1492,6 +1709,30 @@ private:
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
+        } else if (item.Kesus) {
+            if (!AppData()->Icb->BackupControls.S3Controls.EnableKesusImport.AtomicLoad()->Get()) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                    "The control \"EnableKesusImport\" is disabled. The operation cannot be performed.",
+                    "coordination node import is disabled");
+            }
+            TString error;
+            if (!item.Kesus->has_node() || !CreateKesusPropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                    error ? error : TString("Missing coordination node contents"), "invalid coordination node scheme");
+            }
+
+            // Include permissions and metadata in the size check, before sending
+            // any creation requests. Reserve 1 MB, as in IsCommitRedoSizeOverLimit.
+            Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+            const ui64 limitBytes = (ui64(Self->MaxCommitRedoMB) - 1) << 20;
+            const ui64 commitRedoBytes = txc.DB.GetCommitRedoBytes();
+            if (commitRedoBytes >= limitBytes) {
+                txc.DB.RollbackChanges();
+                return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                    TStringBuilder() << "Kesus backup exceeds the maximum commit size: "
+                        << commitRedoBytes << " bytes, limit " << limitBytes << " bytes",
+                    "coordination node backup is too large");
+            }
         } else if (item.Table) {
             const auto path = TPath::Resolve(item.DstPathName, Self);
             if (path.IsResolved() && !path.IsDeleted()) {
@@ -1557,7 +1798,9 @@ private:
             }
         }
 
-        Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+        if (!item.Kesus) {
+            Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+        }
 
         if (item.State != EState::Done) {
             item.State = item.ReplicationConfig ? EState::DropPlaceholder : EState::CreateSchemeObject;
@@ -1772,6 +2015,16 @@ private:
                 break;
             }
             case EState::CreateSchemeObject:
+                if (item.Kesus) {
+                    TString error;
+                    if (!CreateKesus(*importInfo, i, txId, error)) {
+                        NIceDb::TNiceDb db(txc.DB);
+                        CancelAndPersist(db, importInfo, i, error, "invalid coordination node scheme");
+                        return;
+                    }
+                    itemIdx = i;
+                    break;
+                }
                 if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
                     itemIdx = i;
@@ -1930,7 +2183,11 @@ private:
         }
 
         if (record.GetStatus() == NKikimrScheme::StatusSuccess
-                && (item.State == EState::DropPlaceholder || item.State == EState::FinalizeImport)) {
+                && (item.State == EState::DropPlaceholder || item.State == EState::FinalizeImport
+                    || (item.Kesus && item.State == EState::CreateSchemeObject))) {
+            if (item.Kesus) {
+                UpdateItemDstPathId(db, *importInfo, itemIdx);
+            }
             CompletedTxId = txId;
             return OnNotifyResult(txc, ctx);
         }
@@ -2165,10 +2422,7 @@ private:
                         == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
             });
             if (imported) {
-                if (item.ReplicationConfig) {
-                    item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-                }
-                item.State = EState::Done;
+                FinishFinalizeImport(*importInfo, itemIdx, db);
             } else {
                 AllocateTxId(*importInfo, itemIdx);
             }
@@ -2176,6 +2430,10 @@ private:
         }
 
         case EState::CreateSchemeObject:
+            if (item.Kesus) {
+                StartKesusRestore(db, importInfo, itemIdx);
+                return;
+            }
             if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
                 break;
@@ -2266,6 +2524,11 @@ private:
             return SendNotificationsIfFinished(importInfo);
         }
 
+        if (item.State == EState::Done) {
+            // The base table is marked as imported only when all its impl tables are imported.
+            KickParentFinalize(*importInfo, itemIdx);
+        }
+
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
             importInfo->State = EState::Done;
@@ -2303,6 +2566,10 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemaMa
 }
 
 ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev) {
+    return new TImport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportKesusResult::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 

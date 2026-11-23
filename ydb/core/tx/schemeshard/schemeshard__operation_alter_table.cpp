@@ -34,6 +34,14 @@ bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchem
     return false;
 }
 
+// An alter that only changes the replication config of a table does not touch its layout.
+bool IsReplicationConfigOnlyAlter(const NKikimrSchemeOp::TTableDescription& alter) {
+    auto rest = alter;
+    rest.ClearPathId();
+    rest.ClearReplicationConfig();
+    return rest.ByteSizeLong() == 0;
+}
+
 template <typename TMessage>
 bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFields) {
     std::vector<const google::protobuf::FieldDescriptor*> fields;
@@ -328,6 +336,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
@@ -535,7 +544,23 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        const auto parentIndex = context.SS->Indexes.find(path->ParentPathId);
+        const bool hasReadyUniqueIndex = parentIndex != context.SS->Indexes.end()
+            && parentIndex->second->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+            && parentIndex->second->State == NKikimrSchemeOp::EIndexStateReady;
+        const auto& alterPartitionConfig = table->AlterData->PartitionConfigCompatible();
+        const bool disablesShadowData = alterPartitionConfig.HasShadowData()
+            && !alterPartitionConfig.GetShadowData();
         table->FinishAlter();
+
+        if (disablesShadowData && hasReadyUniqueIndex) {
+            // Republish the index's Children listing with the implementation table's new schema version.
+            auto indexPath = context.SS->PathsById.at(path->ParentPathId);
+            ++indexPath->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, indexPath);
+            context.SS->ClearDescribePathCaches(indexPath);
+            context.OnComplete.PublishToSchemeBoard(OperationId, indexPath->PathId);
+        }
 
         path->SetAsyncReplica(table->IsAsyncReplica());
 
@@ -698,7 +723,15 @@ public:
                     .NotBackupTable();
             }
 
-            if (!context.IsAllowedPrivateTables) {
+            const bool isInternalShadowDataRepair = Transaction.GetInternal()
+                && Transaction.GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData
+                && AllowShadowData;
+            // A replication config change keeps the impl table layout intact, so an internal
+            // operation may apply it to an index impl table directly (a consistent operation uses
+            // one index version for all its impl tables, see CreateConsistentAlterTable).
+            if (!context.IsAllowedPrivateTables && !isInternalShadowDataRepair &&
+                !(Transaction.GetInternal() && IsReplicationConfigOnlyAlter(alter)))
+            {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 
@@ -786,6 +819,32 @@ public:
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
                     return result;
                 }
+            }
+        }
+
+        const auto& replicationConfig = table->ReplicationConfig();
+        const auto replicationPathId = replicationConfig.HasOwnerPathId()
+            ? TPathId::FromProto(replicationConfig.GetOwnerPathId()) : TPathId{};
+        if (alter.HasReplicationConfig()) {
+            const auto& config = alter.GetReplicationConfig();
+            const auto newReplicationPathId = config.HasOwnerPathId()
+                ? TPathId::FromProto(config.GetOwnerPathId()) : TPathId{};
+            if (replicationPathId && replicationPathId != newReplicationPathId
+                && !Transaction.HasExpectedReplicationOwnerPathId())
+            {
+                const auto replicationPath = context.SS->PathsById.find(replicationPathId);
+                // A DROP in progress still owns its tables until the controller
+                // has stopped and SchemeShard has committed deletion of its path.
+                if (!newReplicationPathId || !context.SS->IsLocalId(replicationPathId)
+                    || (replicationPath != context.SS->PathsById.end() && !replicationPath->second->Dropped())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Table is owned by another replication");
+                    return result;
+                }
+            }
+            if (newReplicationPathId && replicationConfig.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+                && !replicationConfig.HasOwnerPathId()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot attach a replication to a table that is already read-only");
+                return result;
             }
         }
 
@@ -1344,6 +1403,26 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    // Fence cleanup before creating sub-operations for an index table.
+    if (tx.HasExpectedReplicationOwnerPathId()) {
+        const auto checks = path.Check().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
+        const auto table = context.SS->Tables.find(path->PathId);
+        if (table != context.SS->Tables.end()) {
+            if (table->second->AlterData) {
+                return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight")};
+            }
+            const auto& config = table->second->ReplicationConfig();
+            if (config.HasOwnerPathId()
+                && TPathId::FromProto(config.GetOwnerPathId()) != TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId())) {
+                return {CreateReject(id, NKikimrScheme::StatusSuccess,
+                    "Table is owned by another replication; cleanup skipped")};
+            }
+        }
+    }
+
     if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {
         return std::move(*result);
     }
@@ -1394,18 +1473,32 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     // Reject overlapping impl-table ALTERs before proposing the index part:
     // it creates the next index version before the table part checks its path.
+    // An internal operation may alter all impl tables of one index at once (e.g. the replication
+    // import marks them as imported in one transaction): the first alter creates the new index
+    // version and the others share it, so the index is legitimately under operation here.
+    const bool indexAlteredByThisOperation = tx.GetInternal()
+        && parent.Base()->LastTxId == id.GetTxId();
     for (const auto& alterPath : {parent, path}) {
-        const auto checks = alterPath.Check();
+        auto checks = alterPath.Check();
         checks.NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved()
-            .NotDeleted().NotUnderDeleting().NotUnderOperation();
+            .NotDeleted().NotUnderDeleting();
+        if (!(indexAlteredByThisOperation && alterPath.Base()->PathId == parent.Base()->PathId)) {
+            checks.NotUnderOperation();
+        }
         if (!checks) {
             return {CreateReject(id, checks.GetStatus(), checks.GetError())};
         }
     }
-    if (context.SS->Indexes.at(parent.Base()->PathId)->AlterData
+    if ((!indexAlteredByThisOperation && context.SS->Indexes.at(parent.Base()->PathId)->AlterData)
         || context.SS->Tables.at(path.Base()->PathId)->AlterData)
     {
         return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another index table Alter in flight")};
+    }
+
+    // The new index version was already created by the first impl table alter of this operation,
+    // so this one only changes its own table.
+    if (indexAlteredByThisOperation) {
+        return {CreateAlterTable(id, tx)};
     }
 
     TVector<ISubOperation::TPtr> result;

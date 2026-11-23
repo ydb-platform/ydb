@@ -17,7 +17,7 @@ class TBooleanFormulaTest
     >>
 { };
 
-TEST_P(TBooleanFormulaTest, Test)
+TEST_P(TBooleanFormulaTest, Evaluate)
 {
     const auto& args = GetParam();
     const auto& formula = std::get<0>(args);
@@ -70,7 +70,7 @@ class TBooleanFormulaParseErrorTest
     , public ::testing::WithParamInterface<const char*>
 { };
 
-TEST_P(TBooleanFormulaParseErrorTest, Test)
+TEST_P(TBooleanFormulaParseErrorTest, RejectMalformedFormula)
 {
     const auto& formula = GetParam();
 

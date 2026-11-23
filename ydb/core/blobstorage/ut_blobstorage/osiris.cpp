@@ -472,7 +472,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
     };
     if (scenario == EMirror3dcDisconnectionScenario::SwitchToRestoredRealm) {
         // I/I/X: explicitly seed exactly two copies in each available realm.
-        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
         TBlobStorageGroupInfo::TOrderNums subgroup;
         originalInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
         TString encryptedData = data;
@@ -503,7 +503,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         // I/I/R -> I/I/I: bring back the previously empty realm and collect metadata.
         const ui32 startupDoneBefore = startupSyncDone[2];
         const ui32 requestsBefore = fullSyncRequests[2];
-        setStates({NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
+        setStates({NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
         for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[2] < startupDoneBefore + 3; ++attempt) {
             env.Sim(TDuration::MilliSeconds(100));
         }
@@ -511,14 +511,16 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         UNIT_ASSERT_C(fullSyncRequests[2] > requestsBefore, "F->R must start full sync");
         setStates({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
 
-        // DC_FAILURE_INV1: replicate D=1+1 into the restored realm.
-        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
+        // Establish D=2+2 before publishing the completed invariant. Completed
+        // states do not schedule resurrection of missing copies.
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         waitForReplication(0);
         waitForReplication(2);
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         checkBlob();
 
         // X/X/I: the only readable realm had no copy when the blob was written.
-        setStates({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
+        setStates({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         checkBlob();
         env.Runtime->FilterFunction = {};
         return;
@@ -582,7 +584,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
         using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         TDefinition* definition = request.AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
-        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
+        request.SetIgnoreGroupFailModelChecks(true);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
@@ -654,7 +657,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         NKikimrBlobStorage::TDefineGroupState::TGroupDefinition* definition =
             request.AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
-        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         request.SetIgnoreGroupFailModelChecks(true);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
         definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
@@ -816,7 +819,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 UNIT_ASSERT_VALUES_EQUAL(record.GetDurabilityReplicated(), durabilityReplicated);
             }
         };
-        states = {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING,
+        states = {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1,
             {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}};
         applyStates();
         const TString data(4096, 'U');
@@ -882,7 +885,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_C(copies[0] >= 2 && copies[1] >= 2, "Replication must materialize D=2+2 after the group-state upgrades");
         // A downgrade also changes D (2+2 -> 1+1) and starts a new pass.
         osirisDone = replDone = 0;
-        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1;
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
@@ -894,7 +897,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 0);
         checkReplicationFlags(false);
-        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1;
         applyStates();
         checkReplicationFlags(false);
         holdOsirisDone = false;

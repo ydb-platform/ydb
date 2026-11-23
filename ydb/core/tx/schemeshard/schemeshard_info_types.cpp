@@ -24,6 +24,8 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <util/generic/algorithm.h>
 
 namespace {
@@ -31,16 +33,14 @@ namespace {
 using namespace NKikimr::NSchemeShard;
 using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
-using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
-EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
+EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, ui64>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     bool softQuotaExceeded = false;
-    for (const auto& [poolKind, usage] : storagePoolsUsage) {
+    for (const auto& [poolKind, totalSize] : storagePoolsUsage) {
         if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
-            const auto totalSize = usage.DataSize + usage.IndexSize;
             // If a quota is equal to zero, then it sets no limit on the disk space usage.
             if (quota->HardQuota && totalSize > quota->HardQuota) {
                 return EQuotaUsageStatus::AboveHardQuota;
@@ -55,11 +55,30 @@ EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUs
             : EQuotaUsageStatus::BelowSoftQuota;
 }
 
+EQuotaUsageStatus CalcDiskSpaceQuotaStatus(const TSubDomainInfo::TDiskSpaceQuotaView& view) {
+    if (!view) {
+        return EQuotaUsageStatus::BelowSoftQuota;
+    }
+
+    if (view.Mode == TSubDomainInfo::TDiskSpaceQuotaView::EMode::Overall) {
+        // If a quota is equal to zero, then it sets no limit on the disk space usage.
+        if (view.OverallQuotas.HardQuota && view.OverallUsage > view.OverallQuotas.HardQuota) {
+            return EQuotaUsageStatus::AboveHardQuota;
+        }
+        if (!view.OverallQuotas.SoftQuota || view.OverallUsage < view.OverallQuotas.SoftQuota) {
+            return EQuotaUsageStatus::BelowSoftQuota;
+        }
+        return EQuotaUsageStatus::InBetween;
+    }
+
+    return CheckStoragePoolsQuotas(view.StoragePoolsUsage, view.StoragePoolsQuotas);
+}
+
 /*
 This is a workaround!
 It makes sense only in the specific case where:
     - there are no multiple storage pools of the same kind
-    - all storage pool kinds belong to the set {ssh*, hdd*, rot*, nvme*}
+    - all storage pool kinds belong to the set {ssd*, hdd*, rot*, nvme*}
 */
 EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
     if (poolKind.StartsWith("ssd") || poolKind.StartsWith("nvme")) {
@@ -144,6 +163,24 @@ TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     return TDiskSpaceQuotas{hardQuota, softQuota, std::move(storagePoolsQuotas)};
 }
 
+TSubDomainInfo::TDiskSpaceQuotaView TSubDomainInfo::GetDiskSpaceQuotaView() const {
+    auto quotas = GetDiskSpaceQuotas();
+
+    TDiskSpaceQuotaView view;
+    // If the feature flag is turned off, then the storage pool quotas are ignored, otherwise the overall quota is ignored:
+    // the ignored quotas are not accounted for when we make a decision to change the state of the subdomain.
+    view.Mode = AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()
+        ? TDiskSpaceQuotaView::EMode::StoragePoolKinds
+        : TDiskSpaceQuotaView::EMode::Overall;
+    view.OverallQuotas = {.HardQuota = quotas.HardQuota, .SoftQuota = quotas.SoftQuota};
+    view.OverallUsage = TotalDiskSpaceUsage();
+    view.StoragePoolsQuotas = std::move(quotas.StoragePoolsQuotas);
+    for (const auto& [poolKind, usage] : DiskSpaceUsage.StoragePoolsUsage) {
+        view.StoragePoolsUsage.emplace(poolKind, usage.DataSize + usage.IndexSize);
+    }
+    return view;
+}
+
 void TSubDomainInfo::RecomputeSmallBlobsStorageUnits() {
     SmallBlobsStorageUnits = 0;
     if (!DatabaseQuotas) {
@@ -199,50 +236,46 @@ bool TSubDomainInfo::ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& ex
 }
 
 bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-    const auto changeSubdomainState = [&](EQuotaUsageStatus diskUsage) {
-        return ApplyQuotaExceededStatus(diskUsage, DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters);
+    return ApplyQuotaExceededStatus(
+        CalcDiskSpaceQuotaStatus(GetDiskSpaceQuotaView()),
+        DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters
+    );
+}
+
+void TSubDomainInfo::FillDiskSpaceQuotaUsage(NKikimrSubDomains::TDiskSpaceQuotaUsage& out) const {
+    const auto view = GetDiskSpaceQuotaView();
+
+    if (view.Mode == TDiskSpaceQuotaView::EMode::Overall) {
+        out.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_OVERALL);
+        auto* entry = out.AddEntries();
+        entry->SetPoolKind("");
+        entry->SetUsage(view.OverallUsage);
+        entry->SetSoftQuota(view.OverallQuotas.SoftQuota);
+        entry->SetHardQuota(view.OverallQuotas.HardQuota);
+        return;
+    }
+
+    out.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_STORAGE_POOL_KINDS);
+    struct TPoolKindEntry {
+        ui64 Usage = 0;
+        TQuotasPair Quotas{.HardQuota = 0, .SoftQuota = 0};
     };
-
-    auto quotas = GetDiskSpaceQuotas();
-    if (!quotas) {
-        return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
+    // sorted by pool kind to keep the output stable
+    TMap<TString, TPoolKindEntry> entries;
+    for (const auto& [poolKind, usage] : view.StoragePoolsUsage) {
+        entries[poolKind].Usage = usage;
     }
-
-    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
-        // If the feature flag is turned off, then the storage pool quotas are ignored:
-        // they are not accounted for when we make a decision to change the state of the subdomain.
-        ui64 totalUsage = TotalDiskSpaceUsage();
-
-        // If a quota is equal to zero, then it sets no limit on the disk space usage.
-        const bool isHardQuotaExceeded = quotas.HardQuota && totalUsage > quotas.HardQuota;
-        const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
-
-        if (isHardQuotaExceeded) {
-            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
-        }
-        if (isTotalUsageBelowSoftQuota) {
-            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
-        }
-    } else {
-        // If the feature flag is turned on, then the overall quota is ignored:
-        // it is not accounted for when we make a decision to change the state of the subdomain.
-        const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
-
-        const bool isSomeStoragePoolHardQuotaExceeded = !quotas.StoragePoolsQuotas.empty()
-                                                            && storagePoolsUsageStatus == EQuotaUsageStatus::AboveHardQuota;
-        const bool isEachStoragePoolUsageBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
-                                                            || storagePoolsUsageStatus == EQuotaUsageStatus::BelowSoftQuota;
-
-        if (isSomeStoragePoolHardQuotaExceeded) {
-            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
-        }
-        if (isEachStoragePoolUsageBelowSoftQuota) {
-            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
-        }
+    for (const auto& [poolKind, quotas] : view.StoragePoolsQuotas) {
+        entries[poolKind].Quotas = quotas;
     }
-
-    // made no changes to the state of the subdomain
-    return false;
+    for (const auto& [poolKind, e] : entries) {
+        // zeros are set explicitly, so that clients can tell them from missing values
+        auto* entry = out.AddEntries();
+        entry->SetPoolKind(poolKind);
+        entry->SetUsage(e.Usage);
+        entry->SetSoftQuota(e.Quotas.SoftQuota);
+        entry->SetHardQuota(e.Quotas.HardQuota);
+    }
 }
 
 bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
@@ -569,6 +602,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             ui32 colId = colName2Id[colName];
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
+            if (featureFlags.DisablePgCompatibility && sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
+                    && (col.HasDefaultFromSequence() || col.HasDefaultFromLiteral())) {
+                errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
+                return nullptr;
+            }
+
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
@@ -722,6 +761,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 break;
             }
             case NScheme::NTypeIds::Pg:
+                if (featureFlags.DisablePgCompatibility) {
+                    errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
+                    return nullptr;
+                }
                 if (!featureFlags.EnableTablePgTypes) {
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
@@ -865,7 +908,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         const auto& ttl = op.GetTTLSettings();
 
-        if (!ValidateTtlSettings(ttl, source ? source->Columns : TMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
+        if (!ValidateTtlSettings(ttl, source ? source->Columns : TMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, featureFlags.DisablePgCompatibility, errStr)) {
             return nullptr;
         }
 
@@ -1261,6 +1304,16 @@ bool TPartitionConfigMerger::ApplyChanges(
     const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
     const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
+    for (const auto& family : changes.GetColumnFamilies()) {
+        if ((family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD
+                || family.HasColumnCodecLevel())
+            && !appData->FeatureFlags.GetEnableRowTableZstdCompression())
+        {
+            errDescr = "ZSTD compression for row tables is disabled";
+            return false;
+        }
+    }
+
     result.CopyFrom(src); // inherit all data from src
 
     if (!ApplyChangesInColumnFamilies(result, src, changes, columns, isServerlessDomain, errDescr)) {
@@ -1587,12 +1640,26 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (changesFamily.HasColumnCodec()) {
-            if (changesFamily.GetColumnCodec() == NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) {
-                errDescr = TStringBuilder()
-                    << "Unsupported ColumnCodec. ColumnFamily id: " << familyId << " name: " << familyName;
+            dstFamily.SetColumnCodec(changesFamily.GetColumnCodec());
+            if (changesFamily.GetColumnCodec() != NKikimrSchemeOp::ColumnCodecZSTD) {
+                dstFamily.ClearColumnCodecLevel();
+            }
+        }
+
+        if (changesFamily.HasColumnCodecLevel()) {
+            dstFamily.SetColumnCodecLevel(changesFamily.GetColumnCodecLevel());
+        }
+
+        if (dstFamily.HasColumnCodecLevel()) {
+            if (dstFamily.GetColumnCodec() != NKikimrSchemeOp::ColumnCodecZSTD) {
+                errDescr = "COMPRESSION_LEVEL is supported only for ZSTD compression";
                 return false;
             }
-            dstFamily.SetColumnCodec(changesFamily.GetColumnCodec());
+            const auto maxLevel = ZSTD_maxCLevel();
+            if (dstFamily.GetColumnCodecLevel() < 0 || dstFamily.GetColumnCodecLevel() > maxLevel) {
+                errDescr = TStringBuilder() << "COMPRESSION_LEVEL for ZSTD must be in range [0, " << maxLevel << "]";
+                return false;
+            }
         }
 
         if (changesFamily.HasColumnCache()) {
@@ -2009,7 +2076,30 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
-    return true;
+    // Check constructor preconditions before building a runtime policy.
+    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
+        const auto& generation = policy.GetGeneration(index);
+        if (generation.GetGenerationId() != index) {
+            err = TStringBuilder()
+                << "Compaction generation " << index
+                << ": expected GenerationId " << index
+                << ", got " << generation.GetGenerationId();
+            return false;
+        }
+
+        // The runtime policy derives omitted sizes by dividing by CountToCompact.
+        if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
+            (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
+        {
+            err = TStringBuilder()
+                << "Compaction generation " << index
+                << ": CountToCompact must be nonzero when "
+                   "ExtraCompactionExpMaxSize or UpliftPartSize is omitted";
+            return false;
+        }
+    }
+
+    return NLocalDb::ValidateCompactionPolicy(NLocalDb::TCompactionPolicy(policy), err);
 }
 
 bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::TPartitionConfig &srcConfig, const NKikimrSchemeOp::TPartitionConfig &dstConfig)
@@ -3563,6 +3653,10 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
         auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!typeDesc) {
             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequenceName.c_str());
+            return std::nullopt;
+        }
+        if (AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+            errStr = Sprintf("PostgreSQL compatibility is disabled for sequence '%s'", sequenceName.c_str());
             return std::nullopt;
         }
         if (!pgTypesEnabled) {

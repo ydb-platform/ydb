@@ -73,6 +73,7 @@ public:
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
+                    NIceDb::TUpdate<Schema::Targets::SrcIsImpl>(target.Config->GetSrcIsImpl()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
@@ -84,7 +85,8 @@ public:
                     {"tid", tid},
                     {"kind", target.Kind},
                     {"srcPath", target.Config->GetSrcPath()},
-                    {"dstPath", target.Config->GetDstPath()});
+                    {"dstPath", target.Config->GetDstPath()},
+                    {"bootstrap", Replication->GetConfig().GetBootstrap()});
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

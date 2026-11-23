@@ -757,7 +757,8 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> 
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId) {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVDiskInfo(
+        ui32 nodeId, ui32 pdiskId, bool includeDDiskPoolNames) {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
     request->Record.SetInclusiveFrom(true);
@@ -768,6 +769,9 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> 
     request->Record.MutableTo()->SetNodeId(nodeId);
     request->Record.MutableTo()->SetPDiskId(pdiskId);
     request->Record.MutableTo()->SetVSlotId(std::numeric_limits<ui32>::max());
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
@@ -811,24 +815,32 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResp
     return RequestBSControllerPools();
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots() {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+static auto MakeBSControllerVSlotsRequest(bool includeDDiskPoolNames) {
     auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
+    if (includeDDiskPoolNames) {
+        request->Record.SetIncludeDDiskPoolNames(true);
+    }
+    return request;
+}
+
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::RequestBSControllerVSlots(bool includeDDiskPoolNames) {
+    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+    auto request = MakeBSControllerVSlotsRequest(includeDDiskPoolNames);
     return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release());
 }
 
-TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots() {
+TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> TViewerPipeClient::MakeCachedRequestBSControllerVSlots(bool includeDDiskPoolNames) {
     if (UseCache && Viewer) {
         bool needUpdate = false;
         auto cachedData = Viewer->SharedCacheState->StorageVSlots.GetFromCache(CachedDataMaxAge, needUpdate);
         if (needUpdate) {
-            UpdateSharedCacheTablet(GetBSControllerId(), std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>());
+            UpdateSharedCacheTablet(GetBSControllerId(), MakeBSControllerVSlotsRequest(includeDDiskPoolNames));
         }
         if (cachedData) {
             return cachedData;
         }
     }
-    return RequestBSControllerVSlots();
+    return RequestBSControllerVSlots(includeDDiskPoolNames);
 }
 
 TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> TViewerPipeClient::RequestBSControllerPDisks() {
@@ -1026,7 +1038,7 @@ void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikim
 void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) {
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second));
+                                                   EBoardLookupMode::SecondWithAllReplies));
     ++DataRequests;
 }
 
@@ -1034,7 +1046,7 @@ TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeCl
     TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-Endpoints"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second, {}, cookie));
+                                                   EBoardLookupMode::SecondWithAllReplies, {}, cookie));
     if (response.Span) {
         response.Span.Attribute("path", path);
     }

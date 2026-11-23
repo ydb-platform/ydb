@@ -122,27 +122,70 @@ grpc_socket_mutator_vtable TGRpcSocketMutator::VTable =
     };
 #endif
 
-void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {
-    for (const auto& rec : meta.Aux) {
-        Context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
+std::shared_lock<std::shared_mutex> TEndpointAdmission::Acquire(const IQueueClientContextPtr& call) {
+    std::shared_lock lock(Mutex_);
+    if (!Open_) {
+        return {};
     }
-    if (meta.CallCredentials) {
-        Context.set_credentials(meta.CallCredentials);
+    if (call) {
+        std::lock_guard guard(CallsMutex_);
+        if (Calls_.size() == Calls_.capacity()) {
+            std::erase_if(Calls_, [](const auto& weak) { return weak.expired(); });
+            Calls_.reserve(2 * Calls_.size() + 1); // amortize cleanup even with long-lived streams
+        }
+        Calls_.emplace_back(call);
     }
-    if (const NYdb::TDeadline::Duration* timeout = std::get_if<NYdb::TDeadline::Duration>(&meta.Timeout)) {
-        Context.set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
-    } else if (const NYdb::TDeadline* deadline = std::get_if<NYdb::TDeadline>(&meta.Timeout)) {
-        Context.set_deadline(*deadline);
+    return lock;
+}
+
+void TEndpointAdmission::Retire() {
+    decltype(Calls_) calls;
+    {
+        std::unique_lock lock(Mutex_);
+        Open_ = false;
+        calls.swap(Calls_);
+    }
+    for (const auto& weak : calls) {
+        if (auto call = weak.lock()) {
+            call->Cancel();
+        }
     }
 }
 
-void TGRpcRequestProcessorCommon::GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata) {
-    for (const auto& [key, value] : Context.GetServerInitialMetadata()) {
+void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {
+    for (const auto& rec : meta.Aux) {
+        Context->AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
+    }
+    if (meta.CallCredentials) {
+        Context->set_credentials(meta.CallCredentials);
+    }
+    if (const NYdb::TDeadline::Duration* timeout = std::get_if<NYdb::TDeadline::Duration>(&meta.Timeout)) {
+        Context->set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
+    } else if (const NYdb::TDeadline* deadline = std::get_if<NYdb::TDeadline>(&meta.Timeout)) {
+        Context->set_deadline(*deadline);
+    }
+}
+
+void TGRpcStreamRequestProcessorCommon::GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata) {
+    if (!Context) {
+        metadata->insert(SavedInitialMetadata_.begin(), SavedInitialMetadata_.end());
+        return;
+    }
+    for (const auto& [key, value] : Context->GetServerInitialMetadata()) {
         metadata->emplace(
             std::string(key.begin(), key.end()),
             std::string(value.begin(), value.end())
         );
     }
+}
+
+void TGRpcStreamRequestProcessorCommon::ReleaseContext(bool hasInitialMetadata) {
+    // A caller may keep its finished stream handle and read headers again.
+    // grpc::ClientContext owns the channel until its destructor runs.
+    if (hasInitialMetadata) {
+        GetInitialMetadata(&SavedInitialMetadata_);
+    }
+    Context.reset();
 }
 
 TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime, bool tcpNoDelay)
@@ -195,10 +238,10 @@ void TChannelPool::GetStubsHolderLocked(
     }
 }
 
-void TChannelPool::DeleteChannel(const std::string& channelId) {
+void TChannelPool::DeleteChannel(const std::string& channelId, std::function<bool(TStubsHolder&)> canRemove) {
     std::unique_lock writeLock(RWMutex_);
     auto poolIt = Pool_.find(channelId);
-    if (poolIt != Pool_.end() && !poolIt->second.IsPinned()) {
+    if (poolIt != Pool_.end() && (!canRemove || canRemove(poolIt->second)) && !poolIt->second.IsPinned()) {
         EraseFromQueueByTime(poolIt->second.GetLastUseTime(), channelId);
         Pool_.erase(poolIt);
     }

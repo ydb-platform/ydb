@@ -135,7 +135,7 @@ NThreading::TFuture<TEndpointUpdateResult> TDbDriverState::UpdateEndpoints(TEndp
         future.Subscribe([self = shared_from_this()](const auto& completed) {
             const auto& result = completed.GetValue();
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-            self->Client->DeleteChannels(result.Removed);
+            self->Client->DeleteChannels(result.Removed, self->EndpointPool);
 #endif
             if (self->DiscoveryMode == EDiscoveryMode::Sync) {
                 std::unique_lock guard(self->LastDiscoveryStatusRWLock);

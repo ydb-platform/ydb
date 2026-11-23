@@ -146,6 +146,7 @@ public:
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     NThreading::TFuture<TEndpointUpdateResult> WithPooledChannel(const TDbDriverStatePtr& discoveredState,
+        const std::shared_ptr<NYdbGrpc::TEndpointAdmission>& admission,
         const NYdbGrpc::TGRpcClientConfig& config, std::function<void(NYdbGrpc::TStubsHolder&)> makeConnection);
 #endif
 
@@ -198,7 +199,7 @@ public:
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         pending = WithPooledChannel(UsesDiscoveredEndpoint<TService>(*dbState, endpointPolicy) ? dbState : nullptr,
-            clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
+            selected.Admission, clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
                 conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder);
                 if (dbState->EndpointPool.UsesWatch() && !UsesDiscoveredEndpoint<TService>(*dbState, endpointPolicy)) {
                     std::lock_guard guard(dbState->BootstrapPinMutex);
@@ -747,15 +748,6 @@ public:
                         return;
                     }
 
-                    if (dbState->EndpointPool.UsesWatch() && UsesDiscoveredEndpoint<TService>(*dbState, requestSettings.EndpointPolicy)) {
-                        context = context->CreateContext();
-                        if (!context || !dbState->EndpointPool.RegisterWatchStream(endpoint.GetEndpoint(), context)) {
-                            RunStreamCallback(connectedCallback, TPlainStatus(EStatus::UNAVAILABLE, "Endpoint retired before stream start"),
-                                nullptr, DriverScope_);
-                            return;
-                        }
-                    }
-
                     dbState->StatCollector.IncGRpcInFlight();
                     dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
@@ -806,11 +798,7 @@ public:
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    void DeleteChannels(const std::vector<std::string>& endpoints) override {
-        for (const auto& endpoint : endpoints) {
-            ChannelPool_.DeleteChannel(endpoint);
-        }
-    }
+    void DeleteChannels(const std::vector<std::string>& endpoints, const TEndpointPool& owner) override;
 #endif
 
     bool GetDrainOnDtors() const;
@@ -932,7 +920,7 @@ private:
                             const auto& result = update.GetValue();
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
                             if (started) {
-                                DeleteChannels(result.Removed);
+                                DeleteChannels(result.Removed, dbState->EndpointPool);
                             }
 #else
                             Y_UNUSED(started);

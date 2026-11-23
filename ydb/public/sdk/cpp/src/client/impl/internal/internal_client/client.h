@@ -23,6 +23,7 @@ namespace NYdb::inline Dev::NMetrics {
 namespace NYdb::inline Dev {
 
 class TDbDriverState;
+class TEndpointPool;
 struct TListEndpointsResult;
 
 class IInternalClient {
@@ -33,7 +34,7 @@ public:
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;
     virtual void PostToResponseQueue(std::function<void()>&& f) = 0;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    virtual void DeleteChannels(const std::vector<std::string>& endpoints) = 0;
+    virtual void DeleteChannels(const std::vector<std::string>& endpoints, const TEndpointPool& owner) = 0;
 #endif
     virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) = 0;

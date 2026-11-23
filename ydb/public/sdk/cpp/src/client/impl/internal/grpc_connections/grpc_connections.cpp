@@ -82,6 +82,15 @@ public:
         return !std::exchange(Watching_, true);
     }
 
+    bool Forget(const TEndpointPool& pool) {
+        std::lock_guard guard(Mutex_);
+        std::erase_if(States_, [&](const auto& weak) {
+            auto state = weak.lock();
+            return !state || &state->EndpointPool == &pool;
+        });
+        return States_.empty();
+    }
+
     static NThreading::TFuture<void> Watch(std::weak_ptr<TObservedChannel> weak, std::string endpoint,
                                             IQueueClientContextPtr context, TDriverScope::TPtr scope) {
         while (context && !context->IsCancelled()) {
@@ -144,15 +153,24 @@ private:
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
 NThreading::TFuture<TEndpointUpdateResult> TGRpcConnectionsImpl::WithPooledChannel(const TDbDriverStatePtr& discoveredState,
+    const std::shared_ptr<NYdbGrpc::TEndpointAdmission>& admission,
     const NYdbGrpc::TGRpcClientConfig& config, std::function<void(NYdbGrpc::TStubsHolder&)> makeConnection)
 {
+    auto lease = admission ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+    if (admission && !lease) {
+        return {};
+    }
     std::shared_ptr<TObservedChannel> observed, broken;
+    bool startWatch = false;
     ChannelPool_.GetStubsHolderLocked(config.Locator, config, [&](auto& holder) {
         makeConnection(holder);
         if (discoveredState) {
             observed = holder.template GetOrCreateStub<TObservedChannel>();
+            startWatch = observed->Register(discoveredState);
         }
     }, [&](auto& holder) { broken = holder.template GetOrCreateStub<TObservedChannel>(); });
+
+    lease = {};
 
     // Replacement can beat delivery of the READY change to the CQ. Notify
     // outside the pool lock, since refreshing discovery also uses this pool.
@@ -162,10 +180,18 @@ NThreading::TFuture<TEndpointUpdateResult> TGRpcConnectionsImpl::WithPooledChann
             return pending;
         }
     }
-    if (observed && observed->Register(discoveredState)) {
+    if (startWatch) {
         TObservedChannel::Watch(observed, config.Locator, CreateContext(), DriverScope_);
     }
     return {};
+}
+
+void TGRpcConnectionsImpl::DeleteChannels(const std::vector<std::string>& endpoints, const TEndpointPool& owner) {
+    for (const auto& endpoint : endpoints) {
+        ChannelPool_.DeleteChannel(endpoint, [&](auto& holder) {
+            return holder.template GetOrCreateStub<TObservedChannel>()->Forget(owner);
+        });
+    }
 }
 #endif
 

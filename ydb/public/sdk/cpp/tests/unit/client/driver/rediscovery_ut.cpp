@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
@@ -173,8 +174,9 @@ namespace {
 
     class TTableService: public Ydb::Table::V1::TableService::Service {
     public:
-        grpc::Status BulkUpsert(grpc::ServerContext*, const Ydb::Table::BulkUpsertRequest*,
+        grpc::Status BulkUpsert(grpc::ServerContext* context, const Ydb::Table::BulkUpsertRequest*,
                                 Ydb::Table::BulkUpsertResponse* response) override {
+            context->AddInitialMetadata("test-peer", context->peer());
             ++Calls;
             if (HoldNext.exchange(false)) {
                 Held.TrySetValue();
@@ -280,6 +282,76 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
     }
 
+    Y_UNIT_TEST(RetiringAnEndpointReleasesHeldQueryStreams) {
+        using TService = Ydb::Query::V1::QueryService;
+        using TRequest = Ydb::Query::AttachSessionRequest;
+        using TResponse = Ydb::Query::SessionState;
+        using TReader = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+        class TQueryService : public TService::Service {
+            grpc::Status AttachSession(grpc::ServerContext* context, const TRequest*, grpc::ServerWriter<TResponse>* stream) override {
+                context->AddInitialMetadata("replica", "source");
+                TResponse state;
+                state.set_status(Ydb::StatusIds::SUCCESS);
+                stream->Write(state);
+                const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+                while (!context->IsCancelled() && TInstant::Now() < deadline) {
+                    Sleep(TDuration::MilliSeconds(5));
+                }
+                return grpc::Status::OK;
+            }
+        } service;
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        auto server = StartServer(port, service);
+        NYdbGrpc::TGRpcClientLow client;
+        auto channel = NYdbGrpc::CreateChannelInterface(NYdbGrpc::TGRpcClientConfig(Address(port)));
+        std::weak_ptr<grpc::ChannelInterface> transport = channel;
+        auto holder = std::make_unique<NYdbGrpc::TStubsHolder>(std::move(channel));
+        auto conn = client.CreateGRpcServiceConnection<TService>(*holder);
+        auto open = [&](const NYdbGrpc::TCallMeta& meta) {
+            auto started = NThreading::NewPromise<TReader>();
+            conn->DoStreamRequest<TRequest, TResponse>({}, [started](auto, TReader reader) mutable {
+                started.SetValue(std::move(reader));
+            }, &TService::Stub::AsyncAttachSession, meta);
+            auto reader = started.GetFuture().GetValueSync();
+            UNIT_ASSERT(reader);
+            TResponse response;
+            auto read = NThreading::NewPromise<bool>();
+            reader->Read(&response, [read](auto status) mutable { read.SetValue(status.Ok()); });
+            UNIT_ASSERT(read.GetFuture().GetValueSync());
+            auto finished = NThreading::NewPromise<int>();
+            reader->AddFinishedCallback([finished](auto status) mutable { finished.SetValue(status.GRpcStatusCode); });
+            return std::pair{reader, finished.GetFuture()};
+        };
+        NYdbGrpc::TCallMeta first, second;
+        first.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
+        second.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
+        auto [firstReader, firstDone] = open(first);
+        auto [secondReader, secondDone] = open(second);
+        conn.reset();
+        holder.reset();
+        first.EndpointAdmission->Retire();
+        const bool firstRetired = firstDone.Wait(TDuration::Seconds(3));
+        const bool secondStillActive = !secondDone.HasValue() && !transport.expired();
+        second.EndpointAdmission->Retire();
+        const bool secondRetired = secondDone.Wait(TDuration::Seconds(3));
+        // Keep teardown bounded if retirement regresses.
+        firstReader->Cancel();
+        secondReader->Cancel();
+        UNIT_ASSERT(firstRetired);
+        UNIT_ASSERT(secondStillActive);
+        UNIT_ASSERT(secondRetired);
+        UNIT_ASSERT_VALUES_EQUAL(firstDone.GetValueSync(), int(grpc::StatusCode::CANCELLED));
+        UNIT_ASSERT_VALUES_EQUAL(secondDone.GetValueSync(), int(grpc::StatusCode::CANCELLED));
+        UNIT_ASSERT_C(transport.expired(), "the retained session readers still own the retired gRPC channel");
+        std::unordered_multimap<std::string, std::string> metadata;
+        auto headers = NThreading::NewPromise<bool>();
+        firstReader->ReadInitialMetadata(&metadata, [headers](auto status) mutable { headers.SetValue(status.Ok()); });
+        UNIT_ASSERT(headers.GetFuture().GetValueSync());
+        UNIT_ASSERT(metadata.contains("replica"));
+        UNIT_ASSERT_VALUES_EQUAL(metadata.find("replica")->second, "source");
+    }
+
     Y_UNIT_TEST(WatchPermissionDeniedDoesNotFallBackToListEndpoints) {
         TPortManager ports;
         const auto port = ports.GetPort();
@@ -330,6 +402,9 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         const auto port = ports.GetPort();
         const auto sourcePort = ports.GetPort();
         const auto targetPort = ports.GetPort();
+        const auto otherPort = ports.GetPort();
+        TDiscovery otherDiscovery(sourcePort);
+        auto otherBootstrap = StartServer(otherPort, otherDiscovery);
         TTableService source, target;
         auto liveSource = StartServer(sourcePort, source);
         auto liveTarget = StartServer(targetPort, target);
@@ -366,16 +441,37 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
             return grpc::Status::OK;
         });
         auto bootstrap = StartServer(port, eds);
-        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Eds));
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Eds)
+            .SetUsePerChannelTcpConnection(true));
         NTable::TTableClient client(driver);
+        NTable::TTableClient other(driver, NTable::TClientSettings().Database("/Other")
+            .DiscoveryEndpoint(Address(otherPort)).DiscoveryMode(EDiscoveryMode::Sync));
+        const auto otherPeer = [&] {
+            auto status = other.BulkUpsert("/Other/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            const auto& headers = status.GetResponseMetadata();
+            UNIT_ASSERT(headers.contains("test-peer"));
+            return headers.find("test-peer")->second;
+        };
         const auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync(); };
         UNIT_ASSERT(firstAck.GetFuture().Wait(TDuration::Seconds(5)));
         UNIT_ASSERT(upsert().IsSuccess());
+        const auto peerBefore = otherPeer();
+        source.HoldNext = true;
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        auto inFlight = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "2", {}, settings);
+        UNIT_ASSERT(source.Held.GetFuture().Wait(TDuration::Seconds(5)));
         switched.SetValue();
         UNIT_ASSERT(acknowledged.GetFuture().Wait(TDuration::Seconds(5)));
+        const bool retired = inFlight.Wait(TDuration::Seconds(3));
+        source.ReleaseHeld.SetValue();
+        UNIT_ASSERT(retired);
+        UNIT_ASSERT(!inFlight.GetValueSync().IsSuccess());
         UNIT_ASSERT(upsert().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(eds.Attempts.load(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(otherPeer(), peerBefore);
+        UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 4);
         UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
     }
 

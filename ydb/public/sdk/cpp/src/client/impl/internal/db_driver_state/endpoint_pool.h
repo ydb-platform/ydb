@@ -36,7 +36,6 @@ public:
     void EnableWatch();
     void PauseWatch();
     void PublishWatchResult(TListEndpointsResult result);
-    bool RegisterWatchStream(const std::string& endpoint, const NYdbGrpc::IQueueClientContextPtr& context);
     bool UsesWatch() const { return UsesWatch_; }
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync(EUpdateReason reason = EUpdateReason::Regular);
     NThreading::TFuture<TEndpointUpdateResult> GetPendingTransportUpdate();
@@ -70,7 +69,6 @@ private:
     bool UsesWatch_ = false; // Set before publishing the driver state.
     TPlainStatus WatchStatus_;
     std::unordered_map<std::string, std::shared_ptr<NYdbGrpc::TEndpointAdmission>> WatchAdmissions_;
-    std::vector<std::pair<std::string, std::weak_ptr<NYdbGrpc::IQueueClientContext>>> WatchStreams_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
     std::atomic_bool TransportUpdatePending_ = false;
     std::uint64_t TransportGeneration_ = 0;

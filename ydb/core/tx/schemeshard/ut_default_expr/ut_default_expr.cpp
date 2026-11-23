@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         UNIT_ASSERT(column && !column->HasDefaultFromExpression());
     }
 
-    Y_UNIT_TEST_TWIN(AlterDropDefaultExpression, FeatureEnabled) {
+    Y_UNIT_TEST_FLAG(AlterDropDefaultExpression, FeatureEnabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableDefaultFromExpression(runtime);

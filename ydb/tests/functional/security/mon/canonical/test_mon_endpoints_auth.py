@@ -4,7 +4,12 @@ import json
 import pytest
 import yatest.common
 
-from ydb.tests.functional.security.lib.mon_endpoints_helpers import DATABASE, MON_ENDPOINTS_AUTH_CASES, TENANT_DATABASE, collect_endpoints
+from ydb.tests.functional.security.lib.mon_endpoints_helpers import (
+    DATABASE,
+    MON_ENDPOINTS_AUTH_CASES,
+    TENANT_DATABASE,
+    collect_endpoints,
+)
 
 _NO_QUERY_PARAMS = [
     {},

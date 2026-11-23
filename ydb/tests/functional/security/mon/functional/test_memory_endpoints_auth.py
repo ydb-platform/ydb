@@ -2,8 +2,11 @@
 import pytest
 import yatest.common
 
-from ydb.tests.functional.security.lib.mon_endpoints_helpers import MON_ENDPOINTS_AUTH_CASES, TENANT_DATABASE, collect_endpoints
-
+from ydb.tests.functional.security.lib.mon_endpoints_helpers import (
+    MON_ENDPOINTS_AUTH_CASES,
+    TENANT_DATABASE,
+    collect_endpoints,
+)
 
 ENDPOINT_SPECS = [
     {'path': '/memory/fragmentation'},
@@ -31,6 +34,6 @@ def test(case_name, request):
                         expected = 403
                     else:
                         expected = authorized_status
-                    assert status == expected, (
-                        f'{method} {path}{query}, token={token}: expected {expected}, got {status}'
-                    )
+                    assert (
+                        status == expected
+                    ), f'{method} {path}{query}, token={token}: expected {expected}, got {status}'

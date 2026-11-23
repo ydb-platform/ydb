@@ -717,7 +717,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         NKikimrSchemeOp::TPathDescription Topic;
         const TString Consumer = "source-consumer";
 
-        TCdcAttachmentFixture() {
+        explicit TCdcAttachmentFixture(const char* streamSettings = "") {
             using NKikimr::TPathId;
             using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
             TestCreateReplication(Runtime, ++TxId, "/MyRoot", DefaultScheme("Owner"));
@@ -735,10 +735,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             TestModificationResult(Runtime, TxId);
             Env.TestWaitNotification(Runtime, TxId);
 
-            AsyncSend(Runtime, SchemeShard, InternalTransaction(CreateCdcStreamRequest(++TxId, "/MyRoot", R"(
+            AsyncSend(Runtime, SchemeShard, InternalTransaction(CreateCdcStreamRequest(++TxId, "/MyRoot", Sprintf(R"(
                 TableName: "Table"
-                StreamDescription { Name: "Feed" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatJson State: ECdcStreamStateDisabled }
-            )")));
+                StreamDescription {
+                    Name: "Feed" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatJson State: ECdcStreamStateDisabled
+                    %s
+                }
+            )", streamSettings))));
             TestModificationResult(Runtime, TxId);
             Env.TestWaitNotification(Runtime, TxId);
 
@@ -848,6 +851,11 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         test.Env.TestWaitNotification(test.Runtime, attachId);
 
         test.CheckSplitWithStaleTopic();
+    }
+
+    Y_UNIT_TEST_TWIN(CdcTopicAttachmentRejectsPartitionQuorum, SchemaChanges) {
+        TCdcAttachmentFixture test(SchemaChanges ? "SchemaChanges: true" : "ResolvedTimestampsIntervalMs: 1000");
+        test.Attach(NKikimrScheme::StatusPreconditionFailed);
     }
 
     Y_UNIT_TEST(ConsumerAlterOnRunningCdcMirror) {

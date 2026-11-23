@@ -96,13 +96,13 @@ public:
     }
 
     explicit TCdcPartitionWorker(const TActorId& parent, ui32 partitionId, ui64 tabletId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const TString& replicationConsumer)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const TString& sourceIdPrefix)
         : Parent(parent)
         , PartitionId(partitionId)
         , TabletId(tabletId)
         , SrcTabletId(srcTabletId)
         , DstTabletIds(dstTabletIds)
-        , ReplicationConsumer(replicationConsumer)
+        , SourceIdPrefix(sourceIdPrefix)
     {
     }
 
@@ -128,12 +128,12 @@ public:
         auto& cmd = *request.MutableCmdSplitMessageGroup();
         {
             auto& group = *cmd.AddDeregisterGroups();
-            const auto sourceId = NPQ::MakeCdcSourceId(SrcTabletId, ReplicationConsumer);
+            const auto sourceId = NPQ::MakeCdcSourceId(SrcTabletId, SourceIdPrefix);
             group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
         }
         for (const auto dstTabletId : DstTabletIds) {
             auto& group = *cmd.AddRegisterGroups();
-            const auto sourceId = NPQ::MakeCdcSourceId(dstTabletId, ReplicationConsumer);
+            const auto sourceId = NPQ::MakeCdcSourceId(dstTabletId, SourceIdPrefix);
             group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
         }
 
@@ -157,7 +157,7 @@ private:
     const ui64 TabletId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
-    const TString ReplicationConsumer;
+    const TString SourceIdPrefix;
 
     TActorId PipeClient;
 
@@ -365,8 +365,8 @@ class TCdcWorker
 
         const auto& topic = entry.PQGroupInfo->Description;
         // Splits proposed by older SchemeShards have no producer snapshot.
-        const auto& replicationConsumer = ReplicationConsumer
-            ? *ReplicationConsumer : topic.GetPQTabletConfig().GetReplicationSourceConsumer();
+        const auto& sourceIdPrefix = SourceIdPrefix
+            ? *SourceIdPrefix : topic.GetPQTabletConfig().GetReplicationSourceConsumer();
         for (const auto& partition : topic.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             const auto tabletId = partition.GetTabletId();
@@ -384,7 +384,7 @@ class TCdcWorker
                     {"partitionId", partitionId});
 
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId,
-                    SrcTabletId, DstTabletIds, replicationConsumer));
+                    SrcTabletId, DstTabletIds, sourceIdPrefix));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }
@@ -481,12 +481,12 @@ public:
     }
 
     explicit TCdcWorker(const TActorId& parent, const TPathId& pathId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const std::optional<TString>& replicationConsumer)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const std::optional<TString>& sourceIdPrefix)
         : Parent(parent)
         , PathId(pathId)
         , SrcTabletId(srcTabletId)
         , DstTabletIds(dstTabletIds)
-        , ReplicationConsumer(replicationConsumer)
+        , SourceIdPrefix(sourceIdPrefix)
     {
     }
 
@@ -509,7 +509,7 @@ private:
     const TPathId PathId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
-    const std::optional<TString> ReplicationConsumer;
+    const std::optional<TString> SourceIdPrefix;
 
     THashMap<ui32, TActorId> Workers;
     THashMap<TActorId, ui32> Pending;
@@ -522,7 +522,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     struct TWorker {
         EWorkerType Type;
         TActorId ActorId;
-        std::optional<TString> ReplicationConsumer;
+        std::optional<TString> SourceIdPrefix;
 
         explicit TWorker(EWorkerType type)
             : Type(type)
@@ -541,7 +541,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
         Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
         switch (worker.Type) {
         case EWorkerType::CdcStream:
-            worker.ActorId = Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards, worker.ReplicationConsumer));
+            worker.ActorId = Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards, worker.SourceIdPrefix));
             return worker.ActorId;
         case EWorkerType::AsyncIndex:
             Y_ENSURE(false, "unreachable");
@@ -605,7 +605,7 @@ public:
         if (split) {
             for (const auto& producer : split->GetCdcProducers()) {
                 if (auto* worker = Workers.FindPtr(TPathId::FromProto(producer.GetStreamPathId()))) {
-                    worker->ReplicationConsumer = producer.GetReplicationConsumer();
+                    worker->SourceIdPrefix = producer.GetSourceIdPrefix();
                 }
             }
         }

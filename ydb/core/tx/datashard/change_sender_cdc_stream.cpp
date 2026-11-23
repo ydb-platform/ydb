@@ -537,7 +537,7 @@ class TCdcChangeSenderMain
     void ResolveTopic() {
         auto request = MakeHolder<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
-        request->ResultSet.back().SyncVersion = ResolveOnFirstRecord && !TopicVersion;
+        request->ResultSet.back().SyncVersion = !TopicVersion;
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveTopic);

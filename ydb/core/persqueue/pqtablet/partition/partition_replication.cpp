@@ -53,8 +53,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 
     ReplicationDataNeedsApply = false;
-    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
-    if (IsCdcReplicationTopic() && !MirroringEnabled(config)) {
+    if (IsCdcReplicationTopic() && !IsCurrentMirrorer((*PendingReplicationData)->Sender)) {
         PendingReplicationData.reset();
         return;
     }
@@ -64,6 +63,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         BlobEncoder.MirroredOffset = Max(BlobEncoder.MirroredOffset, *mirroredOffset);
     }
 
+    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
         auto* consumerConfig = GetConsumer(config, consumer);
         if (!consumerConfig || !consumerConfig->GetReplicateOffsets() || offset > static_cast<ui64>(Max<i64>())) {

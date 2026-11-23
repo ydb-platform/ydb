@@ -163,6 +163,8 @@ def get_all_cgi_params(url):
                     producer_id="fq_test_message_meta_writer",
                 )
                 assert topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1)[0] == f"test_data{suffix}"
+                # Persist the processed input offset before replacing the query.
+                self.wait_completed_checkpoints(kikimr_udfs, name)
 
         tests_count = 20
         for i in range(tests_count):

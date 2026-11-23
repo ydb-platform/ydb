@@ -2050,11 +2050,13 @@ FROM `{table_name}`"""
                 self.create_source(kikimr, source_name, shared=True)
 
     def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
-        kikimr.set_feature_flags({
-            "enable_streaming_queries": False,
-            "enable_external_data_sources": False,
-            "enable_shared_reading_in_streaming_queries": False,
-        })
+        kikimr.set_feature_flags(
+            {
+                "enable_streaming_queries": False,
+                "enable_external_data_sources": False,
+                "enable_shared_reading_in_streaming_queries": False,
+            }
+        )
         input_name, topic_ydb_client = self.get_input_name(kikimr, "test_table_mode", True, entity_name)
 
         message = b'{"time": "lunch time"}'
@@ -2477,7 +2479,7 @@ FROM `{table_name}`"""
     def test_structured_json_skip_errors_nested(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"structured_json_skip_errors_nested{local_topics!s:.1}",
             local_topics,
@@ -2556,7 +2558,7 @@ FROM `{table_name}`"""
             '{"top":{"extra":"ignored"},"extra":"ignored","note":"ok-extra-keys"}',
         ]
 
-        self.write_stream(messages, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, messages)
 
         expected_notes = {
             "ok",
@@ -2571,7 +2573,7 @@ FROM `{table_name}`"""
         }
 
         rows = [
-            *map(json.loads, self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint))
+            *map(json.loads, topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_notes)))
         ]
         assert len(rows) == len(expected_notes)
 
@@ -2645,7 +2647,7 @@ FROM `{table_name}`"""
     def test_structured_json_skip_errors_required_top_level(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"structured_json_skip_errors_required{local_topics!s:.1}",
             local_topics,
@@ -2686,9 +2688,9 @@ FROM `{table_name}`"""
             '{"payload":{"id":1,"name":"a"},"note":"ok"}',
         ]
 
-        self.write_stream(messages, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, messages)
 
-        rows = [*map(json.loads, self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))]
+        rows = [*map(json.loads, topic_ydb_client.topic_read(self.output_topic, self.consumer_name, 1))]
         assert len(rows) == 1
 
         row = rows[0]
@@ -2706,7 +2708,7 @@ FROM `{table_name}`"""
     def test_structured_json_skip_errors_invalid_documents(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        inp, out, endpoint = self.get_io_names(
+        inp, out, topic_ydb_client = self.get_io_names(
             kikimr,
             f"structured_json_skip_errors_docs{local_topics!s:.1}",
             local_topics,
@@ -2750,12 +2752,12 @@ FROM `{table_name}`"""
             '{"payload":{"id":1},"note":"valid1"}',
         ]
 
-        self.write_stream(messages, endpoint=endpoint)
+        topic_ydb_client.topic_write(self.input_topic, messages)
 
         expected_notes = {"valid-empty", "valid1"}
 
         rows = [
-            *map(json.loads, self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint))
+            *map(json.loads, topic_ydb_client.topic_read(self.output_topic, self.consumer_name, len(expected_notes)))
         ]
         assert len(rows) == len(expected_notes)
 

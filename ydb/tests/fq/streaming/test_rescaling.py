@@ -155,10 +155,12 @@ class TestRescaling(StreamingTestBase):
         entity_name: Callable[[str], str],
     ) -> None:
         """Keep the saved graph and sink state when deferred publication is enabled."""
-        kikimr.set_feature_flags({
-            "enable_exactly_once_topics_writing": True,
-            "enable_topic_deferred_publish": True,
-        })
+        kikimr.set_feature_flags(
+            {
+                "enable_exactly_once_topics_writing": True,
+                "enable_topic_deferred_publish": True,
+            }
+        )
         partitions_count = 100
         query_name = entity_name("pq_source_rescaling_skips_deferred_publication")
         inp, out, _ = self.get_io_names(

@@ -1,0 +1,610 @@
+diff --git a/core/pom.xml b/core/pom.xml
+index 37d2e5176b2a496a681038a3162063e3fa9dc916..3dc92e9dbdf0e737821a15b620db6a06ceb254b9 100644
+--- a/core/pom.xml
++++ b/core/pom.xml
+@@ -37,6 +37,12 @@
+             <optional>true</optional>
+         </dependency>
+ 
++        <dependency>
++            <groupId>io.envoyproxy.controlplane</groupId>
++            <artifactId>api</artifactId>
++            <version>1.0.54</version>
++        </dependency>
++
+         <!-- Netty is used only for special helper NettyChannelFactory -->
+         <dependency>
+             <groupId>io.grpc</groupId>
+diff --git a/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java b/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
+index a014bf782fac172ded2388d7c72017928fbb5a41..b20fd7f85cc459be8b4db9cbec9de9f244f5c2ea 100644
+--- a/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
++++ b/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
+@@ -66,6 +66,7 @@ public class GrpcTransportBuilder {
+         ASYNC_FALLBACK
+     }
+ 
++    private boolean edsDiscovery;
+     private final String endpoint;
+     private final HostAndPort host;
+     private final String database;
+@@ -187,6 +188,16 @@ public class GrpcTransportBuilder {
+         return readTimeoutMillis;
+     }
+ 
++    public boolean isEdsDiscoveryEnabled() {
++        return edsDiscovery;
++    }
++
++    /** Subscribe to endpoint discovery on a retained bootstrap channel. */
++    public GrpcTransportBuilder withEdsDiscovery() {
++        edsDiscovery = true;
++        return this;
++    }
++
+     public long getDiscoveryTimeoutMillis() {
+         return discoveryTimeoutMillis;
+     }
+diff --git a/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java b/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
+index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff572324844aa8d758f5f865e6e49a761f72ac5a 100644
+--- a/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
++++ b/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
+@@ -247,7 +247,7 @@ public abstract class BaseGrpcTransport implements GrpcTransport {
+         return Status.of(StatusCode.CLIENT_DEADLINE_EXPIRED, Issue.of(message, Issue.Severity.ERROR));
+     }
+ 
+-    private Metadata makeMetadataFromSettings(GrpcRequestSettings settings, EndpointRecord endpoint) {
++    final Metadata makeMetadataFromSettings(GrpcRequestSettings settings, EndpointRecord endpoint) {
+         Metadata metadata = new Metadata();
+         metadata.put(YdbHeaders.BUILD_INFO, buildInfo);
+         String token = getAuthCallOptions().getToken();
+diff --git a/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc68177cae
+--- /dev/null
++++ b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
+@@ -0,0 +1,317 @@
++package tech.ydb.core.impl;
++
++import java.time.Duration;
++import java.util.Iterator;
++import java.util.concurrent.Future;
++import java.util.concurrent.ThreadLocalRandom;
++import java.util.concurrent.TimeUnit;
++
++import com.google.protobuf.Any;
++import com.google.protobuf.InvalidProtocolBufferException;
++import io.envoyproxy.envoy.config.core.v3.SocketAddress;
++import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
++import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
++import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
++import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
++import io.envoyproxy.envoy.service.endpoint.v3.EndpointDiscoveryServiceGrpc;
++import io.grpc.CallOptions;
++import io.grpc.ClientCall;
++import io.grpc.Metadata;
++import io.grpc.Status;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import tech.ydb.core.grpc.GrpcRequestSettings;
++import tech.ydb.proto.StatusCodesProtos.StatusIds;
++import tech.ydb.proto.discovery.DiscoveryProtos.EndpointInfo;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsRequest;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsResponse;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsResult;
++import tech.ydb.proto.discovery.v1.DiscoveryServiceGrpc;
++
++/** One bootstrap transport and at most one active EDS or legacy lookup. */
++final class EdsDiscovery implements AutoCloseable {
++    private static final Logger LOG = LoggerFactory.getLogger(EdsDiscovery.class);
++    private static final String TYPE = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
++    private static final Metadata.Key<String> GENERATION = key("x-ydb-route-generation");
++    private static final Metadata.Key<String> MODE = key("x-ydb-route-mode");
++    private static final Metadata.Key<String> FLOOR = key("x-ydb-min-route-generation");
++    private static final Metadata.Key<String> REQUIRE = key("x-ydb-require-current-route");
++    private static final GrpcRequestSettings SETTINGS = GrpcRequestSettings.newBuilder().build();
++
++    private final FixedCallOptionsTransport bootstrap;
++    private final YdbDiscovery discovery;
++    private final Duration timeout;
++    private final String database;
++    private Long floor;
++    private boolean requireCurrent;
++    private boolean closed;
++    private int delayMs;
++    private ClientCall<?, ?> active;
++    private Future<?> timer;
++    private Future<?> scheduled;
++
++    EdsDiscovery(FixedCallOptionsTransport transport, YdbDiscovery discovery, Duration timeout) {
++        this.bootstrap = transport;
++        this.discovery = discovery;
++        this.timeout = timeout;
++        this.database = transport.getDatabase();
++    }
++
++    private static Metadata.Key<String> key(String name) {
++        return Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER);
++    }
++
++    private static String single(Metadata headers, Metadata.Key<String> key) {
++        Iterable<String> values = headers.getAll(key);
++        if (values == null) {
++            return null;
++        }
++        Iterator<String> it = values.iterator();
++        String value = it.next();
++        return it.hasNext() ? null : value;
++    }
++
++    private static Long generation(Metadata headers) {
++        String value = single(headers, GENERATION);
++        if (value == null || !value.matches("[0-9]+")) {
++            return null;
++        }
++        try {
++            return Long.parseUnsignedLong(value);
++        } catch (NumberFormatException e) {
++            return null;
++        }
++    }
++
++    private boolean accept(Metadata headers) {
++        if (!headers.containsKey(GENERATION) && !headers.containsKey(MODE)) {
++            return floor == null;
++        }
++        Long value = generation(headers);
++        if (value == null || !"managed".equals(single(headers, MODE))
++                || (floor != null && Long.compareUnsigned(value, floor) < 0)) {
++            return false;
++        }
++        if (floor != null && !floor.equals(value)) {
++            discovery.invalidate();
++        }
++        floor = value;
++        return true;
++    }
++
++    private Metadata headers() {
++        Metadata headers = bootstrap.makeMetadataFromSettings(SETTINGS, bootstrap.serverEndpoint);
++        if (floor != null) {
++            headers.put(FLOOR, Long.toUnsignedString(floor));
++        }
++        if (requireCurrent) {
++            headers.put(REQUIRE, "1");
++        }
++        return headers;
++    }
++
++    synchronized void start() {
++        schedule(this::watch, 0);
++    }
++
++    private void schedule(Runnable next, long millis) {
++        if (!closed) {
++            scheduled = bootstrap.getScheduler().schedule(() -> {
++                synchronized (EdsDiscovery.this) {
++                    if (!closed) {
++                        try {
++                            next.run();
++                        } catch (RuntimeException e) {
++                            LOG.warn("Discovery attempt failed", e);
++                            if (active != null) {
++                                active.cancel("Discovery attempt failed", e);
++                                active = null;
++                            }
++                            retry();
++                        }
++                    }
++                }
++            }, millis, TimeUnit.MILLISECONDS);
++        }
++    }
++
++    private void retry() {
++        discovery.invalidate();
++        requireCurrent = true;
++        int wait = delayMs == 0 ? 0 : ThreadLocalRandom.current().nextInt(delayMs / 2, delayMs + 1);
++        delayMs = Math.min(2000, Math.max(100, delayMs * 2));
++        schedule(this::watch, wait);
++    }
++
++    private void watch() {
++        ClientCall<DiscoveryRequest, DiscoveryResponse> call = bootstrap.getChannel(SETTINGS).getReadyChannel()
++                .newCall(EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod(),
++                        bootstrap.getAuthCallOptions().getGrpcCallOptions());
++        active = call;
++        DiscoveryRequest.Builder request = DiscoveryRequest.newBuilder().addResourceNames(database).setTypeUrl(TYPE);
++        timer = bootstrap.getScheduler().schedule(() -> call.cancel("First EDS response timed out", null),
++                timeout.toMillis(), TimeUnit.MILLISECONDS);
++        call.start(new ClientCall.Listener<DiscoveryResponse>() {
++            private boolean routeOk;
++            private boolean received;
++            private Metadata initial = new Metadata();
++
++            @Override
++            public void onHeaders(Metadata value) {
++                synchronized (EdsDiscovery.this) {
++                    if (active != call) {
++                        return;
++                    }
++                    initial = value;
++                    routeOk = accept(initial);
++                    if (!routeOk) {
++                        call.cancel("Stale EDS route", null);
++                    }
++                }
++            }
++
++            @Override
++            public void onMessage(DiscoveryResponse message) {
++                synchronized (EdsDiscovery.this) {
++                    if (active != call || !routeOk) {
++                        return;
++                    }
++                    received = true;
++                    request.setResponseNonce(message.getNonce());
++                    try {
++                        discovery.acceptSnapshot(decode(database, message));
++                        timer.cancel(false);
++                        delayMs = 0;
++                        requireCurrent = false;
++                        request.clearErrorDetail().setVersionInfo(message.getVersionInfo());
++                    } catch (Exception e) {
++                        request.setErrorDetail(com.google.rpc.Status.newBuilder()
++                                .setCode(3).setMessage("Invalid EDS assignment"));
++                        discovery.invalidate();
++                        LOG.warn("Rejected EDS assignment", e);
++                    }
++                    call.sendMessage(request.build());
++                    call.request(1);
++                }
++            }
++
++            @Override
++            public void onClose(Status status, Metadata trailers) {
++                synchronized (EdsDiscovery.this) {
++                    if (active != call || closed) {
++                        return;
++                    }
++                    active = null;
++                    timer.cancel(false);
++                    if (!received && status.getCode() == Status.Code.UNIMPLEMENTED && accept(initial)) {
++                        schedule(EdsDiscovery.this::unary, 0);
++                        return;
++                    }
++                    Long cut = generation(trailers);
++                    if (floor != null && cut != null && Long.compareUnsigned(cut, floor) > 0) {
++                        floor = cut;
++                    }
++                    retry();
++                }
++            }
++        }, headers());
++        call.request(1);
++        call.sendMessage(request.build());
++    }
++
++    private void unary() {
++        CallOptions options = bootstrap.getAuthCallOptions().getGrpcCallOptions()
++                .withDeadlineAfter(timeout.toMillis(), TimeUnit.MILLISECONDS);
++        ClientCall<ListEndpointsRequest, ListEndpointsResponse> call = bootstrap.getChannel(SETTINGS).getReadyChannel()
++                .newCall(DiscoveryServiceGrpc.getListEndpointsMethod(), options);
++        active = call;
++        call.start(new ClientCall.Listener<ListEndpointsResponse>() {
++            private Metadata initial = new Metadata();
++            private ListEndpointsResponse response;
++
++            @Override
++            public void onHeaders(Metadata value) {
++                initial = value;
++            }
++
++            @Override
++            public void onMessage(ListEndpointsResponse value) {
++                response = value;
++            }
++
++            @Override
++            public void onClose(Status status, Metadata trailers) {
++                synchronized (EdsDiscovery.this) {
++                    if (active != call || closed) {
++                        return;
++                    }
++                    active = null;
++                    if (status.isOk() && accept(initial) && response != null
++                            && response.getOperation().getStatus() == StatusIds.StatusCode.SUCCESS) {
++                        try {
++                            discovery.acceptSnapshot(response.getOperation().getResult()
++                                    .unpack(ListEndpointsResult.class));
++                            requireCurrent = false;
++                            delayMs = 0;
++                            schedule(EdsDiscovery.this::watch, TimeUnit.MINUTES.toMillis(1));
++                            return;
++                        } catch (InvalidProtocolBufferException e) {
++                            LOG.warn("Invalid ListEndpoints result", e);
++                        }
++                    }
++                    retry();
++                }
++            }
++        }, headers());
++        call.request(1);
++        call.sendMessage(ListEndpointsRequest.newBuilder().setDatabase(database).build());
++        call.halfClose();
++    }
++
++    static ListEndpointsResult decode(String database, DiscoveryResponse message)
++            throws InvalidProtocolBufferException {
++        if (message.getNonce().isEmpty() || message.getVersionInfo().isEmpty() || !TYPE.equals(message.getTypeUrl())
++                || message.getResourcesCount() != 1 || !TYPE.equals(message.getResources(0).getTypeUrl())) {
++            throw new IllegalArgumentException("Expected one versioned EDS resource");
++        }
++        ClusterLoadAssignment assignment = message.getResources(0).unpack(ClusterLoadAssignment.class);
++        if (!database.equals(assignment.getClusterName()) || assignment.getEndpointsCount() != 1) {
++            throw new IllegalArgumentException("Unexpected EDS cluster");
++        }
++        LocalityLbEndpoints group = assignment.getEndpoints(0);
++        Any metadata = group.getMetadata().getTypedFilterMetadataOrThrow("ydb.discovery");
++        ListEndpointsResult result = metadata.unpack(ListEndpointsResult.class);
++        if (result.getEndpointsCount() != group.getLbEndpointsCount()) {
++            throw new IllegalArgumentException("Mismatched EDS endpoints");
++        }
++        for (int i = 0; i < result.getEndpointsCount(); ++i) {
++            SocketAddress socket = group.getLbEndpoints(i).getEndpoint().getAddress().getSocketAddress();
++            EndpointInfo info = result.getEndpoints(i);
++            if (socket.getProtocol() != SocketAddress.Protocol.TCP || socket.getAddress().isEmpty()
++                    || socket.getPortValue() <= 0 || socket.getPortValue() > 65535
++                    || !socket.getAddress().equals(info.getAddress()) || socket.getPortValue() != info.getPort()) {
++                throw new IllegalArgumentException("Invalid EDS address");
++            }
++        }
++        return result;
++    }
++
++    @Override
++    public void close() {
++        synchronized (this) {
++            closed = true;
++            if (scheduled != null) {
++                scheduled.cancel(false);
++            }
++            if (timer != null) {
++                timer.cancel(false);
++            }
++            if (active != null) {
++                active.cancel("Driver closed", null);
++                active = null;
++            }
++        }
++        bootstrap.close();
++    }
++}
+diff --git a/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java b/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java
+index c8673f7e0a95dcd49d41d5e7b6e7ce7a75f37b5c..9429cc257bcf0c2d2450982c23e1d5aa46b23139 100644
+--- a/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java
++++ b/core/src/main/java/tech/ydb/core/impl/YdbDiscovery.java
+@@ -59,6 +59,7 @@ public class YdbDiscovery {
+     private final ReentrantLock readyLock = new ReentrantLock();
+     private final Condition readyCondition = readyLock.newCondition();
+ 
++    private boolean endpointWatch;
+     private volatile Instant lastUpdateTime;
+     private volatile Future<?> currentSchedule = null;
+     private volatile boolean isStarted = false;
+@@ -73,6 +74,29 @@ public class YdbDiscovery {
+         this.discoveryTimeout = timeout;
+     }
+ 
++    void enableEndpointWatch() {
++        endpointWatch = true;
++    }
++
++    void acceptSnapshot(DiscoveryProtos.ListEndpointsResult result) {
++        if (result.getEndpointsCount() == 0) {
++            invalidate();
++            return;
++        }
++        handleDiscoveryResult(Result.success(result), null);
++    }
++
++    void invalidate() {
++        readyLock.lock();
++        try {
++            isStarted = false;
++            lastException = null;
++            handler.handleEndpoints(java.util.Collections.emptyList(), Piles.EMPTY, null);
++        } finally {
++            readyLock.unlock();
++        }
++    }
++
+     public void start() {
+         logger.debug("start periodic discovery task");
+         currentSchedule = scheduler.submit(() -> {
+@@ -121,7 +145,7 @@ public class YdbDiscovery {
+     }
+ 
+     private void scheduleNextTick() {
+-        if (!isStopped) {
++        if (!isStopped && !endpointWatch) {
+             logger.trace("schedule next discovery in {} seconds", DISCOVERY_PERIOD_MIN_SECONDS);
+             currentSchedule = scheduler.schedule(this::tick, DISCOVERY_PERIOD_MIN_SECONDS, TimeUnit.SECONDS);
+         }
+diff --git a/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java b/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
+index dd6410b6f752cafb5d9bb02c16df96230ec82c76..ff0141ecd6d6fca0bb003b3020d7171127a2d1be 100644
+--- a/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
++++ b/core/src/main/java/tech/ydb/core/impl/YdbTransportImpl.java
+@@ -39,6 +39,8 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+     private final GrpcChannelPool channelPool;
+     private final YdbDiscovery discovery;
+     private final Tracer tracer;
++    private final EdsDiscovery watch;
++    private final Object routeLock = new Object();
+ 
+     public YdbTransportImpl(GrpcTransportBuilder builder) {
+         super(builder);
+@@ -59,17 +61,35 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+         this.endpointPool = new EndpointPool(balancingSettings);
+         DiscoveryHandler handler = new DiscoveryHandler(builder.getBuildInfo());
+         this.discovery = new YdbDiscovery(handler, scheduler, database, discoveryTimeout);
++        if (builder.isEdsDiscoveryEnabled()) {
++            this.discovery.enableEndpointWatch();
++            this.watch = new EdsDiscovery((FixedCallOptionsTransport) handler.createDiscoveryTransport(),
++                    discovery, discoveryTimeout);
++        } else {
++            this.watch = null;
++        }
+     }
+ 
+     public void start(GrpcTransportBuilder.InitMode mode) {
+-        if (mode == GrpcTransportBuilder.InitMode.ASYNC_FALLBACK) {
++        if (watch == null && mode == GrpcTransportBuilder.InitMode.ASYNC_FALLBACK) {
+             endpointPool.setNewState(null, Piles.EMPTY, Collections.singletonList(serverEndpoint));
+         }
+ 
+-        discovery.start();
++        if (watch == null) {
++            discovery.start();
++        } else {
++            watch.start();
++        }
+ 
+         if (mode == GrpcTransportBuilder.InitMode.SYNC) {
+-            discovery.waitReady(-1);
++            try {
++                discovery.waitReady(-1);
++            } catch (RuntimeException failure) {
++                if (watch != null) {
++                    close();
++                }
++                throw failure;
++            }
+         }
+     }
+ 
+@@ -80,6 +100,9 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+ 
+     @Override
+     protected void shutdown() {
++        if (watch != null) {
++            watch.close();
++        }
+         discovery.stop();
+         channelPool.shutdown();
+         callOptions.close();
+@@ -109,7 +132,16 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+ 
+     @Override
+     protected GrpcChannel getChannel(GrpcRequestSettings settings) {
+-        EndpointRecord endpoint = endpointPool.getEndpoint(channelPool.getReadyEndpoints(), settings);
++        if (watch != null) {
++            synchronized (routeLock) {
++                EndpointRecord current = endpointPool.getEndpoint(channelPool.getReadyEndpoints(), settings);
++                if (current != null) {
++                    return channelPool.getChannel(current);
++                }
++            }
++        }
++        EndpointRecord endpoint = watch == null
++                ? endpointPool.getEndpoint(channelPool.getReadyEndpoints(), settings) : null;
+         if (endpoint == null) {
+             // negative value tells waitReady to use the default discovery timeout
+             long timeoutMs = -1;
+@@ -119,7 +151,13 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+                 timeoutMs = Math.max(TimeUnit.NANOSECONDS.toMillis(leftNanos), 1);
+             }
+             discovery.waitReady(timeoutMs);
+-            endpoint = endpointPool.getEndpoint(Collections.emptySet(), settings);
++            synchronized (routeLock) {
++                endpoint = endpointPool.getEndpoint(Collections.emptySet(), settings);
++                if (endpoint == null) {
++                    throw new IllegalStateException("Endpoint discovery is awaiting a current route");
++                }
++                return channelPool.getChannel(endpoint);
++            }
+         }
+         return channelPool.getChannel(endpoint);
+     }
+@@ -148,8 +186,14 @@ public class YdbTransportImpl extends BaseGrpcTransport {
+ 
+         @Override
+         public CompletableFuture<Boolean> handleEndpoints(List<EndpointRecord> endpoints, Piles piles, String selfLoc) {
+-            List<EndpointRecord> removed = endpointPool.setNewState(selfLoc, piles, endpoints);
+-            return channelPool.removeChannels(removed);
++            synchronized (routeLock) {
++                List<EndpointRecord> removed = endpointPool.setNewState(selfLoc, piles, endpoints);
++                if (watch != null && endpoints.isEmpty()) {
++                    channelPool.retireChannels(removed);
++                    return CompletableFuture.completedFuture(true);
++                }
++                return channelPool.removeChannels(removed);
++            }
+         }
+ 
+         @Override
+diff --git a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
+index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..188f601ad7c992fcbb7d95c49f6473c9ffaf4825 100644
+--- a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
++++ b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
+@@ -78,6 +78,15 @@ public class GrpcChannelPool {
+         }, executor);
+     }
+ 
++    public void retireChannels(Collection<EndpointRecord> removed) {
++        for (EndpointRecord record : removed) {
++            GrpcChannel channel = channels.remove(record.getHostAndPort());
++            if (channel != null) {
++                channel.shutdownNow();
++            }
++        }
++    }
++
+     public CompletableFuture<Boolean> removeChannels(Collection<EndpointRecord> endpointsToRemove) {
+         if (endpointsToRemove == null || endpointsToRemove.isEmpty()) {
+             return CompletableFuture.completedFuture(Boolean.TRUE);
+diff --git a/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f106d9be29c1d4ae9d9fc95add63fdd1598a6c6c
+--- /dev/null
++++ b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
+@@ -0,0 +1,39 @@
++package tech.ydb.core.impl;
++
++import com.google.protobuf.Any;
++import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
++import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
++import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
++import org.junit.Assert;
++import org.junit.Test;
++
++import tech.ydb.proto.discovery.DiscoveryProtos.EndpointInfo;
++import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsResult;
++
++public class EdsDiscoveryTest {
++    @Test
++    public void requiresTheRequestedClusterAndMatchingEndpoints() throws Exception {
++        String database = "/Root/test";
++        ClusterLoadAssignment.Builder assignment = ClusterLoadAssignment.newBuilder().setClusterName(database);
++        LocalityLbEndpoints.Builder group = assignment.addEndpointsBuilder();
++        ListEndpointsResult endpoints = ListEndpointsResult.newBuilder().addEndpoints(
++                EndpointInfo.newBuilder().setAddress("node").setPort(2135).setNodeId(42).setLocation("dc")).build();
++        group.getMetadataBuilder().putTypedFilterMetadata("ydb.discovery", Any.pack(endpoints));
++        group.addLbEndpointsBuilder().getEndpointBuilder().getAddressBuilder().getSocketAddressBuilder()
++                .setAddress("node").setPortValue(2135);
++
++        Assert.assertEquals(endpoints, EdsDiscovery.decode(database, response(assignment)));
++        Assert.assertThrows(IllegalArgumentException.class, () -> EdsDiscovery.decode("/Root/other",
++                response(assignment)));
++
++        group.getLbEndpointsBuilder(0).getEndpointBuilder().getAddressBuilder().getSocketAddressBuilder()
++                .setPortValue(2136);
++        Assert.assertThrows(IllegalArgumentException.class, () -> EdsDiscovery.decode(database, response(assignment)));
++    }
++
++    private static DiscoveryResponse response(ClusterLoadAssignment.Builder assignment) {
++        Any resource = Any.pack(assignment.build());
++        return DiscoveryResponse.newBuilder().addResources(resource).setTypeUrl(resource.getTypeUrl())
++                .setVersionInfo("v1").setNonce("n1").build();
++    }
++}

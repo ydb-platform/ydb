@@ -4,6 +4,7 @@
     <artifactId>rediscovery-probe</artifactId>
     <version>1.0.0</version>
     <properties>
+        <ydb.sdk.version>2.5.0</ydb.sdk.version>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
@@ -11,7 +12,12 @@
         <dependency>
             <groupId>tech.ydb</groupId>
             <artifactId>ydb-sdk-scheme</artifactId>
-            <version>2.5.0</version>
+            <version>${ydb.sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-topic</artifactId>
+            <version>${ydb.sdk.version}</version>
         </dependency>
     </dependencies>
     <build>

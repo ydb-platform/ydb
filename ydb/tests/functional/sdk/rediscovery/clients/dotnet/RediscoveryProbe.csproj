@@ -7,6 +7,7 @@
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Ydb.Sdk" Version="0.38.1" />
+        <ProjectReference Condition="'$(YdbDotnetSdkProject)' != ''" Include="$(YdbDotnetSdkProject)" />
+        <PackageReference Condition="'$(YdbDotnetSdkProject)' == ''" Include="Ydb.Sdk" Version="0.38.1" />
     </ItemGroup>
 </Project>

@@ -1,11 +1,9 @@
 using System.Diagnostics;
 using Ydb.Sdk.Ado;
+using Ydb.Sdk.Topic.Reader;
+using Ydb.Sdk.Topic.Writer;
 
 var mode = Environment.GetEnvironmentVariable("YDB_PROBE") ?? "scheme";
-if (mode != "scheme")
-{
-    throw new ArgumentException($"Unsupported YDB_PROBE {mode}");
-}
 var endpoint = Environment.GetEnvironmentVariable("YDB_ENDPOINT")
     ?? throw new ArgumentException("YDB_ENDPOINT");
 var database = Environment.GetEnvironmentVariable("YDB_DATABASE")
@@ -20,6 +18,41 @@ var settings = new YdbConnectionStringBuilder
     ConnectTimeout = 8,
     EnableImplicitSession = true,
 };
+if (Environment.GetEnvironmentVariable("YDB_EDS_DISCOVERY") == "1")
+{
+    settings["EnableEdsDiscovery"] = true;
+}
+if (mode is "topic-write-on-demand" or "topic-read-on-demand")
+{
+    var topic = Environment.GetEnvironmentVariable("YDB_PROBE_TOPIC") ?? throw new ArgumentException("YDB_PROBE_TOPIC");
+    if (mode == "topic-write-on-demand")
+    {
+        await using var writer = new WriterBuilder<string>(settings, topic) { ProducerId = "probe" }.Build();
+        while (await Console.In.ReadLineAsync() is { } payload)
+        {
+            await writer.WriteAsync(payload).WaitAsync(TimeSpan.FromSeconds(20));
+            Console.WriteLine($"OK {payload}");
+        }
+    }
+    else
+    {
+        await using var reader = new ReaderBuilder<string>(settings)
+        {
+            ConsumerName = "probe", SubscribeSettings = { new SubscribeSettings(topic) }
+        }.Build();
+        while (await Console.In.ReadLineAsync() is not null)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var message = await reader.ReadAsync(timeout.Token);
+            Console.WriteLine($"OK {message.Data}");
+        }
+    }
+    return;
+}
+if (mode != "scheme")
+{
+    throw new ArgumentException($"Unsupported YDB_PROBE {mode}");
+}
 await using var connection = new YdbConnection(settings);
 await connection.OpenAsync();
 

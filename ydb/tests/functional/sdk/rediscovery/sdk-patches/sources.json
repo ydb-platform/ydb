@@ -1,7 +1,15 @@
 {
+  "dotnet": {
+    "base": "031a2cf8a4a279d7dfa4af783e5a7961ddbe4320",
+    "repository": "https://github.com/ydb-platform/ydb-dotnet-sdk.git"
+  },
   "go": {
     "base": "1ee6f0062763247fe79d6b8205c6600148b818ff",
     "repository": "https://github.com/ydb-platform/ydb-go-sdk.git"
+  },
+  "java": {
+    "base": "a0a75608c76f8d845edd68bea09eba2e8d7c4ef5",
+    "repository": "https://github.com/ydb-platform/ydb-java-sdk.git"
   },
   "python": {
     "base": "a1e8d261bb62eea99d00692fe6b2fbaa02172f01",

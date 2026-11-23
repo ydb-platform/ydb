@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(YdbDump) {
 Y_UNIT_TEST_F(RestorePropagatesRootLookupError, TCliTestFixture) {
     Service<TSchemeImpl>().ListDirectoryStatus = Ydb::StatusIds::UNAUTHORIZED;
     Service<TSchemeImpl>().ExpectListDirectory("/");
-    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetEndpoint()).SetDatabase(GetDatabase()));
+    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetAddress()).SetDatabase(GetDatabase()));
     NYdb::NDump::TClient client(driver);
     UNIT_ASSERT_VALUES_EQUAL(client.Restore("unused", "relative").GetStatus(), NYdb::EStatus::UNAUTHORIZED);
     CheckExpectations();
@@ -100,11 +100,14 @@ Y_UNIT_TEST(NotNullTypeDump) {
         auto dumpResult = client.Dump(source, tableDumpPath.GetPath(),
             NYdb::NDump::TDumpSettings().Database(GetYdbDatabase()));
         UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
-        const TString destination = name + "Restored";
+        const TString destination = name + "Restored" + (absolute ? "/." : "/");
         auto restoreResult = client.Restore(tableDumpPath.GetPath(), destination);
         UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
         auto schemaResult = client.Restore(tableDumpPath.GetPath(), destination, NYdb::NDump::TRestoreSettings().DryRun(true));
         UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+        auto replaceResult = client.Restore(tableDumpPath.GetPath(), destination + "/" + name + (absolute ? "/." : "/"),
+            NYdb::NDump::TRestoreSettings().Replace(true).VerifyExistence(true));
+        UNIT_ASSERT_C(replaceResult.IsSuccess(), replaceResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(
             RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM `%s/%s/%s`;",
                 GetYdbDatabase().c_str(), destination.c_str(), name.c_str())}, {}),

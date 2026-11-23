@@ -33,6 +33,25 @@ namespace {
         }
     }
 
+    // One request per input line lets the fixture switch while the driver is idle.
+    void ListOnDemand(const NYdb::TDriver& driver, const std::string& database) {
+        NYdb::NScheme::TSchemeClient client(driver);
+        const auto settings = NYdb::NScheme::TListDirectorySettings().ClientTimeout(TDuration::Seconds(3));
+        std::string command;
+        while (std::getline(std::cin, command)) {
+            const auto result = client.ListDirectory(database, settings).GetValueSync();
+            if (!result.IsSuccess()) {
+                std::cout << "ERROR " << result.GetIssues().ToString() << std::endl;
+                continue;
+            }
+            std::cout << "ENTRIES";
+            for (const auto& child : result.GetChildren()) {
+                std::cout << ' ' << child.Name;
+            }
+            std::cout << std::endl;
+        }
+    }
+
     void BulkUpsert(const NYdb::TDriver& driver, const std::string& table) {
         NYdb::NTable::TTableClient client(driver);
         const auto settings = NYdb::NTable::TBulkUpsertSettings().ClientTimeout(TDuration::Seconds(2));
@@ -126,16 +145,24 @@ int main() {
 
     const char* configuredProbe = std::getenv("YDB_PROBE");
     const std::string probe = configuredProbe ? configuredProbe : "scheme";
-    const NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase(database));
+    auto config = NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase(database);
+    if (const char* mode = std::getenv("YDB_DISCOVERY_MODE"); mode && std::string(mode) == "eds") {
+        config.SetDiscoveryMode(NYdb::EDiscoveryMode::Eds);
+    }
+    const NYdb::TDriver driver(config);
+    const char* configuredTopic = std::getenv("YDB_PROBE_TOPIC");
+    const std::string topic = std::string(database) + "/" + (configuredTopic ? configuredTopic : "topic");
 
     if (probe == "scheme") {
         ListDirectory(driver, database);
+    } else if (probe == "list-on-demand") {
+        ListOnDemand(driver, database);
     } else if (probe == "bulk-upsert") {
         BulkUpsert(driver, std::string(database) + "/probe");
     } else if (probe == "topic-write") {
-        WriteTopic(driver, std::string(database) + "/topic");
+        WriteTopic(driver, topic);
     } else if (probe == "topic-read") {
-        ReadTopic(driver, std::string(database) + "/topic");
+        ReadTopic(driver, topic);
     } else {
         throw std::runtime_error("Unknown probe " + probe);
     }

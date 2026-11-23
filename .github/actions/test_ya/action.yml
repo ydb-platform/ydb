@@ -199,6 +199,11 @@ runs:
       id: build
       shell: bash
       env:
+        # Python and C++ PortManager read VALID_PORT_RANGE when allocating ports
+        # for tests and recipes. Keep them away from standard service ports
+        # (e.g. PostgreSQL 5432) and the default Linux ephemeral port range
+        # to reduce collisions with processes outside PortManager.
+        VALID_PORT_RANGE: "10000:30000"
         GITHUB_TOKEN: ${{ github.token }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
         PR_NUMBER: ${{ github.event.number || inputs.pull_number }}

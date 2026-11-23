@@ -7,6 +7,7 @@ namespace NKikimr::NViewer {
 
 void InitPDiskInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/pdisk/info", new TJsonHandler<TPDiskInfo>(TPDiskInfo::GetSwagger()));
+    handlers.Capabilities["/pdisk/info/ddisks"] = 1;
 }
 
 void InitPDiskRestartJsonHandler(TJsonHandlers& handlers) {

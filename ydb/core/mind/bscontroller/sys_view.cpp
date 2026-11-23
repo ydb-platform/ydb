@@ -186,8 +186,7 @@ public:
     }
 
     template <typename TResponse, typename TRequest, typename TIndex>
-    void Reply(TRequest& request, TIndex& index) {
-        const auto& record = request->Get()->Record;
+    THolder<TResponse> BuildResponse(const TRequest& record, const TIndex& index) {
         auto response = MakeHolder<TResponse>();
 
         auto begin = index.begin();
@@ -215,23 +214,41 @@ public:
             entry->MutableInfo()->CopyFrom(*begin->second);
         }
 
-        Send(request->Sender, response.Release());
+        return response;
     }
 
     void Handle(TEvSysView::TEvGetPDisksRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetPDisksResponse>(ev, PDiskIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetPDisksResponse>(ev->Get()->Record, PDiskIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetVSlotsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetVSlotsResponse>(ev, VSlotIndex);
+        const auto& request = ev->Get()->Record;
+        auto response = BuildResponse<TEvSysView::TEvGetVSlotsResponse>(request, VSlotIndex);
+        if (request.GetIncludeDDiskPoolNames()) {
+            for (auto& entry : *response->Record.MutableEntries()) {
+                auto* slot = entry.MutableInfo();
+                if (!slot->GetDDisk()) {
+                    continue;
+                }
+                const auto group = GroupIndex.find(TGroupId::FromValue(slot->GetGroupId()));
+                if (group == GroupIndex.end()) {
+                    continue;
+                }
+                const TBoxStoragePoolId poolId(group->second->GetBoxId(), group->second->GetStoragePoolId());
+                if (const auto pool = StoragePoolIndex.find(poolId); pool != StoragePoolIndex.end() && pool->second->HasName()) {
+                    slot->SetStoragePoolName(pool->second->GetName());
+                }
+            }
+        }
+        Send(ev->Sender, response.Release());
     }
 
     void Handle(TEvSysView::TEvGetGroupsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetGroupsResponse>(ev, GroupIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetGroupsResponse>(ev->Get()->Record, GroupIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStoragePoolsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetStoragePoolsResponse>(ev, StoragePoolIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetStoragePoolsResponse>(ev->Get()->Record, StoragePoolIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStorageStatsRequest::TPtr& ev) {

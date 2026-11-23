@@ -399,7 +399,7 @@ public:
                         StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
-                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
+                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block || ErasureSpecies == TErasureType::Erasure8Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;

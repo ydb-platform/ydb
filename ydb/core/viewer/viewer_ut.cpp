@@ -1,4 +1,5 @@
 #include "ut/ut_utils.h"
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -72,6 +73,53 @@ duration_t GetBasePerformance() {
 double BASE_PERF = GetBasePerformance().count();
 
 Y_UNIT_TEST_SUITE(Viewer) {
+    Y_UNIT_TEST_TWIN(BlockParityGroupStates, block82) {
+        const auto erasure = block82 ? TErasureType::Erasure8Plus2Block : TErasureType::Erasure4Plus2Block;
+        const ui32 disks = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        const NKikimrViewer::EFlag flags[] = {NKikimrViewer::Green, NKikimrViewer::Yellow,
+            NKikimrViewer::Orange, NKikimrViewer::Red};
+        for (bool missing : {false, true}) {
+            for (ui32 failed = 0; failed <= 3; ++failed) {
+                TStorageGroups::TGroup group;
+                group.ErasureSpecies = erasure;
+                NKikimrWhiteboard::TBSGroupStateInfo info;
+                info.SetErasureSpecies(TErasureType::ErasureSpeciesName(erasure));
+                std::vector<NKikimrWhiteboard::TVDiskStateInfo> states(disks);
+                NKikimrWhiteboard::TPDiskStateInfo pdisk;
+                pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> vdisks;
+                TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> pdisks;
+                for (ui32 i = 0; i < disks; ++i) {
+                    const bool bad = i >= disks - failed;
+                    auto& disk = group.VDisks.emplace_back();
+                    disk.VDiskId = TVDiskID(0, 1, 0, i, 0);
+                    disk.Present = !(bad && missing);
+                    if (disk.Present) {
+                        disk.VDiskStatus = bad ? NKikimrBlobStorage::ERROR : NKikimrBlobStorage::READY;
+                    }
+                    auto* id = info.AddVDiskIds();
+                    VDiskIDFromVDiskID(disk.VDiskId, id);
+                    if (disk.Present) {
+                        auto& state = states[i];
+                        state.SetNodeId(i + 1);
+                        state.SetPDiskId(1);
+                        state.SetVDiskState(bad ? NKikimrWhiteboard::LocalRecoveryError : NKikimrWhiteboard::OK);
+                        state.SetReplicated(true);
+                        vdisks.emplace(*id, state);
+                        pdisks.emplace(std::make_pair(i + 1, 1), pdisk);
+                    }
+                }
+                group.CalcState();
+                const auto legacy = GetBSGroupOverallStateWithoutLatency(info, vdisks, pdisks);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(legacy.Overall), static_cast<int>(flags[failed]));
+                UNIT_ASSERT_VALUES_EQUAL(legacy.MissingDisks, failed);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(group.Overall), static_cast<int>(flags[failed]));
+                UNIT_ASSERT_VALUES_EQUAL(group.State, failed ? TStringBuilder() << (failed == 3 ? "dead:" : "degraded:") << failed : TString("ok"));
+                UNIT_ASSERT_VALUES_EQUAL(group.StateSortKey, failed == 3 ? 100 : failed ? 50 + failed : 0);
+            }
+        }
+    }
+
     Y_UNIT_TEST(TabletMerging) {
         THPTimer timer;
         Cerr << "BASE_PERF = " << BASE_PERF << Endl;

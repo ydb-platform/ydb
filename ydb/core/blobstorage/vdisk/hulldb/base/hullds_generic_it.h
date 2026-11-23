@@ -350,6 +350,7 @@ namespace NKikimr {
         };
         using TPQueue = TPriorityQueue<TIter*, TVector<TIter*>, TGreater>;
 
+    protected:
         TVector<std::unique_ptr<TIter>> Iters;
         mutable TPQueue PQueue;
     };

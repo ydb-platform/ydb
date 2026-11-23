@@ -79,14 +79,15 @@ public:
 
 template <class TKey, class TMemRec>
 class TMergeIterator : public TGenericNWayForwardIterator<TKey, TMergeBufferIterator<TKey, TMemRec>> {
-    using TBase = TGenericNWayForwardIterator<TKey, TMergeBufferIterator<TKey, TMemRec>>;
+    using TIter = TMergeBufferIterator<TKey, TMemRec>;
+    using TBase = TGenericNWayForwardIterator<TKey, TIter>;
     using TIterContType = TBase::TIterContType;
-    using TIterPtr = TBase::TIterPtr;
     using TBase::PQueue;
     using TBase::Iters;
 
     std::unordered_map<TVDiskID, TIterContType*> Buffers;
-    std::unordered_map<TVDiskID, TIterPtr> ExhaustedIterators;
+    // Iterators remain owned by TBase::Iters while waiting for more data.
+    std::unordered_map<TVDiskID, TIter*> ExhaustedIterators;
 
 public:
     TMergeIterator(const THullCtxPtr& hullCtx, const TVector<TIterContType*>& elements)
@@ -96,12 +97,12 @@ public:
             Buffers[element->VDiskId] = element;
         }
         for (const auto& it : Iters) {
-            ExhaustedIterators.emplace(it->GetVDiskId(), it);
+            ExhaustedIterators.emplace(it->GetVDiskId(), it.get());
         }
     }
 
     void Next() {
-        TIterPtr it = PQueue.top();
+        TIter* it = PQueue.top();
         PQueue.pop();
         Y_ABORT_UNLESS(it->Valid());
         TKey curKey = it->GetCurKey();

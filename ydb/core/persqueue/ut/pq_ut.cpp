@@ -430,6 +430,7 @@ Y_UNIT_TEST_TWIN(ReadAndCommitRestrictedByWriteMode, kafka) {
                     const auto expected = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE
                         ? NPersQueue::NErrorCode::ERROR : NPersQueue::NErrorCode::BAD_REQUEST;
                     UNIT_ASSERT_C(response->Record.GetErrorCode() == expected, response->Record.DebugString());
+                    UNIT_ASSERT(response->Record.GetPartitionResponse().GetCloseSession());
                     UNIT_ASSERT(!response->Record.GetPartitionResponse().HasCmdReadResult());
                 };
                 BeginCmdRead(readSettings, tc);

@@ -49,7 +49,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     // Client will get BAD_REQUEST error code
     bool IsWriteProhibited() const;
 
-    void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
+    void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession = false);
 
     void HandleWakeup(const TActorContext&);
 

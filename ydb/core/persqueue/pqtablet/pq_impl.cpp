@@ -221,6 +221,9 @@ public:
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         Response->Record.SetErrorCode(ev->ErrorCode);
         Response->Record.SetErrorReason(ev->Error);
+        if (ev->CloseSession) {
+            Response->Record.MutablePartitionResponse()->SetCloseSession(true);
+        }
         ctx.Send(Sender, Response.Release());
         return true;
     }
@@ -377,11 +380,11 @@ bool TPersQueue::IsWriteProhibited() const {
     return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED;
 }
 
-void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
+void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession)
 {
     ReplyPersQueueError(
         ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
-        responseCookie, errorCode, error
+        responseCookie, errorCode, error, /*logDebug=*/false, /*isInternal=*/false, closeSession
     );
 }
 
@@ -2424,8 +2427,6 @@ void TPersQueue::HandleReadRequest(
     } else if (cmd.GetClientId() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "cannot read with internal clinetId: " << cmd.GetClientId());
-    } else if (const auto error = GetWriteModeError(Config)) { // read from topics are unavailable too
-        ReplyError(ctx, responseCookie, error->Code, error->Reason);
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
         ui32 count = cmd.HasCount() ? cmd.GetCount() : Max<ui32>();
@@ -3049,6 +3050,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+<<<<<<< HEAD
     if (req.CmdWriteSize() > 0 && IsWriteUnavailable()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Write to topic is temporarily disabled");
@@ -3059,6 +3061,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
                    "Write to topic is prohibited");
         return;
+=======
+    // Enforce the topic mode for reads and writes, including late writes and
+    // protocols without an earlier check (e.g. kafka_proxy).
+    if (req.CmdWriteSize() > 0 || req.HasCmdRead()) {
+        if (const auto error = GetWriteModeError(Config)) {
+            ReplyError(ctx, responseCookie, error->Code, error->Reason, /*closeSession=*/true);
+            return;
+        }
+>>>>>>> 39fdf42ae81 (better)
     }
 
     if (IsTopicMutateDisabled(ctx)
@@ -3096,8 +3107,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
         if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
             ReplyError(ctx, responseCookie, error ? error->Code : NPersQueue::NErrorCode::ERROR,
+<<<<<<< HEAD
                        error ? error->Reason : "Topic mutations are temporarily disabled");
 >>>>>>> a0be66c0f6f (forbid read & set client offset)
+=======
+                       error ? error->Reason : "Topic mutations are temporarily disabled", /*closeSession=*/error.has_value());
+>>>>>>> 39fdf42ae81 (better)
             return;
         }
     }

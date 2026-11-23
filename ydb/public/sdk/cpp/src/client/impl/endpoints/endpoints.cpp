@@ -72,7 +72,7 @@ static std::int32_t GetBestK(const std::vector<TEndpointRecord>& records) {
     return pos - 1;
 }
 
-std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records, EPenalties penalties) {
+std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records) {
     std::unordered_set<std::string> index;
     std::vector<TEndpointRecord> uniqRec;
 
@@ -91,21 +91,7 @@ std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 
     {
         std::unique_lock guard(Mutex_);
-        size_t penalized = 0;
-        if (penalties == EPenalties::Retain) {
-            for (auto& record : uniqRec) {
-                auto old = KnownEndpoints_.find(record.Endpoint);
-                if (old != KnownEndpoints_.end() && old->second.Priority == PessimizedPriority) {
-                    record.Priority = PessimizedPriority;
-                    ++penalized;
-                }
-            }
-            if (penalized) {
-                Sort(uniqRec.begin(), uniqRec.end());
-                bestK = GetBestK(uniqRec);
-            }
-        }
-        // Find endpoints which were removed
+        // Find endpoins which were removed
         for (const auto& record : Records_) {
             if (index.find(record.Endpoint) == index.end()) {
                 removed.emplace_back(record.Endpoint);
@@ -131,12 +117,11 @@ std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
         }
         Y_ABORT_UNLESS(Records_.size() == KnownEndpoints_.size());
         EndpointCountGauge_.SetValue(Records_.size());
-        EndpointActiveGauge_.SetValue(Records_.size() - penalized);
+        EndpointActiveGauge_.SetValue(Records_.size());
         BestK_ = bestK;
-        PessimizedEndpointCount_ = penalized;
-        const int ratio = penalized ? 100 * penalized / Records_.size() : 0;
-        PessimizationRatio_.store(ratio);
-        PessimizationRatioGauge_.SetValue(ratio);
+        PessimizedEndpointCount_ = 0;
+        PessimizationRatio_.store(0);
+        PessimizationRatioGauge_.SetValue(0);
     }
 
     for (auto& obj : notifyRemoved) {

@@ -33,7 +33,7 @@ def read_topic(driver, topic):
 
 def main():
     database = os.environ["YDB_DATABASE"]
-    options = {"use_eds": True} if os.environ.get("YDB_EDS_DISCOVERY") == "1" else {}
+    options = {"use_long_poll": True} if os.environ.get("YDB_LONG_POLL_DISCOVERY") == "1" else {}
     config = ydb.DriverConfig.default_from_endpoint_and_database(os.environ["YDB_ENDPOINT"], database, **options)
     with ydb.Driver(config) as driver:
         driver.wait(timeout=15, fail_fast=True)

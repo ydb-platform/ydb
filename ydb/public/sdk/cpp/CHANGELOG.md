@@ -1,6 +1,4 @@
-* Added experimental `EDiscoveryMode::Eds` to watch database endpoints over the bootstrap channel. A server that reports the watch method as unimplemented is periodically reprobed while the driver uses unary discovery.
-
-* The driver refreshes discovered endpoints when a data RPC loses its transport or a previously ready data channel loses connectivity between calls, so new requests and Topic reconnects can follow a database switchover.
+* Added experimental `EDiscoveryMode::LongPoll` for managed replica switches. The driver reuses its bootstrap channel and retires data connections removed by discovery.
 
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
 

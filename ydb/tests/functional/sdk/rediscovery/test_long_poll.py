@@ -6,11 +6,10 @@ import grpc
 import pytest
 import yatest.common
 
-from eds_balancer import Balancer, FLOOR, GENERATION
-from ydb.public.api.grpc import ydb_discovery_v1_pb2_grpc, ydb_scheme_v1_pb2_grpc, ydb_topic_v1_pb2_grpc
-from ydb.public.api.grpc.draft.xds import eds_pb2_grpc
-from ydb.public.api.grpc.draft.xds.wire import discovery_pb2 as xds
-from ydb.public.api.protos import ydb_discovery_pb2, ydb_scheme_pb2, ydb_topic_pb2
+from run_long_poll_probe import established_sockets
+from long_poll_balancer import Balancer, CONDITION, GENERATION, OPT_IN
+from ydb.public.api.grpc import ydb_coordination_v1_pb2_grpc, ydb_discovery_v1_pb2_grpc, ydb_scheme_v1_pb2_grpc, ydb_topic_v1_pb2_grpc
+from ydb.public.api.protos import ydb_coordination_pb2, ydb_discovery_pb2, ydb_scheme_pb2, ydb_topic_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -19,8 +18,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 DATABASE = "/Root/tenant"
 METADATA = (("x-ydb-database", DATABASE),)
-TYPE_URL = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
-MARKERS = ("eds-replica-a", "eds-replica-b")
+MARKERS = ("poll-replica-a", "poll-replica-b")
 PROBE = "ydb/tests/functional/sdk/rediscovery/clients/cpp/rediscovery-probe"
 
 
@@ -42,6 +40,10 @@ def replicas():
                 result = scheme.MakeDirectory(
                     ydb_scheme_pb2.MakeDirectoryRequest(path=DATABASE + "/" + marker), metadata=METADATA, timeout=10
                 )
+                assert result.operation.status == StatusIds.SUCCESS, result
+                coord = ydb_coordination_v1_pb2_grpc.CoordinationServiceStub(channel)
+                result = coord.CreateNode(ydb_coordination_pb2.CreateNodeRequest(path=DATABASE + "/coordination"),
+                                          metadata=METADATA, timeout=10)
                 assert result.operation.status == StatusIds.SUCCESS, result
                 topics = ydb_topic_v1_pb2_grpc.TopicServiceStub(channel)
                 result = topics.CreateTopic(
@@ -69,66 +71,39 @@ async def source_marker(channel):
     return {child.name for child in result.children}.intersection(MARKERS)
 
 
-async def endpoints(channel):
-    unary = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
-    response = await unary.ListEndpoints(ydb_discovery_pb2.ListEndpointsRequest(database=DATABASE), metadata=METADATA, timeout=5)
-    result = ydb_discovery_pb2.ListEndpointsResult()
-    assert response.operation.status == StatusIds.SUCCESS and response.operation.result.Unpack(result), response
-    return {(ep.address, ep.port) for ep in result.endpoints}
+async def check_protocol(replicas):
+    async with route_for(replicas) as (route, address, _), grpc.aio.insecure_channel(address) as bootstrap:
+        unary = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(bootstrap)
+        request = ydb_discovery_pb2.ListEndpointsRequest(database=DATABASE)
+        legacy = unary.ListEndpoints(request, metadata=METADATA, timeout=3)
+        assert (await legacy).operation.status == StatusIds.SUCCESS
+        assert GENERATION not in dict(await legacy.trailing_metadata())
+        headers = METADATA + ((OPT_IN, "1"),)
+        first = unary.ListEndpoints(request, metadata=headers, timeout=3)
+        source = await first
+        assert (await first.trailing_metadata())[GENERATION] == "1"
+        poll = unary.ListEndpoints(request, metadata=headers + ((CONDITION, "1"),), timeout=5)
+        await asyncio.wait_for(route.subscriptions.get(), timeout=2)
+        assert not poll.done()
+        route.switch(1)
+        other = await poll
+        assert other.operation.status == StatusIds.SUCCESS
+        assert other.operation.result != source.operation.result
+        assert (await poll.trailing_metadata())[GENERATION] == "2"
+        with pytest.raises(grpc.aio.AioRpcError) as error:
+            await unary.ListEndpoints(request, metadata=headers + ((CONDITION, "3"),), timeout=3)
+        assert error.value.code() == grpc.StatusCode.UNAVAILABLE
+        route.hold = 0.02
+        renewal = unary.ListEndpoints(request, metadata=headers + ((CONDITION, "2"),), timeout=3)
+        assert (await renewal).operation.status == StatusIds.SUCCESS
+        assert (await renewal.trailing_metadata())[GENERATION] == "2"
+        legacy = unary.ListEndpoints(request, metadata=METADATA, timeout=3)
+        assert (await legacy).operation.result == other.operation.result
+        assert GENERATION not in dict(await legacy.trailing_metadata())
 
 
-async def subscribe(channel, expected):
-    stream = eds_pb2_grpc.EndpointDiscoveryServiceStub(channel).StreamEndpoints(metadata=METADATA, timeout=20)
-    request = xds.DiscoveryRequest(node=xds.Node(id="test"), type_url=TYPE_URL, resource_names=[DATABASE])
-    await stream.write(request)
-    snapshot = await stream.read()
-    assert snapshot.type_url == TYPE_URL and snapshot.version_info and snapshot.nonce, snapshot
-    assert len(snapshot.resources) == 1 and snapshot.resources[0].type_url == TYPE_URL, snapshot
-    assignment = xds.ClusterLoadAssignment.FromString(snapshot.resources[0].value)
-    assert assignment.cluster_name == DATABASE, assignment
-    actual = {(ep.endpoint.address.socket_address.address, ep.endpoint.address.socket_address.port_value)
-              for locality in assignment.endpoints for ep in locality.lb_endpoints}
-    assert actual == expected
-    request.version_info, request.response_nonce = snapshot.version_info, snapshot.nonce
-    await stream.write(request)
-    return stream
-
-
-async def check_stream_isolation(replicas):
-    async with route_for(replicas) as (route, address, backends), grpc.aio.insecure_channel(address) as bootstrap:
-        expected = [await endpoints(channel) for channel in backends]
-        assert all(expected) and expected[0].isdisjoint(expected[1])
-        assert await source_marker(backends[0]) == {MARKERS[0]}
-        control = ydb_topic_v1_pb2_grpc.TopicServiceStub(bootstrap).StreamWrite(metadata=METADATA, timeout=25)
-        writes = ydb_topic_pb2.StreamWriteMessage
-        try:
-            await control.write(writes.FromClient(init_request=writes.InitRequest(path=DATABASE + "/control", partition_id=0)))
-            response = await control.read()
-            assert response.status == StatusIds.SUCCESS and response.HasField("init_response"), response
-            watch = await subscribe(bootstrap, expected[0])
-            source, peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=5)
-            assert source == 0 and route.topic_peers == [peer]
-            route.switch(1)
-            assert await watch.code() == grpc.StatusCode.UNAVAILABLE
-            assert (await watch.trailing_metadata())[GENERATION] == "2"
-            replacement = await subscribe(bootstrap, expected[1])
-            target, next_peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=5)
-            assert target == 1 and next_peer == peer
-            replacement.cancel()
-
-            write = writes.WriteRequest(codec=ydb_topic_pb2.CODEC_RAW)
-            write.messages.add(seq_no=1, data=b"after-switch", uncompressed_size=12)
-            await control.write(writes.FromClient(write_request=write))
-            response = await control.read()
-            assert response.status == StatusIds.SUCCESS, response
-            assert [ack.seq_no for ack in response.write_response.acks] == [1], response
-            assert await source_marker(backends[0]) == {MARKERS[0]}
-        finally:
-            control.cancel()
-
-
-def test_eds_cut_leaves_bootstrap_connection_and_source_sessions_open(replicas):
-    asyncio.run(check_stream_isolation(replicas))
+def test_conditional_unary_discovery(replicas):
+    asyncio.run(check_protocol(replicas))
 
 
 @asynccontextmanager
@@ -136,7 +111,7 @@ async def sdk_process(address, probe_binary, workload="list-on-demand"):
     process = await asyncio.create_subprocess_exec(
         probe_binary, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
         env={**os.environ, "YDB_ENDPOINT": address, "YDB_DATABASE": DATABASE,
-             "YDB_EDS_DISCOVERY": "1", "YDB_PROBE": workload, "YDB_PROBE_TOPIC": workload},
+             "YDB_LONG_POLL_DISCOVERY": "1", "YDB_PROBE": workload, "YDB_PROBE_TOPIC": workload},
     )
     try:
         yield process
@@ -159,21 +134,14 @@ async def check_idle_driver(replicas, probe_binary):
         assert await list_with_sdk(sdk) == {MARKERS[0]}
         source, peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=8)
         assert source == 0
-        for target, announce in ((1, True), (0, False)):
-            route.switch(target, announce_generation=announce)
-            # The SDK must reopen discovery without a fresh application request.
+        for target in (1, 0):
+            route.switch(target)
+            # The SDK must issue the next conditional poll without a fresh application request.
             backend, next_peer, headers = await asyncio.wait_for(route.subscriptions.get(), timeout=8)
             assert backend == target and next_peer == peer
-            if announce:
-                assert headers.get(FLOOR) == str(route.generation)
-            else:
-                # A fixed UNAVAILABLE trailer carries no new floor. The worker
-                # must verify the current route before dispatching this retry.
-                assert headers.get(FLOOR) == str(route.generation - 1)
-                assert headers.get("x-ydb-require-current-route") == "1"
+            assert headers[CONDITION] == str(route.generation)
             assert await list_with_sdk(sdk) == {MARKERS[target]}
             assert await source_marker(backends[1 - target]) == {MARKERS[1 - target]}
-        assert not route.unary_requests, route.unary_requests
 
 
 def test_idle_cpp_driver_recovers_in_both_directions(replicas):
@@ -233,8 +201,37 @@ async def check_workload(replicas, probe_binary, workload):
                         await asyncio.sleep(0.05)
                 await expect_output(sdk, b"OK")
                 await asyncio.wait_for(wait_for_row(), timeout=12)
+        old_port = int(replicas[0].rsplit(":", 1)[1])
+        async with asyncio.timeout(5):
+            while established_sockets(sdk.pid, {old_port}) != 0:
+                await asyncio.sleep(0.025)
 
 
 @pytest.mark.parametrize("workload", ["bulk-upsert", "topic-read", "topic-write"])
 def test_cpp_data_client_moves_to_destination(replicas, workload):
     asyncio.run(check_workload(replicas, yatest.common.binary_path(PROBE), workload))
+
+async def check_retained_session(replicas, probe, workload):
+    port = int(replicas[0].rsplit(":", 1)[1])
+    async with route_for(replicas) as (route, address, _), sdk_process(address, probe, workload) as sdk:
+        await expect_output(sdk, b"READY")
+        sdk.stdin.write(b"check\n")
+        await sdk.stdin.drain()
+        await expect_output(sdk, b"ACTIVE")
+        source, peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=5)
+        assert source == 0 and established_sockets(sdk.pid, {port}) == 1
+        route.switch(1)
+        target, next_peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=5)
+        assert target == 1 and next_peer == peer
+        # Keep the application idle and its original session alive while checking TCP.
+        async with asyncio.timeout(5):
+            while established_sockets(sdk.pid, {port}) != 0:
+                await asyncio.sleep(0.025)
+        sdk.stdin.write(b"check\n")
+        await sdk.stdin.drain()
+        await expect_output(sdk, b"EXPIRED")
+
+
+@pytest.mark.parametrize("workload", ["query-session", "table-session", "coordination-session"])
+def test_retained_session_releases_source_connection(replicas, workload):
+    asyncio.run(check_retained_session(replicas, yatest.common.binary_path(PROBE), workload))

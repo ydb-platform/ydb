@@ -92,10 +92,8 @@ class TEndpointElectorSafe {
 public:
     TEndpointElectorSafe() = default;
 
-    enum class EPenalties { Reset, Retain };
-
     // Sets new endpoints, returns removed
-    std::vector<std::string> SetNewState(std::vector<TEndpointRecord>&& records, EPenalties penalties = EPenalties::Reset);
+    std::vector<std::string> SetNewState(std::vector<TEndpointRecord>&& records);
 
     // Allows to get stats
     void SetStatCollector(const NSdkStats::TStatCollector::TEndpointElectorStatCollector& endpointStatCollector);

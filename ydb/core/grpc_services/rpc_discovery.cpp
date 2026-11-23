@@ -1,6 +1,6 @@
 #include "grpc_request_proxy.h"
 
-#include "watched_list_endpoints.h"
+#include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 
 #include <ydb/core/base/appdata.h>
@@ -153,10 +153,6 @@ public:
 
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
-        }
-
-        if (auto* watched = dynamic_cast<TWatchedListEndpointsRequest*>(Request.Get())) {
-            watched->OnSnapshot(CacheId, LookupResponse->BoardPath, LookupResponse->Revision);
         }
 
         if (Request->SslServer()) {

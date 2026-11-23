@@ -18,9 +18,9 @@ var settings = new YdbConnectionStringBuilder
     ConnectTimeout = 8,
     EnableImplicitSession = true,
 };
-if (Environment.GetEnvironmentVariable("YDB_EDS_DISCOVERY") == "1")
+if (Environment.GetEnvironmentVariable("YDB_LONG_POLL_DISCOVERY") == "1")
 {
-    settings["EnableEdsDiscovery"] = true;
+    settings["EnableLongPollDiscovery"] = true;
 }
 if (mode is "topic-write-on-demand" or "topic-read-on-demand")
 {

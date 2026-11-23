@@ -1,4 +1,4 @@
-//go:build !eds
+//go:build !longpoll
 
 package main
 

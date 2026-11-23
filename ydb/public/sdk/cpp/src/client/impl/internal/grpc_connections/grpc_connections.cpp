@@ -4,8 +4,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 
-#include <library/cpp/threading/future/core/coroutine_traits.h>
-
 #include <string>
 #include <utility>
 
@@ -14,160 +12,33 @@ namespace NYdb::inline Dev {
 
 namespace {
 
-using EWaitFor = TGRpcConnectionsImpl::EWaitFor;
-using TWaitResult = TGRpcConnectionsImpl::TWaitResult;
+using TCredentialsWaitResult = TGRpcConnectionsImpl::TCredentialsWaitResult;
 
-TPlainStatus InitFailedStatus(EWaitFor reason, const std::exception* e = nullptr) {
+TPlainStatus InitFailedStatus(const std::exception* e = nullptr) {
     TStringBuilder message;
-    message << (reason == EWaitFor::Credentials ? "Credentials provider initialization failed" : "Endpoint discovery failed");
+    message << "Credentials provider initialization failed";
     if (e) {
         message << ". " << e->what();
     }
-    return TPlainStatus(reason == EWaitFor::Credentials ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, message);
+    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, message);
 }
 
 TPlainStatus InitCancelledStatus() {
     return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
 }
 
-TWaitResult ReadyResult(NThreading::TFuture<void> future, EWaitFor reason) {
+TCredentialsWaitResult ReadyResult(NThreading::TFuture<void> future) {
     try {
         future.GetValue();
         return {};
     } catch (const std::exception& e) {
-        return InitFailedStatus(reason, &e);
+        return InitFailedStatus(&e);
     } catch (...) {
-        return InitFailedStatus(reason);
+        return InitFailedStatus();
     }
 }
-
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-// The completion tag is owned by the gRPC queue until it delivers the change.
-class TConnectivityChange final : public NYdbGrpc::IQueueClientEvent {
-public:
-    static NThreading::TFuture<bool> Wait(grpc::ChannelInterface& channel, grpc_connectivity_state state, grpc::CompletionQueue* queue) {
-        auto* tag = new TConnectivityChange;
-        auto future = tag->Result_.GetFuture();
-        channel.NotifyOnStateChange(state, gpr_inf_future(GPR_CLOCK_MONOTONIC), queue, tag);
-        return future;
-    }
-
-    bool Execute(bool ok) override {
-        Result_.SetValue(ok);
-        return false;
-    }
-
-    void Destroy() override {
-        delete this;
-    }
-
-private:
-    NThreading::TPromise<bool> Result_ = NThreading::NewPromise<bool>();
-};
-
-// The stub holder owns one observer for the actual pooled channel, even when
-// several databases or SDK services select that channel.
-class TObservedChannel {
-public:
-    explicit TObservedChannel(const std::shared_ptr<grpc::ChannelInterface>& channel)
-        : Channel_(channel)
-    {}
-
-    bool Register(const TDbDriverStatePtr& state) {
-        std::lock_guard guard(Mutex_);
-        if (std::ranges::none_of(States_, [&](const auto& weak) { return weak.lock() == state; })) {
-            std::erase_if(States_, [](const auto& weak) { return weak.expired(); });
-            States_.emplace_back(state);
-        }
-        return !std::exchange(Watching_, true);
-    }
-
-    static NThreading::TFuture<void> Watch(std::weak_ptr<TObservedChannel> weak, std::string endpoint,
-                                            IQueueClientContextPtr context, TDriverScope::TPtr scope) {
-        while (context && !context->IsCancelled()) {
-            auto self = weak.lock();
-            auto channel = self ? self->Channel_.lock() : nullptr;
-            if (!channel) {
-                co_return;
-            }
-            const auto state = channel->GetState(false);
-            if (state == GRPC_CHANNEL_SHUTDOWN) {
-                co_return;
-            }
-            auto changed = TConnectivityChange::Wait(*channel, state, context->CompletionQueue());
-            // Eviction and driver shutdown must destroy the C++ channel to
-            // cancel its gRPC watch. Keep only weak ownership across the await.
-            channel.reset();
-            self.reset();
-            if (!(co_await changed)) {
-                co_return;
-            }
-            if (state == GRPC_CHANNEL_READY) {
-                if (auto observer = weak.lock()) {
-                    scope->RunGuarded([&] { observer->Notify(endpoint, {}); }, [] {});
-                }
-            }
-        }
-    }
-
-    NThreading::TFuture<TEndpointUpdateResult> Notify(const std::string& endpoint, const TDbDriverStatePtr& selected) {
-        std::vector<TDbDriverStatePtr> states;
-        {
-            std::lock_guard guard(Mutex_);
-            for (const auto& weak : States_) {
-                if (auto state = weak.lock()) {
-                    states.push_back(std::move(state));
-                }
-            }
-        }
-        NThreading::TFuture<TEndpointUpdateResult> pending;
-        for (const auto& state : states) {
-            state->EndpointPool.BanEndpoint(endpoint);
-            auto update = state->UpdateEndpoints(TEndpointPool::EUpdateReason::TransportFailure);
-            if (state == selected) {
-                pending = std::move(update);
-            }
-        }
-        return pending;
-    }
-
-private:
-    std::weak_ptr<grpc::ChannelInterface> Channel_;
-    std::mutex Mutex_;
-    std::vector<std::weak_ptr<TDbDriverState>> States_;
-    bool Watching_ = false;
-};
-
-#endif
 
 } // anonymous namespace
-
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-NThreading::TFuture<TEndpointUpdateResult> TGRpcConnectionsImpl::WithPooledChannel(const TDbDriverStatePtr& discoveredState,
-    const NYdbGrpc::TGRpcClientConfig& config, std::function<void(NYdbGrpc::TStubsHolder&)> makeConnection)
-{
-    std::shared_ptr<TObservedChannel> observed, broken;
-    ChannelPool_.GetStubsHolderLocked(config.Locator, config, [&](auto& holder) {
-        makeConnection(holder);
-        if (discoveredState) {
-            observed = holder.template GetOrCreateStub<TObservedChannel>();
-        }
-    }, [&](auto& holder) { broken = holder.template GetOrCreateStub<TObservedChannel>(); });
-
-    // Replacement can beat delivery of the READY change to the CQ. Notify
-    // outside the pool lock, since refreshing discovery also uses this pool.
-    if (broken) {
-        auto pending = broken->Notify(config.Locator, discoveredState);
-        if (pending.Initialized()) {
-            return pending;
-        }
-    }
-    if (observed && observed->Register(discoveredState)) {
-        TObservedChannel::Watch(observed, config.Locator, CreateContext(), DriverScope_);
-    }
-    return {};
-}
-#endif
 
 NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
     const TDbDriverStatePtr& dbState,
@@ -184,12 +55,11 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
         : authInfo.IgnoreResult();
 }
 
-void TGRpcConnectionsImpl::DeferUntilReady(
-    EWaitFor reason,
+void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
     const TRpcRequestSettings& requestSettings,
     IQueueClientContextPtr& context,
-    NThreading::TFuture<void> ready,
-    TReadyCallback callback)
+    NThreading::TFuture<void> credentialsReady,
+    TCredentialsCallback callback)
 {
     if (!TryCreateContext(context)) {
         callback(InitCancelledStatus());
@@ -197,7 +67,7 @@ void TGRpcConnectionsImpl::DeferUntilReady(
     }
 
     auto cancelled = NThreading::NewPromise<void>();
-    if (!ready.IsReady()) {
+    if (!credentialsReady.IsReady()) {
         context->SubscribeCancel([cancelled]() mutable {
             cancelled.TrySetValue();
         });
@@ -205,8 +75,9 @@ void TGRpcConnectionsImpl::DeferUntilReady(
         cancelled.SetValue();
     }
 
-    auto scheduleCallback = [this, driverScope = DriverScope_]
-        (const IQueueClientContextPtr& parent, TDeadline deadline, std::function<void(bool)> callback) {
+    auto scheduleContext = context;
+    auto scheduleCallback = [this, scheduleContext, driverScope = DriverScope_]
+        (TDeadline deadline, std::function<void(bool)> callback) {
         // Future continuations may outlive TGRpcConnectionsImpl. Acquire the guard before
         // dereferencing this, so destruction either waits for scheduling or prevents it.
         driverScope->RunGuarded(
@@ -218,52 +89,45 @@ void TGRpcConnectionsImpl::DeferUntilReady(
                         deadline.GetTimePoint() - now).count());
                 // Register the callback directly on the alarm. ScheduleFuture(timeout).Subscribe(...)
                 // may run the callback inline when the future becomes ready before Subscribe().
-                ScheduleCallback(timeout, std::move(callback), parent);
+                ScheduleCallback(timeout, std::move(callback), scheduleContext);
             },
             [&] { callback(false); });
     };
 
-    NThreading::TFuture<TWaitResult> wait;
-    if (ready.IsReady()) {
-        auto status = ReadyResult(ready, reason);
+    NThreading::TFuture<TCredentialsWaitResult> wait;
+    if (credentialsReady.IsReady()) {
+        auto status = ReadyResult(credentialsReady);
         wait = NThreading::MakeFuture(status || !cancelled.HasValue()
             ? std::move(status)
-            : TWaitResult(InitCancelledStatus()));
+            : TCredentialsWaitResult(InitCancelledStatus()));
     } else {
-        auto result = NThreading::NewPromise<TWaitResult>();
+        auto result = NThreading::NewPromise<TCredentialsWaitResult>();
         wait = result.GetFuture();
-        ready.Subscribe([result, reason](NThreading::TFuture<void> future) mutable {
-            result.TrySetValue(ReadyResult(future, reason));
+        credentialsReady.Subscribe([result](NThreading::TFuture<void> future) mutable {
+            result.TrySetValue(ReadyResult(future));
         });
         cancelled.GetFuture().Subscribe([result](NThreading::TFuture<void>) mutable {
             result.TrySetValue(InitCancelledStatus());
         });
         if (requestSettings.Deadline != TDeadline::Max()) {
-            auto deadlineContext = context->CreateContext();
-            if (!deadlineContext) {
-                result.TrySetValue(InitCancelledStatus());
-            } else {
-                wait.Subscribe([deadlineContext](const auto&) { deadlineContext->Cancel(); });
-                scheduleCallback(deadlineContext, requestSettings.Deadline,
-                    [result, reason](bool scheduledSuccessfully) mutable {
-                        result.TrySetValue(scheduledSuccessfully
-                            ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
-                                reason == EWaitFor::Credentials ? "Request deadline exceeded while waiting for credentials"
-                                                                : "Request deadline exceeded while waiting for discovery")
-                            : InitCancelledStatus());
-                    });
-            }
+            scheduleCallback(requestSettings.Deadline,
+                [result](bool scheduledSuccessfully) mutable {
+                    result.TrySetValue(scheduledSuccessfully
+                        ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
+                            "Request deadline exceeded while waiting for credentials")
+                        : InitCancelledStatus());
+                });
         }
     }
 
-    wait.Subscribe([callback = std::move(callback), scheduleCallback = std::move(scheduleCallback), context]
-        (NThreading::TFuture<TWaitResult> future) mutable {
-        scheduleCallback(context, TDeadline::Now(),
+    wait.Subscribe([callback = std::move(callback), scheduleCallback = std::move(scheduleCallback)]
+        (NThreading::TFuture<TCredentialsWaitResult> future) mutable {
+        scheduleCallback(TDeadline::Now(),
             [callback = std::move(callback), status = future.GetValue()]
             (bool scheduledSuccessfully) mutable {
                 callback(scheduledSuccessfully
                     ? std::move(status)
-                    : TWaitResult(InitCancelledStatus()));
+                    : TCredentialsWaitResult(InitCancelledStatus()));
             });
     });
 }
@@ -658,10 +522,6 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
                 [] { return NThreading::MakeFuture(); });
         }).Wait();
     DriverScope_->Cancel();
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    // Releasing channel ownership also completes any remaining connectivity watches.
-    ChannelPool_.Clear();
-#endif
     GRpcClientLow_.Stop(wait);
     if (wait) {
         StopResponseQueue();
@@ -695,7 +555,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
     return ListEndpoints(std::move(dbState), {});
 }
 
-TAsyncListEndpointsResult TGRpcConnectionsImpl::ListEndpoints(TDbDriverStatePtr dbState, TRpcRequestSettings rpcSettings) {
+TAsyncListEndpointsResult TGRpcConnectionsImpl::ListEndpoints(TDbDriverStatePtr dbState, TRpcRequestSettings rpcSettings, IQueueClientContextPtr context) {
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
 
@@ -711,7 +571,9 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::ListEndpoints(TDbDriverStatePtr 
             promise.SetValue(std::move(val));
         };
 
-    rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    if (rpcSettings.Deadline == TDeadline::Max()) {
+        rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    }
     rpcSettings.IncludeObservabilityInBuildInfo = true;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
@@ -720,7 +582,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::ListEndpoints(TDbDriverStatePtr 
         &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
         dbState->shared_from_this(),
         INITIAL_DEFERRED_CALL_DELAY,
-        rpcSettings);
+        rpcSettings, std::move(context));
 
     std::weak_ptr<TDbDriverState> weakState = dbState;
 
@@ -746,6 +608,7 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
     }
 
     auto endpoint = result.DiscoveryStatus.Endpoint;
+    auto metadata = result.DiscoveryStatus.Metadata;
     auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus));
 
     auto aux = IDiscoveryMutatorApi::TAuxInfo {
@@ -757,7 +620,7 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
 
     auto issues = ydbStatus.GetIssues();
 
-    auto plainStatus = TPlainStatus(ydbStatus.GetStatus(), std::move(issues), endpoint, {});
+    auto plainStatus = TPlainStatus(ydbStatus.GetStatus(), std::move(issues), endpoint, std::move(metadata));
     result.DiscoveryStatus = plainStatus;
     return result;
 }

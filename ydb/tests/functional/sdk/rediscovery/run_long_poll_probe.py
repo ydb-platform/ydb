@@ -9,7 +9,7 @@ from urllib.request import urlopen
 
 import grpc
 
-from eds_balancer import Balancer
+from long_poll_balancer import Balancer
 
 
 def requests_completed(monitor, database):
@@ -66,7 +66,7 @@ async def run_direction(database, source, destination, command, timeout, balance
             process = await asyncio.create_subprocess_exec(
                 *command, stdout=asyncio.subprocess.PIPE,
                 env=dict(os.environ, YDB_ENDPOINT=address, YDB_DATABASE=database,
-                         YDB_PROBE="scheme", YDB_EDS_DISCOVERY="1", YDB_DISCOVERY_MODE="eds"),
+                         YDB_PROBE="scheme", YDB_LONG_POLL_DISCOVERY="1", YDB_DISCOVERY_MODE="long_poll"),
             )
             sampler = None
             try:
@@ -100,6 +100,9 @@ async def run_direction(database, source, destination, command, timeout, balance
                     while requests_completed(destination[1], database) < recovered_count + 3:
                         await successes(process, 1)
                     after_sockets = established_sockets(process.pid, ports)
+                    old_port = int(source[0].rsplit(":", 1)[1])
+                    while established_sockets(process.pid, {old_port}):
+                        await asyncio.sleep(0.025)
                     final_src = requests_completed(source[1], database)
                     final_dst = requests_completed(destination[1], database)
                     if final_src != after_cutover or final_dst <= first_count:

@@ -7,14 +7,12 @@ ENDIF()
 
 SRCS(
     actions.cpp
-    eds.cpp
+    long_poll.cpp
     grpc_connections.cpp
 )
 
 PEERDIR(
     ydb/public/api/grpc
-    ydb/public/api/grpc/draft/xds
-    ydb/public/api/grpc/draft/xds/codec
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state
     ydb/public/sdk/cpp/src/client/impl/internal/plain_status

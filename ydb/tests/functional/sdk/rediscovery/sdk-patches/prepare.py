@@ -27,7 +27,7 @@ def main():
         git("fetch", "--quiet", "--depth=1", spec["repository"], spec["base"])
         git("checkout", "--quiet", "--detach", spec["base"])
         git("apply", "--index", "--whitespace=error", str(here / (name + ".patch")))
-        print(f"{name} at {spec['base']} with its staged EDS patch", flush=True)
+        print(f"{name} at {spec['base']} with its staged long-poll patch", flush=True)
 
 
 if __name__ == "__main__":

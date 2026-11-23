@@ -10,8 +10,6 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/public/api/grpc/draft/xds
-    ydb/public/api/grpc/draft/xds/codec
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime

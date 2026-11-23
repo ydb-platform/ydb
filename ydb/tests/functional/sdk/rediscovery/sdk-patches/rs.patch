@@ -1,45 +1,31 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index 55fa4dfc9f724c2be17b006f71cd1f0c73c15637..22c0073b005fe85b292a7a118cb9aac20c0f34c8 100644
+index 55fa4dfc9f724c2be17b006f71cd1f0c73c15637..55d61dfd535aeaaad98d25f538d31bd0df860d3f 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -3942,6 +3942,7 @@ dependencies = [
+@@ -3942,6 +3942,8 @@ dependencies = [
   "flate2",
   "futures-util",
   "http 1.3.1",
 + "http-body 1.0.1",
++ "hyper 1.7.0",
   "itertools 0.10.5",
   "jsonwebtoken",
   "lazy_static",
-@@ -3970,6 +3971,7 @@ dependencies = [
-  "tokio-stream",
-  "tokio-util",
-  "tonic 0.14.2",
-+ "tonic-prost",
-  "tower 0.4.13",
-  "tracing",
-  "tracing-opentelemetry",
 diff --git a/ydb/Cargo.toml b/ydb/Cargo.toml
-index 21e35ae4bd0341d5cfc3b7015296f368037a4a31..11f9c6074de534af8fcc4c15cc474aad3418e4f6 100644
+index 21e35ae4bd0341d5cfc3b7015296f368037a4a31..4e11a9939bd2a9c2af8f30c616df94052c4ee81d 100644
 --- a/ydb/Cargo.toml
 +++ b/ydb/Cargo.toml
-@@ -34,6 +34,7 @@ bon = "3"
+@@ -34,6 +34,8 @@ bon = "3"
  derive_builder = "0.12.0"
  futures-util = "0.3"
  http = "1.1.0"
 +http-body = "1"
++hyper = "1"
  itertools = "0.10"
  jsonwebtoken = "9.3"
  time = "0.3"
-@@ -58,6 +59,7 @@ tokio-util = "0.7.8"
- tracing = "0.1"
- tracing-subscriber = { version = "0.3", features = ["env-filter"] }
- tonic = { workspace = true }
-+tonic-prost = { workspace = true }
- tower = "0.4"
- url = "2.2"
- uuid = { version = "1.17.0", features = ["v4", "v7"] }
 diff --git a/ydb/src/client_builder.rs b/ydb/src/client_builder.rs
-index a5ebebabe6c207d92198218cdc974f6c5a439ffa..5992e043adafe7ef292f0479a0119a5c9c63987b 100644
+index a5ebebabe6c207d92198218cdc974f6c5a439ffa..276194a37a3d4e83f22d31009f8a9662af8b8d5f 100644
 --- a/ydb/src/client_builder.rs
 +++ b/ydb/src/client_builder.rs
 @@ -213,11 +213,12 @@ fn use_discovery(uri: &str, mut client_builder: ClientBuilder) -> YdbResult<Clie
@@ -50,11 +36,11 @@ index a5ebebabe6c207d92198218cdc974f6c5a439ffa..5992e043adafe7ef292f0479a0119a5c
 -            "false" | "0" => client_builder.discovery_enabled = false,
 +            "true" | "1" | "" => client_builder.discovery_mode = DiscoveryMode::Unary,
 +            "false" | "0" => client_builder.discovery_mode = DiscoveryMode::Off,
-+            "eds" => client_builder.discovery_mode = DiscoveryMode::Eds,
++            "long_poll" => client_builder.discovery_mode = DiscoveryMode::LongPoll,
              other => {
                  return Err(YdbError::Custom(format!(
 -                    "unknown value for use_discovery: '{other}', expected true/false"
-+                    "unknown value for use_discovery: '{other}', expected true/false/eds"
++                    "unknown value for use_discovery: '{other}', expected true/false/long_poll"
                  )));
              }
          }
@@ -66,7 +52,7 @@ index a5ebebabe6c207d92198218cdc974f6c5a439ffa..5992e043adafe7ef292f0479a0119a5c
 +enum DiscoveryMode {
 +    Off,
 +    Unary,
-+    Eds,
++    LongPoll,
 +}
 +
  pub struct ClientBuilder {
@@ -84,7 +70,7 @@ index a5ebebabe6c207d92198218cdc974f6c5a439ffa..5992e043adafe7ef292f0479a0119a5c
  }
  
  impl ClientBuilder {
-+    /// Append `?use_discovery=eds` to subscribe to database endpoint changes.
++    /// Append `?use_discovery=long_poll` to subscribe to database endpoint changes.
 +    /// Servers that report the method as unimplemented use periodic discovery.
      pub fn new_from_connection_string<T: Into<String>>(s: T) -> Result<Self, YdbError> {
          let connection_string = s.into();
@@ -93,8 +79,8 @@ index a5ebebabe6c207d92198218cdc974f6c5a439ffa..5992e043adafe7ef292f0479a0119a5c
              self.grpc_opts.clone(),
          );
  
-+        let routes = (self.discovery_mode == DiscoveryMode::Eds && self.discovery.is_none())
-+            .then(crate::grpc_wrapper::eds::routes::EndpointRoutes::default);
++        let routes = (self.discovery_mode == DiscoveryMode::LongPoll && self.discovery.is_none())
++            .then(crate::grpc_wrapper::endpoint_routes::EndpointRoutes::default);
          let discovery: Box<dyn Discovery> = match self.discovery {
              Some(discovery_box) => discovery_box,
 -            None if !self.discovery_enabled => {
@@ -181,28 +167,28 @@ index a5ebebabe6c207d92198218cdc974f6c5a439ffa..5992e043adafe7ef292f0479a0119a5c
  }
 +
 +#[cfg(test)]
-+mod eds_tests {
++mod long_poll_tests {
 +    use super::*;
 +
 +    #[test]
-+    fn accepts_eds_discovery_connection_string() {
++    fn accepts_long_poll_discovery_connection_string() {
 +        assert!(
 +            ClientBuilder::new_from_connection_string(
-+                "grpc://localhost:2136/local?use_discovery=eds"
++                "grpc://localhost:2136/local?use_discovery=long_poll"
 +            )
 +            .is_ok()
 +        );
 +    }
 +}
 diff --git a/ydb/src/discovery.rs b/ydb/src/discovery.rs
-index ee82583fc5b5a9ef232bd8c03392b6ef4f2eeec3..4f176f1a60db6ffd795336b488fd63325acfebd0 100644
+index ee82583fc5b5a9ef232bd8c03392b6ef4f2eeec3..40e2d4722c7b16b9e8d0dc3891699c8bc52e48b8 100644
 --- a/ydb/src/discovery.rs
 +++ b/ydb/src/discovery.rs
 @@ -17,6 +17,7 @@ use tracing::{instrument, trace, warn};
  
  use crate::errors::{NeedRetry, YdbResult};
  use crate::grpc_connection_manager::DiscoveryConnectionManager;
-+use crate::grpc_wrapper::eds::routes::EndpointRoutes;
++use crate::grpc_wrapper::endpoint_routes::EndpointRoutes;
  use crate::grpc_wrapper::{
      raw_discovery_client::{EndpointInfo, GrpcDiscoveryClient},
      raw_services::Service,
@@ -295,7 +281,7 @@ index ee82583fc5b5a9ef232bd8c03392b6ef4f2eeec3..4f176f1a60db6ffd795336b488fd6332
          // check if need force discovery
          let Some(Ok(state)) = &*self.state.state_sender.borrow() else {
              return;
-@@ -350,6 +380,99 @@ impl DiscoverySharedState {
+@@ -350,6 +380,88 @@ impl DiscoverySharedState {
          Ok(DiscoveryState::new(start, new_endpoints))
      }
  
@@ -305,79 +291,68 @@ index ee82583fc5b5a9ef232bd8c03392b6ef4f2eeec3..4f176f1a60db6ffd795336b488fd6332
 +        token_waiter: impl Waiter,
 +        routes: EndpointRoutes,
 +    ) {
-+        use crate::grpc_wrapper::eds::{EdsClient, Route, WatchEnd};
-+        use tokio::time::{Duration, Instant, timeout};
++        use tokio::time::timeout;
 +
 +        if let Err(err) = token_waiter.wait().await {
-+            warn!("token not available for endpoint watch: {err}");
++            warn!("token not available for endpoint discovery: {err}");
 +        }
-+        let mut unsupported_until = Instant::now();
-+        let mut retry_delay = Duration::ZERO;
-+        let mut route = Route::default();
-+        let id = uuid::Uuid::new_v4().to_string();
++        let mut retry_delay = Duration::from_millis(100);
++        let mut since = None;
++        let mut bootstrap = None;
 +        loop {
 +            let Some(owner) = state.upgrade() else { return };
-+            let database = owner.connection_manager.database().clone();
-+            let mut installed = false;
 +            let round: YdbResult<Duration> = async {
-+                let publish = |endpoints| {
-+                    let nodes = Self::list_endpoints_to_node_infos(endpoints)?;
-+                    routes.install(&nodes);
-+                    owner
-+                        .state_sender
-+                        .send_replace(Some(Ok(Arc::new(DiscoveryState::from_watch(nodes)))));
-+                    installed = true;
-+                    Ok(())
++                let client = match &mut bootstrap {
++                    Some(client) => client,
++                    None => bootstrap.insert(
++                        owner
++                            .connection_manager
++                            .get_auth_service_to_node(
++                                GrpcDiscoveryClient::new,
++                                &owner.discovery_uri,
++                            )
++                            .await?,
++                    ),
 +                };
-+                if Instant::now() < unsupported_until {
-+                    let mut unary = owner
-+                        .connection_manager
-+                        .get_auth_service_to_node(GrpcDiscoveryClient::new, &owner.discovery_uri)
-+                        .await?;
-+                    let (endpoints, headers) = timeout(
-+                        Duration::from_secs(10),
-+                        unary.list_endpoints_on_route(database, &route),
-+                    )
-+                    .await
-+                    .map_err(|_| YdbError::DeadlineExceeded)??;
-+                    route.accept(&headers)?;
-+                    let mut publish = publish;
-+                    publish(endpoints)?;
-+                    route.installed();
-+                    return Ok(
-+                        interval.min(unsupported_until.saturating_duration_since(Instant::now()))
-+                    );
++                let deadline = Duration::from_secs(if since.is_some() { 45 } else { 10 });
++                let (endpoints, generation) = timeout(
++                    deadline,
++                    client.poll(owner.connection_manager.database().clone(), since),
++                )
++                .await
++                .map_err(|_| YdbError::DeadlineExceeded)??;
++                let nodes = Self::list_endpoints_to_node_infos(endpoints)?;
++                if since != generation {
++                    routes.install(&[]);
 +                }
-+                let mut eds = owner
-+                    .connection_manager
-+                    .get_auth_service_to_node(EdsClient::new, &owner.discovery_uri)
-+                    .await?;
-+                match eds.watch(&database, &id, &mut route, publish).await? {
-+                    WatchEnd::Unimplemented => {
-+                        unsupported_until = Instant::now() + Duration::from_secs(300);
-+                        Ok(Duration::ZERO)
-+                    }
-+                }
++                routes.install(&nodes);
++                owner
++                    .state_sender
++                    .send_replace(Some(Ok(Arc::new(DiscoveryState::from_watch(nodes)))));
++                since = generation;
++                Ok(if since.is_some() {
++                    Duration::ZERO
++                } else {
++                    interval
++                })
 +            }
 +            .await;
 +            let delay = match round {
 +                Ok(delay) => {
-+                    retry_delay = Duration::ZERO;
++                    retry_delay = Duration::from_millis(100);
 +                    delay
 +                }
 +                Err(err) => {
 +                    warn!("Endpoint watch failed for {}: {err}", owner.discovery_uri);
-+                    routes.install(&[]);
++                    bootstrap = None;
 +                    let had_state = owner.try_state().is_some();
-+                    if had_state {
++                    if had_state && since.is_some() {
++                        routes.install(&[]);
 +                        owner.state_sender.send_replace(Some(Ok(Arc::new(
 +                            DiscoveryState::from_watch(Vec::new()),
 +                        ))));
-+                    } else if err.need_retry() == NeedRetry::False {
++                    } else if !had_state && err.need_retry() == NeedRetry::False {
 +                        owner.state_sender.send_replace(Some(Err(err)));
-+                    }
-+                    if installed {
-+                        retry_delay = Duration::ZERO;
 +                    }
 +                    let delay = retry_delay.mul_f64(0.5 + rand::random::<f64>() / 2.0);
 +                    retry_delay =
@@ -396,14 +371,14 @@ index ee82583fc5b5a9ef232bd8c03392b6ef4f2eeec3..4f176f1a60db6ffd795336b488fd6332
      async fn background_discovery(
          state: Weak<DiscoverySharedState>,
 diff --git a/ydb/src/grpc_connection_manager.rs b/ydb/src/grpc_connection_manager.rs
-index 8ff0aa090785ad677c973ab8a3e928930e4b4ef7..c2ebc8febf74daca0d19dda0a1a2fc98094bc690 100644
+index 8ff0aa090785ad677c973ab8a3e928930e4b4ef7..dce47533e76b07416cc98712e41c626e2753c276 100644
 --- a/ydb/src/grpc_connection_manager.rs
 +++ b/ydb/src/grpc_connection_manager.rs
 @@ -1,6 +1,7 @@
  use std::sync::Arc;
  
  use crate::connection_pool::{Connection, ConnectionPool, RacyRoundRobin, Simple};
-+use crate::grpc_wrapper::eds::routes::EndpointRoutes;
++use crate::grpc_wrapper::endpoint_routes::EndpointRoutes;
  use crate::grpc_wrapper::grpc_limits::WithGrpcMaxMessageSize;
  use crate::grpc_wrapper::raw_services::{GrpcServiceForDiscovery, Service};
  use crate::grpc_wrapper::runtime_interceptors::{InterceptedChannel, MultiInterceptor};
@@ -470,418 +445,15 @@ index 8ff0aa090785ad677c973ab8a3e928930e4b4ef7..c2ebc8febf74daca0d19dda0a1a2fc98
          Ok(new(intercepted_channel).with_grpc_max_message_size(self.opts.max_message_size))
      }
  
-diff --git a/ydb/src/grpc_wrapper/eds/eds.proto b/ydb/src/grpc_wrapper/eds/eds.proto
+diff --git a/ydb/src/grpc_wrapper/endpoint_routes.rs b/ydb/src/grpc_wrapper/endpoint_routes.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..e175e7ded8c906a1aeab340a9f9282329d8d80df
+index 0000000000000000000000000000000000000000..c3eb2680500db80715674ab00403ca5ebc4e982f
 --- /dev/null
-+++ b/ydb/src/grpc_wrapper/eds/eds.proto
-@@ -0,0 +1,76 @@
-+syntax = "proto3";
-+
-+package Ydb.Xds;
-+
-+import "google/protobuf/any.proto";
-+import "google/protobuf/wrappers.proto";
-+
-+// Wire projection of the Envoy v3 EDS messages used by YDB. Keep field numbers
-+// aligned with envoy/service/discovery/v3 and envoy/config/{core,endpoint}/v3.
-+// The private package avoids registering partial Envoy message descriptors.
-+message Node {
-+    string id = 1;
-+    string cluster = 2;
-+}
-+
-+message Status {
-+    int32 code = 1;
-+    string message = 2;
-+}
-+
-+message DiscoveryRequest {
-+    string version_info = 1;
-+    Node node = 2;
-+    repeated string resource_names = 3;
-+    string type_url = 4;
-+    string response_nonce = 5;
-+    Status error_detail = 6;
-+}
-+
-+message DiscoveryResponse {
-+    string version_info = 1;
-+    repeated google.protobuf.Any resources = 2;
-+    string type_url = 4;
-+    string nonce = 5;
-+}
-+
-+message Metadata {
-+    map<string, google.protobuf.Any> typed_filter_metadata = 2;
-+}
-+
-+message SocketAddress {
-+    uint32 protocol = 1;
-+    string address = 2;
-+    oneof port_specifier {
-+        uint32 port_value = 3;
-+        string named_port = 4;
-+    }
-+}
-+
-+message Address {
-+    SocketAddress socket_address = 1;
-+}
-+
-+message Endpoint {
-+    Address address = 1;
-+}
-+
-+message LbEndpoint {
-+    Endpoint endpoint = 1;
-+}
-+
-+message Locality {
-+    string region = 1;
-+}
-+
-+message LocalityLbEndpoints {
-+    Locality locality = 1;
-+    repeated LbEndpoint lb_endpoints = 2;
-+    google.protobuf.UInt32Value load_balancing_weight = 3;
-+    Metadata metadata = 9;
-+}
-+
-+message ClusterLoadAssignment {
-+    string cluster_name = 1;
-+    repeated LocalityLbEndpoints endpoints = 2;
-+}
-diff --git a/ydb/src/grpc_wrapper/eds/mod.rs b/ydb/src/grpc_wrapper/eds/mod.rs
-new file mode 100644
-index 0000000000000000000000000000000000000000..e07ec258738cd0db26d38c44193443f4e97cb5c4
---- /dev/null
-+++ b/ydb/src/grpc_wrapper/eds/mod.rs
-@@ -0,0 +1,315 @@
-+pub(crate) mod routes;
-+
-+#[path = "ydb.xds.rs"]
-+mod wire;
-+
-+use super::grpc_limits::WithGrpcMaxMessageSize;
-+use super::raw_discovery_client::EndpointInfo;
-+use super::raw_services::{GrpcServiceForDiscovery, Service};
-+use super::runtime_interceptors::InterceptedChannel;
-+use crate::{YdbError, YdbResult};
-+use prost::Message;
-+use std::time::Duration;
-+use tokio::sync::mpsc;
-+use tokio::time::{Instant, timeout_at};
-+use tokio_stream::wrappers::ReceiverStream;
-+use tonic::{Code, Request, Status, metadata::MetadataMap};
-+use ydb_grpc::ydb_proto::discovery::ListEndpointsResult;
-+
-+const TYPE_URL: &str = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
-+const METHOD: &str = "/envoy.service.endpoint.v3.EndpointDiscoveryService/StreamEndpoints";
-+const GENERATION: &str = "x-ydb-route-generation";
-+
-+#[derive(Default)]
-+pub(crate) struct Route {
-+    floor: Option<u64>,
-+    current: bool,
-+}
-+
-+fn generation(headers: &MetadataMap) -> Option<u64> {
-+    let mut values = headers.get_all(GENERATION).iter();
-+    let value = values.next()?.to_str().ok()?;
-+    if values.next().is_some() || value.is_empty() || !value.bytes().all(|c| c.is_ascii_digit()) {
-+        return None;
-+    }
-+    value.parse().ok()
-+}
-+
-+impl Route {
-+    pub(crate) fn apply<T>(&self, request: &mut Request<T>) {
-+        if let Some(floor) = self.floor {
-+            request
-+                .metadata_mut()
-+                .insert("x-ydb-min-route-generation", floor.into());
-+        }
-+        if self.current {
-+            request.metadata_mut().insert(
-+                "x-ydb-require-current-route",
-+                tonic::metadata::MetadataValue::from_static("1"),
-+            );
-+        }
-+    }
-+
-+    pub(crate) fn accept(&mut self, headers: &MetadataMap) -> YdbResult<()> {
-+        let mut modes = headers.get_all("x-ydb-route-mode").iter();
-+        let mode = modes.next();
-+        if self.floor.is_none() && mode.is_none() && !headers.contains_key(GENERATION) {
-+            return Ok(());
-+        }
-+        let value = generation(headers);
-+        if modes.next().is_some()
-+            || mode.is_none_or(|v| v != "managed")
-+            || value.is_none()
-+            || value < self.floor
-+        {
-+            return Err(Status::unavailable("Stale or missing discovery route generation").into());
-+        }
-+        self.floor = value;
-+        Ok(())
-+    }
-+
-+    pub(crate) fn installed(&mut self) {
-+        self.current = false;
-+    }
-+
-+    fn lost(&mut self, status: &Status) {
-+        if status.code() == Code::Unavailable
-+            && let Some(cut) = generation(status.metadata())
-+            && self.floor.is_some_and(|old| cut > old)
-+        {
-+            self.floor = Some(cut);
-+            self.current = false;
-+        } else {
-+            self.current = true;
-+        }
-+    }
-+}
-+
-+pub(crate) struct EdsClient(tonic::client::Grpc<InterceptedChannel>);
-+
-+impl EdsClient {
-+    pub(crate) fn new(channel: InterceptedChannel) -> Self {
-+        Self(tonic::client::Grpc::new(channel))
-+    }
-+}
-+
-+impl WithGrpcMaxMessageSize for EdsClient {
-+    fn with_grpc_max_message_size(self, bytes: usize) -> Self {
-+        Self(
-+            self.0
-+                .max_decoding_message_size(bytes)
-+                .max_encoding_message_size(bytes),
-+        )
-+    }
-+}
-+
-+impl GrpcServiceForDiscovery for EdsClient {
-+    fn get_grpc_discovery_service() -> Service {
-+        Service::Discovery
-+    }
-+}
-+
-+fn decode(database: &str, response: &wire::DiscoveryResponse) -> YdbResult<Vec<EndpointInfo>> {
-+    let invalid = || YdbError::custom(format!("Invalid EDS assignment for {database}"));
-+    let [resource] = response.resources.as_slice() else {
-+        return Err(invalid());
-+    };
-+    if response.type_url != TYPE_URL
-+        || resource.type_url != TYPE_URL
-+        || response.version_info.is_empty()
-+        || response.nonce.is_empty()
-+    {
-+        return Err(invalid());
-+    }
-+    let assignment =
-+        wire::ClusterLoadAssignment::decode(resource.value.as_slice()).map_err(|_| invalid())?;
-+    let [group] = assignment.endpoints.as_slice() else {
-+        return Err(invalid());
-+    };
-+    if assignment.cluster_name != database {
-+        return Err(invalid());
-+    }
-+    let typed = group
-+        .metadata
-+        .as_ref()
-+        .and_then(|m| m.typed_filter_metadata.get("ydb.discovery"))
-+        .ok_or_else(invalid)?;
-+    if typed.type_url != "type.googleapis.com/Ydb.Discovery.ListEndpointsResult" {
-+        return Err(invalid());
-+    }
-+    let decoded = ListEndpointsResult::decode(typed.value.as_slice()).map_err(|_| invalid())?;
-+    if decoded.endpoints.len() != group.lb_endpoints.len() {
-+        return Err(invalid());
-+    }
-+    for (ep, lb) in decoded.endpoints.iter().zip(&group.lb_endpoints) {
-+        let socket = lb
-+            .endpoint
-+            .as_ref()
-+            .and_then(|e| e.address.as_ref())
-+            .and_then(|a| a.socket_address.as_ref())
-+            .ok_or_else(invalid)?;
-+        if socket.protocol != 0
-+            || socket.address.is_empty()
-+            || ep.address != socket.address
-+            || !(1..=65535).contains(&ep.port)
-+            || socket.port_specifier
-+                != Some(wire::socket_address::PortSpecifier::PortValue(ep.port))
-+        {
-+            return Err(invalid());
-+        }
-+    }
-+    Ok(EndpointInfo::from_result(decoded))
-+}
-+
-+pub(crate) enum WatchEnd {
-+    Unimplemented,
-+}
-+
-+impl EdsClient {
-+    pub(crate) async fn watch(
-+        &mut self,
-+        database: &str,
-+        id: &str,
-+        route: &mut Route,
-+        mut publish: impl FnMut(Vec<EndpointInfo>) -> YdbResult<()>,
-+    ) -> YdbResult<WatchEnd> {
-+        let first_deadline = Instant::now() + Duration::from_secs(10);
-+        let (requests, rx) = mpsc::channel(1);
-+        let base = wire::DiscoveryRequest {
-+            resource_names: vec![database.to_owned()],
-+            type_url: TYPE_URL.to_owned(),
-+            ..Default::default()
-+        };
-+        let initial = wire::DiscoveryRequest {
-+            node: Some(wire::Node {
-+                id: id.to_owned(),
-+                ..Default::default()
-+            }),
-+            ..base.clone()
-+        };
-+        requests
-+            .send(initial)
-+            .await
-+            .map_err(|_| YdbError::custom("Closed EDS request stream"))?;
-+        let mut request = Request::new(ReceiverStream::new(rx));
-+        route.apply(&mut request);
-+        let open = async {
-+            self.0
-+                .ready()
-+                .await
-+                .map_err(|e| Status::unavailable(e.to_string()))?;
-+            self.0
-+                .streaming(
-+                    request,
-+                    http::uri::PathAndQuery::from_static(METHOD),
-+                    tonic_prost::ProstCodec::default(),
-+                )
-+                .await
-+        };
-+        let response = match timeout_at(first_deadline, open)
-+            .await
-+            .map_err(|_| YdbError::DeadlineExceeded)?
-+        {
-+            Ok(response) => response,
-+            Err(status) if status.code() == Code::Unimplemented => {
-+                route.accept(status.metadata())?;
-+                return Ok(WatchEnd::Unimplemented);
-+            }
-+            Err(status) => {
-+                route.lost(&status);
-+                return Err(status.into());
-+            }
-+        };
-+        let (headers, mut stream, _) = response.into_parts();
-+        let mut version = String::new();
-+        let mut received = false;
-+        loop {
-+            let next = if version.is_empty() {
-+                timeout_at(first_deadline, stream.message())
-+                    .await
-+                    .map_err(|_| YdbError::DeadlineExceeded)?
-+            } else {
-+                stream.message().await
-+            };
-+            let message: wire::DiscoveryResponse = match next {
-+                Ok(Some(message)) => message,
-+                Err(status) if !received && status.code() == Code::Unimplemented => {
-+                    route.accept(&headers)?;
-+                    return Ok(WatchEnd::Unimplemented);
-+                }
-+                ended => {
-+                    let status = match ended {
-+                        Err(s) => s,
-+                        _ => Status::unavailable("EDS stream ended"),
-+                    };
-+                    route.lost(&status);
-+                    return Err(status.into());
-+                }
-+            };
-+            received = true;
-+            let error_detail = match decode(database, &message) {
-+                Ok(endpoints) => {
-+                    route.accept(&headers)?;
-+                    publish(endpoints)?;
-+                    route.installed();
-+                    version = message.version_info;
-+                    None
-+                }
-+                Err(err) => Some(wire::Status {
-+                    code: Code::InvalidArgument as i32,
-+                    message: err.to_string(),
-+                }),
-+            };
-+            requests
-+                .send(wire::DiscoveryRequest {
-+                    version_info: version.clone(),
-+                    response_nonce: message.nonce,
-+                    error_detail,
-+                    ..base.clone()
-+                })
-+                .await
-+                .map_err(|_| YdbError::custom("Closed EDS response stream"))?;
-+        }
-+    }
-+}
-+
-+#[cfg(test)]
-+mod tests {
-+    use super::*;
-+    use crate::discovery::NodeInfo;
-+    use crate::grpc_wrapper::eds::routes::EndpointRoutes;
-+    use http::Uri;
-+
-+    #[tokio::test]
-+    async fn a_cut_revokes_live_data_streams_and_cached_clients_even_after_failback() {
-+        let uri = Uri::from_static("http://localhost:2136/");
-+        let node = NodeInfo::new(uri.clone(), String::new());
-+        let routes = EndpointRoutes::default();
-+        routes.install(std::slice::from_ref(&node));
-+        let original = routes.endpoint(&uri).unwrap();
-+        routes.install(std::slice::from_ref(&node));
-+        assert!(!original.cancelled.is_cancelled());
-+        routes.install(&[]);
-+        assert!(original.cancelled.is_cancelled());
-+        assert!(routes.endpoint(&uri).is_err());
-+        routes.install(&[node]);
-+        assert!(!routes.endpoint(&uri).unwrap().cancelled.is_cancelled());
-+        assert!(original.cancelled.is_cancelled());
-+    }
-+
-+    #[test]
-+    fn stale_or_missing_generation_after_a_cut_is_rejected() {
-+        let mut route = Route::default();
-+        let mut headers = MetadataMap::new();
-+        headers.insert("x-ydb-route-mode", "managed".parse().unwrap());
-+        headers.insert(GENERATION, 1.into());
-+        route.accept(&headers).unwrap();
-+        let mut trailers = MetadataMap::new();
-+        trailers.insert(GENERATION, 2.into());
-+        route.lost(&Status::with_metadata(Code::Unavailable, "cut", trailers));
-+        assert!(route.accept(&headers).is_err());
-+        assert!(route.accept(&MetadataMap::new()).is_err());
-+        headers.insert(GENERATION, 2.into());
-+        route.accept(&headers).unwrap();
-+    }
-+}
-diff --git a/ydb/src/grpc_wrapper/eds/routes.rs b/ydb/src/grpc_wrapper/eds/routes.rs
-new file mode 100644
-index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a345f3543
---- /dev/null
-+++ b/ydb/src/grpc_wrapper/eds/routes.rs
-@@ -0,0 +1,101 @@
++++ b/ydb/src/grpc_wrapper/endpoint_routes.rs
+@@ -0,0 +1,223 @@
 +//! Each admitted authority owns one data channel and cancellation token. A cut
 +//! retires these together. Cached service handles keep their original token.
-+use crate::connection_pool::{Connection, Simple};
++use crate::connection_pool::{endpoint, normalize_uri_scheme};
 +use crate::discovery::NodeInfo;
 +use crate::{GrpcOptions, YdbResult};
 +use http::Uri;
@@ -895,8 +467,8 @@ index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a
 +
 +#[derive(Debug, Default)]
 +pub(crate) struct RouteEndpoint {
-+    pub(super) cancelled: CancellationToken,
-+    channel: OnceCell<Simple>,
++    cancelled: CancellationToken,
++    channel: OnceCell<Channel>,
 +}
 +
 +#[derive(Clone, Debug)]
@@ -926,7 +498,7 @@ index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a
 +        });
 +    }
 +
-+    pub(super) fn endpoint(&self, uri: &Uri) -> YdbResult<Arc<RouteEndpoint>> {
++    fn endpoint(&self, uri: &Uri) -> YdbResult<Arc<RouteEndpoint>> {
 +        Ok(self.0.borrow().get(uri).cloned().ok_or_else(retired)?)
 +    }
 +
@@ -935,14 +507,35 @@ index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a
 +        uri: &Uri,
 +        opts: &GrpcOptions,
 +    ) -> YdbResult<(Channel, CancellationToken)> {
-+        let endpoint = self.endpoint(uri)?;
-+        let channel = endpoint
++        let route = self.endpoint(uri)?;
++        let channel = route
 +            .channel
-+            .get_or_try_init(|| Simple::init(uri.clone(), opts))
-+            .await?
-+            .channel()
++            .get_or_try_init(|| async {
++                Ok::<_, crate::YdbError>(
++                    endpoint(normalize_uri_scheme(uri.clone())?, None, opts)?
++                        .executor(RouteExecutor(route.cancelled.clone()))
++                        .connect_lazy(),
++                )
++            })
 +            .await?;
-+        Ok((channel, endpoint.cancelled.clone()))
++        Ok((channel.clone(), route.cancelled.clone()))
++    }
++}
++
++// Tonic runs both its request queue and HTTP/2 I/O on the endpoint executor.
++// Dropping those tasks closes the socket even when a client still owns a Channel.
++struct RouteExecutor(CancellationToken);
++
++impl<F: Future<Output = ()> + Send + 'static> hyper::rt::Executor<F> for RouteExecutor {
++    fn execute(&self, task: F) {
++        let cancelled = self.0.clone();
++        tokio::spawn(async move {
++            tokio::select! {
++                biased;
++                _ = cancelled.cancelled() => (),
++                _ = task => (),
++            }
++        });
 +    }
 +}
 +
@@ -980,154 +573,162 @@ index 0000000000000000000000000000000000000000..89084769bc628913c09495f39c44353a
 +        Pin::new(&mut self.inner).poll_frame(cx)
 +    }
 +}
-diff --git a/ydb/src/grpc_wrapper/eds/ydb.xds.rs b/ydb/src/grpc_wrapper/eds/ydb.xds.rs
-new file mode 100644
-index 0000000000000000000000000000000000000000..151593223f9151a3eb232e10f4dba9cc29edfb33
---- /dev/null
-+++ b/ydb/src/grpc_wrapper/eds/ydb.xds.rs
-@@ -0,0 +1,107 @@
-+// This file is @generated by prost-build.
-+/// Wire projection of the Envoy v3 EDS messages used by YDB. Keep field numbers
-+/// aligned with envoy/service/discovery/v3 and envoy/config/{core,endpoint}/v3.
-+/// The private package avoids registering partial Envoy message descriptors.
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct Node {
-+    #[prost(string, tag = "1")]
-+    pub id: ::prost::alloc::string::String,
-+    #[prost(string, tag = "2")]
-+    pub cluster: ::prost::alloc::string::String,
++
++const GENERATION: &str = "x-ydb-route-generation";
++
++pub(crate) fn generation(
++    previous: Option<u64>,
++    headers: &tonic::metadata::MetadataMap,
++) -> YdbResult<Option<u64>> {
++    let mut entries = headers.get_all(GENERATION).iter();
++    if let Some(entry) = entries.next() {
++        let value = entry
++            .to_str()
++            .map_err(|_| Status::unavailable("Invalid route generation"))?;
++        if entries.next().is_none()
++            && !value.is_empty()
++            && value.bytes().all(|c| c.is_ascii_digit())
++            && let Ok(current) = value.parse::<u64>()
++            && Some(current) >= previous
++        {
++            return Ok(Some(current));
++        }
++    } else if previous.is_none() {
++        return Ok(None);
++    }
++    Err(Status::unavailable("Missing or stale discovery route generation").into())
 +}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct Status {
-+    #[prost(int32, tag = "1")]
-+    pub code: i32,
-+    #[prost(string, tag = "2")]
-+    pub message: ::prost::alloc::string::String,
-+}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct DiscoveryRequest {
-+    #[prost(string, tag = "1")]
-+    pub version_info: ::prost::alloc::string::String,
-+    #[prost(message, optional, tag = "2")]
-+    pub node: ::core::option::Option<Node>,
-+    #[prost(string, repeated, tag = "3")]
-+    pub resource_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-+    #[prost(string, tag = "4")]
-+    pub type_url: ::prost::alloc::string::String,
-+    #[prost(string, tag = "5")]
-+    pub response_nonce: ::prost::alloc::string::String,
-+    #[prost(message, optional, tag = "6")]
-+    pub error_detail: ::core::option::Option<Status>,
-+}
-+#[derive(Clone, PartialEq, ::prost::Message)]
-+pub struct DiscoveryResponse {
-+    #[prost(string, tag = "1")]
-+    pub version_info: ::prost::alloc::string::String,
-+    #[prost(message, repeated, tag = "2")]
-+    pub resources: ::prost::alloc::vec::Vec<::prost_types::Any>,
-+    #[prost(string, tag = "4")]
-+    pub type_url: ::prost::alloc::string::String,
-+    #[prost(string, tag = "5")]
-+    pub nonce: ::prost::alloc::string::String,
-+}
-+#[derive(Clone, PartialEq, ::prost::Message)]
-+pub struct Metadata {
-+    #[prost(map = "string, message", tag = "2")]
-+    pub typed_filter_metadata:
-+        ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Any>,
-+}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct SocketAddress {
-+    #[prost(uint32, tag = "1")]
-+    pub protocol: u32,
-+    #[prost(string, tag = "2")]
-+    pub address: ::prost::alloc::string::String,
-+    #[prost(oneof = "socket_address::PortSpecifier", tags = "3, 4")]
-+    pub port_specifier: ::core::option::Option<socket_address::PortSpecifier>,
-+}
-+/// Nested message and enum types in `SocketAddress`.
-+pub mod socket_address {
-+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
-+    pub enum PortSpecifier {
-+        #[prost(uint32, tag = "3")]
-+        PortValue(u32),
-+        #[prost(string, tag = "4")]
-+        NamedPort(::prost::alloc::string::String),
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::discovery::NodeInfo;
++    use crate::grpc_wrapper::endpoint_routes::EndpointRoutes;
++    use http::Uri;
++    use tonic::metadata::MetadataMap;
++
++    #[tokio::test]
++    async fn a_cut_revokes_live_data_streams_and_cached_clients_even_after_failback() {
++        let uri = Uri::from_static("http://localhost:2136/");
++        let node = NodeInfo::new(uri.clone(), String::new());
++        let routes = EndpointRoutes::default();
++        routes.install(std::slice::from_ref(&node));
++        let original = routes.endpoint(&uri).unwrap();
++        routes.install(std::slice::from_ref(&node));
++        assert!(!original.cancelled.is_cancelled());
++        routes.install(&[]);
++        assert!(original.cancelled.is_cancelled());
++        assert!(routes.endpoint(&uri).is_err());
++        routes.install(&[node]);
++        assert!(!routes.endpoint(&uri).unwrap().cancelled.is_cancelled());
++        assert!(original.cancelled.is_cancelled());
++    }
++
++    #[tokio::test]
++    async fn removing_an_endpoint_closes_tcp_with_a_retained_channel() {
++        use tokio::io::AsyncReadExt;
++        use tokio::net::TcpListener;
++        use tokio::time::{Duration, timeout};
++        use tonic::body::Body;
++        use tower::Service;
++
++        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let uri = format!("http://{}/", listener.local_addr().unwrap())
++            .parse::<Uri>()
++            .unwrap();
++        let routes = EndpointRoutes::default();
++        routes.install(&[NodeInfo::new(uri.clone(), String::new())]);
++        let (mut channel, _) = routes.connection(&uri, &Default::default()).await.unwrap();
++        std::future::poll_fn(|cx| channel.poll_ready(cx))
++            .await
++            .unwrap();
++        let pending = channel.call(http::Request::new(Body::empty()));
++
++        timeout(Duration::from_secs(3), async {
++            let (mut peer, _) = listener.accept().await.unwrap();
++            let mut preface = [0; 24];
++            peer.read_exact(&mut preface).await.unwrap();
++            assert_eq!(&preface, b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
++            routes.install(&[]);
++            peer.read_to_end(&mut Vec::new()).await.unwrap();
++            assert!(pending.await.is_err());
++            assert!(
++                std::future::poll_fn(|cx| channel.poll_ready(cx))
++                    .await
++                    .is_err()
++            );
++        })
++        .await
++        .expect("the retired TCP transport stayed open");
++    }
++
++    #[test]
++    fn poll_accepts_initial_generation_without_a_mode_and_rejects_regressions() {
++        let mut previous = None;
++        let mut headers = MetadataMap::new();
++        previous = generation(previous, &headers).unwrap();
++        headers.insert(GENERATION, u64::MAX.into());
++        previous = generation(previous, &headers).unwrap();
++        assert!(generation(previous, &MetadataMap::new()).is_err());
++        headers.insert(GENERATION, 1.into());
++        assert!(generation(previous, &headers).is_err());
 +    }
 +}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct Address {
-+    #[prost(message, optional, tag = "1")]
-+    pub socket_address: ::core::option::Option<SocketAddress>,
-+}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct Endpoint {
-+    #[prost(message, optional, tag = "1")]
-+    pub address: ::core::option::Option<Address>,
-+}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct LbEndpoint {
-+    #[prost(message, optional, tag = "1")]
-+    pub endpoint: ::core::option::Option<Endpoint>,
-+}
-+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-+pub struct Locality {
-+    #[prost(string, tag = "1")]
-+    pub region: ::prost::alloc::string::String,
-+}
-+#[derive(Clone, PartialEq, ::prost::Message)]
-+pub struct LocalityLbEndpoints {
-+    #[prost(message, optional, tag = "1")]
-+    pub locality: ::core::option::Option<Locality>,
-+    #[prost(message, repeated, tag = "2")]
-+    pub lb_endpoints: ::prost::alloc::vec::Vec<LbEndpoint>,
-+    #[prost(message, optional, tag = "3")]
-+    pub load_balancing_weight: ::core::option::Option<u32>,
-+    #[prost(message, optional, tag = "9")]
-+    pub metadata: ::core::option::Option<Metadata>,
-+}
-+#[derive(Clone, PartialEq, ::prost::Message)]
-+pub struct ClusterLoadAssignment {
-+    #[prost(string, tag = "1")]
-+    pub cluster_name: ::prost::alloc::string::String,
-+    #[prost(message, repeated, tag = "2")]
-+    pub endpoints: ::prost::alloc::vec::Vec<LocalityLbEndpoints>,
-+}
 diff --git a/ydb/src/grpc_wrapper/mod.rs b/ydb/src/grpc_wrapper/mod.rs
-index dc0276c356b5c129b00d2a4988c2a30683d9cb0f..122e3fa4e0fd6c76dbd7516c0113f09e44d3d23d 100644
+index dc0276c356b5c129b00d2a4988c2a30683d9cb0f..3e2e48b40bb90847ac34886b9adb5e5f31c282cf 100644
 --- a/ydb/src/grpc_wrapper/mod.rs
 +++ b/ydb/src/grpc_wrapper/mod.rs
 @@ -1,4 +1,5 @@
  pub(crate) mod auth;
-+pub(crate) mod eds;
++pub(crate) mod endpoint_routes;
  pub(crate) mod grpc;
  pub(crate) mod grpc_limits;
  
 diff --git a/ydb/src/grpc_wrapper/raw_discovery_client.rs b/ydb/src/grpc_wrapper/raw_discovery_client.rs
-index a91e11fcccfd50ea9fbbfd1e00a83001c1854c4a..398fe59662d604dd95f02440b6c0318cadedb980 100644
+index a91e11fcccfd50ea9fbbfd1e00a83001c1854c4a..3b39050373e9eb4640392b44b72d6084e1c35292 100644
 --- a/ydb/src/grpc_wrapper/raw_discovery_client.rs
 +++ b/ydb/src/grpc_wrapper/raw_discovery_client.rs
-@@ -33,14 +33,34 @@ impl GrpcDiscoveryClient {
+@@ -33,14 +33,51 @@ impl GrpcDiscoveryClient {
          &mut self,
          database: String,
      ) -> YdbResult<Vec<EndpointInfo>> {
+-        let req = ListEndpointsRequest {
 +        let (items, _) = self
-+            .list_endpoints_on_route(database, &super::eds::Route::default())
++            .list_endpoints_request(tonic::Request::new(ListEndpointsRequest {
++                database,
++                ..Default::default()
++            }))
 +            .await?;
 +        Ok(items)
 +    }
 +
-+    pub(crate) async fn list_endpoints_on_route(
++    pub(crate) async fn poll(
 +        &mut self,
 +        database: String,
-+        route: &super::eds::Route,
-+    ) -> YdbResult<(Vec<EndpointInfo>, tonic::metadata::MetadataMap)> {
-         let req = ListEndpointsRequest {
++        since: Option<u64>,
++    ) -> YdbResult<(Vec<EndpointInfo>, Option<u64>)> {
++        let mut req = tonic::Request::new(ListEndpointsRequest {
              database,
-             ..ListEndpointsRequest::default()
-         };
-+        let mut req = tonic::Request::new(req);
-+        route.apply(&mut req);
+-            ..ListEndpointsRequest::default()
+-        };
++            ..Default::default()
++        });
++        req.metadata_mut().insert(
++            "x-ydb-discovery-long-poll",
++            tonic::metadata::MetadataValue::from_static("1"),
++        );
++        if let Some(value) = since {
++            req.metadata_mut()
++                .insert("x-ydb-if-route-generation", value.into());
++        }
++        let (nodes, headers) = self.list_endpoints_request(req).await?;
++        Ok((nodes, super::endpoint_routes::generation(since, &headers)?))
++    }
++
++    async fn list_endpoints_request(
++        &mut self,
++        req: tonic::Request<ListEndpointsRequest>,
++    ) -> YdbResult<(Vec<EndpointInfo>, tonic::metadata::MetadataMap)> {
          let resp = self.service.list_endpoints(req).await?;
 +        let headers = resp.metadata().clone();
          let result: ListEndpointsResult = grpc_read_operation_result(resp)?;
@@ -1143,7 +744,7 @@ index a91e11fcccfd50ea9fbbfd1e00a83001c1854c4a..398fe59662d604dd95f02440b6c0318c
              .endpoints
              .into_iter()
              .map(|item| EndpointInfo {
-@@ -49,8 +69,7 @@ impl GrpcDiscoveryClient {
+@@ -49,8 +86,7 @@ impl GrpcDiscoveryClient {
                  ssl: item.ssl,
                  location: item.location,
              })
@@ -1154,11 +755,11 @@ index a91e11fcccfd50ea9fbbfd1e00a83001c1854c4a..398fe59662d604dd95f02440b6c0318c
  }
  
 diff --git a/ydb/src/grpc_wrapper/runtime_interceptors.rs b/ydb/src/grpc_wrapper/runtime_interceptors.rs
-index fed44665f0009ea872c37f25781d91dbea1937ca..1dee1429379066d34578e545157ba4425704bb7b 100644
+index fed44665f0009ea872c37f25781d91dbea1937ca..df218f05d10374cd3bd982db8139856ab9716443 100644
 --- a/ydb/src/grpc_wrapper/runtime_interceptors.rs
 +++ b/ydb/src/grpc_wrapper/runtime_interceptors.rs
 @@ -1,3 +1,4 @@
-+use super::eds::routes::{RouteBody, retired};
++use super::endpoint_routes::{RouteBody, retired};
  use itertools::enumerate;
  use std::any::Any;
  use std::fmt::{Debug, Display, Formatter};

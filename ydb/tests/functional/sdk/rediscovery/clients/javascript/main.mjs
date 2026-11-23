@@ -10,14 +10,14 @@ if (!endpoint || !database) {
 
 const retryWindowMs = 8_000;
 const driver = new Driver(`grpc://${endpoint}${database}`, {
-    'ydb.sdk.enable_eds': process.env.YDB_EDS_DISCOVERY === '1',
+    'ydb.sdk.enable_long_poll': process.env.YDB_LONG_POLL_DISCOVERY === '1',
 });
 try {
     await driver.ready(AbortSignal.timeout(retryWindowMs));
     const topic = process.env.YDB_TOPIC_PATH || `${database}/topic`;
     if (mode === 'topic-write') {
         const { createTopicWriter } = await import('@ydbjs/topic/writer');
-        const writer = createTopicWriter(driver, { topic, producer: process.env.YDB_PRODUCER || 'eds-probe' });
+        const writer = createTopicWriter(driver, { topic, producer: process.env.YDB_PRODUCER || 'poll-probe' });
         let n = 0;
         while (true) {
             writer.write(Buffer.from(String(++n)));

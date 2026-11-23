@@ -143,14 +143,7 @@ public:
         grpc::ServerCompletionQueue*,
         void*);
 
-    // Accepted streams can expose immutable transport metadata to an internal
-    // request using the same authentication and endpoint selection as a unary RPC.
-    class TAcceptedContext : public IContext {
-    public:
-        virtual const NYdbGrpc::TBaseAsyncContext<TServer>& Transport() const = 0;
-    };
-
-    using TAcceptCallback = std::function<void(TIntrusivePtr<TAcceptedContext>)>;
+    using TAcceptCallback = std::function<void(TIntrusivePtr<IContext>)>;
 
     ~TGRpcStreamingRequest() {
         if (Flags.load() & FlagRegistered) {
@@ -268,7 +261,7 @@ private:
 
             RequestTimer.Reset();
 
-            TIntrusivePtr<TAcceptedContext> facade(new TFacade(this));
+            TIntrusivePtr<IContext> facade(new TFacade(this));
             AcceptCallback(std::move(facade));
         } else {
             // There is no facade, so after finish completes we will be freed
@@ -700,15 +693,11 @@ private:
     }
 
 private:
-    class TFacade : public TAcceptedContext {
+    class TFacade : public IContext {
     public:
         explicit TFacade(TSelf* self)
             : Self(self)
         { }
-
-        const NYdbGrpc::TBaseAsyncContext<TServer>& Transport() const override {
-            return *Self;
-        }
 
         ~TFacade() {
             Self->Detach();

@@ -1,490 +1,344 @@
-diff --git a/go.mod b/go.mod
-index 915bfa4753a008471f128abb689d679b4d126214..f1fec7597835f37ef6dec130e8f5d144e1df0b45 100644
---- a/go.mod
-+++ b/go.mod
-@@ -3,6 +3,7 @@ module github.com/ydb-platform/ydb-go-sdk/v3
- go 1.24.0
- 
- require (
-+	github.com/envoyproxy/go-control-plane/envoy v1.35.0
- 	github.com/golang-jwt/jwt/v4 v4.5.2
- 	github.com/google/uuid v1.6.0
- 	github.com/jonboulle/clockwork v0.5.0
-@@ -11,6 +12,7 @@ require (
- 	go.uber.org/zap v1.27.0
- 	golang.org/x/sync v0.19.0
- 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
-+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217
- 	google.golang.org/grpc v1.78.0
- 	google.golang.org/protobuf v1.36.10
- )
-@@ -18,18 +20,24 @@ require (
- // requires for tests only
- require (
- 	github.com/rekby/fixenv v0.6.1
--	github.com/stretchr/testify v1.10.0
-+	github.com/stretchr/testify v1.11.1
- 	go.uber.org/mock v0.4.0
- )
- 
- require (
-+	github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f // indirect
- 	github.com/davecgh/go-spew v1.1.1 // indirect
-+	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
-+	github.com/kr/pretty v0.3.1 // indirect
-+	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
- 	github.com/pmezard/go-difflib v1.0.0 // indirect
-+	github.com/rogpeppe/go-internal v1.12.0 // indirect
- 	go.uber.org/multierr v1.10.0 // indirect
- 	golang.org/x/net v0.48.0 // indirect
- 	golang.org/x/sys v0.39.0 // indirect
- 	golang.org/x/text v0.32.0 // indirect
--	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-+	google.golang.org/genproto v0.0.0-20251202230838-ff82c1b0f217
-+	google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda // indirect
- 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
- 	gopkg.in/yaml.v3 v3.0.1 // indirect
- )
-diff --git a/go.sum b/go.sum
-index 1e8bb65f6f57cc4e6819c9d555244a1977ce1cef..e4dbc361d802e3503031ee5d1347bc4595330e50 100644
---- a/go.sum
-+++ b/go.sum
-@@ -11,6 +11,9 @@ github.com/cncf/udpa/go v0.0.0-20210930031921-04548b0d99d4/go.mod h1:6pvJx4me5XP
- github.com/cncf/xds/go v0.0.0-20210922020428-25de7278fc84/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
- github.com/cncf/xds/go v0.0.0-20211001041855-01bcc9b48dfe/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
- github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
-+github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f h1:Y8xYupdHxryycyPlc9Y+bSQAYZnetRJ70VMVKm5CKI0=
-+github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f/go.mod h1:HlzOvOjVBOfTGSRXRyY0OiCS/3J1akRGQQpRO/7zyF4=
-+github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
- github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
- github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
- github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-@@ -19,7 +22,11 @@ github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.m
- github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
- github.com/envoyproxy/go-control-plane v0.9.9-0.20201210154907-fd9021fe5dad/go.mod h1:cXg6YxExXjJnVBQHBLXeUAgxn2UodCpnH306RInaBQk=
- github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1/go.mod h1:KJwIaB5Mv44NWtYuAOFCVOjcI94vtpEz2JU/D2v6IjE=
-+github.com/envoyproxy/go-control-plane/envoy v1.35.0 h1:ixjkELDE+ru6idPxcHLj8LBVc2bFP7iBytj353BoHUo=
-+github.com/envoyproxy/go-control-plane/envoy v1.35.0/go.mod h1:09qwbGVuSWWAyN5t/b3iyVfz5+z8QWGrzkoqm/8SbEs=
- github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
-+github.com/envoyproxy/protoc-gen-validate v1.2.1 h1:DEo3O99U8j4hBFwbJfrz9VtgcDfUKS7KJ7spH3d86P8=
-+github.com/envoyproxy/protoc-gen-validate v1.2.1/go.mod h1:d/C80l/jxXLdfEIhX1W2TmLfsJ31lvEjwamM4DxlWXU=
- github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
- github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
- github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
-@@ -59,25 +66,30 @@ github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
- github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
- github.com/jonboulle/clockwork v0.5.0 h1:Hyh9A8u51kptdkR+cqRpT1EebBwTn1oK9YfGYbdFz6I=
- github.com/jonboulle/clockwork v0.5.0/go.mod h1:3mZlmanh0g2NDKO5TWZVJAfofYk64M7XN3SzBPjZF60=
--github.com/kr/pretty v0.2.1 h1:Fmg33tUaq4/8ym9TJN1x7sLJnHVwhP33CNkpYV/7rwI=
- github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
-+github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
-+github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
- github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
- github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
- github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
- github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
-+github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
-+github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 h1:GFCKgmp0tecUJ0sJuv4pzYCqS9+RGSn52M3FUwPs+uo=
-+github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10/go.mod h1:t/avpk3KcrXxUnYOhZhMXJlSEyie6gQbtLq5NM3loB8=
- github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
- github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
- github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
- github.com/rekby/fixenv v0.6.1 h1:jUFiSPpajT4WY2cYuc++7Y1zWrnCxnovGCIX72PZniM=
- github.com/rekby/fixenv v0.6.1/go.mod h1:/b5LRc06BYJtslRtHKxsPWFT/ySpHV+rWvzTg+XWk4c=
- github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
-+github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
-+github.com/rogpeppe/go-internal v1.12.0 h1:exVL4IDcn6na9z1rAb56Vxr+CgyK3nn3O+epU5NdKM8=
-+github.com/rogpeppe/go-internal v1.12.0/go.mod h1:E+RYuTGaKKdloAfM02xzb0FW3Paa99yedzYV+kq4uf4=
- github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
- github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
- github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
--github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
--github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
--github.com/ydb-platform/ydb-go-genproto v0.0.0-20260428144813-1c07baab7f7b h1:xeiobG1riqe6dTMZuTcOvwOY0BbFidSk3gRLyVeLfJA=
--github.com/ydb-platform/ydb-go-genproto v0.0.0-20260428144813-1c07baab7f7b/go.mod h1:Er+FePu1dNUieD+XTMDduGpQuCPssK5Q4BjF+IIXJ3I=
-+github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
-+github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
- github.com/ydb-platform/ydb-go-genproto v0.0.0-20260810122915-65bfd5c4b705 h1:7VKlOrBIQ8L8acJ9wFCt6lWzLDbOhc05VLpL31743tU=
- github.com/ydb-platform/ydb-go-genproto v0.0.0-20260810122915-65bfd5c4b705/go.mod h1:Er+FePu1dNUieD+XTMDduGpQuCPssK5Q4BjF+IIXJ3I=
- go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
-@@ -153,6 +165,10 @@ google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8/go.mod h1:JiN7NxoA
- google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55/go.mod h1:DMBHOl98Agz4BDEuKkezgsaosCRResVns1a3J2ZsMNc=
- google.golang.org/genproto v0.0.0-20200513103714-09dca8ec2884/go.mod h1:55QSHmfGQM9UVYDPBsyGGes0y52j32PQ3BqQfXhyH3c=
- google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013/go.mod h1:NbSheEEYHJ7i3ixzK3sjbqSGDJWnxyFXZblF3eUsNvo=
-+google.golang.org/genproto v0.0.0-20251202230838-ff82c1b0f217 h1:GvESR9BIyHUahIb0NcTum6itIWtdoglGX+rnGxm2934=
-+google.golang.org/genproto v0.0.0-20251202230838-ff82c1b0f217/go.mod h1:yJ2HH4EHEDTd3JiLmhds6NkJ17ITVYOdV3m3VKOnws0=
-+google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda h1:+2XxjfsAu6vqFxwGBRcHiMaDCuZiqXGDUDVWVtrFAnE=
-+google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda/go.mod h1:fDMmzKV90WSg1NbozdqrE64fkuTv6mlq2zxo9ad+3yo=
- google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 h1:gRkg/vSppuSQoDjxyiGfN4Upv/h/DQmIR10ZU8dh4Ww=
- google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217/go.mod h1:7i2o+ce6H/6BluujYR+kqX3GKH+dChPTQU19wjRPiGk=
- google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
 diff --git a/internal/balancer/balancer.go b/internal/balancer/balancer.go
-index f7652c625c8426b765e1cf0fa22813a411b79a2b..8455a89587d7504d5301da53ba9ffa8fe8621f72 100644
+index f7652c625c8426b765e1cf0fa22813a411b79a2b..6b67a5bf2ae03e87bf7504791e9e5280ce946874 100644
 --- a/internal/balancer/balancer.go
 +++ b/internal/balancer/balancer.go
-@@ -75,6 +75,8 @@ type Balancer struct {
+@@ -75,6 +75,9 @@ type Balancer struct {
  	discoveryConfig   *discoveryConfig.Config
  	pool              *conn.Pool
  	discoveryRepeater repeater.Repeater
-+	stopEDS           context.CancelFunc
-+	edsDone           chan struct{}
++	stopPoll          context.CancelFunc
++	pollDone          chan struct{}
++	routeValid        atomic.Pointer[atomic.Bool]
  
  	address string
  	cc      atomic.Pointer[grpc.ClientConn]
-@@ -351,6 +353,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+@@ -351,6 +354,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
  	b.discoveryRepeater = nil
  
  	discoveryCC := b.cc.Swap(nil)
-+	if b.stopEDS != nil {
-+		b.stopEDS()
++	if b.stopPoll != nil {
++		b.stopPoll()
 +	}
  
  	b.closeMu.Unlock()
  
-@@ -362,6 +367,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+@@ -362,6 +368,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
  		onDone(err)
  	}()
  
-+	if b.edsDone != nil {
-+		<-b.edsDone
++	if b.pollDone != nil {
++		<-b.pollDone
 +	}
  	if discoveryRepeater != nil {
  		discoveryRepeater.Stop()
  	}
-@@ -457,6 +465,10 @@ func New(ctx context.Context, driverConfig *config.Config, pool *conn.Pool, opts
+@@ -457,6 +466,13 @@ func New(ctx context.Context, driverConfig *config.Config, pool *conn.Pool, opts
  		b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{
  			endpoint.New(b.driverConfig.Endpoint()),
  		}, "")
-+	} else if b.discoveryConfig.EndpointDiscoveryStream() {
-+		if err := b.startEDS(ctx); err != nil {
++	} else if b.discoveryConfig.DiscoveryLongPoll() {
++		valid := new(atomic.Bool)
++		valid.Store(true)
++		b.routeValid.Store(valid)
++		if err := b.startLongPoll(ctx); err != nil {
 +			return nil, err
 +		}
  	} else {
  		if err := b.clusterDiscovery(ctx); err != nil {
  			return nil, xerrors.WithStackTrace(err)
-diff --git a/internal/balancer/eds.go b/internal/balancer/eds.go
+@@ -513,6 +529,9 @@ func (b *Balancer) NewStream(
+ }
+ 
+ func (b *Balancer) wrapCall(ctx context.Context, f func(ctx context.Context, cc conn.Conn) error) (err error) {
++	if valid := b.routeValid.Load(); valid != nil {
++		ctx = conn.WithRouteValidity(ctx, valid)
++	}
+ 	cc, err := b.nextConn(ctx)
+ 	if err != nil {
+ 		return xerrors.WithStackTrace(err)
+diff --git a/internal/balancer/long_poll.go b/internal/balancer/long_poll.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80becc9b7025f
+index 0000000000000000000000000000000000000000..e19e76e76c089dfcf6afd4f63aee47992b2c4b2f
 --- /dev/null
-+++ b/internal/balancer/eds.go
-@@ -0,0 +1,250 @@
++++ b/internal/balancer/long_poll.go
+@@ -0,0 +1,150 @@
 +package balancer
 +
 +import (
 +	"context"
++	"errors"
 +	"fmt"
-+	"io"
 +	"math/rand/v2"
 +	"strconv"
-+	"sync"
++	"sync/atomic"
 +	"time"
 +
-+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-+	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-+	edsv3 "github.com/envoyproxy/go-control-plane/envoy/service/endpoint/v3"
 +	"github.com/ydb-platform/ydb-go-genproto/Ydb_Discovery_V1"
-+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/discovery"
-+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 +	"google.golang.org/grpc"
-+	"google.golang.org/grpc/codes"
 +	"google.golang.org/grpc/metadata"
-+	"google.golang.org/grpc/status"
++
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/discovery"
++	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 +)
 +
-+func (b *Balancer) startEDS(initCtx context.Context) error {
-+	ctx, cancel := context.WithCancel(context.WithoutCancel(initCtx))
-+	b.stopEDS, b.edsDone = cancel, make(chan struct{})
-+	ready := make(chan error, 1)
++type pollRoute struct {
++	managed    bool
++	generation uint64
++}
++
++func routeGeneration(md metadata.MD, previous pollRoute) (pollRoute, error) {
++	values := md.Get("x-ydb-route-generation")
++	if len(values) == 0 && !previous.managed {
++		return previous, nil
++	}
++	if len(values) != 1 {
++		return previous, errors.New("missing or duplicate managed route generation")
++	}
++	g, err := strconv.ParseUint(values[0], 10, 64)
++	if err != nil || g < previous.generation {
++		return previous, fmt.Errorf("invalid or stale route generation %q", values[0])
++	}
++	return pollRoute{managed: true, generation: g}, nil
++}
++
++func (b *Balancer) startLongPoll(ctx context.Context) error {
++	pollCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
++	b.stopPoll, b.pollDone = cancel, make(chan struct{})
++	var route pollRoute
++	err := retry.Retry(ctx, func(ctx context.Context) error { return b.poll(ctx, &route) },
++		retry.WithIdempotent(true), retry.WithBudget(b.driverConfig.RetryBudget()), retry.WithTrace(b.driverConfig.TraceRetry()))
++	if err != nil {
++		cancel()
++		close(b.pollDone)
++		return err
++	}
 +	go func() {
-+		defer close(b.edsDone)
-+		var once sync.Once
-+		first := func(err error) { once.Do(func() { ready <- err }) }
-+		var floor edsRoute
-+		delay := time.Duration(0)
-+		for ctx.Err() == nil {
++		defer close(b.pollDone)
++		backoff := time.Duration(0)
++		for pollCtx.Err() == nil {
++			delay := backoff
++			if delay == 0 && !route.managed {
++				delay = b.discoveryConfig.Interval()
++			}
 +			if delay > 0 {
 +				select {
-+				case <-ctx.Done():
++				case <-pollCtx.Done():
 +					return
 +				case <-time.After(delay + rand.N(delay/4+1)):
 +				}
 +			}
-+			cc, err := b.discoveryConn(ctx)
-+			assigned := false
-+			if err == nil {
-+				assigned, err = b.watchEDS(ctx, cc, &floor, func() { first(nil) })
-+				if !assigned && status.Code(err) == codes.Unimplemented {
-+					err = b.unaryEDS(ctx, cc, &floor)
-+					floor.requireCurrent = floor.managed && err != nil
-+					if err == nil {
-+						first(nil)
-+						delay = b.discoveryConfig.Interval()
-+						continue
-+					}
-+				}
-+			}
-+			if ctx.Err() != nil {
-+				return
-+			}
-+			if !assigned && err != nil {
-+				switch status.Code(err) {
-+				case codes.Unavailable, codes.DeadlineExceeded, codes.Internal, codes.ResourceExhausted:
-+					// A transient bootstrap failure keeps discovery gated until recovery.
-+				default:
-+					first(err)
-+				}
-+			}
-+			b.clearEDS(ctx)
-+			if assigned {
-+				delay = 0
-+			} else if delay <= 0 {
-+				delay = 100 * time.Millisecond
++			if err := b.poll(pollCtx, &route); err != nil {
++				backoff = min(5*time.Second, max(100*time.Millisecond, 2*backoff))
 +			} else {
-+				delay = min(5*time.Second, delay*2)
++				backoff = 0
 +			}
 +		}
 +	}()
-+	select {
-+	case <-initCtx.Done():
-+		return initCtx.Err()
-+	case err := <-ready:
-+		return err
-+	}
++	return nil
 +}
 +
-+func (b *Balancer) clearEDS(ctx context.Context) {
++func (b *Balancer) poll(ctx context.Context, route *pollRoute) error {
++	cc, err := b.discoveryConn(ctx)
++	if err != nil {
++		return err
++	}
++	ctx, err = b.driverConfig.Meta().DiscoveryContext(ctx)
++	if err != nil {
++		return err
++	}
++	ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-discovery-long-poll", "1")
++	timeout := b.driverConfig.DialTimeout()
++	if route.managed {
++		ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-if-route-generation", strconv.FormatUint(route.generation, 10))
++		timeout = max(timeout, 45*time.Second)
++	}
++	if timeout > 0 {
++		var cancel context.CancelFunc
++		ctx, cancel = context.WithTimeout(ctx, timeout)
++		defer cancel()
++	}
++	var headers, trailers metadata.MD
++	endpoints, location, err := discovery.Discover(ctx, Ydb_Discovery_V1.NewDiscoveryServiceClient(cc), b.discoveryConfig, grpc.Header(&headers), grpc.Trailer(&trailers))
++	if err != nil {
++		return err
++	}
++	next, err := routeGeneration(metadata.Join(headers, trailers), *route)
++	if err != nil {
++		return err
++	}
++	if next != *route {
++		b.retireRoute(ctx)
++		*route = next
++	}
++	if b.policy.DetectsNearestDC() && len(endpoints) > 0 {
++		location, err = b.localDCDetector(ctx, endpoints)
++		if err != nil {
++			return err
++		}
++	}
++	b.applyDiscoveredEndpoints(ctx, endpoints, location)
++	return nil
++}
++
++// A sibling driver may own a reference to the same data channel. Close its
++// current transport before publishing replacement endpoints. A sibling still
++// assigned that node can reconnect with its existing pooled wrapper.
++func (b *Balancer) retireRoute(ctx context.Context) {
 +	b.closeMu.Lock()
 +	if b.closed {
 +		b.closeMu.Unlock()
 +		return
 +	}
++	if old := b.routeValid.Load(); old != nil {
++		old.Store(false)
++	}
 +	old := b.connectionsState.Swap(newConnectionsStateWithPriorities(nil, nil, nil, nil))
 +	b.lastDiscovered = nil
 +	b.closeMu.Unlock()
-+	b.releaseStateConns(ctx, old)
-+}
-+
-+func (b *Balancer) discoveryEDSContext(ctx context.Context, floor edsRoute) (context.Context, error) {
-+	ctx, err := b.driverConfig.Meta().DiscoveryContext(ctx)
-+	if err != nil {
-+		return nil, err
-+	}
-+	if floor.requireCurrent {
-+		ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-require-current-route", "1")
-+	}
-+	if floor.managed {
-+		ctx = metadata.AppendToOutgoingContext(ctx, "x-ydb-min-route-generation", strconv.FormatUint(floor.generation, 10))
-+	}
-+	return ctx, nil
-+}
-+
-+type edsRoute struct {
-+	managed        bool
-+	generation     uint64
-+	requireCurrent bool
-+}
-+
-+func (r *edsRoute) watchClosed(err error, trailers metadata.MD) {
-+	r.requireCurrent = r.managed
-+	values := trailers.Get("x-ydb-route-generation")
-+	if !r.managed || status.Code(err) != codes.Unavailable || len(values) != 1 {
-+		return
-+	}
-+	if cut, err := strconv.ParseUint(values[0], 10, 64); err == nil && cut > r.generation {
-+		r.generation = cut
-+		r.requireCurrent = false
-+	}
-+}
-+
-+func routeGeneration(md metadata.MD, floor edsRoute) (edsRoute, error) {
-+	vals := md.Get("x-ydb-route-generation")
-+	mode := md.Get("x-ydb-route-mode")
-+	if len(vals) == 0 && len(mode) == 0 && !floor.managed {
-+		return floor, nil
-+	}
-+	if len(vals) != 1 || len(mode) != 1 || mode[0] != "managed" {
-+		return floor, fmt.Errorf("missing managed discovery generation")
-+	}
-+	g, err := strconv.ParseUint(vals[0], 10, 64)
-+	if err != nil || g < floor.generation {
-+		return floor, fmt.Errorf("invalid or stale discovery route generation")
-+	}
-+	floor.managed = true
-+	floor.generation = g
-+	return floor, nil
-+}
-+
-+func (b *Balancer) watchEDS(ctx context.Context, cc *grpc.ClientConn, floor *edsRoute, ready func()) (assigned bool, err error) {
-+	var trailers metadata.MD
-+	defer func() {
-+		if assigned || status.Code(err) != codes.Unimplemented {
-+			floor.watchClosed(err, trailers)
-+		}
-+	}()
-+	ctx, err = b.discoveryEDSContext(ctx, *floor)
-+	if err != nil {
-+		return false, err
-+	}
-+	ctx, cancel := context.WithCancel(ctx)
-+	defer cancel()
-+	var handshake *time.Timer
-+	if timeout := b.driverConfig.DialTimeout(); timeout > 0 {
-+		handshake = time.AfterFunc(timeout, cancel)
-+		defer handshake.Stop()
-+	}
-+	stream, err := edsv3.NewEndpointDiscoveryServiceClient(cc).StreamEndpoints(ctx)
-+	if err != nil {
-+		return false, err
-+	}
-+	req := &discoveryv3.DiscoveryRequest{Node: &corev3.Node{Id: "ydb-go-sdk"}, TypeUrl: discovery.EDSResource, ResourceNames: []string{b.driverConfig.Database()}}
-+	if err = stream.Send(req); err != nil {
-+		if err == io.EOF {
-+			_, err = stream.Recv()
-+			trailers = stream.Trailer()
-+		}
-+		return false, err
-+	}
-+	md, _ := stream.Header()
-+	generation, genErr := routeGeneration(md, *floor)
-+	if genErr == nil {
-+		*floor = generation
-+	}
-+	for {
-+		r, err := stream.Recv()
-+		if err != nil {
-+			trailers = stream.Trailer()
-+			return assigned, err
-+		}
-+		if genErr != nil {
-+			return assigned, genErr
-+		}
-+		result, err := discovery.DecodeEDS(r, b.driverConfig.Database())
-+		req.Node = nil
-+		req.ResponseNonce = r.Nonce
-+		req.ErrorDetail = nil
-+		if err != nil {
-+			req.ErrorDetail = &rpcstatus.Status{Code: int32(codes.InvalidArgument), Message: err.Error()}
-+		} else {
-+			eps := discovery.FromEDS(result, b.discoveryConfig)
-+			location := result.SelfLocation
-+			if b.policy.DetectsNearestDC() && len(eps) > 0 {
-+				location, err = b.localDCDetector(ctx, eps)
-+				if err != nil {
-+					return assigned, err
++	if old != nil {
++		seen := make(map[conn.Conn]struct{})
++		for _, connections := range [][]conn.Conn{old.all, old.quarantine} {
++			for _, c := range connections {
++				if _, ok := seen[c]; !ok {
++					b.pool.ResetTransport(ctx, c)
++					seen[c] = struct{}{}
 +				}
 +			}
-+			if !assigned && handshake != nil && !handshake.Stop() {
-+				return assigned, context.DeadlineExceeded
-+			}
-+			b.applyDiscoveredEndpoints(ctx, eps, location)
-+			req.VersionInfo = r.VersionInfo
-+			assigned = true
-+			ready()
 +		}
-+		if err = stream.Send(req); err != nil {
-+			if err == io.EOF {
-+				_, err = stream.Recv()
-+				trailers = stream.Trailer()
-+			}
-+			return assigned, err
-+		}
++		b.releaseStateConns(ctx, old)
 +	}
++	valid := new(atomic.Bool)
++	valid.Store(true)
++	b.routeValid.Store(valid)
 +}
-+
-+func (b *Balancer) unaryEDS(ctx context.Context, cc *grpc.ClientConn, floor *edsRoute) error {
-+	ctx, err := b.discoveryEDSContext(ctx, *floor)
-+	if err != nil {
-+		return err
-+	}
-+	if timeout := b.driverConfig.DialTimeout(); timeout > 0 {
-+		var cancel context.CancelFunc
-+		ctx, cancel = context.WithTimeout(ctx, timeout)
-+		defer cancel()
-+	}
-+	var md metadata.MD
-+	eps, location, err := discovery.Discover(ctx, Ydb_Discovery_V1.NewDiscoveryServiceClient(cc), b.discoveryConfig, grpc.Header(&md))
-+	if err != nil {
-+		return err
-+	}
-+	if *floor, err = routeGeneration(md, *floor); err != nil {
-+		return err
-+	}
-+	if b.policy.DetectsNearestDC() && len(eps) > 0 {
-+		location, err = b.localDCDetector(ctx, eps)
-+		if err != nil {
-+			return err
-+		}
-+	}
-+	b.applyDiscoveredEndpoints(ctx, eps, location)
-+	return nil
-+}
-diff --git a/internal/balancer/eds_test.go b/internal/balancer/eds_test.go
+diff --git a/internal/balancer/long_poll_test.go b/internal/balancer/long_poll_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..5a71256ad14be0272e1b53e7ba603b026eae2138
+index 0000000000000000000000000000000000000000..08c5e3e325490504881b6f545386b78686877fe8
 --- /dev/null
-+++ b/internal/balancer/eds_test.go
-@@ -0,0 +1,59 @@
++++ b/internal/balancer/long_poll_test.go
+@@ -0,0 +1,26 @@
 +package balancer
 +
 +import (
-+	"context"
 +	"testing"
 +
 +	"github.com/stretchr/testify/require"
-+	"github.com/ydb-platform/ydb-go-sdk/v3/config"
-+	"google.golang.org/grpc/codes"
 +	"google.golang.org/grpc/metadata"
-+	"google.golang.org/grpc/status"
 +)
 +
-+func TestEDSRouteFloorSurvivesRollbackAndMissingHeaders(t *testing.T) {
-+	current := edsRoute{managed: true, generation: 11}
-+	for _, md := range []metadata.MD{nil, metadata.Pairs("x-ydb-route-mode", "managed", "x-ydb-route-generation", "10"), metadata.Pairs("x-ydb-route-mode", "managed", "x-ydb-route-generation", "11", "x-ydb-route-generation", "12")} {
-+		if got, err := routeGeneration(md, current); err == nil || got != current {
-+			t.Fatalf("accepted ambiguous route %v: %+v %v", md, got, err)
-+		}
++func TestLongPollRequiresMonotonicGeneration(t *testing.T) {
++	floor := pollRoute{managed: true, generation: 11}
++	for _, value := range []string{"10", "18446744073709551616", "-1", "+1", ""} {
++		_, err := routeGeneration(metadata.Pairs("x-ydb-route-generation", value), floor)
++		require.Error(t, err)
 +	}
-+	zero, err := routeGeneration(metadata.Pairs("x-ydb-route-mode", "managed", "x-ydb-route-generation", "0"), edsRoute{})
-+	if err != nil || !zero.managed {
-+		t.Fatalf("missing generation zero: %v %v", zero, err)
-+	}
-+	if _, err := routeGeneration(nil, zero); err == nil {
-+		t.Fatal("forgot managed route at generation zero")
-+	}
++	_, err := routeGeneration(nil, floor)
++	require.Error(t, err)
++	_, err = routeGeneration(metadata.Pairs("x-ydb-route-generation", "12", "x-ydb-route-generation", "12"), floor)
++	require.Error(t, err)
++	next, err := routeGeneration(metadata.Pairs("x-ydb-route-generation", "12"), floor)
++	require.NoError(t, err)
++	require.Equal(t, uint64(12), next.generation)
++	legacy, err := routeGeneration(nil, pollRoute{})
++	require.NoError(t, err)
++	require.False(t, legacy.managed)
++}
+diff --git a/internal/conn/conn.go b/internal/conn/conn.go
+index 62418e013d502ae679fe1fdf4369e9054a38c17e..9da6d85f77d056b14e1dc0670e86b4938fe4c19c 100644
+--- a/internal/conn/conn.go
++++ b/internal/conn/conn.go
+@@ -152,13 +152,23 @@ func (c *conn) InFlight() int64 {
+ 	return c.inFlight.Load()
+ }
+ 
+-func (c *conn) realConn(ctx context.Context) (cc grpcClientConnInterface, err error) {
+-	if c.isClosed() {
+-		return nil, xerrors.WithStackTrace(errClosedConnection)
+-	}
++type routeValidityKey struct{}
+ 
++// WithRouteValidity prevents a selection racing a cutover from reopening a
++// previously shared node transport after the balancer has reset it.
++func WithRouteValidity(ctx context.Context, valid *atomic.Bool) context.Context {
++	return context.WithValue(ctx, routeValidityKey{}, valid)
 +}
 +
-+func TestEDSRouteRetryHeaders(t *testing.T) {
-+	b := &Balancer{driverConfig: config.New()}
-+	headers := func(route edsRoute) metadata.MD {
-+		ctx, err := b.discoveryEDSContext(context.Background(), route)
-+		require.NoError(t, err)
-+		md, _ := metadata.FromOutgoingContext(ctx)
-+		return md
++func (c *conn) realConn(ctx context.Context) (cc grpcClientConnInterface, err error) {
+ 	c.mtx.Lock()
+ 	defer c.mtx.Unlock()
++	if c.closed {
++		return nil, xerrors.WithStackTrace(errClosedConnection)
 +	}
-+	require.Empty(t, headers(edsRoute{}).Get("x-ydb-require-current-route"))
-+	for _, test := range []struct {
-+		code    codes.Code
-+		stamp   []string
-+		floor   string
-+		current []string
-+	}{
-+		{codes.Unavailable, []string{"12"}, "12", nil},
-+		{codes.Unavailable, nil, "11", []string{"1"}},
-+		{codes.Unavailable, []string{"11"}, "11", []string{"1"}},
-+		{codes.Unavailable, []string{"10"}, "11", []string{"1"}},
-+		{codes.Unavailable, []string{"12", "13"}, "11", []string{"1"}},
-+		{codes.Unavailable, []string{"bogus"}, "11", []string{"1"}},
-+		{codes.Internal, []string{"12"}, "11", []string{"1"}},
-+	} {
-+		route := edsRoute{managed: true, generation: 11}
-+		route.watchClosed(status.Error(test.code, "closed"), metadata.MD{"x-ydb-route-generation": test.stamp})
-+		md := headers(route)
-+		require.Equal(t, []string{test.floor}, md.Get("x-ydb-min-route-generation"))
-+		require.Equal(t, test.current, md.Get("x-ydb-require-current-route"))
++	if valid, _ := ctx.Value(routeValidityKey{}).(*atomic.Bool); valid != nil && !valid.Load() {
++		return nil, xerrors.WithStackTrace(errClosedConnection)
 +	}
+ 
+ 	if c.grpcConn != nil {
+ 		return c.grpcConn, nil
+diff --git a/internal/conn/pool.go b/internal/conn/pool.go
+index 6a867ccecbca51e6914d185682f860a21a280221..7b771500c873d11c27d4a405c5459a71321243fd 100644
+--- a/internal/conn/pool.go
++++ b/internal/conn/pool.go
+@@ -92,6 +92,17 @@ func (p *Pool) get(e endpoint.Endpoint) *connValue {
+ 	return value
+ }
+ 
++// ResetTransport closes active RPCs even when other drivers hold pool references.
++func (p *Pool) ResetTransport(ctx context.Context, c Conn) {
++	cc, ok := c.(*conn)
++	if !ok {
++		return
++	}
++	cc.mtx.Lock()
++	defer cc.mtx.Unlock()
++	_ = cc.close(ctx)
 +}
++
+ // Put decrements the connection use count. When the count reaches zero, the gRPC
+ // connection is closed and the entry is removed from the pool.
+ func (p *Pool) Put(ctx context.Context, c Conn) {
+diff --git a/internal/conn/pool_test.go b/internal/conn/pool_test.go
+index 7b004039e08431529e700ec932acdd057354f4a8..f02f349c3f49a6872e8af4dd06d59d7f5a8ccedd 100644
+--- a/internal/conn/pool_test.go
++++ b/internal/conn/pool_test.go
+@@ -115,6 +115,34 @@ func testConnGRPCConn(c *conn) grpcClientConnInterface {
+ 	return c.grpcConn
+ }
+ 
++func TestResetSharedTransportOnRouteChange(t *testing.T) {
++	ctx := t.Context()
++	pool := NewPool(ctx, &mockConfig{})
++	t.Cleanup(func() { require.NoError(t, pool.RemoveRef(ctx)) })
++	ep := endpoint.New("node:2135")
++	c := pool.Get(ep).(*conn)
++	require.Same(t, c, pool.Get(ep))
++	c.grpcConn = &mockGrpcConn{}
++	valid := new(atomic.Bool)
++	valid.Store(true)
++	old := WithRouteValidity(ctx, valid)
++	_, err := c.realConn(old)
++	require.NoError(t, err)
++
++	valid.Store(false)
++	pool.ResetTransport(ctx, c)
++	pool.Put(ctx, c)
++	require.Nil(t, testConnGRPCConn(c))
++	_, err = c.realConn(old)
++	require.ErrorIs(t, err, errClosedConnection)
++
++	// The unaffected sibling keeps its wrapper and can use a fresh transport.
++	c.grpcConn = &mockGrpcConn{}
++	sibling, err := c.realConn(ctx)
++	require.NoError(t, err)
++	require.Same(t, c.grpcConn, sibling)
++}
++
+ func TestPool_Get(t *testing.T) {
+ 	t.Run("GetSameConnectionTwice", func(t *testing.T) {
+ 		ctx := context.Background()
 diff --git a/internal/discovery/config/config.go b/internal/discovery/config/config.go
-index 3ba36f7d733ce182f5205e08979d9cda3a0bf5c4..49455c9b4c1b294b643a02df777e6a6cfe6eceb4 100644
+index 3ba36f7d733ce182f5205e08979d9cda3a0bf5c4..a7ce5047422bfc5db46b04277780ab2f7e239825 100644
 --- a/internal/discovery/config/config.go
 +++ b/internal/discovery/config/config.go
 @@ -25,8 +25,9 @@ type Config struct {
@@ -493,9 +347,9 @@ index 3ba36f7d733ce182f5205e08979d9cda3a0bf5c4..49455c9b4c1b294b643a02df777e6a6c
  
 -	interval time.Duration
 -	trace    *trace.Discovery
-+	endpointDiscoveryStream bool
-+	interval                time.Duration
-+	trace                   *trace.Discovery
++	discoveryLongPoll bool
++	interval          time.Duration
++	trace             *trace.Discovery
  }
  
  func New(opts ...Option) *Config {
@@ -504,9 +358,9 @@ index 3ba36f7d733ce182f5205e08979d9cda3a0bf5c4..49455c9b4c1b294b643a02df777e6a6c
  	}
  }
 +
-+func (c *Config) EndpointDiscoveryStream() bool { return c.endpointDiscoveryStream }
-+func WithEndpointDiscoveryStream() Option {
-+	return func(c *Config) { c.endpointDiscoveryStream = true }
++func (c *Config) DiscoveryLongPoll() bool { return c.discoveryLongPoll }
++func WithDiscoveryLongPoll() Option {
++	return func(c *Config) { c.discoveryLongPoll = true }
 +}
 diff --git a/internal/discovery/discovery.go b/internal/discovery/discovery.go
 index da846411cb91110539ad646d18c6ec40902c3b9e..73ca3680bec14c46e2837306e72da179b85e4cfc 100644
@@ -529,99 +383,19 @@ index da846411cb91110539ad646d18c6ec40902c3b9e..73ca3680bec14c46e2837306e72da179
  	if err != nil {
  		return nil, location, xerrors.WithStackTrace(
  			xerrors.TransportError(err),
-diff --git a/internal/discovery/eds.go b/internal/discovery/eds.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..a88a0c3e3886b493055d658465c8de350fdc3850
---- /dev/null
-+++ b/internal/discovery/eds.go
-@@ -0,0 +1,38 @@
-+package discovery
-+
-+import (
-+	"fmt"
-+
-+	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
-+	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-+	ydb "github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Discovery"
-+
-+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/discovery/config"
-+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
-+)
-+
-+const EDSResource = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
-+
-+func DecodeEDS(r *discoveryv3.DiscoveryResponse, db string) (*ydb.ListEndpointsResult, error) {
-+	var a endpointv3.ClusterLoadAssignment
-+	if r.GetTypeUrl() != EDSResource || r.GetNonce() == "" || r.GetVersionInfo() == "" || len(r.GetResources()) != 1 || r.Resources[0].UnmarshalTo(&a) != nil || a.ClusterName != db || len(a.Endpoints) != 1 {
-+		return nil, fmt.Errorf("invalid endpoint assignment for %q", db)
-+	}
-+	group := a.Endpoints[0]
-+	attr := group.GetMetadata().GetTypedFilterMetadata()["ydb.discovery"]
-+	result := new(ydb.ListEndpointsResult)
-+	if attr == nil || attr.UnmarshalTo(result) != nil || len(result.Endpoints) != len(group.GetLbEndpoints()) {
-+		return nil, fmt.Errorf("invalid YDB discovery metadata")
-+	}
-+	for i, ep := range result.Endpoints {
-+		addr := group.LbEndpoints[i].GetEndpoint().GetAddress().GetSocketAddress()
-+		if addr.GetProtocol() != 0 || ep.GetAddress() == "" || ep.GetPort() == 0 || ep.GetPort() > 65535 || addr.GetAddress() != ep.Address || addr.GetPortValue() != ep.Port {
-+			return nil, fmt.Errorf("invalid socket address at index %d", i)
-+		}
-+	}
-+	return result, nil
-+}
-+
-+func FromEDS(result *ydb.ListEndpointsResult, cfg *config.Config) []endpoint.Endpoint {
-+	return endpointsFromDiscovery(result, cfg)
-+}
-diff --git a/internal/discovery/eds_test.go b/internal/discovery/eds_test.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..2d70f481df01054c98c5a8eefde0592570c8a915
---- /dev/null
-+++ b/internal/discovery/eds_test.go
-@@ -0,0 +1,30 @@
-+package discovery
-+
-+import (
-+	"testing"
-+
-+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-+	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
-+	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-+	ydb "github.com/ydb-platform/ydb-go-genproto/protos/Ydb_Discovery"
-+	"google.golang.org/protobuf/types/known/anypb"
-+)
-+
-+func TestEDSSnapshot(t *testing.T) {
-+	ydbResult, err := anypb.New(&ydb.ListEndpointsResult{SelfLocation: "dc1"})
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	assignment, err := anypb.New(&endpointv3.ClusterLoadAssignment{ClusterName: "/db", Endpoints: []*endpointv3.LocalityLbEndpoints{{Metadata: &corev3.Metadata{TypedFilterMetadata: map[string]*anypb.Any{"ydb.discovery": ydbResult}}}}})
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	resp := &discoveryv3.DiscoveryResponse{TypeUrl: EDSResource, VersionInfo: "a", Nonce: "1", Resources: []*anypb.Any{assignment}}
-+	got, err := DecodeEDS(resp, "/db")
-+	if err != nil || got.GetSelfLocation() != "dc1" {
-+		t.Fatalf("decode: %v, %v", got, err)
-+	}
-+	if _, err := DecodeEDS(resp, "/other"); err == nil {
-+		t.Fatal("accepted a different database")
-+	}
-+}
 diff --git a/options.go b/options.go
-index 1c173523b6b25d5a8f9f36bdf070c1cfe5bdc55e..3872188e2f5dc14e3227a3e58ae8aed6af86eaec 100644
+index 1c173523b6b25d5a8f9f36bdf070c1cfe5bdc55e..950d515db7611f41c9ed24ce4ef9f3561ac75444 100644
 --- a/options.go
 +++ b/options.go
 @@ -408,6 +408,15 @@ func MergeOptions(opts ...Option) Option {
  	}
  }
  
-+// WithEndpointDiscoveryStream enables the draft YDB EDS watch on the bootstrap channel.
-+// Drivers fall back to periodic discovery when the server returns Unimplemented.
-+func WithEndpointDiscoveryStream() Option {
++// WithDiscoveryLongPoll waits for replica switches on the bootstrap channel.
++// Drivers use periodic discovery when the balancer omits the route generation.
++func WithDiscoveryLongPoll() Option {
 +	return func(_ context.Context, d *Driver) error {
-+		d.discoveryOptions = append(d.discoveryOptions, discoveryConfig.WithEndpointDiscoveryStream())
++		d.discoveryOptions = append(d.discoveryOptions, discoveryConfig.WithDiscoveryLongPoll())
 +		return nil
 +	}
 +}

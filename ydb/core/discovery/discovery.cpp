@@ -256,7 +256,6 @@ namespace NDiscovery {
 
     TEvDiscovery::TEvDiscoveryData* TCachedMessageData::ToEvent(bool returnSerializedMessage) const {
         auto event = std::make_unique<TEvDiscovery::TEvDiscoveryData>();
-        event->Revision = Revision;
         if (returnSerializedMessage && !CachedMessage.empty() && !CachedMessageSsl.empty()) {
             event->CachedMessage = CachedMessage;
             event->CachedMessageSsl = CachedMessageSsl;
@@ -317,47 +316,6 @@ namespace NDiscoveryPrivate {
         THashMap<TString, TVector<TWaiter>> Requested;
         TVector<TAwaitingRequest> AwaitingRequests;
 
-        THashMap<TString, THashSet<TActorId>> Watchers;
-        ui64 LastRevision = 0;
-
-        std::shared_ptr<NDiscovery::TCachedMessageData> FindSnapshot(const TString& path) const {
-            if (auto it = CurrentCachedMessages.find(path); it != CurrentCachedMessages.end()) {
-                return it->second;
-            }
-            if (auto it = OldCachedMessages.find(path); it != OldCachedMessages.end()) {
-                return it->second;
-            }
-            return {};
-        }
-
-        void Changed(const TString& path) {
-            if (auto it = Watchers.find(path); it != Watchers.end()) {
-                for (const auto& actor : it->second) {
-                    Send(actor, new TEvDiscovery::TEvChanged);
-                }
-                Watchers.erase(it);
-            }
-        }
-
-        void Handle(TEvDiscovery::TEvWatch::TPtr& ev) {
-            const auto& path = ev->Get()->Path;
-            auto current = FindSnapshot(path);
-            if (current && current->Revision == ev->Get()->Revision) {
-                Watchers[path].insert(ev->Sender);
-            } else {
-                Send(ev->Sender, new TEvDiscovery::TEvChanged);
-            }
-        }
-
-        void Handle(TEvDiscovery::TEvUnwatch::TPtr& ev) {
-            if (auto it = Watchers.find(ev->Get()->Path); it != Watchers.end()) {
-                it->second.erase(ev->Sender);
-                if (it->second.empty()) {
-                    Watchers.erase(it);
-                }
-            }
-        }
-
         TMaybe<TString> EndpointId;
         TMaybe<TActorId> NameserviceActorId;
 
@@ -407,8 +365,6 @@ namespace NDiscoveryPrivate {
 
             if (msg->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 CurrentCachedMessages.erase(path);
-                DirtyCachedMessages.erase(path);
-                Changed(path);
                 return;
             }
 
@@ -447,20 +403,6 @@ namespace NDiscoveryPrivate {
                 EndpointId.GetOrElse({}), {}, msg->Status)
             );
 
-            const auto previous = FindSnapshot(path);
-            const auto sameEntry = [](const auto& a, const auto& b) {
-                return a.first == b.first && a.second.Payload == b.second.Payload
-                    && a.second.Dropped == b.second.Dropped;
-            };
-            if (previous && previous->Status == newCachedData->Status
-                    && previous->BridgeInfo == BridgeInfo
-                    && std::equal(previous->InfoEntries.begin(), previous->InfoEntries.end(),
-                        newCachedData->InfoEntries.begin(), newCachedData->InfoEntries.end(), sameEntry)) {
-                newCachedData->Revision = previous->Revision;
-            } else {
-                newCachedData->Revision = ++LastRevision;
-                Changed(path);
-            }
             DirtyCachedMessages.erase(path);
 
             if (AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
@@ -492,17 +434,12 @@ namespace NDiscoveryPrivate {
             } else {
                 OldCachedMessages.swap(CurrentCachedMessages);
                 CurrentCachedMessages.clear();
-                for (const auto& [path, _] : Watchers) {
-                    Request(path);
-                }
             }
 
             Y_ABORT_UNLESS(NameserviceResponse);
             Y_ABORT_UNLESS(!IsBridgeMode(ActorContext()) || BridgeInfo);
 
-            for (auto& [path, cachedData] : DirtyCachedMessages) {
-                cachedData->Revision = ++LastRevision;
-                Changed(path);
+            for (auto& [_, cachedData] : DirtyCachedMessages) {
                 cachedData->UpdateCache(NameserviceResponse, BridgeInfo, EndpointId.GetOrElse({}));
             }
 
@@ -548,8 +485,6 @@ namespace NDiscoveryPrivate {
 
             if ((*cachedData)->BridgeInfo != BridgeInfo) {
                 // A pile can stop serving requests without changing its endpoint-board entries.
-                (*cachedData)->Revision = ++LastRevision;
-                Changed(msg->Database);
                 (*cachedData)->UpdateCache(NameserviceResponse, BridgeInfo, EndpointId.GetOrElse({}));
             }
             Send(ev->Sender, (*cachedData)->ToEvent(msg->ReturnSerializedMessage), 0, ev->Cookie);
@@ -566,11 +501,6 @@ namespace NDiscoveryPrivate {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
                 {"ev", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
-            for (const auto& [path, _] : Watchers) {
-                if (auto snapshot = FindSnapshot(path); snapshot && snapshot->BridgeInfo != BridgeInfo) {
-                    DirtyCachedMessages[path] = snapshot;
-                }
-            }
         }
 
     public:
@@ -628,8 +558,6 @@ namespace NDiscoveryPrivate {
         STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvRequest, HandleOnWork);
-                hFunc(TEvDiscovery::TEvWatch, Handle);
-                hFunc(TEvDiscovery::TEvUnwatch, Handle);
                 hFunc(TEvStateStorage::TEvBoardInfo, Handle);
                 hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
                 hFunc(TEvNodeWardenStorageConfig, HandleOnWork);
@@ -652,7 +580,6 @@ class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
 
     bool ResolveResources = false;
     ui64 LookupCookie = 0;
-    TString BoardPath;
 
     void Reply(IEventBase* ev) {
         Send(ReplyTo, ev);
@@ -798,7 +725,6 @@ public:
                 "Database nodes resolve failed with no certain result"));
         }
 
-        LookupResponse->BoardPath = BoardPath;
         Reply(LookupResponse.Release());
     }
 
@@ -824,9 +750,9 @@ public:
             database.append("/").append(token);
         }
 
-        BoardPath = MakeLookupPath(database);
+        const auto reqPath = MakeLookupPath(database);
 
-        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(BoardPath, ReturnSerializedMessage), 0, ++LookupCookie);
+        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, ReturnSerializedMessage), 0, ++LookupCookie);
         LookupResponse.Reset();
     }
 

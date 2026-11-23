@@ -25,9 +25,8 @@ enum class EDiscoveryMode {
     //! Do not perform discovery.
     //! This option disables database discovery and allow to use user provided endpoint for grpc connections
     Off,
-    //! Experimental. Asynchronously watch one database's full endpoint assignment on the
-    //! bootstrap channel. Probe older servers periodically while using ListEndpoints.
-    Eds
+    //! Use conditional ListEndpoints calls on the bootstrap channel. Older servers use periodic discovery.
+    LongPoll
 };
 
 //! @deprecated Use TBalancingPolicy instead

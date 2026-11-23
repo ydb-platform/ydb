@@ -26,9 +26,9 @@ public final class RediscoveryProbe {
         String database = Objects.requireNonNull(System.getenv("YDB_DATABASE"), "YDB_DATABASE");
 
         GrpcTransportBuilder builder = GrpcTransport.forConnectionString("grpc://" + endpoint + database);
-        if ("1".equals(System.getenv("YDB_EDS_DISCOVERY"))) {
+        if ("1".equals(System.getenv("YDB_LONG_POLL_DISCOVERY"))) {
             // The same probe also builds against the released, unary-only artifact.
-            builder.getClass().getMethod("withEdsDiscovery").invoke(builder);
+            builder.getClass().getMethod("withLongPollDiscovery").invoke(builder);
         }
         try (GrpcTransport transport = builder.withDiscoveryTimeout(RETRY_WINDOW)
                 .withReadTimeout(Duration.ofSeconds(2))

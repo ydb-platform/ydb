@@ -7,8 +7,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint = env::var("YDB_ENDPOINT")?;
     let database = env::var("YDB_DATABASE")?;
     let mut uri = format!("grpc://{endpoint}{database}");
-    if env::var("YDB_EDS_DISCOVERY").as_deref() == Ok("1") {
-        uri.push_str("?use_discovery=eds");
+    if env::var("YDB_LONG_POLL_DISCOVERY").as_deref() == Ok("1") {
+        uri.push_str("?use_discovery=long_poll");
     }
     let client = ClientBuilder::new_from_connection_string(uri)?
         .with_credentials(AnonymousCredentials::new())
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     TopicWriterOptions::builder()
                         .topic_path(topic)
                         .producer_id(
-                            env::var("YDB_PRODUCER").unwrap_or_else(|_| "eds-probe".to_owned()),
+                            env::var("YDB_PRODUCER").unwrap_or_else(|_| "poll-probe".to_owned()),
                         )
                         .build(),
                 )

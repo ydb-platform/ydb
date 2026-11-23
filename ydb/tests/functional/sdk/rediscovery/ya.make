@@ -6,10 +6,9 @@ REQUIREMENTS(cpu:4 ram:12)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
-    test_eds_cutover.py
-    test_eds_server.py
+    test_long_poll.py
 )
-PY_SRCS(eds_balancer.py)
+PY_SRCS(long_poll_balancer.py run_long_poll_probe.py)
 
 DEPENDS(
     ydb/tests/functional/sdk/rediscovery/clients/cpp
@@ -18,7 +17,6 @@ DEPENDS(
 PEERDIR(
     contrib/python/grpcio
     ydb/public/api/grpc
-    ydb/public/api/grpc/draft/xds
     ydb/tests/library
     ydb/tests/oss/ydb_sdk_import
 )

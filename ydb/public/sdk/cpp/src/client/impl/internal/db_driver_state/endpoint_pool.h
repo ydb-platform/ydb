@@ -29,17 +29,14 @@ struct TEndpointUpdateResult {
 
 class TEndpointPool {
 public:
-    enum class EUpdateReason { Regular, TransportFailure };
 
     TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client);
     ~TEndpointPool();
     void EnableWatch();
-    void PauseWatch();
-    void PublishWatchResult(TListEndpointsResult result);
-    bool RegisterWatchStream(const std::string& endpoint, const NYdbGrpc::IQueueClientContextPtr& context);
+    enum class ERouteUpdate { Refresh, Switch };
+    void PublishWatchResult(TListEndpointsResult result, ERouteUpdate update = ERouteUpdate::Refresh);
     bool UsesWatch() const { return UsesWatch_; }
-    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync(EUpdateReason reason = EUpdateReason::Regular);
-    NThreading::TFuture<TEndpointUpdateResult> GetPendingTransportUpdate();
+    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const std::string& endpoint);
@@ -55,8 +52,7 @@ public:
     static constexpr std::int32_t GetLocalityShift();
 
 private:
-    NThreading::TFuture<void> RunUpdates();
-    std::vector<std::string> Install(const Ydb::Discovery::ListEndpointsResult& result, TEndpointElectorSafe::EPenalties penalties);
+    std::vector<std::string> Install(const Ydb::Discovery::ListEndpointsResult& result);
     bool IsPreferredEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
                              const std::string& selfLocation,
                              const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
@@ -70,11 +66,7 @@ private:
     bool UsesWatch_ = false; // Set before publishing the driver state.
     TPlainStatus WatchStatus_;
     std::unordered_map<std::string, std::shared_ptr<NYdbGrpc::TEndpointAdmission>> WatchAdmissions_;
-    std::vector<std::pair<std::string, std::weak_ptr<NYdbGrpc::IQueueClientContext>>> WatchStreams_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
-    std::atomic_bool TransportUpdatePending_ = false;
-    std::uint64_t TransportGeneration_ = 0;
-    TDeadline NextTransportUpdate_;
     std::atomic_uint64_t LastUpdateTime_;
     const TBalancingPolicy::TImpl BalancingPolicy_;
 

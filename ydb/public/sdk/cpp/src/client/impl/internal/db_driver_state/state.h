@@ -46,7 +46,6 @@ public:
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
-    NThreading::TFuture<TEndpointUpdateResult> UpdateEndpoints(TEndpointPool::EUpdateReason reason);
     void InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
     std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
 

@@ -1,15 +1,15 @@
 diff --git a/src/Ydb.Sdk/CHANGELOG.md b/src/Ydb.Sdk/CHANGELOG.md
-index 120c36278bf1c6e08d9a08a8bfcf1223f469725f..7e8005293da6d6482d92966f61b3a44aa26006bd 100644
+index 120c36278bf1c6e08d9a08a8bfcf1223f469725f..e7aad00974e0cabb8417bc6f51526e4c418d6a22 100644
 --- a/src/Ydb.Sdk/CHANGELOG.md
 +++ b/src/Ydb.Sdk/CHANGELOG.md
 @@ -1,3 +1,5 @@
-+- Add opt-in EDS endpoint discovery with the `EnableEdsDiscovery` connection setting.
++- Add opt-in long-poll endpoint discovery with the `EnableLongPollDiscovery` connection setting.
 +
  ## v0.38.1
  
  - Fix ADO.NET: the default `ydb.query.session.pool.name` metric attribute no longer contains the password from the
 diff --git a/src/Ydb.Sdk/src/Ado/YdbConnectionStringBuilder.cs b/src/Ydb.Sdk/src/Ado/YdbConnectionStringBuilder.cs
-index d608296ab2011c30a8f6f68a90c3f28912ebd208..94f98db90977e5172ac390159759cda8dd43071d 100644
+index d608296ab2011c30a8f6f68a90c3f28912ebd208..b9411908fe492582a3807100351caf816a9e20bd 100644
 --- a/src/Ydb.Sdk/src/Ado/YdbConnectionStringBuilder.cs
 +++ b/src/Ydb.Sdk/src/Ado/YdbConnectionStringBuilder.cs
 @@ -552,6 +552,18 @@ public sealed class YdbConnectionStringBuilder : DbConnectionStringBuilder, IDri
@@ -17,17 +17,17 @@ index d608296ab2011c30a8f6f68a90c3f28912ebd208..94f98db90977e5172ac390159759cda8
      }
  
 +    /// <summary>Subscribe to endpoint changes on a retained bootstrap channel.</summary>
-+    public bool EnableEdsDiscovery
++    public bool EnableLongPollDiscovery
 +    {
-+        get => _enableEdsDiscovery;
++        get => _enableLongPollDiscovery;
 +        set
 +        {
-+            _enableEdsDiscovery = value;
-+            SaveValue(nameof(EnableEdsDiscovery), value);
++            _enableLongPollDiscovery = value;
++            SaveValue(nameof(EnableLongPollDiscovery), value);
 +        }
 +    }
 +
-+    private bool _enableEdsDiscovery;
++    private bool _enableLongPollDiscovery;
      private bool _enablePreferNearestDcBalancing;
  
      /// <summary>
@@ -36,7 +36,7 @@ index d608296ab2011c30a8f6f68a90c3f28912ebd208..94f98db90977e5172ac390159759cda8
          $"MaxReceiveMessageSize={MaxReceiveMessageSize};DisableDiscovery={DisableDiscovery};" +
          $"ServiceAccountKeyFilePath={ServiceAccountKeyFilePath};EnableMetadataCredentials={EnableMetadataCredentials};" +
 -        $"EnablePreferNearestDcBalancing={EnablePreferNearestDcBalancing}" + ClientInfoKeyFragment + ProxyKeyFragment;
-+        $"EnablePreferNearestDcBalancing={EnablePreferNearestDcBalancing}" + (EnableEdsDiscovery ? ";EnableEdsDiscovery=true" : string.Empty) + ClientInfoKeyFragment + ProxyKeyFragment;
++        $"EnablePreferNearestDcBalancing={EnablePreferNearestDcBalancing}" + (EnableLongPollDiscovery ? ";EnableLongPollDiscovery=true" : string.Empty) + ClientInfoKeyFragment + ProxyKeyFragment;
  
      private string ClientInfoKeyFragment => ClientInfo is null ? string.Empty : $";ClientInfo={ClientInfo}";
  
@@ -44,7 +44,7 @@ index d608296ab2011c30a8f6f68a90c3f28912ebd208..94f98db90977e5172ac390159759cda8
              MaxSendMessageSize = MaxSendMessageSize,
              MaxReceiveMessageSize = MaxReceiveMessageSize,
              EnablePreferNearestDcBalancing = EnablePreferNearestDcBalancing,
-+            EnableEdsDiscovery = EnableEdsDiscovery,
++            EnableLongPollDiscovery = EnableLongPollDiscovery,
              Proxy = Proxy
          };
  
@@ -52,13 +52,13 @@ index d608296ab2011c30a8f6f68a90c3f28912ebd208..94f98db90977e5172ac390159759cda8
                      (builder, enablePreferNearestDcBalancing) =>
                          builder.EnablePreferNearestDcBalancing = enablePreferNearestDcBalancing),
                  "EnablePreferNearestDcBalancing", "Enable Prefer Nearest Dc Balancing");
-+            AddOption(new YdbConnectionOption<bool>(BoolExtractor, (builder, enabled) => builder.EnableEdsDiscovery = enabled),
-+                "EnableEdsDiscovery", "Enable Eds Discovery");
++            AddOption(new YdbConnectionOption<bool>(BoolExtractor, (builder, enabled) => builder.EnableLongPollDiscovery = enabled),
++                "EnableLongPollDiscovery", "Enable Long Poll Discovery");
              AddOption(new YdbConnectionOption<string>(StringExtractor,
                      (builder, poolName) => builder.PoolName = poolName),
                  "PoolName", "Pool Name");
 diff --git a/src/Ydb.Sdk/src/Driver.cs b/src/Ydb.Sdk/src/Driver.cs
-index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..e4267cbd8219cdaa53d6026ceb446e690bbb2f7e 100644
+index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badfe0c0b84c 100644
 --- a/src/Ydb.Sdk/src/Driver.cs
 +++ b/src/Ydb.Sdk/src/Driver.cs
 @@ -20,7 +20,7 @@ namespace Ydb.Sdk;
@@ -75,7 +75,7 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..e4267cbd8219cdaa53d6026ceb446e69
      {
          var driver = new Driver(config, loggerFactory);
 -        await driver.Initialize().ConfigureAwait(false);
-+        if (config.EnableEdsDiscovery)
++        if (config.EnableLongPollDiscovery)
 +        {
 +            await driver.StartEndpointWatch().ConfigureAwait(false);
 +        }
@@ -209,19 +209,19 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..e4267cbd8219cdaa53d6026ceb446e69
      }
  }
 diff --git a/src/Ydb.Sdk/src/DriverConfig.cs b/src/Ydb.Sdk/src/DriverConfig.cs
-index e25d06a5ab5ba7a0426df56ec7c07b214fa6052c..ff461a0bf8508a2a05f2534bbb876a9655290aaa 100644
+index e25d06a5ab5ba7a0426df56ec7c07b214fa6052c..d6523e7b683f3383921ed2419ca53f5192564e28 100644
 --- a/src/Ydb.Sdk/src/DriverConfig.cs
 +++ b/src/Ydb.Sdk/src/DriverConfig.cs
 @@ -98,6 +98,7 @@ internal class DriverConfig
      public IWebProxy? Proxy { get; init; }
  
      internal X509Certificate2Collection CustomServerCertificates { get; } = [];
-+    internal bool EnableEdsDiscovery { get; init; }
++    internal bool EnableLongPollDiscovery { get; init; }
      internal TimeSpan EndpointDiscoveryInterval = TimeSpan.FromMinutes(1);
      internal TimeSpan EndpointDiscoveryTimeout = TimeSpan.FromSeconds(10);
      internal EndpointInfo EndpointInfo { get; }
 diff --git a/src/Ydb.Sdk/src/IDriver.cs b/src/Ydb.Sdk/src/IDriver.cs
-index fd2f07d3234b9ad53760b652befee173e99047b4..9e42316ddb820be086e08c63439d200880e4e1b0 100644
+index fd2f07d3234b9ad53760b652befee173e99047b4..84b84155cb9041bfdc4700be9297a2da97f66c66 100644
 --- a/src/Ydb.Sdk/src/IDriver.cs
 +++ b/src/Ydb.Sdk/src/IDriver.cs
 @@ -104,6 +104,9 @@ public interface IDriver : IAsyncDisposable
@@ -310,7 +310,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..9e42316ddb820be086e08c63439d2008
              e => { OnRpcError(endpointInfo, e); },
 -            _credentialsProvider
 +            _credentialsProvider,
-+            Config.EnableEdsDiscovery ? () => epoch != Volatile.Read(ref RouteEpoch) : null
++            Config.EnableLongPollDiscovery ? () => epoch != Volatile.Read(ref RouteEpoch) : null
          );
      }
  
@@ -319,7 +319,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..9e42316ddb820be086e08c63439d2008
 +
 +    private T StartCall<T>(long epoch, EndpointInfo endpoint, Func<CallInvoker, T> start)
 +    {
-+        if (!Config.EnableEdsDiscovery)
++        if (!Config.EnableLongPollDiscovery)
 +        {
 +            return start(ChannelPool.GetChannel(endpoint).CreateCallInvoker());
 +        }
@@ -355,23 +355,20 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..9e42316ddb820be086e08c63439d2008
          _stream = stream;
          _rpcErrorAction = rpcErrorAction;
          _credentialsProvider = credentialsProvider;
-diff --git a/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
+diff --git a/src/Ydb.Sdk/src/Internal/LongPollDiscovery.cs b/src/Ydb.Sdk/src/Internal/LongPollDiscovery.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058fbca988e
+index 0000000000000000000000000000000000000000..83228bbeb48f3be84ee69c69b132def45924a668
 --- /dev/null
-+++ b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
-@@ -0,0 +1,235 @@
++++ b/src/Ydb.Sdk/src/Internal/LongPollDiscovery.cs
+@@ -0,0 +1,124 @@
 +using System.Globalization;
-+using Google.Protobuf;
 +using Grpc.Core;
-+using Grpc.Net.Client;
 +using Microsoft.Extensions.Logging;
 +using Ydb.Discovery;
 +using Ydb.Discovery.V1;
 +using Ydb.Sdk.Ado;
 +using Ydb.Sdk.Ado.Internal;
 +using Ydb.Sdk.Internal;
-+using Ydb.Sdk.Internal.Eds;
 +using EndpointInfo = Ydb.Sdk.Pool.EndpointInfo;
 +using GrpcMetadata = Grpc.Core.Metadata;
 +
@@ -379,20 +376,11 @@ index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058
 +
 +internal sealed partial class Driver
 +{
-+    private const string EdsType = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 +    private const string GenerationHeader = "x-ydb-route-generation";
-+    private const string ModeHeader = "x-ydb-route-mode";
-+
-+    private static readonly Method<DiscoveryRequest, DiscoveryResponse> StreamEndpoints = new(
-+        MethodType.DuplexStreaming, "envoy.service.endpoint.v3.EndpointDiscoveryService", "StreamEndpoints",
-+        Marshallers.Create(request => request.ToByteArray(), DiscoveryRequest.Parser.ParseFrom),
-+        Marshallers.Create(response => response.ToByteArray(), DiscoveryResponse.Parser.ParseFrom));
-+
 +    private readonly CancellationTokenSource _watchStop = new();
 +    private readonly TaskCompletionSource _firstSnapshot = new(TaskCreationOptions.RunContinuationsAsynchronously);
 +    private Task? _watch;
 +    private ulong? _routeFloor;
-+    private bool _requireCurrent;
 +
 +    private async Task StartEndpointWatch()
 +    {
@@ -421,170 +409,71 @@ index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058
 +    private async Task WatchEndpoints(CancellationToken stop)
 +    {
 +        using var bootstrap = GrpcChannelFactory.CreateChannel(Config.Endpoint);
-+        var delayMs = 0;
++        var discovery = new DiscoveryService.DiscoveryServiceClient(bootstrap);
++        var delayMs = 100;
 +        while (!stop.IsCancellationRequested)
 +        {
-+            ulong? cutover = null;
 +            try
 +            {
-+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(stop);
-+                attempt.CancelAfter(Config.EndpointDiscoveryTimeout);
-+                using var stream = bootstrap.CreateCallInvoker().AsyncDuplexStreamingCall(StreamEndpoints, null,
-+                    await DiscoveryOptions(attempt.Token).ConfigureAwait(false));
-+                var subscription = new DiscoveryRequest { TypeUrl = EdsType, ResourceNames = { Config.Database } };
-+                var initial = new GrpcMetadata();
-+                var received = false;
-+                try
++                var timeout = Config.EndpointDiscoveryTimeout;
++                if (_routeFloor.HasValue && timeout < TimeSpan.FromSeconds(45))
 +                {
-+                    await stream.RequestStream.WriteAsync(subscription).ConfigureAwait(false);
-+                    initial = await stream.ResponseHeadersAsync.ConfigureAwait(false);
-+                    await AcceptRoute(initial).ConfigureAwait(false);
-+                    while (await stream.ResponseStream.MoveNext(attempt.Token).ConfigureAwait(false))
-+                    {
-+                        received = true;
-+                        var message = stream.ResponseStream.Current;
-+                        subscription.ResponseNonce = message.Nonce;
-+                        try
-+                        {
-+                            var endpoints = Decode(message);
-+                            await ApplyEndpoints(endpoints).ConfigureAwait(false);
-+                        }
-+                        catch (Exception error) when (error is InvalidDataException or InvalidProtocolBufferException)
-+                        {
-+                            subscription.ErrorDetail = new Internal.Eds.Status { Code = 3, Message = error.Message };
-+                            await stream.RequestStream.WriteAsync(subscription).ConfigureAwait(false);
-+                            await RetireRoute().ConfigureAwait(false);
-+                            continue;
-+                        }
-+                        subscription.ErrorDetail = null;
-+                        attempt.CancelAfter(Timeout.InfiniteTimeSpan);
-+                        _requireCurrent = false;
-+                        delayMs = 0;
-+                        _firstSnapshot.TrySetResult();
-+                        subscription.VersionInfo = message.VersionInfo;
-+                        await stream.RequestStream.WriteAsync(subscription).ConfigureAwait(false);
-+                    }
++                    timeout = TimeSpan.FromSeconds(45);
 +                }
-+                catch (RpcException error) when (!received && error.StatusCode == Grpc.Core.StatusCode.Unimplemented)
++                var options = await GetCallOptions(new GrpcRequestSettings { CancellationToken = stop }, Config.EndpointInfo)
++                    .ConfigureAwait(false);
++                var headers = options.Headers!;
++                headers.AppendObservabilityChain();
++                headers.Add("x-ydb-discovery-long-poll", "1");
++                if (_routeFloor is { } floor)
 +                {
-+                    // A trailers-only legacy server has no initial metadata. A managed
-+                    // L7 can still have sent a newer generation before UNIMPLEMENTED.
-+                    try { initial = await stream.ResponseHeadersAsync.ConfigureAwait(false); }
-+                    catch (RpcException rpc) when (rpc.StatusCode == Grpc.Core.StatusCode.Unimplemented) { }
-+                    await AcceptRoute(initial).ConfigureAwait(false);
-+                    await LegacySnapshot(bootstrap, stop).ConfigureAwait(false);
-+                    _firstSnapshot.TrySetResult();
-+                    _requireCurrent = false;
-+                    delayMs = 0;
++                    headers.Add("x-ydb-if-route-generation", floor.ToString(CultureInfo.InvariantCulture));
++                }
++                using var call = discovery.ListEndpointsAsync(new ListEndpointsRequest { Database = Config.Database },
++                    options.WithDeadline(DateTime.UtcNow + timeout));
++                var reply = await call.ResponseAsync.ConfigureAwait(false);
++                if (reply.Operation.Status.IsNotSuccess())
++                {
++                    throw YdbException.FromServer(reply.Operation.Status, reply.Operation.Issues);
++                }
++                var result = reply.Operation.Result.Unpack<ListEndpointsResult>();
++                var next = Generation(_routeFloor, await call.ResponseHeadersAsync.ConfigureAwait(false), call.GetTrailers());
++                if (next.HasValue && next != _routeFloor)
++                {
++                    await RetireRoute().ConfigureAwait(false);
++                }
++                await ApplyEndpoints(result).ConfigureAwait(false);
++                _routeFloor = next;
++                _firstSnapshot.TrySetResult();
++                delayMs = 100;
++                if (!next.HasValue)
++                {
 +                    await Task.Delay(Config.EndpointDiscoveryInterval, stop).ConfigureAwait(false);
-+                    continue;
-+                }
-+                catch (RpcException error)
-+                {
-+                    cutover = CutoverGeneration(_routeFloor, error);
-+                    throw;
 +                }
 +            }
 +            catch (Exception error) when (!stop.IsCancellationRequested)
 +            {
-+                Logger.LogWarning(error, "Endpoint discovery watch closed");
-+            }
-+            if (stop.IsCancellationRequested) { return; }
-+
-+            _requireCurrent = _routeFloor.HasValue && !cutover.HasValue;
-+            _routeFloor = cutover ?? _routeFloor;
-+            await RetireRoute().ConfigureAwait(false);
-+            if (delayMs > 0)
-+            {
++                Logger.LogWarning(error, "Endpoint discovery failed");
++                if (_routeFloor.HasValue)
++                {
++                    await RetireRoute().ConfigureAwait(false);
++                }
 +                await Task.Delay(Random.Shared.Next(delayMs / 2, delayMs + 1), stop).ConfigureAwait(false);
-+            }
-+            delayMs = Math.Min(2000, Math.Max(100, delayMs * 2));
-+        }
-+    }
-+
-+    private async Task LegacySnapshot(GrpcChannel bootstrap, CancellationToken stop)
-+    {
-+        var options = (await DiscoveryOptions(stop).ConfigureAwait(false)).WithDeadline(DateTime.UtcNow + Config.EndpointDiscoveryTimeout);
-+        using var call = new DiscoveryService.DiscoveryServiceClient(bootstrap).ListEndpointsAsync(
-+            new ListEndpointsRequest { Database = Config.Database }, options);
-+        var reply = await call.ResponseAsync.ConfigureAwait(false);
-+        await AcceptRoute(await call.ResponseHeadersAsync.ConfigureAwait(false)).ConfigureAwait(false);
-+        if (reply.Operation.Status.IsNotSuccess())
-+        {
-+            throw YdbException.FromServer(reply.Operation.Status, reply.Operation.Issues);
-+        }
-+        await ApplyEndpoints(reply.Operation.Result.Unpack<ListEndpointsResult>()).ConfigureAwait(false);
-+    }
-+
-+    private async ValueTask<CallOptions> DiscoveryOptions(CancellationToken stop)
-+    {
-+        var options = await GetCallOptions(new GrpcRequestSettings { CancellationToken = stop }, Config.EndpointInfo)
-+            .ConfigureAwait(false);
-+        var headers = options.Headers!;
-+        headers.AppendObservabilityChain();
-+        if (_routeFloor is { } floor)
-+        {
-+            headers.Add("x-ydb-min-route-generation", floor.ToString(CultureInfo.InvariantCulture));
-+        }
-+        if (_requireCurrent) { headers.Add("x-ydb-require-current-route", "1"); }
-+        return options;
-+    }
-+
-+    internal static ulong? CutoverGeneration(ulong? floor, RpcException error) =>
-+        error.StatusCode == Grpc.Core.StatusCode.Unavailable && Generation(error.Trailers) is { } cut && cut > floor
-+            ? cut : null;
-+
-+    private static ulong? Generation(GrpcMetadata headers)
-+    {
-+        var values = headers.GetAll(GenerationHeader).ToArray();
-+        return values.Length == 1 && ulong.TryParse(values[0].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
-+            ? value : null;
-+    }
-+
-+    private async ValueTask AcceptRoute(GrpcMetadata headers)
-+    {
-+        if (!_routeFloor.HasValue && headers.Get(GenerationHeader) == null && headers.Get(ModeHeader) == null) { return; }
-+        var modes = headers.GetAll(ModeHeader).ToArray();
-+        if (Generation(headers) is not { } generation || generation < _routeFloor || modes.Length != 1 || modes[0].Value != "managed")
-+        {
-+            throw new InvalidDataException("Missing or stale discovery route metadata");
-+        }
-+        if (_routeFloor.HasValue && _routeFloor.Value != generation)
-+        {
-+            await RetireRoute().ConfigureAwait(false);
-+        }
-+        _routeFloor = generation;
-+    }
-+
-+    private ListEndpointsResult Decode(DiscoveryResponse message)
-+    {
-+        if (message.VersionInfo == "" || message.Nonce == "" || message.TypeUrl != EdsType
-+            || message.Resources.Count != 1 || message.Resources[0].TypeUrl != EdsType)
-+        {
-+            throw new InvalidDataException("Expected one versioned EDS assignment");
-+        }
-+        var assignment = ClusterLoadAssignment.Parser.ParseFrom(message.Resources[0].Value);
-+        if (assignment.ClusterName != Config.Database || assignment.Endpoints.Count != 1)
-+        {
-+            throw new InvalidDataException("Unexpected EDS resource");
-+        }
-+        var group = assignment.Endpoints[0];
-+        if (group.Metadata == null || !group.Metadata.TypedFilterMetadata.TryGetValue("ydb.discovery", out var metadata)
-+            || !metadata.TryUnpack<ListEndpointsResult>(out var result) || result.Endpoints.Count != group.LbEndpoints.Count)
-+        {
-+            throw new InvalidDataException("Invalid YDB discovery metadata");
-+        }
-+        for (var i = 0; i < result.Endpoints.Count; ++i)
-+        {
-+            var socket = group.LbEndpoints[i].Endpoint?.Address?.SocketAddress;
-+            var endpoint = result.Endpoints[i];
-+            if (socket == null || socket.Protocol != 0 || socket.Address == "" || socket.Address != endpoint.Address
-+                || socket.PortValue is 0 or > 65535 || socket.PortValue != endpoint.Port)
-+            {
-+                throw new InvalidDataException("Invalid EDS address");
++                delayMs = Math.Min(2000, delayMs * 2);
 +            }
 +        }
-+        return result;
++    }
++
++    internal static ulong? Generation(ulong? previous, GrpcMetadata headers, GrpcMetadata trailers)
++    {
++        var entries = headers.GetAll(GenerationHeader).Concat(trailers.GetAll(GenerationHeader)).ToArray();
++        if (entries.Length == 0 && !previous.HasValue) { return null; }
++        if (entries.Length != 1 || !ulong.TryParse(entries[0].Value, NumberStyles.None, CultureInfo.InvariantCulture,
++                out var value) || value < previous)
++        {
++            throw new InvalidDataException("Missing or stale discovery route generation");
++        }
++        return value;
 +    }
 +
 +    private ValueTask RetireRoute()
@@ -595,89 +484,6 @@ index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058
 +            return ChannelPool.RemoveChannels(_endpointPool.Reset(Array.Empty<EndpointInfo>()));
 +        }
 +    }
-+}
-diff --git a/src/Ydb.Sdk/src/Internal/Eds/discovery.proto b/src/Ydb.Sdk/src/Internal/Eds/discovery.proto
-new file mode 100644
-index 0000000000000000000000000000000000000000..af5ab76c613e2d828dd91a84c7c5a38a54f65336
---- /dev/null
-+++ b/src/Ydb.Sdk/src/Internal/Eds/discovery.proto
-@@ -0,0 +1,77 @@
-+syntax = "proto3";
-+
-+package ydb.sdk.eds;
-+option csharp_namespace = "Ydb.Sdk.Internal.Eds";
-+
-+import "google/protobuf/any.proto";
-+import "google/protobuf/wrappers.proto";
-+
-+// Wire projection of the Envoy v3 EDS messages used by YDB. Keep field numbers
-+// aligned with envoy/service/discovery/v3 and envoy/config/{core,endpoint}/v3.
-+// The private package avoids registering partial Envoy message descriptors.
-+message Node {
-+    string id = 1;
-+    string cluster = 2;
-+}
-+
-+message Status {
-+    int32 code = 1;
-+    string message = 2;
-+}
-+
-+message DiscoveryRequest {
-+    string version_info = 1;
-+    Node node = 2;
-+    repeated string resource_names = 3;
-+    string type_url = 4;
-+    string response_nonce = 5;
-+    Status error_detail = 6;
-+}
-+
-+message DiscoveryResponse {
-+    string version_info = 1;
-+    repeated google.protobuf.Any resources = 2;
-+    string type_url = 4;
-+    string nonce = 5;
-+}
-+
-+message Metadata {
-+    map<string, google.protobuf.Any> typed_filter_metadata = 2;
-+}
-+
-+message SocketAddress {
-+    uint32 protocol = 1;
-+    string address = 2;
-+    oneof port_specifier {
-+        uint32 port_value = 3;
-+        string named_port = 4;
-+    }
-+}
-+
-+message Address {
-+    SocketAddress socket_address = 1;
-+}
-+
-+message Endpoint {
-+    Address address = 1;
-+}
-+
-+message LbEndpoint {
-+    Endpoint endpoint = 1;
-+}
-+
-+message Locality {
-+    string region = 1;
-+}
-+
-+message LocalityLbEndpoints {
-+    Locality locality = 1;
-+    repeated LbEndpoint lb_endpoints = 2;
-+    google.protobuf.UInt32Value load_balancing_weight = 3;
-+    Metadata metadata = 9;
-+}
-+
-+message ClusterLoadAssignment {
-+    string cluster_name = 1;
-+    repeated LocalityLbEndpoints endpoints = 2;
 +}
 diff --git a/src/Ydb.Sdk/src/Pool/EndpointPool.cs b/src/Ydb.Sdk/src/Pool/EndpointPool.cs
 index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..aaba2e3ae90a6606a1003743b2ec468b02d74a39 100644
@@ -707,54 +513,35 @@ index 56e1287dca00f3679fe2f7fa5f65c87f69335324..714486f59156d8c6eee6dd8ca7f74395
  
      protected void ReconnectSession(StatusCode statusCode = StatusCode.Unspecified)
      {
-diff --git a/src/Ydb.Sdk/src/Ydb.Sdk.csproj b/src/Ydb.Sdk/src/Ydb.Sdk.csproj
-index e74e4d66e32673d97e0fdc0e4a3882131bddcb9f..8e8cf0b4d30328e20b1b53e3429ae0a325eeffb6 100644
---- a/src/Ydb.Sdk/src/Ydb.Sdk.csproj
-+++ b/src/Ydb.Sdk/src/Ydb.Sdk.csproj
-@@ -29,6 +29,8 @@
-   </PropertyGroup>
- 
-   <ItemGroup>
-+    <Protobuf Include="Internal/Eds/discovery.proto" GrpcServices="None" Access="Internal" />
-+    <PackageReference Include="Grpc.Tools" Version="2.42.0" PrivateAssets="All" />
-     <PackageReference Include="Ydb.Protos" Version="1.4.0" />
-     <PackageReference Include="Portable.BouncyCastle" Version="1.9.0" />
-     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.5.0" />
-diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/EdsCutoverTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/EdsCutoverTests.cs
+diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/LongPollCutoverTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/LongPollCutoverTests.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..d0d0603a2bf19ebb061a1a5e598a65c6c17d664a
+index 0000000000000000000000000000000000000000..0cd9b0c3cfff76b4e56b367a9fa33143412e02e0
 --- /dev/null
-+++ b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/EdsCutoverTests.cs
-@@ -0,0 +1,27 @@
-+using Grpc.Core;
++++ b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Internal/LongPollCutoverTests.cs
+@@ -0,0 +1,21 @@
 +using Xunit;
-+using GrpcStatusCode = Grpc.Core.StatusCode;
 +
 +namespace Ydb.Sdk.Ado.Tests.Internal;
 +
-+public class EdsCutoverTests
++public class LongPollCutoverTests
 +{
-+    [Theory]
-+    [InlineData(GrpcStatusCode.Unavailable, "12", null, 12)]
-+    [InlineData(GrpcStatusCode.Unavailable, null, null, null)]
-+    [InlineData(GrpcStatusCode.Unavailable, "11", null, null)]
-+    [InlineData(GrpcStatusCode.Unavailable, "10", null, null)]
-+    [InlineData(GrpcStatusCode.Unavailable, "bad", null, null)]
-+    [InlineData(GrpcStatusCode.Unavailable, "12", "13", null)]
-+    [InlineData(GrpcStatusCode.Internal, "12", null, null)]
-+    public void OnlyANewerUniqueStampOnUnavailableAllowsFloorOnlyRetry(
-+        GrpcStatusCode status, string? first, string? second, int? expected)
++    [Fact]
++    public void RejectsMissingRegressingOrRepeatedGeneration()
 +    {
++        var headers = new Grpc.Core.Metadata();
 +        var trailers = new Grpc.Core.Metadata();
-+        if (first != null) { trailers.Add("x-ydb-route-generation", first); }
-+        if (second != null) { trailers.Add("x-ydb-route-generation", second); }
-+        var error = new RpcException(new Grpc.Core.Status(status, "closed"), trailers);
-+        Assert.Equal((ulong?)expected, Driver.CutoverGeneration(11, error));
-+        Assert.Null(Driver.CutoverGeneration(null, error));
++        Assert.Null(Driver.Generation(null, headers, trailers));
++        Assert.Throws<InvalidDataException>(() => Driver.Generation(1, headers, trailers));
++        trailers.Add("x-ydb-route-generation", "18446744073709551615");
++        Assert.Equal(ulong.MaxValue, Driver.Generation(1, headers, trailers));
++        Assert.Equal(ulong.MaxValue, Driver.Generation(ulong.MaxValue, headers, trailers));
++        headers.Add("x-ydb-route-generation", "1");
++        Assert.Throws<InvalidDataException>(() => Driver.Generation(1, headers, trailers));
++        Assert.Throws<InvalidDataException>(() => Driver.Generation(2, headers, new Grpc.Core.Metadata()));
 +    }
 +}
 diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs
-index 99f6cb6b309ba1c34ca2417243451a052a44e554..0f126a0506b4c99ad92fb3d7405803a3b62409eb 100644
+index 99f6cb6b309ba1c34ca2417243451a052a44e554..86e4fa08068ffb7f0bf4ba3c2f7c041dc4ef68c4 100644
 --- a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs
 +++ b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs
 @@ -6,6 +6,16 @@ namespace Ydb.Sdk.Ado.Tests;
@@ -762,12 +549,12 @@ index 99f6cb6b309ba1c34ca2417243451a052a44e554..0f126a0506b4c99ad92fb3d7405803a3
  public class YdbConnectionStringBuilderTests
  {
 +    [Fact]
-+    public void EdsDiscoveryUsesAnIndependentDriverPool()
++    public void LongPollDiscoveryUsesAnIndependentDriverPool()
 +    {
 +        var defaults = new YdbConnectionStringBuilder();
-+        var streaming = new YdbConnectionStringBuilder("Enable Eds Discovery=true");
-+        Assert.False(defaults.EnableEdsDiscovery);
-+        Assert.True(streaming.EnableEdsDiscovery);
++        var streaming = new YdbConnectionStringBuilder("Enable Long Poll Discovery=true");
++        Assert.False(defaults.EnableLongPollDiscovery);
++        Assert.True(streaming.EnableLongPollDiscovery);
 +        Assert.NotEqual(((IDriverFactory)defaults).GrpcConnectionString, ((IDriverFactory)streaming).GrpcConnectionString);
 +    }
 +

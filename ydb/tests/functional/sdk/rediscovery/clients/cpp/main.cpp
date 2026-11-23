@@ -3,6 +3,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
@@ -67,6 +70,15 @@ namespace {
         for (;;) {
             PrintStatus(client.BulkUpsert(table, NYdb::TValue(rows), settings).GetValueSync());
             std::this_thread::sleep_for(200ms);
+        }
+    }
+
+    template<class TCall>
+    void HoldSession(TCall call) {
+        std::cout << "READY" << std::endl;
+        for (std::string command; std::getline(std::cin, command);) {
+            const auto status = call();
+            std::cout << (status.IsSuccess() ? "ACTIVE" : "EXPIRED") << std::endl;
         }
     }
 
@@ -146,14 +158,33 @@ int main() {
     const char* configuredProbe = std::getenv("YDB_PROBE");
     const std::string probe = configuredProbe ? configuredProbe : "scheme";
     auto config = NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase(database);
-    if (const char* enabled = std::getenv("YDB_EDS_DISCOVERY"); enabled && std::string(enabled) == "1") {
-        config.SetDiscoveryMode(NYdb::EDiscoveryMode::Eds);
+    if (const char* enabled = std::getenv("YDB_LONG_POLL_DISCOVERY"); enabled && std::string(enabled) == "1") {
+        config.SetDiscoveryMode(NYdb::EDiscoveryMode::LongPoll);
     }
     const NYdb::TDriver driver(config);
     const char* configuredTopic = std::getenv("YDB_PROBE_TOPIC");
     const std::string topic = std::string(database) + "/" + (configuredTopic ? configuredTopic : "topic");
 
-    if (probe == "scheme") {
+    if (probe == "query-session") {
+        NYdb::NQuery::TQueryClient client(driver);
+        auto acquired = client.GetSession().GetValueSync();
+        if (!acquired.IsSuccess()) { return 1; }
+        auto session = acquired.GetSession();
+        HoldSession([&] { return session.ExecuteQuery("SELECT 1", NYdb::NQuery::TTxControl::NoTx()).GetValueSync(); });
+    } else if (probe == "table-session") {
+        NYdb::NTable::TTableClient client(driver);
+        auto acquired = client.CreateSession().GetValueSync();
+        if (!acquired.IsSuccess()) { return 1; }
+        auto session = acquired.GetSession();
+        HoldSession([&] { return session.KeepAlive().GetValueSync(); });
+    } else if (probe == "coordination-session") {
+        NYdb::NCoordination::TClient client(driver);
+        auto result = client.StartSession(std::string(database) + "/coordination",
+            NYdb::NCoordination::TSessionSettings().Timeout(TDuration::Seconds(3))).GetValueSync();
+        if (!result.IsSuccess()) { return 1; }
+        auto session = result.ExtractResult();
+        HoldSession([&] { return session.Ping().GetValueSync(); });
+    } else if (probe == "scheme") {
         ListDirectory(driver, database);
     } else if (probe == "list-on-demand") {
         ListOnDemand(driver, database);

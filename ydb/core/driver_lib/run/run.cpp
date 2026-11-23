@@ -1242,7 +1242,6 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
         if (hasDiscovery) {
             server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,grpcRequestProxies[0], hasDiscovery.IsRlAllowed()));
-            server.AddService(NGRpcService::CreateEndpointDiscoveryService(ActorSystem.Get(), Counters, grpcRequestProxies[0], hasDiscovery.IsRlAllowed()));
         }
 
         if (hasLocalDiscovery) {

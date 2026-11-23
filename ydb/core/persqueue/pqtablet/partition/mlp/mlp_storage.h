@@ -269,6 +269,9 @@ public:
     size_t GetLockedMessageGroupsIdSize() const; // from current partition only
     size_t GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const;
     void InitMetrics();
+    // Cursors are not maintained while a snapshot and its WAL are applied.
+    // Call once after that load, before the consumer starts working.
+    void FinishInitialization();
     bool HasRetentionExpiredMessages() const;
     bool GetKeepMessageOrder() const;
     bool HasUnlockedMessageGroupsId() const;
@@ -350,7 +353,6 @@ private:
 
 
     void UpdateFirstUncommittedOffset();
-    void RebuildFastZoneCursors();
 
     TInstant GetMessageLockingTime(const TMessage& message) const;
     void SetMessageLockingTime(TMessage& message, const TInstant& lockingTime, const TInstant& baseDeadline) const;

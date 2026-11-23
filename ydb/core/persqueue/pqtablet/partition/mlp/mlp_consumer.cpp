@@ -424,6 +424,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             AFL_ENSURE(false)("c", record.GetCookie());
     }
 
+    Storage->FinishInitialization();
     Storage->InitMetrics();
     CommitIfNeeded();
     UpdateLockedGroupsIdInChildPartitions(true);

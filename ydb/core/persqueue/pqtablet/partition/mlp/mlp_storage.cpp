@@ -1693,6 +1693,21 @@ void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteT
     BaseWriteTimestamp = newBaseWriteTimestamp;
 }
 
+void TStorage::FinishInitialization() {
+    // Delayed is not committed, so it stops both cursors. Locked and DLQ stop only the commit cursor.
+    const auto isUncommitted = [](const auto& message) {
+        return IsIn({EMessageStatus::Unprocessed, EMessageStatus::Delayed, EMessageStatus::DLQ, EMessageStatus::Locked}, message.GetStatus());
+    };
+    const auto isUnlocked = [](const auto& message) {
+        return IsIn({EMessageStatus::Delayed, EMessageStatus::Unprocessed}, message.GetStatus());
+    };
+
+    const auto uncommittedIndex = std::ranges::find_if(Messages, isUncommitted) - Messages.begin();
+    const auto unlockedIndex = std::ranges::find_if(Messages.begin() + uncommittedIndex, Messages.end(), isUnlocked) - Messages.begin();
+    FirstUncommittedOffset = FirstOffset + uncommittedIndex;
+    FirstUnlockedOffset = FirstOffset + unlockedIndex;
+}
+
 void TStorage::UpdateFirstUncommittedOffset() {
     auto offsetDelta = FirstUncommittedOffset > FirstOffset ? FirstUncommittedOffset - FirstOffset : 0;
     while (offsetDelta < Messages.size() && Messages[offsetDelta].GetStatus() == EMessageStatus::Committed) {

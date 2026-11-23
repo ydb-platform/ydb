@@ -13,7 +13,6 @@ ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/mind/hive/ut THiveTest.TestLocalMetricsIopsTrafficGroup32
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
-ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.LocalRetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithoutLaterMessageReportsDataLoss
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
@@ -31,4 +30,3 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
-ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test

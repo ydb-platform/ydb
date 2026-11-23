@@ -2032,6 +2032,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PublishesSpaceToWhiteboard) {
         TTestContext ctx;
+        ctx.Runtime.FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& event) {
+            return event->GetTypeRewrite() != NNodeWhiteboard::TEvWhiteboard::EvDDiskHealthUpdate;
+        };
         const auto disk = ctx.CreateDDisk(121, 1, NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 30000, 512 * 1024});
         const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
@@ -2054,6 +2057,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT(record.HasAvailableSize());
             UNIT_ASSERT(record.HasTotalSize());
             UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferId(), disk.PBServiceId.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStoragePoolName(), "ddisk_pool");
             break;
         }
         SendToDDisk(ctx, disk.PBServiceId,
@@ -2063,6 +2067,60 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         SendToDDisk(ctx, disk.PBServiceId, recovered);
         const auto update = ctx.Runtime.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>(board, false);
         UNIT_ASSERT_VALUES_EQUAL(update->Get()->Record.GetDDiskOccupancy(), 0.6);
+    }
+
+    Y_UNIT_TEST(PublishesDDiskAndPersistentBufferHealthIndependently) {
+        using TStatus = NKikimrWhiteboard::TDDiskStateInfo;
+        using THealthUpdate = NNodeWhiteboard::TEvWhiteboard::TEvDDiskHealthUpdate;
+        constexpr TDuration reportPeriod = TDuration::MilliSeconds(100);
+        std::array<TVector<TStatus::EComponentStatus>, 2> statuses;
+        TString brokenReason;
+        TTestContext ctx;
+        const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetRecipientRewrite() != board) {
+                return true;
+            }
+            if (event->GetTypeRewrite() != THealthUpdate::EventType) {
+                return false;
+            }
+            const auto& update = *event->Get<THealthUpdate>();
+            UNIT_ASSERT_VALUES_EQUAL(update.PDiskId, 121);
+            UNIT_ASSERT_VALUES_EQUAL(update.DDiskSlotId, 1);
+            UNIT_ASSERT_VALUES_EQUAL(update.OwnerRound, 1);
+            UNIT_ASSERT_VALUES_EQUAL(update.Lifetime, reportPeriod * 3);
+            UNIT_ASSERT_VALUES_EQUAL(update.StoragePoolName, "ddisk_pool");
+            statuses[update.IsPersistentBuffer].push_back(update.Status);
+            if (update.Status == TStatus::Broken) {
+                brokenReason = update.Reason;
+            }
+            return false;
+        };
+
+        const auto disk = ctx.CreateDDisk(121, 1, std::nullopt, {.HealthReportPeriod = reportPeriod});
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1));
+        for (const auto& component : statuses) {
+            UNIT_ASSERT(!component.empty());
+            UNIT_ASSERT(component.front() == TStatus::Initializing);
+            UNIT_ASSERT(component.back() == TStatus::Ready);
+        }
+
+        const std::array reportCounts{statuses[0].size(), statuses[1].size()};
+        AdvanceDDiskTestTime(ctx, reportPeriod + TDuration::MilliSeconds(1));
+        for (size_t role = 0; role < statuses.size(); ++role) {
+            UNIT_ASSERT_VALUES_EQUAL(statuses[role].size(), reportCounts[role] + 1);
+            UNIT_ASSERT(statuses[role].back() == TStatus::Ready);
+        }
+
+        const auto buffer = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+        UNIT_ASSERT(ctx.Runtime.WrapInActorContext(buffer, [](IActor* actor) {
+            NDDisk::TDDiskActorTestPeer::EnterBroken(*static_cast<NDDisk::TDDiskActor*>(actor), "buffer broken");
+        }));
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1));
+        UNIT_ASSERT(statuses[0].back() == TStatus::Ready);
+        UNIT_ASSERT(statuses[1].back() == TStatus::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(brokenReason, "buffer broken");
     }
 
     Y_UNIT_TEST(ShutdownReleasesOnlyNeverCommittedReservations) {
@@ -12001,6 +12059,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PublishesSpaceToWhiteboardAfterRestore) {
         TTestContext ctx;
+        ctx.Runtime.FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& event) {
+            return event->GetTypeRewrite() != NNodeWhiteboard::TEvWhiteboard::EvDDiskHealthUpdate;
+        };
         const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
         const auto disk = CreateDDiskWithRestoredChunkData(ctx, 122, 1, {100, 101, 102, 103}, 1, {});

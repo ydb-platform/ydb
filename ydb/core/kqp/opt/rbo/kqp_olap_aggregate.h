@@ -30,8 +30,11 @@ struct TOlapAggregate {
 };
 
 // Match an aggregate whose keys and aggregations column shards can compute over
-// the read below it. The aggregate phase and pushdown settings are the caller's concern.
-std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, TExprContext& ctx);
+// the read below it. `castAverageInput` is whether the read program can cast the
+// input of an AVG, see TOlapAggregate. The aggregate phase and pushdown settings
+// are the caller's concern.
+std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, bool castAverageInput,
+                                                 TExprContext& ctx);
 
 // AVG accumulates in Double. The read program casts an AVG column of any other
 // type with a YQL kernel, which column shards run only with scalar apply enabled.
@@ -51,5 +54,19 @@ struct TOlapDistinct {
 // names another key. Uses the liveness of the final plan.
 std::optional<TOlapDistinct> MatchOlapDistinct(const TOpAggregate& aggregate, const TString& forcedKey,
                                                const TInfoUnitRegistry& registry);
+
+// The keys of an aggregate over a column table read. As in the old optimizer, PRAGMA
+// OptEnableOlapProvideComputeSharding passes them to the read, so column shards send
+// all rows of a key to one compute task. The aggregate itself may stay in compute.
+struct TOlapComputeSharding {
+    TOpRead* Read = nullptr;
+    // Distinct storage columns of the keys.
+    TVector<TString> Columns;
+};
+
+// Match an intermediate aggregate with keys over a column table read in its stage,
+// when all the keys are read columns.
+std::optional<TOlapComputeSharding> MatchOlapComputeSharding(const TOpAggregate& aggregate,
+                                                             const TInfoUnitRegistry& registry);
 
 } // namespace NKikimr::NKqp

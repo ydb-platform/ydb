@@ -243,6 +243,9 @@ private:
                 case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::SUSPENDED;
                     break;
+                case Ydb::Bridge::PileState::HOT_STANDBY:
+                    internalState = NKikimrBridge::TClusterState::HOT_STANDBY;
+                    break;
                 case Ydb::Bridge::PileState::INACTIVE:
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, "Pile can't be switched to INACTIVE state, it has to be"
                         " removed from the cluster instead", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
@@ -303,9 +306,10 @@ private:
         const auto selfNodePileId = bridgeInfo->SelfNodePile->BridgePileId;
         if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
             const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
-            if (newSelfState == NKikimrBridge::TClusterState::DISCONNECTED ||
-                newSelfState == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 ||
-                newSelfState == NKikimrBridge::TClusterState::SUSPENDED) {
+            // the servers of the pile stop serving out of configuration quorum (as in HOT_STANDBY), and the suspended
+            // one is about to go out; the stop waits for this request to reply
+            if (newSelfState == NKikimrBridge::TClusterState::SUSPENDED ||
+                    !NBridge::PileStateTraits(newSelfState).RequiresConfigQuorum) {
                 IsDisconnectingRequest = true;
                 self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
                     new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestStarted());

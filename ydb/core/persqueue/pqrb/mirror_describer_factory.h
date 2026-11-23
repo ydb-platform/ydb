@@ -9,7 +9,9 @@ NActors::IActor* CreateMirrorDescriber(
     const ui64 tabletId,
     const NActors::TActorId& readBalancerActorId,
     const TString& topicName,
-    const NKikimrPQ::TMirrorPartitionConfig& config
+    const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TString& database = {},
+    const TString& topicPath = {}
 );
 
 }

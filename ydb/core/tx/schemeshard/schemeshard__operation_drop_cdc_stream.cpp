@@ -53,6 +53,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
+        for (const auto& shard : txState->Shards) {
+            context.OnComplete.DeleteShard(shard.Idx);
+        }
+
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         context.SS->PersistRemoveCdcStream(db, pathId);
 
@@ -201,6 +205,15 @@ public:
         txState.CdcPathId = streamPath.Base()->PathId;
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
+
+        Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
+        if (const auto shardIdx = context.SS->CdcStreams.at(streamPath.Base()->PathId)->AggregatorShardIdx) {
+            txState.Shards.emplace_back(shardIdx, ETabletType::CdcAggregator, txState.State);
+
+            context.MemChanges.GrabShard(context.SS, shardIdx);
+            context.SS->ShardInfos.at(shardIdx).CurrentTxId = OperationId.GetTxId();
+            context.DbChanges.PersistShard(shardIdx);
+        }
 
         streamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
         streamPath.Base()->DropTxId = OperationId.GetTxId();

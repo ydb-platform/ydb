@@ -43,7 +43,7 @@ public:
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString&, const google::protobuf::Message&,
-                                              const NSQLTranslation::TSQLHints&,
+                                              const NSQLTranslation::TParsedTokenList&,
                                               const NSQLTranslation::TTranslationSettings&) final {
         Calls_.TextAndMessageToAst = true;
         return {};
@@ -125,9 +125,9 @@ Y_UNIT_TEST(UsesCustomSyntaxForSqlAstToYql) {
     NSQLTranslation::TTranslationSettings settings;
     settings.Syntax = "mock";
     google::protobuf::Any protoAst;
-    NSQLTranslation::TSQLHints hints;
+    NSQLTranslation::TParsedTokenList tokens;
 
-    NSQLTranslation::SqlASTToYql(translators, "SELECT 1;", protoAst, hints, settings);
+    NSQLTranslation::SqlASTToYql(translators, "SELECT 1;", protoAst, tokens, settings);
 
     UNIT_ASSERT(calls.TextAndMessageToAst);
 }

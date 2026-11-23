@@ -474,6 +474,56 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         TerminalSourceDiscoveryError(NYdb::EStatus::BAD_REQUEST, "Invalid source settings");
     }
 
+    Y_UNIT_TEST(TopicAdmissionRequiresFlagAndRowConsistency) {
+        const auto discover = [](TEnv<>& env, bool global, bool secret = false, const TString& source = "/Root/Topic") {
+            auto config = CreateConfig({{source, "/Root/Replica"}});
+            if (global) {
+                config.MutableConsistencySettings()->MutableGlobal();
+            } else {
+                config.MutableConsistencySettings()->MutableRow();
+            }
+            if (secret) {
+                config.MutableSrcConnectionParams()->MutableOAuthToken()->SetTokenSecretName("/Root/token");
+            }
+            env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(), config));
+            return env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
+        };
+
+        TEnv disabled;
+        disabled.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
+        auto result = discover(disabled, false);
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
+            "EnableTopicReplication");
+
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableTopicReplication(true);
+        TEnv enabled(flags);
+        enabled.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
+        result = discover(enabled, false);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);
+        result = discover(enabled, true);
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        result = discover(enabled, false, true);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);
+
+        enabled.CreateTable("/Root", *MakeTableDescription(DummyTable()));
+        const auto created = enabled.Send<TEvYdbProxy::TEvAlterTableResponse>(enabled.GetYdbProxy(),
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/Table",
+                NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(
+                    NYdb::NTable::TChangefeedDescription("Feed", NYdb::NTable::EChangefeedMode::Updates,
+                        NYdb::NTable::EChangefeedFormat::Json))));
+        UNIT_ASSERT_C(created->Get()->Result.IsSuccess(), created->Get()->Result.GetIssues().ToString());
+        result = discover(enabled, false, false, "/Root/Table/Feed");
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
+            "CDC topics cannot be replication sources");
+        result = discover(enabled, false, false, "/Root/Table/Feed/streamImpl");
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+    }
+
     Y_UNIT_TEST(RetryableError) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);

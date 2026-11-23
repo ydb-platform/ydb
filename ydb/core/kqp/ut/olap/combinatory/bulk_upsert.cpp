@@ -19,7 +19,7 @@ TConclusionStatus TBulkUpsertCommand::DoExecute(TKikimrRunner& kikimr) {
         lHelper.SendDataViaActorSystem(TableName, ArrowBatch->Slice(cursor, size), ExpectedCode);
         cursor += size;
     }
-    AFL_VERIFY(cursor == ArrowBatch->num_rows());
+    YDB_LOG_VERIFY(cursor == ArrowBatch->num_rows());
     return TConclusionStatus::Success();
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "query.h"
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -60,7 +60,6 @@ struct TEvKqp {
     using TEvCompileRequest = NPrivateEvents::TEvCompileRequest;
     using TEvRecompileRequest = NPrivateEvents::TEvRecompileRequest;
     using TEvCompileResponse = NPrivateEvents::TEvCompileResponse;
-    using TEvParseResponse = NPrivateEvents::TEvParseResponse;
     using TEvSplitResponse = NPrivateEvents::TEvSplitResponse;
     using TEvCompileInvalidateRequest = NPrivateEvents::TEvCompileInvalidateRequest;
 

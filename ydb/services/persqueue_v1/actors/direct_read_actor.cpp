@@ -279,7 +279,8 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database,
+        AppData()->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason);
@@ -491,7 +492,7 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
+        ctx, ctx.SelfID, ClientId, Cookie, Session, Request->GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 

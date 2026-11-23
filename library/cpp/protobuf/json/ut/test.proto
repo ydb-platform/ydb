@@ -137,6 +137,22 @@ message TFlatOneOfDefault {
     }
 }
 
+message TStrictValidation {
+    oneof Choice {
+        int32 Number = 1;
+        bool Flag = 2;
+        string Text = 3 [json_name = "textValue"];
+        TFlatOptional Object = 4;
+    }
+    oneof OtherChoice {
+        int32 OtherNumber = 5;
+        string OtherText = 6;
+    }
+    optional TStrictValidation Child = 7;
+    repeated TStrictValidation Children = 8;
+    map<string, TStrictValidation> Items = 9;
+}
+
 message TCompositeOptional {
     optional TFlatOptional Part = 1;
 };

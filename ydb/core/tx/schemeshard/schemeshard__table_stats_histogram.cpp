@@ -279,6 +279,11 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
         : Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
+    // The histogram may have been requested before the schema fence was installed.
+    if (Self->IsDatabaseFreezeBlocking(tableId)) {
+        return true;
+    }
+
     // Save CPU resources when potential split will certainly be immediately rejected by Self->IgniteOperation()
     TString inflightLimitErrStr;
     if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {

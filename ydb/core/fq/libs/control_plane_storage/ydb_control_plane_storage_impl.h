@@ -246,8 +246,8 @@ struct TPrepareResponseResultTypeImpl<false, ResponseEvent, Result> {
 
 template <class ResponseEvent, class Result>
 struct TPrepareResponseResultTypeImpl<true, ResponseEvent, Result> {
-    using Type = std::pair<Result, TAuditDetails<typename ResponseEvent::TAuditMessage>>;
-    using TResponseAuditDetails = TAuditDetails<typename ResponseEvent::TAuditMessage>;
+    using TResponseAuditDetails = typename ResponseEvent::TResponseAuditDetails;
+    using Type = std::pair<Result, TResponseAuditDetails>;
 };
 
 template <class ResponseEvent, class Result>

@@ -12,11 +12,12 @@ logger = logging.getLogger("YdbTpccWorkload")
 
 
 class YdbTpccWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, warehouses, tables_prefix, tx_mode=None):
+    def __init__(self, endpoint, database, duration, warehouses, tables_prefix, tx_mode=None, warmup=30):
         super().__init__(None, tables_prefix, 'tpcc', None)
         self.endpoint = endpoint
         self.database = database
         self.duration = str(duration)
+        self.warmup = warmup
         self.warehouses = str(warehouses)
         self.tx_mode = tx_mode
         self.tempdir = None
@@ -81,7 +82,7 @@ class YdbTpccWorkload(WorkloadBase):
     def __loop(self):
         cmd = ['run', '--no-tui', '--format', 'Json',
                '--log-level', 'NOTICE',
-               '--warmup', '30s',
+               '--warmup', f'{self.warmup}s',
                '--time', f'{self.duration}s',
                '--warehouses', self.warehouses]
         if self.tx_mode == 'mixed':

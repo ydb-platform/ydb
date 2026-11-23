@@ -41,7 +41,7 @@ public:
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex, const NScheme::TTypeInfo& typeInfo = {});
 
     TColumnSaver GetColumnSaver() const {
-        AFL_VERIFY(Serializer);
+        YDB_LOG_VERIFY(Serializer);
         return TColumnSaver(Serializer);
     }
 
@@ -69,7 +69,7 @@ public:
     void SetDefaultSerializer(const NArrow::NSerialization::TSerializerContainer& serializer);
 
     const std::shared_ptr<TColumnLoader>& GetLoader() const {
-        AFL_VERIFY(Loader);
+        YDB_LOG_VERIFY(Loader);
         return Loader;
     }
 };

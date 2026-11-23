@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/checkpoint_storage/proto/graph_description.pb.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 
@@ -36,7 +37,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
     Y_UNIT_TEST_QUAD_F(PqGatewayApiForDeferredCommits, LocalTopics, Cancel, TStreamingTestFixture) {
         LogSettings.AddLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
-        SetupAppConfig().MutableFeatureFlags()->SetEnableTopicDeferredPublish(true);
+        auto* flags = SetupAppConfig().MutableFeatureFlags();
+        flags->SetEnableTopicDeferredPublish(true);
+        flags->SetEnableRelativePaths(true);
 
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
         CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
@@ -167,7 +170,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL(info.ExtPublicationId, publicationExtId);
             UNIT_ASSERT_VALUES_EQUAL(info.WriterIdentity, publicationWriter);
             UNIT_ASSERT_VALUES_EQUAL(info.Destinations.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(info.Destinations[0].TopicPath, outputTopicName);
+            UNIT_ASSERT_VALUES_EQUAL(info.Destinations[0].TopicPath,
+                CanonizePath(TStringBuilder() << (LocalTopics ? TEST_DATABASE : YDB_DATABASE) << "/" << outputTopicName));
         }
 
         Sleep(TDuration::Seconds(1));

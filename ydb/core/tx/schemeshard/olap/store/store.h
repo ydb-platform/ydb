@@ -112,7 +112,7 @@ public:
 
     const TOlapStoreSchemaPreset& GetPresetVerified(const ui32 presetId) const {
         auto* result = GetPresetOptional(presetId);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 

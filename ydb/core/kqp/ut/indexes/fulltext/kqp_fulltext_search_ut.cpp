@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>

@@ -101,38 +101,29 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
 }
 
 void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result) const {
+    auto& runtime = *Server.GetRuntime();
     NYdb::NTable::TTableClient tClient(*Driver,
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
-    auto expectation = expectSuccess;
-    bool resultReady = false;
-    bool* rrPtr = &resultReady;
-    tClient.CreateSession().Subscribe([this, result, rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-        auto session = f.GetValueSync().GetSession();
-        session.ExecuteDataQuery(request
-            , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx())
-            .Subscribe([this, result, rrPtr, expectation, request](NYdb::NTable::TAsyncDataQueryResult f)
-                {
-                    TStringStream ss;
-                    f.GetValueSync().GetIssues().PrintTo(ss, false);
-                    Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
-                    UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
-                    *rrPtr = true;
-                    if (result && expectation) {
-                        TStringStream ss;
-                        NYson::TYsonWriter writer(&ss, NYson::EYsonFormat::Text);
-                        for (auto&& i : f.GetValueSync().GetResultSets()) {
-                            PrintResultSet(i, writer);
-                        }
-                        *result = ss.Str();
-                    }
-                });
-        });
-    const TInstant start = TInstant::Now();
-    while (!resultReady && start + TDuration::Seconds(60) > TInstant::Now()) {
-        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+    auto sessionResult = runtime.WaitFuture(tClient.CreateSession(
+        NYdb::NTable::TCreateSessionSettings().ClientTimeout(TDuration::Seconds(60))));
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.GetSession();
+    auto queryResult = runtime.WaitFuture(session.ExecuteDataQuery(request,
+        NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+        NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(60))));
+
+    TStringStream issues;
+    queryResult.GetIssues().PrintTo(issues, false);
+    Cerr << "REQUEST=" << request << ";RESULT=" << issues.Str() << ";EXPECTATION=" << expectSuccess << Endl;
+    UNIT_ASSERT_C(expectSuccess == queryResult.IsSuccess(), issues.Str());
+    if (result && expectSuccess) {
+        TStringStream ss;
+        NYson::TYsonWriter writer(&ss, NYson::EYsonFormat::Text);
+        for (const auto& resultSet : queryResult.GetResultSets()) {
+            PrintResultSet(resultSet, writer);
+        }
+        *result = ss.Str();
     }
-    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    UNIT_ASSERT(resultReady);
 }
 
 void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {

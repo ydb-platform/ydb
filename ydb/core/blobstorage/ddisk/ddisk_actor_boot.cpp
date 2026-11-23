@@ -317,6 +317,7 @@ namespace NKikimr::NDDisk {
         CreatePersistentBuffer();
 
         LogReplayComplete = true;
+        PublishHealth();
         if (DeferredCutLogFreeUpToLsn) {
             const ui64 freeUpToLsn = *DeferredCutLogFreeUpToLsn;
             DeferredCutLogFreeUpToLsn.reset();

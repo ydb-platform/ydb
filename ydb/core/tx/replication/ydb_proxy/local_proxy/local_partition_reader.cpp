@@ -198,7 +198,7 @@ private:
         Offset = SentOffset;
 
         if (AutoCommit && !request.SkipCommit) {
-            if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            if (!AppData()->FeatureFlags.GetEnableClientModifications() && !IsAsyncReplication) {
                 Send(Parent, MakeError(NYdb::EStatus::PRECONDITION_FAILED, "Consumer offset commits are disabled"));
                 PassAway();
                 return;

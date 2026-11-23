@@ -130,6 +130,24 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         UNIT_ASSERT_VALUES_EQUAL(ScalarCompareNullable(invalid, invalid), 0);
     }
 
+    Y_UNIT_TEST(SimpleRowNullScalarKeepsType) {
+        arrow::Int64Builder builder;
+        UNIT_ASSERT(builder.AppendNull().ok());
+        UNIT_ASSERT(builder.Append(7).ok());
+        const auto batch = MakeBatch(Finish(builder));
+
+        const auto nullScalar = TSimpleRow(batch, 0).GetScalar(0);
+        UNIT_ASSERT(nullScalar);
+        UNIT_ASSERT(!nullScalar->is_valid);
+        UNIT_ASSERT_VALUES_EQUAL(nullScalar->type->ToString(), "int64");
+        UNIT_ASSERT(!TSimpleRow(batch, 0).GetValue<i64>(0));
+
+        const auto valueScalar = TSimpleRow(batch, 1).GetScalar(0);
+        UNIT_ASSERT(valueScalar->is_valid);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::Int64Scalar&>(*valueScalar).value, 7);
+        UNIT_ASSERT_VALUES_EQUAL(*TSimpleRow(batch, 1).GetValue<i64>(0), 7);
+    }
+
     Y_UNIT_TEST(NativeBooleanDispatchIsUnchanged) {
         const auto values = MakeArray<arrow::BooleanBuilder, bool>({false, true});
         const auto batch = MakeBatch(values);

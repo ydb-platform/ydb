@@ -24,10 +24,22 @@ protected:
     virtual void ResetWaiting(TOperation::TPtr op) = 0;
     virtual bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) = 0;
 
+    // Most backup/restore Run() failures mean "nothing was started" and the
+    // unit is done. Units that perform flat-table reads may instead need the
+    // transaction restarted after a page fault.
+    virtual EExecutionStatus RunFailureStatus() const {
+        return EExecutionStatus::Executed;
+    }
+
     virtual bool HasResult(TOperation::TPtr op) const = 0;
     virtual bool ProcessResult(TOperation::TPtr op, const TActorContext& ctx) = 0;
 
     virtual void Cancel(TActiveTransaction* tx, const TActorContext& ctx) = 0;
+
+    void ScheduleRestart(TOperation::TPtr op, const TActorContext& ctx) {
+        op->SetWaitingForRestartFlag();
+        ctx.Schedule(TDuration::Seconds(1), new TDataShard::TEvPrivate::TEvRestartOperation(op->GetTxId()));
+    }
 
     void Abort(TOperation::TPtr op, const TActorContext& ctx, const TString& error) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -65,8 +77,9 @@ private:
     }
 
 public:
-    TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(kind, false, self, pipeline)
+    TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline,
+            bool executionMightRestart = false)
+        : TExecutionUnit(kind, executionMightRestart, self, pipeline)
     {
     }
 
@@ -100,7 +113,7 @@ public:
                 {"tabletId", DataShard.TabletID()});
 
             if (!Run(op, txc, ctx)) {
-                return EExecutionStatus::Executed;
+                return RunFailureStatus();
             }
 
             SetWaiting(op);
@@ -117,8 +130,7 @@ public:
                 PersistResult(op, txc);
             } else {
                 Y_DEBUG_ABORT_UNLESS(!HasResult(op));
-                op->SetWaitingForRestartFlag();
-                ctx.Schedule(TDuration::Seconds(1), new TDataShard::TEvPrivate::TEvRestartOperation(op->GetTxId()));
+                ScheduleRestart(op, ctx);
             }
         }
 

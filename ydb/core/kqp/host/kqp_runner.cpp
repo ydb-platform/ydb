@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/opt/kqp_column_statistics_requester.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>

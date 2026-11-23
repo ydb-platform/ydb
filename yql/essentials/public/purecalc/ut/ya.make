@@ -18,6 +18,7 @@ SRCS(
     test_pool.cpp
     test_runtime_settings.cpp
     test_mixed_allocators.cpp
+    empty_stream.cpp
 )
 
 PEERDIR(

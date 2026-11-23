@@ -374,27 +374,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     };
 
     {
-        bool moveUnlockedOffset = true;
-        bool moveUncommittedOffset = true;
-
         TDeserializer<TSnapshotMessage> deserializer(snapshot.GetMessages());
         TSnapshotMessage snapshot;
         while (deserializer.Next(snapshot)) {
-            auto message = fromSnapshot(snapshot);
-            Messages.push_back(message);
-
-            const auto& messageStatus = message.GetStatus();
-
-            moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
-            moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
-
-            if (moveUnlockedOffset) {
-                ++FirstUnlockedOffset;
-            }
-
-            if (moveUncommittedOffset) {
-                ++FirstUncommittedOffset;
-            }
+            Messages.push_back(fromSnapshot(snapshot));
         }
     }
 
@@ -624,9 +607,6 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             .Expiry = TInstant::Seconds(receiveAttempt.GetExpirySeconds()),
         };
     }
-
-    FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
-    FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
 
     // Reset changes
     Batch = { this };

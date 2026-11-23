@@ -113,7 +113,7 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
                 if (parts) {
                     PendingDisk = disk;
                     PendingPart = std::countr_zero(parts);
-                    RestorePart(blob.Id);
+                    RestorePart(blob);
                     return;
                 }
             }
@@ -122,13 +122,15 @@ class TMirror3dcRepairSyncer : public TActorBootstrapped<TMirror3dcRepairSyncer>
         ReadPage();
     }
 
-    void RestorePart(const TLogoBlobID& blobId) {
+    void RestorePart(const TBlob& blob) {
+        const TLogoBlobID& blobId = blob.Id;
         TVDiskID diskId = Info->GetVDiskInSubgroup(PendingDisk, blobId.Hash());
         std::unique_ptr<TEvVRestorePart> request = std::make_unique<TEvVRestorePart>();
         VDiskIDFromVDiskID(diskId, request->Record.MutableVDiskID());
         LogoBlobIDFromLogoBlobID(TLogoBlobID(blobId, PendingPart + 1), request->Record.MutableBlobID());
         TInstant deadline = TActivationContext::Now() + RestorePartTimeout;
         request->Record.SetDeadline(deadline.GetValue());
+        request->Record.SetIssueKeepFlag(blob.Keep && !blob.DoNotKeep);
         RestoreTarget = Info->GetActorId(TVDiskIdShort(diskId));
         ui32 flags = IEventHandle::FlagTrackDelivery;
         if (RestoreTarget->NodeId() != SelfId().NodeId()) {
@@ -184,10 +186,6 @@ public:
         }
         const TMirror3dcGroupState& state = Info->GetMirror3dcState();
         if (!IsValidMirror3dcGroupConfiguration({state.State, state.FailRealmStates})) {
-            return Finish(NKikimrProto::ERROR);
-        }
-        std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(state.State);
-        if (layouts->Durability == EMirror3dcLayout::LAYOUT_0) {
             return Finish(NKikimrProto::ERROR);
         }
         Become(&TThis::StateWork);

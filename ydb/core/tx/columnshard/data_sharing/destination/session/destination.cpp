@@ -17,7 +17,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
     auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
-        AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
+        YDB_LOG_VERIFY(it != PathIds.end(),
+            {"pathIdUndefined", i.first});
         for (auto&& portion : i.second.DetachPortions()) {
             portion->MutablePortionInfo().SetPathId(it->second);
             index.AppendPortion(portion);
@@ -27,8 +28,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
 }
 
 ui32 TDestinationSession::GetSourcesInProgressCount() const {
-    AFL_VERIFY(IsInProgress());
-    AFL_VERIFY(Cursors.size());
+    YDB_LOG_VERIFY(IsInProgress());
+    YDB_LOG_VERIFY(Cursors.size());
     ui32 result = 0;
     for (auto&& [_, cursor] : Cursors) {
         if (!cursor.GetDataFinished()) {
@@ -39,7 +40,7 @@ ui32 TDestinationSession::GetSourcesInProgressCount() const {
 }
 
 void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
-    AFL_VERIFY(IsInProgress() || IsPrepared());
+    YDB_LOG_VERIFY(IsInProgress() || IsPrepared());
     bool found = false;
     for (auto&& [_, cursor] : Cursors) {
         if (tabletId && *tabletId != cursor.GetTabletId()) {
@@ -65,7 +66,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         }
     }
-    AFL_VERIFY(found);
+    YDB_LOG_VERIFY(found);
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
@@ -155,7 +156,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
             return parsed;
         }
         auto it = Cursors.find(cursor.GetTabletId());
-        AFL_VERIFY(it != Cursors.end());
+        YDB_LOG_VERIFY(it != Cursors.end());
         it->second = cursor;
     }
     return TConclusionStatus::Success();
@@ -163,7 +164,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
 
 TConclusionStatus TDestinationSession::DoStart(
     NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) {
-    AFL_VERIFY(IsConfirmed());
+    YDB_LOG_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
@@ -191,7 +192,7 @@ bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, con
             }
         }
     }
-    AFL_VERIFY((containsCounter == 0) ^ (newCounter == 0));
+    YDB_LOG_VERIFY((containsCounter == 0) ^ (newCounter == 0));
     return newCounter;
 }
 

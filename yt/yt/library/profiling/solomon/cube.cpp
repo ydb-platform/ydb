@@ -13,6 +13,7 @@
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
+#include <atomic>
 #include <type_traits>
 
 namespace NYT::NProfiling {
@@ -29,9 +30,22 @@ struct TIntPoint
     i64 Value;
 };
 
+ui64 AllocateCubeId()
+{
+    static std::atomic<ui64> LastCubeId = 0;
+    ui64 cubeId = LastCubeId.fetch_add(1, std::memory_order_relaxed) + 1;
+    YT_VERIFY(cubeId != 0);
+    return cubeId;
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TCube<T>::TProjection::TProjection(TTagIdList tagIds)
+    : TagIds(std::move(tagIds))
+{ }
 
 template <class T>
 bool TCube<T>::TProjection::IsZero(int index) const
@@ -48,6 +62,7 @@ bool TCube<T>::TProjection::IsLingering(i64 iteration) const
 template <class T>
 TCube<T>::TCube(int windowSize, i64 nextIteration)
     : WindowSize_(windowSize)
+    , CubeId_(AllocateCubeId())
     , NextIteration_(nextIteration)
     , BaseIteration_(nextIteration - (nextIteration % windowSize))
 { }
@@ -59,10 +74,10 @@ void TCube<T>::StartIteration()
     NextIteration_++;
     BaseIteration_ = NextIteration_ - (NextIteration_ % WindowSize_);
 
-    for (auto& [tagIds, projection] : Projections_) {
-        projection.Rollup += projection.Values[Index_];
-        projection.Values[Index_] = {};
-        projection.HasValue[Index_] = false;
+    for (const auto& projection : Projections_) {
+        projection->Rollup += projection->Values[Index_];
+        projection->Values[Index_] = {};
+        projection->HasValue[Index_] = false;
     }
 }
 
@@ -73,24 +88,35 @@ void TCube<T>::FinishIteration()
 template <class T>
 void TCube<T>::Add(TTagIdList tagIds)
 {
-    std::sort(tagIds.begin(), tagIds.end());
-    if (auto it = Projections_.find(tagIds); it != Projections_.end()) {
-        it->second.UsageCount++;
-    } else {
-        TProjection projection;
-        projection.UsageCount = 1;
-        projection.Values.resize(WindowSize_);
-        projection.HasValue.resize(WindowSize_);
-        Projections_[tagIds] = std::move(projection);
-    }
+    DoAdd(std::move(tagIds));
 }
 
 template <class T>
-void TCube<T>::AddAll(const TTagIdSet& tagSet)
+typename TCube<T>::TProjectionPtr TCube<T>::DoAdd(TTagIdList tagIds)
 {
-    tagSet.Range([this] (auto tagIds) mutable {
-        Add(std::move(tagIds));
+    std::sort(tagIds.begin(), tagIds.end());
+    if (auto it = Projections_.find(tagIds); it != Projections_.end()) {
+        (*it)->UsageCount++;
+        return *it;
+    }
+
+    auto projection = New<TProjection>(std::move(tagIds));
+    projection->UsageCount = 1;
+    projection->Values.resize(WindowSize_);
+    projection->HasValue.resize(WindowSize_);
+    Projections_.insert(projection);
+    return projection;
+}
+
+template <class T>
+typename TCube<T>::TProjectionCookie TCube<T>::AddAll(const TTagIdSet& tagSet)
+{
+    TProjectionCookie cookie;
+    cookie.OwnerCubeId_ = CubeId_;
+    tagSet.Range([&] (auto tagIds) {
+        cookie.Projections_.push_back(DoAdd(std::move(tagIds)));
     });
+    return cookie;
 }
 
 template <class T>
@@ -103,18 +129,22 @@ void TCube<T>::Remove(TTagIdList tagIds)
             .With("tag_ids", tagIds);
     }
 
-    it->second.UsageCount--;
-    if (it->second.UsageCount == 0) {
+    (*it)->UsageCount--;
+    if ((*it)->UsageCount == 0) {
         Projections_.erase(it);
     }
 }
 
 template <class T>
-void TCube<T>::RemoveAll(const TTagIdSet& tagSet)
+void TCube<T>::RemoveAll(TProjectionCookie cookie)
 {
-    tagSet.Range([this] (auto tagIds) mutable {
-        Remove(std::move(tagIds));
-    });
+    YT_VERIFY(cookie.OwnerCubeId_ == CubeId_);
+    for (const auto& projection : cookie.Projections_) {
+        projection->UsageCount--;
+        if (projection->UsageCount == 0) {
+            Projections_.erase(projection);
+        }
+    }
 }
 
 template <class T>
@@ -127,6 +157,12 @@ void TCube<T>::Update(TTagIdList tagIds, T value)
             .With("tag_ids", tagIds);
     }
 
+    DoUpdate(**it, value);
+}
+
+template <class T>
+void TCube<T>::DoUpdate(TProjection& projection, const T& value)
+{
     if constexpr (std::is_same_v<T, double>) {
         // Special value for gauges with DisableDefault option enabled.
         if (std::isnan(value)) {
@@ -134,15 +170,24 @@ void TCube<T>::Update(TTagIdList tagIds, T value)
         }
     }
 
-    it->second.Values[Index_] += value;
-    it->second.HasValue[Index_] = true;
-    if (!it->second.IsZero(Index_)) {
-        it->second.LastNonZeroIteration = NextIteration_ - 1;
+    projection.Values[Index_] += value;
+    projection.HasValue[Index_] = true;
+    if (!projection.IsZero(Index_)) {
+        projection.LastNonZeroIteration = NextIteration_ - 1;
     }
 }
 
 template <class T>
-const THashMap<TTagIdList, typename TCube<T>::TProjection>& TCube<T>::GetProjections() const
+void TCube<T>::UpdateAll(const TProjectionCookie& cookie, const T& value)
+{
+    YT_VERIFY(cookie.OwnerCubeId_ == CubeId_);
+    for (const auto& projection : cookie.Projections_) {
+        DoUpdate(*projection, value);
+    }
+}
+
+template <class T>
+const typename TCube<T>::TProjectionHashSet& TCube<T>::GetProjections() const
 {
     return Projections_;
 }
@@ -236,6 +281,7 @@ int TCube<T>::ReadSensors(
 
     auto nameLabel = prepareNameLabel({});
     auto sumNameLabel = prepareNameLabel(".sum");
+    auto countNameLabel = prepareNameLabel(".count");
     auto minNameLabel = prepareNameLabel(".min");
     auto maxNameLabel = prepareNameLabel(".max");
     auto avgNameLabel = prepareNameLabel(".avg");
@@ -243,9 +289,11 @@ int TCube<T>::ReadSensors(
     auto globalHostLabel = consumer->PrepareLabel("host", "");
     auto hostLabel = consumer->PrepareLabel("host", options.Host.value_or(""));
     auto ytAggrLegacyLabel = consumer->PrepareLabel("yt_aggr", "1");
-    TCompactFlatMap<ESummaryPolicy, std::pair<ui32, ui32>, 5> ytAggrLabelBySummaryPolicy({
+    auto ytAggrSumLabel = consumer->PrepareLabel("yt_aggr", "sum");
+    TCompactFlatMap<ESummaryPolicy, std::pair<ui32, ui32>, TEnumTraits<ESummaryPolicy>::GetDomainSize()> ytAggrLabelBySummaryPolicy({
         {ESummaryPolicy::All, consumer->PrepareLabel("yt_aggr", "all")},
-        {ESummaryPolicy::Sum, consumer->PrepareLabel("yt_aggr", "sum")},
+        {ESummaryPolicy::Sum, ytAggrSumLabel},
+        {ESummaryPolicy::Count, ytAggrSumLabel},
         {ESummaryPolicy::Max, consumer->PrepareLabel("yt_aggr", "max")},
         {ESummaryPolicy::Min, consumer->PrepareLabel("yt_aggr", "min")},
         {ESummaryPolicy::Avg, consumer->PrepareLabel("yt_aggr", "avg")},
@@ -267,8 +315,8 @@ int TCube<T>::ReadSensors(
             if (options.EnableSolomonAggregates) {
                 auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
                 consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
-            } else if (summaryPolicy == ESummaryPolicy::Sum && !options.Global) {
-                // By default support only sum aggregate except global sensors.
+            } else if ((summaryPolicy == ESummaryPolicy::Sum || summaryPolicy == ESummaryPolicy::Count) && !options.Global) {
+                // The legacy marker requests summation.
                 consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
             }
         }
@@ -319,7 +367,7 @@ int TCube<T>::ReadSensors(
         return true;
     };
 
-    auto skipSparse = [&] (auto window, const std::vector<int>& indices) {
+    auto skipSparse = [&] (const auto& window, const std::vector<int>& indices) {
         if (!options.Sparse) {
             return false;
         }
@@ -333,7 +381,22 @@ int TCube<T>::ReadSensors(
         return true;
     };
 
-    for (const auto& [tagIds, window] : Projections_) {
+    // Projections are separate allocations, so without prefetch this pass stalls on a cache miss per projection.
+    auto prefetchIt = Projections_.begin();
+    for (int step = 0; step < 2 && prefetchIt != Projections_.end(); ++step) {
+        Y_PREFETCH_READ((prefetchIt++)->Get(), 3);
+    }
+    for (auto it = Projections_.begin(); it != Projections_.end(); ) {
+        const auto& windowPtr = *it++;
+        if (prefetchIt != Projections_.end()) {
+            Y_PREFETCH_READ((prefetchIt++)->Get(), 3);
+        }
+        if (it != Projections_.end()) {
+            Y_PREFETCH_READ((*it)->Values.data(), 3);
+        }
+
+        const auto& window = *windowPtr;
+        const auto& tagIds = window.TagIds;
         if (options.EnableSolomonAggregationWorkaround && skipByHack(window)) {
             continue;
         }
@@ -400,7 +463,7 @@ int TCube<T>::ReadSensors(
             auto writeGaugeSummaryMetric = [&] (
                 ESummaryPolicy policyBit,
                 std::pair<ui32, ui32> specificNameLabel,
-                double (NMonitoring::TSummaryDoubleSnapshot::*valueGetter)() const)
+                auto valueGetter)
             {
                 writeMetric(
                     policyBit,
@@ -425,6 +488,11 @@ int TCube<T>::ReadSensors(
                 ESummaryPolicy::Sum,
                 sumNameLabel,
                 &NMonitoring::TSummaryDoubleSnapshot::GetSum);
+
+            writeGaugeSummaryMetric(
+                ESummaryPolicy::Count,
+                countNameLabel,
+                &NMonitoring::TSummaryDoubleSnapshot::GetCount);
 
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Min,
@@ -761,6 +829,8 @@ int TCube<T>::ReadSensorValues(
                 }
             } else if (Any(options.SummaryPolicy & ESummaryPolicy::Avg)) {
                 fluent.Value(value.Count() > 0 ? value.Sum() / value.Count() : NAN);
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Count)) {
+                fluent.Value(static_cast<ui64>(value.Count()));
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
@@ -796,7 +866,8 @@ int TCube<T>::ReadSensorValues(
     // NB(eshcherbin): ReadAllProjections is intended only for debugging purposes.
     if (options.ReadAllProjections) {
         std::vector<TTagIdList> filteredProjectionTagIds;
-        for (const auto& [projectionTagIds, _] : Projections_) {
+        for (const auto& projection : Projections_) {
+            const auto& projectionTagIds = projection->TagIds;
             // NB(eshcherbin): All tagIds vector are guaranteed to be sorted.
             if (std::includes(projectionTagIds.begin(), projectionTagIds.end(), tagIds.begin(), tagIds.end())) {
                 filteredProjectionTagIds.push_back(projectionTagIds);
@@ -805,7 +876,9 @@ int TCube<T>::ReadSensorValues(
 
         if (!filteredProjectionTagIds.empty()) {
             fluent.DoListFor(filteredProjectionTagIds, [&] (TFluentList fluent, const auto& projectionTagIds) {
-                const auto& projection = GetOrCrash(Projections_, projectionTagIds);
+                auto it = Projections_.find(projectionTagIds);
+                YT_VERIFY(it != Projections_.end());
+                const auto& projection = **it;
 
                 fluent
                     .Item().BeginMap()
@@ -825,7 +898,7 @@ int TCube<T>::ReadSensorValues(
             return valuesRead;
         }
 
-        const auto& projection = it->second;
+        const auto& projection = **it;
         doReadValueForProjection(fluent, projection, projection.Values[index]);
     }
 
@@ -843,9 +916,10 @@ void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extr
 template <class T>
 void TCube<T>::DumpCube(NProto::TCube *cube, const TTagIdList& extraTagIds) const
 {
-    for (const auto& [tagIds, window] : Projections_) {
+    for (const auto& windowPtr : Projections_) {
+        const auto& window = *windowPtr;
         auto projection = cube->add_projections();
-        for (auto tagId : tagIds) {
+        for (auto tagId : window.TagIds) {
             projection->add_tag_ids(tagId);
         }
         for (auto tagId : extraTagIds) {

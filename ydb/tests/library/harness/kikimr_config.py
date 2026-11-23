@@ -594,13 +594,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
         if pg_compatible_expirement:
-            self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config["feature_flags"].setdefault('disable_pg_compatibility', False)
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-
-            # https://github.com/ydb-platform/ydb/issues/5152
-            # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
 
         if generic_connector_config:
             if "query_service_config" not in self.yaml_config:

@@ -290,7 +290,10 @@ namespace NKikimr::NDDisk {
                 EvRetryIODelayed,
                 EvProcessPersistentBufferRemoval,
                 EvExpirePersistentBufferRegistrationToken,
+                EvPublishHealth,
             };
+
+            struct TEvPublishHealth : TEventLocal<TEvPublishHealth, EvPublishHealth> {};
 
             struct TEvExpirePersistentBufferRegistrationToken
                 : TEventLocal<TEvExpirePersistentBufferRegistrationToken, EvExpirePersistentBufferRegistrationToken> {
@@ -431,6 +434,10 @@ namespace NKikimr::NDDisk {
         // through TEvPrivate callbacks, so Broken ordering is defined by the actor mailbox.
         bool Broken = false;
         TString BrokenReason;
+        TString HealthStoppingReason;
+
+        void PublishHealth();
+        void PublishHealthAndSchedule();
 
         static constexpr TDuration StopIoTimeout = TDuration::Minutes(1);
         static constexpr TStringBuf StoppingReason = "DDisk is stopping";

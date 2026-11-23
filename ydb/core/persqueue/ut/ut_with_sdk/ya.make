@@ -16,6 +16,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/http/simple
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/public/mlp/ut/common
@@ -41,6 +42,7 @@ SRCS(
     topic_timestamp_ut.cpp
     topic_replication_ut.cpp
     topic_ut.cpp
+    write_mode_ut.cpp
     write_sessions_quoter_ut.cpp
 )
 

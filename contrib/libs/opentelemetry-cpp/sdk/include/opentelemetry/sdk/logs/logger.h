@@ -42,7 +42,7 @@ public:
       opentelemetry::nostd::string_view name,
       std::shared_ptr<LoggerContext> context,
       std::unique_ptr<instrumentationscope::InstrumentationScope> instrumentation_scope =
-          instrumentationscope::InstrumentationScope::Create("")) noexcept;
+          instrumentationscope::InstrumentationScope::Create(""));
 
   /**
    * Returns the name of this logger.

@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/testlib/tablet_helpers.h>

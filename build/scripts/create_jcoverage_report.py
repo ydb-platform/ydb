@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import io
 import tarfile
 import zipfile
 import os
@@ -25,6 +26,19 @@ class Timer(object):
     def step(self, msg):
         sys.stderr.write("{} ({}s)\n".format(msg, int(time.time() - self.start)))
         self.start = time.time()
+
+
+def load_covered_classes(jar):
+    """
+    Return the classes the module compiled itself, or None for a jar without a class list.
+    The list (.covcls) is written next to the jars of the modules selected by JAVA_COVERAGE_SOURCE_FILTER; such a
+    jar may also carry classes that are not its own, e.g. the dependencies merged in by UBERJAR().
+    """
+    class_list = os.path.splitext(jar)[0] + '.covcls'
+    if not os.path.exists(class_list):
+        return None
+    with io.open(class_list, encoding='utf8') as afile:
+        return set(afile.read().split())
 
 
 def main(
@@ -70,12 +84,15 @@ def main(
         if jar.startswith('contrib/java'):
             continue
 
+        covered_classes = load_covered_classes(jar)
         with zipfile.ZipFile(jar) as jf:
             for entry in jf.infolist():
                 if entry.filename.endswith(('.java', '.kt')):
                     dest = src_dir
 
                 elif entry.filename.endswith('.class'):
+                    if covered_classes is not None and entry.filename not in covered_classes:
+                        continue
                     dest = cls_dir
 
                 else:

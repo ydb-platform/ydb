@@ -1,14 +1,59 @@
 #include "diagnostics.h"
+#include "ydb_clients.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/logger/record.h>
 #include <util/string/cast.h>
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 namespace NBridgeSkipper {
 namespace {
+
+class TCaptureBackend final : public TLogBackend {
+public:
+    TCaptureBackend(std::shared_ptr<TDiagnosticStore> store, std::shared_ptr<const TTokenSource> tokens, TAutoPtr<TLogBackend> output)
+        : Store(std::move(store))
+        , Redactor(std::move(tokens))
+        , Output(std::move(output)) {
+    }
+
+    void WriteData(const TLogRecord& record) override {
+        // SDK issue strings have already been redacted at decode. Redact again
+        // before retaining diagnostics, then tee exactly those bytes to the output.
+        const auto text = Redactor.Redact(TStringBuf(record.Data, record.Len), std::numeric_limits<size_t>::max());
+        NJson::TJsonValue json;
+        TString level = "info";
+        if (NJson::ReadJsonTree(text, &json) && json["priority"].IsString()) {
+            level = json["priority"].GetString();
+            level.to_lower();
+            if (level == "warning") {
+                level = "warn";
+            }
+            if (level == "crit" || level == "alert" || level == "emerg") {
+                level = "fatal";
+            }
+        }
+        TInstant eventAt = TInstant::Now();
+        if (json["microseconds"].IsUInteger()) {
+            eventAt = TInstant::MicroSeconds(json["microseconds"].GetUInteger());
+        }
+        Store->Log(level, TString(text.substr(0, 4096)), eventAt);
+        Output->WriteData(TLogRecord(record.Priority, text.data(), text.size(), record.MetaFlags));
+    }
+
+    void ReopenLog() override {
+        Output->ReopenLog();
+    }
+
+private:
+    std::shared_ptr<TDiagnosticStore> Store;
+    TRedactor Redactor;
+    TAutoPtr<TLogBackend> Output;
+};
 
 int Rank(TStringBuf level) {
     if (level == "trace") {
@@ -106,6 +151,14 @@ TString HistorySummary(const NJson::TJsonValue& row) {
 
 } // namespace
 
+
+TAutoPtr<TLogBackend> CreateCaptureBackend(
+    std::shared_ptr<TDiagnosticStore> store,
+    std::shared_ptr<const TTokenSource> tokens,
+    TAutoPtr<TLogBackend> output)
+{
+    return new TCaptureBackend(std::move(store), std::move(tokens), std::move(output));
+}
 
 TDiagnosticStore::TDiagnosticStore(TString bootId, TString captureLevel)
     : BootId(std::move(bootId))

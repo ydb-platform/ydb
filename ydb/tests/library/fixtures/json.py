@@ -137,6 +137,15 @@ class JsonPredicateGenerator:
         self._and_pairs = []
         self._or_pairs = []
         self._build_pool()
+        # A forced JSON index needs a searchable token in every OR branch.
+        has_region = self._je("$.region")
+        has_tenant = self._je("$.tenant")
+        common_types = [self._jv("$.common_type", "Utf8", f'= "{value}"') for value in self._COMMON_TYPES]
+        self.explicit_index_predicates = (
+            has_region, has_tenant, *common_types,
+            f"({common_types[0]}) AND ({has_region})",
+            f"({has_region}) OR ({has_tenant})",
+        )
 
     def _je(self, path, suffix=""):
         return f"JSON_EXISTS({self._column}, '{self._mode} {path}'){suffix}"
@@ -363,7 +372,9 @@ class JsonPredicateGenerator:
             f"({self._jv('$.common_type', 'Utf8', '= \"extended\"')})"
         )
 
-    def random_predicate(self):
+    def random_predicate(self, *, explicit_index=False):
+        if explicit_index:
+            return random.choice(self.explicit_index_predicates)
         roll = random.random()
         if roll < 0.55:
             return random.choice(self._atoms)
@@ -384,10 +395,10 @@ def get_random_json():
     return JsonCorpusGenerator().random_json()
 
 
-def get_random_predicate(column="`json`", mode="strict"):
+def get_random_predicate(column="`json`", mode="strict", *, explicit_index=False):
     global _PREDICATE_GENERATOR
     if _PREDICATE_GENERATOR is None or (
         _PREDICATE_GENERATOR._column != column or _PREDICATE_GENERATOR._mode != mode
     ):
         _PREDICATE_GENERATOR = JsonPredicateGenerator(column=column, mode=mode)
-    return _PREDICATE_GENERATOR.random_predicate()
+    return _PREDICATE_GENERATOR.random_predicate(explicit_index=explicit_index)

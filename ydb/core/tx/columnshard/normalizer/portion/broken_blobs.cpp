@@ -32,7 +32,8 @@ public:
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo.GetPortionInfo().GetPortionId());
-            AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
+            YDB_LOG_VERIFY(!!schema,
+                {"portionId", portionInfo.GetPortionInfo().GetPortionId()});
             YDB_LOG_CRIT("",
                 {"event", "portion_removed_as_broken"},
                 {"portionId", portionInfo.GetPortionInfo().GetAddress().DebugString()});
@@ -101,7 +102,7 @@ protected:
             for (auto&& [_, p] : i.second) {
                 if (readyPortions.emplace(p.GetPortionInfo().GetPortionId()).second) {
                     auto it = Schemas->find(p.GetPortionInfo().GetPortionId());
-                    AFL_VERIFY(it != Schemas->end());
+                    YDB_LOG_VERIFY(it != Schemas->end());
                     auto restored = TReadPortionInfoWithBlobs::RestorePortion(p, blobs, it->second->GetIndexInfo());
                     auto restoredBatch = restored.RestoreBatch(*it->second, *it->second, {});
                     if (restoredBatch.IsFail()) {
@@ -126,11 +127,12 @@ protected:
             {"status", status.GetStatus()},
             {"event", "broken_blob_found"},
             {"storageId", storageId});
-        AFL_VERIFY(status.GetStatus() == NKikimrProto::EReplyStatus::NODATA)("status", status.GetStatus());
+        YDB_LOG_VERIFY(status.GetStatus() == NKikimrProto::EReplyStatus::NODATA,
+            {"status", status.GetStatus()});
         auto itStorage = PortionsByBlobId.find(storageId);
-        AFL_VERIFY(itStorage != PortionsByBlobId.end());
+        YDB_LOG_VERIFY(itStorage != PortionsByBlobId.end());
         auto it = itStorage->second.find(range.GetBlobId());
-        AFL_VERIFY(it != itStorage->second.end());
+        YDB_LOG_VERIFY(it != itStorage->second.end());
         YDB_LOG_CRIT("",
             {"portion", it->second.GetPortionInfo().GetAddress().DebugString()});
         BrokenPortions.emplace(it->second.GetPortionInfo().GetPortionId(), it->second);
@@ -190,10 +192,12 @@ INormalizerTask::TPtr TNormalizer::BuildTask(
             continue;
         }
         for (auto&& i : blobsByStorage) {
-            AFL_VERIFY(i.first == NBlobOperations::TGlobal::DefaultStorageId)("details", "Invalid storage for normalizer")("storage_id", i.first);
+            YDB_LOG_VERIFY(i.first == NBlobOperations::TGlobal::DefaultStorageId,
+                {"details", "Invalid storage for normalizer"},
+                {"storageId", i.first});
             for (auto&& b : i.second) {
                 portionByBlobId[i.first].emplace(b.BlobId, portion);
-                AFL_VERIFY(blobIds[i.first].emplace(b).second);
+                YDB_LOG_VERIFY(blobIds[i.first].emplace(b).second);
             }
         }
     }

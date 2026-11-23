@@ -270,6 +270,18 @@ class TEliminateLeftJoinRule : public ISimplifiedRule {
 };
 
 /**
+ * Compute identical aggregations of an aggregate once, such as COUNT(*) in both SELECT and HAVING.
+ * A Map above the aggregate copies the result to the outputs of the others.
+ */
+class TEliminateDuplicateAggregationsRule : public ISimplifiedRule {
+  public:
+    TEliminateDuplicateAggregationsRule() : ISimplifiedRule("Eliminate duplicate aggregations", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Expand distinct aggregation.
  */
 class TExpandDistinctAggregationRule: public ISimplifiedRule {

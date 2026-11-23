@@ -83,11 +83,15 @@ void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Gen
 NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers,
                                   const TString& query,
                                   const google::protobuf::Message& protoAst,
-                                  const NSQLTranslation::TSQLHints& hints,
+                                  const NSQLTranslation::TParsedTokenList& tokens,
                                   const NSQLTranslation::TTranslationSettings& settings)
 {
     TAstParseResult res;
-    TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
+    NSQLTranslation::TSQLHints hints;
+    if (!CollectSqlHints(tokens, settings.File, settings.File, hints, res.Issues, settings.MaxErrors, /*utf8Aware=*/true)) {
+        return res;
+    }
+    TContext ctx(lexers, parsers, settings, hints, tokens, res.Issues, query);
     SqlASTToYqlImpl(res, protoAst, ctx);
     res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
@@ -101,11 +105,15 @@ NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, c
     NSQLTranslation::TSQLHints hints;
     auto lexer = MakeLexer(lexers, settings.AnsiLexer);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors, /*utf8Aware=*/true)) {
+    NSQLTranslation::TParsedTokenList tokens;
+    if (!NSQLTranslation::Tokenize(*lexer, query, queryName, tokens, res.Issues, settings.MaxErrors)) {
+        return res;
+    }
+    if (!CollectSqlHints(tokens, queryName, settings.File, hints, res.Issues, settings.MaxErrors, /*utf8Aware=*/true)) {
         return res;
     }
 
-    TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
+    TContext ctx(lexers, parsers, settings, hints, tokens, res.Issues, query);
     NSQLTranslation::TErrorCollectorOverIssues collector(res.Issues, settings.MaxErrors, settings.File);
 
     google::protobuf::Message* ast(SqlAST(parsers, query, queryName, collector, settings.AnsiLexer, settings.Arena));
@@ -214,7 +222,8 @@ void SqlASTToAstStatementsImpl(
     const NSQLTranslation::TTranslationSettings& settings,
     TVector<NYql::TStmtParseInfo>* stmtParseInfo,
     TIssues&& issues,
-    NSQLTranslation::TSQLHints&& hints)
+    NSQLTranslation::TSQLHints&& hints,
+    const NSQLTranslation::TParsedTokenList& tokens)
 {
     std::vector<::NSQLv1Generated::TRule_sql_stmt_core> commonStates;
     std::vector<::NSQLv1Generated::TRule_sql_stmt_core> statementResult;
@@ -246,7 +255,7 @@ void SqlASTToAstStatementsImpl(
             return;
         }
 
-        TContext ctx(lexers, parsers, settings, hints, issues, queryText);
+        TContext ctx(lexers, parsers, settings, hints, tokens, issues, queryText);
         result.emplace_back();
         if (stmtParseInfo) {
             stmtParseInfo->push_back({});
@@ -285,11 +294,15 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(
     NSQLTranslation::TSQLHints hints;
     auto lexer = MakeLexer(lexers, settings.AnsiLexer);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, queryText, queryName, settings.File, hints, issues, settings.MaxErrors, /*utf8Aware=*/true)) {
+    NSQLTranslation::TParsedTokenList tokens;
+    if (!NSQLTranslation::Tokenize(*lexer, queryText, queryName, tokens, issues, settings.MaxErrors)) {
+        return result;
+    }
+    if (!CollectSqlHints(tokens, queryName, settings.File, hints, issues, settings.MaxErrors, /*utf8Aware=*/true)) {
         return result;
     }
 
-    TContext ctx(lexers, parsers, settings, hints, issues, queryText);
+    TContext ctx(lexers, parsers, settings, hints, tokens, issues, queryText);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
     google::protobuf::Message* astProto(SqlAST(parsers, queryText, queryName, collector, settings.AnsiLexer, settings.Arena));
@@ -305,7 +318,8 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(
                 settings,
                 stmtParseInfo,
                 std::move(issues),
-                std::move(hints));
+                std::move(hints),
+                tokens);
         }
     } else {
         ctx.IncrementMonCounter("sql_errors", "AstError");
@@ -389,8 +403,8 @@ public:
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
-                                              const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
-        return SqlASTToYql(Lexers_, Parsers_, query, protoAst, hints, settings);
+                                              const NSQLTranslation::TParsedTokenList& tokens, const NSQLTranslation::TTranslationSettings& settings) final {
+        return SqlASTToYql(Lexers_, Parsers_, query, protoAst, tokens, settings);
     }
 
     TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,

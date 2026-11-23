@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NReader {
 
 ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInfo& portion) const {
     auto schema = portion.GetSchema(GetIndexVersions());
-    AFL_VERIFY(schema);
+    YDB_LOG_VERIFY(schema);
     return schema;
 }
 

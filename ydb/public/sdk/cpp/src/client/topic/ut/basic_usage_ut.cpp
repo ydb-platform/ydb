@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .BeginCondition()
                         .MaxProcessingAttempts(11)
                     .EndCondition()
-                    .MoveAction("deadLetterQueue-topic")
+                    .MoveAction("/Root/deadLetterQueue-topic")
                 .EndDeadLetterPolicy()
             .EndAddConsumer();
 
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(CreateTopicWithSharedConsumer_DeleteDeadLetterPolicy) {
@@ -625,7 +625,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
-                        .MoveAction("deadLetterQueue-topic")
+                        .MoveAction("/Root/deadLetterQueue-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .DefaultProcessingTimeout(TDuration::Seconds(13))
                     .BeginAlterDeadLetterPolicy()
                         .Enabled(true)
-                        .AlterMoveAction("deadLetterQueue-topic-new")
+                        .AlterMoveAction("/Root/deadLetterQueue-topic-new")
                         .BeginCondition()
                             .MaxProcessingAttempts(17)
                         .EndCondition()
@@ -668,7 +668,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 17);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic-new");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/deadLetterQueue-topic-new");
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_DisableDeadLetterPolicy) {
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
-                        .MoveAction("deadLetterQueue-topic")
+                        .MoveAction("/Root/deadLetterQueue-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), false);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_SetDeleteDeadLetterPolicy) {
@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             topics.BeginAlterConsumer()
                     .ConsumerName("shared_consumer_name")
                     .BeginAlterDeadLetterPolicy()
-                        .SetMoveAction("dlq-topic")
+                        .SetMoveAction("/Root/dlq-topic")
                     .EndAlterDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
@@ -836,7 +836,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "dlq-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/dlq-topic");
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_AlterMoveDeadLetterPolicy) {
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
-                        .MoveAction("dlq-topic")
+                        .MoveAction("/Root/dlq-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
@@ -872,7 +872,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             topics.BeginAlterConsumer()
                     .ConsumerName("shared_consumer_name")
                     .BeginAlterDeadLetterPolicy()
-                        .AlterMoveAction("dlq-topic-new")
+                        .AlterMoveAction("/Root/dlq-topic-new")
                     .EndAlterDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
@@ -892,7 +892,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "dlq-topic-new");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/dlq-topic-new");
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_DeleteDeadLetterPolicy_AlterMoveDeadLetterPolicy) {

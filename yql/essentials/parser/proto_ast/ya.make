@@ -7,6 +7,10 @@ PEERDIR(
     yql/essentials/parser/common
 )
 
+SRCS(
+    common.cpp
+)
+
 END()
 
 RECURSE(

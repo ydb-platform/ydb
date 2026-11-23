@@ -26,8 +26,8 @@ private:
         : TBase(std::move(input), std::move(output), EProcessorType::Calculation)
         , KernelLogic(kernelLogic)
         , Function(function) {
-        AFL_VERIFY(KernelLogic);
-        AFL_VERIFY(Function);
+        YDB_LOG_VERIFY(KernelLogic);
+        YDB_LOG_VERIFY(Function);
     }
 
     virtual bool IsAggregation() const override {

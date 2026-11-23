@@ -1086,6 +1086,30 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT(h.Clients->Updates.empty());
     }
 
+    Y_UNIT_TEST(UnreachableHotStandbySeedDoesNotBlockClusterView) {
+        THarness h(EMode::Manual);
+        h.Failed.clear();
+        h.Piles["b"] = static_cast<EPileState>(8);
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            h.FailedMethods.insert({B, method});
+        }
+        h.Run(35);
+        const auto snapshot = h.Store->Read();
+        UNIT_ASSERT(snapshot->Selection.View);
+        UNIT_ASSERT(snapshot->Selection.View->Piles.at("b") == static_cast<EPileState>(8));
+        UNIT_ASSERT(snapshot->Decision.Kind == EDecisionKind::Stable);
+        UNIT_ASSERT(!snapshot->Piles.contains("b"));
+        for (const auto& endpoint : snapshot->Endpoints) {
+            UNIT_ASSERT_VALUES_UNEQUAL(endpoint.Pile, "b");
+        }
+        const size_t healthCalls = h.Clients->Health.size();
+        h.Run(10);
+        for (size_t i = healthCalls; i < h.Clients->Health.size(); ++i) {
+            UNIT_ASSERT_VALUES_UNEQUAL(h.Clients->Health[i].Request.Pile, "b");
+        }
+        UNIT_ASSERT(h.Clients->Updates.empty());
+    }
+
     Y_UNIT_TEST(RemovedPileEndpointsAreRetiredWithoutRestart) {
         THarness fixture(EMode::Auto);
         fixture.Failed.clear();
@@ -1121,6 +1145,35 @@ Y_UNIT_TEST_SUITE(TSkipperActor) {
         UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
         UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 7);
         UNIT_ASSERT_VALUES_EQUAL(update.Request.Endpoint, B);
+    }
+
+    Y_UNIT_TEST(DelayedFallbackWithLiveQuorumsNeverDisconnectsAndRewarms) {
+        THarness h(EMode::Auto, {}, 3, "{}");
+        h.Failed.clear();
+        h.Run(35);
+        UNIT_ASSERT(h.Store->Read()->Decision.Kind == EDecisionKind::Stable);
+
+        // A busy BSC may miss its half-budget while node quorums remain live.
+        h.SelfCheckDelay = TDuration::MilliSeconds(1500);
+        h.Fallback = true;
+        h.Run(6);
+        const auto fallback = h.Store->Read();
+        for (const TString pile : {"a", "b"}) {
+            const auto& verdict = fallback->Piles.at(pile).Verdict;
+            UNIT_ASSERT(verdict.SelfQuorum);
+            UNIT_ASSERT(verdict.OwnFallback);
+            UNIT_ASSERT(verdict.Verdict == EPileVerdict::Unknown);
+        }
+        UNIT_ASSERT(h.Clients->Updates.empty());
+
+        h.Fallback = false;
+        h.Run(20);
+        UNIT_ASSERT(h.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Unknown);
+        UNIT_ASSERT(h.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        UNIT_ASSERT(h.Clients->Updates.empty());
+        h.Run(20);
+        UNIT_ASSERT(h.Store->Read()->Decision.Kind == EDecisionKind::Stable);
+        UNIT_ASSERT(h.Clients->Updates.empty());
     }
 
     Y_UNIT_TEST(DefaultTimingConfirmsBscFailureWithinAFewSeconds) {

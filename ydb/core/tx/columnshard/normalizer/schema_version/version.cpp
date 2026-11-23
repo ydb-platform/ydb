@@ -19,7 +19,7 @@ private:
         TKey() = default;
 
         ui64 GetVersion() const {
-            AFL_VERIFY(Version);
+            YDB_LOG_VERIFY(Version);
             return *Version;
         }
 
@@ -36,7 +36,7 @@ private:
                 const bool result = std::tie(Step, TxId) < std::tie(item.Step, item.TxId);
                 if (Version && item.Version) {
                     const bool resultVersions = Version < item.Version;
-                    AFL_VERIFY(result == resultVersions);
+                    YDB_LOG_VERIFY(result == resultVersions);
                 }
                 return result;
             } else {
@@ -145,7 +145,7 @@ public:
                 const ui32 id = rowset.GetValue<Schema::SchemaPresetVersionInfo::Id>();
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
                 Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-                AFL_VERIFY(info.HasSchema());
+                YDB_LOG_VERIFY(info.HasSchema());
                 ui64 version = info.GetSchema().GetVersion();
                 TKey presetVersionKey(id, rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(),
                     rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>(), version);
@@ -155,7 +155,7 @@ public:
                 } else if (it->second < presetVersionKey) {
                     it->second = presetVersionKey;
                 }
-                AFL_VERIFY(schemaIdUsability.emplace(presetVersionKey, usedSchemaVersions.contains(version)).second);
+                YDB_LOG_VERIFY(schemaIdUsability.emplace(presetVersionKey, usedSchemaVersions.contains(version)).second);
 
                 if (!rowset.Next()) {
                     return std::nullopt;
@@ -163,8 +163,8 @@ public:
             }
             for (auto&& i : maxByPresetId) {
                 auto it = schemaIdUsability.find(i.second);
-                AFL_VERIFY(it != schemaIdUsability.end());
-                AFL_VERIFY(it->first == i.second);
+                YDB_LOG_VERIFY(it != schemaIdUsability.end());
+                YDB_LOG_VERIFY(it->first == i.second);
                 it->second = true;
             }
             {
@@ -180,7 +180,7 @@ public:
                     Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
                     auto it = schemaIdUsability.find(TKey(versionInfo.GetSchemaPresetId(),
                         rowset.GetValue<Schema::TableVersionInfo::SinceStep>(), rowset.GetValue<Schema::TableVersionInfo::SinceTxId>(), {}));
-                    AFL_VERIFY(it != schemaIdUsability.end());
+                    YDB_LOG_VERIFY(it != schemaIdUsability.end());
                     if (!it->second) {
                         unusedTableSchemaIds.emplace_back(pathId, rowset.GetValue<Schema::TableVersionInfo::SinceStep>(),
                             rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());

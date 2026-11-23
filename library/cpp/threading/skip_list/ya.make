@@ -7,6 +7,7 @@ SRCS(
 END()
 
 RECURSE(
+    benchmark
     perf
     ut
 )

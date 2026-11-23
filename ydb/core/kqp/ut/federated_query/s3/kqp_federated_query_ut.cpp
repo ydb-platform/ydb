@@ -1876,7 +1876,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
         auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, { .DomainRoot = "TestDomain" });
 

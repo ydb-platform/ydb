@@ -47,8 +47,4 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
-
-    // Dedicated replication identities allowed to maintain marked CDC objects
-    // under schema-only freeze. Empty means no exception; normal ACL still applies.
-    repeated string DatabaseFreezeReplicationAllowedSIDs = 12;
 }

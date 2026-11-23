@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/protos/schemeshard_config.pb.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/unknown_field_set.h>
@@ -316,17 +316,8 @@ public:
 
 } // anonymous namespace
 
-void TSchemeShard::ConfigureDatabaseFreeze(const NKikimrConfig::TSchemeShardConfig& config) {
-    DatabaseFreezeReplicationAllowedSIDs.clear();
-    for (const auto& sid : config.GetDatabaseFreezeReplicationAllowedSIDs()) {
-        if (!sid.empty()) {
-            DatabaseFreezeReplicationAllowedSIDs.insert(sid);
-        }
-    }
-}
-
 bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction,
-    const NACLib::TUserToken* userToken)
+    bool schemaExempt)
 {
     if (DatabaseFreezeStates.empty()) {
         return false;
@@ -501,6 +492,9 @@ bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme
             // Let operations accepted before the fence finish their internal
             // stages. CDC initial scan finalization also needs a scheme tx.
             const auto& state = *freeze;
+            if (state.GetSchemaPhase() == TFreeze::SCHEMA_UNKNOWN || state.GetDataPhase() == TFreeze::DATA_UNKNOWN) {
+                return true;
+            }
             if (IsTopologyOperation(transaction) && IsDatabaseTopologyBlocked(path.Base()->PathId)) {
                 return true;
             }
@@ -515,20 +509,8 @@ bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme
                 && transaction.HasAlterCdcStream()
                 && transaction.GetAlterCdcStream().HasGetReady()
                 && HasOnlyFreezePayload(transaction, "AlterCdcStream");
-            const char* replicationPayload = nullptr;
-            switch (transaction.GetOperationType()) {
-            case NKikimrSchemeOp::ESchemeOpCreateCdcStream: replicationPayload = "CreateCdcStream"; break;
-            case NKikimrSchemeOp::ESchemeOpAlterCdcStream: replicationPayload = "AlterCdcStream"; break;
-            case NKikimrSchemeOp::ESchemeOpDropCdcStream: replicationPayload = "DropCdcStream"; break;
-            case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup: replicationPayload = "AlterPersQueueGroup"; break;
-            default: break;
-            }
-            const bool replication = state.GetSchemaPhase() == TFreeze::SCHEMA_FROZEN
-                && state.GetDataPhase() == TFreeze::DATA_OPEN && replicationPayload
-                && HasOnlyFreezePayload(transaction, replicationPayload)
-                && IsDatabaseFreezeReplicationOperation(transaction, userToken);
             const bool schemaBlocked = state.GetSchemaPhase() != TFreeze::SCHEMA_OPEN
-                && !continuation && !finishCdcScan && !maintenance && !replication;
+                && !schemaExempt && !continuation && !finishCdcScan && !maintenance;
             const bool dataBlocked = state.GetDataPhase() != TFreeze::DATA_OPEN
                 && !continuation && !finishCdcScan
                 && !(state.GetDataPhase() == TFreeze::DATA_FROZEN && IsSafeDirectoryOperation(transaction, this));
@@ -551,10 +533,26 @@ const TFreeze* TSchemeShard::FindDatabaseFreeze(const TPathId& pathId) const {
     return it == DatabaseFreezeStates.end() ? nullptr : &it->second;
 }
 
-bool TSchemeShard::IsDatabaseFreezeBlocking(const TPathId& pathId) const {
+bool TSchemeShard::IsDatabaseFreezeBlocking(const TPathId& pathId, bool schemaExempt) const {
     const auto* state = FindDatabaseFreeze(pathId);
-    return state && (state->GetSchemaPhase() != TFreeze::SCHEMA_OPEN
-        || state->GetDataPhase() != TFreeze::DATA_OPEN);
+    return state && (state->GetDataPhase() != TFreeze::DATA_OPEN
+        || state->GetSchemaPhase() == TFreeze::SCHEMA_UNKNOWN
+        || (state->GetSchemaPhase() != TFreeze::SCHEMA_OPEN && !schemaExempt));
+}
+
+bool TSchemeShard::IsDatabaseFreezeBlocking(const TPathId& pathId, const TString* userSID,
+    const NProtoBuf::RepeatedPtrField<TString>& userGroupSIDs) const
+{
+    if (!IsDatabaseFreezeBlocking(pathId)) {
+        return false;
+    }
+    if (!userSID) {
+        return IsDatabaseFreezeBlocking(pathId, IsClientSchemaModificationExempt(nullptr));
+    }
+    // Separate long-running entry points carry authenticated identity only, not credentials.
+    // A legacy SID-only request is still an identified user, never a tokenless exemption.
+    const NACLib::TUserToken userToken(*userSID, TVector<TString>(userGroupSIDs.begin(), userGroupSIDs.end()));
+    return IsDatabaseFreezeBlocking(pathId, IsClientSchemaModificationExempt(&userToken));
 }
 
 bool TSchemeShard::IsDatabaseTopologyBlocked(const TPathId& pathId) const {

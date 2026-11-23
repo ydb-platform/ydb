@@ -40,6 +40,8 @@ message TEvCreateExportRequest {
     optional string UserSID = 4;
     optional string PeerName = 5;
     optional string SanitizedToken = 6;
+    // Group membership from the authenticated caller; not public request settings.
+    repeated string UserGroupSIDs = 7;
 }
 
 message TCreateExportResponse {

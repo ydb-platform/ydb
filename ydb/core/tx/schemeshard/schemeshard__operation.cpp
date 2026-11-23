@@ -282,13 +282,8 @@ bool IsAsyncReplicationOperation(const NKikimrSchemeOp::TModifyScheme& tx, TSche
 
 } // anonymous namespace
 
-bool TSchemeShard::IsDatabaseFreezeReplicationOperation(
-    const NKikimrSchemeOp::TModifyScheme& transaction, const NACLib::TUserToken* userToken)
-{
-    // Neither the marker nor administrator status is proof of controller identity.
-    return userToken && AnyOf(DatabaseFreezeReplicationAllowedSIDs, [userToken](const auto& sid) {
-        return userToken->IsExist(sid);
-    }) && IsAsyncReplicationOperation(transaction, this);
+bool TSchemeShard::IsClientSchemaModificationExempt(const NACLib::TUserToken* userToken) const {
+    return !userToken || userToken->IsSystemUser() || IsAdministrator(AppData(), userToken);
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context) {
@@ -305,14 +300,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         return response;
     }
 
-    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
-        && context.UserToken
-        && !context.UserToken->IsSystemUser()
-        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get())
-        && !(record.TransactionSize() && AllOf(record.GetTransaction(), [this](const auto& tx) {
+    // Use exactly the same exemptions for the feature flag and user schema freeze.
+    // Replication must qualify as a whole batch, not just one decorated transaction.
+    const bool schemaExempt = IsClientSchemaModificationExempt(context.UserToken.Get())
+        || (record.TransactionSize() && AllOf(record.GetTransaction(), [this](const auto& tx) {
             return IsAsyncReplicationOperation(tx, this);
-        })))
-    {
+        }));
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications() && !schemaExempt) {
         return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
             NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
             "Client schema modifications are disabled for non-administrators");
@@ -321,7 +315,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {
-        if (IsDatabaseFreezeBlocking(transaction, context.UserToken.Get())) {
+        if (IsDatabaseFreezeBlocking(transaction, schemaExempt)) {
             return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
                 NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "Database is frozen for schema changes");
         }

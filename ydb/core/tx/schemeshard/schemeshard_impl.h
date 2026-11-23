@@ -354,13 +354,12 @@ public:
     // Pending progress is rebuilt by the worker after a restart, unlike the
     // durable result in DatabaseFreezeStates.
     THashMap<TPathId, NKikimrScheme::TEvDatabaseFreezeResult> DatabaseFreezeProgress;
-    THashSet<TString> DatabaseFreezeReplicationAllowedSIDs;
-    void ConfigureDatabaseFreeze(const NKikimrConfig::TSchemeShardConfig& config);
-    bool IsDatabaseFreezeReplicationOperation(const NKikimrSchemeOp::TModifyScheme& transaction,
-        const NACLib::TUserToken* userToken);
+    bool IsClientSchemaModificationExempt(const NACLib::TUserToken* userToken) const;
     bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction,
-        const NACLib::TUserToken* userToken = nullptr);
-    bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;
+        bool schemaExempt = false);
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId, bool schemaExempt = false) const;
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId, const TString* userSID,
+        const NProtoBuf::RepeatedPtrField<TString>& userGroupSIDs) const;
     const NKikimrScheme::TDatabaseFreezeState* FindDatabaseFreeze(const TPathId& pathId) const;
     bool IsDatabaseTopologyBlocked(const TPathId& pathId) const;
     bool IsDatabaseBackgroundWriteBlocked(const TPathId& pathId) const;

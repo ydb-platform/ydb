@@ -1141,6 +1141,9 @@ public:
                 auto req = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, Database, buildOp);
                 if (UserToken) {
                     req->Record.SetUserSID(UserToken->GetUserSID());
+                    for (const auto& sid : UserToken->GetGroupSIDs()) {
+                        req->Record.AddUserGroupSIDs(sid);
+                    }
                 }
                 ForwardToSchemeShard(std::move(req));
                 break;
@@ -1159,6 +1162,9 @@ public:
                 auto req = std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, Database, constraintSettings);
                 if (UserToken) {
                     req->Record.SetUserSID(UserToken->GetUserSID());
+                    for (const auto& sid : UserToken->GetGroupSIDs()) {
+                        req->Record.AddUserGroupSIDs(sid);
+                    }
                 }
                 ForwardToSchemeShard(std::move(req));
                 break;

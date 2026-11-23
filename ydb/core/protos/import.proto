@@ -40,6 +40,8 @@ message TEvCreateImportRequest {
     optional string SanitizedToken = 6;
     // Computed by the authenticated RPC, never taken from public import settings.
     optional bool CanRestoreRateLimiterMetering = 7 [default = false];
+    // Group membership from the authenticated caller; not public request settings.
+    repeated string UserGroupSIDs = 8;
 }
 
 message TCreateImportResponse {

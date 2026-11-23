@@ -3,7 +3,6 @@
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet_flat/defs.h>
@@ -47,6 +46,23 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 
 using TStage = NKikimrTxDataShard::TDatabaseFreezeState;
 
+const TString& OrdinaryUserToken() {
+    static const auto token = NACLib::TUserToken("user@builtin", {}).SerializeAsString();
+    return token;
+}
+
+TVector<TString> ClientModificationTokens() {
+    return {
+        NACLib::TUserToken("admin@builtin", {}).SerializeAsString(),
+        NACLib::TUserToken("member@builtin", {"admins@builtin"}).SerializeAsString(),
+        NACLib::TUserToken("maintenance@system", {}).SerializeAsString(),
+        OrdinaryUserToken(),
+        TString(),
+        // A present token with an empty user SID is not an absent token.
+        NACLib::TUserToken("", {"admins@builtin"}).SerializeAsString(),
+    };
+}
+
 struct TFreezeEnv {
     TTestBasicRuntime Runtime;
     TTestEnv Env;
@@ -60,7 +76,9 @@ struct TFreezeEnv {
             .EnableProtoSourceIdInfo(true)
             .EnableChangefeedInitialScan(true)
             .EnableBackgroundCompaction(false))
-    {}
+    {
+        Runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin", "admins@builtin"};
+    }
 
     TString Path(const TString& name) const {
         return name.StartsWith("/") ? name : Root + '/' + name;
@@ -124,14 +142,21 @@ struct TFreezeEnv {
         WaitMode(epoch, freeze, freeze, status);
     }
 
-    auto Modify(NKikimrSchemeOp::TModifyScheme tx, const TString& token = {}) {
+    auto ModifyBatch(const TVector<NKikimrSchemeOp::TModifyScheme>& transactions,
+                     const TString& token = OrdinaryUserToken()) {
         const auto sender = Runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
         request->Record.SetTxId(++TxId);
         request->Record.SetUserToken(token);
-        *request->Record.AddTransaction() = std::move(tx);
+        for (const auto& tx : transactions) {
+            *request->Record.AddTransaction() = tx;
+        }
         ForwardToTablet(Runtime, Owner, sender, request.Release());
         return Runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender)->Get()->Record;
+    }
+
+    auto Modify(const NKikimrSchemeOp::TModifyScheme& tx, const TString& token = OrdinaryUserToken()) {
+        return ModifyBatch({tx}, token);
     }
 
     void CheckPending(ui64 epoch = 1, bool freeze = true) {
@@ -158,12 +183,19 @@ struct TFreezeEnv {
     }
 
     void CheckSchemaBlocked() {
-        TestMkDir(Runtime, Owner, ++TxId, Root, "Blocked", {{NKikimrScheme::StatusPreconditionFailed}});
+        NKikimrSchemeOp::TModifyScheme tx;
+        tx.SetWorkingDir(Root);
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        tx.MutableMkDir()->SetName("Blocked");
+        UNIT_ASSERT_VALUES_EQUAL(Modify(tx).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
     }
 
     void CheckSchemaAvailable() {
-        ++TxId;
-        TestMkDir(Runtime, Owner, TxId, Root, Sprintf("Allowed%lu", TxId));
+        NKikimrSchemeOp::TModifyScheme tx;
+        tx.SetWorkingDir(Root);
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        tx.MutableMkDir()->SetName(Sprintf("Allowed%lu", TxId + 1));
+        UNIT_ASSERT_VALUES_EQUAL(Modify(tx).GetStatus(), NKikimrScheme::StatusAccepted);
         Env.TestWaitNotification(Runtime, TxId, Owner);
     }
 
@@ -1904,43 +1936,320 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         }
     }
 
-    Y_UNIT_TEST(TrustedReplicationExceptionIsLimitedToSchemaOnly) {
+    Y_UNIT_TEST_TWIN(SchemaFreezeUsesClientModificationIdentityExemptions, schemaFreeze) {
         TFreezeEnv env;
-        env.CreateTable();
+        if (schemaFreeze) {
+            env.WaitMode(1, true, false);
+        } else {
+            env.Runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        }
+        const auto tokens = ClientModificationTokens();
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(env.Root);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+            const auto name = Sprintf("Identity%lu", i);
+            tx.MutableMkDir()->SetName(name);
+            const auto sender = env.Runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+            request->Record.SetTxId(++env.TxId);
+            request->Record.SetUserToken(tokens[i]);
+            // Audit SID and requested owner must not grant the administrator exemption.
+            request->Record.SetUserSID("admin@builtin");
+            request->Record.SetOwner("admin@builtin");
+            *request->Record.AddTransaction() = tx;
+            ForwardToTablet(env.Runtime, env.Owner, sender, request.Release());
+            const auto result = env.Runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender)->Get()->Record;
+            const bool allowed = i < 3 || tokens[i].empty();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), allowed
+                ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusPreconditionFailed,
+                result.ShortDebugString());
+            if (allowed) {
+                env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+            }
+            if (allowed) {
+                TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path(name)), {NLs::PathExist});
+            } else {
+                TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path(name)), {NLs::PathNotExist});
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SchemaFreezePreservesEmptyAdministratorListSemantics) {
+        TFreezeEnv env;
+        env.Runtime.GetAppData().AdministrationAllowedSIDs.clear();
         env.WaitMode(1, true, false);
-        auto* shard = dynamic_cast<TSchemeShard*>(env.Runtime.FindActor(ResolveTablet(env.Runtime, env.Owner)));
-        UNIT_ASSERT(shard);
+        // IsAdministrator intentionally grants the exemption to everyone for an empty list.
+        env.CheckSchemaAvailable();
+        env.WaitMode(2, true, true);
         NKikimrSchemeOp::TModifyScheme tx;
         tx.SetWorkingDir(env.Root);
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
-        tx.MutableCreateCdcStream()->SetTableName("Table");
-        auto* stream = tx.MutableCreateCdcStream()->MutableStreamDescription();
-        stream->SetName("Trusted");
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+        tx.MutableCreateTable()->SetName("Unexpected");
+        tx.MutableCreateTable()->AddColumns()->SetName("key");
+        tx.MutableCreateTable()->MutableColumns(0)->SetType("Uint32");
+        tx.MutableCreateTable()->AddKeyColumnNames("key");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        env.WaitMode(3, false, false);
+    }
+
+    Y_UNIT_TEST_TWIN(SchemaFreezeUsesClientModificationReplicationExemptions, schemaFreeze) {
+        TFreezeEnv env;
+        env.CreateTable();
+        TestCreatePQGroup(env.Runtime, ++env.TxId, env.Root, R"(
+            Name: "OtherTopic" TotalGroupCount: 1 PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+        )");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        const auto otherTopicId = DescribePath(env.Runtime, env.Owner, env.Path("OtherTopic")).GetPathId();
+        if (schemaFreeze) {
+            env.WaitMode(1, true, false);
+        } else {
+            env.Runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        }
+        NKikimrSchemeOp::TModifyScheme create;
+        create.SetWorkingDir(env.Root);
+        create.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
+        create.MutableCreateCdcStream()->SetTableName("Table");
+        auto* stream = create.MutableCreateCdcStream()->MutableStreamDescription();
+        stream->SetName("Stream");
+        stream->SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        stream->SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        stream->SetState(NKikimrSchemeOp::ECdcStreamStateReady);
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(create).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        auto* marker = stream->AddUserAttributes();
+        marker->SetKey("__async_replication");
+        marker->SetValue("{}");
+        // Match the existing flag: no additional service identity is required.
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(create).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+
+        NKikimrSchemeOp::TModifyScheme borrowed;
+        borrowed.SetWorkingDir(env.Path("Table/Stream"));
+        borrowed.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+        borrowed.MutableAlterPersQueueGroup()->SetPathId(otherTopicId);
+        borrowed.MutableAlterPersQueueGroup()->MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(20);
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(borrowed).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+
+        NKikimrSchemeOp::TModifyScheme drop;
+        drop.SetWorkingDir(env.Root);
+        drop.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
+        drop.MutableDropCdcStream()->SetTableName("Table");
+        drop.MutableDropCdcStream()->AddStreamName("Stream");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(drop).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+
+        create.MutableCreateCdcStream()->MutableStreamDescription()->SetName("Mixed");
+        NKikimrSchemeOp::TModifyScheme mkdir;
+        mkdir.SetWorkingDir(env.Root);
+        mkdir.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        mkdir.MutableMkDir()->SetName("Unexpected");
+        const auto mixed = env.ModifyBatch({create, mkdir});
+        UNIT_ASSERT_VALUES_EQUAL(mixed.GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        UNIT_ASSERT_STRING_CONTAINS(mixed.GetReason(), schemaFreeze
+            ? "Database is frozen" : "Client schema modifications are disabled");
+        TestDescribeResult(DescribePrivatePath(env.Runtime, env.Owner, env.Path("Table/Mixed")), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path("Unexpected")), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST_TWIN(DataFreezeProtectionCannotBeBypassedByClientModificationExemptions, schemaFreeze) {
+        TFreezeEnv env;
+        env.CreateTable();
+        NKikimrSchemeOp::TModifyScheme createStream;
+        createStream.SetWorkingDir(env.Root);
+        createStream.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
+        createStream.MutableCreateCdcStream()->SetTableName("Table");
+        auto* stream = createStream.MutableCreateCdcStream()->MutableStreamDescription();
+        stream->SetName("Stream");
         stream->SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
         stream->SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
         stream->SetState(NKikimrSchemeOp::ECdcStreamStateReady);
         auto* marker = stream->AddUserAttributes();
         marker->SetKey("__async_replication");
-        marker->SetValue(R"({"id":"1","path":"/Root/Target"})");
-        const auto token = NACLib::TUserToken("controller@builtin", {"replication-service"}).SerializeAsString();
-        // Empty configuration and a marker alone never grant an exception.
-        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
-        NKikimrConfig::TSchemeShardConfig config;
-        config.AddDatabaseFreezeReplicationAllowedSIDs("replication-service");
-        shard->ConfigureDatabaseFreeze(config);
-        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, NACLib::TUserToken("user@builtin", {}).SerializeAsString()).GetStatus(),
-                                 NKikimrScheme::StatusPreconditionFailed);
-        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusAccepted);
+        marker->SetValue("{}");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(createStream).GetStatus(), NKikimrScheme::StatusAccepted);
         env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
-        shard->ConfigureDatabaseFreeze(NKikimrConfig::TSchemeShardConfig());
-        tx.MutableCreateCdcStream()->MutableStreamDescription()->SetName("Revoked");
-        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
-        shard->ConfigureDatabaseFreeze(config);
+        const auto source = env.Shards().front();
+        auto check = [&](TStringBuf phase) {
+            for (const auto& token : ClientModificationTokens()) {
+                NKikimrSchemeOp::TModifyScheme tx;
+                tx.SetWorkingDir(env.Root);
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+                const TString name = Sprintf("Unexpected%lu", env.TxId + 1);
+                auto* table = tx.MutableCreateTable();
+                table->SetName(name);
+                table->AddColumns()->SetName("key");
+                table->MutableColumns(0)->SetType("Uint32");
+                table->AddKeyColumnNames("key");
+                const auto result = env.Modify(tx, token);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrScheme::StatusPreconditionFailed, phase);
+                TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path(name)), {NLs::PathNotExist});
+                tx.ClearCreateTable();
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
+                tx.MutableCreateCdcStream()->SetTableName("Table");
+                auto* stream = tx.MutableCreateCdcStream()->MutableStreamDescription();
+                stream->SetName(name);
+                stream->SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+                stream->SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+                auto* marker = stream->AddUserAttributes();
+                marker->SetKey("__async_replication");
+                marker->SetValue("{}");
+                UNIT_ASSERT_VALUES_EQUAL_C(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed, phase);
+                NKikimrSchemeOp::TModifyScheme drop;
+                drop.SetWorkingDir(env.Root);
+                drop.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
+                drop.MutableDropCdcStream()->SetTableName("Table");
+                drop.MutableDropCdcStream()->AddStreamName("Stream");
+                UNIT_ASSERT_VALUES_EQUAL_C(env.Modify(drop, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed, phase);
+                NKikimrSchemeOp::TModifyScheme split;
+                split.SetWorkingDir(env.Root);
+                split.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(Sprintf(R"(
+                    TablePath: "%s" SourceTabletId: %lu
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 100 } } } }
+                )", env.Path("Table").c_str(), source), split.MutableSplitMergeTablePartitions()));
+                UNIT_ASSERT_VALUES_EQUAL_C(env.Modify(split, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed, phase);
+            }
+            TestDescribeResult(DescribePrivatePath(env.Runtime, env.Owner, env.Path("Table/Stream")), {NLs::PathExist});
+            UNIT_ASSERT_VALUES_EQUAL(env.Shards().size(), 1);
+        };
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> work(env.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME;
+        });
+        const auto beforeFreeze = ++env.TxId;
+        TestCreateTable(env.Runtime, beforeFreeze, env.Root, R"(
+            Name: "Pending" Columns { Name: "key" Type: "Uint32" } KeyColumnNames: ["key"]
+        )");
+        env.Runtime.WaitFor("accepted schema work", [&] { return !work.empty(); });
+        UNIT_ASSERT(!env.RequestMode(1, schemaFreeze, true).GetReady());
+        check("PREPARING");
+        TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> fence(env.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetStage() == TStage::FENCE_WRITES;
+        });
+        work.Stop().Unblock();
+        env.Env.TestWaitNotification(env.Runtime, beforeFreeze, env.Owner);
+        UNIT_ASSERT(!env.RequestMode(1, schemaFreeze, true).GetReady());
+        env.Runtime.WaitFor("pending write fence", [&] { return !fence.empty(); });
+        check("DRAINING");
+        fence.Stop().Unblock();
+        env.WaitMode(1, schemaFreeze, true);
+        check("FROZEN");
+        env.Write("Table", false);
+        TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> open(env.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetStage() == TStage::OPEN;
+        });
+        UNIT_ASSERT(!env.RequestMode(2, false, false).GetReady());
+        env.Runtime.WaitFor("pending thaw", [&] { return !open.empty(); });
+        check("OPENING");
+        open.Stop().Unblock();
+        env.WaitMode(2, false, false);
+        env.AdvancePlanStep();
+        env.Write();
+    }
+
+    Y_UNIT_TEST(AdministratorGroupCanBuildIndexWhileSchemaFrozen) {
+        TFreezeEnv env;
+        env.CreateTable();
+        env.WaitMode(1, true, false);
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path(env.Path("Table"));
+        settings.mutable_index()->set_name("ByValue");
+        settings.mutable_index()->add_index_columns("value");
+        settings.mutable_index()->mutable_global_index();
+        const auto sender = env.Runtime.AllocateEdgeActor();
+        auto build = [&](bool includeGroup) {
+            auto request = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(++env.TxId, env.Root, settings);
+            request->Record.SetUserSID("member@builtin");
+            if (includeGroup) {
+                request->Record.AddUserGroupSIDs("admins@builtin");
+            }
+            ForwardToTablet(env.Runtime, env.Owner, sender, request.Release());
+            return env.Runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender)->Get()->Record;
+        };
+        // SID-only callers must not accidentally get the tokenless exemption.
+        UNIT_ASSERT_VALUES_EQUAL(build(false).GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        const auto accepted = build(true);
+        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), Ydb::StatusIds::SUCCESS, accepted.ShortDebugString());
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+        TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path("Table/ByValue")), {NLs::PathExist});
+        // The later data freeze must include the new index's partitions as well.
         env.WaitMode(2, true, true);
-        env.WaitMode(3, false, true);
-        tx.MutableCreateCdcStream()->MutableStreamDescription()->SetName("Blocked");
-        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
-        env.WaitMode(4, false, false);
+        settings.mutable_index()->set_name("Blocked");
+        UNIT_ASSERT_VALUES_EQUAL(build(true).GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        env.WaitMode(3, true, false);
+        env.CheckSchemaBlocked();
+    }
+
+    Y_UNIT_TEST_TWIN(LongRunningEntryPointsUseClientModificationIdentityExemptions, dataFreeze) {
+        TFreezeEnv env;
+        env.Runtime.GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
+        env.CreateTable();
+        env.WaitMode(1, true, dataFreeze);
+        const auto tokens = ClientModificationTokens();
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            const bool allowed = !dataFreeze && (i < 3 || tokens[i].empty());
+            const NACLib::TUserToken token(tokens[i]);
+            auto identify = [&](auto& record) {
+                if (!tokens[i].empty()) {
+                    record.SetUserSID(token.GetUserSID());
+                    for (const auto& sid : token.GetGroupSIDs()) {
+                        record.AddUserGroupSIDs(sid);
+                    }
+                }
+            };
+            // Invalid payloads terminate after admission, avoiding background work or network I/O.
+            // BAD_REQUEST proves that an exempt caller passed the freeze gate.
+            const auto expected = allowed ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::PRECONDITION_FAILED;
+            const auto sender = env.Runtime.AllocateEdgeActor();
+            auto importRequest = MakeHolder<TEvImport::TEvCreateImportRequest>();
+            importRequest->Record.SetTxId(++env.TxId);
+            importRequest->Record.SetDatabaseName(env.Root);
+            identify(importRequest->Record);
+            auto* importSettings = importRequest->Record.MutableRequest()->MutableImportFromS3Settings();
+            importSettings->set_endpoint("localhost:1");
+            importSettings->set_bucket("bucket");
+            importSettings->add_items()->set_destination_path(env.Path("Duplicate"));
+            importSettings->add_items()->set_destination_path(env.Path("Duplicate"));
+            ForwardToTablet(env.Runtime, env.Owner, sender, importRequest.Release());
+            auto importReply = env.Runtime.GrabEdgeEventRethrow<TEvImport::TEvCreateImportResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(importReply->Get()->Record.GetResponse().GetEntry().GetStatus(), expected,
+                importReply->Get()->Record.ShortDebugString());
+
+            auto exportRequest = MakeHolder<TEvExport::TEvCreateExportRequest>();
+            exportRequest->Record.SetTxId(++env.TxId);
+            exportRequest->Record.SetDatabaseName(env.Root);
+            identify(exportRequest->Record);
+            auto* exportSettings = exportRequest->Record.MutableRequest()->MutableExportToS3Settings();
+            exportSettings->set_endpoint("localhost:1");
+            exportSettings->add_items()->set_source_path(env.Path("Missing"));
+            ForwardToTablet(env.Runtime, env.Owner, sender, exportRequest.Release());
+            auto exportReply = env.Runtime.GrabEdgeEventRethrow<TEvExport::TEvCreateExportResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(exportReply->Get()->Record.GetResponse().GetEntry().GetStatus(), expected,
+                exportReply->Get()->Record.ShortDebugString());
+
+            NKikimrIndexBuilder::TIndexBuildSettings indexSettings;
+            indexSettings.set_source_path(env.Path("Table"));
+            indexSettings.mutable_index()->set_name("Invalid");
+            indexSettings.mutable_index()->add_index_columns("Missing");
+            indexSettings.mutable_index()->mutable_global_index();
+            auto index = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(++env.TxId, env.Root, indexSettings);
+            identify(index->Record);
+            ForwardToTablet(env.Runtime, env.Owner, sender, index.Release());
+            auto indexReply = env.Runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(indexReply->Get()->Record.GetStatus(), expected,
+                indexReply->Get()->Record.ShortDebugString());
+
+            NKikimrSetColumnConstraint::TSetColumnConstraintSettings constraintSettings;
+            constraintSettings.SetTablePath(env.Path("Table"));
+            constraintSettings.AddNotNullColumns("Missing");
+            auto constraint = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(++env.TxId, env.Root, constraintSettings);
+            identify(constraint->Record);
+            ForwardToTablet(env.Runtime, env.Owner, sender, constraint.Release());
+            auto constraintReply = env.Runtime.GrabEdgeEventRethrow<TEvSetColumnConstraint::TEvCreateResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(constraintReply->Get()->Record.GetStatus(), expected,
+                constraintReply->Get()->Record.ShortDebugString());
+        }
+        env.WaitMode(2, false, false);
     }
 
     Y_UNIT_TEST(SchemaOnlyThenDataFreezeWaitsForCurrentSplitAndSuccessors) {
@@ -2098,6 +2407,13 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.WaitMode(2, false, false, Ydb::StatusIds::UNSUPPORTED);
         UNIT_ASSERT(state.GetParticipantsFixed());
         UNIT_ASSERT(!state.GetShards().empty());
+        for (const auto& token : ClientModificationTokens()) {
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(env.Root);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+            tx.MutableMkDir()->SetName("UnknownPhase");
+            UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        }
         env.Write("Table", false);
     }
 

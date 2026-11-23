@@ -69,7 +69,8 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
-        if (Self->IsDatabaseFreezeBlocking(subDomainPathId) && !IsImportContinuation(request, subDomainPathId)) {
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId, request.HasUserSID() ? &request.GetUserSID() : nullptr,
+                request.GetUserGroupSIDs()) && !IsImportContinuation(request, subDomainPathId)) {
             return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for index builds");
         }
         auto subDomainInfo = domainPath.DomainInfo();

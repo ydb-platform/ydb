@@ -268,6 +268,9 @@ message AlterDatabaseRequest {
     // Independent controls. Missing fields preserve the last accepted target.
     // false/true (data-only) is supported; incompatible DDL and topology changes
     // remain fenced while DataShards are frozen. Do not combine with other changes.
+    // Schema freeze uses the EnableClientModifications exemptions: administrators,
+    // system/tokenless callers and asynchronous-replication CDC maintenance.
+    // These exemptions do not bypass the technical protection of data freeze.
     optional bool freeze_schema = 15;
     optional bool freeze_datashards = 16;
 }

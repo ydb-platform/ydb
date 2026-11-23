@@ -289,11 +289,17 @@ protected:
 
     void InitializeLogPrefix() {
         TStringBuilder prefixBuilder;
-        prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
-        if (RequestContext) {
-            prefixBuilder << "Ctx: " << *RequestContext << ". ";
+        prefixBuilder << "SelfId: " << this->SelfId();
+        const size_t selfIdEnd = prefixBuilder.size();
+        if (LogPrefix.empty()) {
+            prefixBuilder << ", TxId: " << TxId << ", task: " << Task.GetId() << ". Ctx: "
+                << TRequestContext(Task.GetRequestContext()) << ". ";
+        } else {
+            // Registration only changes SelfId; reuse the already formatted suffix.
+            prefixBuilder << TStringBuf(LogPrefix).SubStr(LogPrefixSelfIdEnd);
         }
         LogPrefix = std::move(prefixBuilder);
+        LogPrefixSelfIdEnd = selfIdEnd;
 
         WatermarksTracker.SetLogPrefix(LogPrefix);
         WatermarkGeneratorTracker.SetLogPrefix(LogPrefix);
@@ -2519,8 +2525,6 @@ protected:
             OutputChannelSize->Add(OutputChannelsMap.size() * MemoryLimits.ChannelBufferSize);
         }
 
-        RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
-
         InitializeLogPrefix(); // note: SelfId is not initialized here
     }
 
@@ -2923,6 +2927,7 @@ protected:
     // TODO(atarasov5): Resolve naming similarity between RuntimeSettings and CoreRuntimeSettings.
     TRuntimeSettings::TConstPtr CoreRuntimeSettings;
     TString LogPrefix;
+    size_t LogPrefixSelfIdEnd = 0;
     const TComputeRuntimeSettings RuntimeSettings;
     TComputeMemoryLimits MemoryLimits;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -2939,7 +2944,6 @@ protected:
     THashMap<ui64, TAsyncOutputTransformInfo> OutputTransformsMap; // Output index -> Transforms info
     bool ResumeEventScheduled = false;
     NDqProto::EComputeState State;
-    TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
     ui64 ComputeActorElapsedTicks = 0;
     ui64 TaskRunnerActorElapsedTicks = 0;
 

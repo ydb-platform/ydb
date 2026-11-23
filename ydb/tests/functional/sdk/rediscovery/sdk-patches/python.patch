@@ -535,7 +535,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..7ffb64127bf0cd3af645cde9e6800138
              raise
  
 diff --git a/ydb/connection.py b/ydb/connection.py
-index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e531e6941 100644
+index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..a34c1c0607cdb8d0940e66e60dc136ed17667c3e 100644
 --- a/ydb/connection.py
 +++ b/ydb/connection.py
 @@ -5,6 +5,7 @@ from concurrent import futures
@@ -546,16 +546,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
  from typing import (
      Any,
      Callable,
-@@ -344,6 +345,8 @@ def _set_server_timeouts(request, settings, default_value):
- def channel_factory(endpoint, driver_config, channel_provider=None, endpoint_options=None):
-     channel_provider = channel_provider if channel_provider is not None else grpc
-     options = _construct_channel_options(driver_config, endpoint_options)
-+    if getattr(driver_config, "use_long_poll", False) and endpoint_options is not None:
-+        options = list(options) + [("grpc.use_local_subchannel_pool", 1)]
-     logger.debug("Channel options: {}".format(options))
- 
-     if driver_config.root_certificates is None and not driver_config.secure_channel:
-@@ -381,13 +384,21 @@ class _SafeSyncIterator:
+@@ -381,13 +382,21 @@ class _SafeSyncIterator:
          self.on_disconnected_callback = on_disconnected_callback
  
      def cancel(self):
@@ -578,7 +569,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
          try:
              return self.it.__next__()
          except grpc.RpcError as rpc_error:
-@@ -408,6 +419,7 @@ class Connection(object):
+@@ -408,6 +417,7 @@ class Connection(object):
          "_stub_instances",
          "_driver_config",
          "_cleanup_callbacks",
@@ -586,7 +577,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
          "__weakref__",
          "lock",
          "calls",
-@@ -439,6 +451,7 @@ class Connection(object):
+@@ -439,6 +449,7 @@ class Connection(object):
          self.endpoint_key = EndpointKey(endpoint, getattr(endpoint_options, "node_id", None))
          self._channel = channel_factory(self.endpoint, driver_config, endpoint_options=endpoint_options)
          self._driver_config = driver_config
@@ -594,7 +585,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
          self._call_states: Dict[Any, "_RpcState"] = {}
          self._stub_instances: Dict[Any, Any] = {}
          self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
-@@ -459,12 +472,12 @@ class Connection(object):
+@@ -459,12 +470,12 @@ class Connection(object):
      def _prepare_call(self, stub, rpc_name, request, settings):
          timeout, metadata = _get_request_timeout(settings), _construct_metadata(self._driver_config, settings)
          _set_server_timeouts(request, settings, timeout)
@@ -610,7 +601,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
              self.calls += 1
              self._call_states[rpc_state.request_id] = rpc_state
          # Call successfully prepared and registered
-@@ -475,10 +488,9 @@ class Connection(object):
+@@ -475,10 +486,9 @@ class Connection(object):
          with self.lock:
              self.calls -= 1
              self._call_states.pop(call_state.request_id, None)
@@ -624,7 +615,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
  
      def future(
          self,
-@@ -555,6 +567,12 @@ class Connection(object):
+@@ -555,6 +565,12 @@ class Connection(object):
              if hasattr(response, "__iter__"):
                  # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
                  response = _SafeSyncIterator(response, rpc_state, on_disconnected)
@@ -637,7 +628,7 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..40cc733fd7befc79472585fb866f777e
  
              return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
          except grpc.RpcError as rpc_error:
-@@ -596,21 +614,25 @@ class Connection(object):
+@@ -596,21 +612,25 @@ class Connection(object):
              for callback in self._cleanup_callbacks:
                  callback(self)
  
@@ -712,13 +703,13 @@ index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6
      def set_database(self, database: str) -> "DriverConfig":
 diff --git a/ydb/long_poll_test.py b/ydb/long_poll_test.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..5f7662e851613f541a43660354738d486c12cbd5
+index 0000000000000000000000000000000000000000..2a103761d451796bbd145ffac47ce5dcafd14e91
 --- /dev/null
 +++ b/ydb/long_poll_test.py
-@@ -0,0 +1,403 @@
+@@ -0,0 +1,432 @@
 +import asyncio
 +from concurrent.futures import ThreadPoolExecutor
-+from contextlib import contextmanager
++from contextlib import AsyncExitStack, contextmanager
 +from pathlib import Path
 +from types import SimpleNamespace
 +import threading
@@ -738,6 +729,7 @@ index 0000000000000000000000000000000000000000..5f7662e851613f541a43660354738d48
 +        self.legacy = legacy
 +        self.cut = threading.Event()
 +        self.requests = []
++        self.attach_peers = []
 +        self.unary_started = threading.Event()
 +        self.unary_finish = threading.Event()
 +        self.subscribed = threading.Event()
@@ -773,6 +765,7 @@ index 0000000000000000000000000000000000000000..5f7662e851613f541a43660354738d48
 +    unary.add_DiscoveryServiceServicer_to_server(replicas, servers[0])
 +
 +    def attach(request, context):
++        replicas.attach_peers.append(context.peer())
 +        yield _apis.ydb_query.SessionState(status=400000).SerializeToString()
 +        while context.is_active():
 +            threading.Event().wait(0.01)
@@ -1119,6 +1112,33 @@ index 0000000000000000000000000000000000000000..5f7662e851613f541a43660354738d48
 +    finally:
 +        for server in servers:
 +            server.stop(0).wait()
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++def test_two_drivers_share_the_data_socket(async_driver):
++    async def check(replicas, endpoint):
++        async with AsyncExitStack() as cleanup:
++            streams = []
++            for _ in range(2):
++                config = ydb.DriverConfig(endpoint, "/db", credentials=ydb.AnonymousCredentials(), use_long_poll=True)
++                args = (_apis.ydb_query.AttachSessionRequest(), _apis.QueryService.Stub, "AttachSession")
++                if async_driver:
++                    driver = await cleanup.enter_async_context(ydb.aio.Driver(config))
++                    await driver.wait(timeout=5)
++                    stream = await driver(*args)
++                    await anext(stream)
++                else:
++                    driver = ydb.Driver(config)
++                    cleanup.push_async_callback(asyncio.to_thread, driver.stop)
++                    await asyncio.to_thread(driver.wait, 5)
++                    stream = await asyncio.to_thread(driver, *args)
++                    await asyncio.to_thread(next, stream)
++                streams.append(stream)
++            assert len(replicas.attach_peers) == 2
++            assert len(set(replicas.attach_peers)) == 1
++
++    with services(legacy=False) as (replicas, endpoint):
++        asyncio.run(check(replicas, endpoint))
 diff --git a/ydb/pool.py b/ydb/pool.py
 index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..7aa5ac9343708cdcad2e99acffde520dc2df47ec 100644
 --- a/ydb/pool.py

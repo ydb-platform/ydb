@@ -16,6 +16,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <format>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -725,9 +727,15 @@ public:
             return result;
         }
 
-        const bool willMirror = newTabletConfig.GetPartitionConfig().HasMirrorFrom();
-        const bool stopped = !tabletConfig.GetPartitionConfig().HasMirrorFrom() && !willMirror;
-        if (attachCdcTopic || (managedCdcTopic && willMirror)) {
+        const auto& oldPartition = tabletConfig.GetPartitionConfig();
+        const auto& newPartition = newTabletConfig.GetPartitionConfig();
+        const bool stopped = !oldPartition.HasMirrorFrom() && !newPartition.HasMirrorFrom();
+        const bool configureManagedMirror = managedCdcTopic && !stopped
+            && (Transaction.HasExpectedReplicationOwnerPathId()
+                || oldPartition.HasMirrorFrom() != newPartition.HasMirrorFrom()
+                || !google::protobuf::util::MessageDifferencer::Equals(oldPartition.GetMirrorFrom(), newPartition.GetMirrorFrom()));
+
+        if (attachCdcTopic || configureManagedMirror) {
             const auto tablePath = streamPath.Parent();
             const auto checks = tablePath.Check();
             checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsTable().NotUnderOperation();

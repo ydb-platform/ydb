@@ -38,7 +38,8 @@ struct TMessageId {
 
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, static_cast<ui32>(EEv::EvWriteResponse)> {
 
-    // Non-retryable when the topic write mode rejects the modification before any tablet call.
+    // Set when the topic write mode rejects the modification before any tablet call.
+    // WRITE_UNAVAILABLE is UNAVAILABLE; WRITE_PROHIBITED is non-retryable BAD_REQUEST.
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
     TString ErrorDescription;
 
@@ -230,12 +231,12 @@ struct TDescribeSettings {
 // Return TEvDescribeResponse
 IActor* CreateDescriber(const NActors::TActorId& parentId, TDescribeSettings&& settings);
 
-// Set only for WRITE_PROHIBITED. The status is BAD_REQUEST, which callers must not retry.
-struct TWriteProhibitedError {
-    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::BAD_REQUEST;
+// Set when writes are unavailable or prohibited. Callers must not send the modification to a tablet.
+struct TWriteBlockedError {
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::UNAVAILABLE;
     TString Description;
 };
 
-std::optional<TWriteProhibitedError> GetWriteProhibitedError(const NKikimrPQ::TPQTabletConfig& config);
+std::optional<TWriteBlockedError> GetWriteBlockedError(const NKikimrPQ::TPQTabletConfig& config);
 
 } // namespace NKikimr::NPQ::NMLP

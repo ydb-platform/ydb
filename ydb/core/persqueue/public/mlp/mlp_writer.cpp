@@ -53,7 +53,7 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     switch(topic.Status) {
         case NDescriber::EStatus::Success: {
             TopicInfo = topic.Info;
-            if (const auto blocked = GetWriteProhibitedError(TopicInfo->Description.GetPQTabletConfig())) {
+            if (const auto blocked = GetWriteBlockedError(TopicInfo->Description.GetPQTabletConfig())) {
                 Status = blocked->Status;
                 ErrorDescription = blocked->Description;
                 return ReplyErrorAndDie();

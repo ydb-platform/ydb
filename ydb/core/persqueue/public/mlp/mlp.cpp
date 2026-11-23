@@ -4,13 +4,16 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-std::optional<TWriteProhibitedError> GetWriteProhibitedError(const NKikimrPQ::TPQTabletConfig& config) {
+std::optional<TWriteBlockedError> GetWriteBlockedError(const NKikimrPQ::TPQTabletConfig& config) {
     const auto error = GetWriteModeError(config);
-    if (!error || error->Code != NPersQueue::NErrorCode::BAD_REQUEST) {
+    if (!error) {
         return std::nullopt;
     }
-    return TWriteProhibitedError{
-        .Status = Ydb::StatusIds::BAD_REQUEST,
+    const auto status = error->Code == NPersQueue::NErrorCode::BAD_REQUEST
+        ? Ydb::StatusIds::BAD_REQUEST
+        : Ydb::StatusIds::UNAVAILABLE;
+    return TWriteBlockedError{
+        .Status = status,
         .Description = error->Reason,
     };
 }

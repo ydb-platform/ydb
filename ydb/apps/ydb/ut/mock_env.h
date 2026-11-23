@@ -139,7 +139,7 @@ public:
         }
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
-        operation->set_status(Ydb::StatusIds::SUCCESS);
+        operation->set_status(ListDirectoryStatus);
         operation->mutable_result()->PackFrom(res);
         return grpc::Status();
     }
@@ -193,6 +193,7 @@ public:
         ExpectedClientCert = cert;
     }
 
+    Ydb::StatusIds::StatusCode ListDirectoryStatus = Ydb::StatusIds::SUCCESS;
     TString Token;
     TString ExpectedClientCert;
     THashMap<TString, TDirectory> Directories;

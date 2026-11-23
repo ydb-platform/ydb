@@ -1,4 +1,4 @@
-#include "run_ydb.h"
+#include "mock_env.h"
 
 #include <util/string/split.h>
 
@@ -17,6 +17,15 @@
 #include <google/protobuf/text_format.h>
 
 Y_UNIT_TEST_SUITE(YdbDump) {
+
+Y_UNIT_TEST_F(RestorePropagatesRootLookupError, TCliTestFixture) {
+    Service<TSchemeImpl>().ListDirectoryStatus = Ydb::StatusIds::UNAUTHORIZED;
+    Service<TSchemeImpl>().ExpectListDirectory("/");
+    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetEndpoint()).SetDatabase(GetDatabase()));
+    NYdb::NDump::TClient client(driver);
+    UNIT_ASSERT_VALUES_EQUAL(client.Restore("unused", "relative").GetStatus(), NYdb::EStatus::UNAUTHORIZED);
+    CheckExpectations();
+}
 
 Y_UNIT_TEST(NotNullTypeDump) {
     const char* tableName = "TableWithNotNullTypeForDump";
@@ -92,12 +101,9 @@ Y_UNIT_TEST(NotNullTypeDump) {
             NYdb::NDump::TDumpSettings().Database(GetYdbDatabase()));
         UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
         const TString destination = name + "Restored";
-        NYdb::TDriver restoreDriver(NYdb::TDriverConfig().SetEndpoint(GetYdbEndpoint())
-            .SetDatabase(absolute ? GetYdbDatabase() : TString{}));
-        NYdb::NDump::TClient restoreClient(restoreDriver);
-        auto restoreResult = restoreClient.Restore(tableDumpPath.GetPath(), destination);
+        auto restoreResult = client.Restore(tableDumpPath.GetPath(), destination);
         UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
-        auto schemaResult = restoreClient.Restore(tableDumpPath.GetPath(), destination, NYdb::NDump::TRestoreSettings().DryRun(true));
+        auto schemaResult = client.Restore(tableDumpPath.GetPath(), destination, NYdb::NDump::TRestoreSettings().DryRun(true));
         UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(
             RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM `%s/%s/%s`;",

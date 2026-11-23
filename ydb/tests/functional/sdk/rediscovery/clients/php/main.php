@@ -3,12 +3,13 @@
 use YdbPlatform\Ydb\Exception;
 use YdbPlatform\Ydb\Ydb;
 
-require __DIR__ . '/vendor/autoload.php';
+require (getenv('YDB_PHP_AUTOLOAD') ?: __DIR__ . '/vendor/autoload.php');
 
 $driver = new Ydb([
     'endpoint' => getenv('YDB_ENDPOINT'),
     'database' => getenv('YDB_DATABASE'),
     'discovery' => true,
+    'eds' => getenv('YDB_EDS_DISCOVERY') === '1',
     'iam_config' => ['anonymous' => true, 'insecure' => true],
     'grpc' => ['timeout' => 2_000_000],
 ]);

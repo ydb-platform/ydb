@@ -374,27 +374,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     };
 
     {
-        bool moveUnlockedOffset = true;
-        bool moveUncommittedOffset = true;
-
         TDeserializer<TSnapshotMessage> deserializer(snapshot.GetMessages());
         TSnapshotMessage snapshot;
         while (deserializer.Next(snapshot)) {
-            auto message = fromSnapshot(snapshot);
-            Messages.push_back(message);
-
-            const auto& messageStatus = message.GetStatus();
-
-            moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
-            moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
-
-            if (moveUnlockedOffset) {
-                ++FirstUnlockedOffset;
-            }
-
-            if (moveUncommittedOffset) {
-                ++FirstUncommittedOffset;
-            }
+            Messages.push_back(fromSnapshot(snapshot));
         }
     }
 
@@ -432,7 +415,30 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     }
 
     BuildAndLinkMessageGroups();
+    RebuildFastZoneCursors();
     return true;
+}
+
+void TStorage::RebuildFastZoneCursors() {
+    FirstUncommittedOffset = FirstOffset;
+    FirstUnlockedOffset = FirstOffset;
+
+    bool moveUnlockedOffset = true;
+    bool moveUncommittedOffset = true;
+    for (const auto& message : Messages) {
+        const auto messageStatus = message.GetStatus();
+
+        // Delayed is not committed, so it stops both cursors. Locked and DLQ stop only the commit cursor.
+        moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
+        moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
+
+        if (moveUnlockedOffset) {
+            ++FirstUnlockedOffset;
+        }
+        if (moveUncommittedOffset) {
+            ++FirstUncommittedOffset;
+        }
+    }
 }
 
 void TStorage::BuildAndLinkMessageGroups() {
@@ -628,8 +634,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         };
     }
 
-    FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
-    FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
+    RebuildFastZoneCursors();
 
     // Reset changes
     Batch = { this };

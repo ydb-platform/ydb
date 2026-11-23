@@ -368,4 +368,9 @@ message TFeatureFlags {
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
 }

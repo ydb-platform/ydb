@@ -105,6 +105,15 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
+    // ColumnShard can report completion before this schemeshard has applied the plan step.
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvNotifyTxCompletionResult triggered early"
+                               << ", at schemeshard: " << context.SS->SelfTabletId());
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
+        return false;
+    }
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();

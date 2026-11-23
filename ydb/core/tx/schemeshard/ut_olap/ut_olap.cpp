@@ -2521,6 +2521,81 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 100);
         Y_UNUSED(csControllerGuard);
     }
+
+    // YDBBUGS-1197: ColumnShard can finish the planned tx and report completion before SchemeShard
+    // has applied the same plan step. The operation is still in TPropose, which accepts an early
+    // DataShard schema-changed but aborts on TEvColumnShard::TEvNotifyTxCompletionResult.
+    Y_UNIT_TEST(EarlyColumnShardCompletionWhileAlterInPropose) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 shardId = 0;
+        {
+            const auto describe = DescribePath(runtime, "/MyRoot/ColumnTable");
+            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+        }
+
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<NKikimr::TEvTxProcessing::TEvPlanStep> planBlocker(runtime,
+            [alterTxId](const NKikimr::TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (record.GetTabletID() != TTestTxConfig::SchemeShard) {
+                    return false;
+                }
+                for (size_t i = 0; i < record.TransactionsSize(); ++i) {
+                    if (record.GetTransactions(i).GetTxId() == alterTxId) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+        AsyncAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                AddColumns { Name: "extra" Type: "Uint64" }
+            }
+        )");
+
+        runtime.WaitFor("alter plan step blocked on schemeshard", [&] { return !planBlocker.empty(); });
+        UNIT_ASSERT_C(!IsSchemeTxCompleted(runtime, alterTxId),
+            "alter must still be in TPropose while its plan step is held");
+
+        // Deliver the completion before the held plan is released. Dispatching here must not
+        // apply the plan: it stays in the blocker until Unblock.
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(),
+            new TEvColumnShard::TEvNotifyTxCompletionResult(shardId, alterTxId));
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(!IsSchemeTxCompleted(runtime, alterTxId),
+            "early completion reply must not finish the alter before the plan step");
+
+        planBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+
+        bool found = false;
+        const auto describe = DescribePath(runtime, "/MyRoot/ColumnTable");
+        for (const auto& column : describe.GetPathDescription().GetColumnTableDescription().GetSchema().GetColumns()) {
+            if (column.GetName() == "extra") {
+                found = true;
+            }
+        }
+        UNIT_ASSERT_C(found, "alter must commit after an early ColumnShard completion reply");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {

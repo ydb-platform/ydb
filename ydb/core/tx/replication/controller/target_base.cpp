@@ -16,9 +16,18 @@ using EStreamState = TReplication::EStreamState;
 
 namespace {
 
-bool ShouldWaitForAttachment(const TReplication* replication) {
-    return !replication->GetConfig().GetInitialScan()
-        && replication->GetDesiredState() == TReplication::EState::Paused;
+bool CanAttachDestination(const TReplication* replication, ETargetKind kind) {
+    if (replication->GetState() == TReplication::EState::Removing
+        || replication->GetDesiredState() == TReplication::EState::Done)
+    {
+        return false;
+    }
+
+    if (replication->GetDesiredState() == TReplication::EState::Paused) {
+        return kind != ETargetKind::Topic && replication->GetConfig().GetInitialScan();
+    }
+
+    return true;
 }
 
 } // anonymous namespace
@@ -231,11 +240,17 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
+        if (Kind == ETargetKind::Topic && Replication->GetDesiredState() == TReplication::EState::Paused) {
+            break;
+        }
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
         break;
     case EDstState::Ready:
+        if (Kind == ETargetKind::Topic) {
+            break;
+        }
         if (WorkerRegistar && WorkerRegistarProxy != Replication->GetYdbProxy()) {
             // Registration also captures connection settings for the workers.
             // Restart this read-only actor so both its proxy and settings refresh.
@@ -246,19 +261,18 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             WorkerRegistarProxy = Replication->GetYdbProxy();
         }
         break;
-    case EDstState::Alter: {
-        const bool needsCreator = !DstCreator && !DstPathId;
-        const bool canAttach = !ShouldWaitForAttachment(Replication)
-            && Replication->GetDesiredState() != TReplication::EState::Done;
+    case EDstState::Alter:
         if (Workers) {
             RemoveWorkers(ctx);
-        } else if (needsCreator && canAttach) {
-            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        } else if (!DstCreator && !DstAlterer) {
-            DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
+        } else if (!DstCreator) {
+            const bool canAttach = !DstPathId && CanAttachDestination(Replication, Kind);
+            if (canAttach) {
+                DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+            } else if (!DstAlterer) {
+                DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
+            }
         }
         break;
-    }
     case EDstState::Done:
         break;
     case EDstState::Removing:

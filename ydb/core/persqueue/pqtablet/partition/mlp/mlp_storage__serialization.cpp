@@ -415,30 +415,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     }
 
     BuildAndLinkMessageGroups();
-    RebuildFastZoneCursors();
     return true;
-}
-
-void TStorage::RebuildFastZoneCursors() {
-    FirstUncommittedOffset = FirstOffset;
-    FirstUnlockedOffset = FirstOffset;
-
-    bool moveUnlockedOffset = true;
-    bool moveUncommittedOffset = true;
-    for (const auto& message : Messages) {
-        const auto messageStatus = message.GetStatus();
-
-        // Delayed is not committed, so it stops both cursors. Locked and DLQ stop only the commit cursor.
-        moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
-        moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
-
-        if (moveUnlockedOffset) {
-            ++FirstUnlockedOffset;
-        }
-        if (moveUncommittedOffset) {
-            ++FirstUncommittedOffset;
-        }
-    }
 }
 
 void TStorage::BuildAndLinkMessageGroups() {
@@ -630,8 +607,6 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             .Expiry = TInstant::Seconds(receiveAttempt.GetExpirySeconds()),
         };
     }
-
-    RebuildFastZoneCursors();
 
     // Reset changes
     Batch = { this };

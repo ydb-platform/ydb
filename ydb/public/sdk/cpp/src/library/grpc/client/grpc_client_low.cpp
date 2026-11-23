@@ -131,6 +131,7 @@ std::shared_lock<std::shared_mutex> TEndpointAdmission::Acquire(const IQueueClie
         std::lock_guard guard(CallsMutex_);
         if (Calls_.size() == Calls_.capacity()) {
             std::erase_if(Calls_, [](const auto& weak) { return weak.expired(); });
+            Calls_.reserve(2 * Calls_.size() + 1); // amortize cleanup even with long-lived streams
         }
         Calls_.emplace_back(call);
     }
@@ -185,6 +186,26 @@ void TGRpcStreamRequestProcessorCommon::ReleaseContext(bool hasInitialMetadata) 
         GetInitialMetadata(&SavedInitialMetadata_);
     }
     Context.reset();
+}
+
+void TStubsHolder::AddOwner(const std::shared_ptr<void>& owner) {
+    {
+        std::shared_lock guard(RWMutex_);
+        const auto it = Owners_.find(owner.get());
+        if (it != Owners_.end() && !it->second.expired()) {
+            return;
+        }
+    }
+    std::unique_lock guard(RWMutex_);
+    std::erase_if(Owners_, [](const auto& entry) { return entry.second.expired(); });
+    Owners_[owner.get()] = owner;
+}
+
+bool TStubsHolder::ReleaseOwner(const void* owner) {
+    std::unique_lock guard(RWMutex_);
+    Owners_.erase(owner);
+    std::erase_if(Owners_, [](const auto& entry) { return entry.second.expired(); });
+    return Owners_.empty();
 }
 
 TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime, bool tcpNoDelay)

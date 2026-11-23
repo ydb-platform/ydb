@@ -158,7 +158,7 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
                     auto cb = [strong](const NThreading::TFuture<TEndpointUpdateResult>& future) {
                         const auto& updateResult = future.GetValue();
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                        strong->Client->DeleteChannels(updateResult.Removed);
+                        strong->Client->DeleteChannels(updateResult.Removed, strong->EndpointPool);
 #endif
                         if (strong->DiscoveryMode == EDiscoveryMode::Sync) {
                             std::unique_lock guard(strong->LastDiscoveryStatusRWLock);

@@ -175,15 +175,20 @@ public:
             clientConfig.IntChannelParams[GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL] = 1;
         }
 
+        auto admission = selected.Admission ? selected.Admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (selected.Admission && !admission) {
+            return {nullptr, TEndpointKey()};
+        }
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         ChannelPool_.GetStubsHolderLocked(
             clientConfig.Locator, clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
+            holder.AddOwner(std::shared_ptr<void>(dbState, &dbState->EndpointPool));
             if (dbState->EndpointPool.UsesWatch() && !selected.Admission) {
                 std::lock_guard guard(dbState->BootstrapPinMutex);
                 dbState->BootstrapPin = holder.Pin();
             }
-            conn.reset(GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder).release());
+            conn = GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder);
         });
 #else
         conn = std::move(GRpcClientLow_.CreateGRpcServiceConnection<TService>(clientConfig));
@@ -771,9 +776,9 @@ public:
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    void DeleteChannels(const std::vector<std::string>& endpoints) override {
+    void DeleteChannels(const std::vector<std::string>& endpoints, const TEndpointPool& owner) override {
         for (const auto& endpoint : endpoints) {
-            ChannelPool_.DeleteChannel(endpoint);
+            ChannelPool_.DeleteChannel(endpoint, [&](auto& holder) { return holder.ReleaseOwner(&owner); });
         }
     }
 #endif
@@ -881,7 +886,7 @@ private:
                             const auto& updateResult = future.GetValue();
                             if (needUpdateChannels) {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                                DeleteChannels(updateResult.Removed);
+                                DeleteChannels(updateResult.Removed, dbState->EndpointPool);
 #endif
                             }
                             auto discoveryStatus = updateResult.DiscoveryStatus;

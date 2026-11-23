@@ -26,10 +26,7 @@ void TEndpointPool::PublishWatchResult(TListEndpointsResult result, ERouteUpdate
     }
     if (routeUpdate == ERouteUpdate::Switch) {
         // Replica-local node IDs and even host:port pairs can be reused.
-        auto previous = Install({});
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-        Client_->DeleteChannels(previous);
-#endif
+        Install({});
     }
     TEndpointUpdateResult update;
     if (result.DiscoveryStatus.Ok() && result.Result.endpoints().empty()) {
@@ -43,9 +40,6 @@ void TEndpointPool::PublishWatchResult(TListEndpointsResult result, ERouteUpdate
         WatchStatus_ = update.DiscoveryStatus;
         DiscoveryPromise_.Swap(promise);
     }
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    Client_->DeleteChannels(update.Removed);
-#endif
     if (promise.Initialized()) {
         promise.SetValue(std::move(update));
     }
@@ -188,11 +182,16 @@ std::vector<std::string> TEndpointPool::Install(const Ydb::Discovery::ListEndpoi
             }
             record.Admission = admission;
         }
+        std::vector<std::string> removed;
         for (auto& [endpoint, admission] : WatchAdmissions_) {
             if (!next.contains(endpoint)) {
                 admission->Retire();
+                removed.push_back(endpoint);
             }
         }
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+        Client_->DeleteChannels(removed, *this);
+#endif
         WatchAdmissions_.swap(next);
     }
     LastUpdateTime_ = TInstant::Now().MicroSeconds();

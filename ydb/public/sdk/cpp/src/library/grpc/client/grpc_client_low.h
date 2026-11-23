@@ -588,6 +588,9 @@ public:
         }
     }
 
+    void AddOwner(const std::shared_ptr<void>& owner);
+    bool ReleaseOwner(const void* owner);
+
     std::shared_ptr<void> Pin() {
         std::unique_lock guard(RWMutex_);
         if (!Pin_) {
@@ -609,6 +612,7 @@ public:
         LastUsed_ = time;
     }
 private:
+    std::unordered_map<const void*, std::weak_ptr<void>> Owners_;
     std::shared_ptr<void> Pin_;
     TInstant LastUsed_ = Now();
     std::shared_mutex RWMutex_;

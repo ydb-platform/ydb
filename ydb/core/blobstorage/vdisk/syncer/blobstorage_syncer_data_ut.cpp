@@ -38,6 +38,29 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
         UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(*info, sources, self, false));
     }
 
+    Y_UNIT_TEST(GuidHistoryCoverageInSoloRealm) {
+        using TDC = NKikimrBlobStorage::TDataCenterState;
+        TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::Zero(), 1);
+        dynamic.Mirror3dcState = {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1,
+            {TDC::INCLUDED, TDC::EXCLUDED, TDC::EXCLUDED}};
+        TBlobStorageGroupInfo info(TBlobStorageGroupInfo::TTopology(
+            TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), std::move(dynamic), "");
+        const auto& top = info.GetTopology();
+        const auto self = info.GetVDiskId(0);
+        TBlobStorageGroupInfo::TGroupVDisks sources(&top);
+        for (ui32 disk = 3; disk < 9; ++disk) {
+            sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, info.GetVDiskId(disk));
+        }
+        // Excluded realms cannot establish coverage of the surviving realm's publication quorum.
+        UNIT_ASSERT(!NSyncer::HasGuidHistoryCoverage(info, sources, self, false));
+        sources |= TBlobStorageGroupInfo::TGroupVDisks(&top, self);
+        UNIT_ASSERT(!NSyncer::HasGuidHistoryCoverage(info, sources, self, false));
+        UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(info, sources, self, true));
+        // A surviving peer intersects every SOLO publication quorum, even after self was erased.
+        sources = TBlobStorageGroupInfo::TGroupVDisks(&top, info.GetVDiskId(1));
+        UNIT_ASSERT(NSyncer::HasGuidHistoryCoverage(info, sources, self, false));
+    }
+
     template<typename... TArgs>
     void SerDes(TArgs&&... args) {
         auto info = MakeIntrusive<TBlobStorageGroupInfo>(std::forward<TArgs>(args)...);

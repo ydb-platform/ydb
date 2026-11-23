@@ -340,8 +340,9 @@ namespace NKikimr {
                 return !neighbor.Obtained && neighbor.ProxyId == proxy;
             }
 
-            void ResetResponses() {
-                QuorumTracker.Clear();
+            void ResetResponses(const TBlobStorageGroupInfo& info) {
+                Top = info.PickTopology();
+                QuorumTracker.ResetTopology(info);
                 for (auto& neighbor : Neighbors) {
                     neighbor.Get() = TNeighborVDiskState();
                 }
@@ -365,27 +366,14 @@ namespace NKikimr {
                 return counter;
             }
 
-            void RestartSurvey(const TBlobStorageGroupInfo& info) {
-                Top = info.PickTopology();
-                QuorumTracker.ResetTopology(info);
-                for (auto& peer : Neighbors) {
-                    peer.Get() = {};
-                }
-            }
-
             bool GotQuorum(const TBlobStorageGroupInfo& info) const {
                 return QuorumTracker.HasQuorum(info);
             }
 
 
             // calculates final decision
-<<<<<<< HEAD
-            TDecision ReachAVerdict(const TBlobStorageGroupInfo& info) const {
+            TDecision ReachAVerdict(const TBlobStorageGroupInfo& info, TVDiskEternalGuid historicalGuid = 0) const {
                 Y_VERIFY_S(QuorumTracker.HasQuorum(info), VDiskLogPrefix);
-=======
-            TDecision ReachAVerdict(TVDiskEternalGuid historicalGuid = 0) const {
-                Y_VERIFY_S(QuorumTracker.HasQuorum(), VDiskLogPrefix);
->>>>>>> bc0edb4b58d (Preserve durable GUID history and require successful metadata synchronization)
 
                 TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision(info);
                 if (quorumDecision.IsInconsistent) {
@@ -728,32 +716,8 @@ namespace NKikimr {
                                             const TActorContext &ctx) {
                 DecisionMaker.AbandomOngoingRequests(ctx);
                 GInfo = ev->Get()->NewInfo;
-<<<<<<< HEAD
-
-                if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
-                    DecisionMaker.AbandomOngoingRequests(ctx);
-                    DecisionMaker.RestartSurvey(*GInfo);
-                    Bootstrap(ctx);
-                    return;
-                }
-
-                // reconfigure every proxy that hasn't returned a value yet
-                const TString& logPrefix = VCtx->VDiskLogPrefix;
-                auto reconfigureProxy = [&ctx, &logPrefix] (std::unique_ptr<TEvVGenerationChange> &&msg,
-                                                            TVDiskInfo<TNeighborVDiskState>& x) {
-                    Y_VERIFY_S(!x.Get().Obtained, logPrefix);
-                    ctx.Send(x.Get().ProxyId, msg.release());
-                };
-
-                using namespace std::placeholders;
-                auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) {
-                    reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x);
-                };
-                DecisionMaker.ReconfigureAllWorkingProxies(call);
-=======
-                DecisionMaker.ResetResponses();
+                DecisionMaker.ResetResponses(*GInfo);
                 StartSurvey(ctx);
->>>>>>> bc0edb4b58d (Preserve durable GUID history and require successful metadata synchronization)
             }
 
             STRICT_STFUNC(ObtainGuidQuorumFunc,
@@ -776,36 +740,7 @@ namespace NKikimr {
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: ObtainedFromPeer: " << msg->ToString();
                 });
-                if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-                        && msg->VDiskId.GroupGeneration != GInfo->GroupGeneration) {
-                    return;
-                }
                 DecisionMaker.SetResponse(msg->VDiskId, msg->Guid, msg->State);
-<<<<<<< HEAD
-                if (DecisionMaker.GotQuorum(*GInfo)) {
-                    // kill actors that didn't respond
-                    DecisionMaker.AbandomOngoingRequests(ctx);
-                    // reach a verdict and save it
-                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict(*GInfo));
-
-                    // log result of guid recovery
-                    auto pri = NActors::NLog::PRI_INFO;
-                    if (Decision->BadDecision())
-                        pri = NActors::NLog::PRI_ERROR;
-                    YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s", Decision->ToString().data()));
-                    SUBLOGLINE(NotifyId, ctx, {
-                        stream << "GuidRecovery: DECISION: " << Decision->ToString();
-                    });
-
-                    // perform some actions depending on result we got
-                    auto firstRunStep = Decision->GetFirstRunStep();
-                    switch (Decision->GetDecision()) {
-                        case EDecision::FirstRun: {
-                            // run or continue first run phase, create an actor
-                            // that performs all that stuff
-                            FirstRunPhase(ctx, firstRunStep);
-                            break;
-=======
                 if (msg->RecoveredGuid.HasGuid()) {
                     const auto owner = VDiskIDFromVDiskID(msg->RecoveredGuid.GetOwnerVDiskID());
                     HistoryValid &= TVDiskIdShort(owner) == VCtx->ShortSelfVDisk
@@ -826,7 +761,7 @@ namespace NKikimr {
                 const bool historyBlockedByLegacySources = RestoreHistory
                     && !HasGuidHistoryCoverage(*GInfo, ~LegacySources, VCtx->ShortSelfVDisk, HasLocalFinal);
                 const bool canFinishSurvey = !RestoreHistory || HistoryComplete || historyBlockedByLegacySources;
-                if (DecisionMaker.GotQuorum() && canFinishSurvey) {
+                if (DecisionMaker.GotQuorum(*GInfo) && canFinishSurvey) {
                     // kill actors that didn't respond
                     DecisionMaker.AbandomOngoingRequests(ctx);
                     if (!HistoryValid) {
@@ -835,7 +770,6 @@ namespace NKikimr {
                         if (!HistoryComplete) {
                             YDB_LOG_WARN_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix,
                                 "GUID history is unsupported by a peer; using legacy GUID recovery without metadata completeness"));
->>>>>>> bc0edb4b58d (Preserve durable GUID history and require successful metadata synchronization)
                         }
                         auto commit = std::make_unique<TEvSyncerCommit>();
                         commit->Modif = TEvSyncerCommit::EGuidHistory;
@@ -854,7 +788,7 @@ namespace NKikimr {
                 HistoryCommitted = true;
                 if (RestartSurveyAfterCommit) {
                     RestartSurveyAfterCommit = false;
-                    DecisionMaker.ResetResponses();
+                    DecisionMaker.ResetResponses(*GInfo);
                     StartSurvey(ctx);
                 } else {
                     ReachAVerdict(ctx);
@@ -883,7 +817,7 @@ namespace NKikimr {
                     }
                 }
                 // reach a verdict and save it
-                Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict(historicalGuid));
+                Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict(*GInfo, historicalGuid));
 
                 // log result of guid recovery
                 auto pri = NActors::NLog::PRI_INFO;

@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
 namespace NKikimr::NSyncer {
@@ -12,6 +13,10 @@ inline bool HasGuidHistoryCoverage(const TBlobStorageGroupInfo& info,
         TBlobStorageGroupInfo::TGroupVDisks sources, const TVDiskIdShort& self, bool hasLocalFinal) {
     if (!hasLocalFinal) {
         sources &= ~TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), self);
+    }
+    if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            && info.GetTopology().GetTotalFailRealmsNum() == 3) {
+        return !TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, ~sources);
     }
     return !info.GetTopology().GetQuorumChecker().CheckQuorumForGroup(~sources);
 }

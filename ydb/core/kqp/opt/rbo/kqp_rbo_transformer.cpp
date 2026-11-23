@@ -2,6 +2,7 @@
 #include "kqp_operator.h"
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_rules.h"
+#include "kqp_rbo_inspection.h"
 #include "traces/kqp_rbo_trace_output.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
@@ -349,6 +350,17 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         }
         Y_ENSURE(returningResults.empty(), "RETURNING must reference an effect in the same query block");
         ++physicalTxGroup;
+    }
+    if (const auto* trace = KqpCtx.GetCompileTrace(); trace && trace->CaptureRboRoots) {
+        if (const auto* imported = dynamic_cast<const TImportedRboInspection*>(trace)) {
+            Y_ENSURE(Roots.empty() && !imported->Roots.empty(), "Expected exclusively imported RBO roots");
+            Roots = imported->Roots;
+            for (const auto& root : Roots) {
+                root->ComputeParents();
+            }
+        }
+        trace->CaptureRboRoots(Roots, *input, ctx);
+        return TStatus::Error;
     }
     if (Roots.size() > 1) {
         Y_ENSURE(!KqpCtx.Config->GetEnableFallbackOnMultipleStatements(),

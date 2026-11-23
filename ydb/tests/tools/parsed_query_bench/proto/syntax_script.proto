@@ -1,0 +1,563 @@
+syntax = "proto3";
+
+package Ydb.Query;
+option cc_enable_arenas = true;
+
+import "ydb/tests/tools/parsed_query_bench/proto/yql_parser_metadata.proto";
+
+message SyntaxScript {
+  uint32 format_version = 1; // Required: 1.
+
+  YqlParserMetadata.LexerMode lexer_mode = 2;
+  YqlParserMetadata.LeadingDirectives directives = 3;
+  string source_name = 4; // Diagnostic name mapped to TScript::File.
+  repeated Statement statements = 5; // Source order, including PRAGMA and DECLARE.
+
+  message SourceRange {
+    uint64 begin = 1; // Zero-based Unicode code-point offset.
+    uint64 end = 2;   // Exclusive.
+    uint32 line = 3;  // One-based.
+    uint32 column = 4; // Zero-based.
+  }
+
+  message Identifier {
+    string spelling = 1; // Original lexeme, with quoting and escapes.
+    SourceRange range = 2;
+  }
+
+  message Parameter {
+    string spelling = 1; // Includes '$'. A reference or declaration, as indicated by its parent.
+  }
+
+  message Literal {
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      INTEGER = 1;
+      REAL = 2;
+      STRING = 3;
+      BOOLEAN = 4;
+      NULL_LITERAL = 5;
+      BLOB = 6;
+    }
+    Kind kind = 1;
+    string spelling = 2; // Keep suffixes, delimiters and escapes for server decoding.
+  }
+
+  enum SetQuantifier {
+    QUANTIFIER_DEFAULT = 0; // Keyword omitted.
+    QUANTIFIER_ALL = 1;
+    QUANTIFIER_DISTINCT = 2;
+  }
+
+  message Statement {
+    enum ExplainMode {
+      EXPLAIN_NONE = 0;
+      EXPLAIN = 1;
+      EXPLAIN_QUERY_PLAN = 2;
+    }
+    SourceRange range = 1;
+    ExplainMode explain = 2;
+    oneof kind {
+      Query query = 10; // TQueryStatement.
+      Pragma pragma = 11;
+      NamedBinding named_binding = 12;
+      Declare declare = 13;
+      Write write = 14;
+    }
+  }
+
+  message Pragma {
+    enum ValueForm {
+      NO_VALUE = 0;
+      ASSIGNMENT = 1;
+      LIST = 2;
+    }
+    Identifier namespace = 1; // Absent for an unqualified name.
+    Identifier name = 2;
+    ValueForm value_form = 3;
+    repeated PragmaValue values = 4;
+  }
+
+  message PragmaValue {
+    SourceRange range = 1;
+    oneof kind {
+      Identifier identifier = 10;
+      Literal literal = 11;
+      Parameter parameter = 12;
+    }
+  }
+
+  message NamedBinding {
+    SourceRange range = 1;
+    Parameter name = 2;
+    Expression value = 3;
+  }
+
+  message Declare {
+    Parameter name = 1;
+    TypeName type = 2;
+  }
+
+  message Write {
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      INSERT = 1;
+      UPSERT = 2;
+      REPLACE = 3;
+      UPDATE = 4;
+      DELETE = 5;
+    }
+    enum OnConflict {
+      CONFLICT_ABORT = 0; // Import as "abort".
+      CONFLICT_REVERT = 1; // Import as "revert".
+    }
+    Kind kind = 1;
+    Source target = 2;
+    repeated Identifier columns = 3;
+    oneof input {
+      Query query = 10;
+      Values values = 11;
+    }
+    Expression where = 4;
+    repeated NamedExpression assignments = 5;
+    OnConflict on_conflict = 6;
+    repeated Identifier returning = 7;
+    bool returning_all = 8;
+  }
+
+  message Values {
+    repeated ExpressionList rows = 1; // Each entry is one VALUES row.
+  }
+
+  message Query {
+    SourceRange range = 1;
+    repeated Cte with = 2;
+    oneof body {
+      Select select = 10;
+      SetOperation set_operation = 11;
+    }
+    repeated SortSpecification order_by = 3; // Compound-query ordering.
+    bool parenthesized = 4;
+    Expression limit = 5;
+    Expression offset = 6;
+  }
+
+  message Cte {
+    Identifier name = 1;
+    repeated Identifier columns = 2;
+    Query query = 3;
+    bool recursive = 4;
+  }
+
+  message SetOperation {
+    enum Op {
+      OP_UNSPECIFIED = 0;
+      UNION = 1;
+      INTERSECT = 2;
+      EXCEPT = 3;
+    }
+    Op op = 1;
+    SetQuantifier quantifier = 2;
+    Query left = 3;
+    Query right = 4;
+  }
+
+  message Select {
+    SetQuantifier quantifier = 1;
+    repeated NamedExpression columns = 2;
+    Source from = 3;
+    Expression where = 4;
+    repeated GroupingElement group_by = 5;
+    bool compact_group_by = 6;
+    SetQuantifier group_quantifier = 7;
+    Identifier group_hint = 8;
+    Expression having = 9;
+    repeated WindowDefinition windows = 10;
+    repeated SortSpecification order_by = 11; // SELECT-level ordering.
+    bool assume_order_by = 12;
+  }
+
+  message GroupingElement {
+    enum Kind {
+      ORDINARY = 0;
+      ROLLUP = 1;
+      CUBE = 2;
+      SETS = 3;
+    }
+    SourceRange range = 1;
+    Kind kind = 2;
+    NamedExpression expression = 3; // Present for ORDINARY.
+    repeated GroupingElement elements = 4; // Preserve nesting and empty sets.
+  }
+
+  message SortSpecification {
+    enum Direction {
+      DEFAULT = 0;
+      ASCENDING = 1;
+      DESCENDING = 2;
+    }
+    Expression expression = 1;
+    Direction direction = 2;
+  }
+
+  message WindowDefinition {
+    SourceRange range = 1;
+    Identifier name = 2;
+    WindowSpecification specification = 3;
+  }
+
+  message WindowSpecification {
+    SourceRange range = 1;
+    Identifier base_window = 2;
+    repeated NamedExpression partition_by = 3;
+    bool compact_partition = 4;
+    repeated SortSpecification order_by = 5;
+    WindowFrame frame = 6;
+  }
+
+  message WindowReference {
+    SourceRange range = 1;
+    oneof kind {
+      Identifier name = 10; // OVER w.
+      WindowSpecification specification = 11; // OVER (...), including OVER (w).
+    }
+  }
+
+  message WindowFrame {
+    enum Units {
+      ROWS = 0;
+      RANGE = 1;
+      GROUPS = 2;
+    }
+    enum Exclusion {
+      EXCLUSION_DEFAULT = 0;
+      EXCLUDE_CURRENT_ROW = 1;
+      EXCLUDE_GROUP = 2;
+      EXCLUDE_TIES = 3;
+      EXCLUDE_NO_OTHERS = 4;
+    }
+    SourceRange range = 1;
+    Units units = 2;
+    WindowBound begin = 3;
+    WindowBound end = 4; // Absent in single-bound syntax.
+    Exclusion exclusion = 5;
+  }
+
+  message WindowBound {
+    enum Kind {
+      CURRENT_ROW = 0;
+      PRECEDING = 1;
+      FOLLOWING = 2;
+      UNBOUNDED_PRECEDING = 3;
+      UNBOUNDED_FOLLOWING = 4;
+    }
+    SourceRange range = 1;
+    Kind kind = 2;
+    Expression offset = 3; // Present for PRECEDING or FOLLOWING.
+  }
+
+  message Source {
+    SourceRange range = 1;
+    Identifier alias = 2;
+    repeated Identifier column_aliases = 3;
+    Sampling sampling = 4;
+    repeated TableHint hints = 5;
+    oneof kind {
+      Table table = 10;
+      Query derived_table = 11;
+      Join join = 12;
+      Expression expression_source = 13; // AS_TABLE.
+    }
+  }
+
+  message Table {
+    Identifier name = 1;
+    Identifier cluster = 2;
+    Identifier provider = 3;
+    bool binding = 4; // '$'-prefixed name.
+    bool anonymous = 5; // '@' prefix.
+  }
+
+  message Join {
+    enum Kind {
+      KIND_UNSPECIFIED = 0;
+      INNER = 1;
+      CROSS = 2;
+      LEFT = 3;
+      RIGHT = 4;
+      FULL = 5;
+      LEFT_ONLY = 6;
+      RIGHT_ONLY = 7;
+      LEFT_SEMI = 8;
+      RIGHT_SEMI = 9;
+      EXCLUSION = 10;
+    }
+    Kind kind = 1;
+    Source left = 2;
+    Source right = 3;
+    Expression on = 4;
+    repeated Identifier using_columns = 5;
+    bool natural = 6;
+    bool left_any = 7;
+    bool right_any = 8;
+  }
+
+  message Sampling {
+    enum Mode {
+      SAMPLE = 0;
+      BERNOULLI = 1;
+      SYSTEM = 2;
+    }
+    SourceRange range = 1;
+    Mode mode = 2;
+    Expression rate = 3; // Fraction for SAMPLE, percent for TABLESAMPLE.
+    Expression seed = 4; // Optional REPEATABLE.
+  }
+
+  message TableHint {
+    SourceRange range = 1;
+    oneof kind {
+      GenericTableHint generic = 10;
+      SchemaHint schema = 11;
+      Expression watermark = 12;
+    }
+  }
+
+  message GenericTableHint {
+    enum ValueForm {
+      NO_VALUE = 0;
+      SCALAR = 1;
+      LIST = 2;
+    }
+    Identifier name = 1;
+    ValueForm value_form = 2;
+    repeated TypeTag values = 3;
+  }
+
+  message SchemaHint {
+    enum Kind {
+      SCHEMA = 0;
+      COLUMNS = 1;
+    }
+    Kind kind = 1;
+    oneof value {
+      TypeName type = 10;
+      SchemaColumns columns = 11;
+    }
+  }
+
+  message SchemaColumns {
+    repeated SchemaColumn columns = 1;
+  }
+
+  message SchemaColumn {
+    enum Nullability {
+      DEFAULT = 0;
+      NULLABLE = 1;
+      NOT_NULL = 2;
+    }
+    SourceRange range = 1;
+    TypeTag name = 2;
+    TypeName type = 3;
+    Nullability nullability = 4;
+  }
+
+  message Expression {
+    SourceRange range = 1;
+    oneof kind {
+      Literal literal = 10;
+      Name name = 11;
+      Parameter parameter = 12;
+      Star star = 13;
+      Unary unary = 14;
+      Binary binary = 15;
+      Call call = 16;
+      Member member = 17;
+      Index index = 18;
+      Tuple tuple = 19;
+      ExpressionList list = 20;
+      Case case_expr = 21;
+      Cast cast = 22;
+      Query subquery = 23;
+      Query exists = 24;
+      Between between = 25;
+      In in_expr = 26;
+      PatternMatch pattern_match = 27;
+      Lambda lambda = 28;
+    }
+  }
+
+  message Name {
+    Identifier name = 1;
+    Identifier module = 2; // Callable namespace, not a table qualifier.
+  }
+
+  message Star {
+    Identifier qualifier = 1;
+  }
+
+  message Unary {
+    enum Op {
+      OP_UNSPECIFIED = 0;
+      PLUS = 1;
+      MINUS = 2;
+      BIT_NOT = 3;
+      NOT = 4;
+      IS_NULL = 5;
+      IS_NOT_NULL = 6;
+    }
+    Op op = 1;
+    Expression operand = 2;
+  }
+
+  message Binary {
+    enum Op {
+      OP_UNSPECIFIED = 0;
+      OR = 1;
+      AND = 2;
+      XOR = 3;
+      EQUAL = 4;
+      NOT_EQUAL = 5;
+      LESS = 6;
+      LESS_OR_EQUAL = 7;
+      GREATER = 8;
+      GREATER_OR_EQUAL = 9;
+      IS_DISTINCT_FROM = 10;
+      IS_NOT_DISTINCT_FROM = 11;
+      ADD = 12;
+      SUBTRACT = 13;
+      MULTIPLY = 14;
+      DIVIDE = 15;
+      MODULO = 16;
+      BIT_AND = 17;
+      BIT_OR = 18;
+      BIT_XOR = 19;
+      SHIFT_LEFT = 20;
+      SHIFT_RIGHT = 21;
+      ROTATE_LEFT = 22;
+      ROTATE_RIGHT = 23;
+      CONCAT = 24;
+      COALESCE = 25;
+    }
+    Op op = 1;
+    Expression left = 2;
+    Expression right = 3;
+  }
+
+  message Call {
+    enum NullTreatment {
+      DEFAULT = 0;
+      RESPECT = 1;
+      IGNORE = 2;
+    }
+    Expression callable = 1;
+    repeated NamedExpression arguments = 2;
+    SetQuantifier quantifier = 3;
+    bool star_argument = 4;
+    NullTreatment null_treatment = 5;
+    Expression filter = 6;
+    WindowReference over = 7;
+  }
+
+  message NamedExpression {
+    Expression expression = 1;
+    Identifier alias = 2;
+  }
+
+  message Member {
+    Expression object = 1;
+    Identifier member = 2;
+  }
+
+  message Index {
+    Expression object = 1;
+    Expression index = 2;
+  }
+
+  message Tuple {
+    repeated NamedExpression elements = 1;
+  }
+
+  message ExpressionList {
+    repeated Expression elements = 1;
+  }
+
+  message Case {
+    Expression operand = 1; // Absent for searched CASE.
+    repeated When branches = 2;
+    Expression else_expr = 3;
+  }
+
+  message When {
+    Expression when_expr = 1;
+    Expression then_expr = 2;
+  }
+
+  message Cast {
+    Expression value = 1;
+    TypeName type = 2;
+    bool bitcast = 3;
+  }
+
+  message Between {
+    Expression value = 1;
+    Expression lower = 2;
+    Expression upper = 3;
+    bool negated = 4;
+    bool symmetric = 5;
+  }
+
+  message In {
+    Expression value = 1;
+    Expression collection = 2;
+    bool negated = 3;
+    bool compact = 4;
+  }
+
+  message PatternMatch {
+    enum Op {
+      OP_UNSPECIFIED = 0;
+      LIKE = 1;
+      ILIKE = 2;
+      GLOB = 3;
+      REGEXP = 4;
+      RLIKE = 5;
+      MATCH = 6;
+    }
+    Op op = 1;
+    Expression value = 2;
+    Expression pattern = 3;
+    Expression escape = 4;
+    bool negated = 5;
+  }
+
+  message Lambda {
+    repeated Parameter parameters = 1;
+    repeated NamedBinding bindings = 2;
+    Expression body = 3;
+  }
+
+  message TypeName {
+    Identifier name = 1;
+    repeated TypeName arguments = 2;
+    repeated string parameters = 3; // E.g. Decimal precision and scale as written.
+    uint32 optional_depth = 4;
+    bool binding = 5;
+    repeated TypeMember members = 6;
+    repeated TypeTag tags = 7;
+  }
+
+  message TypeMember {
+    TypeTag name = 1; // Absent for a positional Variant alternative.
+    TypeName type = 2;
+  }
+
+  message TypeTag {
+    SourceRange range = 1;
+    oneof kind {
+      Identifier identifier = 10;
+      Literal literal = 11;
+      Parameter parameter = 12;
+    }
+  }
+}

@@ -249,6 +249,8 @@ public:
     using TQueryResult = NYql::IKikimrGateway::TQueryResult;
     using TAsyncQueryResult = NYql::IKikimrAsyncResult<TQueryResult>;
 
+    virtual TIntrusivePtr<TAsyncQueryResult> PrepareNewRbo(const NYql::TExprNode::TPtr& query, NYql::TExprContext& ctx) = 0;
+
     virtual TIntrusivePtr<TAsyncQueryResult> PrepareDataQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& query, NYql::TExprContext& ctx,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;

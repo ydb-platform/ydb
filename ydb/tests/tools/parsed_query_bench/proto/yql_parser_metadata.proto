@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package Ydb.Query;
+option cc_enable_arenas = true;
+
+message YqlParserMetadata {
+
+  bytes grammar_fingerprint = 1;
+
+  enum LexerMode {
+    LEXER_MODE_UNSPECIFIED = 0;
+    DEFAULT = 1;
+    ANSI = 2;
+  }
+  LexerMode lexer_mode = 2; // Required effective lexer mode used by the producer.
+  LeadingDirectives directives = 3;
+  repeated HintGroup hints = 4;
+  string source_name = 5; // settings.File / diagnostic filename.
+
+  message LeadingDirectives {
+
+    bool explicit_syntax_v1 = 1;
+    bool explicit_ansi_lexer = 2;
+  }
+
+  message Position {
+    uint32 line = 1; // 1-based.
+    uint32 column = 2; // 1-based Unicode character column, as NYql::TPosition.
+  }
+  message HintGroup {
+
+    Position anchor = 1;
+    repeated Hint hints = 2; // Preserve source order and repeated hints.
+  }
+  message Hint {
+    string name = 1;
+    repeated string values = 2; // Already parsed/unescaped hint arguments.
+    Position position = 3;
+  }
+}
+
+message YqlParserToken {
+  sint32 type = 1; // Exact vocabulary ID; -1 is EOF, 0 is invalid.
+  string text = 2; // Raw UTF-8 lexeme, including literal/identifier quoting.
+  uint32 channel = 3; // 0: default; others as defined by the grammar manifest.
+  uint32 line = 4; // 1-based.
+  uint32 column = 5; // 0-based Unicode character column, as in ANTLR4.
+  uint64 begin = 6; // Unicode code-point offset, NOT a UTF-8 byte offset.
+  uint64 end = 7; // Exclusive. EOF: begin=end. Restore stop=end-1 otherwise.
+}

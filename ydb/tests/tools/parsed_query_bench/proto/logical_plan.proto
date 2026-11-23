@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package Ydb.Query;
+
+import "ydb/tests/tools/parsed_query_bench/proto/native_query.proto";
+
+// RFC draft for ParsedQuery.stage: LogicalPlan logical_plan = 7.
+// The imported value and operator messages refer to the benchmark at 86810c8.
+// A public API would give their shared, supported subset a neutral package.
+message LogicalPlan {
+  uint32 version = 1; // 1. Other versions require explicit reader support.
+  repeated string required_features = 2; // A semantics-changing extension must declare its feature.
+  repeated NativeQuery.Type types = 3;
+  repeated NativeQuery.Function functions = 4;
+  repeated NativeQuery.Parameter parameters = 5; // Values come from the request.
+  repeated Root roots = 6; // Source order. Roots of one statement are contiguous.
+
+  // Version 1 uses YQL expression semantics and a versioned set of accepted
+  // types and functions. Unknown versions, features, kinds or callables are errors.
+  // PG-native types, callables and expression semantics are outside this profile.
+  // Expression.parameter may name only a declared external parameter.
+  // IDs start at 1. Types, functions and root IDs are scoped to this message.
+  // Operator, IU, expression and hub IDs have distinct scopes within each root.
+  // Statements preserve source order and the transaction semantics of ExecuteQuery.
+  // Within a statement, compute read/materialized inputs before effects, then
+  // apply the effects in listed order. A result_index does not schedule a root.
+  // The server must reject any sequence it cannot implement under tx_control.
+  message Root {
+    uint32 id = 1;
+    optional uint32 statement_index = 2; // Required, zero-based SQL ordinal.
+    Graph graph = 3;
+    repeated NativeQuery.OutputColumn columns = 4; // Ordered (IU, public label).
+    // Exactly one destination is required. A Write may occur only as the
+    // direct input of one root, never in a subquery or shared producer.
+    // effect_only requires Write; materialize requires a read-only graph.
+    // A Write with result_index implements RETURNING in one execution.
+    // Its projection uses the IUs defined in Write.returning; an effect-only
+    // root has neither a projection nor returning columns.
+    // Public result indices are unique, dense and start at 0.
+    oneof destination {
+      uint32 result_index = 5;
+      NativeQuery.Empty effect_only = 6;
+      NativeQuery.Empty materialize = 7; // Evaluated once for later roots.
+    }
+    // False permits any row order. True requires the graph to provide it.
+    bool ordered_rows = 8;
+    // Only valid for Write with RETURNING. Limits returned rows after the effect.
+    optional uint32 returning_limit_expr_id = 9;
+  }
+
+  message Graph {
+    uint32 input_operator_id = 1; // The child of TOpRoot.
+    repeated Operator operators = 2;
+    repeated NativeQuery.Expression expressions = 3;
+    repeated ColumnValue information_units = 4;
+    repeated Subquery subqueries = 5;
+    repeated NativeQuery.ReplicateHub replicate_hubs = 6;
+  }
+  message ColumnValue {
+    uint32 id = 1;
+    uint32 defined_type_id = 2; // At definition; derive outer-join nullability at use.
+  }
+  message Subquery {
+    NativeQuery.Subplan binding = 1; // SCALAR, IN, EXISTS; root-local graph.
+    repeated uint32 correlated_iu_ids = 2; // Outer bindings used by this body.
+  }
+
+  // Each node has its own ordered inputs in its payload. Every reference
+  // must resolve. Cycle checks traverse operator inputs, expressions,
+  // subquery dependencies and replicate hubs including the shared producer.
+  message Operator {
+    uint32 id = 1;
+    oneof node {
+      NativeQuery.EmptySource rows = 10; // Unit row or typed list-of-struct input.
+      Read read = 11;
+      NativeQuery.Map map = 12;
+      NativeQuery.Filter filter = 13;
+      NativeQuery.Join join = 14;
+      NativeQuery.Aggregate aggregate = 15;
+      NativeQuery.GroupingSets grouping_sets = 16;
+      NativeQuery.Window window = 17;
+      NativeQuery.Sort sort = 18;
+      NativeQuery.Limit limit = 19;
+      NativeQuery.UnionAll union_all = 20;
+      NativeQuery.Capture capture = 21;
+      NativeQuery.ReplicatePort replicate_port = 22;
+      Write write = 23;
+      Lookup lookup = 24;
+      Sequencer sequencer = 25;
+      DependentJoin dependent_join = 26;
+      ReadMaterialized read_materialized = 27;
+    }
+  }
+  // A path is resolved in the request's database and authorization context.
+  // Column names are catalog names; IU IDs identify row values in this root.
+  message ColumnBinding {
+    string column = 1;
+    uint32 iu_id = 2;
+  }
+  message Read {
+    string table_path = 1;
+    repeated ColumnBinding columns = 2; // Defines IUs; each has a declared type.
+  }
+  // Logical key lookup. Physical choice of index/algorithm remains server-side.
+  message Lookup {
+    uint32 input = 1;
+    string table_path = 2;
+    repeated ColumnBinding keys = 3; // Catalog key order; consumes input IUs.
+    repeated ColumnBinding columns = 4; // Defines IUs for retrieved values.
+    bool allow_null_keys = 5;
+  }
+  message DependentJoin {
+    uint32 domain = 1;
+    uint32 input = 2;
+    repeated Dependency dependencies = 3;
+    message Dependency {
+      uint32 parameter_iu_id = 1;
+      uint32 domain_iu_id = 2;
+    }
+  }
+  message Sequencer {
+    uint32 input = 1;
+    string table_path = 2;
+    repeated ColumnBinding passthrough = 3;
+    repeated ColumnBinding generated = 4; // Allocate the default once per input row.
+  }
+  message Write {
+    // Ordinary row DML only. Batch writes, extra write settings and DDL need
+    // their own specified semantics; producers must reject unsupported input.
+    uint32 input = 1;
+    string table_path = 2;
+    NativeQuery.Operation operation = 3; // Only write kinds; includes INSERT conflict mode.
+    repeated ColumnBinding columns = 4; // Input IUs, including keys where required.
+    repeated ColumnBinding returning = 5; // Fresh output IUs for RETURNING.
+    repeated string insert_only_default_columns = 6; // Members of columns.
+  }
+  message ReadMaterialized {
+    uint32 producer_root_id = 1; // Must precede this root and have materialize set.
+    repeated Column columns = 2;
+    message Column {
+      uint32 producer_column_index = 1; // Ordinal in the producer's Root.columns.
+      uint32 output_iu_id = 2; // New binding in the consumer.
+    }
+  }
+}

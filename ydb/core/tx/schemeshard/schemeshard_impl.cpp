@@ -5399,6 +5399,13 @@ void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NK
         .Key(op.GetTxId())
         .Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
+    PersistedIncrementalRestoreOps[op.GetTxId()] = TPathId(
+        op.GetBackupCollectionPathId().GetOwnerId(), op.GetBackupCollectionPathId().GetLocalId());
+}
+
+void TSchemeShard::PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId) {
+    db.Table<Schema::IncrementalRestoreOperations>().Key(operationId).Delete();
+    PersistedIncrementalRestoreOps.erase(operationId);
 }
 
 TTabletId TSchemeShard::GetGlobalHive() const {

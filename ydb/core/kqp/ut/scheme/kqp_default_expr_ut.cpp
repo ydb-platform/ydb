@@ -833,6 +833,29 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, CAST(v AS Int64) FROM TestTable ORDER BY k;", "[[1;[42]];[2;[42]]]");
     }
 
+    Y_UNIT_TEST(PersistedPgDefaultUsesCurrentCompatibilityPolicy) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        const TString expression = "COALESCE(FromPg(CAST(RandomNumber(1) * 0ul + 42ul AS pgint4)), 0)";
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Int32 DEFAULT " << expression));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42]]]");
+
+        auto& runtime = *fixture.Runner().GetTestServer().GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            NKikimrConfig::TFeatureFlags flags = runtime.GetAppData(node).FeatureFlags;
+            flags.SetDisablePgCompatibility(true);
+            runtime.GetAppData(node).UpdateRuntimeFlags(flags);
+        }
+        fixture.RestartSchemeShard("/Root/TestTable");
+        fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", "PostgreSQL compatibility is disabled");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42]];[2;[7]]]");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+    }
+
     Y_UNIT_TEST(FeatureFlagDisabledPreservesLiteralDefaultsAndWrites) {
         TTestFixture fixture(TFixtureOptions{.FeatureFlagEnabled = false});
         fixture.Exec(R"(

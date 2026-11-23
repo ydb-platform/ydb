@@ -3,6 +3,8 @@
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
+
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -216,7 +218,8 @@ TString ColumnExpressionSubjectCapitalized(const TKikimrColumnMetadata& col) {
 }
 
 IGraphTransformer::TStatus CoerceColumnLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
-    const TTypeAnnotationNode& columnType, const TKikimrColumnMetadata& column, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+    const TTypeAnnotationNode& columnType, const TKikimrColumnMetadata& column, TExprContext& ctx,
+    TTypeAnnotationContext& typeCtx, bool disablePgCompatibility)
 {
     const TString subject = ColumnExpressionSubject(column);
     if (!rowType) {
@@ -228,7 +231,7 @@ IGraphTransformer::TStatus CoerceColumnLambdaToColumnType(TExprNode::TPtr& lambd
     if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+    if (!NKikimr::NKqp::InstantAnnotateKqpTypes(probe, ctx, typeCtx, disablePgCompatibility) || !probe->GetTypeAnn()) {
         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
             << "Failed to infer the type of " << subject));
         return IGraphTransformer::TStatus::Error;
@@ -277,7 +280,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
 
         if (const auto* columnType = table.GetColumnType(name)) {
             if (auto status = CoerceColumnLambdaToColumnType(lambda, table.SchemeNode, *columnType,
-                    col, ctx, typeCtx);
+                    col, ctx, typeCtx, sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility());
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -345,8 +348,9 @@ IGraphTransformer::TStatus CompileDefaultColumnLambda(const TKikimrColumnMetadat
     settingsBuilder.SetFromConfig(sessionCtx.Config());
     lambda = CompileDefaultExpr(query, column.Name, ctx, settingsBuilder, typeCtx.Modules);
     const auto* emptyRowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+    const bool disablePgCompatibility = sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility();
     if (!lambda || !UpdateLambdaAllArgumentsTypes(lambda, {emptyRowType}, ctx)
-        || !InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx))
+        || !NKikimr::NKqp::InstantAnnotateKqpTypes(lambda, ctx, typeCtx, disablePgCompatibility))
     {
         return IGraphTransformer::TStatus::Error;
     }
@@ -355,7 +359,7 @@ IGraphTransformer::TStatus CompileDefaultColumnLambda(const TKikimrColumnMetadat
     {
         return status;
     }
-    return CoerceColumnLambdaToColumnType(lambda, emptyRowType, columnType, column, ctx, typeCtx);
+    return CoerceColumnLambdaToColumnType(lambda, emptyRowType, columnType, column, ctx, typeCtx, disablePgCompatibility);
 }
 
 // Compile only DEFAULT expressions that an insert-like write omitted from its input
@@ -945,7 +949,8 @@ namespace {
             }
 
             // Type the expression body
-            if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx)) {
+            if (!NKikimr::NKqp::InstantAnnotateKqpTypes(lambda, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility())) {
                 return IGraphTransformer::TStatus::Error;
             }
 

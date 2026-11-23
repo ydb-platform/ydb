@@ -1,9 +1,14 @@
+#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h>
+#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <chrono>
 #include <map>
@@ -14,7 +19,10 @@ namespace {
 using namespace NYdb::NTopic;
 
 const TString TOPIC = "/Root/write-mode";
+const TString TOPIC_NAME = "write-mode";
 const TString CONSUMER = "reader";
+// NGRpcProxy::MAGIC_COOKIE_VALUE, skips ChooseProxy for pqv0.
+constexpr ui64 PQV0_PROXY_COOKIE = 123456789;
 const TString WRITE_MODE = "_write_mode";
 const TString AVAILABLE = "available";
 const TString UNAVAILABLE = "unavailable";
@@ -28,6 +36,11 @@ public:
     TTopicClient Client;
     NYdb::NPersQueue::TPersQueueClient PqClient;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
+    TPortManager PortManager;
+    const ui16 PqV0Port;
+    // The test server does not host the deprecated pqv0 service, so it gets its own gRPC server.
+    NYdbGrpc::TGRpcServer PqV0Server;
+    std::unique_ptr<NPersQueue::PersQueueService::Stub> PqV0Stub;
 
     TWriteModeEnv()
         : Setup("WriteMode", NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(), false)
@@ -36,7 +49,20 @@ public:
         , PqClient(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
             Setup.GetEndpoint(), grpc::InsecureChannelCredentials())))
+        , PqV0Port(PortManager.GetPort())
+        , PqV0Server(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(PqV0Port))
+        , PqV0Stub(NPersQueue::PersQueueService::NewStub(grpc::CreateChannel(
+            "localhost:" + ToString(PqV0Port), grpc::InsecureChannelCredentials())))
     {
+        PqV0Server.AddService(new NGRpcService::TGRpcPersQueueService(
+            Setup.GetRuntime().GetActorSystem(0),
+            MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+            NMsgBusProxy::CreatePersQueueMetaCacheV2Id()));
+        PqV0Server.Start();
+    }
+
+    ~TWriteModeEnv() {
+        PqV0Server.Stop();
     }
 
     void InitContext(grpc::ClientContext& context) {
@@ -151,6 +177,7 @@ public:
         auto writer = Client.CreateSimpleBlockingWriteSession(WriteSettings());
         UNIT_ASSERT(writer->Write("message", seqNo, std::nullopt, TDuration::Seconds(10)));
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+        AssertPqV0(true);
     }
 
     template <class TEvents, class TWriter>
@@ -171,7 +198,6 @@ public:
                     UNIT_ASSERT_VALUES_EQUAL(ack.State, TEvents::TWriteAck::EES_DISCARDED);
                 }
             } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                UNIT_ASSERT(sent);
                 const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
                 const auto reason = mode == UNAVAILABLE ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
                 UNIT_ASSERT_VALUES_EQUAL_C(closed->GetStatus(), expected, closed->DebugString());
@@ -182,7 +208,36 @@ public:
         UNIT_FAIL("Write session did not close after a rejected write");
     }
 
+    // First pqv0 response is the error, so init never reaches the partition chooser.
+    void AssertPqV0(bool expectOk, const TString& mode = {}) {
+        grpc::ClientContext context;
+        InitContext(context);
+        auto stream = PqV0Stub->WriteSession(&context);
+        NPersQueue::WriteRequest request;
+        auto* init = request.mutable_init();
+        init->set_topic(TOPIC_NAME);
+        init->set_source_id("pqv0-producer");
+        init->set_proxy_cookie(PQV0_PROXY_COOKIE);
+        UNIT_ASSERT(stream->Write(request));
+        NPersQueue::WriteResponse response;
+        UNIT_ASSERT_C(stream->Read(&response), "pqv0 write session returned no message");
+        if (expectOk) {
+            UNIT_ASSERT_C(response.has_init(), response.ShortDebugString());
+            return;
+        }
+        UNIT_ASSERT_C(response.has_error(), response.ShortDebugString());
+        const auto expectedCode = mode == UNAVAILABLE
+            ? NPersQueue::NErrorCode::ERROR
+            : NPersQueue::NErrorCode::BAD_REQUEST;
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(response.error().code()), static_cast<int>(expectedCode));
+        const auto reason = mode == UNAVAILABLE
+            ? "Write to topic is temporarily disabled"
+            : "Write to topic is prohibited";
+        UNIT_ASSERT_STRING_CONTAINS(response.error().description(), reason);
+    }
+
     void RejectWrites(bool pqv1, const TString& mode) {
+        AssertPqV0(false, mode);
         for (const auto size : {16u, 600u * 1024}) {
             const TString data(size, 'x');
             if (pqv1) {
@@ -194,6 +249,57 @@ public:
             } else {
                 auto writer = Client.CreateWriteSession(WriteSettings());
                 AssertRejected<TWriteSessionEvent>(writer, data, mode);
+            }
+        }
+    }
+
+    // The session passed its init check before the alter, so only the tablet can reject the write.
+    void RejectWriteInOpenSession(bool pqv1, const TString& mode, ui64 seqNo) {
+        auto writer = Client.CreateWriteSession(WriteSettings());
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        auto nextEvent = [&] {
+            UNIT_ASSERT_C(writer->WaitEvent().Wait(deadline - TInstant::Now()), "Write session did not respond");
+            auto event = writer->GetEvent(false);
+            UNIT_ASSERT(event);
+            return std::move(*event);
+        };
+
+        std::optional<TContinuationToken> token;
+        bool written = false;
+        bool sent = false;
+        while (!written || !token) {
+            auto event = nextEvent();
+            if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                if (sent) {
+                    token = std::move(ready->ContinuationToken);
+                } else {
+                    writer->Write(std::move(ready->ContinuationToken), "before", seqNo);
+                    sent = true;
+                }
+            } else if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+                for (const auto& ack : acks->Acks) {
+                    UNIT_ASSERT_VALUES_EQUAL(ack.State, TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+                }
+                written = true;
+            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
+                UNIT_FAIL(closed->DebugString());
+            }
+        }
+
+        Alter(pqv1, {{WRITE_MODE, mode}});
+        writer->Write(std::move(*token), "after", seqNo + 1);
+        while (true) {
+            auto event = nextEvent();
+            if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+                for (const auto& ack : acks->Acks) {
+                    UNIT_ASSERT_VALUES_EQUAL(ack.State, TWriteSessionEvent::TWriteAck::EES_DISCARDED);
+                }
+            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
+                const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
+                const auto reason = mode == UNAVAILABLE ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
+                UNIT_ASSERT_VALUES_EQUAL_C(closed->GetStatus(), expected, closed->DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(closed->GetIssues().ToString(), reason);
+                return;
             }
         }
     }
@@ -284,6 +390,15 @@ Y_UNIT_TEST_SUITE(TTopicWriteMode) {
         env.AssertAttribute(AVAILABLE);
         env.Write(1);
         env.AssertOffsets(0, 1);
+    }
+
+    Y_UNIT_TEST_TWIN(RejectWriteInOpenSession, pqv1) {
+        for (const auto& mode : {UNAVAILABLE, PROHIBITED}) {
+            TWriteModeEnv env;
+            env.Create(pqv1);
+            env.RejectWriteInOpenSession(pqv1, mode, 1);
+            env.AssertOffsets(0, 1);
+        }
     }
 
     Y_UNIT_TEST_TWIN(RejectInvalidWriteModeAttributes, pqv1) {

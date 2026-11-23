@@ -461,4 +461,5 @@ message TFeatureFlags {
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableIndexShadowDataRepair = 393 [default = false];
     optional bool EnableTopicReplication = 396 [default = false];
+    optional bool ShareShardedMkqlProgram = 399 [default = false];
 }

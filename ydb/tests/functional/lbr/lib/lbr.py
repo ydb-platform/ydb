@@ -33,6 +33,8 @@ class LbrCollector:
         phase=None,
         conversion=None,
     ):
+        if conversion is not None and (not isinstance(phase, str) or not phase):
+            raise ValueError("LBR conversion requires a nonempty phase name")
         if not pids or snapshots < 1 or not math.isfinite(record_seconds) or record_seconds <= 0:
             raise ValueError("LBR needs server PIDs, snapshots and a positive record duration")
         if not math.isfinite(start_delay_seconds) or start_delay_seconds < 0 or mmap_pages < 1:

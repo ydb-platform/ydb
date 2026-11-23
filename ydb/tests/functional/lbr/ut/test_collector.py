@@ -504,3 +504,10 @@ def test_started_phase_guard_does_not_overwrite_manifest(tmp_path, fake_perf):
         with collector:
             time.sleep(0.1)
     assert manifest(collector.output_dir)["valid"]
+
+
+@pytest.mark.parametrize("phase", [None, "", 42])
+def test_conversion_requires_named_phase(tmp_path, phase):
+    with pytest.raises(ValueError, match="nonempty phase name"):
+        LbrCollector([os.getpid()], tmp_path / "out", 1800, phase=phase, conversion=object())
+    assert not (tmp_path / "out").exists()

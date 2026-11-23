@@ -74,7 +74,8 @@ def test_conversion_failure_rejects_valid_phase(tmp_path, monkeypatch):
     assert "profgen failed" in (tmp_path / "profiles/conversion.json").read_text()
 
 
-def test_raw_lbr_filter_and_atomic_profile(tmp_path):
+@pytest.mark.parametrize("disable_time", [False, True])
+def test_raw_lbr_filter_and_atomic_profile(tmp_path, disable_time):
     binary = tmp_path / "ydbd"
     binary.touch()
     perf = tmp_path / "perf"
@@ -93,6 +94,8 @@ def test_raw_lbr_filter_and_atomic_profile(tmp_path):
     profdata.write_text('#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\nshift\nprintf merged > "$1"\n')
     profdata.chmod(0o755)
     conversion = LbrConversion(binary, tmp_path / "profiles", llvm, str(perf))
+    if disable_time:
+        conversion.time_tool = None
     conversion.submit("workload", 1, tmp_path / "ready.perf.data")
     conversion.finish_phase("workload", True)
     conversion.finish()
@@ -102,7 +105,11 @@ def test_raw_lbr_filter_and_atomic_profile(tmp_path):
     assert (tmp_path / "profiles/workload/snap1.prof").read_bytes() == b"profile"
     assert not list((tmp_path / "profiles").rglob("*.tmp"))
     report = json.loads((tmp_path / "profiles/conversion.json").read_text())[0]
-    assert report["samples"] == 1 and report["peak_rss_kib"] is not None
+    assert report["samples"] == 1
+    if conversion.time_tool is None:
+        assert report["peak_rss_kib"] is None
+    else:
+        assert report["peak_rss_kib"] is not None
 
 
 def test_bad_snapshot_does_not_prevent_other_phase_merge(tmp_path, monkeypatch):

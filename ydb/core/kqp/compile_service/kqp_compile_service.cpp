@@ -109,6 +109,7 @@ struct TKqpCompileRequest {
 
     bool UsePessimisticLocks;
     bool CollectDiagnostics = false;
+    bool RecompileByUid = false;
     bool RevalidatePgCompatibility = false;
 
     ui64 ConfigGeneration = 0;
@@ -189,7 +190,7 @@ public:
         return {};
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, const TString& uid) {
+    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, const TString& uid, bool canJoinPrepare) {
         auto queryIt = QueryIndex.find(query);
         if (queryIt == QueryIndex.end()) {
             return {};
@@ -200,7 +201,9 @@ public:
         for (auto it = requests.begin(); it != requests.end();) {
             auto requestIt = *it;
             Y_ENSURE(requestIt != Queue.end());
-            if (requestIt->RevalidatePgCompatibility && requestIt->Uid != uid) {
+            if ((requestIt->RecompileByUid && requestIt->Uid != uid)
+                || (requestIt->CompileSettings.IsQueryActionPrepare && !canJoinPrepare))
+            {
                 ++it;
                 continue;
             }
@@ -653,6 +656,7 @@ private:
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, request.CollectDiagnostics);
         compileRequest.RevalidatePgCompatibility = !revalidateUid.empty();
+        compileRequest.RecompileByUid = compileRequest.RevalidatePgCompatibility;
 
         // Report the miss before queueing, even if the request is later rejected,
         // times out or is cancelled. SPLIT is not a cache lookup.
@@ -725,6 +729,7 @@ private:
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), nullptr, nullptr,
                 request.UsePessimisticLocks, request.CollectDiagnostics);
+            compileRequest.RecompileByUid = true;
             compileRequest.RevalidatePgCompatibility = modeChanged;
 
             EnqueueCompileRequest(std::move(compileRequest), ctx);
@@ -779,6 +784,7 @@ private:
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
+                bool canJoinPrepare = !compileRequest.RevalidatePgCompatibility;
                 if (!hasTempTablesNameClashes && !skipRevalidationCacheUpdate) {
                     if (isStale) {
                         YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
@@ -786,7 +792,7 @@ private:
                             {"requestGeneration", compileRequest.ConfigGeneration},
                             {"currentGeneration", ConfigGeneration});
                     } else if (compileRequest.RevalidatePgCompatibility) {
-                        QueryCache->Replace(compileResult);
+                        canJoinPrepare = QueryCache->Replace(compileResult);
                     } else {
                         UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, compileRequest.CompileSettings.IsWarmupCompilation);
                     }
@@ -799,7 +805,7 @@ private:
                     }
                 }
 
-                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->Uid);
+                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->Uid, canJoinPrepare);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
@@ -844,16 +850,16 @@ private:
 
     void PerformRequest(TEvKqp::TEvCompileInvalidateRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
-        auto& request = *ev->Get();
+        const auto& request = *ev->Get();
 
         YDB_LOG_DEBUG_CTX(ctx, "Received invalidate request",
             {"sender", ev->Sender},
-            {"queryUid", request.Uid});
+            {"queryUid", request.CompileResult->Uid});
 
         auto dbCounters = request.DbCounters;
         Counters->ReportCompileRequestInvalidate(dbCounters);
 
-        QueryCache->EraseByUid(request.Uid);
+        QueryCache->EraseIfCurrent(request.CompileResult);
     }
 
     void HandleTtlTimer(const TActorContext& ctx) {
@@ -1267,24 +1273,27 @@ bool TKqpQueryCache::EraseByUidImpl(const TString& uid) {
     return true;
 }
 
-void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) {
+bool TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) {
     TGuard<TAdaptiveLock> guard(Lock);
 
     auto it = Index.find(TItem(compileResult->Uid));
-    if (it != Index.end()) {
-        TItem& item = const_cast<TItem&>(*it);
-        const auto& previous = *item.Value.CompileResult;
-        if (*previous.Query != *compileResult->Query) {
-            // Preserve the existing text lookup when this prepared UID changes mode.
-            QueryIndex.try_emplace(*compileResult->Query, compileResult->Uid);
-            EraseQueryIndex(previous);
-            DecBytes(previous.PreparedQuery->ByteSize());
-            IncBytes(compileResult->PreparedQuery->ByteSize());
-        }
-        Snapshot.Erase(previous.Uid);
-        item.Value.CompileResult = compileResult;
-        Snapshot.Insert(compileResult->Uid, compileResult, TInstant::Now());
+    if (it == Index.end()) {
+        return false;
     }
+
+    TItem& item = const_cast<TItem&>(*it);
+    const auto& previous = *item.Value.CompileResult;
+    if (*previous.Query != *compileResult->Query) {
+        // Preserve the existing text lookup when this prepared UID changes mode.
+        QueryIndex.try_emplace(*compileResult->Query, compileResult->Uid);
+        EraseQueryIndex(previous);
+        DecBytes(previous.PreparedQuery->ByteSize());
+        IncBytes(compileResult->PreparedQuery->ByteSize());
+    }
+    Snapshot.Erase(previous.Uid);
+    item.Value.CompileResult = compileResult;
+    Snapshot.Insert(compileResult->Uid, compileResult, TInstant::Now());
+    return true;
 }
 
 // Must be called under Lock, only after SID / TempTables rejection checks passed.

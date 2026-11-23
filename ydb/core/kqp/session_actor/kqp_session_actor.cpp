@@ -2656,7 +2656,7 @@ public:
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
             auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
-                QueryState->CompileResult->Uid, Settings.DbCounters);
+                QueryState->CompileResult, Settings.DbCounters);
 
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
         }

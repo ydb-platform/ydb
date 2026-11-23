@@ -424,3 +424,24 @@ def test_successful_command_at_deadline_is_not_rejected(tmp_path, monkeypatch):
         # The deadline callback races with the caller finishing the context.
         timers[0].callback()
     assert not conversion._processes
+
+
+def test_deadline_kills_descendants_after_parent_exit(tmp_path):
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles", timeout=0.2)
+    finished = threading.Event()
+    with conversion._process(["/bin/sh", "-c", "sleep 60 & exit 0"], stdout=subprocess.PIPE) as process:
+        assert process.wait(timeout=5) == 0
+
+        def read_stdout():
+            process.stdout.read()
+            finished.set()
+
+        reader = threading.Thread(target=read_stdout, daemon=True)
+        reader.start()
+        try:
+            assert finished.wait(3), "Orphaned child retained stdout beyond the conversion deadline"
+        finally:
+            conversion._kill(process)
+            reader.join(timeout=3)
+    assert not reader.is_alive()
+    assert not conversion._processes

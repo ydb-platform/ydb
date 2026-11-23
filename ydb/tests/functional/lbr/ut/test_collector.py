@@ -433,7 +433,9 @@ def test_numeric_parameter_parsing(converter, value, expected):
     assert parse_numeric_parameter("tpc-lbr-test", value, converter) == expected
 
 
-@pytest.mark.parametrize("converter,value", [(int, "abc"), (int, "1.5"), (float, "abc")])
+@pytest.mark.parametrize(
+    "converter,value", [(int, "abc"), (int, "1.5"), (float, "abc"), (float, "nan"), (float, "inf"), (float, "-inf")]
+)
 def test_numeric_parameter_error_names_parameter(converter, value):
     with pytest.raises(ValueError, match="tpc-lbr-test") as error:
         parse_numeric_parameter("tpc-lbr-test", value, converter)

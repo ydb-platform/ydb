@@ -282,7 +282,10 @@ def validate_training_settings(
 
 def parse_numeric_parameter(name, value, converter):
     try:
-        return converter(value)
+        result = converter(value)
+        if isinstance(result, float) and not math.isfinite(result):
+            raise ValueError("Non-finite value")
+        return result
     except (ValueError, TypeError, OverflowError) as error:
-        expected = "an integer" if converter is int else "a number"
+        expected = "an integer" if converter is int else "a finite number"
         raise ValueError(f"{name} must be {expected}, got {value!r}") from error

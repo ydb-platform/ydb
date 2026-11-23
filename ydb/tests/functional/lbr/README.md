@@ -56,6 +56,8 @@ shifting workload snapshots into warmup. When changing CLI builds, check its
 reported effective warmup and choose a sufficiently large explicit value; the
 collector does not derive its schedule from the CLI's effective warmup.
 Both workload and preparation sampling schedules are validated before cluster startup.
+The fit check covers recording time; leave extra time for perf startup and
+flushing when choosing a schedule close to the workload boundary.
 
 The command is `perf record -m 64 -F 99 -e cycles:u -b -p <six server PIDs>`.
 No system-wide or CLI sampling is performed. The smaller per-CPU mmap buffer
@@ -127,7 +129,11 @@ interpret profile similarity as a direct performance comparison.
 The 1000-warehouse training run used about 142 GiB for the server/test processes,
 in addition to RAM-backed storage. This opt-in mode is intended for a suitably
 sized local host; the test suite RAM requirement does not describe its
-training resource needs. The suite timeout is four hours, including import,
+training resource needs. This measurement is specific to the baseline binary.
+`YDB_HARD_MEMORY_LIMIT_BYTES=107374182400` in `ya.make` limits each server
+process to 100 GiB; it is not the aggregate budget for the six-node cluster,
+file-backed storage and converters. Size the host for their combined usage.
+The suite timeout is four hours, including import,
 compaction, workload, conversion and merging. Reduce the training parameters or
 raise the runner timeout for longer runs; a suite timeout can terminate the
 process before manifests and conversion reports are finalized.
@@ -153,7 +159,10 @@ The exact sampled ydbd is used, without binary rewriting or an LLVM patch.
 
 `profiles/<phase>/snap*.prof` are published after successful conversion by an
 atomic rename. Command lines, logs, wall time, peak RSS and file sizes are kept
-next to each snapshot. `profiles/conversion.json` records phase validity and
+next to each snapshot. Merge diagnostics are stored alongside the phase profiles
+as `merge-<phase>.command.json`, `.log`, `.time` (when GNU time is available)
+and `.result.json` (when the command completes without a timeout).
+`profiles/conversion.json` records phase validity and
 errors. A failed or incomplete phase is not merged, even if some of its
 snapshots converted successfully. Per-snapshot files from invalid phases remain
 available for diagnostics; their existence does not certify phase validity.

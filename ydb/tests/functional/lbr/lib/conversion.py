@@ -104,8 +104,9 @@ class LbrConversion:
 
         def expire():
             expired.set()
-            if process.poll() is None:
-                self._kill(process)
+            # start_new_session makes pid the process-group ID; descendants
+            # may still own stdout after the direct child has exited.
+            self._kill(process)
 
         timer = threading.Timer(self.timeout, expire)
         timer.daemon = True

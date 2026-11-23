@@ -3726,9 +3726,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         }
 
         if (*subset) {
-            // A tier-managed forced request may include disk parts even when
-            // no memory remains to flush. Their epoch can lag the log head.
-            Y_ENSURE(subset->IsStickedToHead() || (params->Tiering && IsDiskOnlyCompactionBehindHead(*subset)),
+            Y_ENSURE(subset->IsStickedToHead(),
                 "Got table subset with unexpected head " << subset->Head
                 << " and epoch " << subset->Epoch());
         }

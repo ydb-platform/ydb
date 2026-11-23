@@ -376,22 +376,39 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
 
         NActors::TBlockEvents<NOps::TEvResult> blocked(env.Env, [](const auto& ev) {
             const auto* compact = dynamic_cast<const TProdCompact*>(ev->Get()->Result.Get());
-            return compact && compact->Params && compact->Params->Table == TableId
-                && compact->Params->Tiering
-                && static_cast<const NTable::NCompGen::TGenCompactionParams&>(*compact->Params).TieringForced;
+            if (!compact || !compact->Params || compact->Params->Table != TableId || !compact->Params->Tiering) {
+                return false;
+            }
+            const auto& params = static_cast<const NTable::NCompGen::TGenCompactionParams&>(*compact->Params);
+            return params.ForcedMemRequestId != 0 || params.TieringForced;
         });
         env.SendSync(new NFake::TEvCompact(TableId));
+        env->WaitFor("memory flush before forced disk compaction",
+            [&] { return !blocked.empty(); }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
+        {
+            const auto* result = blocked.front()->Get();
+            const auto* compact = static_cast<const TProdCompact*>(result->Result.Get());
+            UNIT_ASSERT(compact->Success);
+            UNIT_ASSERT(compact->Params->Mode == NTable::TCompactionParams::EMode::Regular);
+            UNIT_ASSERT(result->Subset->Head > input->Epoch + 1);
+            UNIT_ASSERT(result->Subset->Frozen.empty());
+            UNIT_ASSERT(result->Subset->Flatten.empty());
+            UNIT_ASSERT(compact->Results.empty());
+        }
+        blocked.Unblock();
         env->WaitFor("forced disk compaction result",
             [&] { return !blocked.empty(); }, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
         const auto* result = blocked.front()->Get();
         const auto* compact = static_cast<const TProdCompact*>(result->Result.Get());
         UNIT_ASSERT(compact->Success);
+        UNIT_ASSERT(static_cast<const NTable::NCompGen::TGenCompactionParams&>(*compact->Params).TieringForced);
         UNIT_ASSERT(compact->Params->Mode == NTable::TCompactionParams::EMode::TierAware);
         UNIT_ASSERT(result->Subset->Frozen.empty());
         UNIT_ASSERT(result->Subset->TxStatus.empty());
         UNIT_ASSERT_VALUES_EQUAL(result->Subset->Epoch(), input->Epoch);
-        UNIT_ASSERT(result->Subset->Head > input->Epoch + 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Subset->Head, NTable::TEpoch::Zero());
         UNIT_ASSERT_VALUES_EQUAL(result->Subset->Flatten.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Subset->Flatten.front()->Label, input->Label);
         UNIT_ASSERT_VALUES_EQUAL(compact->Results.size(), 1);

@@ -1224,7 +1224,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         }
     }
 
-    Y_UNIT_TEST(AForcedMemoryTacWaitsForConflictingDiskInputs) {
+    Y_UNIT_TEST(FullCompactionFlushesMemoryWhileItsDiskInputsAreBusy) {
         TStrategyFixture f;
         f.Backend.Enabled = true;
         f.Backend.MemoryEpoch = TEpoch::FromIndex(30);
@@ -1235,23 +1235,33 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         const ui64 diskId = f.RunPending();
         constexpr ui64 forcedId = 777;
 
-        // A forced request selects the cold disk inputs already reserved
-        // by the running TAC, even though its memory epoch is disjoint.
-        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->BeginMemCompaction(0,
-            {0, TEpoch::Max()}, forcedId), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), diskId);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.back(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, 0);
-        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
-        f.Complete(diskId, {ColdTier});
-
-        UNIT_ASSERT(f.Backend.MemoryRetryRequests > 0);
         const ui64 memoryId = f.Strategy->BeginMemCompaction(0,
             {0, TEpoch::Max()}, forcedId);
         UNIT_ASSERT(memoryId != 0);
-        UNIT_ASSERT(f.Backend.Started.at(memoryId)->Mode == TCompactionParams::EMode::TierAware);
-        f.Complete(memoryId, {0});
+        const auto& flush = *f.Backend.Started.at(memoryId);
+        UNIT_ASSERT(flush.Mode == TCompactionParams::EMode::Regular);
+        UNIT_ASSERT(flush.Tiering->HasMemoryInputs);
+        UNIT_ASSERT(!flush.Tiering->AllowCooling);
+        UNIT_ASSERT(flush.Context->Inputs.empty());
+        const auto flushed = f.Complete(memoryId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(flushed.NewPartLevels.size(), 1);
+
+        // Grant any pending disk task while the running TAC still owns the inputs.
+        f.Broker.RunPending();
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), diskId);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+        const auto compacted = f.Complete(diskId, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(compacted.NewPartLevels.size(), 1);
+
+        const auto fullId = f.RunPending();
+        const auto& full = *f.Backend.Started.at(fullId);
+        UNIT_ASSERT(full.Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(!full.Tiering->HasMemoryInputs);
+        UNIT_ASSERT_VALUES_EQUAL(full.Parts.size(), 2);
+        UNIT_ASSERT(Contains(full.Parts, flushed.NewPartLevels.begin()->first));
+        UNIT_ASSERT(Contains(full.Parts, compacted.NewPartLevels.begin()->first));
+        f.Complete(fullId, {0, ColdTier});
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
     }
 
@@ -1579,12 +1589,12 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT(!f.Broker.RunPending(4));
     }
 
-    Y_UNIT_TEST(AConflictingForcedMemoryRequestWaitsWithoutFinishingItsUserId) {
+    Y_UNIT_TEST(AFullFlushWithAnOverlappingMemoryEpochRetriesBeforeTheDiskPhase) {
         TStrategyFixture f;
         f.AddPart(20, 1);
         f.AddPart(30, 1, 2);
         f.Policy->Generations[0].ForceCountToCompact = 2;
-        f.Backend.MemoryEpoch = TEpoch::FromIndex(40);
+        f.Backend.MemoryEpoch = TEpoch::FromIndex(25);
         f.Start();
         const ui64 diskId = f.RunPending();
         constexpr ui64 forcedId = 777;
@@ -1606,26 +1616,83 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT(f.Backend.Started.at(memoryId)->Mode == TCompactionParams::EMode::Regular);
         const ui32 retryRequests = f.Backend.MemoryRetryRequests;
         f.Complete(memoryId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+        f.Complete(f.RunPending(), {0});
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, retryRequests);
         f.Strategy->UpdateCompactions();
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, retryRequests);
     }
 
-    Y_UNIT_TEST(ForcedMemoryCompactionCoversAllTiersAndCompletesTheUserId) {
+    Y_UNIT_TEST(FullCompactionFinishesAfterFlushWhenThereAreNoDiskParts) {
+        TStrategyFixture f;
+        f.Start();
+        constexpr ui64 forcedId = 777;
+        const ui64 flush = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, forcedId);
+        f.Complete(flush, {});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
+        UNIT_ASSERT(!f.Broker.HasPending());
+    }
+
+    Y_UNIT_TEST(FullCompactionWithEmptyMemoryCompactsAllDiskTiers) {
         TStrategyFixture f;
         f.AddPart(30, 1);
         f.AddPart(20, 3, 2);
         f.AddPart(10, 5, 3);
         f.Start();
         constexpr ui64 forcedId = 777;
-        const ui64 id = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, forcedId);
+        const ui64 flush = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, forcedId);
+        UNIT_ASSERT(f.Backend.Started.at(flush)->Context->Inputs.empty());
+        f.Complete(flush, {});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+        const ui64 id = f.RunPending();
+        UNIT_ASSERT(f.Backend.Started.at(id)->Edge.Head == TEpoch::Zero());
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(id)->Context->Inputs.size(), 3);
         f.Complete(id, {0, ColdTier, ArchiveTier});
 
         UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
         UNIT_ASSERT(f.Strategy->AllowForcedCompaction());
         UNIT_ASSERT(f.Backend.Started.empty());
+    }
+
+    Y_UNIT_TEST(FullCompactionAcknowledgesOnlyTheFlushIncludedInItsDiskPhase) {
+        for (bool finishNewFlushFirst : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = true;
+            f.Backend.MemoryEpoch = TEpoch::FromIndex(10);
+            f.Start();
+
+            constexpr ui64 firstId = 777;
+            const ui64 firstFlush = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, firstId);
+            f.Complete(firstFlush, {0});
+            const ui64 firstDisk = f.RunPending();
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(firstDisk)->Parts.size(), 1);
+
+            constexpr ui64 secondId = firstId + 1;
+            f.Backend.MemoryEpoch = TEpoch::FromIndex(20);
+            const ui64 secondFlush = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, secondId);
+            UNIT_ASSERT(secondFlush != 0);
+            UNIT_ASSERT(f.Backend.Started.at(secondFlush)->Context->Inputs.empty());
+
+            if (finishNewFlushFirst) {
+                f.Complete(secondFlush, {0});
+                UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
+            }
+            f.Complete(firstDisk, {ColdTier});
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), firstId);
+            if (!finishNewFlushFirst) {
+                f.Complete(secondFlush, {0});
+            }
+
+            const ui64 secondDisk = f.RunPending();
+            const auto& inputs = f.Backend.Started.at(secondDisk)->Parts;
+            UNIT_ASSERT_VALUES_EQUAL(inputs.size(), 2);
+            for (const auto& part : f.Parts) {
+                UNIT_ASSERT(Contains(inputs, part->Label));
+            }
+            f.Complete(secondDisk, {0, ColdTier});
+            UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), secondId);
+        }
     }
 
     Y_UNIT_TEST(IdleTickCanCoolASingletonWithoutImmediatelyRepeatingIt) {

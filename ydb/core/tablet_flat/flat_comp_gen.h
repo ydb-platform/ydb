@@ -16,7 +16,8 @@ namespace NCompGen {
 
     public:
         ui32 Generation = Max<ui32>();
-        bool TieringForced = false;
+        ui64 ForcedMemRequestId = 0; // User Full request whose MemTable is being flushed.
+        bool TieringForced = false; // Disk pass over all tiers, including automatic compactions.
         ui32 PreferredLevel = 255;
     };
 
@@ -271,7 +272,7 @@ namespace NCompGen {
         void CancelTierCompactions();
         void BeginTierGenCompaction(TTaskId taskId, ui32 generation);
         ui64 PrepareTierCompaction(TTaskId taskId, TSnapEdge edge, ui32 generation,
-            TExtraState& extra, bool forced, bool sweep);
+            TExtraState& extra, ui64 forcedMemRequestId = 0);
         TCompactionChanges FinishTierCompaction(ui64 compactionId,
             TGenCompactionParams& params, TCompactionResult& result);
         ui32 ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const;

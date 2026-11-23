@@ -478,11 +478,9 @@ ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, 
             return 0;
         }
         TExtraState extra;
-        MemCompactionId = PrepareTierCompaction(taskId, edge, 0, extra,
-            forcedCompactionId != 0, false);
+        MemCompactionId = PrepareTierCompaction(taskId, edge, 0, extra, forcedCompactionId);
         if (MemCompactionId != 0 && forcedCompactionId != 0) {
             ForcedMemCompactionId = MemCompactionId;
-            NextForcedGenCompactionId = forcedCompactionId;
         }
         return MemCompactionId;
     }
@@ -1747,9 +1745,8 @@ void TGenCompactionStrategy::CancelTierCompactions() {
     }
     if (MemCompactionId != 0) {
         Backend->CancelCompaction(MemCompactionId);
-        if (ForcedMemCompactionId == MemCompactionId) {
-            // The outer memory request still owns this forced id and will
-            // retry it. A parallel disk completion must not advance it early.
+        if (!TierManaged && ForcedMemCompactionId == MemCompactionId) {
+            // A legacy flush records the request before publishing its parts.
             NextForcedGenCompactionId = 0;
         }
         MemCompactionId = 0;
@@ -1781,7 +1778,7 @@ void TGenCompactionStrategy::BeginTierGenCompaction(TTaskId taskId, ui32 generat
         Broker->FinishTask(taskId, EResourceStatus::Cancelled);
         return;
     }
-    const bool forced = ForcedState == EForcedState::Pending && ForcedGeneration == generation;
+    const bool forced = NeedToForceCompact(generation);
     const bool sweep = TierSweepGeneration == generation;
     if (!CanStartTierCompaction(generation)
             || (!forced && (!HasFreeTierInputs(generation)
@@ -1799,7 +1796,7 @@ void TGenCompactionStrategy::BeginTierGenCompaction(TTaskId taskId, ui32 generat
             && TierForLevel(generation) == TierForLevel(generation + 1)) {
         extra.InitFromPolicy(Policy->Generations[generation]);
     }
-    const ui64 id = PrepareTierCompaction(taskId, {}, generation, extra, forced, sweep);
+    const ui64 id = PrepareTierCompaction(taskId, {}, generation, extra);
     if (id == 0) {
         Broker->FinishTask(taskId, EResourceStatus::Cancelled);
         state = EState::Free;
@@ -1815,7 +1812,7 @@ void TGenCompactionStrategy::BeginTierGenCompaction(TTaskId taskId, ui32 generat
 }
 
 ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edge,
-        ui32 generation, TExtraState& extra, bool forced, bool sweep)
+        ui32 generation, TExtraState& extra, ui64 forcedMemRequestId)
 {
     Y_ENSURE(CanStartTierCompaction(generation), "Tier-managed compaction cannot start yet");
     auto params = MakeHolder<TGenCompactionParams>();
@@ -1824,11 +1821,14 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
     params->Edge = edge;
     params->Generation = generation;
     params->TierId = TierForLevel(generation);
-    params->TieringForced = forced;
+    params->ForcedMemRequestId = forcedMemRequestId;
+    params->TieringForced = generation != 0 && NeedToForceCompact(generation);
     params->Tiering = MakeHolder<TTieringCompaction>();
     params->Tiering->PartLevels = KnownParts;
-    const bool cool = Backend->IsDataTieringEnabled() && Backend->TableScheme(Table)->TieringPolicy;
-    params->Mode = sweep || cool
+    // A full request flushes to the default tier first. Its disk pass routes the rows.
+    const bool cool = forcedMemRequestId == 0 && Backend->IsDataTieringEnabled()
+        && Backend->TableScheme(Table)->TieringPolicy;
+    params->Mode = TierSweepGeneration == generation || cool
         ? TCompactionParams::EMode::TierAware : TCompactionParams::EMode::Regular;
     const bool isFinal = Policy->IsFinalLevel(generation);
     params->KeepInCache = generation == 0
@@ -1849,7 +1849,7 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
         }
     }
 
-    if (forced) {
+    if (params->TieringForced) {
         params->Parts = Backend->TableParts(Table);
         params->ColdParts = Backend->TableColdParts(Table);
     } else {
@@ -2098,20 +2098,28 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
             "Concurrent compactions have overlapping epoch intervals");
     }
 
-    if (params.Generation == 0 && ForcedMemCompactionId == compactionId) {
+    if (params.ForcedMemRequestId) {
+        Y_ENSURE(ForcedMemCompactionId == compactionId);
         ForcedMemCompactionId = 0;
+        NextForcedGenCompactionId = params.ForcedMemRequestId;
     }
     if (params.TieringForced) {
-        CurrentForcedGenCompactionId = Max(CurrentForcedGenCompactionId,
-            std::exchange(NextForcedGenCompactionId, 0));
         ForcedState = EForcedState::None;
         ForcedGeneration = 0;
         OnForcedGenCompactionDone();
-    } else if (NextForcedGenCompactionId != 0 && ForcedMemCompactionId == 0) {
+    }
+    // A running disk scan can only acknowledge flushes published before it started.
+    if (NextForcedGenCompactionId && ForcedState != EForcedState::Compacting) {
         CurrentForcedGenCompactionId = std::exchange(NextForcedGenCompactionId, 0);
-        ForcedState = EForcedState::Pending;
-        ForcedGeneration = Generations.empty() ? 255 : 1;
-    } else {
+        if (KnownParts.empty()) {
+            ForcedState = EForcedState::None;
+            ForcedGeneration = 0;
+            OnForcedGenCompactionDone();
+        } else {
+            ForcedState = EForcedState::Pending;
+            ForcedGeneration = Generations.empty() ? 255 : 1;
+        }
+    } else if (!params.TieringForced) {
         MaybeAutoStartForceCompaction();
     }
     CheckTierGenerations();
@@ -2140,7 +2148,6 @@ void TGenCompactionStrategy::CompactionCancelled(ui64 compactionId, const TCompa
         MemCompactionId = 0;
         if (ForcedMemCompactionId == compactionId) {
             ForcedMemCompactionId = 0;
-            NextForcedGenCompactionId = 0;
         }
         // The caller retains the original snapshot/forced request and decides
         // when to retry it. Other generations may continue in parallel.

@@ -1591,6 +1591,12 @@ message TImmediateControlsConfig {
           MinValue: 0,
           MaxValue: 31536000, // 365 * 86400
           DefaultValue: 60 }];
+
+        optional uint64 CdcZstdMinPayloadBytes = 26 [(ControlOptions) = {
+          Description: "Override for the CDC zstd minimum payload size in bytes. Zero uses DataShardConfig.CdcZstdMinPayloadBytes",
+          MinValue: 0,
+          MaxValue: 1073741824,
+          DefaultValue: 0 }];
     }
 
     message TTxLimitControls {

@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/change_exchange/visitor.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -36,6 +37,36 @@
 #include <cmath>
 
 namespace NKikimr::NDataShard {
+
+struct TCdcZstdContext::TState {
+    struct TFreeZstdContext {
+        static void Destroy(ZSTD_CCtx* context) noexcept {
+            ZSTD_freeCCtx(context);
+        }
+    };
+
+    ZSTD_CCtx* Get() const {
+        if (!Context) {
+            Context.Reset(ZSTD_createCCtx());
+            Y_ENSURE(Context, "Cannot allocate zstd compression context");
+        }
+        return Context.Get();
+    }
+
+    mutable THolder<ZSTD_CCtx, TFreeZstdContext> Context;
+};
+
+TCdcZstdContext::TCdcZstdContext()
+    : State(new TState)
+{}
+
+TCdcZstdContext::~TCdcZstdContext() = default;
+
+size_t TCdcZstdContext::Compress(void* dst, size_t dstCapacity, const void* src, size_t srcSize, int level) const {
+    const size_t written = ZSTD_compressCCtx(State->Get(), dst, dstCapacity, src, srcSize, level);
+    Y_ENSURE(!ZSTD_isError(written), "zstd compress failed: " << ZSTD_getErrorName(written));
+    return written;
+}
 
 class TBaseSerializer: public IChangeRecordSerializer {
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
@@ -104,8 +135,9 @@ public:
     }
 
 protected:
-    // Reuse one context for every record of this serializer. Creating a context
-    // repeats CPU feature detection, which dominates short CDC rows.
+    // Creating a zstd context repeats CPU feature detection, which dominates
+    // short CDC rows. The sender shares one context; a serializer without one
+    // keeps a private context for tests.
     void SetCompressedPayload(NKikimrPQClient::TDataChunk& data, TString payload) const {
         switch (Opts.Compression) {
         case NKikimrSchemeOp::ECdcStreamCompressionNone:
@@ -116,19 +148,13 @@ protected:
                 data.SetData(std::move(payload));
                 return;
             }
-            if (!CompressionContext) {
-                CompressionContext.Reset(ZSTD_createCCtx());
-                Y_ENSURE(CompressionContext, "Cannot allocate zstd compression context");
-            }
             const size_t bound = ZSTD_compressBound(payload.size());
             Y_ENSURE(!ZSTD_isError(bound), "zstd compress bound failed: " << ZSTD_getErrorName(bound));
             TString compressed = TString::Uninitialized(bound);
-            const size_t written = ZSTD_compressCCtx(
-                CompressionContext.Get(),
+            const size_t written = CompressionContext().Compress(
                 compressed.begin(), compressed.size(),
                 payload.data(), payload.size(),
                 ResolvedCompressionLevel());
-            Y_ENSURE(!ZSTD_isError(written), "zstd compress failed: " << ZSTD_getErrorName(written));
             if (written >= payload.size()) {
                 data.SetData(std::move(payload));
                 return;
@@ -149,23 +175,38 @@ protected:
     const TChangeRecordSerializerOpts Opts;
 
 private:
-    struct TFreeZstdContext {
-        static void Destroy(ZSTD_CCtx* context) noexcept {
-            ZSTD_freeCCtx(context);
-        }
-    };
-
     int ResolvedCompressionLevel() const {
         return Opts.CompressionLevel ? Opts.CompressionLevel : DefaultCdcZstdCompressionLevel;
     }
 
     ui64 MinPayloadBytes() const {
-        return HasAppData()
-            ? AppData()->DataShardConfig.GetCdcZstdMinPayloadBytes()
-            : DefaultCdcZstdMinPayloadBytes;
+        if (!HasAppData()) {
+            return DefaultCdcZstdMinPayloadBytes;
+        }
+        const auto* appData = AppData();
+        if (appData->Icb) {
+            // Zero keeps the startup DataShardConfig value. Console updates this
+            // immediate control without recreating the sender.
+            if (const auto control = appData->Icb->DataShardControls.CdcZstdMinPayloadBytes.AtomicLoad()) {
+                if (const auto overrideBytes = control->Get(); overrideBytes > 0) {
+                    return static_cast<ui64>(overrideBytes);
+                }
+            }
+        }
+        return appData->DataShardConfig.GetCdcZstdMinPayloadBytes();
     }
 
-    mutable THolder<ZSTD_CCtx, TFreeZstdContext> CompressionContext;
+    TCdcZstdContext& CompressionContext() const {
+        if (Opts.ZstdContext) {
+            return *Opts.ZstdContext;
+        }
+        if (!PrivateContext) {
+            PrivateContext = MakeIntrusive<TCdcZstdContext>();
+        }
+        return *PrivateContext;
+    }
+
+    mutable TCdcZstdContext::TPtr PrivateContext;
     mutable TMaybe<ui32> PendingUncompressedSize;
 
 }; // TBaseSerializer

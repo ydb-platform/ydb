@@ -3486,6 +3486,8 @@ private:
 
     TControlWrapper ReadIteratorKeysExtBlobsPrecharge;
 
+    TControlWrapper CdcZstdMinPayloadBytes;
+
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;
     TIntrusivePtr<TThrRefBase> DataShardSysTables;

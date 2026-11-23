@@ -31,7 +31,11 @@ namespace NKikimr::NDataShard {
 using namespace NPQ;
 using ESenderType = TEvChangeExchange::ESenderType;
 
-static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTable::TCdcStream& stream, ui64 shardId) {
+static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(
+        const TUserTable::TCdcStream& stream,
+        ui64 shardId,
+        const TCdcZstdContext::TPtr& zstdContext)
+{
     return THolder<IChangeRecordSerializer>(CreateChangeRecordSerializer({
         .StreamFormat = stream.Format,
         .StreamMode = stream.Mode,
@@ -42,6 +46,7 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
         .TraceIds = stream.TraceIds,
         .Compression = stream.Compression,
         .CompressionLevel = stream.CompressionLevel,
+        .ZstdContext = zstdContext,
     }));
 }
 
@@ -283,13 +288,14 @@ public:
             const TDataShardId& dataShard,
             ui32 partitionId,
             ui64 shardId,
-            const TUserTable::TCdcStream& stream)
+            const TUserTable::TCdcStream& stream,
+            const TCdcZstdContext::TPtr& zstdContext)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
-        , Serializer(CreateCdcStreamSerializer(stream, DataShard.TabletId))
+        , Serializer(CreateCdcStreamSerializer(stream, DataShard.TabletId, zstdContext))
     {
     }
 
@@ -645,7 +651,7 @@ class TCdcChangeSenderMain
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ENSURE(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream, ZstdContext);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -740,9 +746,12 @@ public:
         , StreamPathId(streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
+        , ZstdContext(stream.Compression == NKikimrSchemeOp::ECdcStreamCompressionZstd
+            ? MakeIntrusive<TCdcZstdContext>()
+            : nullptr)
     {
         if (stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
-            AggregatedHeartbeats.emplace(CreateCdcStreamSerializer(stream, dataShard.TabletId), dataShard.TabletId);
+            AggregatedHeartbeats.emplace(CreateCdcStreamSerializer(stream, dataShard.TabletId, ZstdContext), dataShard.TabletId);
         }
     }
 
@@ -794,6 +803,10 @@ private:
     THashMap<ui32, ui64> PartitionToShard;
 
     std::optional<TCdcAggregatedHeartbeats> AggregatedHeartbeats;
+
+    // One context per stream on this DataShard. Partition actors share the
+    // main sender mailbox, so the context is not used concurrently.
+    const TCdcZstdContext::TPtr ZstdContext;
 
 }; // TCdcChangeSenderMain
 

@@ -165,6 +165,27 @@ Y_UNIT_TEST_SUITE(CdcZstdCompression) {
         UNIT_ASSERT_VALUES_EQUAL(heartbeatChunk.GetCodec(), 0);
     }
 
+    Y_UNIT_TEST(SharedContextMatchesOneShotFrame) {
+        const auto table = MakeTable();
+        const auto record = MakeRecord(
+            TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(MakeValueBytes(2048)).SerializeAsString());
+        const auto raw = RawJson(*record);
+        const auto expected = ReferenceCompress(raw, DefaultCdcZstdCompressionLevel);
+
+        auto opts = JsonOpts(NKikimrSchemeOp::ECdcStreamCompressionZstd);
+        opts.ZstdContext = MakeIntrusive<TCdcZstdContext>();
+        std::unique_ptr<IChangeRecordSerializer> first(CreateChangeRecordSerializer(opts));
+        std::unique_ptr<IChangeRecordSerializer> second(CreateChangeRecordSerializer(opts));
+        for (auto* serializer : {first.get(), second.get()}) {
+            TCmdWrite cmd;
+            serializer->Serialize(cmd, *record);
+            UNIT_ASSERT_VALUES_EQUAL(cmd.GetUncompressedSize(), static_cast<i32>(raw.size()));
+            const auto chunk = ParseChunk(cmd.GetData());
+            UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(chunk.GetData(), expected);
+        }
+    }
+
     Y_UNIT_TEST(ExplicitLevelOverridesDefault) {
         const auto table = MakeTable();
         const auto record = MakeRecord(

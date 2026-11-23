@@ -144,6 +144,11 @@ public:
         return grpc::Status();
     }
 
+    grpc::Status RemoveDirectory(grpc::ServerContext*, const Ydb::Scheme::RemoveDirectoryRequest*, Ydb::Scheme::RemoveDirectoryResponse*) override {
+        AddFailure("Unexpected RemoveDirectory request");
+        return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Unexpected RemoveDirectory request");
+    }
+
     TSchemeImpl& ExpectListDirectory(TString path, Ydb::Scheme::Entry::Type selfType = Ydb::Scheme::Entry::DIRECTORY) {
         Directories[std::move(path)].SelfType = selfType;
         return *this;

@@ -4,6 +4,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/program/graph_execute.h>
 
+#include <algorithm>
+
 namespace NKikimr::NColumnShard {
 
 TScanCounters::TScanCounters(const TString& module)
@@ -188,6 +190,86 @@ TString TConcreteScanCounters::StepsCountersDebugString() const {
     bld << "counters_summ_across_all_steps:(";
     bld << "[StepName: AllSteps; " << sum.DebugString() << "])\n";
     return bld;
+}
+
+std::vector<TConcreteScanCounters::TStepHandle> TConcreteScanCounters::RegisterSteps(const std::vector<TString>& names) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    auto& steps = lock.Value;
+    std::vector<TStepList::iterator> existing;
+    existing.reserve(steps.size());
+    for (auto it = steps.begin(); it != steps.end(); ++it) {
+        existing.push_back(it);
+    }
+
+    // Compute the longest common subsequence of each pair of suffixes.
+    std::vector<std::vector<size_t>> matches(names.size() + 1, std::vector<size_t>(existing.size() + 1));
+    for (size_t i = names.size(); i != 0; --i) {
+        for (size_t j = existing.size(); j != 0; --j) {
+            if (names[i - 1] == existing[j - 1]->Name) {
+                matches[i - 1][j - 1] = 1 + matches[i][j];
+            } else {
+                matches[i - 1][j - 1] = std::max(matches[i][j - 1], matches[i - 1][j]);
+            }
+        }
+    }
+
+    std::vector<TStepHandle> handles;
+    handles.reserve(names.size());
+    size_t i = 0;
+    size_t j = 0;
+    while (i < names.size()) {
+        if (j < existing.size() && names[i] == existing[j]->Name) {
+            handles.push_back(TStepHandle(existing[j]));
+            ++i;
+            ++j;
+        } else if (j < existing.size() && matches[i][j + 1] > matches[i + 1][j]) {
+            ++j;
+        } else {
+            // On a tie, keep the earlier existing position available for a later match.
+            const auto next = j < existing.size() ? existing[j] : steps.end();
+        handles.push_back(TStepHandle(steps.insert(next, TStepCounters{names[i], {}, {}})));
+            ++i;
+        }
+    }
+    return handles;
+}
+
+namespace {
+
+void RecordStepMeasurement(TStepMeasurementCounters& counter, std::optional<ui64> value) {
+    if (value) {
+        counter.Sum += *value;
+        ++counter.Count;
+    }
+}
+
+}   // namespace
+
+void TConcreteScanCounters::RecordStepExecution(TStepHandle handle, TDuration activeTime, std::optional<ui64> inputRows,
+    std::optional<ui64> outputRows, std::optional<ui64> inputBytes, std::optional<ui64> outputBytes) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    auto& statistics = handle.Position->Statistics;
+    ++statistics.Calls;
+    statistics.ActiveTime += activeTime;
+    RecordStepMeasurement(statistics.InputRows, inputRows);
+    RecordStepMeasurement(statistics.OutputRows, outputRows);
+    RecordStepMeasurement(statistics.InputBytes, inputBytes);
+    RecordStepMeasurement(statistics.OutputBytes, outputBytes);
+}
+
+void TConcreteScanCounters::AddStepWait(TStepHandle handle, TDuration waitTime) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    handle.Position->Statistics.WaitTime += waitTime;
+}
+
+void TConcreteScanCounters::AddStepReadBytes(TStepHandle handle, ui64 readBytes) const {
+    auto lock = FetchingStepCounters->WriteGuard();
+    RecordStepMeasurement(handle.Position->Statistics.ReadBytes, readBytes);
+}
+
+std::vector<TStepCounters> TConcreteScanCounters::GetStepStats() const {
+    auto lock = FetchingStepCounters->ReadGuard();
+    return std::vector<TStepCounters>(lock.Value.begin(), lock.Value.end());
 }
 
 TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersForStep(TStringBuf stepName) const {

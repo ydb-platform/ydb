@@ -14,6 +14,12 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <list>
+#include <memory>
+#include <optional>
+#include <variant>
+#include <vector>
+
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 class TCompiledGraph;
 }
@@ -416,7 +422,50 @@ public:
     }
 };
 
+struct TStepMeasurementCounters {
+    ui64 Sum = 0;
+    ui64 Count = 0;
+};
+
+struct TStepStatisticsCounters {
+    ui64 Calls = 0;
+    TDuration ActiveTime;
+    TDuration WaitTime;
+    TStepMeasurementCounters InputRows;
+    TStepMeasurementCounters OutputRows;
+    TStepMeasurementCounters InputBytes;
+    TStepMeasurementCounters OutputBytes;
+    TStepMeasurementCounters ReadBytes;
+};
+
+struct TStepCounters {
+    TString Name;
+    TStepStatisticsCounters Statistics;
+    std::variant<std::monostate> Details;
+};
+
 class TConcreteScanCounters: public TScanCounters {
+    using TStepList = std::list<TStepCounters>;
+    std::shared_ptr<TThreadSafeValue<TStepList>> FetchingStepCounters = std::make_shared<TThreadSafeValue<TStepList>>();
+
+public:
+    class TStepHandle {
+        friend class TConcreteScanCounters;
+
+        TStepList::iterator Position;
+
+        explicit TStepHandle(TStepList::iterator position)
+            : Position(position)
+        {
+        }
+    };
+
+    std::vector<TStepHandle> RegisterSteps(const std::vector<TString>& names) const;
+    void RecordStepExecution(TStepHandle handle, TDuration activeTime, std::optional<ui64> inputRows = {},
+        std::optional<ui64> outputRows = {}, std::optional<ui64> inputBytes = {}, std::optional<ui64> outputBytes = {}) const;
+    void AddStepWait(TStepHandle handle, TDuration waitTime) const;
+    void AddStepReadBytes(TStepHandle handle, ui64 readBytes) const;
+    std::vector<TStepCounters> GetStepStats() const;
 public:
     struct TPerStepAtomicCounters {
         std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds =

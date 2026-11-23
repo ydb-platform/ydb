@@ -1,5 +1,7 @@
 #include "script_cursor.h"
 
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
+
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
@@ -9,6 +11,37 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
+
+namespace {
+
+std::optional<ui64> GetStepRows(const IDataSource& source) {
+    if (source.HasStageResult()) {
+        const auto& result = source.GetStageResult();
+        if (result.IsEmpty()) {
+            return 0;
+        }
+        const auto& filter = result.GetNotAppliedFilter();
+        if (filter) {
+            if (auto count = filter->GetFilteredCount()) {
+                return *count;
+            }
+        }
+        if (const auto& batch = result.GetBatch()) {
+            return batch->num_rows();
+        }
+    } else if (source.HasStageData() && source.GetStageData().HasTable()) {
+        return source.GetStageData().GetTable().GetRecordsCountActualOptional();
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+void TFetchingScriptCursor::RecordReadBytes(const IDataSource& source, const NBlobOperations::NRead::TCompositeReadBlobs& blobs) const {
+    if (const auto& step = Script->GetStep(CurrentStepIdx)->GetStepStatsHandle()) {
+        source.GetContext()->GetCommonContext()->GetCounters().AddStepReadBytes(*step, blobs.GetTotalBlobsSize());
+    }
+}
 
 TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source) {
     YDB_LOG_CREATE_CONTEXT(
@@ -40,7 +73,11 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
             if (CurrentStepIdx == 0) {
                 return TConclusionStatus::Fail("Internal error: step 0 should not have a predecessor");
             }
-            counters.CountersForStep(Script->GetStep(CurrentStepIdx - 1)->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
+            const auto& previousStep = Script->GetStep(CurrentStepIdx - 1);
+            counters.CountersForStep(previousStep->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
+            if (const auto& stepStatsHandle = previousStep->GetStepStatsHandle()) {
+                counters.AddStepWait(*stepStatsHandle, waitDuration);
+            }
         }
         auto step = Script->GetStep(CurrentStepIdx);
         std::optional<TMemoryProfileGuard> mGuard;
@@ -51,12 +88,18 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source
             {"scanStep", step->DebugString()},
             {"scanStepIdx", CurrentStepIdx});
 
+        const auto& stepStatsHandle = step->GetStepStatsHandle();
+        const auto inputRows = stepStatsHandle ? GetStepRows(source) : std::nullopt;
         const TMonotonic startInstant = TMonotonic::Now();
         auto resultStep = step->ExecuteInplace(source, *this);
         const auto executionTime = TMonotonic::Now() - startInstant;
 
         counters.CountersForStep(step->GetName()).ExecutionDurationMicroSeconds->Add(executionTime.MicroSeconds());
         counters.AddExecutionDuration(executionTime);
+        if (stepStatsHandle) {
+            const auto outputRows = resultStep.IsSuccess() && !resultStep->IsPending() ? GetStepRows(source) : std::nullopt;
+            counters.RecordStepExecution(*stepStatsHandle, executionTime, inputRows, outputRows);
+        }
 
         Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (resultStep.IsFail()) {

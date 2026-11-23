@@ -1,6 +1,10 @@
 #pragma once
 #include "script.h"
 
+namespace NKikimr::NOlap::NBlobOperations::NRead {
+class TCompositeReadBlobs;
+}
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 class TFetchingScriptCursor {
@@ -21,6 +25,8 @@ public:
     const TString& GetName() const {
         return Script->GetStep(CurrentStepIdx)->GetName();
     }
+
+    void RecordReadBytes(const IDataSource& source, const NBlobOperations::NRead::TCompositeReadBlobs& blobs) const;
 
     TString GetPrevName() const {
         if (CurrentStepIdx > 0) {

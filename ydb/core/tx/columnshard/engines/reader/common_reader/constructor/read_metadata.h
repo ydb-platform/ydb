@@ -182,7 +182,7 @@ public:
         return GetProgram().HasProcessingColumnIds();
     }
 
-    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+    YDB_READONLY(NYql::NDqProto::EDqStatsMode, StatsMode, NYql::NDqProto::DQ_STATS_MODE_NONE);
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     const ESourcesSorting SourcesSorting;
 
@@ -200,6 +200,7 @@ public:
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
 
     TReadMetadata(const TReadMetadata&) = delete;
+
     TReadMetadata& operator=(const TReadMetadata&) = delete;
 
     bool OrderByLimitAllowed() const {

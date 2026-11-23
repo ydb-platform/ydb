@@ -1,5 +1,7 @@
 #include "script.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -15,6 +17,25 @@ TString TFetchingScript::DebugString() const {
     }
     sb << "{branch:" << BranchName << ";steps:[" << sbBranch << "]}";
     return sb;
+}
+
+TFetchingScript::TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps,
+    const NColumnShard::TConcreteScanCounters* counters)
+    : BranchName(branchName)
+    , Steps(std::move(steps))
+{
+    if (counters) {
+        std::vector<TString> names;
+        names.reserve(Steps.size());
+        for (const auto& step : Steps) {
+            names.push_back(step->GetName());
+        }
+        const auto handles = counters->RegisterSteps(names);
+        for (size_t i = 0; i < Steps.size(); ++i) {
+            Y_ABORT_UNLESS(!Steps[i]->StepStatsHandle);
+            Steps[i]->StepStatsHandle = handles[i];
+        }
+    }
 }
 
 TString TFetchingScript::ProfileDebugString() const {
@@ -82,6 +103,10 @@ TString IFetchingStep::DebugString(const bool stats) const {
 TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
     : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns())
 {
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableColumnShardStats()
+        && context.GetReadMetadata()->GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+        Counters = &context.GetCommonContext()->GetCounters();
+    }
 }
 
 void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {

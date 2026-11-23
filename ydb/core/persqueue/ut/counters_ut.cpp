@@ -855,7 +855,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 } // Y_UNIT_TEST_SUITE(PQCountersSimple)
 
 Y_UNIT_TEST_SUITE(PQCountersLabeled) {
-    Y_UNIT_TEST_TWIN(DisableTabletMetrics, firstClass) {
+    Y_UNIT_TEST_TWIN(DisableLabeledMetrics, firstClass) {
         TTestContext tc;
         TFinalizer finalizer(tc);
         bool activeZone = false;
@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
 
         ui64 tabletUpdates = 0;
         ui64 labeledUpdates = 0;
-        ui64 forgets = 0;
+        ui64 labeledDrops = 0;
         auto observer = tc.Runtime->AddObserver([&](IEventHandle::TPtr& handle) {
             auto& event = *handle;
             switch (event.GetTypeRewrite()) {
@@ -875,12 +875,11 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                     break;
                 case TEvTabletCounters::EvTabletAddLabeledCounters:
                     if (event.Get<TEvTabletCounters::TEvTabletAddLabeledCounters>()->TabletID == tc.TabletId) {
-                        ++labeledUpdates;
-                    }
-                    break;
-                case TEvTabletCounters::EvTabletCountersForgetTablet:
-                    if (event.Get<TEvTabletCounters::TEvTabletCountersForgetTablet>()->TabletID == tc.TabletId) {
-                        ++forgets;
+                        if (event.Get<TEvTabletCounters::TEvTabletAddLabeledCounters>()->LabeledCounters->GetDrop()) {
+                            ++labeledDrops;
+                        } else {
+                            ++labeledUpdates;
+                        }
                     }
                     break;
             }
@@ -897,12 +896,10 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
             tc.Runtime->Send(new IEventHandle(MakeTabletCountersAggregatorID(tc.Runtime->GetNodeId()),
                 tc.Edge, request.Release()));
             auto response = tc.Runtime->GrabEdgeEvent<TEvTabletCounters::TEvTabletCountersResponse>(tc.Edge);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.CountersInfoSize(), enabled ? 1 : 0);
-            if (enabled) {
-                const auto& counters = response->Get()->Record.GetCountersInfo(0);
-                UNIT_ASSERT(counters.HasExecutorCounters());
-                UNIT_ASSERT(counters.HasAppCounters());
-            }
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.CountersInfoSize(), 1);
+            const auto& counters = response->Get()->Record.GetCountersInfo(0);
+            UNIT_ASSERT(counters.HasExecutorCounters());
+            UNIT_ASSERT(counters.HasAppCounters());
             if (!firstClass) {
                 auto labeledRequest = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersRequest>();
                 labeledRequest->Record.SetTabletType(TTabletTypes::PersQueue);
@@ -922,23 +919,23 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
 
         config.SetVersion(config.GetVersion() + 1);
         config.SetMetricsDisabled(true);
-        forgets = 0;
         applyConfig();
         // Drain events sent before the config was applied.
         tc.Runtime->SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(forgets > 0);
         tabletUpdates = labeledUpdates = 0;
         CmdWrite(0, "disabled", TestData(), tc, false);
         tc.Runtime->SimulateSleep(TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(tabletUpdates, 0);
+        UNIT_ASSERT(tabletUpdates > 0);
         UNIT_ASSERT_VALUES_EQUAL(labeledUpdates, 0);
+        UNIT_ASSERT(labeledDrops > 0);
         checkStoredCounters(false);
 
-        // Covers both the final executor flush and loading MetricsDisabled from storage.
+        // The persisted flag must suppress labeled counters after a reboot too.
+        tabletUpdates = 0;
         RebootTablet(*tc.Runtime, tc.TabletId, tc.Edge);
         CmdWrite(0, "after-reboot", TestData(), tc, false);
         tc.Runtime->SimulateSleep(TDuration::Seconds(30));
-        UNIT_ASSERT_VALUES_EQUAL(tabletUpdates, 0);
+        UNIT_ASSERT(tabletUpdates > 0);
         UNIT_ASSERT_VALUES_EQUAL(labeledUpdates, 0);
         checkStoredCounters(false);
 

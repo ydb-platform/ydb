@@ -250,3 +250,11 @@ def validate_training_settings(
     common = dict(record_seconds=record_seconds, snapshots=snapshots, mmap_pages=mmap_pages)
     LbrCollector([os.getpid()], ".", window_seconds, start_delay_seconds=start_delay_seconds, **common)
     LbrCollector([os.getpid()], ".", None, interval_seconds=interval_seconds, **common)
+
+
+def parse_numeric_parameter(name, value, converter):
+    try:
+        return converter(value)
+    except (ValueError, TypeError, OverflowError) as error:
+        expected = "an integer" if converter is int else "a number"
+        raise ValueError(f"{name} must be {expected}, got {value!r}") from error

@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from ydb.tests.functional.lbr.lib.lbr import LbrCollector, validate_training_settings
+from ydb.tests.functional.lbr.lib.lbr import LbrCollector, parse_numeric_parameter, validate_training_settings
 
 
 @pytest.fixture
@@ -426,3 +426,15 @@ def test_exit_does_not_wait_forever_for_collector_thread(tmp_path, monkeypatch):
     assert joins == [75]
     assert collector._entry_failed.is_set()
     assert collector._phase_failed and not collector.valid
+
+
+@pytest.mark.parametrize("converter,value,expected", [(int, "42", 42), (float, "1.5", 1.5)])
+def test_numeric_parameter_parsing(converter, value, expected):
+    assert parse_numeric_parameter("tpc-lbr-test", value, converter) == expected
+
+
+@pytest.mark.parametrize("converter,value", [(int, "abc"), (int, "1.5"), (float, "abc")])
+def test_numeric_parameter_error_names_parameter(converter, value):
+    with pytest.raises(ValueError, match="tpc-lbr-test") as error:
+        parse_numeric_parameter("tpc-lbr-test", value, converter)
+    assert repr(value) in str(error.value)

@@ -6,7 +6,7 @@ from pathlib import Path
 import yatest.common
 
 import ydb.tests.olap.load.lib.tpcc as tpcc
-from ydb.tests.functional.lbr.lib.lbr import LbrCollector, validate_training_settings
+from ydb.tests.functional.lbr.lib.lbr import LbrCollector, parse_numeric_parameter, validate_training_settings
 from ydb.tests.functional.lbr.lib.conversion import LbrConversion
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 from ydb.tests.library.common.types import Erasure
@@ -34,18 +34,34 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
             directory = Path(pdisk_directory)
             if not directory.is_absolute() or not directory.is_dir() or not os.access(directory, os.W_OK):
                 raise ValueError(f"PDisks directory must be an existing writable absolute path: {directory}")
-        pdisk_size_gib = int(yatest.common.get_param("tpc-lbr-pdisk-size-gib", "256"))
+        pdisk_size_gib = parse_numeric_parameter(
+            "tpc-lbr-pdisk-size-gib", yatest.common.get_param("tpc-lbr-pdisk-size-gib", "256"), int
+        )
         if pdisk_size_gib <= 0:
             raise ValueError("PDisks size must be positive")
-        cls.warehouses = int(yatest.common.get_param("tpc-lbr-warehouses", "1000"))
-        cls.time_s = float(yatest.common.get_param("tpc-lbr-seconds", "1800"))
-        cls.warmup_s = float(yatest.common.get_param("tpc-lbr-warmup-seconds", "600"))
+        cls.warehouses = parse_numeric_parameter(
+            "tpc-lbr-warehouses", yatest.common.get_param("tpc-lbr-warehouses", "1000"), int
+        )
+        cls.time_s = parse_numeric_parameter(
+            "tpc-lbr-seconds", yatest.common.get_param("tpc-lbr-seconds", "1800"), float
+        )
+        cls.warmup_s = parse_numeric_parameter(
+            "tpc-lbr-warmup-seconds", yatest.common.get_param("tpc-lbr-warmup-seconds", "600"), float
+        )
         if cls.warehouses < 1 or cls.time_s <= 0 or cls.warmup_s < cls.warehouses // 10 + 1:
             raise ValueError("Use positive warehouses/time and warmup >= warehouses // 10 + 1 seconds")
-        cls.phase_interval_s = float(yatest.common.get_param("tpc-lbr-phase-interval-seconds", "60"))
-        cls.mmap_pages = int(yatest.common.get_param("tpc-lbr-mmap-pages", "64"))
-        cls.record_seconds = float(yatest.common.get_param("tpc-lbr-record-seconds", "30"))
-        cls.snapshots = int(yatest.common.get_param("tpc-lbr-snapshots", "3"))
+        cls.phase_interval_s = parse_numeric_parameter(
+            "tpc-lbr-phase-interval-seconds", yatest.common.get_param("tpc-lbr-phase-interval-seconds", "60"), float
+        )
+        cls.mmap_pages = parse_numeric_parameter(
+            "tpc-lbr-mmap-pages", yatest.common.get_param("tpc-lbr-mmap-pages", "64"), int
+        )
+        cls.record_seconds = parse_numeric_parameter(
+            "tpc-lbr-record-seconds", yatest.common.get_param("tpc-lbr-record-seconds", "30"), float
+        )
+        cls.snapshots = parse_numeric_parameter(
+            "tpc-lbr-snapshots", yatest.common.get_param("tpc-lbr-snapshots", "3"), int
+        )
         cls.perf = yatest.common.get_param("tpc-lbr-perf", "perf")
         cls.profile_dir = Path(yatest.common.test_output_path("lbr"))
         validate_training_settings(

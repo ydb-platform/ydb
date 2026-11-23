@@ -399,3 +399,28 @@ def test_invalid_workload_schedule_keeps_preparation_profile(tmp_path, monkeypat
     assert (tmp_path / "profiles/import.prof").read_bytes() == b"merged"
     report = json.loads((tmp_path / "profiles/conversion.json").read_text())
     assert report[0]["phase_valid"]
+
+
+def test_successful_command_at_deadline_is_not_rejected(tmp_path, monkeypatch):
+    timers = []
+
+    class DeadlineTimer:
+        daemon = False
+
+        def __init__(self, timeout, callback):
+            self.callback = callback
+            timers.append(self)
+
+        def start(self):
+            pass
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(threading, "Timer", DeadlineTimer)
+    conversion = LbrConversion(tmp_path / "ydbd", tmp_path / "profiles")
+    with conversion._process(["/bin/sh", "-c", "exit 0"], stdout=subprocess.DEVNULL) as process:
+        assert process.wait(timeout=5) == 0
+        # The deadline callback races with the caller finishing the context.
+        timers[0].callback()
+    assert not conversion._processes

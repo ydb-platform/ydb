@@ -104,7 +104,8 @@ class LbrConversion:
 
         def expire():
             expired.set()
-            self._kill(process)
+            if process.poll() is None:
+                self._kill(process)
 
         timer = threading.Timer(self.timeout, expire)
         timer.daemon = True
@@ -113,7 +114,7 @@ class LbrConversion:
             yield process
             if self._aborted.is_set() or phase in self._cancelled_phases:
                 raise CancelledError("LBR conversion cancelled")
-            if expired.is_set():
+            if expired.is_set() and process.poll() != 0:
                 raise TimeoutError(f"Conversion command timed out after {self.timeout}s: {command[0]}")
         finally:
             timer.cancel()

@@ -588,6 +588,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         if (GetProjectSettings()) {
             settings.ProjectSettings = *GetProjectSettings();
+            settings.LangVer = settings.ProjectSettings.LangVer.GetOrElse(settings.LangVer);
         }
         settings.File = fullName;
         settings.ClusterMapping = ClusterMapping_;

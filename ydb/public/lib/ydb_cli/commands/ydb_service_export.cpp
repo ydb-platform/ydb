@@ -20,6 +20,8 @@ static const TString AppendPrefix = "<append=true>";
 
 namespace {
 
+    constexpr ui32 MaxParquetRowGroupSize = 10000000;
+
     const char slashC = '/';
     const TStringBuf slash(&slashC, 1);
 
@@ -552,6 +554,18 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonDestinationPrefix);
 
+    config.Opts->AddLongOption("file-format",
+            "Format of table data files. Supported values are csv (YDB backup CSV with URL-encoded strings) and parquet."
+            " Parquet requires the EnableExportInParquet server feature flag.")
+        .RequiredArgument("FORMAT").StoreResult(&FileFormat).DefaultValue(FileFormat)
+        .ChoicesWithCompletion({{"csv", "YDB backup CSV"}, {"parquet", "Apache Parquet"}});
+
+    config.Opts->AddLongOption("parquet-row-group-size", TStringBuilder()
+            << "Number of rows per Parquet row group. Requires --file-format parquet."
+            << " Allowed range is 1 to " << MaxParquetRowGroupSize
+            << " (default: " << NExport::TParquetFormat{}.RowGroupSize_ << ").")
+        .RequiredArgument("ROWS").StoreResult(&ParquetRowGroupSize);
+
     config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
@@ -566,6 +580,18 @@ void TCommandExportToS3::Config(TConfig& config) {
 
 void TCommandExportToS3::Parse(TConfig& config) {
     TCommandExportBase::Parse(config);
+
+    if (ParquetRowGroupSize) {
+        if (FileFormat != "parquet") {
+            throw TMisuseException() << "--parquet-row-group-size requires --file-format parquet";
+        }
+        if (*ParquetRowGroupSize == 0 || *ParquetRowGroupSize > MaxParquetRowGroupSize) {
+            throw TMisuseException() << "--parquet-row-group-size must be between 1 and " << MaxParquetRowGroupSize;
+        }
+    }
+    if (FileFormat == "parquet" && (EncryptionAlgorithm || EncryptionKey)) {
+        throw TMisuseException() << "--file-format parquet is incompatible with YDB backup encryption";
+    }
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
@@ -595,6 +621,14 @@ int TCommandExportToS3::Run(TConfig& config) {
 
     if (CommonDestinationPrefix) {
         settings.DestinationPrefix(CommonDestinationPrefix);
+    }
+
+    if (FileFormat == "parquet") {
+        TParquetFormat format;
+        if (ParquetRowGroupSize) {
+            format.RowGroupSize(*ParquetRowGroupSize);
+        }
+        settings.Format(format);
     }
 
     const bool encryption = EncryptionAlgorithm && EncryptionKey;

@@ -133,6 +133,7 @@ std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
         EndpointCountGauge_.SetValue(Records_.size());
         EndpointActiveGauge_.SetValue(Records_.size() - penalized);
         BestK_ = bestK;
+        PessimizedEndpointCount_ = penalized;
         const int ratio = penalized ? 100 * penalized / Records_.size() : 0;
         PessimizationRatio_.store(ratio);
         PessimizationRatioGauge_.SetValue(ratio);
@@ -195,8 +196,8 @@ bool TEndpointElectorSafe::PessimizeEndpointUnlocked(const std::string& endpoint
         it->second.Record.Priority = PessimizedPriority;
     }
 
-    const int pessimizationRatio = PessimizationRatio_.load();
-    const auto newRatio = (pessimizationRatio * Records_.size() + 100) / Records_.size();
+    ++PessimizedEndpointCount_;
+    const auto newRatio = PessimizedEndpointCount_ * 100 / Records_.size();
     PessimizationRatio_.store(newRatio);
     PessimizationRatioGauge_.SetValue(newRatio);
     EndpointActiveGauge_.Dec();

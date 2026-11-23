@@ -1099,3 +1099,32 @@ def _TS_OUTPUT_PREFIX(unit: ymake.Unit, *args: str) -> None:
         raise ValueError("TS_OUTPUT_PREFIX accepts at most one path")
     prefix = args[0] if args else unit.get("MODDIR")
     unit.set(["_TS_OUTPUT_PREFIX_ARG", shlex.quote("--output-prefix=" + prefix)])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _NOTS_TOOL_CONFIGURE(unit: ymake.Unit):
+    implementation = unit.get("TS_NOTS_BUILDER_IMPL")
+    if implementation == "python":
+        return
+    if implementation != "typescript":
+        raise ValueError("TS_NOTS_BUILDER_IMPL must be python or typescript")
+
+    # Building the source runner requires the CLI and its workspace peers.
+    # Their own makefiles select the pinned builder and keep the graph acyclic.
+    pinned_typescript = (
+        unit.get("TS_USE_PREBUILT_NOTS_TOOL") == "yes" and unit.get("_NOTS_BOOTSTRAP_TYPESCRIPT") == "yes"
+    )
+    bootstrap = not pinned_typescript and unit.get("MODDIR") in unit.get("_NOTS_BOOTSTRAP_MODULES").split()
+    tool_path = "devtools/frontend_build_platform/nots/" + ("bootstrap" if bootstrap else "builder/typescript")
+    typescript = not bootstrap or unit.get("_NOTS_BOOTSTRAP_TYPESCRIPT") == "yes"
+    suffix = ""
+    if typescript:
+        # Build commands use the shared host resource. Recipes retain the bundled
+        # fallback so released yatest can run them without new DART fields.
+        unit.onpeerdir(["devtools/frontend_build_platform/nots/bsdtar"])
+        suffix += ' ${env:"NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"}'
+        suffix += ' ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/settings.schema.json"}'
+    unit.set(["NOTS_TOOL", '${tool:"' + tool_path + '"} ${hide:TS_FAKEID} ${hide;input:T0_SETTINGS_PATH}' + suffix])
+    unit.set(["_NOTS_RECIPE_DEPENDS", tool_path])
+    unit.set(["_NOTS_RECIPE", tool_path + ("/nots-recipe" if typescript else "/bootstrap")])

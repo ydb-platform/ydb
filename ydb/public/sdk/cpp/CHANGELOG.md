@@ -2,6 +2,8 @@
 
 * The driver refreshes discovered endpoints when a data RPC loses its transport or a previously ready data channel loses connectivity between calls, so new requests and Topic reconnects can follow a database switchover.
 
+* Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
+
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 
 * Added `TOperation::HasMetadata()` to check whether operation metadata is available.

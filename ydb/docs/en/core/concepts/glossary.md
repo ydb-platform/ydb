@@ -76,13 +76,10 @@ Each dynamic group belongs to a single [database](#database) and stores that dat
 
 Virtual storage groups decouple the physical placement of data from the logical allocation of storage to tablets. This gives the administrator more flexibility in storage management, including the ability to decommission dynamic groups and reduce the storage allocated to a particular [database](#database).
 
-<<<<<<< HEAD
-=======
 #### BlobDepot {#blob-depot}
 
 **BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other dynamic groups or in S3-compatible storage and is also used to decommission dynamic groups.
 
->>>>>>> 82711400d44 (Улучшения в общих описаниях концепций стораджа (#56393))
 ### Storage pool {#storage-pool}
 
 **Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.

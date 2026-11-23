@@ -911,8 +911,10 @@ public:
 
         auto txCtx = GetTxContextForCompilation();
 
+        auto query = QueryState->BuildQueryId(GetEncodedGUCSettings(), txCtx);
+
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GetEncodedGUCSettings(), Counters, SelfId(), txCtx, QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, query, Counters, SelfId(), QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -932,7 +934,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, GetEncodedGUCSettings(), txCtx);
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, std::move(query), txCtx);
         YDB_LOG_DEBUG("Sending CompileQuery request",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},

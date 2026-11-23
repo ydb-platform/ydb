@@ -629,6 +629,7 @@ public:
     }
 
     NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
+    bool UsePessimisticLocks(TKqpTransactionContext* txCtx) const;
 
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
@@ -641,16 +642,18 @@ public:
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
 
+    TMaybe<TKqpQueryId> BuildQueryId(TStringBuf encodedGUCSettings, TKqpTransactionContext* txCtx) const;
+
     bool TryGetFromCache(
         TKqpQueryCache& cache,
-        TStringBuf encodedGUCSettings,
+        TMaybe<TKqpQueryId>& query,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TStringBuf encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie,
+        const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx = nullptr);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
     std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TStringBuf encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);

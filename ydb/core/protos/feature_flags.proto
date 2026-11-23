@@ -354,6 +354,7 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     // Bumps GROUP BY HOP state version to 3
     optional bool EnableHoppingWindowStartCheck = 346 [default = false];
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
@@ -366,5 +367,10 @@ message TFeatureFlags {
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
+    // (LOGBROKER-10680). Default false is
+    // the legacy zeroing behaviour that undercounted the consumed
+    // write quota.
+    optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
+    optional bool EnableTopicReplication = 396 [default = false];
     optional bool ShareShardedMkqlProgram = 399 [default = false];
 }

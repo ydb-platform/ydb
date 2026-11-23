@@ -17,6 +17,9 @@
 
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <util/generic/size_literals.h>
+#include <util/system/sanitizers.h>
+
 #include <arrow/api.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -173,6 +176,67 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
             UNIT_ASSERT_VALUES_EQUAL(keys->Value(i), i);
             UNIT_ASSERT_VALUES_EQUAL(values->GetString(i), TStringBuilder() << "value_" << i);
         }
+    }
+
+    // Fewer rows than the row group size, but more than 2 GiB of data in one column: arrow binary arrays
+    // use 32-bit offsets, so the row group cannot be built. Collect() has to report the error (the export
+    // fails) instead of aborting the process.
+    Y_UNIT_TEST(ShouldReportArrowCapacityErrorForLargeRowGroup) {
+        if (NSan::PlainOrUnderSanitizer(false, true)) {
+            return; // the arrow buffer alone takes 2 GiB
+        }
+
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        const ui32 rowGroupSize = 10000;
+        const TString value(1_MB, 'x');
+        ui32 collected = 0;
+        TString error;
+        bool lastPartPrepared = true;
+
+        auto produce = [&]() {
+            IExport::TTableColumns columns;
+            columns[0] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
+            columns[1] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
+
+            NKikimrSchemeOp::TBackupTask task;
+            ConfigureParquetBackupTask(task, EParquetExportSettings::S3, rowGroupSize);
+
+            TS3Export exportTask(task, columns);
+            THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
+            Y_ENSURE(buffer, "CreateBuffer returned null");
+
+            buffer->ColumnsOrder({0, 1});
+
+            for (ui32 key = 0; key < rowGroupSize; ++key) {
+                NTable::IScan::TRow row;
+                row.Init(2);
+                row.Set(0, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(key));
+                row.Set(1, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(value.data(), value.size()));
+                if (!buffer->Collect(row)) {
+                    error = buffer->GetError();
+                    break;
+                }
+                ++collected;
+            }
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(true, stats));
+            lastPartPrepared = bool(event);
+        };
+
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(new TCbActor(produce, edge));
+        runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
+
+        UNIT_ASSERT_C(!error.empty(), "all " << collected << " rows were collected");
+        UNIT_ASSERT_GE(collected, 2000u);
+        UNIT_ASSERT_LT(collected, rowGroupSize);
+        UNIT_ASSERT_STRING_CONTAINS(error, "Failed to append row to arrow batch");
+        UNIT_ASSERT_STRING_CONTAINS(error, "Capacity error");
+        UNIT_ASSERT_STRING_CONTAINS(error, "array cannot contain more than");
+        UNIT_ASSERT(!lastPartPrepared);
     }
 }
 

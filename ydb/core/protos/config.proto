@@ -2717,6 +2717,21 @@ message THiveConfig {
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 300]; // seconds
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
+
+    message TNamedResourceSettings {
+        enum EBalanceMode {
+            NO_BALANCE = 0; // observe only: values are stored and shown, but never trigger tablet moves
+            SATURATION = 1; // balance when some node exceeds its maximum while another one has spare capacity
+            SCATTER = 2; // balance by spread of normalized usage between nodes, like the built-in resources
+        }
+
+        optional string Name = 1; // Resource name, or a prefix ending with '*'. Exact match wins over prefix, longer prefix wins over shorter.
+        optional EBalanceMode BalanceMode = 2; // How the resource is balanced.
+        optional double MinScatterToBalance = 3 [default = 0.5]; // Scatter threshold for SCATTER balance mode, as a normalized fraction.
+        optional uint64 DefaultMaximum = 4; // Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource.
+    }
+    repeated TNamedResourceSettings NamedResources = 97; // Settings of named resources (e.g. resource broker queues). Entries override built-in defaults.
+    optional bool TrackResourceBrokerUsage = 100 [default = true]; // Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported.
 }
 
 message THealthCheckConfig {

@@ -1313,6 +1313,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
+    TMaybe<TString> Bootstrap;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 
     TRowConsistency& EnsureRowConsistency() {

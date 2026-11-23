@@ -40,6 +40,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         READ_TXS_COOKIE = 6,
     };
 
+    void OnActivateExecutor(const TActorContext& ctx) override;
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 

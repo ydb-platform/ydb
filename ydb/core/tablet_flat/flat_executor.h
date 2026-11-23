@@ -457,6 +457,7 @@ class TExecutor
     THolder<TTabletCountersBase> AppCounters;
     THolder<TTabletCountersBase> CountersBaseline;
     THolder<TTabletCountersBase> AppCountersBaseline;
+    bool CountersPublishingEnabled = true;
     THolder<NMetrics::TResourceMetrics> ResourceMetrics;
 
     TAutoPtr<NTable::TDatabase> Database;
@@ -751,6 +752,7 @@ public:
     TExecutorCounters* GetCounters() override;
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
+    void SetCountersPublishingEnabled(bool enabled) override;
 
     virtual void SetPreloadTablesData(THashSet<ui32> tables) override;
 

@@ -1080,6 +1080,27 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         )", "column tables");
     }
 
+    Y_UNIT_TEST(ExternalTableRejectsExpressionDefault) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(R"(
+            CREATE EXTERNAL DATA SOURCE ExternalSource WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="my-bucket", AUTH_METHOD="NONE"
+            );
+        )");
+        fixture.Rejects(R"(
+            CREATE EXTERNAL TABLE TestTable (
+                v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul
+            ) WITH (DATA_SOURCE="/Root/ExternalSource", LOCATION="/");
+        )", "DEFAULT expressions are not supported in external tables");
+        fixture.Exec(R"(
+            CREATE EXTERNAL TABLE TestTable (v Uint64)
+            WITH (DATA_SOURCE="/Root/ExternalSource", LOCATION="/");
+        )");
+    }
+
     Y_UNIT_TEST(AddColumnWithDefaultExprRejected) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL("v Int32"));

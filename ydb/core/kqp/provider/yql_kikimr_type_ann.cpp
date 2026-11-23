@@ -885,6 +885,12 @@ namespace {
             }
 
             if (!isGenerated) {
+                if (meta.TableType == ETableType::ExternalTable) {
+                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Pos()),
+                        "DEFAULT expressions are not supported in external tables"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 const auto* columnAnnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
                 const auto& columnType = columnMeta.NotNull ? RemoveOptionality(*columnAnnType) : *columnAnnType;
                 TExprNode::TPtr lambda;

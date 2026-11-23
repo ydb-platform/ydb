@@ -109,7 +109,7 @@ void TTargetBase::SetDstState(const EDstState value) {
     if (DstState != EDstState::Ready) {
         Reset(WorkerRegistar);
     }
-    if (DstState != EDstState::Alter) {
+    if (DstState != EDstState::Alter && DstState != EDstState::PreparingCdc) {
         Reset(DstAlterer);
     }
     if (DstState != EDstState::Removing) {
@@ -255,8 +255,13 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         if (IsTopicTarget(Kind) && Replication->GetDesiredState() == TReplication::EState::Paused) {
             break;
         }
-        if (!DstCreator && Kind != ETargetKind::CdcTopic) {
+        if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+        }
+        break;
+    case EDstState::PreparingCdc:
+        if (Replication->GetDesiredState() != TReplication::EState::Paused && !DstAlterer) {
+            DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
     case EDstState::Ready:

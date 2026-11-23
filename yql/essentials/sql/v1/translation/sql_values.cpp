@@ -6,13 +6,14 @@
 #include "sql_expression.h"
 #include "source.h"
 
+#include <yql/essentials/sql/v1/proto_parser/reflection.h>
+
 namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
 TSourcePtr TSqlValues::Build(const TRule_values_stmt& node, TPosition& valuesPos, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos) {
-    Token(node.GetToken1());
-    valuesPos = Ctx_.Pos();
+    valuesPos = Ctx_.Position(node);
 
     TVector<TVector<TNodePtr>> rows;
     const auto& rowList = node.GetRule_values_source_row_list2();
@@ -43,7 +44,7 @@ TSourcePtr TSqlValues::Build(const TRule_values_stmt& node, TPosition& valuesPos
 
     TVector<TNodePtr> labels;
     for (size_t i = 0; i < columnsCount; ++i) {
-        labels.push_back(BuildQuotedAtom(derivedColumnsPos, columns[i]));
+        labels.push_back(BuildQuotedAtom(i < derivedColumns.size() ? derivedColumnsPos : valuesPos, columns[i]));
     }
 
     TVector<TNodePtr> items;
@@ -75,8 +76,7 @@ bool TSqlValues::BuildRows(const TRule_values_source_row_list& node, TVector<TVe
             return false;
         }
         if (rows.back().size() != rowSize) {
-            Token(valuesSourceRow.GetRule_values_source_row2().GetToken1());
-            Error() << "All VALUES items should have same size: expecting " << rowSize << ", got " << rows.back().size();
+            Ctx_.Error(valuesSourceRow.GetRule_values_source_row2()) << "All VALUES items should have same size: expecting " << rowSize << ", got " << rows.back().size();
             return false;
         }
     }
@@ -92,7 +92,7 @@ TSourceResult TSqlValues::ValuesSource(const TRule_values_source& node, const TV
                                        const TString& operationName)
 {
     Ctx_.IncrementMonCounter("sql_features", "ValuesSource");
-    TPosition pos(Ctx_.Pos());
+    const auto pos = Ctx_.Position(node);
     switch (node.Alt_case()) {
         case TRule_values_source::kAltValuesSource1: {
             TVector<TVector<TNodePtr>> rows{{}};
@@ -131,7 +131,7 @@ TSourceResult TSqlIntoValues::Build(const TRule_into_values_source& node, const 
         }
         case NSQLv1Generated::TRule_into_values_source::kAltIntoValuesSource2:
             Ctx_.IncrementMonCounter("sql_errors", "DefaultValuesOrOther");
-            AltNotImplemented("into_values_source", node);
+            Ctx_.Error(node) << "into_values_source: alternative is not implemented yet: " << AltDescription(node);
             return std::unexpected(ESQLError::Basic);
         case NSQLv1Generated::TRule_into_values_source::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
@@ -142,7 +142,7 @@ TSourceResult TSqlAsValues::Build(const TRule_values_source& node, const TString
     switch (node.Alt_case()) {
         case TRule_values_source::kAltValuesSource1: {
             Ctx_.IncrementMonCounter("sql_errors", "UnknownValuesSource");
-            Error() << "AS VALUES statement is not supported for " << operationName << ".";
+            Ctx_.Error(node) << "AS VALUES statement is not supported for " << operationName << ".";
             return std::unexpected(ESQLError::Basic);
         }
         case TRule_values_source::kAltValuesSource2: {

@@ -51,6 +51,7 @@ public:
         Paused,
         Attaching, // Deprecated.
         WaitingImport,
+        PreparingCdc,
         Error = Max<ui8>()
     };
 

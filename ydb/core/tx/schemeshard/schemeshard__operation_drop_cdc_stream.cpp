@@ -4,8 +4,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 
-#include <util/generic/algorithm.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
@@ -13,68 +11,6 @@ namespace NKikimr::NSchemeShard {
 namespace NCdc {
 
 namespace {
-
-TString CheckReplicationStreamRemoval(const TTxTransaction& tx, const TPath& tablePath,
-        const TPath& streamPath, const TOperationContext& context)
-{
-    const auto& op = tx.GetDropCdcStream();
-    if (!tx.HasExpectedReplicationOwnerPathId()) {
-        return {};
-    }
-
-    using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
-    if (!tx.GetInternal() || !tablePath.IsCommonSensePath() || op.StreamNameSize() != 1) {
-        return "Managed CDC removal requires an internal request for one stream";
-    }
-
-    const auto expectedOwner = TPathId::FromProto(tx.GetExpectedReplicationOwnerPathId());
-    const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
-    if (!expectedOwner.OwnerId || !expectedOwner.LocalPathId
-        || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != expectedOwner
-        || config.GetMode() != TConfig::REPLICATION_MODE_READ_ONLY
-        || config.GetConsistencyLevel() != TConfig::CONSISTENCY_LEVEL_ROW
-        || config.GetImportState() == TConfig::WAITING_IMPORT
-        || config.GetImportState() == TConfig::IMPORTING)
-    {
-        return "Managed CDC removal requires the current owner of a read-only ROW replica";
-    }
-
-    const auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
-    if (stream->AlterData || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled) {
-        return "Managed CDC removal requires a Disabled stream";
-    }
-
-    const auto topicPath = streamPath.Child("streamImpl");
-    const auto checks = topicPath.Check();
-    checks.NotEmpty().IsResolved().NotDeleted().IsPQGroup().NotUnderOperation();
-    if (!checks) {
-        return "Managed CDC removal requires the exact idle child topic";
-    }
-
-    // Older SchemeShards ignore the replication owner. Keep the destructive request
-    // fenced by path versions they already understand, including after detach.
-    const auto hasPathFence = [&](const TPath& path) {
-        const auto& conditions = tx.GetApplyIf();
-        return FindIf(conditions, [&](const auto& condition) {
-            return condition.HasPathId() && condition.GetPathId() == path.Base()->PathId.LocalPathId
-                && condition.HasPathVersion() && !condition.GetCheckEntityVersion();
-        }) != conditions.end();
-    };
-    if (!hasPathFence(tablePath) || !hasPathFence(streamPath) || !hasPathFence(topicPath)) {
-        return "Managed CDC removal requires legacy path-version guards for table, stream and topic";
-    }
-
-    const auto topic = context.SS->Topics.at(topicPath.Base()->PathId);
-    const auto topicConfig = topic->GetTabletConfig();
-    if (topic->AlterData
-        || topicConfig.GetReplicationSourceConsumer().empty()
-        || topicConfig.GetPartitionConfig().HasMirrorFrom())
-    {
-        return "Managed CDC removal requires unchanged topic configuration and stopped mirroring";
-    }
-
-    return {};
-}
 
 class TPropose: public TSubOperationState {
 public:
@@ -243,7 +179,7 @@ public:
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
             // Dropping the table must also remove its CDC streams.
-            if (checks && !tablePath.IsUnderDeleting() && !Transaction.HasExpectedReplicationOwnerPathId()) {
+            if (checks && !tablePath.IsUnderDeleting()) {
                 checks.NotAsyncReplicaTable();
             }
 
@@ -255,11 +191,6 @@ public:
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
-        }
-
-        if (const auto error = CheckReplicationStreamRemoval(Transaction, tablePath, streamPath, context)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, error);
-            return result;
         }
 
         auto guard = context.DbGuard();
@@ -463,12 +394,9 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .NotUnderDeleting()
                 .NotUnderOperation();
-
-            if (checks && !Transaction.HasExpectedReplicationOwnerPathId()) {
-                checks.NotAsyncReplicaTable();
-            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -497,10 +425,6 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-            if (const auto error = CheckReplicationStreamRemoval(Transaction, tablePath, streamPath, context)) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, error);
                 return result;
             }
             streamPaths.push_back(streamPath);
@@ -602,8 +526,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
         const TOperationId& opId,
         const TPath& workingDirPath,
         const TString& tableName,
-        const TString& streamName,
-        bool dropOwnedStream)
+        const TString& streamName)
 {
     const auto tablePath = workingDirPath.Child(tableName);
     {
@@ -615,12 +538,9 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
             .IsResolved()
             .NotDeleted()
             .IsTable()
+            .NotAsyncReplicaTable()
             .NotUnderDeleting()
             .NotUnderOperation();
-
-        if (checks && !dropOwnedStream) {
-            checks.NotAsyncReplicaTable();
-        }
 
         if (checks && !tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
@@ -675,21 +595,11 @@ void DoDropStream(
         const TPath& tablePath,
         const TVector<TPath>& streamPaths,  // Now handles multiple streams
         const TTxId lockTxId,
-        TOperationContext& context,
-        const TTxTransaction* transaction)
+        TOperationContext& context)
 {
-    const auto copyReplicationGuard = [&](TTxTransaction& outTx) {
-        if (transaction && transaction->HasExpectedReplicationOwnerPathId()) {
-            outTx.SetInternal(transaction->GetInternal());
-            outTx.MutableExpectedReplicationOwnerPathId()->CopyFrom(transaction->GetExpectedReplicationOwnerPathId());
-            *outTx.MutableApplyIf() = transaction->GetApplyIf();
-        }
-    };
-
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);
         outTx.MutableDropCdcStream()->CopyFrom(op);  // Preserves all stream names
-        copyReplicationGuard(outTx);
 
         if (lockTxId != InvalidTxId) {
             outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
@@ -728,10 +638,6 @@ void DoDropStream(
     for (const auto& streamPath : streamPaths) {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
         outTx.MutableDrop()->SetName(streamPath.Base()->Name);
-        if (transaction && transaction->HasExpectedReplicationOwnerPathId()) {
-            outTx.MutableDropCdcStream()->CopyFrom(op);
-            copyReplicationGuard(outTx);
-        }
 
         if (lockTxId != InvalidTxId) {
             outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
@@ -810,21 +716,17 @@ bool CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperation
         return false;
     }
 
-    const auto firstStreamChecksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamNames[0], tx.HasExpectedReplicationOwnerPathId());
+    const auto firstStreamChecksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamNames[0]);
     if (std::holds_alternative<ISubOperation::TPtr>(firstStreamChecksResult)) {
         result = {std::get<ISubOperation::TPtr>(firstStreamChecksResult)};
         return false;
     }
 
     const auto [tablePath, firstStreamPath] = std::get<TStreamPaths>(firstStreamChecksResult);
-    if (const auto error = CheckReplicationStreamRemoval(tx, tablePath, firstStreamPath, context)) {
-        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, error)};
-        return false;
-    }
     streamPaths.push_back(firstStreamPath);
 
     for (size_t i = 1; i < streamNames.size(); ++i) {
-        const auto checksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamNames[i], tx.HasExpectedReplicationOwnerPathId());
+        const auto checksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamNames[i]);
         if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
             result = {std::get<ISubOperation::TPtr>(checksResult)};
             return false;
@@ -863,7 +765,7 @@ bool CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperation
         return false;
     }
 
-    DoDropStream(result, op, opId, workingDirPath, tablePath, streamPaths, lockTxId, context, &tx);
+    DoDropStream(result, op, opId, workingDirPath, tablePath, streamPaths, lockTxId, context);
 
     return true;
 }

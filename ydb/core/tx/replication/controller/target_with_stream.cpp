@@ -219,7 +219,9 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
 }
 
 bool TTargetWithStream::CanDetachWithoutStream() const {
-    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done
+        || (GetKind() == ETargetKind::CdcTopic && GetReplication()->GetState() == TReplication::EState::Removing))
+    {
         return false;
     }
 
@@ -317,6 +319,16 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     case EStreamState::Removed:
     case EStreamState::Error:
         break;
+    }
+
+    const bool startingTable = GetDstState() == EDstState::Ready || GetDstState() == EDstState::PreparingCdc
+        || (GetDstState() == EDstState::Alter && replication->GetDesiredState() == TReplication::EState::Ready);
+    if (GetKind() == ETargetKind::Table && startingTable && !HasWorkers()) {
+        for (const auto* child : GetCdcChildren(*replication, GetId())) {
+            if (child->GetDstState() != EDstState::Ready) {
+                return;
+            }
+        }
     }
 
     TTargetBase::Progress(ctx);

@@ -9,9 +9,13 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -21,9 +25,13 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
+#include <utility>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
+
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     void DescribePath(ui32 idx) {
@@ -150,10 +158,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
             auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
-            target.CdcStreams = result.GetTableDescription().GetChangefeedDescriptions();
-            EraseIf(target.CdcStreams, [](const auto& stream) {
-                return stream.GetAttributes().contains("__async_replication");
-            });
+            if (CdcOwner) {
+                target.CdcStreams = result.GetTableDescription().GetChangefeedDescriptions();
+                EraseIf(target.CdcStreams, [](const auto& stream) {
+                    return stream.GetFormat() == NYdb::NTable::EChangefeedFormat::Unknown
+                        || stream.GetAttributes().contains("__async_replication");
+                });
+            }
 
             YDB_LOG_INFO("Add target",
                 {"srcPath", target.Config->GetSrcPath()},
@@ -326,6 +337,14 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             return;
         }
 
+        if (Failed.empty() && AnyOf(ToAdd, [](const auto& target) { return !target.CdcStreams.empty(); })) {
+            Become(&TThis::StateRegisterChangefeeds);
+            return AllocateRegistrationTx();
+        }
+        Reply();
+    }
+
+    void Reply() {
         if (Failed) {
             Send(Parent, new TEvPrivate::TEvDiscoveryTargetsResult(ReplicationId, std::move(Failed)));
         } else {
@@ -333,6 +352,78 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         }
 
         PassAway();
+    }
+
+    void AllocateRegistrationTx() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+    }
+
+    void RegisterChangefeeds(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        RegistrationTxId = ev->Get()->TxId;
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(RegistrationTxId, CdcOwner.OwnerId);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterReplication);
+        tx.SetInternal(true);
+        auto& alter = *tx.MutableAlterReplication();
+        CdcOwner.ToProto(alter.MutablePathId());
+        alter.SetManagesChangefeeds(true);
+
+        PipeCache = ev->Get()->Services.LeaderPipeCache;
+        Send(PipeCache, new TEvPipeCache::TEvForward(request.Release(), CdcOwner.OwnerId));
+    }
+
+    void HandleRegistration(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetTxId() != RegistrationTxId) {
+            return;
+        }
+        switch (record.GetStatus()) {
+        case NKikimrScheme::StatusSuccess:
+            return Reply();
+        case NKikimrScheme::StatusAccepted:
+            Send(PipeCache, new TEvPipeCache::TEvForward(
+                new TEvSchemeShard::TEvNotifyTxCompletion(RegistrationTxId), CdcOwner.OwnerId));
+            return;
+        case NKikimrScheme::StatusMultipleModifications:
+        case NKikimrScheme::StatusNotAvailable:
+        case NKikimrScheme::StatusResourceExhausted:
+            return RetryRegistration();
+        default:
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(record.GetReason());
+            Failed.emplace_back(ToAdd.front().Config->GetDstPath(), NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
+            return Reply();
+        }
+    }
+
+    void RegistrationComplete(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+        if (RegistrationTxId && ev->Get()->Record.GetTxId() == RegistrationTxId) {
+            Reply();
+        }
+    }
+
+    void RetryRegistration() {
+        if (std::exchange(RegistrationTxId, 0)) {
+            Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+        }
+    }
+
+    STATEFN(StateRegisterChangefeeds) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, RegisterChangefeeds);
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, HandleRegistration);
+            hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, RegistrationComplete);
+            sFunc(TEvPipeCache::TEvDeliveryProblem, RetryRegistration);
+            sFunc(TEvents::TEvWakeup, AllocateRegistrationTx);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(CdcOwner.OwnerId));
+        }
+        TActorBootstrapped<TTargetDiscoverer>::PassAway();
     }
 
     void ListDirectory(const std::pair<TString, TString>& path) {
@@ -446,11 +537,12 @@ public:
     }
 
     explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-        const NKikimrReplication::TReplicationConfig& config)
+        const NKikimrReplication::TReplicationConfig& config, TPathId cdcOwner)
         : Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Config(config)
+        , CdcOwner(cdcOwner)
         , LogPrefix(CreateActorLogPrefix("TargetDiscoverer", ReplicationId))
         , Backoff(5)
     {
@@ -493,6 +585,9 @@ private:
     const ui64 ReplicationId;
     const TActorId YdbProxy;
     const NKikimrReplication::TReplicationConfig Config;
+    const TPathId CdcOwner;
+    TActorId PipeCache;
+    ui64 RegistrationTxId = 0;
     TVector<std::pair<TString, TString>> Paths;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -511,9 +606,9 @@ private:
 }; // TTargetDiscoverer
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    const NKikimrReplication::TReplicationConfig& config)
+    const NKikimrReplication::TReplicationConfig& config, TPathId cdcOwner)
 {
-    return new TTargetDiscoverer(parent, rid, proxy, config);
+    return new TTargetDiscoverer(parent, rid, proxy, config, cdcOwner);
 }
 
 }

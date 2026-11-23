@@ -776,6 +776,11 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
+    if (ev->Get()->MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(ev->Get()->MirrorerActor)) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
+        return;
+    }
+
     const bool replicatedPartition = ReplicationEnabled(Config);
     const bool replicationDisabled = replicatedPartition
         && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
@@ -1201,10 +1206,9 @@ void TPartition::ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& paramete
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    if (p.MirrorerActor && (!Mirrorer || p.MirrorerActor != Mirrorer->Actor)) {
+    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(p.MirrorerActor)) {
         WriteInflightSize -= p.Msg.Data.size();
-        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::BAD_REQUEST,
-                           "Write from an inactive mirrorer");
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
         return EProcessResult::ContinueDrop;
     }
 
@@ -1403,6 +1407,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     const auto& ctx = ActorContext();
 
+    if (p.MirrorerActor && IsCdcReplicationTopic() && !IsCurrentMirrorer(p.MirrorerActor)) {
+        ScheduleReplyError(p.Cookie, false, NPersQueue::NErrorCode::ERROR, "CDC mirroring has stopped");
+        return false;
+    }
+
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
@@ -1412,7 +1421,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 defaultOffset = Max(curOffset, BlobEncoder.MirroredOffset);
+    ui64 defaultOffset = CdcReplicationTrimTxId ? curOffset : Max(curOffset, BlobEncoder.MirroredOffset);
     if (AppData(ctx)->PQConfig.HasMinOffset()) {
         defaultOffset = Max(defaultOffset, AppData(ctx)->PQConfig.GetMinOffset());
     }

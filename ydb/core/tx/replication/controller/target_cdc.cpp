@@ -1,5 +1,5 @@
 #include "target_cdc.h"
-#include "dst_cdc_creator.h"
+#include "dst_creator.h"
 #include "schema.h"
 
 #include <ydb/core/protos/replication.pb.h>
@@ -19,13 +19,27 @@ bool TTargetCdc::ActivateOnDetach() const {
     return Cdc.GetActivateOnDetach();
 }
 
-bool TTargetCdc::OnMirrorStopped(NIceDb::TNiceDb& db, const TActorContext& ctx) {
-    if (Cdc.GetPhase() != TCdc::STOPPING && Cdc.GetPhase() != TCdc::STOPPING_PRESERVE) {
+bool TTargetCdc::OnDstAltered(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    switch (Cdc.GetPhase()) {
+    case TCdc::STOPPING:
+        Cdc.SetPhase(TCdc::TRIMMING);
+        break;
+    case TCdc::STOPPING_PRESERVE:
+        Cdc.SetPhase(TCdc::PREPARED);
+        break;
+    case TCdc::TRIMMING:
+        if (GetReplication()->GetState() == TReplication::EState::Removing) {
+            Cdc.SetPhase(TCdc::FINISHED);
+            SetDstState(EDstState::Done);
+        } else {
+            Cdc.SetPhase(TCdc::PREPARED);
+        }
+        break;
+    default:
         return false;
     }
 
     Shutdown(ctx);
-    Cdc.SetPhase(Cdc.GetPhase() == TCdc::STOPPING_PRESERVE ? TCdc::PREPARED : TCdc::RESETTING);
     db.Table<TControllerSchema::Targets>().Key(GetReplication()->GetId(), GetId()).Update(
         NIceDb::TUpdate<TControllerSchema::Targets::Cdc>(Cdc.SerializeAsString()));
     return true;
@@ -37,35 +51,27 @@ bool TTargetCdc::IsExpectedDstCreator(const TActorId& actor) const {
 
 void TTargetCdc::Progress(const TActorContext& ctx) {
     auto* replication = GetReplication();
-    if (GetDstState() == EDstState::Alter) {
-        if (Cdc.GetPhase() == TCdc::RESETTING) {
-            for (const auto* sibling : GetCdcChildren(*replication, Cdc.GetParentTargetId())) {
-                if (sibling->GetId() < GetId()
-                    && sibling->GetCdc().GetPhase() != TCdc::PREPARED
-                    && sibling->GetCdc().GetPhase() != TCdc::FINISHED)
-                {
-                    return;
-                }
-            }
+    if (GetDstState() == EDstState::Creating && Cdc.HasInitialCreateTxId()) {
+        if (!HandoffActor) {
+            HandoffActor = ctx.Register(CreateDstCreator(replication, GetId(), ctx));
         }
-        switch (Cdc.GetPhase()) {
-        case TCdc::RESETTING:
-            if (!HandoffActor) {
-                HandoffActor = ctx.Register(CreateDstCdcResetter(ctx.SelfID, replication->GetSchemeShardId(),
-                    replication->GetDatabase(), replication->GetPathId(), replication->GetId(), GetId(),
-                    TDstCdcResetSettings{
-                        .TablePathId = TPathId::FromProto(Cdc.GetTablePathId()),
-                        .StreamPathId = TPathId::FromProto(Cdc.GetStreamPathId()),
-                        .TopicPathId = GetDstPathId(),
-                        .CreateTxId = Cdc.GetResetCreateTxId(),
-                        .Definition = Cdc.GetDefinition(),
-                        .ActivateOnDetach = ActivateOnDetach(),
-                    }));
-            }
+        return;
+    }
+    if (GetDstState() == EDstState::Creating && GetStreamState() == EStreamState::Ready) {
+        const auto* table = replication->FindTarget(Cdc.GetParentTargetId());
+        if (!table || !table->GetDstPathId()
+            || (table->GetDstState() != EDstState::Ready && table->GetDstState() != EDstState::Paused
+                && table->GetDstState() != EDstState::PreparingCdc))
+        {
             return;
+        }
+    }
+
+    if (GetDstState() == EDstState::Alter) {
+        switch (Cdc.GetPhase()) {
         case TCdc::RUNNING:
             if (replication->GetDesiredState() == TReplication::EState::Done) {
-                return; // No explicit reset policy has been admitted.
+                return; // No CDC handoff policy has been admitted.
             }
             break;
         case TCdc::PREPARED:
@@ -105,6 +111,9 @@ TVector<TTargetCdc*> GetCdcChildren(const TReplication& replication, ui64 parent
 
 void FinishCdcChildren(const TReplication& replication, ui64 parentId, NIceDb::TNiceDb& db) {
     for (auto* child : GetCdcChildren(replication, parentId)) {
+        if (child->GetCdc().GetPhase() == TCdc::FINISHED) {
+            continue;
+        }
         Y_ABORT_UNLESS(child->GetCdc().GetPhase() == TCdc::PREPARED);
         child->GetCdc().SetPhase(TCdc::FINISHED);
         child->SetDstState(TReplication::EDstState::Done);

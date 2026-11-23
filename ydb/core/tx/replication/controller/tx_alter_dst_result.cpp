@@ -54,7 +54,9 @@ public:
             return true;
         }
 
-        if (target->GetDstState() != TReplication::EDstState::Alter) {
+        if (target->GetDstState() != TReplication::EDstState::Alter
+            && target->GetDstState() != TReplication::EDstState::PreparingCdc)
+        {
             YDB_LOG_WARN_CTX(ctx, "Dst state mismatch",
                 {"rid", rid},
                 {"tid", tid},
@@ -68,7 +70,7 @@ public:
             if (auto* cdc = GetCdcTarget(target); cdc
                 && (removing || Replication->GetDesiredState() == TReplication::EState::Done))
             {
-                if (!cdc->OnMirrorStopped(db, ctx)) {
+                if (!cdc->OnDstAltered(db, ctx)) {
                     Replication.Reset();
                     return true;
                 }

@@ -1,7 +1,6 @@
 #include "logging.h"
 #include "private_events.h"
 #include "stream_remover.h"
-#include "target_cdc.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
@@ -163,6 +162,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             return TStringBuf(entry.Name) == name;
         });
         return child == children.end()
+            || (ChildPath == CdcTablePath
+                && !EqualToOneOf(child->Type, EType::Table, EType::Unknown))
             || (ChildPath == SrcPath
                 && !EqualToOneOf(child->Type, EType::Topic, EType::PqGroup, EType::Unknown));
     }
@@ -291,10 +292,10 @@ IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TAct
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     auto srcPath = target->GetSrcPath();
-    if (const auto* cdc = GetCdcTarget(target)) {
+    if (target->GetKind() == TReplication::ETargetKind::CdcTopic) {
         return CreateCdcStreamConsumerRemover(ctx.SelfID, replication->GetYdbProxy(),
-            replication->GetId(), targetId, TString(ExtractParent(target->GetSrcPath())),
-            cdc->GetCdc().GetDefinition().GetStreamDescription().GetName(), target->GetStreamConsumerName());
+            replication->GetId(), targetId, TString(ExtractParent(srcPath)),
+            TString(ExtractBase(srcPath)), target->GetStreamConsumerName());
     }
     if (target->GetKind() == TReplication::ETargetKind::Topic) {
         srcPath = CanonizePath(IsStartWithSlash(srcPath) ? srcPath

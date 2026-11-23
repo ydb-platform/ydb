@@ -16,10 +16,10 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/actors/resource_pool_tracker.h>
 #include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/common/service_id.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
-#include <ydb/services/workload_manager/service/service.h>
 
 namespace NKikimr::NWorkloadManager {
 

@@ -356,6 +356,14 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
+bool TPersQueue::IsWriteUnavailable() const {
+    return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
+}
+
+bool TPersQueue::IsWriteProhibited() const {
+    return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED;
+}
+
 bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
     if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
         return false;
@@ -2694,6 +2702,18 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "multiple commands in request: " << count);
+        return;
+    }
+
+    if (req.CmdWriteSize() > 0 && IsWriteUnavailable()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                   "Write to topic is temporarily disabled");
+        return;
+    }
+
+    if (req.CmdWriteSize() > 0 && IsWriteProhibited()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "Write to topic is prohibited");
         return;
     }
 

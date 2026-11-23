@@ -3,13 +3,15 @@ package NKikimrReplicationController;
 
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 
 message TCdcTarget {
     enum EPhase {
         RUNNING = 0;
         STOPPING = 1;
         STOPPING_PRESERVE = 2;
-        RESETTING = 3;
+        TRIMMING = 3;
         PREPARED = 4;
         FINISHED = 5;
     }
@@ -18,6 +20,10 @@ message TCdcTarget {
     optional NKikimrProto.TPathID StreamPathId = 3;
     optional NKikimrProto.TPathID TablePathId = 4;
     optional EPhase Phase = 5 [default = RUNNING];
-    optional uint64 ResetCreateTxId = 6;
+    optional uint64 TrimRequestId = 6;
     optional NKikimrSchemeOp.TCreateCdcStream Definition = 7;
+    optional Ydb.Table.ChangefeedDescription SourceStream = 8;
+    optional uint64 InitialCreateTxId = 9;
+    // Consumer settings for the first topic ALTER, captured with the CREATE intent.
+    optional NKikimrPQ.TPQTabletConfig TopicSetup = 10;
 }

@@ -1,0 +1,1291 @@
+%skeleton "lalr1.cc"
+%require "3.0"
+%language "C++"
+
+%define api.namespace {NYT::NQueryClient::NAst}
+%define api.prefix {yt_ql_yy}
+%define api.value.type variant
+%define api.location.type {TSourceLocation}
+%define api.parser.class {TParser}
+%define parse.error verbose
+
+%defines
+%locations
+
+%parse-param {TLexer& lexer}
+%parse-param {TAstHead* head}
+%parse-param {TStringBuf source}
+%parse-param {std::stack<TAliasMap> aliasMapStack}
+
+%code requires {
+    #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+
+    #include <yt/yt/library/query/base/ast.h>
+
+    #include <stack>
+
+    namespace NYT::NQueryClient::NAst {
+
+    ////////////////////////////////////////////////////////////////////////////////
+
+    using namespace NTableClient;
+
+    class TLexer;
+    class TParser;
+
+    ////////////////////////////////////////////////////////////////////////////////
+
+    } // namespace NYT::NQueryClient::NAst
+}
+
+%code {
+    #include <yt/yt/library/query/base/lexer.h>
+    #include <yt/yt/library/query/base/private.h>
+
+    #define yt_ql_yylex lexer.GetNextToken
+
+    #ifndef YYLLOC_DEFAULT
+    #define YYLLOC_DEFAULT(Current, Rhs, N) \
+        do { \
+            if (N) { \
+                (Current).first = YYRHSLOC(Rhs, 1).first; \
+                (Current).second = YYRHSLOC (Rhs, N).second; \
+            } else { \
+                (Current).first = (Current).second = YYRHSLOC(Rhs, 0).second; \
+            } \
+        } while (false)
+    #endif
+}
+
+// Special stray tokens to control parser flow.
+
+// NB: Enumerate stray tokens in decreasing order, e. g. 999, 998, and so on
+//     so that actual tokens won't change their identifiers.
+// NB: And keep one-character tokens consistent with their ASCII codes
+//     to simplify lexing.
+
+%token End 0 "end of stream"
+%token Failure 256 "lexer failure"
+
+%token StrayWillParseQuery 999
+%token StrayWillParseJobQuery 998
+%token StrayWillParseExpression 997
+
+// Language tokens.
+
+%token KwSelect "keyword `SELECT`"
+%token KwFrom "keyword `FROM`"
+%token KwWithIndex "keyword `WITH INDEX`"
+%token KwWithHint "keyword `WITH HINT`"
+%token KwWhere "keyword `WHERE`"
+%token KwHaving "keyword `HAVING`"
+%token KwOffset "keyword `OFFSET`"
+%token KwLimit "keyword `LIMIT`"
+%token KwJoin "keyword `JOIN`"
+%token KwArray "keyword `ARRAY`"
+%token KwUsing "keyword `USING`"
+%token KwGroupBy "keyword `GROUP BY`"
+%token KwWithTotals "keyword `WITH TOTALS`"
+%token KwOrderBy "keyword `ORDER BY`"
+%token KwAsc "keyword `ASC`"
+%token KwDesc "keyword `DESC`"
+%token KwLeft "keyword `LEFT`"
+%token KwAs "keyword `AS`"
+%token KwOn "keyword `ON`"
+%token KwUnnest "keyword `UNNEST`"
+%token KwCast "keyword `CAST`"
+
+%token KwAnd "keyword `AND`"
+%token KwOr "keyword `OR`"
+%token KwIs "keyword `IS`"
+%token KwNot "keyword `NOT`"
+%token KwNull "keyword `NULL`"
+%token KwBetween "keyword `BETWEEN`"
+%token KwIn "keyword `IN`"
+%token KwTransform "keyword `TRANSFORM`"
+%token KwCaseBegin "keyword `CASE`"
+%token KwCaseWhen "keyword `WHEN`"
+%token KwCaseThen "keyword `THEN`"
+%token KwCaseElse "keyword `ELSE`"
+%token KwCaseEnd "keyword `END`"
+%token KwLike "keyword `LIKE`"
+%token KwILike "keyword `ILIKE`"
+%token KwRLike "keyword `RLIKE`"
+%token KwRegexp "keyword `REGEXP`"
+%token KwEscape "keyword `ESCAPE`"
+
+%token KwUnion "keyword `UNION`"
+%token KwAll "keyword `ALL`"
+
+%token KwInf "keyword `INF`"
+
+%token KwFalse "keyword `TRUE`"
+%token KwTrue "keyword `FALSE`"
+
+%token <std::string> Identifier "identifier"
+
+%token <i64> Int64Literal "int64 literal"
+%token <ui64> Uint64Literal "uint64 literal"
+%token <TDoubleOrDotIntToken> DoubleOrDotIntToken "double or dot int token"
+%token <std::string> StringLiteral "string literal"
+%token <std::string> PlaceholderLiteral "placeholder literal"
+
+
+
+%token OpTilde 126 "`~`"
+%token OpNumberSign 35 "`#`"
+%token OpVerticalBar 124 "`|`"
+%token OpAmpersand 38 "`&`"
+%token OpModulo 37 "`%`"
+%token OpLeftShift "`<<`"
+%token OpRightShift "`>>`"
+
+%token LeftParenthesis 40 "`(`"
+%token RightParenthesis 41 "`)`"
+%token LeftSquareBracket "`[`"
+%token RightSquareBracket "`]`"
+
+%token Asterisk 42 "`*`"
+%token OpPlus 43 "`+`"
+%token Comma 44 "`,`"
+%token OpMinus 45 "`-`"
+%token Dot 46 "`.`"
+%token OpDivide 47 "`/`"
+%token OpConcatenate 48 "`||`"
+
+
+%token OpLess 60 "`<`"
+%token OpLessOrEqual "`<=`"
+%token OpEqual 61 "`=`"
+%token OpNotEqualCStyle "`!=`"
+%token OpNotEqualSql92 "`<>`"
+%token OpGreater 62 "`>`"
+%token OpGreaterOrEqual "`>=`"
+
+
+%type <TQuery> full-query
+%type <TNullableExpressionList> select-clause
+%type <std::variant<TTableDescriptor, TQueryAstHeadPtr, TExpressionList, TUnionAllClause>> from-clause
+%type <std::variant<TTableDescriptor, TQueryAstHeadPtr, TExpressionList, TUnionAllClause>> from-clause-tail
+%type <std::vector<TQueryAstHeadPtr>> union-all-tail
+%type <std::optional<TTableDescriptor>> with-index-clause
+%type <std::vector<std::variant<TJoin, TArrayJoin>>> join-clause
+%type <TNullableExpressionList> where-clause
+%type <std::tuple<TNullableExpressionList, ETotalsMode, TNullableExpressionList>> group-by-clause
+%type <TOrderExpressionList> order-by-clause
+%type <std::optional<i64>> offset-clause
+%type <std::optional<i64>> limit-clause
+
+%type <TTableDescriptor> table-descriptor
+%type <std::optional<std::string>> optional-alias
+%type <TTableHint> optional-hint
+
+%type <bool> is-desc
+%type <bool> is-left
+
+%type <TReferenceExpressionPtr> qualified-identifier
+%type <TIdentifierList> identifier-list
+%type <TStructAndTupleMemberAccessor> struct-and-tuple-member-accessor-list
+%type <TStructAndTupleMemberAccessorListItem> struct-and-tuple-member-accessor-list-item
+%type <TCompositeTypeMemberAccessor> member-accessor-list
+%type <TExpressionList> list-or-dict-item-accessor
+
+%type <TOrderExpressionList> order-expr-list
+%type <TExpressionList> expression
+%type <TExpressionTupleList> expression-tuple-list
+%type <TExpressionList> or-op-expr
+%type <TExpressionList> and-op-expr
+%type <TExpressionList> not-op-expr
+%type <TExpressionList> is-null-op-expr
+%type <TExpressionList> equal-op-expr
+%type <TExpressionList> string-like-op-expr
+%type <TExpressionList> relational-op-expr
+%type <TExpressionList> bitor-op-expr
+%type <TExpressionList> bitand-op-expr
+%type <TExpressionList> shift-op-expr
+%type <TExpressionList> multiplicative-op-expr
+%type <TExpressionList> additive-op-expr
+%type <TExpressionList> unary-expr
+%type <TExpressionList> atomic-expr
+%type <TExpressionList> atomic-expr-other
+%type <TExpressionList> atomic-expr-common
+%type <TExpressionList> atomic-expr-other-common
+%type <TExpressionList> restricted-additive-op-expr
+%type <TExpressionList> restricted-multiplicative-op-expr
+%type <TExpressionList> restricted-unary-expr
+%type <TExpressionList> restricted-atomic-expr
+%type <TExpressionList> restricted-atomic-expr-other
+%type <TExpressionList> comma-restricted-additive-op-expr
+%type <TExpressionRangeList> restricted-additive-op-expr-range-list
+%type <TExpressionList> comma-expr
+%type <TExpressionList> pseudo-alias-expr
+%type <TExpressionList> pseudo-alias-comma-expr
+%type <TNullableExpressionList> transform-default-expr
+%type <TNullableExpressionList> join-predicate
+%type <TNullableExpressionList> case-default-expr
+%type <TWhenThenExpression> when-then-expr
+%type <TWhenThenExpressionList> when-then-expr-list
+%type <TNullableExpressionList> optional-escape
+
+%type <std::optional<TLiteralValue>> literal-value
+%type <std::optional<TLiteralValue>> const-value
+%type <TLiteralValueList> const-list
+%type <TLiteralValueList> const-tuple
+%type <TLiteralValueTupleList> const-tuple-list
+
+%type <EUnaryOp> unary-op
+
+%type <EBinaryOp> relational-op
+%type <EBinaryOp> multiplicative-op
+%type <EBinaryOp> additive-op
+%type <EStringMatchOp> string-match-op
+
+%start head
+
+%%
+
+head
+    : StrayWillParseQuery parse-query
+    | StrayWillParseJobQuery parse-job-query
+    | StrayWillParseExpression parse-expression
+;
+
+parse-query
+    : optional-select-keyword full-query[query]
+        {
+            head->Ast = std::move($query);
+        }
+;
+
+full-query
+    : select-clause[select]
+        from-clause[from]
+        with-index-clause[withIndex]
+        join-clause[joins]
+        where-clause[where]
+        group-by-clause[groupBy]
+        order-by-clause[orderBy]
+        offset-clause[offset]
+        limit-clause[limit]
+        {
+            $$ = TQuery{
+                .FromClause = std::move($from),
+                .WithIndex = std::move($withIndex),
+                .Joins = std::move($joins),
+
+                .SelectExprs = std::move($select),
+                .WherePredicate = std::move($where),
+
+                .GroupExprs = std::move(std::get<0>($groupBy)),
+                .TotalsMode = std::move(std::get<1>($groupBy)),
+                .HavingPredicate = std::move(std::get<2>($groupBy)),
+
+                .OrderExpressions = std::move($orderBy),
+
+                .Offset = $offset,
+                .Limit = $limit,
+            };
+        }
+;
+
+parse-job-query
+    : select-clause[select] where-clause[where]
+        {
+            head->Ast = TQuery{
+                .SelectExprs = std::move($select),
+                .WherePredicate = std::move($where),
+            };
+        }
+;
+
+parse-expression
+    : expression[expr]
+        {
+            if ($expr.size() != 1) {
+                THROW_ERROR_EXCEPTION("Expected scalar expression, got %Qv", GetSource(@$, source));
+            }
+            head->Ast = $expr.front();
+        }
+;
+
+select-clause
+    : comma-expr[projections]
+        {
+            $$ = std::move($projections);
+        }
+    | Asterisk
+        {
+            $$ = std::nullopt;
+        }
+;
+
+optional-select-keyword
+    : KwSelect
+    |
+;
+
+optional-alias
+    : KwAs Identifier[alias]
+        {
+            $$ = std::move($alias);
+        }
+    | Identifier[alias]
+        {
+            $$ = std::move($alias);
+        }
+    | { }
+;
+
+optional-hint
+    : KwWithHint StringLiteral[hint]
+        {
+            $$ = ConvertTo<TTableHint>(NYson::TYsonStringBuf($hint));
+        }
+    |
+        {
+            $$ = TTableHint();
+        }
+;
+
+table-descriptor
+    : Identifier[path] optional-alias[alias] optional-hint[hint]
+        {
+            $$ = TTableDescriptor(NYPath::TYPath($path), std::move($alias), std::move($hint));
+        }
+;
+
+from-clause
+    : KwFrom
+        {
+            auto saved = std::move(head->AliasMap);
+            head->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+            aliasMapStack.push(std::move(saved));
+        }
+        from-clause-tail[result]
+        {
+            auto saved = std::move(head->AliasMap);
+            head->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+            aliasMapStack.push(std::move(saved));
+
+            $$ = std::move($result);
+        }
+;
+
+from-clause-tail
+    : table-descriptor[table]
+        {
+            $$ = std::move($table);
+        }
+    | LeftParenthesis push-alias-map KwSelect full-query[query] union-all-tail[tail] RightParenthesis optional-alias[alias]
+        {
+            TUnionAllClause clause;
+
+            auto* firstSubquery = head->New<TQueryAstHead>();
+            firstSubquery->Ast = std::move($query);
+            // The first subquery's alias map was stashed on the alias map stack
+            // in the first mid-rule action of union-all-tail.
+            firstSubquery->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+            clause.Subqueries.push_back(firstSubquery);
+
+            for (auto* tailSubquery : $tail) {
+                clause.Subqueries.push_back(tailSubquery);
+            }
+
+            clause.Alias = std::move($alias);
+
+            head->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+
+            $$ = std::move(clause);
+        }
+    | atomic-expr-other[expr] optional-alias[alias]
+        {
+            bool asQueryAstHead = false;
+
+            if ($expr.size() == 1) {
+                if (auto* queryExpr = $expr[0]->As<TQueryExpression>()) {
+                    // COMPAT: single subquery without UNION ALL
+                    auto subqueryHead = head->New<TQueryAstHead>();
+                    subqueryHead->Ast = std::move(queryExpr->Query);
+                    subqueryHead->AliasMap = std::move(queryExpr->AliasMap);
+                    subqueryHead->Alias = std::move($alias);
+                    $$ = std::move(subqueryHead);
+                    asQueryAstHead = true;
+                }
+            }
+
+            if (!asQueryAstHead) {
+                $$ = std::move($expr);
+            }
+        }
+;
+
+push-alias-map
+    :
+        {
+            aliasMapStack.push(std::move(head->AliasMap));
+            head->AliasMap = {};
+        }
+;
+
+union-all-tail
+    : KwUnion KwAll KwSelect
+        {
+            // The first subquery's alias map is still in head->AliasMap;
+            // stash it on the alias map stack, and push an empty ambient
+            // alias map for the next subquery.
+            aliasMapStack.push(std::move(head->AliasMap));
+            aliasMapStack.push(TAliasMap{});
+            head->AliasMap = {};
+        }
+        full-query[query]
+        {
+            auto* subqueryHead = head->New<TQueryAstHead>();
+            subqueryHead->Ast = std::move($query);
+            subqueryHead->AliasMap = std::move(head->AliasMap);
+            head->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+            $$.push_back(subqueryHead);
+        }
+    | union-all-tail[list] KwUnion KwAll KwSelect
+        {
+            // The first subquery is not accounted for in $list.
+            if (std::ssize($list) >= MaxUnionAllSubqueryCount - 1) {
+                THROW_ERROR_EXCEPTION("UNION ALL clause exceeds maximum subquery count of %v",
+                    MaxUnionAllSubqueryCount);
+            }
+            aliasMapStack.push(std::move(head->AliasMap));
+            head->AliasMap = {};
+        }
+        full-query[query]
+        {
+            $$ = std::move($list);
+            auto* subqueryHead = head->New<TQueryAstHead>();
+            subqueryHead->Ast = std::move($query);
+            subqueryHead->AliasMap = std::move(head->AliasMap);
+            head->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+            $$.push_back(subqueryHead);
+        }
+;
+
+with-index-clause
+    : KwWithIndex Identifier[path] optional-alias[alias]
+        {
+            $$ = TTableDescriptor(NYPath::TYPath($path), std::move($alias));
+        }
+    |
+        {
+            $$ = std::nullopt;
+        }
+;
+
+join-predicate
+    : KwAnd and-op-expr[predicate]
+        {
+            $$ = $predicate;
+        }
+    | { }
+;
+
+join-clause
+    : join-clause[list] is-left[isLeft] KwJoin table-descriptor[table] KwUsing identifier-list[fields] join-predicate[predicate]
+        {
+            $$.swap($list);
+            $$.push_back(TJoin($isLeft, $table, $fields, $predicate));
+        }
+    | join-clause[list] is-left[isLeft] KwJoin table-descriptor[table] KwOn bitor-op-expr[lhs] OpEqual bitor-op-expr[rhs] join-predicate[predicate]
+        {
+            $$.swap($list);
+            $$.push_back(TJoin($isLeft, $table, $lhs, $rhs, $predicate));
+        }
+    | join-clause[list] is-left[isLeft] KwArray KwJoin pseudo-alias-comma-expr[arrays] join-predicate[predicate]
+        {
+            $$.swap($list);
+            $$.push_back(TArrayJoin($isLeft, $arrays, $predicate));
+        }
+    |
+        {
+            $$ = {};
+        }
+;
+
+is-left
+    : KwLeft
+        {
+            $$ = true;
+        }
+    |
+        {
+            $$ = false;
+        }
+;
+
+where-clause
+    : KwWhere or-op-expr[predicate]
+        {
+            $$ = std::move($predicate);
+        }
+    |
+        {
+            $$ = std::nullopt;
+        }
+;
+
+group-by-clause
+    : KwGroupBy comma-expr[key]
+        {
+            $$ = std::tuple(std::move($key), ETotalsMode::None, std::nullopt);
+        }
+    | KwGroupBy comma-expr[key] KwWithTotals
+        {
+            $$ = std::tuple(std::move($key), ETotalsMode::BeforeHaving, std::nullopt);
+        }
+    | KwGroupBy comma-expr[key] KwHaving or-op-expr[filter]
+        {
+            $$ = std::tuple(std::move($key), ETotalsMode::None, std::move($filter));
+        }
+    | KwGroupBy comma-expr[key] KwHaving or-op-expr[filter] KwWithTotals
+        {
+            $$ = std::tuple(std::move($key), ETotalsMode::AfterHaving, std::move($filter));
+        }
+    | KwGroupBy comma-expr[key] KwWithTotals KwHaving or-op-expr[filter]
+        {
+            $$ = std::tuple(std::move($key), ETotalsMode::BeforeHaving, std::move($filter));
+        }
+    |
+        {
+            $$ = std::tuple(std::nullopt, ETotalsMode::None, std::nullopt);
+        }
+;
+
+order-by-clause
+    : KwOrderBy order-expr-list[exprs]
+        {
+            $$ = std::move($exprs);
+        }
+    |
+        {
+            $$ = {};
+        }
+;
+
+order-expr-list
+    : order-expr-list[list] Comma expression[expr] is-desc[isDesc]
+        {
+            $$.swap($list);
+            $$.emplace_back($expr, $isDesc);
+        }
+    | expression[expr] is-desc[isDesc]
+        {
+            $$.emplace_back($expr, $isDesc);
+        }
+;
+
+is-desc
+    : KwDesc
+        {
+            $$ = true;
+        }
+    | KwAsc
+        {
+            $$ = false;
+        }
+    |
+        {
+            $$ = false;
+        }
+;
+
+offset-clause
+    : KwOffset Int64Literal[offset]
+        {
+            $$ = $offset;
+        }
+    |
+        {
+            $$ = std::nullopt;
+        }
+;
+
+limit-clause
+    : KwLimit Int64Literal[limit]
+        {
+            $$ = $limit;
+        }
+    |
+        {
+            $$ = std::nullopt;
+        }
+;
+
+identifier-list
+    : identifier-list[list] Comma qualified-identifier[value]
+        {
+            $$.swap($list);
+            $$.push_back($value);
+        }
+    | qualified-identifier[value]
+        {
+            $$.push_back($value);
+        }
+;
+
+pseudo-alias-expr
+    : or-op-expr[expr] KwAs Identifier[name]
+        {
+            if ($expr.size() != 1) {
+                THROW_ERROR_EXCEPTION("Aliased expression %Qv must be scalar", GetSource(@$, source));
+            }
+            $$ = MakeExpression<TAliasExpression>(head, @$, $expr.front(), $name);
+        }
+;
+
+pseudo-alias-comma-expr
+    : pseudo-alias-comma-expr[lhs] Comma pseudo-alias-expr[rhs]
+        {
+            $$ = $lhs;
+            $$.insert($$.end(), $rhs.begin(), $rhs.end());
+        }
+    | pseudo-alias-expr
+        { $$ = $1; }
+;
+
+expression
+    : or-op-expr
+        { $$ = $1; }
+    | or-op-expr[expr] KwAs Identifier[name]
+        {
+            if ($expr.size() != 1) {
+                THROW_ERROR_EXCEPTION("Aliased expression %Qv must be scalar", GetSource(@$, source));
+            }
+            auto inserted = head->AliasMap.emplace($name, $expr.front()).second;
+            if (!inserted) {
+                THROW_ERROR_EXCEPTION("Alias %Qv has been already used", $name);
+            }
+            $$ = MakeExpression<TAliasExpression>(head, @$, $expr.front(), $name);
+        }
+;
+
+expression-tuple-list
+    : expression-tuple-list[as] Comma expression[a]
+        {
+            $$.swap($as);
+            $$.push_back($a);
+        }
+    | expression[a]
+        {
+            $$.push_back($a);
+        }
+;
+
+or-op-expr
+    : or-op-expr[lhs] KwOr and-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::Or, $lhs, $rhs);
+        }
+    | and-op-expr
+        { $$ = $1; }
+;
+
+and-op-expr
+    : and-op-expr[lhs] KwAnd not-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::And, $lhs, $rhs);
+        }
+    | not-op-expr
+        { $$ = $1; }
+;
+
+not-op-expr
+    : KwNot is-null-op-expr[expr]
+        {
+            $$ = MakeExpression<TUnaryOpExpression>(head, @$, EUnaryOp::Not, $expr);
+        }
+    | is-null-op-expr
+        { $$ = $1; }
+;
+
+is-null-op-expr
+    : equal-op-expr[expr] KwIs KwNull
+        {
+            $$ = MakeExpression<TFunctionExpression>(head, @$, "is_null", $expr);
+        }
+    | equal-op-expr[expr] KwIs KwNot KwNull
+        {
+            $$ = MakeExpression<TUnaryOpExpression>(head, @$, EUnaryOp::Not,
+                MakeExpression<TFunctionExpression>(head, @$, "is_null", $expr));
+        }
+    | equal-op-expr
+        { $$ = $1; }
+;
+
+equal-op-expr
+    : equal-op-expr[lhs] OpEqual relational-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::Equal, $lhs, $rhs);
+        }
+
+    | equal-op-expr[lhs] OpNotEqual relational-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::NotEqual, $lhs, $rhs);
+        }
+    | relational-op-expr
+        { $$ = $1; }
+;
+
+OpNotEqual
+    : OpNotEqualCStyle
+    | OpNotEqualSql92
+;
+
+relational-op-expr
+    : relational-op-expr[lhs] relational-op[opcode] bitor-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, $opcode, $lhs, $rhs);
+        }
+    | additive-op-expr[expr] KwBetween restricted-additive-op-expr[lower] KwAnd additive-op-expr[upper]
+        {
+            $$ = MakeBetweenExpressionFromExpressionTupleRange(head, @$, $expr, $lower, $upper);
+        }
+    | additive-op-expr[expr] KwBetween LeftParenthesis restricted-additive-op-expr-range-list[ranges] RightParenthesis
+        {
+            $$ = MakeBetweenExpressionFromExpressionTupleRangeList(head, @$, $expr, $ranges);
+        }
+    | additive-op-expr[expr] KwIn LeftParenthesis RightParenthesis
+        {
+            $$ = MakeExpression<TLiteralExpression>(head, @$, TLiteralValue(false));
+        }
+    | additive-op-expr[expr] KwIn LeftParenthesis expression-tuple-list[args] RightParenthesis
+        {
+            $$ = MakeInExpressionFromExpressionTupleList(head, @$, $expr, $args);
+        }
+    | additive-op-expr[expr] KwNot KwIn LeftParenthesis RightParenthesis
+        {
+            $$ = MakeExpression<TLiteralExpression>(head, @$, TLiteralValue(true));
+        }
+    | additive-op-expr[expr] KwNot KwIn LeftParenthesis expression-tuple-list[args] RightParenthesis
+        {
+            $$ = MakeExpression<TUnaryOpExpression>(head, @$, EUnaryOp::Not,
+                MakeInExpressionFromExpressionTupleList(head, @$, $expr, $args));
+        }
+    | bitor-op-expr
+        { $$ = $1; }
+    | string-like-op-expr
+        { $$ = $1; }
+;
+
+relational-op
+    : OpLess
+        { $$ = EBinaryOp::Less; }
+    | OpLessOrEqual
+        { $$ = EBinaryOp::LessOrEqual; }
+    | OpGreater
+        { $$ = EBinaryOp::Greater; }
+    | OpGreaterOrEqual
+        { $$ = EBinaryOp::GreaterOrEqual; }
+;
+
+string-like-op-expr
+    : additive-op-expr[text] string-match-op[opcode] additive-op-expr[pattern] optional-escape[escape]
+        {
+            $$ = MakeExpression<TLikeExpression>(head, @$, $text, $opcode, $pattern, $escape);
+        }
+    | additive-op-expr[text] KwNot string-match-op[opcode] additive-op-expr[pattern] optional-escape[escape]
+        {
+            $$ = MakeExpression<TUnaryOpExpression>(
+                head,
+                @$,
+                EUnaryOp::Not,
+                MakeExpression<TLikeExpression>(head, @$, $text, $opcode, $pattern, $escape));
+        }
+;
+
+optional-escape
+    : KwEscape additive-op-expr[expr]
+        { $$ = $expr; }
+    |
+        { }
+;
+
+string-match-op
+    : KwLike
+        { $$ = EStringMatchOp::Like; }
+    | KwILike
+        { $$ = EStringMatchOp::CaseInsensitiveLike; }
+    | KwRLike
+        { $$ = EStringMatchOp::Regex; }
+    | KwRegexp
+        { $$ = EStringMatchOp::Regex; }
+;
+
+bitor-op-expr
+    : bitor-op-expr[lhs] OpVerticalBar bitand-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::BitOr, $lhs, $rhs);
+        }
+    | bitand-op-expr
+        { $$ = $1; }
+;
+
+bitand-op-expr
+    : bitand-op-expr[lhs] OpAmpersand shift-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::BitAnd, $lhs, $rhs);
+        }
+    | shift-op-expr
+        { $$ = $1; }
+;
+
+shift-op-expr
+    : shift-op-expr[lhs] OpLeftShift additive-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::LeftShift, $lhs, $rhs);
+        }
+    | shift-op-expr[lhs] OpRightShift additive-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, EBinaryOp::RightShift, $lhs, $rhs);
+        }
+    | additive-op-expr
+        { $$ = $1; }
+;
+
+/*
+ * We have two expression types: additive-op-expr and restricted-additive-op-expr.
+ * Expression restricted-additive-op-expr is a subset of additive-op-expr,
+ * that must be used in some places to avoid shift/reduce conflicts.
+ *
+ * We can't do BETWEEN as "BETWEEN additive-op-expr AND additive-op-expr"
+ * because additive-op-expr may expand to "expression" which can contain AND keyword.
+ * Such expansion will produce conflict with AND operand from BETWEEN expression.
+ * To solve this issue, we introduce restricted-additive-op-expr, which can't contain boolean keywords.
+ *
+ * Common parts of additive-op-expr and restricted-additive-op-expr are placed in
+ * expressions with postfix "-common"; it's factored out just to eliminate redundant coding.
+ */
+additive-op-expr
+    : additive-op-expr[lhs] additive-op[opcode] multiplicative-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, $opcode, $lhs, $rhs);
+        }
+    | multiplicative-op-expr
+        { $$ = $1; }
+;
+
+additive-op
+    : OpPlus
+        { $$ = EBinaryOp::Plus; }
+    | OpMinus
+        { $$ = EBinaryOp::Minus; }
+    | OpConcatenate
+        { $$ = EBinaryOp::Concatenate; }
+;
+
+multiplicative-op-expr
+    : multiplicative-op-expr[lhs] multiplicative-op[opcode] unary-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, $opcode, $lhs, $rhs);
+        }
+    | unary-expr
+        { $$ = $1; }
+;
+
+multiplicative-op
+    : Asterisk
+        { $$ = EBinaryOp::Multiply; }
+    | OpDivide
+        { $$ = EBinaryOp::Divide; }
+    | OpModulo
+        { $$ = EBinaryOp::Modulo; }
+;
+
+comma-expr
+    : comma-expr[lhs] Comma expression[rhs]
+        {
+            $$ = $lhs;
+            $$.insert($$.end(), $rhs.begin(), $rhs.end());
+        }
+    | expression
+        { $$ = $1; }
+;
+
+unary-expr
+    : unary-op[opcode] unary-expr[rhs]
+        {
+            $$ = MakeExpression<TUnaryOpExpression>(head, @$, $opcode, $rhs);
+        }
+    | atomic-expr
+        { $$ = $1; }
+;
+
+unary-op
+    : OpPlus
+        { $$ = EUnaryOp::Plus; }
+    | OpMinus
+        { $$ = EUnaryOp::Minus; }
+    | OpTilde
+        { $$ = EUnaryOp::BitNot; }
+;
+
+qualified-identifier
+    : Identifier[name]
+        {
+            $$ = head->New<TReferenceExpression>(@$, $name);
+        }
+    | Identifier[table] Dot Identifier[name]
+        {
+            $$ = head->New<TReferenceExpression>(@$, $name, $table);
+        }
+    | Identifier[table] Dot Identifier[name] member-accessor-list[list]
+        {
+            $$ = head->New<TReferenceExpression>(@$, $name, $table, $list);
+        }
+;
+
+member-accessor-list
+    : struct-and-tuple-member-accessor-list[list] list-or-dict-item-accessor[index]
+        {
+            $$ = TCompositeTypeMemberAccessor{$list, $index};
+        }
+    | struct-and-tuple-member-accessor-list[list]
+        {
+            $$ = TCompositeTypeMemberAccessor{$list, {}};
+        }
+    | list-or-dict-item-accessor[index]
+        {
+            $$ = TCompositeTypeMemberAccessor{{}, $index};
+        }
+;
+
+list-or-dict-item-accessor
+    : LeftSquareBracket relational-op-expr[index] RightSquareBracket
+        {
+            $$ = $index;
+        }
+;
+
+struct-and-tuple-member-accessor-list
+    : struct-and-tuple-member-accessor-list[list] struct-and-tuple-member-accessor-list-item[item]
+        {
+            $$.swap($list);
+            $$.push_back($item);
+        }
+    | struct-and-tuple-member-accessor-list-item[item]
+        {
+            $$.push_back($item);
+        }
+;
+
+struct-and-tuple-member-accessor-list-item
+    : Dot Identifier[structMember]
+        {
+            $$ = $structMember;
+        }
+    | DoubleOrDotIntToken[tupleItem]
+        {
+            $$ = $tupleItem.AsDotInt();
+        }
+;
+
+atomic-expr
+    : atomic-expr-common
+        { $$ = $1; }
+    | atomic-expr-other
+        { $$ = $1; }
+;
+
+atomic-expr-common
+    : qualified-identifier[identifier]
+        {
+            $$ = TExpressionList(1, $identifier);
+        }
+    | KwTransform LeftParenthesis expression[expr] Comma LeftParenthesis const-tuple-list[from] RightParenthesis Comma LeftParenthesis const-tuple-list[to] RightParenthesis transform-default-expr[default] RightParenthesis
+        {
+            $$ = MakeExpression<TTransformExpression>(head, @$, $expr, $from, $to, $default);
+        }
+    | literal-value[value]
+        {
+            $$ = MakeExpression<TLiteralExpression>(head, @$, *$value);
+        }
+    | KwCaseBegin expression[optionalOperand] when-then-expr-list[whenThenExpressions] case-default-expr[default] KwCaseEnd
+        {
+            $$ = MakeExpression<TCaseExpression>(head, @$, $optionalOperand, $whenThenExpressions, $default);
+        }
+    | KwCaseBegin when-then-expr-list[whenThenExpressions] case-default-expr[default] KwCaseEnd
+        {
+            $$ = MakeExpression<TCaseExpression>(head, @$, TNullableExpressionList{}, $whenThenExpressions, $default);
+        }
+;
+
+atomic-expr-other-common
+    : Identifier[name] LeftParenthesis RightParenthesis
+        {
+            $$ = MakeExpression<TFunctionExpression>(head, @$, $name, TExpressionList());
+        }
+    | Identifier[name] LeftParenthesis comma-expr[args] RightParenthesis
+        {
+            $$ = MakeExpression<TFunctionExpression>(head, @$, $name, $args);
+        }
+    | LeftParenthesis push-alias-map KwSelect full-query[query] RightParenthesis
+        {
+            auto aliasMap = std::move(head->AliasMap);
+            $$ = MakeExpression<TQueryExpression>(head, @$, std::move($query), std::move(aliasMap));
+            head->AliasMap = std::move(aliasMapStack.top());
+            aliasMapStack.pop();
+        }
+    | KwCast LeftParenthesis or-op-expr[expr] KwAs Identifier[typename] RightParenthesis
+        {
+            THROW_ERROR_EXCEPTION_UNLESS($expr.size() == 1,
+                "Expected a single argument for CAST operator, got %v",
+                    $expr.size());
+
+            auto arguments = MakeExpression<TLiteralExpression>(head, @$, std::move($typename));
+            arguments.insert(arguments.begin(), $expr[0]);
+
+            $$ = MakeExpression<TFunctionExpression>(
+                head,
+                @$,
+                "cast_operator",
+                std::move(arguments));
+        }
+;
+
+atomic-expr-other
+    : atomic-expr-other-common[expr]
+        {
+            $$ = $expr;
+        }
+    | LeftParenthesis comma-expr[expr] RightParenthesis
+        {
+            $$ = $expr;
+        }
+;
+
+when-then-expr-list
+    : when-then-expr-list[list] when-then-expr[clause]
+        {
+            $$.swap($list);
+            $$.push_back($clause);
+        }
+    | when-then-expr[clause]
+        {
+            $$.push_back($clause);
+        }
+;
+
+when-then-expr
+    : KwCaseWhen expression[condition] KwCaseThen expression[result]
+        {
+            $$ = {std::move($condition), std::move($result)};
+        }
+;
+
+case-default-expr
+    : KwCaseElse expression[expr]
+        {
+            $$ = $expr;
+        }
+    | { }
+;
+
+transform-default-expr
+    : Comma expression[expr]
+        {
+            $$ = $expr;
+        }
+    | { }
+;
+
+literal-value
+    : Int64Literal
+        { $$ = $1; }
+    | Uint64Literal
+        { $$ = $1; }
+    | DoubleOrDotIntToken
+        { $$ = $1.AsDouble(); }
+    | StringLiteral
+        { $$ = $1; }
+    | KwInf
+        { $$ = std::numeric_limits<double>::infinity(); }
+    | KwFalse
+        { $$ = false; }
+    | KwTrue
+        { $$ = true; }
+    | KwNull
+        { $$ = TNullLiteralValue(); }
+    | OpNumberSign
+        { $$ = TNullLiteralValue(); }
+;
+
+const-value
+    : unary-op[op] const-value[value]
+        {
+            switch ($op) {
+                case EUnaryOp::Minus: {
+                    if (const auto* data = std::get_if<i64>(&*$value)) {
+                        $$ = -*data;
+                    } else if (const auto* data = std::get_if<ui64>(&*$value)) {
+                        $$ = -*data;
+                    } else if (const auto* data = std::get_if<double>(&*$value)) {
+                        $$ = -*data;
+                    } else {
+                        THROW_ERROR_EXCEPTION("Negation of unsupported type");
+                    }
+                    break;
+                }
+                case EUnaryOp::Plus:
+                    $$ = $value;
+                    break;
+                case EUnaryOp::BitNot: {
+                    if (const auto* data = std::get_if<i64>(&*$value)) {
+                        $$ = ~*data;
+                    } else if (const auto* data = std::get_if<ui64>(&*$value)) {
+                        $$ = ~*data;
+                    } else {
+                        THROW_ERROR_EXCEPTION("Bitwise negation of unsupported type");
+                    }
+                    break;
+                }
+                default:
+                    YT_ABORT();
+            }
+
+        }
+    | literal-value[value]
+        { $$ = $value; }
+;
+
+const-list
+    : const-list[as] Comma const-value[a]
+        {
+            $$.swap($as);
+            $$.push_back(*$a);
+        }
+    | const-value[a]
+        {
+            $$.push_back(*$a);
+        }
+;
+
+const-tuple
+    : const-value[a]
+        {
+            $$.push_back(*$a);
+        }
+    | LeftParenthesis const-list[a] RightParenthesis
+        {
+            $$ = $a;
+        }
+;
+
+/*
+ * Expression restricted-additive-op-expr is a subset of additive-op-expr,
+ * that must be used in some places to avoid shift/reduce conflicts.
+ *
+ * Expression restricted-additive-op-expr is used in BETWEEN and we remove
+ * boolean keywords from restricted-additive-op-expr.
+ */
+restricted-additive-op-expr
+    : restricted-additive-op-expr[lhs] additive-op[opcode] restricted-multiplicative-op-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, $opcode, $lhs, $rhs);
+        }
+    | restricted-multiplicative-op-expr
+        { $$ = $1; }
+;
+
+restricted-multiplicative-op-expr
+    : restricted-multiplicative-op-expr[lhs] multiplicative-op[opcode] restricted-unary-expr[rhs]
+        {
+            $$ = MakeExpression<TBinaryOpExpression>(head, @$, $opcode, $lhs, $rhs);
+        }
+    | restricted-unary-expr
+        { $$ = $1; }
+;
+
+restricted-unary-expr
+    : unary-op[opcode] restricted-unary-expr[rhs]
+        {
+            $$ = MakeExpression<TUnaryOpExpression>(head, @$, $opcode, $rhs);
+        }
+    | restricted-atomic-expr
+        { $$ = $1; }
+;
+
+restricted-atomic-expr
+    : atomic-expr-common
+        { $$ = $1; }
+    | restricted-atomic-expr-other
+        { $$ = $1; }
+;
+
+restricted-atomic-expr-other
+    : atomic-expr-other-common[expr]
+        {
+            $$ = $expr;
+        }
+    | LeftParenthesis comma-restricted-additive-op-expr[expr] RightParenthesis
+        {
+            $$ = $expr;
+        }
+;
+
+comma-restricted-additive-op-expr
+    : comma-restricted-additive-op-expr[lhs] Comma restricted-additive-op-expr[rhs]
+        {
+            $$.swap($lhs);
+            $$.insert($$.end(), $rhs.begin(), $rhs.end());
+        }
+    | restricted-additive-op-expr
+        { $$ = $1; }
+;
+
+restricted-additive-op-expr-range-list
+    : restricted-additive-op-expr-range-list[head] Comma restricted-additive-op-expr[a] KwAnd additive-op-expr[b]
+        {
+            $$.swap($head);
+            $$.emplace_back($a, $b);
+        }
+    | restricted-additive-op-expr[a] KwAnd additive-op-expr[b]
+        {
+            $$.emplace_back($a, $b);
+        }
+;
+
+const-tuple-list
+    : const-tuple-list[as] Comma const-tuple[a]
+        {
+            $$.swap($as);
+            $$.push_back($a);
+        }
+    | const-tuple[a]
+        {
+            $$.push_back($a);
+        }
+;
+
+%%
+
+namespace NYT::NQueryClient::NAst {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TParser::error(const location_type& location, const std::string& message)
+{
+    auto leftContextStart = std::max<size_t>(location.first, 16) - 16;
+    auto rightContextEnd = std::min<size_t>(location.second + 16, source.size());
+
+    THROW_ERROR_EXCEPTION("Error while parsing query: %v", message)
+        .With("position", Format("%v-%v", location.first, location.second))
+        .With("query", Format("%v >>>>> %v <<<<< %v",
+            source.substr(leftContextStart, location.first - leftContextStart),
+            source.substr(location.first, location.second - location.first),
+            source.substr(location.second, rightContextEnd - location.second)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NAst::NQueryClient::NYT

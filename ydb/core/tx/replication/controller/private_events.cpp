@@ -63,15 +63,6 @@ TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPa
 {
 }
 
-TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& topicPathId,
-        const TPathId& streamPathId, bool activateOnDetach)
-    : TBase(rid, tid, NKikimrScheme::StatusSuccess)
-    , DstPathId(topicPathId)
-    , CdcStreamPathId(streamPathId)
-    , ActivateCdcOnDetach(activateOnDetach)
-{
-}
-
 TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
     : TBase(rid, tid, status, error)
 {

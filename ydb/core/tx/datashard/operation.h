@@ -109,6 +109,7 @@ enum class EOperationKind : ui32 {
     // Values [1, 100) are used to map NKikimrTxDataShard::ETransactionKind.
     DataTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_DATA,
     SchemeTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME,
+    CdcHandoff = NKikimrTxDataShard::ETransactionKind::TX_KIND_CDC_HANDOFF,
     ReadTable = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCAN,
     Snapshot = NKikimrTxDataShard::ETransactionKind::TX_KIND_SNAPSHOT,
     DistributedErase = NKikimrTxDataShard::ETransactionKind::TX_KIND_DISTRIBUTED_ERASE,
@@ -174,7 +175,7 @@ public:
     bool IsReadTx() const { return Kind == EOperationKind::ReadTx; }
     bool IsWriteTx() const { return Kind == EOperationKind::WriteTx; }
     bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; }
-    bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx; }
+    bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx || Kind == EOperationKind::CdcHandoff; }
     bool IsReadTable() const { return Kind == EOperationKind::ReadTable; }
     bool IsSnapshotTx() const { return Kind == EOperationKind::Snapshot; }
     bool IsDistributedEraseTx() const { return Kind == EOperationKind::DistributedErase; }

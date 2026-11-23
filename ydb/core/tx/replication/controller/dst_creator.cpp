@@ -4,13 +4,13 @@
 #include "private_events.h"
 #include "util.h"
 #include "topic_mirror.h"
+#include "target_cdc.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
-#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -29,7 +29,6 @@
 
 #include <google/protobuf/util/message_differencer.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -122,150 +121,7 @@ bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
 } // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
-    enum class ECdcPath { Table, Stream, Topic };
-
-    struct TCdcCreation {
-        TDstCdcSettings Settings;
-        std::optional<TDstCdcResetSettings> Reset;
-        ui64 PartitionCount = 0;
-        ui64 TableVersion = 0;
-        ui64 StreamVersion = 0;
-        bool ActivateOnDetach = false;
-        NKikimrSchemeOp::TCdcStreamDescription Stream;
-        NKikimrPQ::TPQTabletConfig Topic;
-        google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> Consumers;
-        NKikimrSchemeOp::TModifyScheme Create;
-        TString TablePath;
-        ECdcPath Describe = ECdcPath::Table;
-        struct TRefusal {
-            NKikimrSchemeOp::TModifyScheme Proposal;
-            TString Reason;
-        };
-        std::optional<TRefusal> Refusal;
-    };
-
-    bool PrepareCdcStream(const Ydb::Table::ChangefeedDescription& source, TString& error) {
-        if (!EqualToOneOf(source.state(), Ydb::Table::ChangefeedDescription::STATE_ENABLED,
-                Ydb::Table::ChangefeedDescription::STATE_DISABLED)
-            || source.name().empty() || source.name().find('/') != TString::npos
-            || source.attributes().find("__async_replication") != source.attributes().end()
-            || source.schema_changes() || source.virtual_timestamps()
-            || source.has_resolved_timestamps_interval())
-        {
-            error = "CDC mirroring requires a user Enabled/Disabled stream without schema changes or timestamps";
-            return false;
-        }
-
-        Ydb::StatusIds::StatusCode status;
-        if (!FillChangefeedDescription(Cdc->Stream, source, status, error)) {
-            return false;
-        }
-        Cdc->Stream.SetState(NKikimrSchemeOp::ECdcStreamStateDisabled);
-        return true;
-    }
-
-    bool PrepareCdcSource(TString& error) {
-        const auto& source = Cdc->Settings.SourceStream;
-        const auto& topic = Cdc->Settings.SourceTopic;
-        if (!PrepareCdcStream(source, error)) {
-            return false;
-        }
-
-        if (!PathId || !Cdc->Settings.TablePathId || Cdc->Settings.Consumer.empty()
-            || Cdc->Settings.TablePathId.OwnerId != SchemeShardId)
-        {
-            error = "CDC mirroring requires an owner, final destination table and source consumer";
-            return false;
-        }
-
-        const auto marker = topic.GetAttributes().find("_ydb_replication_consumer");
-        const auto consumer = FindIf(topic.GetConsumers(), [&](const auto& value) {
-            return value.GetConsumerName() == Cdc->Settings.Consumer;
-        });
-        if (marker == topic.GetAttributes().end() || marker->second != Cdc->Settings.Consumer
-            || consumer == topic.GetConsumers().end() || !consumer->GetImportant())
-        {
-            error = "CDC source consumer must be registered before destination creation";
-            return false;
-        }
-
-        const auto& partitions = topic.GetPartitions();
-        THashSet<ui64> ids;
-        if (partitions.empty()
-            || topic.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
-                != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
-        {
-            error = "CDC mirroring requires fixed nonempty source partitions";
-            return false;
-        }
-        for (const auto& partition : partitions) {
-            if (!partition.GetActive() || partition.GetPartitionId() >= partitions.size()
-                || !partition.GetParentPartitionIds().empty() || !partition.GetChildPartitionIds().empty()
-                || !ids.insert(partition.GetPartitionId()).second)
-            {
-                error = "CDC mirroring requires unsplit contiguous source partitions";
-                return false;
-            }
-        }
-
-        Cdc->PartitionCount = partitions.size();
-        Cdc->ActivateOnDetach = source.state() == Ydb::Table::ChangefeedDescription::STATE_ENABLED;
-        auto request = BuildTopicMirrorRequest(topic, Cdc->Settings.Consumer);
-        request.mutable_partitioning_settings()->set_min_active_partitions(Cdc->PartitionCount);
-        return PrepareCdcTopic(std::move(request), error);
-    }
-
-    bool PrepareCdcReset(TString& error) {
-        const auto& reset = *Cdc->Reset;
-        const auto& definition = reset.Definition;
-        if (!PathId || !reset.TablePathId || !reset.StreamPathId || !reset.TopicPathId || !reset.CreateTxId
-            || reset.TablePathId.OwnerId != SchemeShardId || reset.StreamPathId.OwnerId != SchemeShardId
-            || reset.TopicPathId.OwnerId != SchemeShardId || reset.TablePathId == reset.StreamPathId
-            || reset.TablePathId == reset.TopicPathId || reset.StreamPathId == reset.TopicPathId
-            || definition.GetReplicationSourceConsumer().empty() || !definition.GetTopicPartitions()
-            || definition.GetTopicAutoPartitioning()
-            || definition.GetStreamDescription().GetState() != NKikimrSchemeOp::ECdcStreamStateDisabled)
-        {
-            error = "CDC reset requires an owned destination snapshot with exact original identities and a Disabled stream";
-            return false;
-        }
-
-        Ydb::Table::ChangefeedDescription stream;
-        FillChangefeedDescription(stream, definition.GetStreamDescription());
-        if (!PrepareCdcStream(stream, error)) {
-            return false;
-        }
-        if (!google::protobuf::util::MessageDifferencer::Equivalent(Cdc->Stream, definition.GetStreamDescription())) {
-            error = "CDC reset definition contains unsupported stream settings";
-            return false;
-        }
-
-        Cdc->PartitionCount = definition.GetTopicPartitions();
-        Cdc->ActivateOnDetach = reset.ActivateOnDetach;
-        Ydb::Topic::CreateTopicRequest request;
-        request.mutable_partitioning_settings()->set_min_active_partitions(Cdc->PartitionCount);
-        request.mutable_retention_period()->set_seconds(definition.GetRetentionPeriodSeconds());
-        *request.mutable_consumers() = definition.GetReplicationConsumers();
-        return PrepareCdcTopic(std::move(request), error);
-    }
-
-    bool PrepareCdcTopic(Ydb::Topic::CreateTopicRequest request, TString& error) {
-        Cdc->Consumers = request.consumers();
-        NKikimrSchemeOp::TModifyScheme proposal;
-        auto result = NPQ::NSchema::ProposeCreateTopic(proposal, std::move(request), Database, Database, Cdc->Stream.GetName());
-        if (!result) {
-            error = result.GetErrorMessage();
-            return false;
-        }
-        Cdc->Topic = proposal.GetCreatePersQueueGroup().GetPQTabletConfig();
-        if (AnyOf(Cdc->Topic.GetConsumers(), [](const auto& consumer) {
-            return consumer.GetMetricsLevel() || !consumer.GetMonitoringProjectId().empty();
-        })) {
-            error = "CDC consumer monitoring overrides cannot be migrated yet";
-            return false;
-        }
-        return true;
-    }
+    using ECdcPath = TCdcCreation::EPath;
 
     void DescribeCdc(ECdcPath path) {
         Cdc->Describe = path;
@@ -273,11 +129,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (path == ECdcPath::Table) {
             request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(Cdc->Settings.TablePathId);
         } else {
-            const TString streamPath = Cdc->TablePath + "/" + Cdc->Stream.GetName();
+            const TString streamPath = Cdc->TablePath + "/" + Cdc->Definition.GetStreamDescription().GetName();
             request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(
                 path == ECdcPath::Stream ? streamPath : streamPath + "/streamImpl");
         }
         request->Record.MutableOptions()->SetShowPrivateTable(true);
+        request->Record.MutableOptions()->SetReturnPartitioningInfo(true);
         Send(PipeCache, new TEvPipeCache::TEvForward(request.Release(), SchemeShardId), 0, ++RetryGeneration);
         Become(&TThis::StateDescribeCdc);
     }
@@ -299,8 +156,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         {
             return Error(NKikimrScheme::StatusPreconditionFailed, Cdc->Refusal->Reason);
         }
-        if (Cdc->Reset && TxBody.HasCreateCdcStream()) {
-            TxId = Cdc->Reset->CreateTxId;
+        if (TxBody.HasCreateCdcStream() && Cdc->InitialCreateTxId) {
+            TxId = Cdc->InitialCreateTxId;
         }
         ExecuteSchemeTx(TxBody);
     }
@@ -313,7 +170,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist
             && Cdc->Describe == ECdcPath::Stream && !Cdc->Settings.StreamPathId && !Cdc->Settings.TopicPathId)
         {
-            TxBody = Cdc->Create;
+            if (Cdc->TablePartitionCount != Cdc->Definition.GetTopicPartitions()) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                    << "Cannot create CDC mirror: source feed has " << Cdc->Definition.GetTopicPartitions()
+                    << " partitions, destination table has " << Cdc->TablePartitionCount);
+            }
+            Cdc->FillCreate(TxBody);
             return ExecuteCdcTx();
         }
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
@@ -337,180 +199,36 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void HandleCdcTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& desc = record.GetPathDescription();
-        const auto& self = desc.GetSelf();
-        const TPathId id(self.GetSchemeshardId(), self.GetPathId());
-        const auto& config = desc.GetTable().GetReplicationConfig();
         TString error;
-        if (id != Cdc->Settings.TablePathId || !desc.HasTable()
-            || !config.HasOwnerPathId() || TPathId::FromProto(config.GetOwnerPathId()) != PathId
-            || EqualToOneOf(config.GetImportState(),
-                NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT,
-                NKikimrSchemeOp::TTableReplicationConfig::IMPORTING)
-            || !CheckReplicationConfig(config, EReplicationMode::ReadOnly, EConsistencyLevel::Row, error))
-        {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination must be the final owned ROW replica");
+        if (!Cdc->CheckTable(record, PathId, SchemeShardId, Owner, error)) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
 
-        if (Cdc->Reset) {
-            if (Cdc->Reset->Definition.GetTableName() != self.GetName()) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC reset parent name changed");
-            }
-            Cdc->Settings.StreamPathId = {};
-            Cdc->Settings.TopicPathId = {};
-        }
-        Cdc->TableVersion = self.GetPathVersion();
-        Owner = self.GetOwner();
-        Cdc->TablePath = record.GetPath();
-        auto& tx = Cdc->Create;
-        tx.Clear();
-        tx.SetWorkingDir(TString(ExtractParent(record.GetPath())));
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
-        auto& create = *tx.MutableCreateCdcStream();
-        create.SetTableName(self.GetName());
-        *create.MutableStreamDescription() = Cdc->Stream;
-        create.SetTopicPartitions(Cdc->PartitionCount);
-        create.SetRetentionPeriodSeconds(Cdc->Topic.GetPartitionConfig().GetLifetimeSeconds());
-        create.SetReplicationSourceConsumer(Cdc->Settings.Consumer);
-        *create.MutableReplicationConsumers() = Cdc->Consumers;
-        auto& condition = *tx.AddApplyIf();
-        condition.SetPathId(id.LocalPathId);
-        condition.SetPathVersion(self.GetPathVersion());
-        return DescribeCdc(ECdcPath::Stream);
+        DescribeCdc(ECdcPath::Stream);
     }
 
     void HandleCdcStream(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& desc = record.GetPathDescription();
-        const auto& self = desc.GetSelf();
-        const TPathId id(self.GetSchemeshardId(), self.GetPathId());
-        Ydb::Table::ChangefeedDescription expected, actual;
-        FillChangefeedDescription(expected, Cdc->Stream);
-        FillChangefeedDescription(actual, desc.GetCdcStreamDescription());
-        if (!desc.HasCdcStreamDescription() || self.GetParentPathId() != Cdc->Settings.TablePathId.LocalPathId
-            || id.OwnerId != SchemeShardId
-            || (Cdc->Settings.StreamPathId && id != Cdc->Settings.StreamPathId)
-            || !google::protobuf::util::MessageDifferencer::Equivalent(expected, actual))
-        {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination stream identity or configuration changed");
+        TString error;
+        if (!Cdc->CheckStream(record, SchemeShardId, Owner, error)) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
-        if (self.GetOwner() != Owner || !self.GetACL().empty()) {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination requires inherited owner and ACL");
-        }
-        if (Cdc->Reset) {
-            const auto& reset = *Cdc->Reset;
-            if (id == reset.StreamPathId) {
-                if (self.GetCreateTxId() == reset.CreateTxId) {
-                    return Error(NKikimrScheme::StatusPreconditionFailed, "CDC reset CREATE id was already used by the original");
-                }
-            } else if (self.GetCreateTxId() != reset.CreateTxId || self.GetVersion().GetCdcStreamVersion() != 1) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC replacement does not belong to the unchanged reset CREATE");
-            }
-        }
-        Cdc->Settings.StreamPathId = id;
-        Cdc->StreamVersion = self.GetPathVersion();
-        return DescribeCdc(ECdcPath::Topic);
+
+        DescribeCdc(ECdcPath::Topic);
     }
 
     void HandleCdcTopic(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& desc = record.GetPathDescription();
-        const auto& self = desc.GetSelf();
-        const TPathId id(self.GetSchemeshardId(), self.GetPathId());
-        const auto& topic = desc.GetPersQueueGroup();
-        const auto& config = topic.GetPQTabletConfig();
-        if (!desc.HasPersQueueGroup() || self.GetParentPathId() != Cdc->Settings.StreamPathId.LocalPathId
-            || id.OwnerId != SchemeShardId
-            || (Cdc->Settings.TopicPathId && id != Cdc->Settings.TopicPathId)
-            || config.GetReplicationSourceConsumer() != Cdc->Settings.Consumer
-            || config.GetPartitionConfig().HasMirrorFrom()
-            || config.GetPartitionConfig().GetLifetimeSeconds() != Cdc->Topic.GetPartitionConfig().GetLifetimeSeconds()
-            || topic.GetTotalGroupCount() != Cdc->PartitionCount)
-        {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination topic identity or configuration changed");
+        TString error;
+        if (!Cdc->CheckTopic(record, SchemeShardId, Owner, error)) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
-        THashSet<ui32> partitionIds;
-        if (config.GetPartitionStrategy().GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig::DISABLED
-            || topic.PartitionsSize() != topic.GetTotalGroupCount())
-        {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination partition layout changed");
-        }
-        for (const auto& partition : topic.GetPartitions()) {
-            if (partition.GetStatus() != NKikimrPQ::Active
-                || partition.GetPartitionId() >= topic.GetTotalGroupCount()
-                || partition.ParentPartitionIdsSize() || partition.ChildPartitionIdsSize()
-                || !partitionIds.insert(partition.GetPartitionId()).second)
-            {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination partition layout changed");
-            }
-        }
-        Cdc->Settings.TopicPathId = id;
-        DstPathId = id;
 
-        if (config.ConsumersSize() != Cdc->Topic.ConsumersSize()) {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination consumers changed");
+        if (Cdc->NeedsTopicSetup) {
+            Cdc->FillTopicSetup(TxBody, record);
+            return ExecuteCdcTx();
         }
-        for (const auto& expected : Cdc->Topic.GetConsumers()) {
-            const auto found = FindIf(config.GetConsumers(), [&](const auto& consumer) {
-                return consumer.GetName() == expected.GetName();
-            });
-            if (found == config.GetConsumers().end()) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination consumer is missing");
-            }
-            auto actual = *found;
-            auto normalized = expected;
-            actual.ClearGeneration();
-            normalized.ClearGeneration();
-            if (Cdc->Reset) {
-                actual.ClearVersion();
-                normalized.ClearVersion();
-            }
-            if (!google::protobuf::util::MessageDifferencer::Equivalent(normalized, actual)) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination consumer configuration changed");
-            }
-            const auto* expectedQuota = NPQ::GetReadQuota(Cdc->Topic, expected.GetName());
-            const auto* actualQuota = NPQ::GetReadQuota(config, expected.GetName());
-            if (bool(expectedQuota) != bool(actualQuota)
-                || (expectedQuota && !google::protobuf::util::MessageDifferencer::Equivalent(*expectedQuota, *actualQuota)))
-            {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination consumer quota changed");
-            }
-        }
-        if (self.GetOwner() != Owner || !self.GetACL().empty()) {
-            return Error(NKikimrScheme::StatusPreconditionFailed, "CDC destination requires inherited owner and ACL");
-        }
-        if (Cdc->Reset) {
-            const auto& reset = *Cdc->Reset;
-            const bool originalStream = Cdc->Settings.StreamPathId == reset.StreamPathId;
-            const bool originalTopic = id == reset.TopicPathId;
-            if (originalStream != originalTopic) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC reset found a different child identity");
-            }
-            if (originalStream) {
-                return DropOriginalCdc(self.GetPathVersion());
-            }
-            if (self.GetCreateTxId() != reset.CreateTxId || self.GetVersion().GetPQVersion() != 1) {
-                return Error(NKikimrScheme::StatusPreconditionFailed, "CDC replacement topic was created by another request or altered");
-            }
-        }
+
+        DstPathId = Cdc->Settings.TopicPathId;
         Success();
-    }
-
-    void DropOriginalCdc(ui64 topicVersion) {
-        const auto& reset = *Cdc->Reset;
-        TxBody.Clear();
-        TxBody.SetWorkingDir(TString(ExtractParent(Cdc->TablePath)));
-        TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
-        auto& drop = *TxBody.MutableDropCdcStream();
-        drop.SetTableName(reset.Definition.GetTableName());
-        drop.AddStreamName(Cdc->Stream.GetName());
-        const auto fence = [&](const TPathId& id, ui64 version) {
-            auto& condition = *TxBody.AddApplyIf();
-            condition.SetPathId(id.LocalPathId);
-            condition.SetPathVersion(version);
-        };
-        fence(reset.TablePathId, Cdc->TableVersion);
-        fence(reset.StreamPathId, Cdc->StreamVersion);
-        fence(reset.TopicPathId, topicVersion);
-        ExecuteCdcTx();
     }
 
     bool IsStandby() const {
@@ -792,6 +510,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Error(ConvertStatus(result.GetStatus()), result.GetIssues().ToOneLineString());
         }
 
+        if (Cdc) {
+            TString error;
+            if (!Cdc->Prepare(result.GetTopicDescription(), Database, error)) {
+                return Error(NKikimrScheme::StatusInvalidParameter, error);
+            }
+            return AllocateTxId();
+        }
+
         if (TopicMirror.Error) {
             return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
         }
@@ -819,7 +545,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (CreatePlaceholder) {
+        if (PrepareCdcTable) {
+            replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+        } else if (CreatePlaceholder) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         }
         if (AssignOwner) {
@@ -850,6 +578,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (Cdc) {
+            if (!Cdc->InitialCreateTxId) {
+                if (!PathId || !Cdc->Settings.TablePathId || Cdc->Settings.TablePathId.OwnerId != SchemeShardId) {
+                    return Error(NKikimrScheme::StatusInvalidParameter, "CDC creation requires a local destination table");
+                }
+                return Success();
+            }
             DescribeCdc(ECdcPath::Table);
         } else if (SwitchoverTx.HasAlterTable()) {
             ExecuteSchemeTx(SwitchoverTx);
@@ -920,10 +654,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
-        const bool missingCdcToDrop = Cdc && TxBody.HasDropCdcStream()
-            && EqualToOneOf(record.GetStatus(), NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusNameConflict);
-        if (Cdc && (missingCdcToDrop || EqualToOneOf(record.GetStatus(), NKikimrScheme::StatusAlreadyExists,
-                NKikimrScheme::StatusPreconditionFailed)))
+        if (Cdc && EqualToOneOf(record.GetStatus(), NKikimrScheme::StatusAlreadyExists,
+                NKikimrScheme::StatusPreconditionFailed))
         {
             if (record.GetStatus() == NKikimrScheme::StatusPreconditionFailed) {
                 Cdc->Refusal = TCdcCreation::TRefusal{TxBody, record.GetReason()};
@@ -1403,26 +1135,28 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Success() {
-        Y_ABORT_UNLESS(DstPathId);
+        Y_ABORT_UNLESS(DstPathId || (Cdc && !Cdc->InitialCreateTxId));
         YDB_LOG_INFO("Success",
             {"dstPathId", DstPathId});
 
+        auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId, CreatePlaceholder);
         if (Cdc) {
-            auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId,
-                Cdc->Settings.StreamPathId, Cdc->ActivateOnDetach);
-            if (!Cdc->Reset) {
-                auto& state = result->CdcState.emplace();
+            auto& state = result->CdcState.emplace();
+            if (!Cdc->InitialCreateTxId) {
                 Cdc->Settings.TablePathId.ToProto(state.MutableTablePathId());
-                Cdc->Settings.StreamPathId.ToProto(state.MutableStreamPathId());
                 state.SetActivateOnDetach(Cdc->ActivateOnDetach);
-                *state.MutableDefinition() = Cdc->Create.GetCreateCdcStream();
-                // Final CDC validation follows a fresh allocation, with no proposal using this id.
-                state.SetResetCreateTxId(TxId);
+                *state.MutableDefinition() = Cdc->Definition;
+                *state.MutableTopicSetup() = Cdc->Topic;
+                state.SetInitialCreateTxId(TxId);
+            } else {
+                // Final validation follows a fresh allocation, with no proposal using this id.
+                Cdc->Settings.StreamPathId.ToProto(state.MutableStreamPathId());
+                state.SetTrimRequestId(TxId);
             }
-            Send(Parent, result.Release());
         } else {
-            Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId, CreatePlaceholder));
+            result->PreparingCdc = PrepareCdcTable;
         }
+        Send(Parent, result.Release());
         PassAway();
     }
 
@@ -1446,7 +1180,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         const auto state = CurrentStateFunc();
-        if (Cdc) {
+        if (Cdc && state != &TThis::StateDescribeSrcPath) {
             return AllocateTxId();
         }
         if (state == &TThis::StateDescribeSrcPath) {
@@ -1536,10 +1270,10 @@ public:
     {
     }
 
-    TDstCreator(const TActorId& parent, ui64 schemeShardId, const TString& database,
-            const TPathId& replicationPathId, ui64 rid, ui64 tid, TDstCdcSettings&& settings)
-        : TDstCreator(parent, schemeShardId, {}, replicationPathId, rid, tid,
-            TReplication::ETargetKind::Topic, {}, {}, EReplicationMode::ReadOnly,
+    TDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TString& database,
+            const TPathId& replicationPathId, ui64 rid, ui64 tid, const TString& srcPath, TDstCdcSettings&& settings)
+        : TDstCreator(parent, schemeShardId, proxy, replicationPathId, rid, tid,
+            TReplication::ETargetKind::Topic, srcPath, {}, EReplicationMode::ReadOnly,
             EConsistencyLevel::Row, database, true, TReplication::EState::Ready, false, {})
     {
         Cdc = std::make_unique<TCdcCreation>(TCdcCreation{.Settings = std::move(settings)});
@@ -1547,23 +1281,34 @@ public:
     }
 
     TDstCreator(const TActorId& parent, ui64 schemeShardId, const TString& database,
-            const TPathId& replicationPathId, ui64 rid, ui64 tid, TDstCdcResetSettings&& settings)
-        : TDstCreator(parent, schemeShardId, database, replicationPathId, rid, tid, TDstCdcSettings{
-            .SourceTopic = NYdb::NTopic::TTopicDescription(Ydb::Topic::DescribeTopicResult{}),
+            const TPathId& replicationPathId, ui64 rid, ui64 tid,
+            const NKikimrReplicationController::TCdcTarget& birth)
+        : TDstCreator(parent, schemeShardId, {}, database, replicationPathId, rid, tid, {}, TDstCdcSettings{
+            .TablePathId = TPathId::FromProto(birth.GetTablePathId()),
+            .Consumer = birth.GetTopicSetup().GetReplicationSourceConsumer(),
         })
     {
-        Cdc->Settings.TablePathId = settings.TablePathId;
-        Cdc->Settings.Consumer = settings.Definition.GetReplicationSourceConsumer();
-        Cdc->Reset = std::move(settings);
+        Cdc->InitialCreateTxId = birth.GetInitialCreateTxId();
+        Cdc->Definition = birth.GetDefinition();
+        Cdc->Topic = birth.GetTopicSetup();
+    }
+
+    void PrepareCdcChildren() {
+        PrepareCdcTable = true;
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
         AssignOwner = AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership();
         if (Cdc) {
-            TString error;
-            if (!(Cdc->Reset ? PrepareCdcReset(error) : PrepareCdcSource(error))) {
-                return Error(NKikimrScheme::StatusInvalidParameter, error);
+            if (SrcPath) {
+                return DescribeSrcPath();
+            }
+            if (!Cdc->InitialCreateTxId || Cdc->Settings.Consumer.empty()
+                || !Cdc->Definition.GetTopicPartitions() || Cdc->Definition.GetStreamDescription().GetState()
+                    != NKikimrSchemeOp::ECdcStreamStateDisabled)
+            {
+                return Error(NKikimrScheme::StatusInvalidParameter, "Incomplete saved CDC creation request");
             }
             return AllocateTxId();
         }
@@ -1610,6 +1355,7 @@ private:
     const bool InitialScan;
     const bool Switchover;
     const bool CreatePlaceholder;
+    bool PrepareCdcTable = false;
     const TReplication::EState DesiredState;
     const TTopicMirrorSettings TopicMirror;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
@@ -1702,6 +1448,23 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
+    if (const auto* cdc = GetCdcTarget(target)) {
+        if (cdc->GetCdc().HasInitialCreateTxId()) {
+            return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetDatabase(),
+                replication->GetPathId(), replication->GetId(), targetId, cdc->GetCdc());
+        }
+        const auto* table = replication->FindTarget(cdc->GetCdc().GetParentTargetId());
+        Y_ABORT_UNLESS(table && table->GetDstPathId());
+        TDstCdcSettings settings{
+            .TablePathId = table->GetDstPathId(),
+            .SourceStream = cdc->GetCdc().GetSourceStream(),
+            .Consumer = target->GetStreamConsumerName(),
+        };
+        return new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+            replication->GetDatabase(), replication->GetPathId(), replication->GetId(), targetId,
+            target->GetSrcPath(), std::move(settings));
+    }
+
     if (target->GetKind() == TReplication::ETargetKind::Topic) {
         TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
             target->GetSrcPath(), target->GetStreamConsumerName());
@@ -1710,12 +1473,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
             replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), std::move(topicMirror));
     }
 
-    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
-        replication->GetDatabase(), replication->GetPathId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
+    auto* creator = new TDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetPathId(), replication->GetId(), target->GetId(), target->GetKind(),
+        target->GetSrcPath(), target->GetDstPath(), EReplicationMode::ReadOnly,
+        ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()), replication->GetDatabase(),
         replication->GetConfig().GetInitialScan(), replication->GetDesiredState(),
-        IsSwitchover(replication->GetConfig()));
+        IsSwitchover(replication->GetConfig()), {});
+    if (replication->GetConfig().GetInitialScan() && !GetCdcChildren(*replication, targetId).empty()) {
+        creator->PrepareCdcChildren();
+    }
+    return creator;
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
@@ -1735,20 +1502,6 @@ IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const 
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, TReplication::ETargetKind::Topic,
         srcPath, dstPath, EReplicationMode::ReadOnly, EConsistencyLevel::Row, database, true,
         TReplication::EState::Ready, false, std::move(topicMirror));
-}
-
-IActor* CreateDstCdcResetter(const TActorId& parent, ui64 schemeShardId,
-        const TString& database, const TPathId& replicationPathId,
-        ui64 rid, ui64 tid, TDstCdcResetSettings&& settings)
-{
-    return new TDstCreator(parent, schemeShardId, database, replicationPathId, rid, tid, std::move(settings));
-}
-
-IActor* CreateDstCdcCreator(const TActorId& parent, ui64 schemeShardId,
-        const TString& database, const TPathId& replicationPathId,
-        ui64 rid, ui64 tid, TDstCdcSettings&& settings)
-{
-    return new TDstCreator(parent, schemeShardId, database, replicationPathId, rid, tid, std::move(settings));
 }
 
 }

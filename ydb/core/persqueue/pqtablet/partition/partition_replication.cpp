@@ -11,7 +11,7 @@ ui64 GetEffectiveReplicationOffset(ui64 offset, ui64 startOffset, const TUserInf
 } // namespace
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
-    if (!Mirrorer || ev->Sender != Mirrorer->Actor) {
+    if (IsCdcReplicationTopic() && !IsCurrentMirrorer(ev->Sender)) {
         return;
     }
 
@@ -23,7 +23,7 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
         return;
     }
 
-    if (PendingReplicationData && (*PendingReplicationData)->Sender == ev->Sender) {
+    if (PendingReplicationData) {
         auto& pending = *(*PendingReplicationData)->Get();
         for (const auto& [consumer, offset] : ev->Get()->OffsetsByConsumers) {
             if (offset > static_cast<ui64>(Max<i64>())) {
@@ -54,9 +54,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
 
     ReplicationDataNeedsApply = false;
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
-    if (!Mirrorer
-        || (*PendingReplicationData)->Sender != Mirrorer->Actor
-        || !MirroringEnabled(config)) {
+    if (IsCdcReplicationTopic() && !MirroringEnabled(config)) {
         PendingReplicationData.reset();
         return;
     }

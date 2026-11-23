@@ -188,7 +188,7 @@ void TPartition::DumpKeysForBlobsCompaction() const
 
 void TPartition::TryRunCompaction(bool force)
 {
-    if (StopCompaction) {
+    if (StopCompaction || CdcReplicationTrimPending) {
         LOG_D("Blobs compaction is stopped");
         return;
     }
@@ -531,6 +531,9 @@ void TPartition::AbortBlobsCompaction(const TString& reason, const TActorContext
     // Resume deferred GetWriteInfo only — that path sets StopCompaction and does
     // not restart blobs compaction.
     TryProcessGetWriteInfoRequest(ctx);
+    if (CdcReplicationTrimPending) {
+        ProcessTxsAndUserActs(ctx);
+    }
 }
 
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)

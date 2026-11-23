@@ -50,11 +50,22 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
         EvExpireWorkerLag,
+        EvCdcTrimVerified,
 
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvCdcTrimVerified: public TEventLocal<TEvCdcTrimVerified, EvCdcTrimVerified> {
+        const bool Success;
+        const TString Error;
+
+        explicit TEvCdcTrimVerified(TString error = {})
+            : Success(error.empty())
+            , Error(std::move(error))
+        {}
+    };
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {
@@ -163,15 +174,12 @@ struct TEvPrivate {
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
         const TPathId DstPathId;
         const bool WaitingImport = false;
-        const TPathId CdcStreamPathId;
-        const bool ActivateCdcOnDetach = false;
-
-        // Enrollment binds ParentTargetId and persists this with DstPathId before START.
+        bool PreparingCdc = false;
+        // An invalid DstPathId carries prepared CDC creation; persist it before local CREATE.
+        // A completed creation carries the identities and reset definition to persist before START.
         std::optional<NKikimrReplicationController::TCdcTarget> CdcState;
 
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport);
-        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& topicPathId,
-            const TPathId& streamPathId, bool activateOnDetach);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
         TString ToString() const override;
     };

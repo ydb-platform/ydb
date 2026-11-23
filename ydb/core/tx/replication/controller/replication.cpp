@@ -11,6 +11,7 @@
 #include "tenant_resolver.h"
 #include "util.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -115,10 +116,16 @@ class TReplication::TImpl: public TLagProvider {
                 return ErrorState("Not implemented");
 
             case NKikimrReplication::TReplicationConfig::kSpecific:
-            case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific: {
+                const bool mirrorChangefeeds = Config.GetInitialScan()
+                    && Config.GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::kRow
+                    && AppData(ctx)->FeatureFlags.GetEnableTopicReplication()
+                    && AppData(ctx)->FeatureFlags.GetEnableAsyncReplicationTableOwnership();
                 TargetDiscovererRevision = CredentialsRevision;
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config,
+                    mirrorChangefeeds ? PathId : TPathId{}));
                 break;
+            }
 
             default:
                 return ErrorState(TStringBuilder() << "Unexpected targets: " << Config.GetTargetCase());

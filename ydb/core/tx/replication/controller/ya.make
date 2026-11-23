@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/kqp/common/events
     ydb/services/scheme_secret
+    ydb/core/persqueue/events
     ydb/core/persqueue/public/schema
     ydb/core/protos
     ydb/core/tablet
@@ -31,9 +32,11 @@ PEERDIR(
 )
 
 SRCS(
+    cdc_trim_verifier.cpp
     controller.cpp
     dst_alterer.cpp
     dst_creator.cpp
+    dst_cdc_creator.cpp
     dst_remover.cpp
     event_util.cpp
     lag_provider.cpp

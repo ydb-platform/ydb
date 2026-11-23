@@ -1234,10 +1234,6 @@ message TCreateCdcStream {
     // Topic autopartitioning settings
     optional bool TopicAutoPartitioning = 5 [default = false]; // we always can split and merge of topic partitions
     optional uint32 MaxPartitionCount = 6;
-
-    // Internal creation of a disabled destination CDC stream for async replication.
-    optional string ReplicationSourceConsumer = 7;
-    repeated Ydb.Topic.Consumer ReplicationConsumers = 8;
 }
 
 message TAlterCdcStream {
@@ -1743,6 +1739,9 @@ message TPersQueueGroupDescription {
         optional bool CreatePartition = 3;
     }
     repeated TPartitionBoundary RootPartitionBoundaries = 17;
+
+    // Internal ALTER action. SchemeShard stamps the tablet config after checking ownership.
+    optional uint64 TrimCdcReplicationTxId = 18;
 }
 
 message TRtmrVolumeDescription {
@@ -1951,6 +1950,8 @@ message TReplicationDescription {
     }
 
     optional TAlterTransfer AlterTransfer = 10;
+    // Set by the controller before it enrolls the first mirrored changefeed.
+    optional bool ManagesChangefeeds = 11;
 }
 
 message TBlobDepotDescription {

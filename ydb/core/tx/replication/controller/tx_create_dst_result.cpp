@@ -67,15 +67,41 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         auto* cdc = GetCdcTarget(target);
         if (Ev->Get()->IsSuccess() && cdc) {
-            auto& state = cdc->GetCdc();
-            if (state.GetPhase() != NKikimrReplicationController::TCdcTarget::RESETTING) {
+            if (dstState != TReplication::EDstState::Creating) {
                 Replication.Reset();
                 return true;
             }
-            target->SetDstPathId(Ev->Get()->DstPathId);
-            Ev->Get()->CdcStreamPathId.ToProto(state.MutableStreamPathId());
-            state.ClearResetCreateTxId();
-            state.SetPhase(NKikimrReplicationController::TCdcTarget::PREPARED);
+
+            Y_ABORT_UNLESS(Ev->Get()->CdcState);
+            const auto& created = *Ev->Get()->CdcState;
+            auto& state = cdc->GetCdc();
+            if (Ev->Get()->DstPathId) {
+                target->SetDstPathId(Ev->Get()->DstPathId);
+                target->SetDstState(TReplication::EDstState::Alter);
+                *state.MutableStreamPathId() = created.GetStreamPathId();
+                state.SetTrimRequestId(created.GetTrimRequestId());
+                state.ClearInitialCreateTxId();
+                state.ClearSourceStream();
+                state.ClearDefinition();
+                state.ClearTopicSetup();
+
+                if (Replication->GetState() == TReplication::EState::Removing) {
+                    state.SetPhase(NKikimrReplicationController::TCdcTarget::TRIMMING);
+                } else if (Replication->GetDesiredState() == TReplication::EState::Done
+                    && state.GetPhase() == NKikimrReplicationController::TCdcTarget::STOPPING)
+                {
+                    // This Disabled topic has never mirrored any data.
+                    state.SetPhase(NKikimrReplicationController::TCdcTarget::PREPARED);
+                }
+            } else {
+                // Persist the reserved CREATE before starting destination DDL.
+                *state.MutableTablePathId() = created.GetTablePathId();
+                state.SetActivateOnDetach(created.GetActivateOnDetach());
+                state.SetInitialCreateTxId(created.GetInitialCreateTxId());
+                *state.MutableDefinition() = created.GetDefinition();
+                *state.MutableTopicSetup() = created.GetTopicSetup();
+            }
+
             cdc->Shutdown(ctx);
             db.Table<Schema::Targets>().Key(rid, tid).Update(
                 NIceDb::TUpdate<Schema::Targets::Cdc>(state.SerializeAsString()));
@@ -87,6 +113,8 @@ public:
                 target->SetDstState(TReplication::EDstState::Alter);
             } else if (Replication->GetDesiredState() == TReplication::EState::Done) {
                 target->SetDstState(TReplication::EDstState::Alter);
+            } else if (Ev->Get()->PreparingCdc) {
+                target->SetDstState(TReplication::EDstState::PreparingCdc);
             } else if (Ev->Get()->WaitingImport) {
                 if (Replication->GetDesiredState() == TReplication::EState::Paused) {
                     target->SetDstState(TReplication::EDstState::WaitingImport);

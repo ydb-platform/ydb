@@ -114,7 +114,7 @@ TString CheckCdcActivation(const TTxTransaction& tx, const TPath& tablePath, TOp
         }
         const auto topic = context.SS->Topics.at(topicPath.Base()->PathId);
         const auto topicConfig = topic->GetTabletConfig();
-        if (topic->AlterData || topicConfig.GetReplicationSourceConsumer().empty()
+        if (topic->AlterData || !topicConfig.HasCdcReplication() || topicConfig.GetReplicationSourceConsumer().empty()
             || topicConfig.GetPartitionConfig().HasMirrorFrom())
         {
             return "CDC activation requires a managed stream topic with mirroring stopped";
@@ -551,6 +551,8 @@ public:
 
         txState->ClearShardsInProgress();
 
+        const auto& description = context.SS->Tables.at(txState->TargetPathId)->AlterData->TableDescriptionFull;
+        const bool activateCdcStreams = description.Defined() && description->ActivateCdcStreamsSize();
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -562,6 +564,9 @@ public:
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
             auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
+            if (activateCdcStreams) {
+                event->Record.SetTxKind(NKikimrTxDataShard::TX_KIND_CDC_HANDOFF);
+            }
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 
@@ -1482,20 +1487,18 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    if (!path->IsTable()) {
-        if (alter.ActivateCdcStreamsSize()) {
-            return {CreateReject(id, NKikimrScheme::StatusPreconditionFailed,
-                "CDC activation requires a row table")};
+    if (alter.ActivateCdcStreamsSize()) {
+        if (!path->IsTable()) {
+            return {CreateReject(id, NKikimrScheme::StatusPreconditionFailed, "CDC activation requires a row table")};
         }
-        if (path->IsColumnTable()) {
-            return {CreateAlterColumnTable(id, tx)};
-        }
+        // Handoff validates the owner in Propose and applies only to this table.
         return {CreateAlterTable(id, tx)};
     }
 
-    // Activation belongs to this table only and requires strict ownership in Propose.
-    // Do not apply legacy cleanup's foreign-owner no-op or index decomposition.
-    if (alter.ActivateCdcStreamsSize()) {
+    if (!path->IsTable()) {
+        if (path->IsColumnTable()) {
+            return {CreateAlterColumnTable(id, tx)};
+        }
         return {CreateAlterTable(id, tx)};
     }
 

@@ -27,6 +27,15 @@ void ParsePQTabletConfig(NKikimrPQ::TPQTabletConfig& config,
     }
 }
 
+bool SanitizeCdcReplication(NKikimrPQ::TPQTabletConfig& config, bool allowCdcReplication) {
+    if (config.HasCdcReplication()
+            && (!allowCdcReplication || config.GetReplicationSourceConsumer().empty())) {
+        config.ClearCdcReplication();
+        return true;
+    }
+    return false;
+}
+
 void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTopicTabletInfo::TTopicPartitionInfo* pq, ui64 tabletId) {
     partition.SetPartitionId(pq->PqId);
     partition.SetCreateVersion(pq->CreateVersion);
@@ -240,7 +249,7 @@ TPipeMessageFragments MakePQProposeTransactionFragments(
     fragments.Items.push_back(configCommonPart); // refcount share, one buffer per pass
     fragments.Items.push_back(MakePipeMessageFragment(deltaRecord.SerializeAsString())); // per-shard delta
     if (!bootstrapPart.empty()) {
-        Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
+        Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup || txType == TTxState::TxAlterPQGroup);
         fragments.Items.push_back(bootstrapPart); // refcount share, one buffer per pass
     }
     fragments.Items.push_back(MakePipeMessageFragment(tailRecord.SerializeAsString())); // per-shard record fields
@@ -433,23 +442,36 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     auto topicPath = TPath::Init(txState->TargetPathId, context.SS);
 
+    const bool create = txState->TxType == TTxState::TxCreatePQGroup;
+    const bool cdcTopic = topicPath.Parent().IsCdcStream();
+    TString attachedCdcConsumer;
+    {
+        NKikimrPQ::TPQTabletConfig config;
+        ParsePQTabletConfig(config, *pqGroup);
+        if (SanitizeCdcReplication(config, cdcTopic && !create)) {
+            Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->AlterData->TabletConfig);
+        } else if (config.HasCdcReplication()) {
+            const auto previous = pqGroup->GetTabletConfig();
+            if (!previous.HasCdcReplication() || previous.GetReplicationSourceConsumer().empty()) {
+                attachedCdcConsumer = config.GetReplicationSourceConsumer();
+            }
+        }
+    }
+
     NKikimrPQ::TBootstrapConfig bootstrapConfig;
-    if (txState->TxType == TTxState::TxCreatePQGroup && topicPath.Parent().IsCdcStream()) {
+    if (cdcTopic && (create || !attachedCdcConsumer.empty())) {
         auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
         Y_ABORT_UNLESS(tablePath.IsResolved());
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        NKikimrPQ::TPQTabletConfig config;
-        ParsePQTabletConfig(config, *pqGroup);
-
         for (const auto* p : table->GetPartitions()) {
             const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
             Y_ABORT_UNLESS(shardInfo != nullptr);
 
             auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
-            const auto sourceId = NPQ::MakeCdcSourceId(ui64(shardInfo->TabletID), config.GetReplicationSourceConsumer());
+            const auto sourceId = NPQ::MakeCdcSourceId(ui64(shardInfo->TabletID), attachedCdcConsumer);
             mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
             //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
@@ -779,8 +801,10 @@ void TPropose::PersistState(const TTxState& txState,
 
     TTopicInfo::TPtr pqGroup = context.SS->Topics.at(PathId);
 
-    NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
+    const bool allowCdcReplication = txState.TxType == TTxState::TxAlterPQGroup
+        && context.SS->PathsById.at(Path->ParentPathId)->IsCdcStream();
+    bool configChanged = SanitizeCdcReplication(newTabletConfig, allowCdcReplication);
 
     // Only an alter can back-fill an Id on a pre-existing topic. A create always stamps the
     // sentinel TxStep = 0 in CreatePersQueueGroup, so never touch it here.
@@ -790,6 +814,9 @@ void TPropose::PersistState(const TTxState& txState,
         // The Id is filled by this alter transaction: remember the exact plan step so
         // writers keep the name-keyed fallback during the transition window.
         newTabletConfig.MutableId()->SetTxStep(ui64(txState.PlanStep));
+        configChanged = true;
+    }
+    if (configChanged) {
         Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&pqGroup->AlterData->TabletConfig);
     }
 

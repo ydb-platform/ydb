@@ -22,7 +22,7 @@ public:
     NKikimrReplicationController::TCdcTarget& GetCdc();
     const NKikimrReplicationController::TCdcTarget& GetCdc() const;
     bool ActivateOnDetach() const;
-    bool OnMirrorStopped(NIceDb::TNiceDb& db, const TActorContext& ctx);
+    bool OnDstAltered(NIceDb::TNiceDb& db, const TActorContext& ctx);
     bool IsExpectedDstCreator(const TActorId& actor) const override;
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;

@@ -334,13 +334,24 @@ public:
 
             if (managedCdcTopic) {
                 const auto& consumer = tabletConfig->GetReplicationSourceConsumer();
-                if (alterConfig.HasReplicationSourceConsumer()
-                    && alterConfig.GetReplicationSourceConsumer() != consumer)
-                {
-                    errStr = "Cannot change the replication source consumer of a managed CDC topic";
+                if (!consumer.empty()) {
+                    if (alterConfig.HasReplicationSourceConsumer() && alterConfig.GetReplicationSourceConsumer() != consumer) {
+                        errStr = "Cannot change the replication source consumer of a managed CDC topic";
+                        return nullptr;
+                    }
+                    alterConfig.SetReplicationSourceConsumer(consumer);
+                }
+
+                auto& cdc = *alterConfig.MutableCdcReplication();
+                const auto& previous = tabletConfig->GetCdcReplication();
+                if (cdc.HasTrimTxId() && cdc.GetTrimTxId() != previous.GetTrimTxId()) {
+                    errStr = "Cannot set a CDC trim token directly in the tablet config";
                     return nullptr;
                 }
-                alterConfig.SetReplicationSourceConsumer(consumer);
+                cdc.CopyFrom(previous);
+            } else if (alterConfig.HasCdcReplication()) {
+                errStr = "CDC replication settings require a managed changefeed";
+                return nullptr;
             }
 
             if (tabletConfig->HasId()) {
@@ -708,16 +719,35 @@ public:
         NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
         const auto streamPath = path.Parent();
-        const bool managedCdcTopic = streamPath.IsCdcStream()
+        const bool cdcTopic = streamPath.IsCdcStream();
+        const bool managedCdcTopic = cdcTopic && tabletConfig.HasCdcReplication()
             && !tabletConfig.GetReplicationSourceConsumer().empty();
-        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, managedCdcTopic, errStr);
+        const bool attachCdcTopic = cdcTopic && !managedCdcTopic
+            && !alter.GetPQTabletConfig().GetReplicationSourceConsumer().empty();
+        TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, topic, alter, managedCdcTopic || attachCdcTopic, errStr);
 
         if (!alterData) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
-        if (managedCdcTopic && newTabletConfig.GetPartitionConfig().HasMirrorFrom()) {
+        const bool trimRequested = alter.HasTrimCdcReplicationTxId();
+        const auto& previousCdc = tabletConfig.GetCdcReplication();
+        const bool willMirror = newTabletConfig.GetPartitionConfig().HasMirrorFrom();
+        const bool stopped = !tabletConfig.GetPartitionConfig().HasMirrorFrom() && !willMirror;
+        if (managedCdcTopic && previousCdc.HasTrimTxId() && willMirror) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot restart CDC mirroring after trim");
+            return result;
+        }
+
+        if (trimRequested && (!managedCdcTopic || !alter.GetTrimCdcReplicationTxId() || !stopped
+            || (previousCdc.HasTrimTxId() && previousCdc.GetTrimTxId() != alter.GetTrimCdcReplicationTxId())))
+        {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Trim requires a stopped managed CDC topic and a stable request ID");
+            return result;
+        }
+
+        if (attachCdcTopic || trimRequested || (managedCdcTopic && willMirror)) {
             const auto tablePath = streamPath.Parent();
             const auto checks = tablePath.Check();
             checks.NotEmpty().IsResolved().IsAtLocalSchemeShard().NotDeleted().IsTable().NotUnderOperation();
@@ -726,7 +756,13 @@ public:
                 return result;
             }
 
-            const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
+            const auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+            if (attachCdcTopic && !table->GetSplitOpsInFlight().empty()) {
+                result->SetError(NKikimrScheme::StatusMultipleModifications, "Table split or merge is in progress");
+                return result;
+            }
+
+            const auto& config = table->ReplicationConfig();
             const auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
             const auto expectedOwner = TPathId::FromProto(Transaction.GetExpectedReplicationOwnerPathId());
             if (!Transaction.GetInternal() || !expectedOwner.OwnerId || !expectedOwner.LocalPathId
@@ -735,9 +771,20 @@ public:
                 || stream->State != NKikimrSchemeOp::ECdcStreamStateDisabled)
             {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "Managed CDC mirroring requires a Disabled stream and the current replica table owner");
+                    "Managed CDC attachment, mirroring, and trim require a Disabled stream and the current replica table owner");
                 return result;
             }
+        }
+
+        if (attachCdcTopic && !stopped) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Managed CDC attachment requires a stopped topic");
+            return result;
+        }
+
+        if (trimRequested) {
+            newTabletConfig.MutableCdcReplication()->SetTrimTxId(alter.GetTrimCdcReplicationTxId());
+            Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&alterData->TabletConfig);
         }
 
         // do not change if not set

@@ -537,6 +537,7 @@ class TCdcChangeSenderMain
     void ResolveTopic() {
         auto request = MakeHolder<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
+        request->ResultSet.back().SyncVersion = ResolveOnFirstRecord && !TopicVersion;
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolveTopic);
@@ -673,6 +674,9 @@ class TCdcChangeSenderMain
             AggregatedHeartbeats->RegisterPendingRecordIds(ev->Get()->Records);
         }
         EnqueueRecords(std::move(ev->Get()->Records));
+        if (!IsResolved() && !IsResolving()) {
+            ResolveCdcStream();
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
@@ -757,6 +761,7 @@ public:
         , TChangeSender(this, this, this, this, dataShard.ActorId)
         , StreamPathId(streamPathId)
         , DataShard(dataShard)
+        , ResolveOnFirstRecord(stream.State == NKikimrSchemeOp::ECdcStreamStateDisabled)
         , TopicVersion(0)
     {
         if (stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
@@ -769,7 +774,12 @@ public:
     }
 
     void Bootstrap() {
-        ResolveCdcStream();
+        // A disabled replica feed may acquire its producer namespace after CREATE.
+        if (ResolveOnFirstRecord) {
+            Become(&TThis::StateMain);
+        } else {
+            ResolveCdcStream();
+        }
     }
 
     STFUNC(StateBase) {
@@ -804,6 +814,7 @@ public:
 private:
     const TPathId StreamPathId;
     const TDataShardId DataShard;
+    const bool ResolveOnFirstRecord;
 
     TUserTable::TCdcStream Stream;
     TString SourceId;

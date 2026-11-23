@@ -389,9 +389,11 @@ The `compile_cache_queries` system view is not available in serverless mode.
 
 {% endnote %}
 
-Each cluster node has its own cache of compiled queries. This cache is used by all sessions running on that node: if during query execution its text is already in the cache, no additional compilation is required.
+Each cluster node has its own cache of compiled queries. All sessions on the node share this cache and can reuse a matching plan without recompiling the query.
 
 The system view `compile_cache_queries` provides data on the cache state on all or selected cluster nodes. When querying this view, requests are sent to each node unless a restriction on `NodeId` is specified in the `WHERE` condition. The response returns current information about the cache contents for each node, and the resulting table combines the received data.
+
+At startup, a node uses this view for [compilation cache warmup](../concepts/query_execution/compile-cache-warmup.md). It compiles selected queries before it starts serving clients.
 
 View structure:
 
@@ -400,13 +402,13 @@ View structure:
 | `NodeId` | Node ID where the query is stored in the cache.<br/>Type: `Uint32`.<br/>Key: `0`. |
 | `QueryId` | Unique query ID in the node cache.<br/>Type: `Utf8`.<br/>Key: `1`. |
 | `Query` | Query text. If the query exceeds 10 KB, it is truncated.<br/>Type: `Utf8`. |
-| `AccessCount` | Number of cache hits for the query text.<br/>Type: `Uint64`. |
+| `AccessCount` | Number of accesses to the compiled plan while it is in the cache, including the first access after compilation.<br/>Type: `Uint64`. |
 | `CompiledAt` | Query compilation time.<br/>Type: `Timestamp`. |
 | `UserSID` | Security ID of the user on whose behalf the query was compiled. May be empty for system queries.<br/>Type: `Utf8`. |
 | `LastAccessedAt` | Time of the last access to the query compilation result in the cache.<br/>Type: `Timestamp`. |
 | `CompilationDurationMs` | Query compilation duration in milliseconds.<br/>Type: `Uint64`. |
 | `Warnings` | Warnings that occurred during query compilation.<br/>Type: `Utf8`. |
-| `Metadata` | Query parameter types in JSON format. Contains the `parameters` key with parameter names and their types.<br/>Type: `Utf8`. |
+| `Metadata` | Compilation metadata in JSON format. The `parameters` key contains query parameter names and types. Parameter values are never stored. Only the metadata system user can see the `user_group_sids` key. It contains an array of the user's group IDs, or `null` if the number of groups or the total size of their IDs exceeds the limit. Older entries may omit this key.<br/>Type: `Utf8`. |
 | `IsTruncated` | Flag indicating whether the query text was truncated due to exceeding the 10 KB limit.<br/>Type: `Bool`. |
 | `QueryType` | Query type, one of:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service in concurrent mode<br/>May be empty for old entries.<br/>Type: `Utf8`. |
 | `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old entries without syntax information<br/>`SYNTAX_PG` — deprecated value for entries compiled before the removal of experimental PostgreSQL compatibility; new queries with this syntax are not accepted<br/>Type: `Utf8`. |

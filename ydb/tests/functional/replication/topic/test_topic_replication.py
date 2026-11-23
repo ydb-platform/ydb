@@ -3,7 +3,9 @@ import time
 
 import grpc
 
+from ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
 from ydb.public.api.grpc.draft import ydb_replication_v1_pb2_grpc
+from ydb.public.api.protos import ydb_topic_pb2
 from ydb.public.api.protos.draft import ydb_replication_pb2
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -16,7 +18,9 @@ TOPIC = "/Root/events"
 REPLICATION = "/Root/replication"
 CONSUMER = "application"
 REPLICATION_USER = "root@builtin"
+METADATA = (("x-ydb-database", DATABASE), ("x-ydb-auth-ticket", REPLICATION_USER))
 TIMEOUT = 60
+RPC_TIMEOUT = 5
 
 
 @contextmanager
@@ -46,7 +50,7 @@ def wait_for(description, observe, expected):
     actual = None
     while time.monotonic() < deadline:
         try:
-            actual = observe()
+            actual = observe(deadline)
         except (ydb.SchemeError, ydb.NotFound, ydb.Unavailable, ydb.Overloaded, ydb.Timeout) as error:
             actual = error
         except grpc.RpcError as error:
@@ -55,30 +59,45 @@ def wait_for(description, observe, expected):
             actual = error
         if actual == expected:
             return
-        time.sleep(0.25)
+        time.sleep(max(0, min(0.25, deadline - time.monotonic())))
     raise AssertionError(f"Timed out waiting for {description}: expected {expected!r}, got {actual!r}")
 
 
-def offsets(client):
-    consumer = client.describe_consumer(TOPIC, CONSUMER, include_stats=True)
+def rpc_timeout(deadline):
+    return max(0, min(RPC_TIMEOUT, deadline - time.monotonic()))
+
+
+def unpack(response, result_type):
+    operation = response.operation
+    assert operation.ready, operation
+    ydb.issues._process_response(operation)
+    result = result_type()
+    assert operation.result.Unpack(result), operation
+    return result
+
+
+def offsets(stub, deadline):
+    response = stub.DescribeConsumer(
+        ydb_topic_pb2.DescribeConsumerRequest(path=TOPIC, consumer=CONSUMER, include_stats=True),
+        metadata=METADATA,
+        timeout=rpc_timeout(deadline),
+    )
+    consumer = unpack(response, ydb_topic_pb2.DescribeConsumerResult)
     assert len(consumer.partitions) == 1, consumer
     partition = consumer.partitions[0]
     assert partition.partition_id == 0, partition
-    if partition.partition_stats is None or partition.partition_consumer_stats is None:
+    if not partition.HasField("partition_stats") or not partition.HasField("partition_consumer_stats"):
         return None
-    return partition.partition_stats.partition_end, partition.partition_consumer_stats.committed_offset
+    return partition.partition_stats.partition_offsets.end, partition.partition_consumer_stats.committed_offset
 
 
-def replication_state(stub):
-    operation = stub.DescribeReplication(
+def replication_state(stub, deadline):
+    response = stub.DescribeReplication(
         ydb_replication_pb2.DescribeReplicationRequest(path=REPLICATION),
-        metadata=(("x-ydb-database", DATABASE), ("x-ydb-auth-ticket", REPLICATION_USER)),
-        timeout=5,
-    ).operation
-    assert operation.ready, operation
-    ydb.issues._process_response(operation)
-    result = ydb_replication_pb2.DescribeReplicationResult()
-    assert operation.result.Unpack(result), operation
+        metadata=METADATA,
+        timeout=rpc_timeout(deadline),
+    )
+    result = unpack(response, ydb_replication_pb2.DescribeReplicationResult)
     state = result.WhichOneof("state")
     assert state != "error", result
     return state
@@ -112,6 +131,8 @@ def test_topic_replication_and_failover():
     with (
         database("source") as (source_endpoint, source),
         database("destination") as (destination_endpoint, destination),
+        grpc.insecure_channel(source_endpoint) as source_channel,
+        grpc.insecure_channel(destination_endpoint) as destination_channel,
     ):
         with ydb.QuerySessionPool(source) as queries:
             queries.execute_with_retries(f"CREATE TOPIC `{TOPIC}`;")
@@ -122,18 +143,21 @@ def test_topic_replication_and_failover():
         initial = messages("initial")
         write(source_topic, initial)
 
-        with ydb.QuerySessionPool(destination) as queries, grpc.insecure_channel(destination_endpoint) as channel:
+        source_stats = ydb_topic_v1_pb2_grpc.TopicServiceStub(source_channel)
+        destination_stats = ydb_topic_v1_pb2_grpc.TopicServiceStub(destination_channel)
+        replication = ydb_replication_v1_pb2_grpc.ReplicationServiceStub(destination_channel)
+
+        with ydb.QuerySessionPool(destination) as queries:
             queries.execute_with_retries(
                 f'CREATE ASYNC REPLICATION `{REPLICATION}` FOR `{TOPIC}` AS `{TOPIC}` WITH ('
                 f'CONNECTION_STRING = "grpc://{source_endpoint}/?database={DATABASE}", '
                 f'TOKEN = "{REPLICATION_USER}", CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);'
             )
-            replication = ydb_replication_v1_pb2_grpc.ReplicationServiceStub(channel)
-            wait_for("replication to start", lambda: replication_state(replication), "running")
+            wait_for("replication to start", lambda deadline: replication_state(replication, deadline), "running")
 
-            def destination_offsets():
-                replication_state(replication)
-                return offsets(destination_topic)
+            def destination_offsets(deadline):
+                replication_state(replication, deadline)
+                return offsets(destination_stats, deadline)
 
             initial_end = len(initial)
             wait_for("initial messages on the destination", destination_offsets, (initial_end, 0))
@@ -158,7 +182,7 @@ def test_topic_replication_and_failover():
             queries.execute_with_retries(
                 f'ALTER ASYNC REPLICATION `{REPLICATION}` SET (STATE = "DONE", FAILOVER_MODE = "FORCE");'
             )
-            wait_for("failover completion", lambda: replication_state(replication), "done")
+            wait_for("failover completion", lambda deadline: replication_state(replication, deadline), "done")
             queries.execute_with_retries(f"DROP ASYNC REPLICATION `{REPLICATION}`;")
 
         destination_end = live_end
@@ -169,8 +193,8 @@ def test_topic_replication_and_failover():
             destination_end += len(local)
             destination_topic.commit_offset(TOPIC, CONSUMER, 0, destination_end)
             wait_for(
-                "local consumer offset after failover", lambda: offsets(destination_topic),
+                "local consumer offset after failover", lambda deadline: offsets(destination_stats, deadline),
                 (destination_end, destination_end),
             )
 
-        assert offsets(source_topic) == (live_end, live_end)
+        assert offsets(source_stats, time.monotonic() + RPC_TIMEOUT) == (live_end, live_end)

@@ -8,6 +8,7 @@
 #include <ydb/library/actors/async/wait_for_event.h>
 
 #include <map>
+#include <span>
 
 namespace NKikimr {
 
@@ -32,11 +33,15 @@ namespace NKikimr {
         using TClusterState = NKikimrBridge::TClusterState;
 
         // is the part of the group in the pile sure to hold everything written to the group
-        static bool PartHoldsEverything(const NKikimrBridge::TGroupState& state, const TBridgeInfo::TPile& pile) {
+        static bool PartHoldsEverything(const NKikimrBridge::TGroupState& state, const TBridgeInfo::TPile& pile,
+                std::optional<TBridgePileId> knownAuthorityPileId = std::nullopt) {
             const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId);
             if (!part || part->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
                 return false;
-            } else if (const auto authorityPileId = NBridge::GetAuthorityPileId(state)) {
+            }
+            const auto authorityPileId = knownAuthorityPileId ? *knownAuthorityPileId
+                : NBridge::GetAuthorityPileId(state);
+            if (authorityPileId) {
                 // nothing is written to the group without this part, so it holds everything even when its pile has
                 // been out, while the other parts may lack something
                 return pile.BridgePileId == authorityPileId;
@@ -46,8 +51,39 @@ namespace NKikimr {
             return pile.State == TClusterState::SYNCHRONIZED;
         }
 
+        static bool GroupPartTakesGets(NKikimrBridge::TGroupState::EStage stage) {
+            return stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA
+                || stage == NKikimrBridge::TGroupState::SYNCED;
+        }
+
+        static std::unique_ptr<TEvBlobStorage::TEvGet> MakeGetSubrequest(const TEvBlobStorage::TEvGet& original,
+                std::span<const ui32> queryIndices = {}) {
+            using TGet = TEvBlobStorage::TEvGet;
+            std::unique_ptr<TGet> result;
+            if (queryIndices.empty()) {
+                result = std::make_unique<TGet>(TEvBlobStorage::CloneEventPolicy, original);
+            } else {
+                TArrayHolder<TGet::TQuery> queries(new TGet::TQuery[queryIndices.size()]);
+                for (size_t i = 0; i < queryIndices.size(); ++i) {
+                    queries[i] = original.Queries[queryIndices[i]];
+                }
+                result = std::make_unique<TGet>(queries, queryIndices.size(), original.Deadline, original.GetHandleClass,
+                    original.MustRestoreFirst, original.IsIndexOnly, original.ForceBlockTabletData, original.IsInternal,
+                    original.IsVerboseNoDataEnabled, original.CollectDebugInfo, original.ReportDetailedPartMap);
+                result->DataKind = original.DataKind;
+                result->TabletId = original.TabletId;
+                result->AcquireBlockedGeneration = original.AcquireBlockedGeneration;
+                result->PhantomCheck = original.PhantomCheck;
+                result->Decommission = original.Decommission;
+                result->ReaderTabletData = original.ReaderTabletData;
+            }
+            result->DoNotReportIndexRestoreGetMissingBlobs = original.DoNotReportIndexRestoreGetMissingBlobs;
+            return result;
+        }
+
         struct TRequestPayload {
             size_t Index;
+            bool IsGetFallback;
         };
 
         struct TRequest
@@ -81,6 +117,9 @@ namespace NKikimr {
             struct TGetState {
                 size_t NumResponses;
                 TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
+                std::vector<TBridgePileId> DeferredPiles;
+                std::vector<ui32> FallbackQueryIndices; // populated only for a partial fallback
+                TDynBitMap PayloadConflicts;
                 ui32 BlockedGeneration = 0;
             };
 
@@ -399,9 +438,41 @@ namespace NKikimr {
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
+                auto* getState = std::get_if<TGetState>(&State);
                 const bool trusted = DataIsTrustedInPile(pile);
-                if (ev->Status != NKikimrProto::OK && std::holds_alternative<TGetState>(State) && !MustRestoreFirst &&
-                        !IsRestoring && (!trusted || ev->Status != NKikimrProto::BLOCKED)) {
+                const bool canMakeUpForFailure = getState && !MustRestoreFirst && !IsRestoring &&
+                    (!trusted || ev->Status != NKikimrProto::BLOCKED);
+                Y_ABORT_UNLESS(!payload.IsGetFallback || getState);
+                const auto queryIndices = payload.IsGetFallback ? std::span<const ui32>(getState->FallbackQueryIndices)
+                    : std::span<const ui32>();
+                const bool partialFallback = !queryIndices.empty();
+                const bool canCompleteFromResponse = trusted && !MustRestoreFirst && !IsRestoring && !partialFallback &&
+                    ev->Status == NKikimrProto::OK;
+                const std::span responses(ev->Responses.Get(), ev->ResponseSz);
+                const auto isOk = [](const auto& response) { return response.Status == NKikimrProto::OK; };
+                const auto firstUnresolved = canCompleteFromResponse ? std::ranges::find_if_not(responses, isOk)
+                    : responses.begin();
+                const bool completeTrustedResponse = canCompleteFromResponse && firstUnresolved == responses.end();
+                if (getState && !getState->DeferredPiles.empty() && canMakeUpForFailure && !completeTrustedResponse) {
+                    const auto& get = static_cast<const TEvBlobStorage::TEvGet&>(*OriginalRequest);
+                    Y_ABORT_UNLESS(!get.MustRestoreFirst && !get.IsIndexOnly);
+                    if (ev->Status == NKikimrProto::OK) {
+                        Y_ABORT_UNLESS(responses.size() == get.QuerySize);
+                        // A whole-batch miss uses the original query order directly.
+                        if (firstUnresolved != responses.begin() || std::ranges::any_of(responses, isOk)) {
+                            for (auto it = firstUnresolved; it != responses.end(); ++it) {
+                                if (!isOk(*it)) {
+                                    getState->FallbackQueryIndices.push_back(it - responses.begin());
+                                }
+                            }
+                        }
+                    }
+                    for (TBridgePileId bridgePileId : std::exchange(getState->DeferredPiles, {})) {
+                        auto fallback = MakeGetSubrequest(get, getState->FallbackQueryIndices);
+                        self.SendQuery(shared_from_this(), bridgePileId, std::move(fallback), {.IsGetFallback = true});
+                    }
+                }
+                if (ev->Status != NKikimrProto::OK && canMakeUpForFailure) {
                     // the failed pile doesn't fail the read other piles can answer: the blob found in any pile is there;
                     // its blobs are taken for failed ones, so their absence remains unproven, unless some pile has them.
                     // The failure of the trusted pile is remembered to be the answer when other piles lack something.
@@ -410,9 +481,11 @@ namespace NKikimr {
                         TrustedPileFailureReason = ev->ErrorReason;
                     }
                     auto& get = static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest);
-                    auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, get.QuerySize, self.GroupId);
-                    for (ui32 i = 0; i < get.QuerySize; ++i) {
-                        res->Responses[i].Id = get.Queries[i].Id;
+                    const size_t numResponses = partialFallback ? queryIndices.size() : get.QuerySize;
+                    auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, numResponses, self.GroupId);
+                    for (ui32 i = 0; i < numResponses; ++i) {
+                        const ui32 queryIndex = partialFallback ? queryIndices[i] : i;
+                        res->Responses[i].Id = get.Queries[queryIndex].Id;
                         res->Responses[i].Status = NKikimrProto::ERROR;
                     }
                     res->BlockedGeneration = ev->BlockedGeneration;
@@ -479,16 +552,16 @@ namespace NKikimr {
                     }
                 }
 
-                Y_ABORT_UNLESS(std::holds_alternative<TGetState>(State));
-                auto& state = std::get<TGetState>(State);
+                Y_ABORT_UNLESS(getState);
+                auto& state = *getState;
 
                 // ensure we got right number of responses
-                Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
+                const size_t expectedResponses = partialFallback ? queryIndices.size() : state.NumResponses;
+                Y_ABORT_UNLESS(ev->ResponseSz == expectedResponses);
 
                 if (MustRestoreFirst) {
                     // we are going to restore data, so we have to collect answers from all piles
-                } else if (trusted && std::all_of(&ev->Responses[0], &ev->Responses[ev->ResponseSz],
-                        [](const auto& r) { return r.Status == NKikimrProto::OK; })) {
+                } else if (!payload.IsGetFallback && completeTrustedResponse) {
                     // this is response from synced pile having every blob asked for, we can fully trust it
                     return ev;
                 } else {
@@ -501,22 +574,29 @@ namespace NKikimr {
 
                 if (!state.Responses) {
                     // this is the first response, we just repeat what we got in response
+                    Y_ABORT_UNLESS(!payload.IsGetFallback);
                     state.Responses.Reset(new TEvBlobStorage::TEvGetResult::TResponse[state.NumResponses]);
                     std::move(&ev->Responses[0], &ev->Responses[state.NumResponses], &state.Responses[0]);
                 } else {
                     // this is additional response, merge data with already received responses
-                    for (size_t i = 0; i < state.NumResponses; ++i) {
-                        auto& existing = state.Responses[i];
+                    for (size_t i = 0; i < ev->ResponseSz; ++i) {
+                        const size_t queryIndex = partialFallback ? queryIndices[i] : i;
+                        auto& existing = state.Responses[queryIndex];
                         auto& current = ev->Responses[i];
                         Y_ABORT_UNLESS(existing.Id == current.Id);
                         const bool keep = existing.Keep || current.Keep;
                         const bool doNotKeep = existing.DoNotKeep || current.DoNotKeep;
 
-                        if (existing.Status == current.Status) {
+                        if (state.PayloadConflicts.Get(queryIndex)) {
+                            // conflicting successful payloads must not be replaced by another copy
+                        } else if (existing.Status == current.Status) {
                             // status did not change, so there is nothing to do, unless the piles have different data
                             if (!(existing.Buffer == current.Buffer)) {
                                 STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB08, "piles have different data of the blob",
                                     (GroupId, self.GroupId), (BlobId, existing.Id), (BridgePileId, pile.BridgePileId));
+                                if (current.Status == NKikimrProto::OK) {
+                                    state.PayloadConflicts.Set(queryIndex);
+                                }
                                 existing = {};
                                 existing.Id = current.Id;
                                 existing.Status = NKikimrProto::ERROR;
@@ -543,7 +623,10 @@ namespace NKikimr {
                 state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
 
                 if (!MustRestoreFirst) {
-                    if (ResponsesPending) {
+                    if (payload.IsGetFallback && completeTrustedResponse) {
+                        // the trusted pile answered the whole original batch, and earlier observations are merged now
+                        return MakeGetResult(self, state);
+                    } else if (ResponsesPending) {
                         return nullptr;
                     } else if (!TrustedPileResponded) {
                         // strange situation: we haven't got response from trusted pile?
@@ -556,7 +639,7 @@ namespace NKikimr {
                         return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
                             TrustedPileFailure, TrustedPileFailureReason, self.GroupId);
                     }
-                    return IssueNextRestoreGet(self); // nothing to restore, it makes the result
+                    return MakeGetResult(self, state);
                 }
 
                 for (size_t i = 0; i < state.NumResponses; ++i) {
@@ -577,6 +660,13 @@ namespace NKikimr {
                 }
 
                 return IssueNextRestoreGet(self);
+            }
+
+            std::unique_ptr<IEventBase> MakeGetResult(TThis& self, TGetState& state) {
+                auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, state.NumResponses,
+                    std::move(state.Responses), self.GroupId);
+                res->BlockedGeneration = state.BlockedGeneration;
+                return res;
             }
 
             std::unique_ptr<IEventBase> IssueNextRestoreGet(TThis& self) {
@@ -618,10 +708,7 @@ namespace NKikimr {
 
                 return std::visit(TOverloaded{
                     [&](TGetState& state) -> std::unique_ptr<IEventBase> {
-                        auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, state.NumResponses,
-                            std::move(state.Responses), self.GroupId);
-                        res->BlockedGeneration = state.BlockedGeneration;
-                        return res;
+                        return MakeGetResult(self, state);
                     },
                     [&](TDiscoverState& state) -> std::unique_ptr<IEventBase> {
                         Y_ABORT_UNLESS(state.Id);
@@ -1186,8 +1273,12 @@ namespace NKikimr {
             std::vector<std::shared_ptr<TRequest>> requests;
             THashSet<const TRequest*> seen;
             for (const auto& [cookie, item] : RequestsInFlight) {
-                if (!item.Request->Finished && !IsPileInDataQuorum(item.Pile->BridgePileId) &&
-                        seen.insert(item.Request.get()).second) {
+                const auto* getState = std::get_if<TRequest::TGetState>(&item.Request->State);
+                const bool waitsForPileOut = !IsPileInDataQuorum(item.Pile->BridgePileId) ||
+                    (getState && std::ranges::any_of(getState->DeferredPiles, [&](TBridgePileId bridgePileId) {
+                        return !IsPileInDataQuorum(bridgePileId);
+                    }));
+                if (!item.Request->Finished && waitsForPileOut && seen.insert(item.Request.get()).second) {
                     requests.push_back(item.Request);
                 }
             }
@@ -1337,9 +1428,22 @@ namespace NKikimr {
             // decide which piles get the request with the group state and the cluster state we have now
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
+            std::vector<TBridgePileId> deferredGetPiles;
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> backgroundWrites;
             std::vector<TGroupId> garbageHeldBack; // the parts of HOT_STANDBY piles not getting garbage collection
             bool hasTrustedPile = false;
+
+            TBridgePileId initialGetPileId;
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
+                const auto *selfPile = BridgeInfo->SelfNodePile;
+                if (AppData()->FeatureFlags.GetEnableBridgeProxyLocalPileFirstGet() && !ev->Get()->MustRestoreFirst &&
+                        !ev->Get()->IsIndexOnly && ev->Get()->Deadline == TInstant::Max() &&
+                        selfPile->State == TClusterState::SYNCHRONIZED && IsPileInDataQuorum(selfPile->BridgePileId) &&
+                        PartHoldsEverything(state, *selfPile, authorityPileId)) {
+                    initialGetPileId = selfPile->BridgePileId;
+                }
+            }
+
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
                 if (!IsPileInDataQuorum(bridgePileId)) {
@@ -1364,22 +1468,31 @@ namespace NKikimr {
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
                 if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
                     // Check every synchronized copy; incomplete parts being synced do not imply degradation.
-                    if (!PartHoldsEverything(state, *pile)) {
+                    if (!PartHoldsEverything(state, *pile, authorityPileId)) {
                         return;
                     }
                 }
 
                 // check the sync state for this group
+                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
+                    if (initialGetPileId && pile->BridgePileId != initialGetPileId) {
+                        if (GroupPartTakesGets(groupPileInfo.GetStage())) {
+                            deferredGetPiles.push_back(pile->BridgePileId);
+                        }
+                        return;
+                    }
+                }
                 if (auto eventToSend = PrepareEvent(groupPileInfo, *ev->Get(), pile->BridgePileId)) {
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
                         // A DATA part may already be the sole writer in a newer view. Its reply (or generation fence)
                         // is needed even though this view still trusts another part for completeness.
-                        hasTrustedPile |= PartHoldsEverything(state, *pile);
+                        hasTrustedPile |= PartHoldsEverything(state, *pile, authorityPileId);
                     }
                     subrequests.emplace_back(pile->BridgePileId, std::move(eventToSend));
                 }
             });
-            if (subrequests.empty() || (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> && !hasTrustedPile)) {
+            if (subrequests.empty() ||
+                    (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> && !hasTrustedPile)) {
                 // no pile is able to take this request with the group state we have; it is older than the cluster state
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
@@ -1403,6 +1516,9 @@ namespace NKikimr {
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
             request->BridgeInfo = BridgeInfo;
             request->RoutingBudget = routingBudget;
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
+                std::get<TRequest::TGetState>(request->State).DeferredPiles = std::move(deferredGetPiles);
+            }
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
@@ -1770,8 +1886,12 @@ namespace NKikimr {
                     return nullptr; // the rule is shared with BS_CONTROLLER counting the space of the group
                 }
             }
-
-            switch (stage) {
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
+                if (!GroupPartTakesGets(stage)) {
+                    return nullptr;
+                }
+                return MakeGetSubrequest(ev);
+            } else switch (stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
                         if (!ev.Keep) {

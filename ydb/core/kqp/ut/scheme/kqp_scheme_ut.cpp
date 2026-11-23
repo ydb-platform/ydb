@@ -4491,7 +4491,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateTableWithPgColumn) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -7013,7 +7013,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterTableWithPgColumn) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/TableWithPgColumn";
@@ -16762,6 +16762,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddPgColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17797,6 +17798,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -17835,6 +17837,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     Y_UNIT_TEST(PgMultipleTypesColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetDisablePgCompatibility(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

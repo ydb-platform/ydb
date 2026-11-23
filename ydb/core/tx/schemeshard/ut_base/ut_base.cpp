@@ -8174,6 +8174,38 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
+    Y_UNIT_TEST(CreatePersQueueGroupWithInvalidPartitionParams) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionStrategy {
+                    MinPartitionCount: 5
+                    MaxPartitionCount: 1
+                    PartitionStrategyType: CAN_SPLIT_AND_MERGE
+                }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid min and max partition count"}});
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+            }
+            PartitionsToAdd { PartitionId: 1 GroupId: 1 }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(TopicMeteringMode) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

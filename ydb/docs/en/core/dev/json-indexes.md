@@ -43,9 +43,15 @@ Functions and expressions for working with JSON in predicates:
 
 Ready-made use cases are collected in the [JSON document search recipes](../recipes/json-search/index.md) section.
 
+## Filtered JSON indexes {#filtered}
+
+A filtered JSON index limits search to rows with specific values in filter columns, for example documents belonging to one customer. To create one, list the filter columns before the JSON column in `ON`. See the [creation example](../yql/reference/syntax/create_table/json_index.md#filtered).
+
+Queries must include an equality condition for every filter column, together with a JSON search condition. See the [query example](../yql/reference/syntax/select/json_index.md#filtered).
+
 ## Updating JSON indexes {#update}
 
-JSON indexes are automatically maintained when data is modified and are updated synchronously together with the main table. Tables with JSON indexes support:
+JSON indexes are automatically maintained when data is modified and are updated synchronously together with the main table. A query through a JSON index sees rows inserted earlier in the same transaction, before commit. Tables with JSON indexes support:
 
 * `INSERT`
 * `UPSERT`
@@ -65,6 +71,8 @@ Additionally, tables with JSON indexes do not support:
 For execution via JSON indexes, only expressions based on the `JSON_EXISTS` and `JSON_VALUE` functions in the `WHERE` block, combined by the `AND` / `OR` operators according to the rules below, are supported.
 
 Predicates with `ERROR ON ERROR` in `JSON_EXISTS`, as well as with `ERROR ON EMPTY` or `ERROR ON ERROR` in `JSON_VALUE`, are not used for searching via a JSON index, because when searching via the index some table rows are not read, and an error on such a row may go unnoticed. If another condition in `AND` allows the index to be used, the condition with the `ERROR` handler is checked by post-filter.
+
+The `PASSING` clause also supports parameters of type `Json`, including arrays of values to match. See the [query example](../yql/reference/syntax/select/json_index.md#json-parameters).
 
 ### JSON_EXISTS {#json-exists}
 
@@ -95,7 +103,8 @@ WHERE JSON_EXISTS(doc, '$.a') AND JSON_EXISTS(doc, '$.b')
 WHERE JSON_EXISTS(doc, '$.a') OR JSON_EXISTS(doc, '$.b')
 ```
 
-**Prohibited** (error when using the `VIEW` statement or index auto-selection failure):
+
+**Examples of predicates that cannot be used for index lookup:**
 
 ```yql
 -- Comparison predicates at the top level of the path (outside ? (...))
@@ -224,7 +233,6 @@ To check 'value equals `false`' or 'value equals `null`', use a JsonPath filter 
 ## Limitations {#limitations}
 
 * JSON indexes are supported only for [row tables](../concepts/datamodel/table.md#row-oriented-tables).
-* The table's primary key must consist of a single column of an integer type (`Uint64`, `Uint32`, `Int64`, or `Int32`). This is a temporary limitation that will be removed in future development.
 * A single JSON index indexes exactly one column of type `Json` or `JsonDocument`.
 * The `COVER` expression is not supported for JSON indexes.
 * A number of data modification operations and mechanisms are [not supported](#update) for tables with JSON indexes.

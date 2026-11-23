@@ -33,6 +33,26 @@ struct TAuditDetails {
     }
 };
 
+enum class EBindingRenameAction {
+    None,
+    Prepare,
+    RecordSource,
+    Commit,
+    Abort,
+    Finish,
+};
+
+struct TBindingModifyAuditDetails: TAuditDetails<FederatedQuery::Binding> {
+    TBindingModifyAuditDetails() = default;
+
+    TBindingModifyAuditDetails(const TAuditDetails<FederatedQuery::Binding>& audit)
+        : TAuditDetails<FederatedQuery::Binding>(audit)
+    {
+    }
+
+    TMaybe<FederatedQuery::Internal::BindingRename> Rename;
+};
+
 struct TNodeInfo {
     ui32 NodeId;
     TString InstanceId;
@@ -283,39 +303,37 @@ struct TEvControlPlaneStorage {
         }
     };
 
-    template <typename ProtoMessage, typename AuditMessage, ui32 EventType>
+    template <typename ProtoMessage, typename AuditMessage, ui32 EventType, typename TAudit = TAuditDetails<AuditMessage>>
     struct TControlPlaneAuditableResponse
-        : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType> {
+        : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType, TAudit>, ProtoMessage, EventType> {
+        using TBase = TControlPlaneResponse<TControlPlaneAuditableResponse, ProtoMessage, EventType>;
+        using TResponseAuditDetails = TAudit;
         using TProto = ProtoMessage;
         static constexpr bool Auditable = true;
         using TAuditMessage = AuditMessage;
 
-        explicit TControlPlaneAuditableResponse(const ProtoMessage& result, const TAuditDetails<AuditMessage>& auditDetails)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result)
+        explicit TControlPlaneAuditableResponse(const ProtoMessage& result, const TAudit& auditDetails)
+            : TBase(result)
             , AuditDetails(auditDetails)
         {
         }
 
         explicit TControlPlaneAuditableResponse(const NYql::TIssues& issues)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(issues)
+            : TBase(issues)
         {
         }
 
-        explicit TControlPlaneAuditableResponse(
-            const ProtoMessage& result, const NYql::TIssues& issues, const TAuditDetails<AuditMessage>& auditDetails)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(
-                  result, issues)
+        explicit TControlPlaneAuditableResponse(const ProtoMessage& result, const NYql::TIssues& issues, const TAudit& auditDetails)
+            : TBase(result, issues)
             , AuditDetails(auditDetails)
         {
         }
 
         size_t GetByteSize() const {
-            return TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage,
-                       EventType>::GetByteSize() +
-                   AuditDetails.GetByteSize();
+            return TBase::GetByteSize() + AuditDetails.GetByteSize();
         }
 
-        TAuditDetails<AuditMessage> AuditDetails;
+        TAudit AuditDetails;
     };
 
     using TEvCreateQueryRequest = TControlPlaneRequest<FederatedQuery::CreateQueryRequest, EvCreateQueryRequest>;
@@ -363,9 +381,19 @@ struct TEvControlPlaneStorage {
     using TEvListBindingsResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListBindingsResult, EvListBindingsResponse>;
     using TEvDescribeBindingRequest = TControlPlaneRequest<FederatedQuery::DescribeBindingRequest, EvDescribeBindingRequest>;
     using TEvDescribeBindingResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeBindingResult, EvDescribeBindingResponse>;
-    using TEvModifyBindingRequest = TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>;
-    using TEvModifyBindingResponse =
-        TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse>;
+
+    struct TEvModifyBindingRequest
+        : TBaseControlPlaneRequest<TEvModifyBindingRequest, FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest> {
+        using TBaseControlPlaneRequest::TBaseControlPlaneRequest;
+
+        TMaybe<i64> ObservedRevision;
+        EBindingRenameAction RenameAction = EBindingRenameAction::None;
+        TString RenameOperationId;
+        TString RenameIdentity;
+    };
+
+    using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding,
+        EvModifyBindingResponse, TBindingModifyAuditDetails>;
     using TEvDeleteBindingRequest = TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>;
     using TEvDeleteBindingResponse =
         TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;

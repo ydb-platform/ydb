@@ -47,23 +47,24 @@ public:
 
     void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& cfg,
-        ::NMonitoring::TDynamicCounterPtr counters, bool allowLocalFiles) override {
+        ::NMonitoring::TDynamicCounterPtr counters, bool allowLocalFiles, ::NMonitoring::TDynamicCounterPtr cpuCounters) override {
 #if defined(_linux_) || defined(_darwin_)
         NDB::registerFormats();
-        factory.RegisterSource<NS3::TSource>("S3Source", [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](
+        factory.RegisterSource<NS3::TSource>("S3Source", [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles, cpuCounters](
                                                              NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
             YQL_LOG(DEBUG) << "S3Source factory: cfg.EnableScheduling=" << cfg.EnableScheduling
                            << " args.SchedulableWorkFactory=" << (args.SchedulableWorkFactory ? "set" : "null");
             auto workFactory = cfg.EnableScheduling ? std::move(args.SchedulableWorkFactory) : nullptr;
             return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, std::move(args.Alloc), gateway, std::move(settings), args.InputIndex,
                 args.StatsLevel, args.TxId, args.SecureParams, args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory,
-                retryPolicy, cfg, counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(workFactory));
+                retryPolicy, cfg, counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(workFactory), cpuCounters);
         });
 #else
         Y_UNUSED(factory);
         Y_UNUSED(credentialsFactory);
         Y_UNUSED(gateway);
         Y_UNUSED(counters);
+        Y_UNUSED(cpuCounters);
 #endif
     }
 };

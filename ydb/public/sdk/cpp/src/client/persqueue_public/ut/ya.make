@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/persqueue_public)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/coverage.inc)
+
 REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)

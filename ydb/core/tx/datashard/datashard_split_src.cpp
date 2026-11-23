@@ -254,7 +254,8 @@ public:
                 // Forward grandparent ancestor locks (multi-hop split/merge)
                 for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
                     auto& proto = *srcLockInfo.AddAncestorLocks();
-                    proto.SetTabletId(tabletId);
+                    proto.SetTabletId(ancestorLock.TabletId);
+                    proto.SetCreatedOn(ancestorLock.CreatedOn);
                     proto.SetGeneration(ancestorLock.Generation);
                     proto.SetCounter(ancestorLock.Counter);
                     proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());

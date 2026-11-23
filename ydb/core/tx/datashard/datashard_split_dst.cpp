@@ -321,6 +321,7 @@ public:
                 for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
                     TAncestorLock ancestorLock;
                     ancestorLock.TabletId = protoLock.GetTabletId();
+                    ancestorLock.CreatedOn = protoLock.GetCreatedOn();
                     ancestorLock.Generation = protoLock.GetGeneration();
                     ancestorLock.Counter = protoLock.GetCounter();
                     ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());

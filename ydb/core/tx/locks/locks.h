@@ -11,6 +11,7 @@
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
+#include <util/digest/multi.h>
 #include <util/generic/list.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
@@ -30,11 +31,40 @@ struct TLockWriteSeqNum {
     ui64 WriteSeqNum = 0;
 };
 
-// Last uncommitted write for one WriterIndex.
+// A logical lock within one physical LockTxId (and table).
+struct TLockKey {
+    ui64 Owner = 0;
+    ui64 CreatedOn = 0;
+
+    bool operator==(const TLockKey&) const = default;
+};
+
+struct TLockKeyHash {
+    size_t operator()(const TLockKey& key) const {
+        return MultiHash(key.Owner, key.CreatedOn);
+    }
+};
+
+TString SerializeLockShardsPath(TConstArrayRef<ui64> path);
+TVector<ui64> DeserializeLockShardsPath(const TString& data);
+TString SerializeLockCreatedOnRange(const std::optional<TSerializedTableRange>& range);
+std::optional<TSerializedTableRange> DeserializeLockCreatedOnRange(const TString& data);
+
+struct TWriteSeqNumBranch {
+    TVector<ui64> ShardsPath;
+    ui64 WriteSeqNum = 0;
+    TString SerializedResult; // serialized NKikimrDataEvents::TWriteSeqNumResult
+};
+
+// Aggregate maximum for one WriterIndex, retained independently of branch GC.
+// The current chain also keeps its latest result here.
+// TODO: do we need it?
 struct TWriteSeqNumState {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
-    TString SerializedResult; // last TEvWriteResult; empty if none
+    TString SerializedResult; // latest current-chain result; empty if none
+    std::optional<ui64> GcWriteSeqNum;
+    TVector<TWriteSeqNumBranch> Branches;
 };
 
 // ELockFlags type safe enum
@@ -62,11 +92,16 @@ inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
 // writes were transferred to this shard during split/merge.
 struct TAncestorLock {
     ui64 TabletId = 0;      // ancestor shard
+    ui64 CreatedOn = 0;
+
+    TLockKey GetKey() const { return {TabletId, CreatedOn}; }
+
     ui32 Generation = 0;
     ui64 Counter = 0;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
     THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates; // WriterIndex -> state
+    std::optional<TSerializedTableRange> CreatedOnRange; // Null means CreatedOn=self.
 };
 
 class ILocksDb {
@@ -118,12 +153,14 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
-    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult, std::optional<ui64> gcWriteSeqNum = std::nullopt) = 0;
     virtual void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) = 0;
     virtual void PersistAddAncestorLock(ui64 lockId, const TAncestorLock& lock) = 0;
-    virtual void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) = 0;
-    virtual void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
-    virtual void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex) = 0;
+    virtual void PersistRemoveAncestorLock(ui64 lockId, TLockKey key) = 0;
+    virtual void PersistAncestorLockWriteSeqNum(ui64 lockId, TLockKey key, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult, std::optional<ui64> gcWriteSeqNum = std::nullopt) = 0;
+    virtual void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, TLockKey key, ui64 writerIndex) = 0;
+    virtual void PersistAncestorLockBranch(ui64 lockId, TLockKey key, ui64 writerIndex, const TWriteSeqNumBranch& branch) = 0;
+    virtual void PersistRemoveAncestorLockBranch(ui64 lockId, TLockKey key, ui64 writerIndex, const TVector<ui64>& shardsPath) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -519,8 +556,13 @@ public:
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
-    const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
+    const THashMap<TLockKey, TAncestorLock, TLockKeyHash>& GetAncestorLocks() const { return AncestorLocks; }
     void AddAncestorLock(TAncestorLock lock);
+    void PersistAncestorLock(TAncestorLock lock, ILocksDb& db);
+    const TAncestorLock* FindAncestorLock(TLockKey key) const {
+        auto it = AncestorLocks.find(key);
+        return it != AncestorLocks.end() ? &it->second : nullptr;
+    }
 
     const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
     bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
@@ -572,7 +614,7 @@ private:
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
     THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates;
-    THashMap<ui64, TAncestorLock> AncestorLocks;  // TabletId -> TAncestorLock
+    THashMap<TLockKey, TAncestorLock, TLockKeyHash> AncestorLocks;
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -1369,7 +1411,7 @@ private:
     ILocksDb* Db = nullptr;
 
     TLock MakeLock(
-        ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+        ui64 lockTxId, ui64 shardId, ui64 createdOn, ui32 generation, ui64 counter,
         const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const;
     TLock MakeAndLogLock(
         ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,

@@ -3496,6 +3496,7 @@ private:
 
             addLock->SetLockId(lock.LockId);
             addLock->SetDataShard(lock.DataShard);
+            addLock->SetCreatedOn(lock.CreatedOn);
             addLock->SetGeneration(lock.Generation);
             addLock->SetCounter(lock.Counter);
             addLock->SetSchemeShard(lock.SchemeShard);

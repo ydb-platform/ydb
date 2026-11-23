@@ -956,6 +956,11 @@ message TPersistentSnapshot {
     optional uint64 TimeoutMs = 7;
 }
 
+// Canonical serialized key for a persisted branch.
+message TLockShardsPath {
+    repeated uint64 Shards = 1 [packed = true];
+}
+
 // Info about the state of a writer to a lock.
 message TWriteSeqNumState {
     optional uint64 WriterIndex = 1;
@@ -974,6 +979,7 @@ message TSplitSrcLockInfo {
         optional uint64 CreateTimestamp = 4;
         optional uint64 Flags           = 5;
         repeated TWriteSeqNumState WriteSeqNumStates = 6;
+        optional uint64 CreatedOn = 7;
     }
 
     optional uint64 LockId          = 1;

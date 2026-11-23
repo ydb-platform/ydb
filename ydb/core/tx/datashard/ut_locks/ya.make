@@ -1,5 +1,9 @@
 UNITTEST_FOR(ydb/core/tx/datashard)
 
+ADDINCL(
+    ydb/core/tablet_flat
+)
+
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -8,6 +12,8 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/tablet_flat/test/libs/exec
+    ydb/core/tablet_flat/test/libs/table
     ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre
@@ -24,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_locks.cpp
+    datashard_ut_locks_schema.cpp
 )
 
 END()

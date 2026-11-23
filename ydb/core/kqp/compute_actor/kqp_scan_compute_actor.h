@@ -39,6 +39,7 @@ private:
             return MultiHash(
                 lock.GetLockId(),
                 lock.GetDataShard(),
+                lock.GetCreatedOn(),
                 lock.GetSchemeShard(),
                 lock.GetPathId(),
                 lock.GetGeneration(),
@@ -51,6 +52,7 @@ private:
         bool operator()(const NKikimrDataEvents::TLock& lhs, const NKikimrDataEvents::TLock& rhs) {
             return lhs.GetLockId() == rhs.GetLockId()
                 && lhs.GetDataShard() == rhs.GetDataShard()
+                && lhs.GetCreatedOn() == rhs.GetCreatedOn()
                 && lhs.GetSchemeShard() == rhs.GetSchemeShard()
                 && lhs.GetPathId() == rhs.GetPathId()
                 && lhs.GetGeneration() == rhs.GetGeneration()

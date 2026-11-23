@@ -153,7 +153,7 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
                  continue;
              }
 
-            auto it = lockInfo->GetAncestorLocks().find(lockProto.GetDataShard());
+            auto it = lockInfo->GetAncestorLocks().find(TLockKey{lockProto.GetDataShard(), lockProto.GetCreatedOn()});
             if (it == lockInfo->GetAncestorLocks().end()) {
                 YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (ancestor lock not found)",
                     {"lockId", lockProto.GetLockId()},

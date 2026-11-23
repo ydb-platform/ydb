@@ -45,8 +45,8 @@ bool SameBorders(const TTableRange& lhs, const TTableRange& rhs) {
 namespace {
 
 struct TKqpLock {
-    using TKey = std::tuple<ui64, ui64, ui64, ui64>;
-    TKey GetKey() const { return std::make_tuple(Proto.GetLockId(), Proto.GetDataShard(), Proto.GetSchemeShard(), Proto.GetPathId()); }
+    using TKey = std::tuple<ui64, ui64, ui64, ui64, ui64>;
+    TKey GetKey() const { return std::make_tuple(Proto.GetLockId(), Proto.GetDataShard(), Proto.GetCreatedOn(), Proto.GetSchemeShard(), Proto.GetPathId()); }
 
     bool Invalidated(const TKqpLock& newLock) const {
         YDB_LOG_ENSURE(GetKey() == newLock.GetKey());

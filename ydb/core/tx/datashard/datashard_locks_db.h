@@ -10,6 +10,7 @@ private:
     using TBase = NLocks::TShardLocksDb<TDataShard, TDataShard::Schema>;
 
 public:
+    using TSchema = TDataShard::Schema;
     using TBase::TBase;
 
     void PersistLockCounter(ui64 lockId, ui64 counter) override;

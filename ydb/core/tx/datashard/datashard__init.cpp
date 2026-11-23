@@ -1,5 +1,6 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
+#include "datashard_locks_schema.h"
 #include "memory_state_migration.h"
 #include "build_index/build_index_scan_manager.h"
 #include "build_index/common_helper.h"
@@ -334,6 +335,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::LockWriteSeqNums);
         PRECHARGE_SYS_TABLE(Schema::AncestorShardsLocks);
         PRECHARGE_SYS_TABLE(Schema::AncestorLockWriteSeqNums);
+        PRECHARGE_SYS_TABLE(Schema::AncestorLockBranches);
         PRECHARGE_SYS_TABLE(Schema::LockChangeRecords);
         PRECHARGE_SYS_TABLE(Schema::ChangeRecordCommits);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileDetails);
@@ -778,6 +780,10 @@ public:
             Schema::SchemaTables<Schema::ScanProgress>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
         } else {
             db.Materialize<Schema>();
+        }
+
+        if (!UpdateLocksSchema(txc.DB)) {
+            return false;
         }
 
         if (isCreate) {

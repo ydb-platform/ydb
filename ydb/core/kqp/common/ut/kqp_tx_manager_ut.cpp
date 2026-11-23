@@ -22,6 +22,28 @@ TVector<NScheme::TTypeInfo> Uint32KeyColumnTypes() {
 
 Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
 
+    Y_UNIT_TEST(LockIdentityIncludesCreatedOn) {
+        auto txManager = CreateKqpTransactionManager();
+        txManager->AddShard(100, false, "/Root/Table");
+        NKikimrDataEvents::TLock lock;
+        lock.SetLockId(1);
+        lock.SetDataShard(10);
+        lock.SetCreatedOn(20);
+        lock.SetSchemeShard(1);
+        lock.SetPathId(2);
+        lock.SetGeneration(3);
+        lock.SetCounter(4);
+        UNIT_ASSERT(txManager->AddLock(100, lock));
+        lock.SetCreatedOn(30);
+        lock.SetCounter(5);
+        UNIT_ASSERT(txManager->AddLock(100, lock));
+        UNIT_ASSERT_VALUES_EQUAL(txManager->GetLocks(100).size(), 2);
+        // A repeat replaces neither independent identity.
+        UNIT_ASSERT(txManager->AddLock(100, lock));
+        UNIT_ASSERT_VALUES_EQUAL(txManager->GetLocks(100).size(), 2);
+    }
+
+
     Y_UNIT_TEST(AddShardStoresAndReturnsMeta) {
         auto txManager = CreateKqpTransactionManager();
 

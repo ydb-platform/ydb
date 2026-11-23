@@ -1,6 +1,8 @@
 #include "locks.h"
 #include "time_counters.h"
 
+#include <ydb/core/protos/tx_datashard.pb.h>
+
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/base/appdata.h>
 
@@ -92,6 +94,40 @@ bool TRangeKey::ParseSerializedLockRange(const ILocksDb::TLockRange& range) {
     return true;
 }
 
+TString SerializeLockShardsPath(TConstArrayRef<ui64> path) {
+    Y_ENSURE(!path.empty());
+    NKikimrTxDataShard::TLockShardsPath proto;
+    for (ui64 shard : path) {
+        Y_ENSURE(shard);
+        proto.AddShards(shard);
+    }
+    return proto.SerializeAsString();
+}
+
+TVector<ui64> DeserializeLockShardsPath(const TString& data) {
+    NKikimrTxDataShard::TLockShardsPath proto;
+    Y_ENSURE(proto.ParseFromString(data) && proto.ShardsSize(), "Invalid persisted lock path");
+    return {proto.GetShards().begin(), proto.GetShards().end()};
+}
+
+TString SerializeLockCreatedOnRange(const std::optional<TSerializedTableRange>& range) {
+    if (!range) {
+        return {};
+    }
+    NKikimrTx::TKeyRange proto;
+    range->Serialize(proto);
+    return proto.SerializeAsString();
+}
+
+std::optional<TSerializedTableRange> DeserializeLockCreatedOnRange(const TString& data) {
+    if (data.empty()) {
+        return std::nullopt;
+    }
+    NKikimrTx::TKeyRange proto;
+    Y_ENSURE(proto.ParseFromString(data), "Invalid persisted lock range");
+    return TSerializedTableRange(proto);
+}
+
 // TLockInfo
 
 TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId)
@@ -149,40 +185,55 @@ TLockInfo::~TLockInfo() {
     }
 }
 
+void TLockInfo::PersistAncestorLock(TAncestorLock lock, ILocksDb& db) {
+    Y_ENSURE(IsPersistent());
+    Y_ENSURE(!AncestorLocks.contains(lock.GetKey()), "Logical lock already exists");
+    db.PersistAddAncestorLock(LockId, lock);
+    for (const auto& [writer, state] : lock.WriteSeqNumStates) {
+        db.PersistAncestorLockWriteSeqNum(LockId, lock.GetKey(), writer,
+            state.WriteSeqNum, state.SerializedResult, state.GcWriteSeqNum);
+        for (const auto& branch : state.Branches) {
+            db.PersistAncestorLockBranch(LockId, lock.GetKey(), writer, branch);
+        }
+    }
+    AddAncestorLock(std::move(lock));
+}
+
 void TLockInfo::AddAncestorLock(TAncestorLock lock) {
-    ui64 tabletId = lock.TabletId;
-    AncestorLocks[tabletId] = std::move(lock);
+    const auto key = lock.GetKey();
+    Y_ENSURE(key.Owner && key.CreatedOn);
+    AncestorLocks[key] = std::move(lock);
 }
 
 const TWriteSeqNumState* TLockInfo::FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const {
-    auto it = AncestorLocks.find(dataShard);
+    auto it = AncestorLocks.find(TLockKey{dataShard, dataShard});
     if (it == AncestorLocks.end()) return nullptr;
     auto jt = it->second.WriteSeqNumStates.find(writerIndex);
     return jt != it->second.WriteSeqNumStates.end() ? &jt->second : nullptr;
 }
 
 bool TLockInfo::SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db) {
-    auto it = AncestorLocks.find(dataShard);
+    auto it = AncestorLocks.find(TLockKey{dataShard, dataShard});
     Y_ENSURE(it != AncestorLocks.end());
     auto& state = it->second.WriteSeqNumStates[writerIndex];
     state.WriterIndex = writerIndex;
     state.WriteSeqNum = writeSeqNum;
     state.SerializedResult.clear();
     if (db && IsPersistent()) {
-        db->PersistAncestorLockWriteSeqNum(LockId, dataShard, writerIndex, writeSeqNum, {});
+        db->PersistAncestorLockWriteSeqNum(LockId, it->first, writerIndex, writeSeqNum, {}, state.GcWriteSeqNum);
         return true;
     }
     return false;
 }
 
 void TLockInfo::SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db) {
-    auto it = AncestorLocks.find(dataShard);
+    auto it = AncestorLocks.find(TLockKey{dataShard, dataShard});
     Y_ENSURE(it != AncestorLocks.end());
     auto jt = it->second.WriteSeqNumStates.find(writerIndex);
     Y_ENSURE(jt != it->second.WriteSeqNumStates.end() && jt->second.WriteSeqNum);
     jt->second.SerializedResult = std::move(serializedResult);
     if (db && IsPersistent()) {
-        db->PersistAncestorLockWriteSeqNum(LockId, dataShard, writerIndex, jt->second.WriteSeqNum, jt->second.SerializedResult);
+        db->PersistAncestorLockWriteSeqNum(LockId, it->first, writerIndex, jt->second.WriteSeqNum, jt->second.SerializedResult, jt->second.GcWriteSeqNum);
     }
 }
 
@@ -336,10 +387,13 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     WriteSeqNumStates.clear();
 
     // Remove ancestor shard records
-    for (const auto& [tabletId, ancestorLock] : AncestorLocks) {
-        db->PersistRemoveAncestorLock(LockId, tabletId);
-        for (const auto& [writerIdx, _] : ancestorLock.WriteSeqNumStates) {
-            db->PersistRemoveAncestorLockWriteSeqNum(LockId, tabletId, writerIdx);
+    for (const auto& [key, ancestorLock] : AncestorLocks) {
+        db->PersistRemoveAncestorLock(LockId, key);
+        for (const auto& [writerIdx, state] : ancestorLock.WriteSeqNumStates) {
+            for (const auto& branch : state.Branches) {
+                db->PersistRemoveAncestorLockBranch(LockId, key, writerIdx, branch.ShardsPath);
+            }
+            db->PersistRemoveAncestorLockWriteSeqNum(LockId, key, writerIdx);
         }
     }
     AncestorLocks.clear();
@@ -623,7 +677,7 @@ bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db)
     state.WriteSeqNum = writeSeqNum;
     state.SerializedResult.clear();
     if (db && IsPersistent()) {
-        db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum, {});
+        db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum, {}, state.GcWriteSeqNum);
         return true;
     }
     return false;
@@ -635,7 +689,7 @@ void TLockInfo::SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult,
         "Result of an uncommitted write imply its position in the chain");
     it->second.SerializedResult = std::move(serializedResult);
     if (db && IsPersistent()) {
-        db->PersistLockWriteSeqNum(LockId, writerIndex, it->second.WriteSeqNum, it->second.SerializedResult);
+        db->PersistLockWriteSeqNum(LockId, writerIndex, it->second.WriteSeqNum, it->second.SerializedResult, it->second.GcWriteSeqNum);
     }
 }
 
@@ -1463,7 +1517,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         if (Update->WriteSeqNumUpdate && Update->Lock) {
             const auto& lock = Update->Lock;
             for (auto [shardId, seqNum] : Update->WriteSeqNumUpdate->SetAncestorWriteSeqNums) {
-                auto it = lock->AncestorLocks.find(shardId);
+                auto it = lock->AncestorLocks.find(TLockKey{shardId, shardId});
                 Y_ENSURE(it != lock->AncestorLocks.end());
                 const auto& ancestorLock = it->second;
                 auto ancestorCounter = TLock::IsError(counter) ? counter : ancestorLock.Counter;
@@ -1472,7 +1526,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                     .WriteSeqNum = seqNum,
                 };
                 out.push_back(MakeLock(
-                    Update->LockTxId, shardId,
+                    Update->LockTxId, shardId, ancestorLock.CreatedOn,
                     ancestorLock.Generation, ancestorCounter,
                     tableId, lock->IsWriteLock(), writerSeqNum));
             }
@@ -1481,7 +1535,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
 
     auto makeEchoLocks = [&](const TPathId& tableId) {
         out.push_back(MakeLock(
-            Update->LockTxId, Self->TabletID(),
+            Update->LockTxId, Self->TabletID(), Self->TabletID(),
             lock ? lock->GetGeneration() : Self->Generation(), counter,
             tableId, Update->Lock && Update->Lock->IsWriteLock(),
             Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
@@ -1900,12 +1954,13 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
 }
 
 TSysLocks::TLock TSysLocks::MakeLock(
-    ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+    ui64 lockTxId, ui64 shardId, ui64 createdOn, ui32 generation, ui64 counter,
     const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const
 {
     TLock lock;
     lock.LockId = lockTxId;
     lock.DataShard = shardId;
+    lock.CreatedOn = createdOn;
     lock.Generation = generation;
     lock.Counter = counter;
     lock.SchemeShard = pathId.OwnerId;
@@ -1921,7 +1976,11 @@ TSysLocks::TLock TSysLocks::MakeAndLogLock(
     ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
     const TPathId& pathId, bool hasWrites,TLockWriteSeqNum writeSeqNum) const
 {
-    TLock lock = MakeLock(lockTxId, shardId, generation, counter, pathId, hasWrites, writeSeqNum);
+    TLock lock = MakeLock(lockTxId, shardId, shardId, generation, counter, pathId, hasWrites, writeSeqNum);
+    // This raw access log is only for /sys/locks reads of current locks.
+    // Ancestor echoes are built separately and must never enter TxArtifacts.Locks.
+    // TODO: Do we need ancestors lock here?
+    Y_ENSURE(shardId == Self->TabletID());
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;
     return lock;
@@ -2048,6 +2107,7 @@ void TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& r
     {
         TAncestorLock ancestorLock;
         ancestorLock.TabletId = srcTabletId;
+        ancestorLock.CreatedOn = srcTabletId;
         ancestorLock.Generation = row.Generation;
         ancestorLock.Counter = row.Counter;
         ancestorLock.CreationTime = TInstant::MicroSeconds(row.CreateTs);
@@ -2055,7 +2115,7 @@ void TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& r
         for (auto& state : row.WriteSeqNumStates) {
             ui64 index = state.WriterIndex;
             locksDb.PersistAncestorLockWriteSeqNum(
-                row.LockId, srcTabletId,
+                row.LockId, ancestorLock.GetKey(),
                 state.WriterIndex, state.WriteSeqNum, state.SerializedResult);
             ancestorLock.WriteSeqNumStates[index] = std::move(state);
         }
@@ -2069,7 +2129,7 @@ void TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& r
         locksDb.PersistAddAncestorLock(row.LockId, ancestorLock);
         for (const auto& [_, state] : ancestorLock.WriteSeqNumStates) {
             locksDb.PersistAncestorLockWriteSeqNum(
-                row.LockId, ancestorLock.TabletId,
+                row.LockId, ancestorLock.GetKey(),
                 state.WriterIndex, state.WriteSeqNum, state.SerializedResult);
         }
         lock->AddAncestorLock(std::move(ancestorLock));

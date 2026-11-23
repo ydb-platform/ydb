@@ -133,6 +133,7 @@ struct TSysTables {
                 ErrorBroken = Max<ui64>()
             };
 
+            ui64 CreatedOn = 0; // Not part of the raw TPersistentLock layout
             bool HasWrites = false; // Not exposed as a column
             ui64 WriterIndex = 0; // Not exposed as a column
             ui64 WriteSeqNum = 0; // Not exposed as a column
@@ -172,6 +173,7 @@ struct TSysTables {
                 TLock result;
                 result.LockId = lock.LockId;
                 result.DataShard = lock.DataShard;
+                result.CreatedOn = lock.DataShard;
                 result.Generation = lock.Generation;
                 result.Counter = lock.Counter;
                 result.SchemeShard = lock.SchemeShard;

@@ -348,7 +348,7 @@ public:
                 current = lock->GetWriteSeqNum(writerIndex);
             } else {
                 // Ancestor shard
-                auto ancestorIt = lock->GetAncestorLocks().find(shardKey);
+                auto ancestorIt = lock->GetAncestorLocks().find(TLockKey{shardKey, shardKey});
                 if (ancestorIt == lock->GetAncestorLocks().end()) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                         << "Ancestor shard " << shardKey << " not found in lock " << guardLocks.LockTxId);
@@ -493,7 +493,7 @@ public:
             }
 
             writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites,
-                lock.WriterIndex, lock.WriteSeqNum);
+                lock.WriterIndex, lock.WriteSeqNum, lock.CreatedOn);
 
             YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
                 {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});

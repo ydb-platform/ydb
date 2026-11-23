@@ -248,6 +248,7 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_datashard_rest_3_m1.cpp
     datashard_locks_db.cpp
+    datashard_locks_schema.cpp
     datashard__migrate_schemeshard.cpp
     datashard__mon_reset_schema_version.cpp
     datashard__monitoring.cpp

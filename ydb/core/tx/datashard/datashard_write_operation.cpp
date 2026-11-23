@@ -596,8 +596,11 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     using TLocksVector = TVector<TSysTables::TLocksTable::TPersistentLock>;
     TLocksVector vec;
     vec.reserve(LocksAccessLog().Locks.size());
-    for (auto& pr : LocksAccessLog().Locks)
-        vec.emplace_back(pr.second);
+    for (const auto& [lockId, lock] : LocksAccessLog().Locks) {
+        // Raw artifacts represent current-shard /sys/locks reads only.
+        Y_ENSURE(lock.CreatedOn == lock.DataShard);
+        vec.emplace_back(lock);
+    }
 
     // Historically C++ column type was TVector<TLock>
     const char* vecDataStart = reinterpret_cast<const char*>(vec.data());

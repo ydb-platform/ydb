@@ -23,25 +23,31 @@ index d587624005d2a63f9f069a61d3e9452901895f2f..7dfde467d7cc70c9e0475349978bf79a
       - Credentials instance. Falls back to :class:`~ydb.AnonymousCredentials` if ``None``.
 diff --git a/ydb/_long_poll.py b/ydb/_long_poll.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..f5a4aba1c542f77f8933f2887fe63f4b076f3dcd
+index 0000000000000000000000000000000000000000..6c119c8605d4ed5c50b36e5e935630709a1c3c6e
 --- /dev/null
 +++ b/ydb/_long_poll.py
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,75 @@
 +"""Conditional ListEndpoints on the driver's bootstrap channel."""
 +
 +import threading
++from itertools import cycle
 +
 +from . import _apis, connection, resolver
 +from .aio import connection as aio_connection
 +
 +
 +class LongPoll:
-+    def __init__(self, config, channel):
++    def __init__(self, config, bootstrap):
 +        self.config = config
-+        self.method = _apis.DiscoveryService.Stub(channel).ListEndpoints
++        self.bootstrap = bootstrap
++        alternates = list(dict.fromkeys(endpoint for endpoint in config.endpoints if endpoint != config.endpoint))
++        self.alternates = cycle(alternates + [config.endpoint]) if alternates else None
 +        self.generation = None
 +        self.active = None
 +        self.lock = threading.Lock()
++
++    def next_bootstrap(self):
++        self.bootstrap = type(self.bootstrap)(next(self.alternates), self.config)
 +
 +    def options(self):
 +        headers = [("x-ydb-discovery-long-poll", "1")]
@@ -74,7 +80,7 @@ index 0000000000000000000000000000000000000000..f5a4aba1c542f77f8933f2887fe63f4b
 +        with self.lock:
 +            if stopped():
 +                raise RuntimeError("Driver stopped")
-+            self.active = self.method.future(
++            self.active = _apis.DiscoveryService.Stub(self.bootstrap._channel).ListEndpoints.future(
 +                resolver._list_endpoints_request_factory(self.config), metadata=meta, timeout=timeout
 +            )
 +            call = self.active
@@ -89,7 +95,7 @@ index 0000000000000000000000000000000000000000..f5a4aba1c542f77f8933f2887fe63f4b
 +        meta = await aio_connection._construct_metadata(self.config, None) + headers
 +        if stopped():
 +            raise RuntimeError("Driver stopped")
-+        self.active = call = self.method(
++        self.active = call = _apis.DiscoveryService.Stub(self.bootstrap._channel).ListEndpoints(
 +            resolver._list_endpoints_request_factory(self.config), metadata=meta, timeout=timeout
 +        )
 +        try:
@@ -357,7 +363,7 @@ index e5875f2dbc002b13cab509926005a0d604d17bec..a75233cc2cc21745627c0f5075934162
      async def _dispatch_loop(self, stream):
          while not self._closed and self._stream is stream:
 diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
-index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349a8ca7c2f 100644
+index 150274368d9238a9969df34306c6142c6b40f4e4..f7112ad56614f8b768e84ad05e7e98c5e2624fc9 100644
 --- a/ydb/aio/pool.py
 +++ b/ydb/aio/pool.py
 @@ -81,7 +81,10 @@ class ConnectionsCache(_ConnectionsCache):
@@ -412,7 +418,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
  
          local_dc = resolve_details.self_location
  
-@@ -213,9 +226,44 @@ class Discovery:
+@@ -213,9 +226,53 @@ class Discovery:
  
      def stop(self) -> None:
          self._should_stop = True
@@ -420,17 +426,20 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
 +            self._watch.cancel()
          self._wake_up_event.set()
  
++    async def _retire_discovery_route(self):
++        self._cache.route_epoch += 1
++        retired = self._cache.values()
++        for conn in retired:
++            self._cache.remove(conn)
++        await asyncio.gather(*(conn.retire() for conn in retired))
++
 +    async def _run_long_poll(self):
 +        failures = 0
 +        while not self._should_stop:
 +            try:
 +                resolved, generation = await self._watch.poll_async(lambda: self._should_stop)
 +                if generation != self._watch.generation:
-+                    self._cache.route_epoch += 1
-+                    retired = self._cache.values()
-+                    for conn in retired:
-+                        self._cache.remove(conn)
-+                    await asyncio.gather(*(conn.retire() for conn in retired))
++                    await self._retire_discovery_route()
 +                self._watch.generation = generation
 +                ready = await self._apply_endpoints(resolved)
 +                if not ready:
@@ -438,6 +447,11 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
 +                failures = 0
 +                delay = self._discovery_interval() if generation is None else 0
 +            except (Exception, asyncio.CancelledError) as error:
++                if self._watch.generation is not None and failures == 0:
++                    await self._retire_discovery_route()
++                if self._watch.alternates and not self._should_stop:
++                    await self._watch.bootstrap.close()
++                    self._watch.next_bootstrap()
 +                self._resolver._add_debug_details("ListEndpoints poll failed: %s", error)
 +                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
 +                delay = min(16, 2 ** min(failures, 4)) * self._emergency_retry_interval()
@@ -448,6 +462,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
 +                except asyncio.TimeoutError:
 +                    pass
 +                self._wake_up_event.clear()
++        await self._watch.bootstrap.close()
 +        await self._cache.cleanup()
 +
      async def run(self) -> None:
@@ -457,18 +472,27 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
          while True:
              try:
                  successful = await self.execute_discovery()
-@@ -284,6 +332,10 @@ class ConnectionPool(IConnectionPool):
+@@ -284,13 +341,18 @@ class ConnectionPool(IConnectionPool):
          else:
              # Start discovery as usual
              self._discovery = Discovery(self._store, self._driver_config)
 +            if driver_config.use_long_poll:
 +                from ydb._long_poll import LongPoll
 +
-+                self._discovery._watch = LongPoll(driver_config, self._grpc_init._channel)
++                self._discovery._watch = LongPoll(driver_config, self._grpc_init)
              self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
  
      async def stop(self, timeout: int = 10) -> None:  # type: ignore[override]  # async override of sync method
-@@ -305,6 +357,8 @@ class ConnectionPool(IConnectionPool):
+         self._stopping = True
+         if self._discovery:
+             self._discovery.stop()
+-        await self._grpc_init.close()
++        if not self._driver_config.use_long_poll:
++            await self._grpc_init.close()
+         try:
+             await asyncio.wait_for(self._discovery_task, timeout=timeout)
+         except asyncio.TimeoutError:
+@@ -305,6 +367,8 @@ class ConnectionPool(IConnectionPool):
  
      def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
          async def __wrapper__() -> None:
@@ -477,7 +501,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
              await connection.close()
              if self._discovery:
                  self._discovery.notify_disconnected()
-@@ -352,7 +406,7 @@ class ConnectionPool(IConnectionPool):
+@@ -352,7 +416,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
          except BaseException:
@@ -652,10 +676,10 @@ index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6
      def set_database(self, database: str) -> "DriverConfig":
 diff --git a/ydb/long_poll_test.py b/ydb/long_poll_test.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..7bb76fb02d5198dd3c7f3dc80df315232348d99f
+index 0000000000000000000000000000000000000000..82de6728a7807038872965e793d18235b2262010
 --- /dev/null
 +++ b/ydb/long_poll_test.py
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,275 @@
 +import asyncio
 +from concurrent.futures import ThreadPoolExecutor
 +from contextlib import contextmanager
@@ -833,14 +857,106 @@ index 0000000000000000000000000000000000000000..7bb76fb02d5198dd3c7f3dc80df31523
 +def test_rejects_missing_or_invalid_managed_generation(values):
 +    channel = grpc.insecure_channel("localhost:1")
 +    try:
-+        poll = LongPoll(None, channel)
++        poll = LongPoll(ydb.DriverConfig("localhost:1", "/database"), None)
 +        poll.generation = 10
 +        with pytest.raises(ValueError):
 +            poll.result(None, [("x-ydb-route-generation", v) for v in values], [])
 +    finally:
 +        channel.close()
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++@pytest.mark.parametrize("roll_back_after_ready", [False, True])
++def test_rotate_bootstrap_with_one_socket_and_keep_managed_floor(async_driver, roll_back_after_ready):
++    from unittest.mock import patch
++
++    class Bootstrap(unary.DiscoveryServiceServicer):
++        def __init__(self, primary):
++            self.primary = primary
++
++        def ListEndpoints(self, request, context):
++            headers = dict(context.invocation_metadata())
++            assert request.database == "/database" and headers["x-ydb-auth-ticket"] == "ticket"
++            generation = 1 if self.primary else 2
++            if self.primary and not roll_back_after_ready:
++                context.abort(grpc.StatusCode.UNAVAILABLE, "primary unavailable at start")
++            if self.primary and "x-ydb-if-route-generation" in headers:
++                while context.is_active() and not lose_capability.wait(0.01):
++                    pass
++                generation = None
++            elif not self.primary:
++                alternate_headers.append(headers)
++                if headers.get("x-ydb-if-route-generation") == "2":
++                    while context.is_active():
++                        threading.Event().wait(0.01)
++                else:
++                    while context.is_active() and not allow_alternate.wait(0.01):
++                        pass
++            if generation is not None:
++                context.set_trailing_metadata((("x-ydb-route-generation", str(generation)),))
++            result = _apis.ydb_discovery.ListEndpointsResult()
++            result.endpoints.add(address="127.0.0.1", port=ports[2 if self.primary else 3], node_id=1)
++            reply = _apis.ydb_discovery.ListEndpointsResponse()
++            reply.operation.ready = True
++            reply.operation.status = 400000
++            reply.operation.result.Pack(result)
++            return reply
++
++    async def run():
++        async def wait_until(check):
++            async def wait():
++                while not check():
++                    await asyncio.sleep(0.01)
++
++            await asyncio.wait_for(wait(), 6)
++
++        for server in servers:
++            server.start()
++        config = ydb.DriverConfig(
++            f"127.0.0.1:{ports[0]}",
++            "/database",
++            endpoints=[f"127.0.0.1:{ports[1]}"],
++            use_long_poll=True,
++            auth_token="ticket",
++        )
++        discovery_owner = ydb.aio.pool.Discovery if async_driver else ydb.pool.Discovery
++        with patch.object(discovery_owner, "_emergency_retry_interval", return_value=0.02):
++            driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
++            try:
++                if roll_back_after_ready:
++                    await wait_until(lambda: bool(driver._store.connections))
++                    assert list(driver._store.connections) == [f"127.0.0.1:{ports[2]}"]
++                    lose_capability.set()
++                await wait_until(lambda: bool(alternate_headers))
++                assert alternate_headers[0].get("x-ydb-if-route-generation") == ("1" if roll_back_after_ready else None)
++                assert not driver._store.connections
++                if Path("/proc/net/tcp").exists():
++                    assert not established(ports[0]) and not established(ports[2])
++                allow_alternate.set()
++                await wait_until(lambda: list(driver._store.connections) == [f"127.0.0.1:{ports[3]}"])
++            finally:
++                allow_alternate.set()
++                lose_capability.set()
++                if async_driver:
++                    await driver.stop()
++                else:
++                    await asyncio.to_thread(driver.stop)
++        if Path("/proc/net/tcp").exists():
++            await wait_until(lambda: not established(ports[1]))
++
++    servers = [grpc.server(ThreadPoolExecutor(max_workers=3)) for _ in range(4)]
++    ports = [s.add_insecure_port("127.0.0.1:0") for s in servers]
++    alternate_headers = []
++    lose_capability, allow_alternate = threading.Event(), threading.Event()
++    for index in (0, 1):
++        unary.add_DiscoveryServiceServicer_to_server(Bootstrap(primary=index == 0), servers[index])
++    try:
++        asyncio.run(run())
++    finally:
++        for server in servers:
++            server.stop(0).wait()
 diff --git a/ydb/pool.py b/ydb/pool.py
-index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e23a7e4bf 100644
+index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..9f7e43716876083303e88a092c95470912efa1b8 100644
 --- a/ydb/pool.py
 +++ b/ydb/pool.py
 @@ -34,6 +34,7 @@ class ConnectionsCache:
@@ -1026,7 +1142,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e
  
          self._cache.cleanup_outdated()
  
-@@ -308,9 +322,41 @@ class Discovery(threading.Thread):
+@@ -308,9 +322,50 @@ class Discovery(threading.Thread):
  
      def stop(self) -> None:
          self._should_stop.set()
@@ -1034,19 +1150,22 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e
 +            self._watch.cancel()
          self._send_wake_up()
  
++    def _retire_discovery_route(self):
++        with self._cache.lock:
++            self._cache.route_epoch += 1
++            retired = self._cache.values()
++            for conn in retired:
++                self._cache.remove(conn)
++        for conn in retired:
++            conn.retire()
++
 +    def _run_long_poll(self):
 +        failures = 0
 +        while not self._should_stop.is_set():
 +            try:
 +                resolved, generation = self._watch.poll(self._should_stop.is_set)
 +                if generation != self._watch.generation:
-+                    with self._cache.lock:
-+                        self._cache.route_epoch += 1
-+                        retired = self._cache.values()
-+                        for conn in retired:
-+                            self._cache.remove(conn)
-+                    for conn in retired:
-+                        conn.retire()
++                    self._retire_discovery_route()
 +                self._watch.generation = generation
 +                ready = self._apply_endpoints(resolved)
 +                if not ready:
@@ -1054,11 +1173,17 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e
 +                failures = 0
 +                delay = self._discovery_interval() if generation is None else 0
 +            except Exception as error:
++                if self._watch.generation is not None and failures == 0:
++                    self._retire_discovery_route()
++                if self._watch.alternates and not self._should_stop.is_set():
++                    self._watch.bootstrap.close()
++                    self._watch.next_bootstrap()
 +                self._resolver._add_debug_details("ListEndpoints poll failed: %s", error)
 +                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
 +                delay = min(16, 2 ** min(failures, 4)) * self._emergency_retry_interval()
 +                failures += 1
 +            self._should_stop.wait(delay)
++        self._watch.bootstrap.close()
 +        self._cache.cleanup()
 +
      def run(self) -> None:
@@ -1068,18 +1193,28 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e
          with self.condition:
              while True:
                  if self._should_stop.is_set():
-@@ -425,6 +471,10 @@ class ConnectionPool(IConnectionPool):
+@@ -425,6 +480,10 @@ class ConnectionPool(IConnectionPool):
          else:
              # Start discovery thread as usual
              self._discovery_thread = Discovery(self._store, self._driver_config)
 +            if driver_config.use_long_poll:
 +                from ._long_poll import LongPoll
 +
-+                self._discovery_thread._watch = LongPoll(driver_config, self._grpc_init._channel)
++                self._discovery_thread._watch = LongPoll(driver_config, self._grpc_init)
              self._discovery_thread.start()
  
      def _init_connection(self) -> None:
-@@ -494,6 +544,8 @@ class ConnectionPool(IConnectionPool):
+@@ -456,7 +515,8 @@ class ConnectionPool(IConnectionPool):
+             self._stop_event.set()
+             if self._discovery_thread:
+                 self._discovery_thread.stop()
+-        self._grpc_init.close()
++        if not self._driver_config.use_long_poll:
++            self._grpc_init.close()
+         if self._discovery_thread:
+             self._discovery_thread.join(timeout)
+         if self._init_thread:
+@@ -494,6 +554,8 @@ class ConnectionPool(IConnectionPool):
          :param connection: A disconnected connection
          :return: None
          """
@@ -1088,7 +1223,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e
          connection.close()
          if self._discovery_thread:
              self._discovery_thread.notify_disconnected()
-@@ -547,7 +599,7 @@ class ConnectionPool(IConnectionPool):
+@@ -547,7 +609,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = self._store.get(preferred_endpoint)
          except Exception:
@@ -1097,7 +1232,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..5a6020151d2ca0760ab68c52860c230e
                  self._discovery_thread.notify_disconnected()
              raise
  
-@@ -592,7 +644,7 @@ class ConnectionPool(IConnectionPool):
+@@ -592,7 +654,7 @@ class ConnectionPool(IConnectionPool):
          try:
              connection = self._store.get(preferred_endpoint)
          except Exception:

@@ -14,10 +14,10 @@ index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..a847de0c0a4c694fd915240ca96e7090
  
  `using driver = new Driver(...)` and `driver.close()` immediately cancel active RPCs and close all connections, with or without discovery. The driver has no asynchronous disposal or shutdown grace period.
 diff --git a/packages/core/src/driver.discovery.test.ts b/packages/core/src/driver.discovery.test.ts
-index d87f684b3ae110ec4994068e76412bf7f45fc1b7..3c6a85b426301f7f8a4a0b5c3416860e69d65b92 100644
+index d87f684b3ae110ec4994068e76412bf7f45fc1b7..8d825a7f450377f486cdbed3f8df668593c8d379 100644
 --- a/packages/core/src/driver.discovery.test.ts
 +++ b/packages/core/src/driver.discovery.test.ts
-@@ -5,6 +5,9 @@ import {
+@@ -5,16 +5,18 @@ import {
  	WhoAmIResponseSchema,
  } from '@ydbjs/api/discovery'
  import { channel } from 'node:diagnostics_channel'
@@ -27,7 +27,10 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..3c6a85b426301f7f8a4a0b5c3416860e
  import { setTimeout as delay } from 'node:timers/promises'
  
  import { create } from '@bufbuild/protobuf'
-@@ -14,7 +17,6 @@ import { Server } from '@ydbjs/grpc'
+ import { anyPack } from '@bufbuild/protobuf/wkt'
+ import { StatusIds_StatusCode } from '@ydbjs/api/operation'
+-import { Server } from '@ydbjs/grpc'
++import { RpcError, Server, Status } from '@ydbjs/grpc'
  import { expect, test } from 'vitest'
  
  import { Driver } from './driver.ts'
@@ -35,7 +38,7 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..3c6a85b426301f7f8a4a0b5c3416860e
  // Controlled discovery can remove a node while its real RPC remains live.
  test.for([false, true])(
  	'rediscovery preserves the active call and reroutes new calls (GOAWAY: %s)',
-@@ -111,3 +113,96 @@ test.for([false, true])(
+@@ -111,3 +113,198 @@ test.for([false, true])(
  		await shutdown
  	}
  )
@@ -132,6 +135,108 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..3c6a85b426301f7f8a4a0b5c3416860e
 +		await Promise.all([bootstrap.close(), first.close(), second.close()])
 +	}
 +})
++
++test(
++	'a legacy worker can recover from an empty initial long-poll result',
++	{ timeout: 10_000 },
++	async (tc) => {
++		let server = new Server()
++		let port = 0
++		let attempts = 0
++		server.add(DiscoveryServiceDefinition, {
++			async listEndpoints() {
++				let endpoints = attempts++ === 0 ? [] : [{ nodeId: 1, address: '127.0.0.1', port }]
++				return create(ListEndpointsResponseSchema, {
++					operation: {
++						ready: true,
++						status: StatusIds_StatusCode.SUCCESS,
++						result: anyPack(
++							ListEndpointsResultSchema,
++							create(ListEndpointsResultSchema, { endpoints })
++						),
++					},
++				})
++			},
++		})
++		port = await server.listen('127.0.0.1:0')
++		try {
++			using driver = new Driver(`grpc://127.0.0.1:${port}/local`, {
++				'ydb.sdk.enable_long_poll': true,
++				'ydb.sdk.discovery_interval_ms': 250,
++				'ydb.sdk.discovery_timeout_ms': 100,
++			})
++			await driver.ready(tc.signal)
++			expect(attempts).toBeGreaterThan(1)
++		} finally {
++			await server.close()
++		}
++	}
++)
++
++test(
++	'an unstamped background discovery error keeps the data RPC alive',
++	{ timeout: 10000 },
++	async (tc) => {
++		let bootstrap = new Server()
++		let data = new Server()
++		let dataPort = 0
++		let inFlight = Promise.withResolvers<void>()
++		let finish = Promise.withResolvers<void>()
++		let failed = false
++		let recovered = Promise.withResolvers<void>()
++		bootstrap.add(DiscoveryServiceDefinition, {
++			async listEndpoints() {
++				if (inFlightDone && !failed) {
++					failed = true
++					throw new RpcError(Status.UNAVAILABLE, 'bootstrap unavailable')
++				}
++				if (failed) recovered.resolve()
++				return create(ListEndpointsResponseSchema, {
++					operation: {
++						ready: true,
++						status: StatusIds_StatusCode.SUCCESS,
++						result: anyPack(
++							ListEndpointsResultSchema,
++							create(ListEndpointsResultSchema, {
++								endpoints: [{ nodeId: 1, address: '127.0.0.1', port: dataPort }],
++							})
++						),
++					},
++				})
++			},
++		})
++		let inFlightDone = false
++		data.add(DiscoveryServiceDefinition, {
++			async whoAmI() {
++				inFlightDone = true
++				inFlight.resolve()
++				await finish.promise
++				return create(WhoAmIResponseSchema, { operation: { id: 'source' } })
++			},
++		})
++		try {
++			dataPort = await data.listen('127.0.0.1:0')
++			let boot = await bootstrap.listen('127.0.0.1:0')
++			using driver = new Driver(`grpc://127.0.0.1:${boot}/local`, {
++				'ydb.sdk.enable_long_poll': true,
++				'ydb.sdk.discovery_interval_ms': 250,
++				'ydb.sdk.discovery_timeout_ms': 100,
++			})
++			await driver.ready(tc.signal)
++			let result = driver
++				.createClient(DiscoveryServiceDefinition)
++				.whoAmI({}, { signal: tc.signal })
++			void result.catch(() => {})
++			await inFlight.promise
++			await recovered.promise
++			finish.resolve()
++			expect((await result).operation?.id).toBe('source')
++		} finally {
++			finish.resolve()
++			await Promise.all([bootstrap.close(), data.close()])
++		}
++	}
++)
 diff --git a/packages/core/src/driver.ts b/packages/core/src/driver.ts
 index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52b4428788 100644
 --- a/packages/core/src/driver.ts
@@ -211,7 +316,7 @@ index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52
  		assert.ok(response.operation, new DriverResponseError('Missing operation data.'))
  
 diff --git a/packages/core/src/endpoints/endpoints-runtime.ts b/packages/core/src/endpoints/endpoints-runtime.ts
-index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a376612a9ce513 100644
+index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..b225ef3f0b6fc96906fccb3da2bcfc0089990212 100644
 --- a/packages/core/src/endpoints/endpoints-runtime.ts
 +++ b/packages/core/src/endpoints/endpoints-runtime.ts
 @@ -62,6 +62,8 @@ export type DiscoveryResult = {
@@ -282,15 +387,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  				let result = await discoveryCh.tracePromise(
  					async () => {
  						let r = await ctx.listEndpoints(link.signal)
-@@ -311,6 +335,7 @@ let effects = {
- 				if (ctx.ac.signal.aborted) return
- 				// A per-round timeout (not the pool abort) is retryable — keep the
- 				// interval/backoff cadence rather than treating it as terminal.
-+				if (ctx.watching) runtime.dispatch({ type: 'endpoints.discovery.watch_lost' })
- 				let timedOut = timeoutAc.signal.aborted
- 				runtime.dispatch({
- 					type: 'endpoints.discovery.round_failed',
-@@ -318,6 +343,7 @@ let effects = {
+@@ -318,6 +342,7 @@ let effects = {
  					retryable: timedOut || isRetryableError(error, true),
  				})
  			} finally {
@@ -298,7 +395,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  				clearTimeout(timer)
  				link[Symbol.dispose]()
  			}
-@@ -350,7 +376,9 @@ let effects = {
+@@ -350,7 +375,9 @@ let effects = {
  					ctx.timers.delete(key)
  					runtime.dispatch(event)
  				}, delay)
@@ -309,7 +406,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  		ctx.timers.set(key, handle)
  	},
  
-@@ -436,6 +464,10 @@ export class EndpointPool implements Disposable {
+@@ -436,6 +463,10 @@ export class EndpointPool implements Disposable {
  		return this.#snapshot
  	}
  
@@ -320,7 +417,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  	get closed(): boolean {
  		return (
  			this.#machine.signal.aborted ||
-@@ -540,7 +572,7 @@ export class EndpointPool implements Disposable {
+@@ -540,7 +571,7 @@ export class EndpointPool implements Disposable {
  		signal?.throwIfAborted()
  		this.#machine.signal.throwIfAborted()
  		if (this.#env.isFinalized) throw new Error('Endpoints closed')
@@ -329,7 +426,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  			let waiter = Promise.withResolvers<void>()
  			let onAbort = () => {
  				this.#env.readyWaiters.delete(waiter)
-@@ -819,6 +851,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
+@@ -819,6 +850,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
  export type EndpointsRuntimeConfig = {
  	identity: DriverIdentity
  	listEndpoints: ListEndpoints
@@ -337,7 +434,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a37661
  	secure?: boolean
  	transportOptions?: ClientOptions | undefined
  	connectionFactory?: ConnectionFactory | undefined
-@@ -845,6 +878,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
+@@ -845,6 +877,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
  		identity: config.identity,
  		hooks: config.hooks,
  		listEndpoints: config.listEndpoints,
@@ -502,10 +599,10 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..253450d480a2a3ec4e37b71000f24802
  						which: 'discovery_interval',
 diff --git a/packages/core/src/endpoints/long-poll.ts b/packages/core/src/endpoints/long-poll.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..b2c24492cf9e853edf196e34513d6e271e5b5568
+index 0000000000000000000000000000000000000000..69878cdbda483cee562fc4eec55e33fdc544f1b5
 --- /dev/null
 +++ b/packages/core/src/endpoints/long-poll.ts
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,77 @@
 +import { type CallOptions, type Metadata, RpcError, Status } from '@ydbjs/grpc'
 +import type { DiscoveryResult } from './endpoints-runtime.js'
 +
@@ -523,6 +620,17 @@ index 0000000000000000000000000000000000000000..b2c24492cf9e853edf196e34513d6e27
 +	}
 +
 +	async *watch(signal: AbortSignal): AsyncGenerator<DiscoveryResult> {
++		try {
++			yield* this.#poll(signal)
++		} catch (error) {
++			if (this.#since !== undefined) {
++				yield { endpoints: [], selfLocation: '', pileStates: [] }
++			}
++			throw error
++		}
++	}
++
++	async *#poll(signal: AbortSignal): AsyncGenerator<DiscoveryResult> {
 +		for (;;) {
 +			let metadata: Record<string, string> = { 'x-ydb-discovery-long-poll': '1' }
 +			let timeout = this.#timeoutMs
@@ -544,6 +652,12 @@ index 0000000000000000000000000000000000000000..b2c24492cf9e853edf196e34513d6e27
 +				onTrailer: read,
 +			})
 +			if (stamps.length === 0 && this.#since === undefined) {
++				if (!result.endpoints.length) {
++					throw new RpcError(
++						Status.UNAVAILABLE,
++						'Discovery returned an empty endpoint list'
++					)
++				}
 +				yield result
 +				return
 +			}

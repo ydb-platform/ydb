@@ -56,12 +56,34 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..1753c1a80e5ef0aede98a83e8eea50fa
  	} else {
  		if err := b.clusterDiscovery(ctx); err != nil {
  			return nil, xerrors.WithStackTrace(err)
+diff --git a/internal/balancer/balancer_test.go b/internal/balancer/balancer_test.go
+index cdb518808cf0fc9dc59b4f9025212546af9e6b52..686475b0a17f70aef64a5237391eb81c8fce2cb1 100644
+--- a/internal/balancer/balancer_test.go
++++ b/internal/balancer/balancer_test.go
+@@ -2544,7 +2544,7 @@ func (h *serverConnStats) HandleConn(_ context.Context, connectionStats stats.Co
+ 	}
+ }
+ 
+-func startDynamicDiscoveryServer(tb testing.TB, nodeIDs []uint32) *dynamicDiscoveryServer {
++func startDynamicDiscoveryServer(tb testing.TB, nodeIDs []uint32, options ...grpc.ServerOption) *dynamicDiscoveryServer {
+ 	tb.Helper()
+ 
+ 	var listenConfig net.ListenConfig
+@@ -2565,7 +2565,7 @@ func startDynamicDiscoveryServer(tb testing.TB, nodeIDs []uint32) *dynamicDiscov
+ 	}
+ 
+ 	statsHandler := &serverConnStats{active: &server.activeConns}
+-	server.grpcServer = grpc.NewServer(grpc.StatsHandler(statsHandler))
++	server.grpcServer = grpc.NewServer(append(options, grpc.StatsHandler(statsHandler))...)
+ 
+ 	Ydb_Discovery_V1.RegisterDiscoveryServiceServer(
+ 		server.grpcServer,
 diff --git a/internal/balancer/long_poll.go b/internal/balancer/long_poll.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..bc45d70e15bf96a08a2634ebbac69809e8a00c10
+index 0000000000000000000000000000000000000000..a8b17ac05b2e46d068f7844adb9c9b8585234dc1
 --- /dev/null
 +++ b/internal/balancer/long_poll.go
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,134 @@
 +package balancer
 +
 +import (
@@ -127,6 +149,9 @@ index 0000000000000000000000000000000000000000..bc45d70e15bf96a08a2634ebbac69809
 +				}
 +			}
 +			if err := b.poll(pollCtx, &route); err != nil {
++				if route.managed && backoff == 0 && pollCtx.Err() == nil {
++					b.retireRoute(pollCtx)
++				}
 +				backoff = min(5*time.Second, max(100*time.Millisecond, 2*backoff))
 +			} else {
 +				backoff = 0
@@ -290,14 +315,23 @@ index 0000000000000000000000000000000000000000..3d6cc7721569ae3bc9655c06ae20d81d
 +}
 diff --git a/internal/balancer/long_poll_test.go b/internal/balancer/long_poll_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..08c5e3e325490504881b6f545386b78686877fe8
+index 0000000000000000000000000000000000000000..f07043b9679c706d96b72533e919b3e90cb1b647
 --- /dev/null
 +++ b/internal/balancer/long_poll_test.go
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,79 @@
 +package balancer
 +
 +import (
++	"context"
++	"github.com/ydb-platform/ydb-go-sdk/v3/config"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
++	discoveryConfig "github.com/ydb-platform/ydb-go-sdk/v3/internal/discovery/config"
++	"google.golang.org/grpc"
++	"google.golang.org/grpc/credentials/insecure"
++	"strings"
++	"sync/atomic"
 +	"testing"
++	"time"
 +
 +	"github.com/stretchr/testify/require"
 +	"google.golang.org/grpc/metadata"
@@ -319,6 +353,50 @@ index 0000000000000000000000000000000000000000..08c5e3e325490504881b6f545386b786
 +	legacy, err := routeGeneration(nil, pollRoute{})
 +	require.NoError(t, err)
 +	require.False(t, legacy.managed)
++}
++
++func TestManagedRollbackRetiresHealthyDataNode(t *testing.T) {
++	loseCapability := make(chan struct{})
++	var restore atomic.Bool
++	intercept := func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
++		if strings.HasSuffix(info.FullMethod, "/ListEndpoints") {
++			md, _ := metadata.FromIncomingContext(ctx)
++			known := md.Get("x-ydb-if-route-generation")
++			if len(known) == 0 {
++				_ = grpc.SetTrailer(ctx, metadata.Pairs("x-ydb-route-generation", "1"))
++			} else {
++				select {
++				case <-ctx.Done():
++					return nil, ctx.Err()
++				case <-loseCapability:
++				}
++				if restore.Load() {
++					if known[0] == "2" {
++						<-ctx.Done()
++						return nil, ctx.Err()
++					}
++					_ = grpc.SetTrailer(ctx, metadata.Pairs("x-ydb-route-generation", "2"))
++				}
++			}
++		}
++		return handler(ctx, request)
++	}
++	server := startDynamicDiscoveryServer(t, []uint32{1}, grpc.UnaryInterceptor(intercept))
++	ctx := t.Context()
++	cfg := config.New(config.WithEndpoint(server.endpoint()), config.WithDatabase("/local"),
++		config.WithGrpcOptions(grpc.WithTransportCredentials(insecure.NewCredentials())))
++	pool := conn.NewPool(ctx, cfg)
++	defer func() { require.NoError(t, pool.RemoveRef(ctx)) }()
++	b, err := New(ctx, cfg, pool, discoveryConfig.WithDiscoveryLongPoll())
++	require.NoError(t, err)
++	defer func() { require.NoError(t, b.Close(ctx)) }()
++	dialWhoAmI(t, b, 1)
++	require.EqualValues(t, 2, server.activeGRPCConns())
++	close(loseCapability)
++	require.Eventually(t, func() bool { return len(activeNodeIDs(b)) == 0 && server.activeGRPCConns() == 1 }, 3*time.Second, time.Millisecond)
++	restore.Store(true)
++	require.Eventually(t, func() bool { return len(activeNodeIDs(b)) == 1 }, 3*time.Second, time.Millisecond)
++	dialWhoAmI(t, b, 1)
 +}
 diff --git a/internal/balancer/watched_conn.go b/internal/balancer/watched_conn.go
 new file mode 100644

@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TCompileTimeExpressions) {
         UNIT_ASSERT(UpdateLambdaAllArgumentsTypes(identity, {type}, ctx));
         UNIT_ASSERT(InstantAnnotateTypes(identity, ctx, false, types));
         UNIT_ASSERT(CanEvaluateAtCompileTime(*identity));
-        UNIT_ASSERT(!CanEvaluateAtCompileTime(*argument));
+        UNIT_ASSERT(!CanEvaluateAtCompileTime(identity->Head().Head()));
         for (const TStringBuf callable : {"RandomNumber", "CurrentUtcTimestamp", "CurrentActorId",
                 "HostRuntimeSetting", "UdfRuntimeSetting", "Parameter"})
         {

@@ -22,7 +22,7 @@ TEST(TCubeTest, GaugeProjections)
     auto it = p.find(TTagIdList{ 1 });
     ASSERT_TRUE(it != p.end());
 
-    EXPECT_EQ(4.0, (*it)->Values[0]);
+    EXPECT_EQ(4.0, (*it)->Values()[0]);
 
     cube.StartIteration();
     cube.Remove({ 1 });
@@ -78,7 +78,29 @@ TEST(TCubeTest, ProjectionCookieStableAcrossRehash)
 
     auto it = cube.GetProjections().find(TTagIdList{1});
     ASSERT_NE(it, cube.GetProjections().end());
-    EXPECT_EQ((*it)->Values[0], 7);
+    EXPECT_EQ((*it)->Values()[0], 7);
+}
+
+TEST(TCubeTest, WindowWiderThanOneMaskWord)
+{
+    TCube<i64> cube(/*windowSize*/ 100, /*nextIteration*/ 0);
+    cube.Add({1});
+
+    for (int iteration = 0; iteration < 70; ++iteration) {
+        cube.StartIteration();
+        if (iteration == 66) {
+            cube.Update({1}, 5);
+        }
+        cube.FinishIteration();
+    }
+
+    auto it = cube.GetProjections().find(TTagIdList{1});
+    ASSERT_NE(it, cube.GetProjections().end());
+    const auto& projection = **it;
+    EXPECT_TRUE(projection.HasValue()[66]);
+    EXPECT_FALSE(projection.HasValue()[65]);
+    EXPECT_FALSE(projection.HasValue()[2]);
+    EXPECT_EQ(projection.Values()[66], 5);
 }
 
 TEST(TCubeTest, RemoveAllKeepsSharedProjection)
@@ -103,7 +125,7 @@ TEST(TCubeTest, RemoveAllKeepsSharedProjection)
 
     auto it = cube.GetProjections().find(TTagIdList{1});
     ASSERT_NE(it, cube.GetProjections().end());
-    EXPECT_EQ((*it)->Values[0], 7);
+    EXPECT_EQ((*it)->Values()[0], 7);
 
     cube.RemoveAll(std::move(secondCookie));
     EXPECT_TRUE(cube.GetProjections().empty());

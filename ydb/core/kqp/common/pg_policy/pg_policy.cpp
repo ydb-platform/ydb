@@ -52,11 +52,12 @@ private:
     bool HasPg = false;
 };
 
-bool IsPgValue(const NYql::TTypeAnnotationNode* type) {
-    while (type->GetKind() == NYql::ETypeAnnotationKind::Optional) {
-        type = type->Cast<NYql::TOptionalExprType>()->GetItemType();
+bool IsPgValue(const NYql::TTypeAnnotationNode& type) {
+    const auto* item = &type;
+    while (item->GetKind() == NYql::ETypeAnnotationKind::Optional) {
+        item = item->Cast<NYql::TOptionalExprType>()->GetItemType();
     }
-    return type->GetKind() == NYql::ETypeAnnotationKind::Pg;
+    return item->GetKind() == NYql::ETypeAnnotationKind::Pg;
 }
 
 bool IsExpandedType(const NYql::TExprNode& node, const NYql::TExprContext& ctx) {
@@ -82,6 +83,7 @@ public:
     TStatus Transform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final {
         const auto name = input->Content();
         const bool pgType = input->IsCallable("PgType");
+        // YQL rewrites can emit FromPg as an identity on native values.
         const bool convertsPg = input->IsCallable("FromPg") && input->ChildrenSize() == 1 && input->Head().GetTypeAnn() &&
                                 input->Head().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg;
         if (input->IsCallable() && (convertsPg || (!pgType && IsPgCallable(name)))) {
@@ -100,7 +102,7 @@ public:
             const auto& type = *output->GetTypeAnn();
             // An initial read contains the full row. Composite value types
             // are checked after unused fields have been pruned.
-            if (IsPgValue(&type) || (name == "ParseType" && TPgTypeVisitor().ContainsPg(type))) {
+            if (IsPgValue(type) || (name == "ParseType" && TPgTypeVisitor().ContainsPg(type))) {
                 AddPgCompatibilityIssue(*output, ctx, NYql::TIssuesIds::KIKIMR_UNSUPPORTED);
                 return TStatus::Error;
             }

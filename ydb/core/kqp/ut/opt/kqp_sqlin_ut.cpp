@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -665,6 +666,24 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*stats).compilation().from_cache(), fromCache);
             }
         }
+    }
+
+    Y_UNIT_TEST(DisablePgCompatibilityRejectsPgInParsedType) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext types;
+        const NYql::TPositionHandle pos;
+        auto transformer = CreateKqpTypeAnnCallableFactory(types, true)();
+        const auto annotate = [&](TStringBuf type) {
+            auto input = ctx.NewCallable(pos, "ParseType", {ctx.NewAtom(pos, type)});
+            NYql::TExprNode::TPtr output;
+            return transformer->Transform(input, output, ctx);
+        };
+
+        UNIT_ASSERT(annotate("Optional<Uint64>") == NYql::IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT(annotate("Optional<pgint4>") == NYql::IGraphTransformer::TStatus::Error);
+        const auto& issues = ctx.IssueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(issues.back().GetCode(), static_cast<NYql::TIssueCode>(NYql::TIssuesIds::KIKIMR_UNSUPPORTED));
     }
 
     Y_UNIT_TEST(DisablePgCompatibilityAllowsNativeProjection) {

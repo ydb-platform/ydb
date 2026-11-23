@@ -737,6 +737,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
     Y_UNIT_TEST(ReadRows_PgValue) {
         auto settings = TKikimrSettings()
+            .SetDisablePgCompatibility(false)
             .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
 
@@ -812,6 +813,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
     Y_UNIT_TEST(ReadRows_PgKey) {
         auto settings = TKikimrSettings()
+            .SetDisablePgCompatibility(false)
             .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
 

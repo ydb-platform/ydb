@@ -27,6 +27,11 @@
 {% if backend_name == "YDB" %}
 
 * [ANALYZE](analyze.md)
+<<<<<<< HEAD
+=======
+* [CHECKSUM TABLE](checksum-table.md)
+* [KILL SESSION](kill-session.md)
+>>>>>>> 601efd5bc5f (Docs: CHECKSUM TABLE and DigestAggregate (#59829))
 
 {% endif %}
 

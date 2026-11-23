@@ -36,7 +36,6 @@ See the description of the command to init the data load:
 
 ### Available parameters { #init_options }
 
-<<<<<<< HEAD
 | Name                                             | Description                                                                     | Default value                          |
 |--------------------------------------------------|---------------------------------------------------------------------------------|----------------------------------------|
 | `--store <value>`                                | Table storage type. Possible values: `row`, `column`, `external-s3`.            | `row`.                                 |
@@ -44,19 +43,8 @@ See the description of the command to init the data load:
 | `--external-s3-endpoint <value>` or `-e <value>` | Only relevant for external tables. Link to S3 Bucket with data.                 |                                        |
 | `--string`                                       | Use `String` type for text fields. `Utf8` is used by default.                   |                                        |
 | `--datetime`                                     | Use `Date`, `Datetime` and `Timestamp` type for time-related fields.            |`Date32`, `Datetime64` and `Timestamp64`|
-| `--clear`                                        | If the table at the specified path has already been created, it will be deleted.|                                        |
-=======
-| Name          | Description                                                       | Default value             |
-|--------------------------------------------------|---------------------------------------------------------------------------|----------------------------|
-| `--store <value>`                                | Table storage type. Possible values: `row`, `column`, `external-s3`.      | `column`.                     |
-| `--external-s3-prefix <value>`                   | Only relevant for external tables. Root path to the dataset in S3 storage.|                            |
-| `--external-s3-endpoint <value>` or `-e <value>` | Only relevant for external tables. Link to S3 Bucket with data.           |                            |
-| `--string`                                       | Use `String` type for text fields. `Utf8` is used by default.             |                            |
-| `--datetime`                                     | Use `Date`, `Datetime` and `Timestamp` type for time-related fields.      |`Date32`, `Datetime64` and `Timestamp64`|
 |  `--partition-size` | Maximum partition size in mebibytes (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) for row tables. | 2048 |
-| `--clear`                                        | If the table at the specified path has already been created, it will be deleted.|                      |
-| `--dry-run`                                      | Do not execute initialization queries, but only display their text. |                      |
->>>>>>> 6cc7a689204 ([YDBDOCS-2875] Correct AUTO_PARTITIONING_PARTITION_SIZE_MB default and units (#52607))
+| `--clear`                                        | If the table at the specified path has already been created, it will be deleted.|                                        |
 
 ## Loading data into a table { #load }
 

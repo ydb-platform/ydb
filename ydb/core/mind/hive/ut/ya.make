@@ -1,5 +1,10 @@
 UNITTEST_FOR(ydb/core/mind/hive)
 
+IF (OS_LINUX)
+    # The integrated test binary can exceed the DWARF32 offset range.
+    LINKER_SCRIPT(${ARCADIA_ROOT}/ydb/apps/ydbd/strip_debug.ld)
+ENDIF()
+
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)

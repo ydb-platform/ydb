@@ -34,9 +34,39 @@ Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
 namespace NKikimr {
 namespace NHive {
 
+namespace {
+
+bool ValidCreateBatch(const NKikimrHive::TEvCreateTablet& request, ui32 limit) {
+    if (request.HasTabletID() || request.BindedChannelsSize() > MAX_TABLET_CHANNELS
+            || (request.HasTabletCategory() && !request.GetTabletCategory().HasTabletCategoryID())) {
+        return false;
+    }
+    if (request.HasCount()) {
+        const auto count = request.GetCount();
+        return request.HasOwnerIdx() && !request.OwnerIdxsSize() && count && count <= limit
+            && request.GetOwnerIdx() <= Max<ui64>() - (count - 1);
+    }
+    if (request.HasOwnerIdx() || !request.OwnerIdxsSize() || request.OwnerIdxsSize() > limit) {
+        return false;
+    }
+    THashSet<ui64> indices;
+    for (const ui64 index : request.GetOwnerIdxs()) {
+        if (!indices.insert(index).second) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
-    if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
+    const bool batch = rec.HasCount() || rec.OwnerIdxsSize();
+    const bool validIndices = batch
+        ? AppData()->FeatureFlags.GetEnablePacedBackupExport() && ValidCreateBatch(rec, CurrentConfig.GetMaxCreateTabletBatchSize())
+        : rec.HasOwnerIdx();
+    if (rec.HasOwner() && validIndices && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
         YDB_LOG_DEBUG("Handle TEvHive::TEvCreateTablet:",
             {"logPrefix", GetLogPrefix()},
             {"tabletType", rec.GetTabletType()},

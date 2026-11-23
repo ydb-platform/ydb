@@ -124,6 +124,19 @@ enum EPercentileCounters {
         Ranges: { Value: 150                     }
         Ranges: { Value: 200                     }
     }];
+    COUNTER_CREATE_TABLET_BATCH_SIZE = 4 [(CounterOpts) = {
+        Name: "CreateTabletBatchSize",
+        Ranges: { Value: 1 }, Ranges: { Value: 4 }, Ranges: { Value: 8 },
+        Ranges: { Value: 16 }, Ranges: { Value: 32 }, Ranges: { Value: 64 },
+        Ranges: { Value: 128 }, Ranges: { Value: 256 }
+    }];
+    COUNTER_CREATE_TABLET_BATCH_DURATION_MS = 5 [(CounterOpts) = {
+        Name: "CreateTabletBatchDurationMs",
+        Ranges: { Value: 1 }, Ranges: { Value: 2 }, Ranges: { Value: 5 },
+        Ranges: { Value: 10 }, Ranges: { Value: 25 }, Ranges: { Value: 50 },
+        Ranges: { Value: 100 }, Ranges: { Value: 250 }, Ranges: { Value: 500 },
+        Ranges: { Value: 1000 }, Ranges: { Value: 5000 }
+    }];
 }
 
 enum ETxTypes {
@@ -205,4 +218,5 @@ enum ETxTypes {
     TXTYPE_MON_EVENTS = 75                                [(TxTypeOpts) = {Name: "TxMonEvents"}];
     TXTYPE_MON_NODE_INFO = 76                             [(TxTypeOpts) = {Name: "TxMonNodeInfo"}];
     TXTYPE_REASSIGN_TABLETS = 77                          [(TxTypeOpts) = {Name: "TxReassignTablets"}];
+    TXTYPE_CREATE_TABLET_BATCH = 78                       [(TxTypeOpts) = {Name: "TxCreateTabletBatch"}];
 }

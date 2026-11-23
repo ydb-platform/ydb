@@ -31,6 +31,7 @@ enum EErrorReason {
     ERROR_REASON_CHANNELS_CANNOT_SHRINK = 1;
 
     ERROR_REASON_INVALID_ARGUMENTS = 2;
+    ERROR_REASON_CREATE_PARAMETERS_MISMATCH = 3;
 }
 
 enum ETabletVolatileState {
@@ -120,6 +121,10 @@ message TEvCreateTablet {
     repeated string AllowedDataCenters = 25;
     optional EBalancerPolicy BalancerPolicy = 26;
     optional bool IsBackup = 27 [default = false];
+    // Exactly one addressing mode: OwnerIdx + Count, or a nonempty OwnerIdxs.
+    // OwnerIdx alone retains the single-tablet update-or-create semantics.
+    optional uint32 Count = 28;
+    repeated uint64 OwnerIdxs = 29 [packed = true];
 
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED
@@ -138,6 +143,14 @@ message TEvLookupTablet {
 }
 
 message TEvCreateTabletReply {
+    message TResult {
+        optional uint64 OwnerIdx = 1;
+        optional NKikimrProto.EReplyStatus Status = 2;
+        optional fixed64 TabletID = 3;
+        optional EErrorReason ErrorReason = 4;
+        optional TForwardRequest ForwardRequest = 5;
+    }
+    repeated TResult Results = 8;
     optional NKikimrProto.EReplyStatus Status = 1;
     optional fixed64 Owner = 2;
     optional uint64 OwnerIdx = 3;

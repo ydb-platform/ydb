@@ -2468,6 +2468,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         } while (true);
 
+        TBlockEvents<TEvHive::TEvResponseTabletIdSequence> sequences(runtime, [&](auto&) {
+            return !objectDomain;
+        });
+
         THolder<TEvHive::TEvCreateTablet> createHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
         createHive->Record.AddAllowedDomains();
         createHive->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
@@ -2554,6 +2558,65 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(createTabletReply);
         UNIT_ASSERT(createTabletReply->Record.HasForwardRequest());
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
+
+        // A lost bulk-create reply leaves the owner with only its durable key.
+        // Even after migration the old Hive must not allocate a second tablet.
+        for (ui32 node = 0; node < 2; ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnablePacedBackupExport(true);
+        }
+        auto retry = TEvHive::TEvCreateTablet(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS).Record;
+        retry.SetCount(1);
+        *retry.AddAllowedDomains() = subdomainKey;
+        if (objectDomain) {
+            *retry.MutableObjectDomain() = objectDomain;
+        }
+        for (const ui64 target : {hiveTablet, subHiveTablet}) {
+            auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+            request->Record = retry;
+            runtime.SendToPipe(target, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto& reply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle)->Record;
+            UNIT_ASSERT_VALUES_EQUAL(reply.ResultsSize(), 1);
+            const auto& result = reply.GetResults(0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetOwnerIdx(), 1);
+            if (target == hiveTablet) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::INVALID_OWNER);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetTabletID(), tabletId1);
+            }
+        }
+
+        if (!objectDomain) {
+            // No IDs are available in the child Hive until its grant arrives.
+            // Retrying the sparse subset must allocate each key exactly once.
+            retry.ClearCount();
+            retry.ClearOwnerIdx();
+            retry.AddOwnerIdxs(20);
+            retry.AddOwnerIdxs(25);
+            auto sendNew = [&] {
+                auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+                request->Record = retry;
+                runtime.SendToPipe(subHiveTablet, sender, request.Release(), 0, GetPipeConfigWithRetries());
+                return runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle)->Record;
+            };
+            const auto pending = sendNew();
+            UNIT_ASSERT_VALUES_EQUAL(pending.ResultsSize(), 2);
+            for (const auto& result : pending.GetResults()) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::TRYLATER);
+            }
+            runtime.WaitFor("child Hive sequence grant", [&] { return !sequences.empty(); });
+            sequences.Stop().Unblock();
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            const auto allocated = sendNew();
+            UNIT_ASSERT_VALUES_EQUAL(allocated.ResultsSize(), 2);
+            for (const auto& result : allocated.GetResults()) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT(result.GetTabletID());
+            }
+            const auto duplicate = sendNew();
+            UNIT_ASSERT_VALUES_EQUAL(allocated.SerializeAsString(), duplicate.SerializeAsString());
+        }
 
         runtime.SetObserverFunc(prevObserverFunc);
     }
@@ -3530,6 +3593,197 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ui64 tabletId = createTabletReply->Record.GetTabletID();
 
             MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+    }
+
+    void ApplyHiveConfig(TTestActorRuntime& runtime, ui64 hiveTablet,
+                         const TActorId& sender, const NKikimrConfig::THiveConfig& hiveConfig) {
+        auto config = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        config->Record.MutableConfig()->MutableHiveConfig()->CopyFrom(hiveConfig);
+        runtime.SendToPipe(hiveTablet, sender, config.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+    }
+
+    Y_UNIT_TEST(TestCreateTabletBatch) {
+        TTestBasicRuntime runtime;
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.FeatureFlags.SetEnablePacedBackupExport(true);
+            app.HiveConfig.SetMaxCreateTabletBatchSize(3);
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui64 hive = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        auto send = [&](const NKikimrHive::TEvCreateTablet& record) {
+            auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+            request->Record = record;
+            runtime.SendToPipe(hive, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            return runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle)->Record;
+        };
+
+        const ui64 first = Max<ui64>() - 2;
+        auto batch = TEvHive::TEvCreateTablet(owner, first, TTabletTypes::Dummy, BINDED_CHANNELS).Record;
+        batch.SetCount(3);
+        batch.SetIsBackup(true);
+        batch.SetObjectId(17);
+        batch.MutableTabletCategory()->SetTabletCategoryID(19);
+        batch.MutableTabletCategory()->SetMaxDisconnectTimeout(33);
+        // Both group flags used to be lost when Hive reloaded the groups.
+        batch.AddFollowerGroups()->SetLocalNodeOnly(true);
+        batch.AddFollowerGroups()->SetRequireDifferentNodes(true);
+        ui32 bootNotifications = 0;
+        auto notifications = runtime.AddObserver<TEvHive::TEvTabletCreationResult>([&](auto& ev) {
+            if (ev->Recipient == sender) {
+                ++bootNotifications;
+            }
+        });
+        THashMap<ui64, ui64> created;
+        const auto reply = send(batch);
+        UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reply.GetOrigin(), hive);
+        UNIT_ASSERT_VALUES_EQUAL(reply.GetOwner(), owner);
+        UNIT_ASSERT_VALUES_EQUAL(reply.ResultsSize(), 3);
+        THashSet<ui64> tabletIds;
+        for (const auto& result : reply.GetResults()) {
+            UNIT_ASSERT(result.GetOwnerIdx() >= first);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT(result.GetTabletID());
+            UNIT_ASSERT(tabletIds.insert(result.GetTabletID()).second);
+            UNIT_ASSERT(created.emplace(result.GetOwnerIdx(), result.GetTabletID()).second);
+        }
+        for (auto id : tabletIds) {
+            MakeSureTabletIsUp(runtime, id, 0);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(bootNotifications, 0);
+        auto changedCategory = batch;
+        changedCategory.ClearCount();
+        changedCategory.ClearOwnerIdx();
+        changedCategory.AddOwnerIdxs(first);
+        changedCategory.AddOwnerIdxs(47);
+        changedCategory.MutableTabletCategory()->SetMaxDisconnectTimeout(55);
+        const auto sharedConflict = send(changedCategory);
+        UNIT_ASSERT_VALUES_EQUAL(sharedConflict.ResultsSize(), 2);
+        for (const auto& result : sharedConflict.GetResults()) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::ERROR);
+            UNIT_ASSERT_C(result.GetErrorReason() == NKikimrHive::ERROR_REASON_CREATE_PARAMETERS_MISMATCH, result.ShortDebugString());
+        }
+
+        // The owner omitted the resource defaults. Replaying its original parameters
+        // must still work after dynamic Hive configuration changes.
+        auto config = runtime.GetAppData(0).HiveConfig;
+        config.SetDefaultUnitIOPS(51);
+        config.SetDefaultUnitSize(413);
+        config.SetDefaultUnitThroughput(713);
+        ApplyHiveConfig(runtime, hive, sender, config);
+        const auto reconfigured = send(batch);
+        UNIT_ASSERT_VALUES_EQUAL(reconfigured.ResultsSize(), 3);
+        for (const auto& result : reconfigured.GetResults()) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTabletID(), created.at(result.GetOwnerIdx()));
+        }
+        auto explicitBinding = batch;
+        explicitBinding.SetCount(1);
+        explicitBinding.MutableBindedChannels(0)->SetSize(413);
+        const auto conflict = send(explicitBinding);
+        UNIT_ASSERT_VALUES_EQUAL(conflict.ResultsSize(), 1);
+        UNIT_ASSERT_C(conflict.GetResults(0).GetErrorReason() == NKikimrHive::ERROR_REASON_CREATE_PARAMETERS_MISMATCH, conflict.GetResults(0).ShortDebugString());
+
+        // The range reply may be lost after commit and before the caller persisted it.
+        RebootTablet(runtime, hive, sender);
+        const auto replay = send(batch);
+        UNIT_ASSERT_VALUES_EQUAL(replay.ResultsSize(), 3);
+        for (const auto& result : replay.GetResults()) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTabletID(), created.at(result.GetOwnerIdx()));
+        }
+
+        batch.ClearCount();
+        batch.ClearOwnerIdx();
+        batch.AddOwnerIdxs(first + 2);
+        batch.AddOwnerIdxs(42);
+        batch.SetObjectId(18);
+        const auto mixed = send(batch);
+        UNIT_ASSERT_VALUES_EQUAL(mixed.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(mixed.ResultsSize(), 2);
+        for (const auto& result : mixed.GetResults()) {
+            if (result.GetOwnerIdx() == 42) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT(result.GetTabletID());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetOwnerIdx(), first + 2);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::ERROR);
+                UNIT_ASSERT_C(result.GetErrorReason() == NKikimrHive::ERROR_REASON_CREATE_PARAMETERS_MISMATCH, result.ShortDebugString());
+                UNIT_ASSERT(!result.HasTabletID());
+            }
+        }
+
+        batch.ClearOwnerIdxs();
+        batch.SetOwnerIdx(first + 2);
+        batch.SetCount(1);
+        batch.SetObjectId(17);
+        const auto singleBatch = send(batch);
+        UNIT_ASSERT_VALUES_EQUAL(singleBatch.ResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(singleBatch.GetResults(0).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(singleBatch.GetResults(0).GetTabletID(), created.at(first + 2));
+    }
+
+    Y_UNIT_TEST(TestCreateTabletBatchValidation) {
+        TTestBasicRuntime runtime;
+        Setup(runtime, false, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMaxCreateTabletBatchSize(2);
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui64 hive = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        auto reject = [&](const NKikimrHive::TEvCreateTablet& record) {
+            auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+            request->Record = record;
+            runtime.SendToPipe(hive, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto& result = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle)->Record;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::ERROR);
+            UNIT_ASSERT_C(result.GetErrorReason() == NKikimrHive::ERROR_REASON_INVALID_ARGUMENTS, result.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultsSize(), 0);
+        };
+        auto request = TEvHive::TEvCreateTablet(owner, 70, TTabletTypes::Dummy, BINDED_CHANNELS).Record;
+        request.SetCount(2);
+        reject(request); // disabled
+        runtime.GetAppData(0).FeatureFlags.SetEnablePacedBackupExport(true);
+        request.SetCount(0);
+        reject(request);
+        request.SetCount(3);
+        reject(request);
+        request.SetOwnerIdx(Max<ui64>());
+        request.SetCount(2);
+        reject(request);
+        request.ClearOwnerIdx();
+        reject(request);
+        request.AddOwnerIdxs(70);
+        reject(request);
+        request.ClearCount();
+        request.SetOwnerIdx(0);
+        reject(request);
+        request.ClearOwnerIdx();
+        request.AddOwnerIdxs(70);
+        reject(request);
+        request.SetOwnerIdxs(1, 71);
+        request.AddOwnerIdxs(72);
+        reject(request);
+        request.MutableOwnerIdxs()->RemoveLast();
+        request.SetTabletID(1);
+        reject(request);
+        request.ClearTabletID();
+        request.MutableTabletCategory()->SetMaxDisconnectTimeout(5);
+        reject(request);
+
+        for (ui64 index : {70, 71, 72}) {
+            runtime.SendToPipe(hive, sender, new TEvHive::TEvLookupTablet(owner, index), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto& result = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle)->Record;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::NODATA);
         }
     }
 
@@ -10297,15 +10551,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.SendToPipe(hiveTablet, sender, metrics.Release(), nodeIndex, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
-    }
-
-    void ApplyHiveConfig(TTestActorRuntime& runtime, ui64 hiveTablet,
-                         const TActorId& sender, const NKikimrConfig::THiveConfig& hiveConfig) {
-        auto config = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        config->Record.MutableConfig()->MutableHiveConfig()->CopyFrom(hiveConfig);
-        runtime.SendToPipe(hiveTablet, sender, config.Release(), 0, GetPipeConfigWithRetries());
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
     }
 
     Y_UNIT_TEST(TestUnlockTabletExecutionAfterDisablingMetrics) {

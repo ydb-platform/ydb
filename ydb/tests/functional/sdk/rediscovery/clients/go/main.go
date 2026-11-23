@@ -20,8 +20,8 @@ func probe() error {
 		return fmt.Errorf("YDB_ENDPOINT and YDB_DATABASE must be set")
 	}
 	ctx := context.Background()
-	driver, err := ydb.Open(ctx, "grpc://"+endpoint+database,
-		ydb.WithAnonymousCredentials(), ydb.WithDialTimeout(8*time.Second))
+	options := append([]ydb.Option{ydb.WithAnonymousCredentials(), ydb.WithDialTimeout(8*time.Second)}, discoveryOptions()...)
+	driver, err := ydb.Open(ctx, "grpc://"+endpoint+database, options...)
 	if err != nil {
 		return err
 	}

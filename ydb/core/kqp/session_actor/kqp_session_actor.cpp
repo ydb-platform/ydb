@@ -58,6 +58,7 @@
 #include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/overloaded.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -990,11 +991,22 @@ public:
             return;
         }
 
+        using TSchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
+        if (QueryState->IsIndexValidation() && AnyOf(response->Request->ResultSet, [](const auto& entry) {
+                return entry.Status == TSchemeStatus::LookupError || entry.Status == TSchemeStatus::RedirectLookupError;
+            }))
+        {
+            ReplyQueryError(Ydb::StatusIds::UNAVAILABLE, "", MessageFromIssues(TIssues{
+                YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, "Could not verify the index schema for CHECK TABLE INDEX")}));
+            return;
+        }
+
         if (QueryState->CheckingIndexValidationResult) {
             QueryState->CheckingIndexValidationResult = false;
             if (!QueryState->EnsureTableVersions(*response)) {
                 InvalidateQuery();
-                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Index schema changed during validation");
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(TIssues{
+                    YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Index schema changed during validation")}));
                 return;
             }
             ReplySuccess();
@@ -1005,7 +1017,8 @@ public:
         if (!QueryState->EnsureTableVersions(*response)) {
             if (QueryState->IsIndexValidation()) {
                 InvalidateQuery();
-                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Index schema changed before validation");
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(TIssues{
+                    YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Index schema changed before validation")}));
                 return;
             }
             if (QueryState->QueryPhysicalGraph) {
@@ -1675,6 +1688,18 @@ public:
 
     bool PrepareQueryContext() {
         YQL_ENSURE(QueryState);
+        if (QueryState->IsIndexValidation()) {
+            if (QueryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize() != 1 || QueryState->IsSplitted()) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "CHECK TABLE INDEX must run as a standalone statement");
+                return false;
+            }
+            if (QueryState->IsStreamResult() && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
+                && !QueryState->RequestEv->GetSupportsStreamTrailingResult())
+            {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "This query API cannot return a validated CHECK TABLE INDEX result");
+                return false;
+            }
+        }
         if (!PrepareQueryTransaction()) {
             return false;
         }
@@ -1870,6 +1895,9 @@ public:
         try {
             const auto& parameters = QueryState->GetYdbParameters();
             QueryState->QueryData->ParseParameters(parameters);
+            if (QueryState->IsIndexValidation()) {
+                QueryState->QueryData->ValidateIndexValidationParameters(phyQuery);
+            }
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         } catch(const TMemoryLimitExceededException&) {

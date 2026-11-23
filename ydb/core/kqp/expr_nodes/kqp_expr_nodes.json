@@ -907,6 +907,36 @@
             ]
         },
         {
+            "Name": "TKqpIndexValidationGeneration",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "BaseTableOwnerId", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "BaseTableLocalId", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "IndexName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "IndexOwnerId", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "IndexLocalId", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "Version", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpIndexValidationGenerationList",
+            "ListBase": "TKqpIndexValidationGeneration"
+        },
+        {
+            "Name": "TKqpIndexValidationSnapshotStep",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpIndexValidationSnapshotStep"},
+            "Children": [
+                {"Index": 0, "Name": "Indexes", "Type": "TKqpIndexValidationGenerationList"}
+            ]
+        },
+        {
+            "Name": "TKqpIndexValidationSnapshotTxId",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpIndexValidationSnapshotTxId"}
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},

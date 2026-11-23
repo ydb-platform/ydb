@@ -18,6 +18,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/provider
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
 )

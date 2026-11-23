@@ -47,7 +47,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
         if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
             auto callable = maybeCallable.Cast();
             if (IsQueryBoundNonDeterministic(callable.Ref())
-                || callable.Ref().IsCallable({"KqpIndexValidationSnapshotStep", "KqpIndexValidationSnapshotTxId"}))
+                || callable.Maybe<TKqpIndexValidationSnapshotStep>() || callable.Maybe<TKqpIndexValidationSnapshotTxId>())
             {
                 const auto paramName = TStringBuilder() << ParamNamePrefix
                     << NNaming::CamelToSnakeCase(TString(callable.CallableName()));

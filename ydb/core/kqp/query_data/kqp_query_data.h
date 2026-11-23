@@ -256,6 +256,8 @@ public:
         IndexValidationSnapshot.emplace(step, txId);
     }
 
+    void ValidateIndexValidationParameters(const NKqpProto::TKqpPhyQuery& query) const;
+
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
     void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);

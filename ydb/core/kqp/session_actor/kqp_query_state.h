@@ -440,11 +440,7 @@ public:
     }
 
     bool BufferIndexValidationResult() const {
-        // ExecuteQuery can publish one buffered result with the terminal response.
-        const auto type = GetType();
-        return (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
-                || type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY)
-            && IsIndexValidation() && PreparedQuery->GetPhysicalQuery().ResultBindingsSize() == 1;
+        return IsIndexValidation() && IsStreamResult();
     }
 
     bool CheckingIndexValidationResult = false;

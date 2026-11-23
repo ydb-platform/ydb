@@ -426,17 +426,32 @@ private:
         auto& record = ev->Get()->Record;
         const auto seqNo = record.GetSeqNo();
         const ui32 resultSetIndex = record.GetQueryResultIndex();
-        const auto& resultSet = record.GetResultSet();
-        const auto rowsCount = resultSet.rows_size();
         const auto finished = record.GetFinished();
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Compute stream data",
             {"logPrefix", LogPrefix()},
             {"seqNo", record.GetSeqNo()},
             {"resultSetIndex", resultSetIndex},
-            {"rowsCount", rowsCount},
+            {"rowsCount", record.GetResultSet().rows_size()},
             {"finished", finished},
             {"from", ev->Sender});
 
+        if (!AcceptResultSet(resultSetIndex, *record.MutableResultSet(), finished)) {
+            return;
+        }
+
+        const auto channelId = record.GetChannelId();
+        auto& channel = StreamChannels[channelId];
+        channel.ActorId = ev->Sender;
+        channel.LastSeqNo = seqNo;
+        channel.AckedFreeSpaceBytes = SaveResultsState.GetFreeSpaceBytes();
+        channel.ChannelId = channelId;
+        channel.Enough = SaveResultsState.ResultSetInfos[resultSetIndex].Truncated;
+        channel.SendAck(SelfId());
+
+        ContinueExecute();
+    }
+
+    bool AcceptResultSet(ui32 resultSetIndex, Ydb::ResultSet& resultSet, bool finished) {
         auto& resultSetInfos = SaveResultsState.ResultSetInfos;
         if (resultSetIndex >= resultSetInfos.size()) {
             // we don't know result set count, so just accept all of them
@@ -453,7 +468,7 @@ private:
             const auto rowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             const auto sizeLimit = QueryServiceConfig.GetScriptResultSizeLimit();
 
-            for (auto& row : *record.MutableResultSet()->mutable_rows()) {
+            for (auto& row : *resultSet.mutable_rows()) {
                 if (rowsLimit && rowCount + 1 > rowsLimit) {
                     resultSetInfo.Truncated = true;
                     break;
@@ -483,7 +498,7 @@ private:
                         Finish(Ydb::StatusIds::INTERNAL_ERROR,
                             AddRootIssue(TStringBuilder()
                                              << "Invalid result set " << resultSetIndex << " columns, please contact internal support", issues));
-                        return;
+                        return false;
                     }
                 }
 
@@ -498,19 +513,10 @@ private:
         } else {
             YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Skip truncated result part",
                 {"logPrefix", LogPrefix()},
-                {"rowsCount", rowsCount});
+                {"rowsCount", resultSet.rows_size()});
         }
 
-        const auto channelId = record.GetChannelId();
-        auto& channel = StreamChannels[channelId];
-        channel.ActorId = ev->Sender;
-        channel.LastSeqNo = seqNo;
-        channel.AckedFreeSpaceBytes = SaveResultsState.GetFreeSpaceBytes();
-        channel.ChannelId = channelId;
-        channel.Enough = resultSetInfo.Truncated;
-        channel.SendAck(SelfId());
-
-        ContinueExecute();
+        return true;
     }
 
     void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
@@ -590,6 +596,12 @@ private:
 
         const auto status = record.GetYdbStatus();
         if (status == Ydb::StatusIds::SUCCESS) {
+            auto& bufferedResults = *response.MutableYdbResults();
+            for (int index = 0; index < bufferedResults.size(); ++index) {
+                if (!AcceptResultSet(index, *bufferedResults.Mutable(index), /*finished=*/true)) {
+                    return;
+                }
+            }
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Script query successfully finished",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},

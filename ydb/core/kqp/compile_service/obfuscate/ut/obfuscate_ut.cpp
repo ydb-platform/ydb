@@ -172,6 +172,17 @@ Y_UNIT_TEST_SUITE(TReplayMessageObfuscatorTest) {
         }
     }
 
+    Y_UNIT_TEST(ObfuscateMetadata_NotReadyIndexes) {
+        TReplayMessageObfuscator obfuscator;
+        auto meta = MakeTableMeta("orders", {"id"}, {"id"});
+        meta.AddNotReadyIndexNames("building_customer_index");
+
+        obfuscator.AddTableMetadata(meta);
+        const auto obfuscated = obfuscator.ObfuscateMetadata(meta);
+        UNIT_ASSERT_VALUES_EQUAL(obfuscated.GetNotReadyIndexNames().size(), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(obfuscated.GetNotReadyIndexNames(0), "index_0");
+    }
+
     Y_UNIT_TEST(ObfuscateQueryText_SimpleSelect) {
         TReplayMessageObfuscator obfuscator;
 

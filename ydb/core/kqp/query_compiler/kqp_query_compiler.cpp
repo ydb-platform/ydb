@@ -24,6 +24,8 @@
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -165,9 +167,9 @@ NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::st
         bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER;
     } else if (type == "RandomUuid"sv) {
         bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_UUID;
-    } else if (type == "KqpIndexValidationSnapshotStep") {
+    } else if (type == TKqpIndexValidationSnapshotStep::CallableName()) {
         bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP;
-    } else if (type == "KqpIndexValidationSnapshotTxId") {
+    } else if (type == TKqpIndexValidationSnapshotTxId::CallableName()) {
         bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID;
     }
 
@@ -760,6 +762,32 @@ public:
         auto querySettings = TKqpPhyQuerySettings::Parse(query);
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
+
+        // The logical blocks also survive script AST serialization and retain the
+        // generations even if the physical optimizer prunes a report expression.
+        const auto validations = FindNodes(dataQueryBlocks.Ptr(), [](const TExprNode::TPtr& node) {
+            return TKqpIndexValidationSnapshotStep::Match(node.Get());
+        });
+        if (!validations.empty()) {
+            if (query.Results().Size() != 1 || dataQueryBlocks.ArgCount() != 1
+                || dataQueryBlocks.Arg(0).Effects().ArgCount() != 0)
+            {
+                ctx.AddError(YqlIssue(ctx.GetPosition(validations.front()->Pos()), TIssuesIds::KIKIMR_UNSUPPORTED,
+                    "CHECK TABLE INDEX must run as a standalone statement"));
+                return false;
+            }
+            for (const auto& validation : validations) {
+                for (const auto& index : TKqpIndexValidationSnapshotStep(validation).Indexes()) {
+                    auto* info = queryProto.AddIndexValidations();
+                    info->MutableBaseTableId()->SetOwnerId(FromString<ui64>(index.BaseTableOwnerId()));
+                    info->MutableBaseTableId()->SetTableId(FromString<ui64>(index.BaseTableLocalId()));
+                    info->SetName(TString(index.IndexName().Value()));
+                    info->SetPathOwnerId(FromString<ui64>(index.IndexOwnerId()));
+                    info->SetLocalPathId(FromString<ui64>(index.IndexLocalId()));
+                    info->SetSchemaVersion(FromString<ui64>(index.Version()));
+                }
+            }
+        }
 
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
@@ -1516,30 +1544,14 @@ private:
             // GetUseRowIdAsDocId() check below is false for legacy indexes, so this is a no-op there).
             auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
             if (desc && desc->GetUseRowIdAsDocId()) {
-                const TIndexDescription* uniqueIdx = nullptr;
-                TIntrusivePtr<TKikimrTableMetadata> uniqueImplMeta;
-                TString uniqueIdxName;
-                YQL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-                for (size_t i = 0; i < tableMeta->Indexes.size(); ++i) {
-                    const auto& candidate = tableMeta->Indexes[i];
-                    if (candidate.Type == TIndexDescription::EType::GlobalSyncUnique
-                        && candidate.State == TIndexDescription::EIndexState::Ready
-                        && candidate.KeyColumns.size() == 1
-                        && candidate.KeyColumns[0] == NKikimr::NTableIndex::NFulltext::RowIdColumn)
-                    {
-                        uniqueIdx = &candidate;
-                        uniqueImplMeta = tableMeta->ImplTables[i];
-                        uniqueIdxName = candidate.Name;
-                        break;
-                    }
-                }
+                const auto [uniqueImplMeta, uniqueIdx] = tableMeta->FindRowIdMappingIndex();
                 YQL_ENSURE(uniqueIdx, "Index '" << indexName << "' has UseRowIdAsDocId=true but no Ready unique index on '"
                     << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' was found");
                 YQL_ENSURE(uniqueImplMeta);
 
                 TVector<TString> uniquePathParts = {
                     TString(settings.Table().Cast().Path()),
-                    uniqueIdxName,
+                    uniqueIdx->Name,
                     TString(NKikimr::NTableIndex::ImplTable),
                 };
                 TString uniqueImplPath = NKikimr::JoinPath(uniquePathParts);

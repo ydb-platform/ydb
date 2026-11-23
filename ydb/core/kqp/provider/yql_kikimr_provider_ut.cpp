@@ -1,11 +1,17 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/sql/v1/translation/context.h>
@@ -66,6 +72,57 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
+    Y_UNIT_TEST(ExplicitReadProjectionColumnOrder) {
+        const auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+        const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), MakeIntrusive<TKikimrConfiguration>(),
+            CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+        TExprContext ctx;
+        TTypeAnnotationContext types;
+        types.DeriveColumnOrder = true;
+
+        auto& table = session->Tables().GetOrAddTable("db", "/Root", "/Root/Table");
+        table.Metadata = MakeIntrusive<TKikimrTableMetadata>("db", "/Root/Table");
+        table.Metadata->DoesExist = true;
+        table.Metadata->KeyColumnNames = {"a"};
+        table.Metadata->ColumnOrder = {"a", "b", "c"};
+        ui32 id = 0;
+        for (const auto& name : table.Metadata->ColumnOrder) {
+            table.Metadata->Columns.emplace(name, TKikimrColumnMetadata{name, ++id, "Uint64", true});
+        }
+        UNIT_ASSERT(table.Load(ctx, false));
+
+        const auto ast = ParseAst(R"((
+            (return (KiReadTable! world (DataSource 'kikimr 'db)
+                (Key '('table (String '"/Root/Table"))) '('c 'a) '()))
+        ))");
+        UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+        TExprNode::TPtr read;
+        UNIT_ASSERT_C(CompileExpr(*ast.Root, read, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+        read->ChildPtr(0)->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+        auto transformer = CreateKiSourceTypeAnnotationTransformer(session, types);
+        UNIT_ASSERT_VALUES_EQUAL_C(SyncTransform(*transformer, read, ctx), IGraphTransformer::TStatus::Ok,
+            ctx.IssueManager.GetIssues().ToString());
+
+        const auto order = types.LookupColumnOrder(*read);
+        UNIT_ASSERT(order);
+        UNIT_ASSERT_VALUES_EQUAL(order->Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL((*order)[0].LogicalName, "c");
+        UNIT_ASSERT_VALUES_EQUAL((*order)[1].LogicalName, "a");
+    }
+
+    Y_UNIT_TEST(NotReadyIndexNamesRoundTrip) {
+        TKikimrTableMetadata original("db", "/Root/Table");
+        original.NotReadyIndexNames = {"building"};
+        NKikimrKqp::TKqpTableMetadataProto proto;
+        original.ToMessage(&proto);
+
+        const TKikimrTableMetadata restored(&proto);
+        UNIT_ASSERT(restored.IsIndexNotReady("building"));
+        UNIT_ASSERT(!restored.IsIndexNotReady("unknown"));
+        UNIT_ASSERT(restored.Indexes.empty());
+        UNIT_ASSERT(restored.ImplTables.empty());
+    }
+
     Y_UNIT_TEST(LegacySyntaxVersionIsNormalized) {
         NYql::NProto::TTranslationSettings serializedSettings;
         serializedSettings.SetSyntaxVersion(0);

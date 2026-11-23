@@ -305,6 +305,19 @@ void TQueryData::ParseParameters(const google::protobuf::Map<TBasicString<char>,
     }
 }
 
+void TQueryData::ValidateIndexValidationParameters(const NKqpProto::TKqpPhyQuery& query) const {
+    using TBinding = NKqpProto::TKqpPhyInternalBinding;
+    for (const auto& tx : query.GetTransactions()) {
+        for (const auto& binding : tx.GetParamBindings()) {
+            const auto type = binding.GetInternalBinding().GetType();
+            if (type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_STEP || type == TBinding::PARAM_INDEX_VALIDATION_SNAPSHOT_TX_ID) {
+                YQL_ENSURE(!UnboxedData.contains(binding.GetName()),
+                    "Parameter " << binding.GetName() << " is reserved for CHECK TABLE INDEX");
+            }
+        }
+    }
+}
+
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
     auto g = TypeEnv().BindAllocator();

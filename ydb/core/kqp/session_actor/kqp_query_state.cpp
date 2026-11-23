@@ -39,6 +39,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     const auto& navigate = *response.Request;
 
     const bool strict = IsIndexValidation();
+    if (strict && navigate.ResultSet.size() != TableVersions.size()) {
+        return false;
+    }
     for (const auto& entry : navigate.ResultSet) {
         if (strict && entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
             return false;
@@ -49,6 +52,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                 if (!expectedVersion) {
                     YDB_LOG_WARN("Unexpected tableId in scheme cache navigate reply",
                         {"tableId", entry.TableId});
+                    if (strict) {
+                        return false;
+                    }
                     continue;
                 }
 
@@ -57,7 +63,7 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                     continue;
                 }
 
-                if (entry.TableId.SchemaVersion && entry.TableId.SchemaVersion != *expectedVersion) {
+                if ((strict || entry.TableId.SchemaVersion) && entry.TableId.SchemaVersion != *expectedVersion) {
                     YDB_LOG_INFO("Scheme version mismatch",
                         {"pathId", entry.TableId.PathId},
                         {"expectedVersion", *expectedVersion},

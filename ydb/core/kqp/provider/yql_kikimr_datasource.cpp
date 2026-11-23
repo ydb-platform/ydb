@@ -958,7 +958,11 @@ public:
                     return nullptr;
                 }
                 if (node->IsCallable(RightName)) {
-                    return BuildCheckIndex(*read, tableDesc, check->Child(1)->Content(), *SessionCtx, Types, ctx);
+                    const auto* table = SessionCtx->Tables().EnsureTableExists(cluster, tablePath, read->Pos(), ctx);
+                    if (!table) {
+                        return nullptr;
+                    }
+                    return BuildCheckIndex(*read, *table, check->Child(1)->Content(), *SessionCtx, Types, ctx);
                 }
                 return read->ChildPtr(0);
             }

@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/tx/datashard/ut_common
     ydb/library/json_index
+    ydb/public/sdk/cpp/src/client/operation
     yql/essentials/sql/pg_dummy
     yql/essentials/types/binary_json
 )

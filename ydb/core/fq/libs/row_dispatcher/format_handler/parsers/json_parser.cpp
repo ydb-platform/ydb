@@ -40,6 +40,9 @@ static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type
     const simdjson::error_code error = value; \
     if (Y_UNLIKELY(error))
 
+// fragile:
+// on fast-path, returned `name` points to temporary simdjson storage, and may be invalidated by following simdjson:: calls;
+// on slow-path, `consume` key in terms of simdjson (and hence should not be called twice)
 static simdjson::error_code ExtractJsonKey(simdjson::simdjson_result<simdjson::builtin::ondemand::field>& item, std::string_view& name) {
     {
         CHECK_JSON_ERROR(item.escaped_key().get(name)) {

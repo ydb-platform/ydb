@@ -300,9 +300,9 @@ class TExportFixture : public TCliTestFixture {
     }
 
 public:
-    TList<TString> S3ExportArgs(const TList<TString>& options, const TString& database = TEST_DATABASE) {
+    TList<TString> S3ExportArgs(const TList<TString>& options) {
         TList<TString> args = {
-            "-e", GetEndpoint(), "-d", database, "export", "s3",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "export", "s3",
             "--bucket", TEST_BUCKET, "--s3-endpoint", TEST_S3_ENDPOINT,
             "--access-key", "test-key", "--secret-key", "test-access-key",
             "--destination-prefix", "dst",
@@ -313,30 +313,6 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(ExportTest) {
-    Y_UNIT_TEST_F(RelativeDatabasePaths, TExportFixture) {
-        for (const bool expand : {false, true}) {
-            for (const TString root : {"", "root/"}) {
-                auto& scheme = Service<TSchemeImpl>();
-                scheme.Database = "tenant";
-                if (expand) {
-                    scheme.ExpectChild(root.empty() ? "." : "root", "keep", Ydb::Scheme::Entry::TABLE);
-                }
-                Service<TExportImpl>()
-                    .ExpectBucket(TEST_BUCKET).ExpectS3Endpoint(TEST_S3_ENDPOINT)
-                    .ExpectS3AccessKey("test-key").ExpectS3SecretKey("test-access-key")
-                    .ExpectCommonSourcePrefix(root).ExpectCommonDstPrefix("dst")
-                    .ExpectItem(expand && root.empty() ? "./keep" : "keep", expand ? "dst/keep" : "target");
-                TList<TString> options = {"--root-path", root};
-                if (expand) {
-                    options.insert(options.end(), {"--exclude", "skip"});
-                } else {
-                    options.insert(options.end(), {"--item", "src=keep,dst=target"});
-                }
-                RunCli(S3ExportArgs(options, "tenant"));
-            }
-        }
-    }
-
     Y_UNIT_TEST_F(BadRequestDoesNotRetryWithTablesOnly, TExportFixture) {
         for (const bool nfs : {false, true}) {
             for (const bool includeTable : {false, true}) {

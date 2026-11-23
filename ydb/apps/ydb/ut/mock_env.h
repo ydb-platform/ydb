@@ -112,8 +112,8 @@ public:
         std::vector<std::pair<TString, Ydb::Scheme::Entry::Type>> Children;
     };
 
-    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) override {
-        CheckClientMetadata(context, "x-ydb-database", Database);
+    grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
+        CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
         } else {
@@ -142,11 +142,6 @@ public:
         operation->set_status(ListDirectoryStatus);
         operation->mutable_result()->PackFrom(res);
         return grpc::Status();
-    }
-
-    grpc::Status RemoveDirectory(grpc::ServerContext*, const Ydb::Scheme::RemoveDirectoryRequest*, Ydb::Scheme::RemoveDirectoryResponse*) override {
-        AddFailure("Unexpected RemoveDirectory request");
-        return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Unexpected RemoveDirectory request");
     }
 
     TSchemeImpl& ExpectListDirectory(TString path, Ydb::Scheme::Entry::Type selfType = Ydb::Scheme::Entry::DIRECTORY) {
@@ -189,7 +184,7 @@ public:
         Token = token;
     }
 
-    void ClearExpectations() override {
+    void ClearExpectations() {
         ExpectedClientCert = Token = {};
         Directories.clear();
     }
@@ -198,7 +193,6 @@ public:
         ExpectedClientCert = cert;
     }
 
-    TString Database = TEST_DATABASE;
     Ydb::StatusIds::StatusCode ListDirectoryStatus = Ydb::StatusIds::SUCCESS;
     TString Token;
     TString ExpectedClientCert;

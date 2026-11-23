@@ -17,8 +17,6 @@ CREATE TABLE documents (
 
 The column type `JsonDocument` stores JSON in a compact binary format and is preferred for an indexed column. Alternatively, the type `Json` (text representation) can be used.
 
-The primary key of the table must consist of a single column of an integer type (`Uint64`, `Uint32`, `Int64`, or `Int32`) — this is a [current limitation](../../dev/json-indexes.md#limitations) of the JSON index implementation.
-
 ## Add test data
 
 

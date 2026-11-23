@@ -65,9 +65,12 @@ private:
     }
 };
 
-inline TEffectsKikimrRunner NewRboKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {}) {
+inline TEffectsKikimrRunner NewRboKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
+    std::optional<bool> disablePgCompatibility = std::nullopt)
+{
     return TEffectsKikimrRunner(TKikimrSettings(NewRboAppConfig())
         .SetKqpSettings(kqpSettings)
+        .SetDisablePgCompatibility(disablePgCompatibility)
         .SetEnableScriptExecutionOperations(true));
 }
 

@@ -12,6 +12,8 @@
     #include <yql/essentials/public/udf/service/dispatch/udf_service_dispatch.h>
 #endif
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
+
 #include <util/string/builder.h>
 #include <util/system/align.h>
 #include <util/system/defaults.h>
@@ -22,6 +24,13 @@
 #include <atomic>
 #include <memory>
 #include <source_location>
+
+namespace NKikimr {
+
+void SetArrowAllocator(arrow::MemoryPool* allocator);
+arrow::MemoryPool* GetArrowAllocator();
+
+} // namespace NKikimr
 
 namespace NKikimr::NMiniKQL {
 
@@ -370,7 +379,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
 #endif
     Y_DEBUG_ABORT_UNLESS(state);
 
-    bool useMalloc = sz > MaxPageUserData || TAllocState::IsDefaultAllocatorUsed();
+    bool useMalloc = sz > MaxPageUserData || IsDefaultAllocatorUsed();
 
     if (Y_UNLIKELY(useMalloc)) {
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
@@ -423,7 +432,7 @@ inline void MKQLFreeFastWithSizeImpl(const void* mem, size_t sz, TAllocState* st
     state->DefaultMemInfo->Return(mem, sz);
 #endif
 
-    bool useFree = sz > MaxPageUserData || TAllocState::IsDefaultAllocatorUsed();
+    bool useFree = sz > MaxPageUserData || IsDefaultAllocatorUsed();
 
     if (Y_UNLIKELY(useFree)) {
         auto entry = (TAllocState::TListEntry*)(mem)-1;

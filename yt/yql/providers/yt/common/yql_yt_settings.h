@@ -325,6 +325,8 @@ public:
     NCommon::TConfSetting<ui64, Static> LookupJoinMaxRows;
     NCommon::TConfSetting<EConvertDynamicTablesToStatic, Static> ConvertDynamicTablesToStatic;
     NCommon::TConfSetting<bool, Static> KeepMergeWithDynamicInput;
+    NCommon::TConfSetting<bool, Static> BypassMergeWithInputSettings;
+    NCommon::TConfSetting<bool, Static> BypassIdentityMapWithSysColumns;
     NCommon::TConfSetting<NSize::TSize, Static> EvaluationTableSizeLimit;
     NCommon::TConfSetting<TSet<TString>, Static> DisableOptimizers;
     NCommon::TConfSetting<ui32, Static> MaxInputTables;

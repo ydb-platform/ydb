@@ -269,6 +269,9 @@ public:
     size_t GetLockedMessageGroupsIdSize() const; // from current partition only
     size_t GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const;
     void InitMetrics();
+    // Cursors and inflight metrics are not maintained while a snapshot and its WAL are applied.
+    // Call once after that load, before the consumer starts working.
+    void FinishInitialization();
     bool HasRetentionExpiredMessages() const;
     bool GetKeepMessageOrder() const;
     bool HasUnlockedMessageGroupsId() const;

@@ -2,11 +2,15 @@
 #include "logging.h"
 #include "private_events.h"
 #include "util.h"
+#include "topic_mirror.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/common/family_settings.h>
@@ -226,6 +230,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     RetryGeneration);
             }
             break;
+        case TReplication::ETargetKind::Topic:
+            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(SrcPath, {}), 0, RetryGeneration);
+            break;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -236,6 +243,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"actorState", "StateDescribeSrcPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -300,25 +308,17 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
         }
 
-        // filter out unsupported index types
+        // async indexes are unsupported if the EnableAsyncIndexReplication feature flag is unset,
+        // others are always supported
         auto& indexes = *scheme.mutable_indexes();
         for (auto it = indexes.begin(); it != indexes.end();) {
-            switch (it->type_case()) {
-            case Ydb::Table::TableIndex::kGlobalIndex:
-            case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-                ++it;
-                continue;
-            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
-                    ++it;
-                } else {
-                    it = indexes.erase(it);
-                }
-                continue;
-            default:
+            if (it->type_case() == Ydb::Table::TableIndex::kGlobalAsyncIndex &&
+                !AppData()->FeatureFlags.GetEnableAsyncIndexReplication())
+            {
                 it = indexes.erase(it);
-                break;
+                continue;
             }
+            ++it;
         }
 
         Ydb::StatusIds::StatusCode status;
@@ -366,13 +366,55 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
+                // Local indexes live inside the table and have no impl tables to replicate.
                 // Async indexes are maintained by the destination's own change exchange.
-                // Only synchronous index tables have independent replication targets.
-                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
-                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Other index tables have independent replication targets.
+                if (NTableIndex::HasReplicatedImplTables(index.GetType())) {
+                    for (auto& implTable : *index.MutableIndexImplTableDescriptions()) {
+                        FillReplicationConfig(*implTable.MutableReplicationConfig());
+                    }
                 }
             }
         }
+
+        AllocateTxId();
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        if (ev->Cookie != RetryGeneration) {
+            return;
+        }
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                return Retry();
+            }
+
+            return Error(ConvertStatus(result.GetStatus()), result.GetIssues().ToOneLineString());
+        }
+
+        if (TopicMirror.Error) {
+            return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
+        }
+
+        auto request = BuildTopicMirrorRequest(result.GetTopicDescription(), TopicMirror.Config->GetConsumer());
+
+        std::pair<TString, TString> path;
+        TString error;
+        if (!TrySplitPathByDb(DstPath, Database, path, error)) {
+            return Error(NKikimrScheme::StatusInvalidParameter, error);
+        }
+
+        TxBody.Clear();
+        auto proposal = NPQ::NSchema::ProposeCreateTopic(TxBody, std::move(request), Database, path.first, path.second);
+        if (!proposal) {
+            return Error(NKikimrScheme::StatusInvalidParameter, proposal.GetErrorMessage());
+        }
+
+        // Start mirroring only after the controller has persisted the destination id.
+        TxBody.MutableCreatePersQueueGroup()->MutablePQTabletConfig()
+            ->SetReplicationSourceConsumer(TopicMirror.Config->GetConsumer());
 
         AllocateTxId();
     }
@@ -409,11 +451,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (DropIndexTx.HasDropIndex()) {
-            ExecuteSchemeTx(DropIndexTx);
-        } else if (SwitchoverTx.HasAlterTable()) {
+        if (SwitchoverTx.HasAlterTable()) {
             ExecuteSchemeTx(SwitchoverTx);
-        } else if (InitialScan || CreatePlaceholder) {
+        } else if (InitialScan || CreatePlaceholder || Kind == TReplication::ETargetKind::Topic) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -422,33 +462,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void CreateDst() {
         ExecuteSchemeTx(TxBody);
-    }
-
-    bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
-        return !InitialScan && !CreatePlaceholder
-            && Kind == TReplication::ETargetKind::Table
-            && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-    }
-
-    void PrepareDropIndex(const NKikimrSchemeOp::TIndexDescription& index,
-            const NKikimrScheme::TEvDescribeSchemeResult& desc)
-    {
-        const auto parts = SplitPath(desc.GetPath());
-        Y_ABORT_UNLESS(!parts.empty());
-        DropIndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
-        DropIndexTx.SetInternal(true);
-        DropIndexTx.SetWorkingDir(TString(ExtractParent(desc.GetPath())));
-        DropIndexTx.MutableDropIndex()->SetTableName(parts.back());
-        DropIndexTx.MutableDropIndex()->SetIndexName(index.GetName());
-
-        // DROP INDEX is addressed by name. Bind it to the table and index we
-        // validated so a concurrent schema change cannot redirect the removal.
-        auto* tableCondition = DropIndexTx.AddApplyIf();
-        tableCondition->SetPathId(DstPathId.LocalPathId);
-        tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
-        DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
-        NeedToCheck = true;
-        AllocateTxId();
     }
 
     void PrepareSwitchover(const NKikimrScheme::TEvDescribeSchemeResult& desc) {
@@ -518,10 +531,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
                 return SubscribeTx(record.GetPathCreateTxId());
-            } else if (DropIndexTx.HasDropIndex()) {
-                DropIndexTx.Clear();
-                Become(&TThis::StateDescribeDstPath);
-                return Retry();
             } else if (SwitchoverTx.HasAlterTable()) {
                 SwitchoverTx.Clear();
                 Become(&TThis::StateDescribeDstPath);
@@ -534,9 +543,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return DescribeDstPath();
         case NKikimrScheme::StatusPreconditionFailed:
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (DropIndexTx.HasDropIndex()) {
-                return DescribeDstPath();
-            }
             if (SwitchoverTx.HasAlterTable()) {
                 // Either the ApplyIf no longer holds -- the destination moved under us, possibly
                 // because the demote itself committed and its reply was lost -- or the alter is
@@ -580,7 +586,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
-        DropIndexTx.Clear();
         Send(PipeCache, new TEvPipeCache::TEvForward(
             new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
@@ -616,11 +621,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
                     << "`" << DstPath << "` is owned by another replication");
             }
-            for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                if (ShouldDropVectorIndex(index)) {
-                    return PrepareDropIndex(index, record);
-                }
-            }
             if (NeedsSwitchover(desc.GetTable())) {
                 const auto version = desc.GetSelf().GetPathVersion();
                 if (SwitchoverRefusal && SwitchoverRefusal->PathVersion == version) {
@@ -633,7 +633,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Success();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (!InitialScan) {
+            if (!InitialScan && Kind != TReplication::ETargetKind::Topic) {
                 return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
             }
             return AllocateTxId();
@@ -654,6 +654,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return CheckTableScheme(desc.GetTable(), error);
+        case TReplication::ETargetKind::Topic: {
+            const auto& expectedConsumer = TopicMirror.Config->GetConsumer();
+            const auto& actualConsumer = desc.GetPersQueueGroup().GetPQTabletConfig().GetReplicationSourceConsumer();
+            if (desc.HasPersQueueGroup() && !expectedConsumer.empty() && actualConsumer == expectedConsumer) {
+                return true;
+            }
+            error = "Destination topic was not created by this replication";
+            return false;
+        }
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -687,6 +696,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             if (!InitialScan && IsStandby() && !IsImported(got)) {
+                // Fulltext and vector indexes are replicated as their impl tables, so the index table
+                // target refers to an impl table directly (unlike a secondary index one).
+                const auto srcParts = SplitPath(SrcPath);
+                const auto dstParts = SplitPath(DstPath);
+                const bool isIndexImplTable = !srcParts.empty() && !dstParts.empty()
+                    && srcParts.back() == dstParts.back();
+
+                if (Kind == TReplication::ETargetKind::IndexTable && isIndexImplTable) {
+                    // Its impl table is still importing, i.e. the index was built from the restored data
+                    // instead of being imported: its content (segment compaction, clustering) may differ
+                    // from the source one, so it cannot be attached to the replication.
+                    error = TStringBuilder() << "Cannot attach destination index table '" << DstPath
+                        << "': it was built during the import instead of being restored, so its content"
+                        << " may differ from the source one. Restore the index together with its data"
+                        << " (--include-index-data, --index-population-mode Import) before switching to STANDBY";
+                    return false;
+                }
+
                 error = "Destination table import is not complete (expected IMPORTED)";
                 return false;
             }
@@ -810,9 +837,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check indexes
         THashMap<TStringBuf, const NKikimrSchemeOp::TIndexDescription*> indexes;
         for (const auto& index : got.GetTableIndexes()) {
-            if (ShouldDropVectorIndex(index)) {
-                continue;
-            }
             indexes.emplace(index.GetName(), &index);
         }
 
@@ -915,6 +939,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Topic:
             return;
         case TReplication::ETargetKind::Transfer:
             return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist,
@@ -1050,7 +1075,8 @@ public:
             const TString& database,
             bool initialScan,
             TReplication::EState desiredState,
-            bool switchover = false)
+            bool switchover,
+            TTopicMirrorSettings&& topicMirror)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -1066,8 +1092,10 @@ public:
         , Switchover(switchover)
         // A switchover destination already exists and holds its data: there is no placeholder to
         // create for it, paused or not.
-        , CreatePlaceholder(!initialScan && !switchover && desiredState == TReplication::EState::Paused)
+        , CreatePlaceholder(kind != TReplication::ETargetKind::Topic
+            && !initialScan && !switchover && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
+        , TopicMirror(std::move(topicMirror))
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
@@ -1078,6 +1106,7 @@ public:
         AssignOwner = AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership();
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::Topic:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
             if (!InitialScan && !CreatePlaceholder) {
@@ -1118,6 +1147,7 @@ private:
     const bool Switchover;
     const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
+    const TTopicMirrorSettings TopicMirror;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -1127,7 +1157,6 @@ private:
     ui64 TxId = 0;
     ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
-    NKikimrSchemeOp::TModifyScheme DropIndexTx;
     NKikimrSchemeOp::TModifyScheme SwitchoverTx;
     ui64 SwitchoverPathVersion = 0;
     struct TRefusal {
@@ -1208,6 +1237,14 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
+    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+        TTopicMirrorSettings topicMirror(replication->GetConfig().GetSrcConnectionParams(),
+            target->GetSrcPath(), target->GetStreamConsumerName());
+        return CreateDstTopicCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+            replication->GetDatabase(), replication->GetPathId(),
+            replication->GetId(), target->GetId(), target->GetSrcPath(), target->GetDstPath(), std::move(topicMirror));
+    }
+
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
@@ -1222,7 +1259,17 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
         TReplication::EState desiredState, bool switchover)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, switchover);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, switchover, {});
+}
+
+IActor* CreateDstTopicCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+        const TString& database, const TPathId& pathId,
+        ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath,
+        TTopicMirrorSettings&& topicMirror)
+{
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, TReplication::ETargetKind::Topic,
+        srcPath, dstPath, EReplicationMode::ReadOnly, EConsistencyLevel::Row, database, true,
+        TReplication::EState::Ready, false, std::move(topicMirror));
 }
 
 }

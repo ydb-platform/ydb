@@ -2301,7 +2301,7 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportPg, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
@@ -8980,7 +8980,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             if (tables) {
                 UNIT_ASSERT(replica);
-                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex || asyncIndex ? 1 : 2);
+                // The base table is marked together with the impl tables of its indexes
+                // (async index impl tables are maintained by the destination).
+                UNIT_ASSERT_VALUES_EQUAL(tables, asyncIndex ? 1 : 2);
                 ++finalAlterRequests;
             }
         });
@@ -9001,7 +9003,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
-        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
+        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? 1 : 0);
         if (replica) {
             CheckImportedReplica(runtime, "/MyRoot/Table");
             if (!asyncIndex) {

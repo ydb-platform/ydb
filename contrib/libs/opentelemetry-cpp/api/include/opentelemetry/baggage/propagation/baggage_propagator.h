@@ -27,10 +27,9 @@ public:
               const context::Context &context) noexcept override
   {
     auto baggage = baggage::GetBaggage(context);
-    auto header  = baggage->ToHeader();
-    if (header.size())
+    if (HasEntries(baggage))
     {
-      carrier.Set(kBaggageHeader, header);
+      carrier.Set(kBaggageHeader, baggage->ToHeader());
     }
   }
 
@@ -38,9 +37,13 @@ public:
                            context::Context &context) noexcept override
   {
     nostd::string_view baggage_str = carrier.Get(baggage::kBaggageHeader);
-    auto baggage                   = baggage::Baggage::FromHeader(baggage_str);
+    if (baggage_str.empty())
+    {
+      return context;
+    }
+    auto baggage = baggage::Baggage::FromHeader(baggage_str);
 
-    if (baggage->ToHeader().size())
+    if (HasEntries(baggage))
     {
       return baggage::SetBaggage(context, baggage);
     }
@@ -53,6 +56,13 @@ public:
   bool Fields(nostd::function_ref<bool(nostd::string_view)> callback) const noexcept override
   {
     return callback(kBaggageHeader);
+  }
+
+private:
+  static bool HasEntries(const nostd::shared_ptr<Baggage> &baggage) noexcept
+  {
+    return baggage &&
+           !baggage->GetAllEntries([](nostd::string_view, nostd::string_view) { return false; });
   }
 };
 }  // namespace propagation

@@ -1,0 +1,6 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["order_id";["OptionalType";["DataType";"String"]]];
+        ["puid";["DataType";"Uint64"]];
+    ]];
+}}

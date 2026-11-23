@@ -36,7 +36,7 @@ TString Unknown(ui32 value) {
 } // namespace
 
 bool IsKnownState(EPileState state) {
-    return state >= EPileState::Primary && state <= EPileState::Inactive;
+    return state >= EPileState::Primary && state <= EPileState::HotStandby;
 }
 
 bool IsSynchronized(EPileState state) {
@@ -91,6 +91,7 @@ TString ToString(EPileState state) {
         case EPileState::Suspended: return "SUSPENDED";
         case EPileState::Disconnected: return "DISCONNECTED";
         case EPileState::Inactive: return "INACTIVE";
+        case EPileState::HotStandby: return "HOT_STANDBY";
     }
     return Unknown(static_cast<ui32>(state));
 }

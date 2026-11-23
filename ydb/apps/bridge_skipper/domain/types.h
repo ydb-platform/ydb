@@ -39,6 +39,7 @@ enum class EPileState : ui32 {
     Suspended = 5,
     Disconnected = 6,
     Inactive = 7,
+    HotStandby = 8,
 };
 
 using TNamedPileStates = std::map<TString, EPileState>;

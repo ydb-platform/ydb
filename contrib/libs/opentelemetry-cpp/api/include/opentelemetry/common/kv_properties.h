@@ -36,11 +36,7 @@ public:
       : str_(str), opts_(opts)
   {}
 
-  static nostd::string_view GetDefaultKeyOrValue()
-  {
-    static std::string default_str = "";
-    return default_str;
-  }
+  static nostd::string_view GetDefaultKeyOrValue() { return ""; }
 
   // Returns next key value in the string header
   // @param valid_kv : if the found kv pair is valid or not
@@ -91,8 +87,8 @@ public:
       }
       else
       {
-        key   = list_member.substr(0, key_end_pos);
-        value = list_member.substr(key_end_pos + 1);
+        key   = StringUtil::Substr(list_member, 0, key_end_pos);
+        value = StringUtil::Substr(list_member, key_end_pos + 1);
       }
 
       index_ = end + 2;
@@ -261,6 +257,19 @@ public:
       {
         const auto &entry_value = entry.GetValue();
         value                   = std::string(entry_value.data(), entry_value.size());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Returns whether an entry for `key` exists
+  bool HasKey(nostd::string_view key) const noexcept
+  {
+    for (size_t i = 0; i < num_entries_; i++)
+    {
+      if ((entries_.get())[i].GetKey() == key)
+      {
         return true;
       }
     }

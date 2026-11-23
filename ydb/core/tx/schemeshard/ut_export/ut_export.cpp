@@ -10,6 +10,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/rpc_export_base.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -60,6 +62,20 @@ namespace {
 
     using NKikimr::EBackupTestDataFormat;
     namespace TEvKesus = NKikimr::NKesus::TEvKesus;
+
+    template <typename TRpc>
+    typename TRpc::TResponse CallOperationRpc(TTestBasicRuntime& runtime,
+            typename TRpc::TRequest request, const TString& userSID = {})
+    {
+        TMaybe<TString> token;
+        if (userSID) {
+            token = NACLib::TUserToken(userSID, TVector<TString>{}).SerializeAsString();
+        }
+        auto future = NKikimr::NRpcService::DoLocalRpc<TRpc>(
+            std::move(request), "/MyRoot", token, runtime.GetActorSystem(0));
+        runtime.WaitFor("operation RPC response", [&] { return future.HasValue() || future.HasException(); });
+        return future.GetValueSync();
+    }
 
     const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
         switch (format) {
@@ -1572,6 +1588,46 @@ namespace {
             }
         }
 
+        void TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
+            Env();
+            ui64 txId = 100;
+            const auto topic = NDescUT::TSimpleTopic(0, 0);
+            auto description = topic.GetPrivateProto();
+            description.MutablePQTabletConfig()->SetWriteMode(mode);
+
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", description.DebugString());
+            Env().TestWaitNotification(Runtime(), txId);
+            TestExport(Runtime(), ++txId, "/MyRoot", topic.GetExportRequest(S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            Ydb::Topic::CreateTopicRequest exported;
+            const auto content = GetS3FileContent(topic.GetPath());
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
+            const auto value = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE ? "unavailable"
+                : mode == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED ? "prohibited" : "available";
+            UNIT_ASSERT(exported.attributes().contains("_write_mode"));
+            UNIT_ASSERT_VALUES_EQUAL(exported.attributes().at("_write_mode"), value);
+
+            TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "Topic_0"
+                        destination_path: "/MyRoot/RestoredTopic"
+                    }
+                }
+            )", S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
+            const auto& config = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+            UNIT_ASSERT(config.HasWriteMode());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetWriteMode()), static_cast<int>(mode));
+        }
+
         void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
             EnvOptions().EnablePermissionsExport(enablePermissions);
             Env();
@@ -2445,7 +2501,12 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         });
         const ui64 exportId = StartCompletionMarkerExport();
         Runtime().WaitFor("operation marker upload", [&] { return !markers.empty(); });
+        auto cancelObserver = Runtime().AddObserver<TEvExport::TEvCancelExportRequest>([](auto& ev) {
+            ev->Get()->Record.SetUserSID("canceller@builtin");
+        });
         TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+        const auto entry = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!entry.HasCancelRequestedBy());
         markers.Stop().Unblock();
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -4382,6 +4443,13 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+        const ui64 exportId = txId;
+        auto cancelObserver = Runtime().AddObserver<TEvExport::TEvCancelExportRequest>([](auto& ev) {
+            ev->Get()->Record.SetUserSID("canceller@builtin");
+        });
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        const auto completed = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!completed.HasCancelRequestedBy());
     }
 
     struct TWaitExportItemStateDelayFunc {
@@ -4445,6 +4513,14 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected schema upload failure");
+        auto cancelObserver = Runtime().AddObserver<TEvExport::TEvCancelExportRequest>([](auto& ev) {
+            ev->Get()->Record.SetUserSID("canceller@builtin");
+        });
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        const auto cancelled = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry();
+        UNIT_ASSERT(!cancelled.HasCancelRequestedBy());
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.GetIssues(0).message(), entry.GetIssues(0).message());
 
         poison.Stop().Unblock();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
@@ -4515,10 +4591,19 @@ partitioning_settings {
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(CancelledExportEndTime) {
+    Y_UNIT_TEST_TWIN(CancelledExportEndTime, Authenticated) {
         Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
+        const TString creator = "creator@builtin";
+        const TString canceller = "canceller@builtin";
+        const TString retryCaller = "retry@builtin";
+        NACLib::TDiffACL acl;
+        for (const auto& sid : {canceller, retryCaller}) {
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead | NACLib::GenericWrite, sid);
+        }
+        TestModifyACL(Runtime(), ++txId, "/", "MyRoot", acl.SerializeAsString(), "");
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -4547,7 +4632,7 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", S3Port()), creator);
         const ui64 exportId = txId;
 
         Runtime().AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
@@ -4569,13 +4654,62 @@ partitioning_settings {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        using TCancelRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::CancelOperationRequest, Ydb::Operations::CancelOperationResponse>;
+        using TGetRpc = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>;
+        using TListRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::ListOperationsRequest, Ydb::Operations::ListOperationsResponse>;
+        const auto operationId = NKikimr::NOperationId::ProtoToString(
+            NKikimr::NGRpcService::TExportConv::MakeOperationId(exportId, NKikimrExport::TExport::kExportToS3Settings));
+        Ydb::Operations::CancelOperationRequest cancelRequest;
+        cancelRequest.set_id(operationId);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, "denied@builtin").status(),
+            Ydb::StatusIds::UNAUTHORIZED);
+        const auto before = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!before.HasCancelRequestedBy());
+
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest,
+            Authenticated ? canceller : TString()).status(), Ydb::StatusIds::SUCCESS);
 
         auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         auto entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), creator);
+        UNIT_ASSERT_VALUES_EQUAL(entry.HasCancelRequestedBy(), Authenticated);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetCancelRequestedBy(), Authenticated ? canceller : TString());
+
+        auto checkOperation = [&](const Ydb::Operations::Operation& operation, bool ready) {
+            UNIT_ASSERT_VALUES_EQUAL(operation.id(), operationId);
+            UNIT_ASSERT_VALUES_EQUAL(operation.ready(), ready);
+            UNIT_ASSERT_VALUES_EQUAL(operation.status(), ready ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(operation.created_by(), creator);
+            UNIT_ASSERT_VALUES_EQUAL(operation.cancel_requested_by(), Authenticated ? canceller : TString());
+        };
+        auto checkApi = [&](bool ready) {
+            Ydb::Operations::GetOperationRequest get;
+            get.set_id(operationId);
+            checkOperation(CallOperationRpc<TGetRpc>(Runtime(), get, canceller).operation(), ready);
+            Ydb::Operations::ListOperationsRequest list;
+            list.set_kind("export/s3");
+            const auto response = CallOperationRpc<TListRpc>(Runtime(), list, canceller);
+            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.operations_size(), 1);
+            checkOperation(response.operations(0), ready);
+        };
+        checkApi(false);
+        Runtime().AdvanceCurrentTime(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        checkApi(false);
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        checkApi(false);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        checkApi(false);
 
         Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
@@ -4590,6 +4724,11 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+        checkApi(true);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        checkApi(true);
     }
 
     // Based on CompletedExportEndTime
@@ -5880,6 +6019,76 @@ state: STATE_ENABLED
       TestTopic();
     }
 
+    Y_UNIT_TEST_TWIN(TopicReplicationConsumerExportImport, replication) {
+        Env();
+        ui64 txId = 100;
+        const TString attribute = "_ydb_replication_consumer";
+        const auto topic = NDescUT::TSimpleTopic(0, 2);
+        auto description = topic.GetPrivateProto();
+        auto* consumer = description.MutablePQTabletConfig()->MutableConsumers(1);
+        consumer->SetType(replication
+            ? NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+            : NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+        const auto replicationConsumer = consumer->GetName();
+
+        TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", description.DebugString());
+        Env().TestWaitNotification(Runtime(), txId);
+        TestExport(Runtime(), ++txId, "/MyRoot", topic.GetExportRequest(S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        Ydb::Topic::CreateTopicRequest exported;
+        const auto content = GetS3FileContent(topic.GetPath());
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(content, &exported), content);
+        const auto it = exported.attributes().find(attribute);
+        if (replication) {
+            UNIT_ASSERT_C(it != exported.attributes().end(), content);
+            UNIT_ASSERT_VALUES_EQUAL(it->second, replicationConsumer);
+        } else {
+            UNIT_ASSERT_C(it == exported.attributes().end(), content);
+        }
+
+        TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "Topic_0"
+                    destination_path: "/MyRoot/RestoredTopic"
+                }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const auto restored = DescribePath(Runtime(), "/MyRoot/RestoredTopic");
+        const auto& consumers = restored.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 2);
+        ui32 replicationConsumers = 0;
+        for (const auto& restoredConsumer : consumers) {
+            if (restoredConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                ++replicationConsumers;
+                UNIT_ASSERT_VALUES_EQUAL(restoredConsumer.GetName(), replicationConsumer);
+            } else {
+                UNIT_ASSERT_C(restoredConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING,
+                    restoredConsumer.DebugString());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicationConsumers, replication ? 1 : 0);
+    }
+
+    Y_UNIT_TEST(TopicWriteAvailableExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+    }
+
+    Y_UNIT_TEST(TopicWriteUnavailableExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(TopicWriteProhibitedExportImport) {
+        TestTopicWriteModeExportImport(NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED);
+    }
+
     Y_UNIT_TEST(TopicWithPermissionsExport) {
       TestTopic(true);
     }
@@ -6928,6 +7137,7 @@ WITH (
             PQTabletConfig {
                 RequireAuthRead: false
                 RequireAuthWrite: false
+                WriteMode: WRITE_PROHIBITED
                 AbcId: 123
                 AbcSlug: "abc_slug"
                 FederationAccount: "federation_account"
@@ -7099,6 +7309,9 @@ WITH (
         // RequireAuthWrite: false -> _allow_unauthenticated_write: true
         UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
+
+        UNIT_ASSERT(attrs.contains("_write_mode"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_write_mode"), "prohibited");
 
         UNIT_ASSERT(attrs.contains("_abc_id"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");

@@ -53,6 +53,8 @@ struct TTopicInfo {
     TString CdcStreamName;
 
     ui64 CreateStep = 0;
+    bool IsServerless = false;
+    bool IsAsyncReplication = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
@@ -77,6 +79,9 @@ struct TDescribeSettings {
     bool ForceSyncVersion = false;
     // Legacy callers opt out; the resolver still checks the global feature flag.
     bool EnableRelativePaths = true;
+    // Topic strings are already scheme paths (discovery primary/secondary).
+    // Do not run ResolveName, which rewrites legacy paths under LbUserDatabaseRoot.
+    bool ResolvedPaths = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

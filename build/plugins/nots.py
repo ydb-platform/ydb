@@ -606,11 +606,11 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
     from lib.nots.package_manager.common_config import common_config_inputs
     from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
-    has_deps = pj.has_dependencies()
     local_cli = unit.get_subst("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     effective_config = _configure_pnpm_settings(unit, pm, pj)
     _, _, settings = effective_config
+    has_deps = pj.has_dependencies() or bool(settings.get("overrides"))
     platform = _configure_tarballs_platform(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(
         unit.get("_TARBALLS_STORE"),
@@ -920,13 +920,15 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    has_deps = pj.has_dependencies()
+    effective_config = _configure_pnpm_settings(unit, pm, pj)
+    _, _, settings = effective_config
+    has_deps = pj.has_dependencies() or bool(settings.get("overrides"))
     prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     if use_hermetic_node_modules:
         _configure_hermetic_node_modules(unit)
 
-    local_peers = pm.get_local_peers_from_package_json()
+    local_peers = pm.get_local_peers_from_package_json(pj, settings)
     if local_peers:
         unit.onpeerdir(local_peers)
         __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
@@ -963,7 +965,7 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         if not use_hermetic_node_modules:
             from lib.nots.package_manager.common_config import common_config_inputs
 
-            ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
+            ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root, effective_config))
             # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
@@ -984,9 +986,6 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         if pj.get_use_prebuilder():
             _setup_prebuilder_resource(unit)
 
-            from lib.nots.package_manager.common_config import load_common_config
-
-            _, _, settings = load_common_config(pj, pm.sources_root, include_settings=True)
             is_valid, validation_messages = pj.validate_prebuilds(settings.get("overrides", {}))
 
             if not is_valid:
@@ -1100,3 +1099,32 @@ def _TS_OUTPUT_PREFIX(unit: ymake.Unit, *args: str) -> None:
         raise ValueError("TS_OUTPUT_PREFIX accepts at most one path")
     prefix = args[0] if args else unit.get("MODDIR")
     unit.set(["_TS_OUTPUT_PREFIX_ARG", shlex.quote("--output-prefix=" + prefix)])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _NOTS_TOOL_CONFIGURE(unit: ymake.Unit):
+    implementation = unit.get("TS_NOTS_BUILDER_IMPL")
+    if implementation == "python":
+        return
+    if implementation != "typescript":
+        raise ValueError("TS_NOTS_BUILDER_IMPL must be python or typescript")
+
+    # Building the source runner requires the CLI and its workspace peers.
+    # Their own makefiles select the pinned builder and keep the graph acyclic.
+    pinned_typescript = (
+        unit.get("TS_USE_PREBUILT_NOTS_TOOL") == "yes" and unit.get("_NOTS_BOOTSTRAP_TYPESCRIPT") == "yes"
+    )
+    bootstrap = not pinned_typescript and unit.get("MODDIR") in unit.get("_NOTS_BOOTSTRAP_MODULES").split()
+    tool_path = "devtools/frontend_build_platform/nots/" + ("bootstrap" if bootstrap else "builder/typescript")
+    typescript = not bootstrap or unit.get("_NOTS_BOOTSTRAP_TYPESCRIPT") == "yes"
+    suffix = ""
+    if typescript:
+        # Build commands use the shared host resource. Recipes retain the bundled
+        # fallback so released yatest can run them without new DART fields.
+        unit.onpeerdir(["devtools/frontend_build_platform/nots/bsdtar"])
+        suffix += ' ${env:"NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"}'
+        suffix += ' ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/settings.schema.json"}'
+    unit.set(["NOTS_TOOL", '${tool:"' + tool_path + '"} ${hide:TS_FAKEID} ${hide;input:T0_SETTINGS_PATH}' + suffix])
+    unit.set(["_NOTS_RECIPE_DEPENDS", tool_path])
+    unit.set(["_NOTS_RECIPE", tool_path + ("/nots-recipe" if typescript else "/bootstrap")])

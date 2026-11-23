@@ -16,6 +16,10 @@ DEFAULT_DURATION_SECONDS = 5 * 60
 DESCRIBE_INTERVAL_SECONDS = 1
 COMMITTED_STALL_TIMEOUT_SECONDS = 10
 DRAIN_TIMEOUT_SECONDS = 120
+# A short per-message delay. Immediate messages keep the committed offset moving,
+# so this stays under COMMITTED_STALL_TIMEOUT_SECONDS.
+DELAY_EVERY = 10
+DELAY_SECONDS = 2
 BOTO_CONFIG = Config(
     connect_timeout=5,
     read_timeout=20,
@@ -135,6 +139,7 @@ class BotoStressWorkload:
         lock = threading.Lock()
         stats = {
             "sent": 0,
+            "delayed": 0,
             "deleted": 0,
             "send_errors": 0,
             "receive_errors": 0,
@@ -154,12 +159,18 @@ class BotoStressWorkload:
             seq = 0
             while not stop_event.is_set():
                 try:
-                    client.send_message(
-                        QueueUrl=queue_url,
-                        MessageBody=f"stress-{worker_id}-{seq}",
-                    )
+                    delay_seconds = DELAY_SECONDS if seq % DELAY_EVERY == 0 else 0
+                    request = {
+                        "QueueUrl": queue_url,
+                        "MessageBody": f"stress-{worker_id}-{seq}",
+                    }
+                    if delay_seconds:
+                        request["DelaySeconds"] = delay_seconds
+                    client.send_message(**request)
                     with lock:
                         stats["sent"] += 1
+                        if delay_seconds:
+                            stats["delayed"] += 1
                     seq += 1
                 except Exception as error:
                     with lock:
@@ -353,6 +364,9 @@ class BotoStressWorkload:
         ]
         assert not alive, f"threads are still alive: {alive}"
         assert final_stats["sent"] > 0, f"no messages were sent: {final_stats}"
+        assert 0 < final_stats["delayed"] < final_stats["sent"], (
+            f"delayed sends must be a portion of all sends: {final_stats}"
+        )
         assert final_stats["deleted"] > 0, f"no messages were deleted: {final_stats}"
         assert final_stats["describe_checks"] > 0, f"topic was not described: {final_stats}"
         assert final_stats["send_errors"] < final_stats["sent"], f"too many send errors: {final_stats}"

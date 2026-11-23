@@ -4553,7 +4553,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
 
     if ((Mode_ == NSQLTranslation::ESqlMode::SUBQUERY ||
          Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) &&
-        !ValidateSubqueryOrViewBody(blocks))
+        !ValidateSubqueryOrViewBody(blocks, Ctx_.Position(query)))
     {
         return nullptr;
     }
@@ -4694,7 +4694,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
 
     if ((Mode_ == NSQLTranslation::ESqlMode::SUBQUERY ||
          Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) &&
-        !ValidateSubqueryOrViewBody(blocks))
+        !ValidateSubqueryOrViewBody(blocks, statements.empty() ? TPosition(1, 1, Ctx_.Settings.File) : Ctx_.Position(statements.front())))
     {
         return nullptr;
     }

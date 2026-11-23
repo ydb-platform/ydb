@@ -139,7 +139,7 @@ index 74e9bca7fddc0bb7c471106a260856a937e7d871..f056bb42f2a4082d0e76d83fa409cf9f
              return self._first_error.result()
          return None
 diff --git a/ydb/aio/connection.py b/ydb/aio/connection.py
-index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613ac1621c27 100644
+index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..7b86963af216ee50e2a1747983d7f499f2585710 100644
 --- a/ydb/aio/connection.py
 +++ b/ydb/aio/connection.py
 @@ -2,6 +2,7 @@ from __future__ import annotations
@@ -150,7 +150,19 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613a
  from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
  import collections
  import grpc
-@@ -122,20 +123,42 @@ class _SafeAsyncIterator:
+@@ -115,27 +116,62 @@ class _RpcState(RpcState):
+ 
+ 
+ class _SafeAsyncIterator:
+-    def __init__(self, resp, rpc_state, on_disconnected_callback):
++    def __init__(self, resp, rpc_state, on_disconnected_callback, managed=False):
++        self.managed = managed
+         self.resp = resp
+-        self.it = resp.__aiter__()
++        # grpc.aio caches its async iterator on the call. read() avoids a cycle
++        # that can keep an abandoned stream and its native socket alive.
++        self.it = None if managed and hasattr(resp, "read") else resp.__aiter__()
+         self.rpc_state = rpc_state
          self.on_disconnected_callback = on_disconnected_callback
  
      def cancel(self):
@@ -173,32 +185,43 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613a
          return self
  
      async def __anext__(self):
-+        if self.it is None:
++        if self.resp is None:
 +            raise issues.ConnectionLost("Endpoint route has changed")
          try:
-             return await self.it.__anext__()
-+        except asyncio.CancelledError as error:
+-            return await self.it.__anext__()
 +            if self.it is not None:
++                return await self.it.__anext__()
++            message = await self.resp.read()
++            if message is grpc.aio.EOF:
++                raise StopAsyncIteration
++            return message
++        except asyncio.CancelledError as error:
++            if not self.managed:
 +                raise
-+            # A retained reader error can otherwise keep the cancelled gRPC
-+            # generator frame, and its native transport, alive indefinitely.
-+            error.__traceback__ = None
++            # A saved cancellation from before cutover must release the native
++            # call too. Raise the equivalent error outside its gRPC traceback.
++            if self.resp is not None:
++                stream_error: BaseException = asyncio.CancelledError(*error.args)
++            else:
++                stream_error = issues.ConnectionLost("Endpoint route has changed")
          except grpc.RpcError as rpc_error:
 -            ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
 -            if _is_disconnect_needed(ydb_error):
 -                await self.on_disconnected_callback()
 -            raise ydb_error
-+            if self.it is not None:
-+                ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
-+                if _is_disconnect_needed(ydb_error):
++            if self.resp is not None:
++                stream_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
++                if _is_disconnect_needed(stream_error):
 +                    await self.on_disconnected_callback()
-+                raise ydb_error
-+            rpc_error.__traceback__ = None
-+        raise issues.ConnectionLost("Endpoint route has changed")
++                if not self.managed:
++                    raise stream_error
++            else:
++                stream_error = issues.ConnectionLost("Endpoint route has changed")
++        raise stream_error
  
      def __getattr__(self, item):
          return getattr(self.resp, item)
-@@ -149,6 +172,7 @@ class Connection:
+@@ -149,6 +185,7 @@ class Connection:
          "_stub_instances",
          "_driver_config",
          "_cleanup_callbacks",
@@ -206,7 +229,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613a
          "__weakref__",
          "lock",
          "calls",
-@@ -175,6 +199,7 @@ class Connection:
+@@ -175,6 +212,7 @@ class Connection:
          self._channel = channel_factory(self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options)
          self._driver_config = driver_config
  
@@ -214,7 +237,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613a
          self._stub_instances: Dict[Any, Any] = {}
          self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
          for stub in _stubs_list:
-@@ -192,13 +217,12 @@ class Connection:
+@@ -192,13 +230,12 @@ class Connection:
      ) -> Tuple[_RpcState, float, List[Tuple[str, str]]]:
          timeout, metadata = _get_request_timeout(settings), await _construct_metadata(self._driver_config, settings)  # type: ignore[arg-type]
          _set_server_timeouts(request, settings, timeout)
@@ -230,19 +253,55 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613a
          # Call successfully prepared and registered
          _log_request(rpc_state, request)
          return rpc_state, timeout, metadata
-@@ -238,6 +262,11 @@ class Connection:
+@@ -226,6 +263,7 @@ class Connection:
+         :return: A result of computation
+         """
+         rpc_state, timeout, metadata = await self._prepare_call(stub, rpc_name, request, settings)
++        call_error: BaseException
+         try:
+             feature = asyncio.ensure_future(rpc_state(request, timeout=timeout, metadata=metadata))
+ 
+@@ -237,22 +275,49 @@ class Connection:
+ 
              if hasattr(response, "__aiter__"):
                  # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
-                 response = _SafeAsyncIterator(response, rpc_state, on_disconnected)
+-                response = _SafeAsyncIterator(response, rpc_state, on_disconnected)
++                response = _SafeAsyncIterator(
++                    response, rpc_state, on_disconnected, managed=self._managed_streams is not None
++                )
 +                if self._managed_streams is not None:
 +                    if self.closing:
-+                        response.cancel()
++                        await response.retire()
 +                        raise issues.ConnectionLost("Endpoint route changed while opening the stream")
 +                    self._managed_streams.add(response)
  
              return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
++        except asyncio.CancelledError as error:
++            if self._managed_streams is None:
++                raise
++            call_error = (
++                issues.ConnectionLost("Endpoint was retired") if self.closing else asyncio.CancelledError(*error.args)
++            )
++        except grpc.aio.UsageError:
++            if not self.closing or self._managed_streams is None:
++                raise
++            call_error = issues.ConnectionLost("Endpoint was retired")
          except grpc.RpcError as rpc_error:
-@@ -253,6 +282,11 @@ class Connection:
+             if on_disconnected:
+                 coro = on_disconnected()
+                 if asyncio.iscoroutine(coro):
+                     await coro
+                 on_disconnected = None
+-            raise _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
++            call_error = _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
++            if self._managed_streams is None:
++                raise call_error
+         finally:
+             self._finish_call(rpc_state)
++        # Stored exceptions must not retain the task that owns the native call.
++        del feature
++        raise call_error
+ 
      def _finish_call(self, call_state: _RpcState) -> None:
          self.calls.pop(call_state.request_id, None)
  
@@ -254,6 +313,49 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613a
      async def destroy(self, grace: float = 0) -> None:
          """
          Destroys the underlying gRPC channel
+@@ -293,10 +358,12 @@ class Connection:
+         for callback in self._cleanup_callbacks:
+             callback(self)
+ 
+-        if self.calls:
+-            await asyncio.wait(self.calls.values(), timeout=grace)
+-
+-        await self.destroy()
++        if self._managed_streams is not None:
++            await self.retire()
++        else:
++            if self.calls:
++                await asyncio.wait(self.calls.values(), timeout=grace)
++            await self.destroy()
+ 
+     async def __aenter__(self):
+         return self
+diff --git a/ydb/aio/coordination/reconnector.py b/ydb/aio/coordination/reconnector.py
+index e5875f2dbc002b13cab509926005a0d604d17bec..a75233cc2cc21745627c0f507593416241ddaf9e 100644
+--- a/ydb/aio/coordination/reconnector.py
++++ b/ydb/aio/coordination/reconnector.py
+@@ -73,8 +73,8 @@ class CoordinationReconnector:
+ 
+     async def _connection_loop(self):
+         while not self._closed:
++            stream = CoordinationStream(self._driver)
+             try:
+-                stream = CoordinationStream(self._driver)
+                 await stream.start_session(
+                     self._node_path,
+                     self._timeout_millis,
+@@ -94,9 +94,8 @@ class CoordinationReconnector:
+             except Exception as exc:
+                 logger.debug("Coordination stream error: %r", exc)
+             finally:
+-                if self._stream:
+-                    await self._stream.close()
+-                    self._stream = None
++                await stream.close()
++                self._stream = None
+ 
+     async def _dispatch_loop(self, stream):
+         while not self._closed and self._stream is stream:
 diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
 index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349a8ca7c2f 100644
 --- a/ydb/aio/pool.py
@@ -385,7 +487,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..5ed76b4bc10d89cc73dd8dcc6a493349
              raise
  
 diff --git a/ydb/connection.py b/ydb/connection.py
-index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..ecb803ba4ba976955da8fc161c076f12b57c6dee 100644
+index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..b44c57d41d83e11fc1e095623546d07f1f621b68 100644
 --- a/ydb/connection.py
 +++ b/ydb/connection.py
 @@ -5,6 +5,7 @@ from concurrent import futures
@@ -467,16 +569,27 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..ecb803ba4ba976955da8fc161c076f12
 +                if self._managed_streams is not None:
 +                    with self.lock:
 +                        if self.closing:
-+                            response.cancel()
++                            response.retire()
 +                            raise issues.ConnectionLost("Endpoint route changed while opening the stream")
 +                        self._managed_streams.add(response)
  
              return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
          except grpc.RpcError as rpc_error:
-@@ -603,6 +622,14 @@ class Connection(object):
-                 # everything is cancelled/completed and channel can be destroyed
-                 self.destroy()
+@@ -596,21 +615,27 @@ class Connection(object):
+             for callback in self._cleanup_callbacks:
+                 callback(self)
  
+-            # potentially we should cancel in-flight calls here but currently
+-            # it is not required since gRPC can successfully cancel these calls manually.
++            if self._managed_streams is None:
++                if self.calls == 0:
++                    self.destroy()
++                return
++        self.retire()
+ 
+-            if self.calls == 0:
+-                # everything is cancelled/completed and channel can be destroyed
+-                self.destroy()
 +    def retire(self):
 +        with self.lock:
 +            self.closing = True
@@ -484,10 +597,21 @@ index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..ecb803ba4ba976955da8fc161c076f12
 +        for stream in streams:
 +            stream.retire()
 +        self.destroy()
-+
+ 
      def destroy(self):
-         channel = getattr(self, "_channel", None)
+-        channel = getattr(self, "_channel", None)
++        with self.lock:
++            channel, self._channel = self._channel, None
++            self._stub_instances.clear()
          if channel is not None and hasattr(channel, "close"):
+             channel.close()
+ 
+-        self._stub_instances.clear()
+-        self._channel = None
+-
+     def ready_future(self):
+         """
+         Creates a future that tracks underlying gRPC channel is ready
 diff --git a/ydb/driver.py b/ydb/driver.py
 index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6203f1a4d 100644
 --- a/ydb/driver.py
@@ -528,10 +652,10 @@ index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6
      def set_database(self, database: str) -> "DriverConfig":
 diff --git a/ydb/long_poll_test.py b/ydb/long_poll_test.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..7479cedae76e47b7daf78d895b1ff2206e756c38
+index 0000000000000000000000000000000000000000..7bb76fb02d5198dd3c7f3dc80df315232348d99f
 --- /dev/null
 +++ b/ydb/long_poll_test.py
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,183 @@
 +import asyncio
 +from concurrent.futures import ThreadPoolExecutor
 +from contextlib import contextmanager
@@ -592,17 +716,15 @@ index 0000000000000000000000000000000000000000..7479cedae76e47b7daf78d895b1ff220
 +        done.wait(5)
 +        return _apis.ydb_query.CreateSessionResponse(status=400000, session_id="old").SerializeToString()
 +
-+    servers[1].add_generic_rpc_handlers(
-+        (
-+            grpc.method_handlers_generic_handler(
-+                "Ydb.Query.V1.QueryService",
-+                {
-+                    "AttachSession": grpc.unary_stream_rpc_method_handler(attach),
-+                    "CreateSession": grpc.unary_unary_rpc_method_handler(create),
-+                },
-+            ),
-+        )
++    query = grpc.method_handlers_generic_handler(
++        "Ydb.Query.V1.QueryService",
++        {
++            "AttachSession": grpc.unary_stream_rpc_method_handler(attach),
++            "CreateSession": grpc.unary_unary_rpc_method_handler(create),
++        },
 +    )
++    for node in servers[1:]:
++        node.add_generic_rpc_handlers((query,))
 +    ports = [s.add_insecure_port("127.0.0.1:0") for s in servers]
 +    replicas.ports = ports[1:]
 +    try:
@@ -624,6 +746,15 @@ index 0000000000000000000000000000000000000000..7479cedae76e47b7daf78d895b1ff220
 +    )
 +
 +
++async def assert_socket_closed(port):
++    if Path("/proc/net/tcp").exists():
++        for _ in range(50):
++            if not established(port):
++                return
++            await asyncio.sleep(0.02)
++        pytest.fail(f"Retained stream kept the TCP socket to port {port} open")
++
++
 +@pytest.mark.parametrize("async_driver", [False, True])
 +@pytest.mark.parametrize("legacy", [False, True])
 +def test_long_poll_cutover(async_driver, legacy):
@@ -642,17 +773,28 @@ index 0000000000000000000000000000000000000000..7479cedae76e47b7daf78d895b1ff220
 +                    await asyncio.sleep(0.1)
 +                    assert len(replicas.requests) == 1
 +                    return
-+                args = (_apis.ydb_query.AttachSessionRequest(), _apis.QueryService.Stub, "AttachSession")
++                attach_args = (_apis.ydb_query.AttachSessionRequest(), _apis.QueryService.Stub, "AttachSession")
 +                if async_driver:
-+                    held = await driver(*args)
++                    held = await driver(*attach_args)
 +                    await held.__anext__()
 +                else:
-+                    held = await asyncio.to_thread(driver, *args)
++                    held = await asyncio.to_thread(driver, *attach_args)
 +                    await asyncio.to_thread(next, held)
 +                if Path("/proc/net/tcp").exists():
 +                    assert established(replicas.ports[0])
 +                # Simulate the Topic reader's background read. Its application
 +                # keeps the error for later while the driver replaces the route.
++                if async_driver:
++                    abandoned = await driver(*attach_args)
++                    await anext(abandoned)
++                    del abandoned
++                    cancelled_stream = await driver(*attach_args)
++                    await anext(cancelled_stream)
++                    saved_read = asyncio.create_task(anext(cancelled_stream))
++                    await asyncio.sleep(0)
++                    cancelled_stream.cancel()
++                    with pytest.raises(asyncio.CancelledError) as saved_error:
++                        await saved_read
 +                pending_read = asyncio.create_task(held.__anext__()) if async_driver else None
 +                args = (_apis.ydb_query.CreateSessionRequest(), _apis.QueryService.Stub, "CreateSession")
 +                call = asyncio.create_task(driver(*args) if async_driver else asyncio.to_thread(driver, *args))
@@ -664,22 +806,25 @@ index 0000000000000000000000000000000000000000..7479cedae76e47b7daf78d895b1ff220
 +                    await asyncio.sleep(0.02)
 +                assert [r.get("x-ydb-if-route-generation") for r in replicas.requests[:3]] == [None, "1", "2"]
 +                assert list(driver._store.connections) == [f"127.0.0.1:{replicas.ports[1]}"]
-+                with pytest.raises((ydb.Error, asyncio.CancelledError)):
++                with pytest.raises(ydb.Error):
 +                    await asyncio.wait_for(call, 3)
 +                if pending_read is not None:
 +                    with pytest.raises(ydb.issues.ConnectionLost):
 +                        await pending_read
-+                if Path("/proc/net/tcp").exists():
-+                    for _ in range(50):
-+                        if not established(replicas.ports[0]):
-+                            break
-+                        await asyncio.sleep(0.02)
-+                    assert not established(replicas.ports[0]), "retained stream kept old TCP socket open"
++                await assert_socket_closed(replicas.ports[0])
++                if async_driver:
++                    assert isinstance(saved_error.value, asyncio.CancelledError)
++                    active = await driver(*attach_args)
++                    await anext(active)
++                else:
++                    active = await asyncio.to_thread(driver, *attach_args)
++                    await asyncio.to_thread(next, active)
 +            finally:
 +                if async_driver:
 +                    await driver.stop()
 +                else:
 +                    await asyncio.to_thread(driver.stop)
++            await assert_socket_closed(replicas.ports[1])
 +
 +    asyncio.run(run())
 +

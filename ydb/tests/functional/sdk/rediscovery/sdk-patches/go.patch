@@ -1,18 +1,30 @@
 diff --git a/internal/balancer/balancer.go b/internal/balancer/balancer.go
-index f7652c625c8426b765e1cf0fa22813a411b79a2b..6b67a5bf2ae03e87bf7504791e9e5280ce946874 100644
+index f7652c625c8426b765e1cf0fa22813a411b79a2b..1753c1a80e5ef0aede98a83e8eea50fa226778cd 100644
 --- a/internal/balancer/balancer.go
 +++ b/internal/balancer/balancer.go
-@@ -75,6 +75,9 @@ type Balancer struct {
+@@ -73,8 +73,10 @@ type Balancer struct {
+ 	driverConfig      *config.Config
+ 	policy            policy.Policy
  	discoveryConfig   *discoveryConfig.Config
- 	pool              *conn.Pool
+-	pool              *conn.Pool
++	pool              connectionPool
  	discoveryRepeater repeater.Repeater
 +	stopPoll          context.CancelFunc
 +	pollDone          chan struct{}
-+	routeValid        atomic.Pointer[atomic.Bool]
  
  	address string
  	cc      atomic.Pointer[grpc.ClientConn]
-@@ -351,6 +354,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+@@ -325,6 +327,9 @@ func (b *Balancer) applyDiscoveredEndpoints(
+ 		active, quarantine, previousPriorities, endpoints, priorities, b.policy.MaxConnections(), b.random,
+ 	)
+ 	quarantine, connections := nextState(ctx, b.pool, quarantine, active, selectedEndpoints)
++	if watched, ok := b.pool.(*watchedPool); ok {
++		quarantine = watched.releaseRemoved(ctx, quarantine, endpoints)
++	}
+ 
+ 	if b.policy.MaxConnections() > 0 {
+ 		b.lastDiscovered = append(b.lastDiscovered[:0], endpoints...)
+@@ -351,6 +356,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
  	b.discoveryRepeater = nil
  
  	discoveryCC := b.cc.Swap(nil)
@@ -22,7 +34,7 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..6b67a5bf2ae03e87bf7504791e9e5280
  
  	b.closeMu.Unlock()
  
-@@ -362,6 +368,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+@@ -362,6 +370,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
  		onDone(err)
  	}()
  
@@ -32,36 +44,24 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..6b67a5bf2ae03e87bf7504791e9e5280
  	if discoveryRepeater != nil {
  		discoveryRepeater.Stop()
  	}
-@@ -457,6 +466,13 @@ func New(ctx context.Context, driverConfig *config.Config, pool *conn.Pool, opts
+@@ -457,6 +468,11 @@ func New(ctx context.Context, driverConfig *config.Config, pool *conn.Pool, opts
  		b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{
  			endpoint.New(b.driverConfig.Endpoint()),
  		}, "")
 +	} else if b.discoveryConfig.DiscoveryLongPoll() {
-+		valid := new(atomic.Bool)
-+		valid.Store(true)
-+		b.routeValid.Store(valid)
++		b.pool = newWatchedPool(pool)
 +		if err := b.startLongPoll(ctx); err != nil {
 +			return nil, err
 +		}
  	} else {
  		if err := b.clusterDiscovery(ctx); err != nil {
  			return nil, xerrors.WithStackTrace(err)
-@@ -513,6 +529,9 @@ func (b *Balancer) NewStream(
- }
- 
- func (b *Balancer) wrapCall(ctx context.Context, f func(ctx context.Context, cc conn.Conn) error) (err error) {
-+	if valid := b.routeValid.Load(); valid != nil {
-+		ctx = conn.WithRouteValidity(ctx, valid)
-+	}
- 	cc, err := b.nextConn(ctx)
- 	if err != nil {
- 		return xerrors.WithStackTrace(err)
 diff --git a/internal/balancer/long_poll.go b/internal/balancer/long_poll.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..e19e76e76c089dfcf6afd4f63aee47992b2c4b2f
+index 0000000000000000000000000000000000000000..bc45d70e15bf96a08a2634ebbac69809e8a00c10
 --- /dev/null
 +++ b/internal/balancer/long_poll.go
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,131 @@
 +package balancer
 +
 +import (
@@ -70,14 +70,12 @@ index 0000000000000000000000000000000000000000..e19e76e76c089dfcf6afd4f63aee4799
 +	"fmt"
 +	"math/rand/v2"
 +	"strconv"
-+	"sync/atomic"
 +	"time"
 +
 +	"github.com/ydb-platform/ydb-go-genproto/Ydb_Discovery_V1"
 +	"google.golang.org/grpc"
 +	"google.golang.org/grpc/metadata"
 +
-+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/discovery"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/retry"
 +)
@@ -181,36 +179,114 @@ index 0000000000000000000000000000000000000000..e19e76e76c089dfcf6afd4f63aee4799
 +	return nil
 +}
 +
-+// A sibling driver may own a reference to the same data channel. Close its
-+// current transport before publishing replacement endpoints. A sibling still
-+// assigned that node can reconnect with its existing pooled wrapper.
++// Revoke the entire previous assignment on a generation change, including
++// addresses that appear again after a coalesced switch and failback.
 +func (b *Balancer) retireRoute(ctx context.Context) {
 +	b.closeMu.Lock()
 +	if b.closed {
 +		b.closeMu.Unlock()
 +		return
 +	}
-+	if old := b.routeValid.Load(); old != nil {
-+		old.Store(false)
-+	}
 +	old := b.connectionsState.Swap(newConnectionsStateWithPriorities(nil, nil, nil, nil))
 +	b.lastDiscovered = nil
 +	b.closeMu.Unlock()
-+	if old != nil {
-+		seen := make(map[conn.Conn]struct{})
-+		for _, connections := range [][]conn.Conn{old.all, old.quarantine} {
-+			for _, c := range connections {
-+				if _, ok := seen[c]; !ok {
-+					b.pool.ResetTransport(ctx, c)
-+					seen[c] = struct{}{}
-+				}
-+			}
-+		}
-+		b.releaseStateConns(ctx, old)
++	b.pool.(*watchedPool).invalidateMissing(ctx, nil)
++	b.releaseStateConns(ctx, old)
++}
+diff --git a/internal/balancer/long_poll_connections_test.go b/internal/balancer/long_poll_connections_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d6cc7721569ae3bc9655c06ae20d81dccdd08e4
+--- /dev/null
++++ b/internal/balancer/long_poll_connections_test.go
+@@ -0,0 +1,89 @@
++package balancer
++
++import (
++	"context"
++	"net"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++	"google.golang.org/grpc"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/credentials/insecure"
++	"google.golang.org/grpc/health"
++	healthpb "google.golang.org/grpc/health/grpc_health_v1"
++	"google.golang.org/grpc/status"
++
++	"github.com/ydb-platform/ydb-go-sdk/v3/config"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
++)
++
++func TestLongPollRetiresSharedRoutesAndClosesLastDataTransport(t *testing.T) {
++	ctx, cancel := context.WithTimeout(conn.WithoutWrapping(t.Context()), 5*time.Second)
++	defer cancel()
++	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
++	require.NoError(t, err)
++	var sockets atomic.Int64
++	server := grpc.NewServer(grpc.StatsHandler(&serverConnStats{active: &sockets}))
++	healthServer := health.NewServer()
++	healthpb.RegisterHealthServer(server, healthServer)
++	go func() { _ = server.Serve(listener) }()
++	t.Cleanup(server.Stop)
++
++	cfg := config.New(config.WithGrpcOptions(grpc.WithTransportCredentials(insecure.NewCredentials())))
++	pool := conn.NewPool(ctx, cfg)
++	defer func() { _ = pool.RemoveRef(ctx) }()
++	nodes := []endpoint.Endpoint{endpoint.New(listener.Addr().String(), endpoint.WithID(1))}
++	watch := func() (*Balancer, healthpb.Health_WatchClient, context.CancelFunc) {
++		b := &Balancer{driverConfig: cfg, pool: newWatchedPool(pool)}
++		b.applyDiscoveredEndpoints(ctx, nodes, "")
++		streamCtx, stop := context.WithCancel(ctx)
++		t.Cleanup(stop)
++		s, err := healthpb.NewHealthClient(b).Watch(streamCtx, &healthpb.HealthCheckRequest{})
++		require.NoError(t, err)
++		_, err = s.Recv()
++		require.NoError(t, err)
++		return b, s, stop
 +	}
-+	valid := new(atomic.Bool)
-+	valid.Store(true)
-+	b.routeValid.Store(valid)
++	parent, parentStream, _ := watch()
++	old := parent.connections().All()[0]
++	held := parent.pool.Get(nodes[0]) // concurrent pinned selection
++	child, childStream, stopChild := watch()
++	require.EqualValues(t, 1, sockets.Load())
++	parent.applyDiscoveredEndpoints(ctx, nodes, "")
++	parent.retireRoute(ctx)
++	// A live child stream still owns the shared TCP connection.
++	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
++	_, err = parentStream.Recv()
++	require.Error(t, err)
++	reply, err := childStream.Recv()
++	require.NoError(t, err)
++	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, reply.Status)
++	require.EqualValues(t, 1, sockets.Load())
++
++	// Re-admitting the same pooled socket creates a fresh route. Previously
++	// retained handles cannot start another RPC, including after failback.
++	parent.applyDiscoveredEndpoints(ctx, nodes, "")
++	parent.pool.Put(ctx, held)
++	_, err = healthpb.NewHealthClient(old).Check(ctx, &healthpb.HealthCheckRequest{})
++	require.Equal(t, codes.Unavailable, status.Code(err))
++	_, err = healthpb.NewHealthClient(parent).Check(ctx, &healthpb.HealthCheckRequest{})
++	require.NoError(t, err)
++	parent.retireRoute(ctx)
++
++	// The sibling still owns a pool reference. As soon as its in-flight RPC
++	// ends, the shared old socket closes. Its next call lazily reconnects.
++	stopChild()
++	require.Eventually(t, func() bool { return sockets.Load() == 0 }, 2*time.Second, time.Millisecond)
++	_, err = healthpb.NewHealthClient(child).Check(ctx, &healthpb.HealthCheckRequest{})
++	require.NoError(t, err)
++	require.EqualValues(t, 1, sockets.Load())
++
++	// A removal within a live watch must retire the last transport immediately.
++	child.applyDiscoveredEndpoints(ctx, nil, "")
++	require.Eventually(t, func() bool { return sockets.Load() == 0 }, 2*time.Second, time.Millisecond)
++	_, err = childStream.Recv()
++	require.Error(t, err)
 +}
 diff --git a/internal/balancer/long_poll_test.go b/internal/balancer/long_poll_test.go
 new file mode 100644
@@ -244,99 +320,289 @@ index 0000000000000000000000000000000000000000..08c5e3e325490504881b6f545386b786
 +	require.NoError(t, err)
 +	require.False(t, legacy.managed)
 +}
+diff --git a/internal/balancer/watched_conn.go b/internal/balancer/watched_conn.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..c8f83c6500ad815e54ab9bb3438e6bd18668c56c
+--- /dev/null
++++ b/internal/balancer/watched_conn.go
+@@ -0,0 +1,195 @@
++package balancer
++
++import (
++	"context"
++	"sync"
++	"sync/atomic"
++
++	"google.golang.org/grpc"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/status"
++
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xcontext"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xerrors"
++	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xslices"
++)
++
++// Each balancer owns the RPC lifetime for its assignment. Driver.With can
++// share the underlying pool (and TCP connection) across independent databases.
++type watchedConn struct {
++	conn.Conn
++	calls   *xcontext.CancelsGuard
++	retired atomic.Bool
++	refs    int // guarded by watchedPool.mu
++}
++
++func watchConn(c conn.Conn) *watchedConn {
++	return &watchedConn{Conn: c, calls: xcontext.NewCancelsGuard()}
++}
++
++func (p *watchedPool) retire(ctx context.Context, c *watchedConn) {
++	c.retired.Store(true)
++	c.calls.Cancel()
++	p.Pool.CloseTransportWhenIdle(ctx, c.Conn)
++}
++
++var errRouteRetired = status.Error(codes.Unavailable, "discovery retired the data endpoint")
++
++func retirementError(ctx context.Context) error {
++	if conn.UseWrapping(ctx) {
++		return xerrors.Transport(errRouteRetired)
++	}
++	return errRouteRetired
++}
++
++func (c *watchedConn) routeError(ctx context.Context, err error) error {
++	if err != nil && c.retired.Load() &&
++		(xerrors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled || xerrors.IsTransportError(err, codes.Canceled)) {
++		return retirementError(ctx)
++	}
++	return err
++}
++
++func (c *watchedConn) callContext(ctx context.Context) (context.Context, func(), error) {
++	ctx, cancel := c.calls.WithCancel(ctx)
++	if c.retired.Load() {
++		cancel()
++		return nil, nil, retirementError(ctx)
++	}
++	return ctx, cancel, nil
++}
++
++func (c *watchedConn) Invoke(ctx context.Context, method string, req, reply any, opts ...grpc.CallOption) error {
++	ctx, done, err := c.callContext(ctx)
++	if err != nil {
++		return err
++	}
++	defer done()
++	return c.routeError(ctx, c.Conn.Invoke(ctx, method, req, reply, opts...))
++}
++
++func (c *watchedConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
++	ctx, done, err := c.callContext(ctx)
++	if err != nil {
++		return nil, err
++	}
++	stream, err := c.Conn.NewStream(ctx, desc, method, append(opts, grpc.OnFinish(func(error) { done() }))...)
++	if err != nil {
++		done()
++		return nil, c.routeError(ctx, err)
++	}
++	return &watchedStream{ClientStream: stream, conn: c, ctx: ctx}, nil
++}
++
++func (c *watchedConn) Ban(ctx context.Context) {
++	if !c.retired.Load() {
++		c.Conn.Ban(ctx)
++	}
++}
++
++type watchedStream struct {
++	grpc.ClientStream
++	conn *watchedConn
++	ctx  context.Context
++}
++
++func (s *watchedStream) SendMsg(m any) error {
++	if s.conn.retired.Load() {
++		return retirementError(s.ctx)
++	}
++	return s.conn.routeError(s.ctx, s.ClientStream.SendMsg(m))
++}
++
++func (s *watchedStream) RecvMsg(m any) error {
++	if s.conn.retired.Load() {
++		return retirementError(s.ctx)
++	}
++	return s.conn.routeError(s.ctx, s.ClientStream.RecvMsg(m))
++}
++
++type connectionPool interface {
++	Get(endpoint.Endpoint) conn.Conn
++	Put(context.Context, conn.Conn)
++	Ban(context.Context, conn.Conn, error)
++	RemoveRef(context.Context) error
++}
++
++// Track which calls belong to this balancer even if other balancers use the
++// same physical connection. The last pool reference closes its gRPC transport.
++type watchedPool struct {
++	*conn.Pool
++	mu     sync.Mutex
++	routes map[endpoint.Key]*watchedConn
++}
++
++func newWatchedPool(pool *conn.Pool) *watchedPool {
++	return &watchedPool{Pool: pool, routes: make(map[endpoint.Key]*watchedConn)}
++}
++
++func (p *watchedPool) Get(e endpoint.Endpoint) conn.Conn {
++	p.mu.Lock()
++	defer p.mu.Unlock()
++	c := p.Pool.Get(e)
++	if c == nil {
++		return nil
++	}
++	key := e.Key()
++	route := p.routes[key]
++	if route == nil {
++		route = watchConn(c)
++		p.routes[key] = route
++	}
++	route.refs++
++	return route
++}
++
++func (p *watchedPool) Put(ctx context.Context, c conn.Conn) {
++	route := c.(*watchedConn)
++	p.mu.Lock()
++	route.refs--
++	key := route.Endpoint().Key()
++	last := route.refs == 0 && p.routes[key] == route
++	if last {
++		delete(p.routes, key)
++	}
++	p.mu.Unlock()
++
++	if last {
++		p.retire(ctx, route)
++	}
++	p.Pool.Put(ctx, route.Conn)
++}
++
++// A pinned selection can still hold a temporary reference when an assignment
++// is removed. Invalidate the old route before the new generation is visible.
++func (p *watchedPool) invalidateMissing(ctx context.Context, admitted map[endpoint.Key]bool) {
++	p.mu.Lock()
++	var removed []*watchedConn
++	for key, route := range p.routes {
++		if !admitted[key] {
++			delete(p.routes, key)
++			removed = append(removed, route)
++		}
++	}
++	p.mu.Unlock()
++	for _, route := range removed {
++		p.retire(ctx, route)
++	}
++}
++
++func (p *watchedPool) releaseRemoved(ctx context.Context, quarantine []conn.Conn, endpoints []endpoint.Endpoint) []conn.Conn {
++	admitted := make(map[endpoint.Key]bool, len(endpoints))
++	for _, e := range endpoints {
++		admitted[e.Key()] = true
++	}
++	p.invalidateMissing(ctx, admitted)
++	return xslices.Filter(quarantine, func(c conn.Conn) bool {
++		if admitted[c.Endpoint().Key()] {
++			return true
++		}
++		p.Put(ctx, c)
++		return false
++	})
++}
 diff --git a/internal/conn/conn.go b/internal/conn/conn.go
-index 62418e013d502ae679fe1fdf4369e9054a38c17e..9da6d85f77d056b14e1dc0670e86b4938fe4c19c 100644
+index 62418e013d502ae679fe1fdf4369e9054a38c17e..12f2a2c39511147d66f5713c7c5ccadc9f37fc82 100644
 --- a/internal/conn/conn.go
 +++ b/internal/conn/conn.go
-@@ -152,13 +152,23 @@ func (c *conn) InFlight() int64 {
+@@ -67,6 +67,7 @@ type (
+ 		closed                  bool
+ 		state                   atomic.Uint32
+ 		inFlight                atomic.Int64
++		closeWhenIdle           atomic.Bool
+ 		lastClusterAnnouncement atomic.Int64
+ 		childStreams            *xcontext.CancelsGuard
+ 		usage                   *usageTracker
+@@ -152,6 +153,18 @@ func (c *conn) InFlight() int64 {
  	return c.inFlight.Load()
  }
  
--func (c *conn) realConn(ctx context.Context) (cc grpcClientConnInterface, err error) {
--	if c.isClosed() {
--		return nil, xerrors.WithStackTrace(errClosedConnection)
--	}
-+type routeValidityKey struct{}
- 
-+// WithRouteValidity prevents a selection racing a cutover from reopening a
-+// previously shared node transport after the balancer has reset it.
-+func WithRouteValidity(ctx context.Context, valid *atomic.Bool) context.Context {
-+	return context.WithValue(ctx, routeValidityKey{}, valid)
++// The last outstanding RPC may belong to a sibling sharing this transport.
++// Close the retired socket at the first idle point, before reusing it again.
++func (c *conn) finishRPC(ctx context.Context) {
++	if c.inFlight.Add(-1) == 0 && c.closeWhenIdle.Load() {
++		c.mtx.Lock()
++		defer c.mtx.Unlock()
++		if c.closeWhenIdle.Load() && c.inFlight.Load() == 0 {
++			_ = c.close(ctx)
++		}
++	}
 +}
 +
-+func (c *conn) realConn(ctx context.Context) (cc grpcClientConnInterface, err error) {
- 	c.mtx.Lock()
- 	defer c.mtx.Unlock()
-+	if c.closed {
-+		return nil, xerrors.WithStackTrace(errClosedConnection)
-+	}
-+	if valid, _ := ctx.Value(routeValidityKey{}).(*atomic.Bool); valid != nil && !valid.Load() {
-+		return nil, xerrors.WithStackTrace(errClosedConnection)
-+	}
+ func (c *conn) realConn(ctx context.Context) (cc grpcClientConnInterface, err error) {
+ 	if c.isClosed() {
+ 		return nil, xerrors.WithStackTrace(errClosedConnection)
+@@ -227,6 +240,7 @@ func isAvailable(raw grpcClientConnInterface) bool {
  
- 	if c.grpcConn != nil {
- 		return c.grpcConn, nil
+ // conn must be locked
+ func (c *conn) close(ctx context.Context) (err error) {
++	c.closeWhenIdle.Store(false)
+ 	if c.grpcConn == nil {
+ 		return nil
+ 	}
+@@ -403,7 +417,7 @@ func (c *conn) Invoke(
+ 	opts ...grpc.CallOption,
+ ) (err error) {
+ 	c.inFlight.Add(1)
+-	defer c.inFlight.Add(-1)
++	defer c.finishRPC(ctx)
+ 
+ 	stopUsage := c.startUsage()
+ 	defer stopUsage()
+@@ -451,7 +465,7 @@ func (c *conn) NewStream(
+ 	opts ...grpc.CallOption,
+ ) (_ grpc.ClientStream, finalErr error) {
+ 	c.inFlight.Add(1)
+-	stopInFlight := sync.OnceFunc(func() { c.inFlight.Add(-1) })
++	stopInFlight := sync.OnceFunc(func() { c.finishRPC(ctx) })
+ 	defer func() {
+ 		if finalErr != nil {
+ 			stopInFlight()
 diff --git a/internal/conn/pool.go b/internal/conn/pool.go
-index 6a867ccecbca51e6914d185682f860a21a280221..7b771500c873d11c27d4a405c5459a71321243fd 100644
+index 6a867ccecbca51e6914d185682f860a21a280221..b8d5bb637f1018fe22957951cce02dc98bc16388 100644
 --- a/internal/conn/pool.go
 +++ b/internal/conn/pool.go
-@@ -92,6 +92,17 @@ func (p *Pool) get(e endpoint.Endpoint) *connValue {
+@@ -92,6 +92,20 @@ func (p *Pool) get(e endpoint.Endpoint) *connValue {
  	return value
  }
  
-+// ResetTransport closes active RPCs even when other drivers hold pool references.
-+func (p *Pool) ResetTransport(ctx context.Context, c Conn) {
-+	cc, ok := c.(*conn)
-+	if !ok {
-+		return
-+	}
++// CloseTransportWhenIdle closes the current socket as soon as every RPC using
++// it has completed. It leaves the pooled wrapper available for other drivers.
++func (p *Pool) CloseTransportWhenIdle(ctx context.Context, c Conn) {
++	cc := c.(*conn)
 +	cc.mtx.Lock()
 +	defer cc.mtx.Unlock()
-+	_ = cc.close(ctx)
++	if cc.grpcConn != nil {
++		cc.closeWhenIdle.Store(true)
++		if cc.inFlight.Load() == 0 {
++			_ = cc.close(ctx)
++		}
++	}
 +}
 +
  // Put decrements the connection use count. When the count reaches zero, the gRPC
  // connection is closed and the entry is removed from the pool.
  func (p *Pool) Put(ctx context.Context, c Conn) {
-diff --git a/internal/conn/pool_test.go b/internal/conn/pool_test.go
-index 7b004039e08431529e700ec932acdd057354f4a8..f02f349c3f49a6872e8af4dd06d59d7f5a8ccedd 100644
---- a/internal/conn/pool_test.go
-+++ b/internal/conn/pool_test.go
-@@ -115,6 +115,34 @@ func testConnGRPCConn(c *conn) grpcClientConnInterface {
- 	return c.grpcConn
- }
- 
-+func TestResetSharedTransportOnRouteChange(t *testing.T) {
-+	ctx := t.Context()
-+	pool := NewPool(ctx, &mockConfig{})
-+	t.Cleanup(func() { require.NoError(t, pool.RemoveRef(ctx)) })
-+	ep := endpoint.New("node:2135")
-+	c := pool.Get(ep).(*conn)
-+	require.Same(t, c, pool.Get(ep))
-+	c.grpcConn = &mockGrpcConn{}
-+	valid := new(atomic.Bool)
-+	valid.Store(true)
-+	old := WithRouteValidity(ctx, valid)
-+	_, err := c.realConn(old)
-+	require.NoError(t, err)
-+
-+	valid.Store(false)
-+	pool.ResetTransport(ctx, c)
-+	pool.Put(ctx, c)
-+	require.Nil(t, testConnGRPCConn(c))
-+	_, err = c.realConn(old)
-+	require.ErrorIs(t, err, errClosedConnection)
-+
-+	// The unaffected sibling keeps its wrapper and can use a fresh transport.
-+	c.grpcConn = &mockGrpcConn{}
-+	sibling, err := c.realConn(ctx)
-+	require.NoError(t, err)
-+	require.Same(t, c.grpcConn, sibling)
-+}
-+
- func TestPool_Get(t *testing.T) {
- 	t.Run("GetSameConnectionTwice", func(t *testing.T) {
- 		ctx := context.Background()
 diff --git a/internal/discovery/config/config.go b/internal/discovery/config/config.go
 index 3ba36f7d733ce182f5205e08979d9cda3a0bf5c4..a7ce5047422bfc5db46b04277780ab2f7e239825 100644
 --- a/internal/discovery/config/config.go

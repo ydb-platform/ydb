@@ -23,6 +23,7 @@ class Balancer(grpc.GenericRpcHandler):
         self.subscriptions = asyncio.Queue()
         self.unary_requests = []
         self.topic_peers = []
+        self.cut_metadata = ()
 
     @asynccontextmanager
     async def serve(self):
@@ -35,9 +36,10 @@ class Balancer(grpc.GenericRpcHandler):
         finally:
             await server.stop(0)
 
-    def switch(self, target):
+    def switch(self, target, *, announce_generation=True):
         self.target = target
         self.generation += 1
+        self.cut_metadata = ((GENERATION, str(self.generation)),) if announce_generation else ()
         for call in self.watches:
             call.cancel()
 
@@ -73,7 +75,7 @@ class Balancer(grpc.GenericRpcHandler):
         except (asyncio.CancelledError, grpc.aio.AioRpcError) as error:
             if generation != self.generation:
                 await context.abort(
-                    grpc.StatusCode.UNAVAILABLE, "route changed", trailing_metadata=((GENERATION, str(self.generation)),)
+                    grpc.StatusCode.UNAVAILABLE, "route changed", trailing_metadata=self.cut_metadata
                 )
             if isinstance(error, grpc.aio.AioRpcError):
                 await context.abort(error.code(), error.details())

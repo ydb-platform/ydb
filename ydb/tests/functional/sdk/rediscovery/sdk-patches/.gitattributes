@@ -1,0 +1,2 @@
+# Unified-diff context includes a leading space. prepare.py checks added source lines with git apply --whitespace=error.
+*.patch -whitespace

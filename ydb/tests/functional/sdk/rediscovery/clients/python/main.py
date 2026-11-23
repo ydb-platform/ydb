@@ -33,7 +33,9 @@ def read_topic(driver, topic):
 
 def main():
     database = os.environ["YDB_DATABASE"]
-    with ydb.Driver(endpoint=os.environ["YDB_ENDPOINT"], database=database) as driver:
+    options = {"use_eds": True} if os.environ.get("YDB_EDS_DISCOVERY") == "1" else {}
+    config = ydb.DriverConfig.default_from_endpoint_and_database(os.environ["YDB_ENDPOINT"], database, **options)
+    with ydb.Driver(config) as driver:
         driver.wait(timeout=15, fail_fast=True)
         probe = os.environ.get("YDB_PROBE", "scheme")
         if probe == "scheme":

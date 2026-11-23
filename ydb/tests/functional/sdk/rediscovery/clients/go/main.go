@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -20,13 +21,19 @@ func probe() error {
 		return fmt.Errorf("YDB_ENDPOINT and YDB_DATABASE must be set")
 	}
 	ctx := context.Background()
-	options := append([]ydb.Option{ydb.WithAnonymousCredentials(), ydb.WithDialTimeout(8*time.Second)}, discoveryOptions()...)
+	options := append([]ydb.Option{ydb.WithAnonymousCredentials(), ydb.WithDialTimeout(8 * time.Second)}, discoveryOptions()...)
 	driver, err := ydb.Open(ctx, "grpc://"+endpoint+database, options...)
 	if err != nil {
 		return err
 	}
 	defer driver.Close(ctx)
 
+	topicName := os.Getenv("YDB_PROBE_TOPIC")
+	if topicName == "" {
+		topicName = "topic"
+	}
+	path := database + "/" + topicName
+	success := "OK"
 	var request func(context.Context) error
 	switch mode := os.Getenv("YDB_PROBE"); mode {
 	case "", "scheme":
@@ -35,7 +42,7 @@ func probe() error {
 			return err
 		}
 	case "topic-write":
-		writer, err := driver.Topic().StartWriter(database+"/topic",
+		writer, err := driver.Topic().StartWriter(path,
 			topicoptions.WithWriterProducerID("probe"),
 			topicoptions.WithWriterCodec(topictypes.CodecRaw),
 			topicoptions.WithWriterWaitServerAck(true))
@@ -50,6 +57,27 @@ func probe() error {
 		request = func(callCtx context.Context) error {
 			return writer.Write(callCtx, topicwriter.Message{Data: bytes.NewReader([]byte("probe"))})
 		}
+	case "topic-read":
+		reader, err := driver.Topic().StartReader("probe", topicoptions.ReadTopic(path))
+		if err != nil {
+			return err
+		}
+		defer func() {
+			closeCtx, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+			_ = reader.Close(closeCtx)
+		}()
+		request = func(callCtx context.Context) error {
+			msg, err := reader.ReadMessage(callCtx)
+			if err != nil {
+				return err
+			}
+			payload, err := io.ReadAll(msg)
+			if err == nil {
+				success = "OK " + string(payload)
+			}
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported YDB_PROBE %q", mode)
 	}
@@ -61,7 +89,7 @@ func probe() error {
 		lastErr = request(callCtx)
 		cancel()
 		if lastErr == nil {
-			fmt.Println("OK")
+			fmt.Println(success)
 			retryDeadline = time.Now().Add(8 * time.Second)
 		} else {
 			log.Print(lastErr)

@@ -136,7 +136,7 @@ async def sdk_process(address, probe_binary, workload="list-on-demand"):
     process = await asyncio.create_subprocess_exec(
         probe_binary, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
         env={**os.environ, "YDB_ENDPOINT": address, "YDB_DATABASE": DATABASE,
-             "YDB_DISCOVERY_MODE": "eds", "YDB_PROBE": workload, "YDB_PROBE_TOPIC": workload},
+             "YDB_EDS_DISCOVERY": "1", "YDB_PROBE": workload, "YDB_PROBE_TOPIC": workload},
     )
     try:
         yield process
@@ -159,12 +159,18 @@ async def check_idle_driver(replicas, probe_binary):
         assert await list_with_sdk(sdk) == {MARKERS[0]}
         source, peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=8)
         assert source == 0
-        for target in (1, 0):
-            route.switch(target)
+        for target, announce in ((1, True), (0, False)):
+            route.switch(target, announce_generation=announce)
             # The SDK must reopen discovery without a fresh application request.
             backend, next_peer, headers = await asyncio.wait_for(route.subscriptions.get(), timeout=8)
             assert backend == target and next_peer == peer
-            assert headers.get(FLOOR) == str(route.generation)
+            if announce:
+                assert headers.get(FLOOR) == str(route.generation)
+            else:
+                # A fixed UNAVAILABLE trailer carries no new floor. The worker
+                # must verify the current route before dispatching this retry.
+                assert headers.get(FLOOR) == str(route.generation - 1)
+                assert headers.get("x-ydb-require-current-route") == "1"
             assert await list_with_sdk(sdk) == {MARKERS[target]}
             assert await source_marker(backends[1 - target]) == {MARKERS[1 - target]}
         assert not route.unary_requests, route.unary_requests

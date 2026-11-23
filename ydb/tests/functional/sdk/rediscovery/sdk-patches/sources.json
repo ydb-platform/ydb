@@ -1,6 +1,10 @@
 {
   "go": {
-    "repository": "https://github.com/ydb-platform/ydb-go-sdk.git",
-    "base": "1ee6f0062763247fe79d6b8205c6600148b818ff"
+    "base": "1ee6f0062763247fe79d6b8205c6600148b818ff",
+    "repository": "https://github.com/ydb-platform/ydb-go-sdk.git"
+  },
+  "python": {
+    "base": "a1e8d261bb62eea99d00692fe6b2fbaa02172f01",
+    "repository": "https://github.com/ydb-platform/ydb-python-sdk.git"
   }
 }

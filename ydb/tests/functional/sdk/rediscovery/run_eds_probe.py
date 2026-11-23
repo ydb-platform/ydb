@@ -38,7 +38,7 @@ async def run_direction(database, source, destination, command, timeout, balance
             process = await asyncio.create_subprocess_exec(
                 *command, stdout=asyncio.subprocess.PIPE,
                 env=dict(os.environ, YDB_ENDPOINT=address, YDB_DATABASE=database,
-                         YDB_PROBE="scheme", YDB_EDS_DISCOVERY="1"),
+                         YDB_PROBE="scheme", YDB_EDS_DISCOVERY="1", YDB_DISCOVERY_MODE="eds"),
             )
             try:
                 async with asyncio.timeout(timeout):

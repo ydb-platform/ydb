@@ -1,0 +1,818 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 89b1dcb04237311103d78f5ed7a19fc0edb7cffc..de250f59bfe9766ae90d00721a44382f6b20e3ee 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,3 +1,4 @@
++* Add opt-in EDS endpoint discovery to synchronous and asyncio drivers
+ * Fix automatic refresh of short-lived login tokens by using their JWT expiration time.
+ 
+ ## 3.35.0 ##
+diff --git a/docs/driver.rst b/docs/driver.rst
+index d587624005d2a63f9f069a61d3e9452901895f2f..70e891e4458af5215db27363e7cbbd54060664f3 100644
+--- a/docs/driver.rst
++++ b/docs/driver.rst
+@@ -27,6 +27,11 @@ DriverConfig
+    * - ``database``
+      - ``None``
+      - Full database path, e.g. ``/local`` or ``/ru-central1/b1g.../etn...``.
++   * - ``use_eds``
++     - ``False``
++     - Subscribe to Endpoint Discovery Service updates on the bootstrap channel. Install
++       ``ydb[eds]`` and pass ``DriverConfig(endpoint, database, use_eds=True)`` to
++       either driver. Servers returning gRPC UNIMPLEMENTED use unary discovery.
+    * - ``credentials``
+      - ``None``
+      - Credentials instance. Falls back to :class:`~ydb.AnonymousCredentials` if ``None``.
+diff --git a/setup.py b/setup.py
+index b6d8105163bfbbebec1f9569713298eae9ef9c7c..6a89a91c46762cd7e341ef736ad236d0f50e1a97 100644
+--- a/setup.py
++++ b/setup.py
+@@ -37,6 +37,7 @@ setuptools.setup(
+     python_requires=">=3.10",
+     install_requires=requirements,  # requirements.txt
+     extras_require={
++        "eds": ["xds-protos>=1.75.0"],
+         "yc": ["yandexcloud", ],
+         "opentelemetry": ["opentelemetry-api>=1.0.0"],
+     }
+diff --git a/tox.ini b/tox.ini
+index 064ff46ef3855ff2eb296e1ba6ed67ee6c5a8e7b..22d1ccf1b9b664c33830ead2d68d2c7e78d39dac 100644
+--- a/tox.ini
++++ b/tox.ini
+@@ -1,5 +1,5 @@
+ [tox]
+-envlist = py,py-proto6,py-proto5,py-proto4,py-proto3,style,pylint,black,black-format,mypy
++envlist = eds,py,py-proto6,py-proto5,py-proto4,py-proto3,style,pylint,black,black-format,mypy
+ minversion = 4.2.6
+ skipsdist = True
+ ignore_basepython_conflict = true
+@@ -95,3 +95,7 @@ per-file-ignores = ydb/table.py:F401
+ 
+ [pytest]
+ asyncio_mode = auto
++
++[testenv:eds]
++extras = eds
++commands = pytest -v ydb/eds_test.py
+diff --git a/ydb/_eds.py b/ydb/_eds.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92f0e8ace5
+--- /dev/null
++++ b/ydb/_eds.py
+@@ -0,0 +1,223 @@
++"""State-of-the-world endpoint discovery on the driver's bootstrap channel."""
++
++from __future__ import annotations
++
++import queue
++
++import grpc
++from envoy.config.endpoint.v3 import endpoint_pb2
++from envoy.service.discovery.v3 import discovery_pb2
++from envoy.service.endpoint.v3 import eds_pb2_grpc
++
++from . import _apis, connection, resolver
++from .aio import connection as aio_connection
++
++TYPE_URL = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
++GENERATION = "x-ydb-route-generation"
++MODE = "x-ydb-route-mode"
++
++
++class InvalidAssignment(ValueError):
++    pass
++
++
++class Route:
++    def __init__(self, config):
++        self.config = config
++        self.floor = None
++        self.require_current = False
++
++    def headers(self):
++        result = []
++        if self.floor is not None:
++            result.append(("x-ydb-min-route-generation", str(self.floor)))
++        if self.require_current:
++            result.append(("x-ydb-require-current-route", "1"))
++        return result
++
++    def verify(self, metadata):
++        headers = dict(metadata or ())
++        mode = headers.get(MODE)
++        if mode is None and GENERATION not in headers and self.floor is None:
++            return
++        value = headers.get(GENERATION, "")
++        if mode not in ("managed", "legacy") or not value.isascii() or not value.isdecimal():
++            raise InvalidAssignment("Missing or invalid managed route metadata")
++        generation = int(value)
++        if self.floor is not None and generation < self.floor:
++            raise InvalidAssignment("Worker is behind the accepted route generation")
++        self.floor = generation
++
++    def lost(self, code, trailers):
++        value = dict(trailers or ()).get(GENERATION, "")
++        if (
++            self.floor is not None
++            and code == grpc.StatusCode.UNAVAILABLE
++            and value.isascii()
++            and value.isdecimal()
++            and int(value) >= self.floor
++        ):
++            self.floor = int(value)
++            self.require_current = False
++        else:
++            self.require_current = True
++
++    def request(self, version="", nonce="", error=""):
++        request = discovery_pb2.DiscoveryRequest(
++            version_info=version, response_nonce=nonce, type_url=TYPE_URL, resource_names=[self.config.database]
++        )
++        if not nonce:
++            request.node.id = "ydb-python-sdk"
++        if error:
++            request.error_detail.code = 3
++            request.error_detail.message = error
++        return request
++
++    def assignment(self, response):
++        if (
++            response.type_url != TYPE_URL
++            or not response.version_info
++            or not response.nonce
++            or len(response.resources) != 1
++            or response.resources[0].type_url != TYPE_URL
++        ):
++            raise InvalidAssignment("Expected one versioned ClusterLoadAssignment")
++        assignment = endpoint_pb2.ClusterLoadAssignment()
++        if (
++            not response.resources[0].Unpack(assignment)
++            or assignment.cluster_name != self.config.database
++            or len(assignment.endpoints) != 1
++        ):
++            raise InvalidAssignment("Assignment does not match the requested database")
++        group = assignment.endpoints[0]
++        result = _apis.ydb_discovery.ListEndpointsResult()
++        typed = group.metadata.typed_filter_metadata
++        if (
++            "ydb.discovery" not in typed
++            or not typed["ydb.discovery"].Unpack(result)
++            or len(group.lb_endpoints) != len(result.endpoints)
++        ):
++            raise InvalidAssignment("Invalid YDB endpoint metadata")
++        for lb, ep in zip(group.lb_endpoints, result.endpoints):
++            socket = lb.endpoint.address.socket_address
++            if (
++                socket.protocol
++                or not socket.address
++                or socket.address != ep.address
++                or socket.port_value != ep.port
++                or not 0 < ep.port <= 65535
++            ):
++                raise InvalidAssignment("EDS address disagrees with the YDB endpoint")
++        self.require_current = False
++        return resolver.DiscoveryResult.from_result(result, self.config.use_all_nodes)
++
++    def unary_result(self, response, headers):
++        self.verify(headers)
++        result = resolver.DiscoveryResult.from_response(None, response, self.config.use_all_nodes)
++        self.require_current = False
++        return result
++
++
++class SyncWatch:
++    def __init__(self, route, channel):
++        self.route = route
++        self.channel = channel
++        self.active = None
++
++    def cancel(self):
++        active = self.active
++        if active is not None:
++            active.cancel()
++
++    def subscribe(self, apply, stopped):
++        route = self.route
++        requests = queue.Queue()
++        requests.put(route.request())
++        metadata = connection._construct_metadata(route.config, None) + route.headers()
++        call = eds_pb2_grpc.EndpointDiscoveryServiceStub(self.channel).StreamEndpoints(
++            iter(requests.get, None), metadata=metadata
++        )
++        self.active = call
++        try:
++            if stopped():
++                return False
++            route.verify(call.initial_metadata())
++            version = ""
++            for response in call:
++                try:
++                    resolved = route.assignment(response)
++                except InvalidAssignment as error:
++                    requests.put(route.request(version, response.nonce, str(error)))
++                    continue
++                apply(resolved)
++                version = response.version_info
++                requests.put(route.request(version, response.nonce))
++            route.lost(call.code(), call.trailing_metadata())
++        except grpc.RpcError as error:
++            if error.code() == grpc.StatusCode.UNIMPLEMENTED:
++                route.verify(error.initial_metadata())
++                metadata = connection._construct_metadata(route.config, None) + route.headers()
++                unary = _apis.DiscoveryService.Stub(self.channel).ListEndpoints
++                response, rpc = unary.with_call(
++                    resolver._list_endpoints_request_factory(route.config),
++                    metadata=metadata,
++                    timeout=route.config.discovery_request_timeout,
++                )
++                return apply(route.unary_result(response, rpc.initial_metadata()))
++            route.lost(error.code(), error.trailing_metadata())
++            raise
++        finally:
++            call.cancel()
++            requests.put(None)
++            self.active = None
++        return False
++
++
++class AsyncWatch:
++    def __init__(self, route, channel):
++        self.route = route
++        self.channel = channel
++        self.active = None
++
++    def cancel(self):
++        if self.active is not None:
++            self.active.cancel()
++
++    async def subscribe(self, apply, stopped):
++        route = self.route
++        metadata = await aio_connection._construct_metadata(route.config, None) + route.headers()
++        call = eds_pb2_grpc.EndpointDiscoveryServiceStub(self.channel).StreamEndpoints(metadata=metadata)
++        self.active = call
++        try:
++            if stopped():
++                return False
++            await call.write(route.request())
++            route.verify(await call.initial_metadata())
++            version = ""
++            async for response in call:
++                try:
++                    resolved = route.assignment(response)
++                except InvalidAssignment as error:
++                    await call.write(route.request(version, response.nonce, str(error)))
++                    continue
++                await apply(resolved)
++                version = response.version_info
++                await call.write(route.request(version, response.nonce))
++            route.lost(await call.code(), await call.trailing_metadata())
++        except grpc.aio.AioRpcError as error:
++            if error.code() == grpc.StatusCode.UNIMPLEMENTED:
++                route.verify(error.initial_metadata())
++                metadata = await aio_connection._construct_metadata(route.config, None) + route.headers()
++                unary = _apis.DiscoveryService.Stub(self.channel).ListEndpoints(
++                    resolver._list_endpoints_request_factory(route.config),
++                    metadata=metadata,
++                    timeout=route.config.discovery_request_timeout,
++                )
++                response = await unary
++                return await apply(route.unary_result(response, await unary.initial_metadata()))
++            route.lost(error.code(), error.trailing_metadata())
++            raise
++        finally:
++            call.cancel()
++            self.active = None
++        return False
+diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
+index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5fc0a2f50 100644
+--- a/ydb/aio/pool.py
++++ b/ydb/aio/pool.py
+@@ -81,7 +81,10 @@ class ConnectionsCache(_ConnectionsCache):
+         self._fast_fail_event.set()
+ 
+     def remove(self, connection: Connection) -> None:  # type: ignore[override]  # async Connection type
+-        self.connections_by_node_id.pop(connection.node_id, None)
++        if self.connections_by_node_id.get(connection.node_id) is connection:
++            self.connections_by_node_id.pop(connection.node_id, None)
++        if self.connections.get(connection.endpoint) is not connection:
++            return
+         self.preferred.pop(connection.endpoint, None)
+         self.connections.pop(connection.endpoint, None)
+         self.outdated.pop(connection.endpoint, None)
+@@ -108,6 +111,7 @@ class Discovery:
+         self._cache = store
+         self._driver_config = driver_config
+         self._resolver = resolver.DiscoveryEndpointsResolver(self._driver_config)
++        self._watch = None
+         self._base_discovery_interval = 60
+         self._ready_timeout = 4
+         self._discovery_request_timeout = 2
+@@ -123,6 +127,8 @@ class Discovery:
+         return self._resolver.debug_details()
+ 
+     def notify_disconnected(self) -> None:
++        if self._watch:
++            self._watch.cancel()
+         self._wake_up_event.set()
+ 
+     def _emergency_retry_interval(self) -> float:
+@@ -137,6 +143,9 @@ class Discovery:
+         if resolve_details is None:
+             return False
+ 
++        return await self._apply_endpoints(resolve_details)
++
++    async def _apply_endpoints(self, resolve_details) -> bool:
+         resolved_endpoints = set(
+             endpoint
+             for resolved_endpoint in resolve_details.endpoints
+@@ -213,9 +222,46 @@ class Discovery:
+ 
+     def stop(self) -> None:
+         self._should_stop = True
++        if self._watch:
++            self._watch.cancel()
+         self._wake_up_event.set()
+ 
++    async def _run_eds(self):
++        failures = 0
++        while not self._should_stop:
++            try:
++                legacy_ready = await self._watch.subscribe(self._apply_endpoints, lambda: self._should_stop)
++            except asyncio.CancelledError:
++                self._watch.route.require_current = True
++                legacy_ready = False
++            except Exception as error:
++                self._resolver._add_debug_details("EDS subscription failed: %s", error)
++                legacy_ready = False
++            if legacy_ready:
++                failures = 0
++                delay = self._discovery_interval()
++            else:
++                retired = self._cache.values()
++                for conn in retired:
++                    self._cache.remove(conn)
++                    conn.closing = True
++                await asyncio.gather(*(conn.close(grace=0) for conn in retired))
++                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
++                delay = 0 if failures == 0 else min(20, 2 ** min(failures - 1, 4)) * self._emergency_retry_interval()
++                failures += 1
++            if self._should_stop:
++                break
++            try:
++                await asyncio.wait_for(self._wake_up_event.wait(), timeout=delay)
++            except asyncio.TimeoutError:
++                pass
++            self._wake_up_event.clear()
++        await self._cache.cleanup()
++
+     async def run(self) -> None:
++        if self._watch:
++            await self._run_eds()
++            return
+         while True:
+             try:
+                 successful = await self.execute_discovery()
+@@ -284,6 +330,10 @@ class ConnectionPool(IConnectionPool):
+         else:
+             # Start discovery as usual
+             self._discovery = Discovery(self._store, self._driver_config)
++            if driver_config.use_eds:
++                from ydb._eds import AsyncWatch, Route
++
++                self._discovery._watch = AsyncWatch(Route(driver_config), self._grpc_init._channel)
+             self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
+ 
+     async def stop(self, timeout: int = 10) -> None:  # type: ignore[override]  # async override of sync method
+@@ -305,6 +355,8 @@ class ConnectionPool(IConnectionPool):
+ 
+     def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
+         async def __wrapper__() -> None:
++            if self._driver_config.use_eds and connection not in self._store.values():
++                return
+             await connection.close()
+             if self._discovery:
+                 self._discovery.notify_disconnected()
+diff --git a/ydb/driver.py b/ydb/driver.py
+index 988649804fa1645dc459c7d450c0a7728a4c26d6..ac4c26fb4d461473a082a0b113938a00db0cc2e6 100644
+--- a/ydb/driver.py
++++ b/ydb/driver.py
+@@ -113,6 +113,7 @@ class DriverConfig(object):
+         "compression",
+         "disable_discovery",
+         "detect_local_dc",
++        "use_eds",
+         "_additional_sdk_headers",
+     )
+ 
+@@ -141,6 +142,7 @@ class DriverConfig(object):
+         disable_discovery: bool = False,
+         detect_local_dc: bool = False,
+         *,
++        use_eds: bool = False,
+         _additional_sdk_headers: Tuple[str, ...] = (),
+     ) -> None:
+         """
+@@ -162,6 +164,7 @@ class DriverConfig(object):
+         If tracing aio ScopeManager must be ContextVarsScopeManager
+         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_robin`
+         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
++        :param use_eds: Subscribe to gRPC Endpoint Discovery Service updates (requires the eds extra).
+         :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
+         :param detect_local_dc: If True, detect nearest datacenter using TCP latency measurement instead of using\
+         server-provided self_location. **Note**: This option only affects endpoint selection when use_all_nodes=False.\
+@@ -196,6 +199,9 @@ class DriverConfig(object):
+         self.compression = compression
+         self.disable_discovery = disable_discovery
+         self.detect_local_dc = detect_local_dc
++        if use_eds and (disable_discovery or not database):
++            raise ValueError("EDS requires discovery and a database name")
++        self.use_eds = use_eds
+         self._additional_sdk_headers = _additional_sdk_headers
+ 
+     def set_database(self, database: str) -> "DriverConfig":
+diff --git a/ydb/eds_test.py b/ydb/eds_test.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..31a1dcceae7f6bf3a1a7ef3c497d7ac749832993
+--- /dev/null
++++ b/ydb/eds_test.py
+@@ -0,0 +1,127 @@
++"""Exercise both driver discovery owners with real gRPC channels."""
++
++import asyncio
++from concurrent.futures import ThreadPoolExecutor
++from contextlib import contextmanager
++import threading
++
++import grpc
++import pytest
++
++import ydb
++from ydb import _apis
++from ydb._grpc.common import ydb_discovery_v1_pb2_grpc as unary
++
++pytest.importorskip("envoy.service.discovery.v3.discovery_pb2")
++from envoy.service.discovery.v3 import discovery_pb2  # noqa: E402
++from envoy.service.endpoint.v3 import eds_pb2_grpc  # noqa: E402
++from envoy.config.endpoint.v3 import endpoint_pb2  # noqa: E402
++
++DATABASE = "/database"
++TYPE = "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
++
++
++class Replicas(eds_pb2_grpc.EndpointDiscoveryServiceServicer, unary.DiscoveryServiceServicer):
++    def __init__(self):
++        self.generation = 1
++        self.switch = threading.Event()
++        self.requests = []
++        self.unary_requests = []
++
++    def topology(self):
++        topology = _apis.ydb_discovery.ListEndpointsResult()
++        topology.endpoints.add(address="localhost", port=self.ports[self.generation - 1], node_id=1)
++        return topology
++
++    def StreamEndpoints(self, requests, context):
++        generation = self.generation
++        first = next(requests)
++        headers = dict(context.invocation_metadata())
++        self.requests.append((first, headers))
++        context.send_initial_metadata((("x-ydb-route-generation", str(generation)), ("x-ydb-route-mode", "managed")))
++        if self.legacy:
++            context.abort(grpc.StatusCode.UNIMPLEMENTED, "old server")
++        assignment = endpoint_pb2.ClusterLoadAssignment(cluster_name=DATABASE)
++        locality = assignment.endpoints.add()
++        topology = self.topology()
++        locality.metadata.typed_filter_metadata["ydb.discovery"].Pack(topology)
++        sock = locality.lb_endpoints.add().endpoint.address.socket_address
++        sock.address, sock.port_value = "localhost", self.ports[generation - 1]
++        response = discovery_pb2.DiscoveryResponse(type_url=TYPE, version_info="opaque", nonce="one")
++        response.resources.add().Pack(assignment)
++        yield response
++        ack = next(requests)
++        assert ack.version_info == "opaque" and ack.response_nonce == "one"
++        while context.is_active():
++            if generation == 1 and self.switch.wait(0.02):
++                context.set_trailing_metadata((("x-ydb-route-generation", "2"),))
++                context.abort(grpc.StatusCode.UNAVAILABLE, "cutover")
++            elif generation != 1:
++                threading.Event().wait(0.02)
++
++    def ListEndpoints(self, request, context):
++        self.unary_requests.append(dict(context.invocation_metadata()))
++        context.send_initial_metadata(
++            (("x-ydb-route-generation", str(self.generation)), ("x-ydb-route-mode", "managed"))
++        )
++        response = _apis.ydb_discovery.ListEndpointsResponse()
++        response.operation.ready = True
++        response.operation.status = 400000
++        response.operation.result.Pack(self.topology())
++        return response
++
++
++@contextmanager
++def services(legacy):
++    replicas = Replicas()
++    replicas.legacy = legacy
++    servers = [grpc.server(ThreadPoolExecutor(max_workers=4)) for _ in range(3)]
++    unary.add_DiscoveryServiceServicer_to_server(replicas, servers[0])
++    eds_pb2_grpc.add_EndpointDiscoveryServiceServicer_to_server(replicas, servers[0])
++    ports = [s.add_insecure_port("localhost:0") for s in servers]
++    replicas.ports = ports[1:]
++    try:
++        for s in servers:
++            s.start()
++        yield replicas, f"localhost:{ports[0]}"
++    finally:
++        for s in servers:
++            s.stop(0).wait()
++
++
++@pytest.mark.parametrize("async_driver", [False, True])
++@pytest.mark.parametrize("legacy", [False, True])
++def test_eds_discovery(async_driver, legacy):
++    async def run():
++        with services(legacy) as (replicas, endpoint):
++            config = ydb.DriverConfig(endpoint, DATABASE, use_eds=True, credentials=ydb.AnonymousCredentials())
++            driver = (ydb.aio.Driver if async_driver else ydb.Driver)(config)
++            try:
++                if async_driver:
++                    await driver.wait(timeout=5)
++                else:
++                    await asyncio.to_thread(driver.wait, 5)
++                assert len(replicas.requests) == 1
++                first, headers = replicas.requests[0]
++                assert first.type_url == TYPE and list(first.resource_names) == [DATABASE]
++                assert headers["x-ydb-database"] == DATABASE
++                assert list(driver._store.connections) == [f"localhost:{replicas.ports[0]}"]
++                if legacy:
++                    assert replicas.unary_requests[0]["x-ydb-min-route-generation"] == "1"
++                    return
++                replicas.generation = 2
++                replicas.switch.set()
++                for _ in range(150):
++                    if list(driver._store.connections) == [f"localhost:{replicas.ports[1]}"]:
++                        break
++                    await asyncio.sleep(0.02)
++                assert list(driver._store.connections) == [f"localhost:{replicas.ports[1]}"]
++                assert replicas.requests[1][1]["x-ydb-min-route-generation"] == "2"
++                assert not replicas.unary_requests
++            finally:
++                if async_driver:
++                    await driver.stop()
++                else:
++                    await asyncio.to_thread(driver.stop)
++
++    asyncio.run(run())
+diff --git a/ydb/pool.py b/ydb/pool.py
+index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058ef6ce9e0f 100644
+--- a/ydb/pool.py
++++ b/ydb/pool.py
+@@ -155,7 +155,10 @@ class ConnectionsCache:
+ 
+     def remove(self, connection: Connection) -> None:
+         with self.lock:
+-            self.connections_by_node_id.pop(connection.node_id, None)
++            if self.connections_by_node_id.get(connection.node_id) is connection:
++                self.connections_by_node_id.pop(connection.node_id, None)
++            if self.connections.get(connection.endpoint) is not connection:
++                return
+             self.preferred.pop(connection.endpoint, None)
+             self.connections.pop(connection.endpoint, None)
+             self.outdated.pop(connection.endpoint, None)
+@@ -179,6 +182,7 @@ class Discovery(threading.Thread):
+         self._cache = store
+         self._driver_config = driver_config
+         self._resolver = resolver.DiscoveryEndpointsResolver(self._driver_config)
++        self._watch = None
+         self._base_discovery_interval = 60
+         self._ready_timeout = 4
+         self._discovery_request_timeout = 2
+@@ -199,6 +203,8 @@ class Discovery(threading.Thread):
+         return (1 + random.random()) * self._base_discovery_interval
+ 
+     def notify_disconnected(self) -> None:
++        if self._watch:
++            self._watch.cancel()
+         self._send_wake_up()
+ 
+     def _send_wake_up(self) -> None:
+@@ -228,79 +234,82 @@ class Discovery(threading.Thread):
+             if resolve_details is None:
+                 return False
+ 
+-            resolved_endpoints = set(
++            return self._apply_endpoints(resolve_details)
++
++    def _apply_endpoints(self, resolve_details) -> bool:
++        resolved_endpoints = set(
++            endpoint
++            for resolved_endpoint in resolve_details.endpoints
++            for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
++        )
++        for cached_endpoint in self._cache.values():
++            if cached_endpoint.endpoint not in resolved_endpoints:
++                self._cache.make_outdated(cached_endpoint)
++
++        local_dc = resolve_details.self_location
++
++        # Detect local DC using TCP latency if enabled and preferred is meaningful
++        if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
++            # Use only endpoints that match the SSL requirements for detection
++            ssl_filtered_endpoints = [
+                 endpoint
+-                for resolved_endpoint in resolve_details.endpoints
+-                for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
+-            )
+-            for cached_endpoint in self._cache.values():
+-                if cached_endpoint.endpoint not in resolved_endpoints:
+-                    self._cache.make_outdated(cached_endpoint)
+-
+-            local_dc = resolve_details.self_location
+-
+-            # Detect local DC using TCP latency if enabled and preferred is meaningful
+-            if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
+-                # Use only endpoints that match the SSL requirements for detection
+-                ssl_filtered_endpoints = [
+-                    endpoint
+-                    for endpoint in resolve_details.endpoints
+-                    if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
+-                ]
+-
+-                if ssl_filtered_endpoints:
+-                    try:
+-                        detected_location = _utilities.detect_local_dc(
+-                            ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
++                for endpoint in resolve_details.endpoints
++                if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
++            ]
++
++            if ssl_filtered_endpoints:
++                try:
++                    detected_location = _utilities.detect_local_dc(
++                        ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
++                    )
++                    if detected_location:
++                        local_dc = detected_location
++                        self.logger.info(
++                            "Detected local DC via TCP latency: %s (server reported: %s)",
++                            local_dc,
++                            resolve_details.self_location,
+                         )
+-                        if detected_location:
+-                            local_dc = detected_location
+-                            self.logger.info(
+-                                "Detected local DC via TCP latency: %s (server reported: %s)",
+-                                local_dc,
+-                                resolve_details.self_location,
+-                            )
+-                        else:
+-                            self.logger.warning(
+-                                "Failed to detect local DC via TCP latency, using server location: %s",
+-                                resolve_details.self_location,
+-                            )
+-                    except Exception as e:
++                    else:
+                         self.logger.warning(
+-                            "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
++                            "Failed to detect local DC via TCP latency, using server location: %s",
+                             resolve_details.self_location,
+-                            e,
+-                            exc_info=True,
+                         )
+-                else:
++                except Exception as e:
+                     self.logger.warning(
+-                        "No SSL-compatible endpoints for local DC detection, using server location: %s",
++                        "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
+                         resolve_details.self_location,
++                        e,
++                        exc_info=True,
+                     )
++            else:
++                self.logger.warning(
++                    "No SSL-compatible endpoints for local DC detection, using server location: %s",
++                    resolve_details.self_location,
++                )
+ 
+-            for resolved_endpoint in resolve_details.endpoints:
+-                if self._ssl_required and not resolved_endpoint.ssl:
+-                    continue
++        for resolved_endpoint in resolve_details.endpoints:
++            if self._ssl_required and not resolved_endpoint.ssl:
++                continue
+ 
+-                if not self._ssl_required and resolved_endpoint.ssl:
+-                    continue
++            if not self._ssl_required and resolved_endpoint.ssl:
++                continue
++
++            preferred = local_dc == resolved_endpoint.location
+ 
+-                preferred = local_dc == resolved_endpoint.location
++            for (
++                endpoint,
++                endpoint_options,
++            ) in resolved_endpoint.endpoints_with_options():
++                if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
++                    continue
+ 
+-                for (
++                ready_connection = connection_impl.Connection.ready_factory(
+                     endpoint,
+-                    endpoint_options,
+-                ) in resolved_endpoint.endpoints_with_options():
+-                    if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
+-                        continue
+-
+-                    ready_connection = connection_impl.Connection.ready_factory(
+-                        endpoint,
+-                        self._driver_config,
+-                        self._ready_timeout,
+-                        endpoint_options=endpoint_options,
+-                    )
+-                    self._cache.add(ready_connection, preferred)
++                    self._driver_config,
++                    self._ready_timeout,
++                    endpoint_options=endpoint_options,
++                )
++                self._cache.add(ready_connection, preferred)
+ 
+         self._cache.cleanup_outdated()
+ 
+@@ -308,9 +317,40 @@ class Discovery(threading.Thread):
+ 
+     def stop(self) -> None:
+         self._should_stop.set()
++        if self._watch:
++            self._watch.cancel()
+         self._send_wake_up()
+ 
++    def _run_eds(self):
++        failures = 0
++        while not self._should_stop.is_set():
++            try:
++                legacy_ready = self._watch.subscribe(self._apply_endpoints, self._should_stop.is_set)
++            except Exception as error:
++                self._resolver._add_debug_details("EDS subscription failed: %s", error)
++                legacy_ready = False
++            if legacy_ready:
++                failures = 0
++                delay = self._discovery_interval()
++            else:
++                # First remove every affinity, then cancel data and Topic streams.
++                with self._cache.lock:
++                    retired = self._cache.values()
++                    for conn in retired:
++                        self._cache.remove(conn)
++                for conn in retired:
++                    conn.close()
++                    conn.destroy()
++                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
++                delay = 0 if failures == 0 else min(20, 2 ** min(failures - 1, 4)) * self._emergency_retry_interval()
++                failures += 1
++            self._should_stop.wait(delay)
++        self._cache.cleanup()
++
+     def run(self) -> None:
++        if self._watch:
++            self._run_eds()
++            return
+         with self.condition:
+             while True:
+                 if self._should_stop.is_set():
+@@ -425,6 +465,10 @@ class ConnectionPool(IConnectionPool):
+         else:
+             # Start discovery thread as usual
+             self._discovery_thread = Discovery(self._store, self._driver_config)
++            if driver_config.use_eds:
++                from ._eds import SyncWatch, Route
++
++                self._discovery_thread._watch = SyncWatch(Route(driver_config), self._grpc_init._channel)
+             self._discovery_thread.start()
+ 
+     def _init_connection(self) -> None:
+@@ -494,6 +538,8 @@ class ConnectionPool(IConnectionPool):
+         :param connection: A disconnected connection
+         :return: None
+         """
++        if self._driver_config.use_eds and connection not in self._store.values():
++            return
+         connection.close()
+         if self._discovery_thread:
+             self._discovery_thread.notify_disconnected()
+diff --git a/ydb/resolver.py b/ydb/resolver.py
+index 40a04980748334a180e11514bfdbd0e07c0edee6..4354cd5d6b678bc3da7a1604333793a2b8a1b27b 100644
+--- a/ydb/resolver.py
++++ b/ydb/resolver.py
+@@ -118,6 +118,10 @@ class DiscoveryResult(object):
+         issues._process_response(response.operation)
+         message = _apis.ydb_discovery.ListEndpointsResult()
+         response.operation.result.Unpack(message)
++        return cls.from_result(message, use_all_nodes)
++
++    @classmethod
++    def from_result(cls, message, use_all_nodes=False):
+         unique_local_set: set[EndpointInfo] = set()
+         unique_different_set: set[EndpointInfo] = set()
+         for info in message.endpoints:

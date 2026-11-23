@@ -164,17 +164,19 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..8455a89587d7504d5301da53ba9ffa8f
  			return nil, xerrors.WithStackTrace(err)
 diff --git a/internal/balancer/eds.go b/internal/balancer/eds.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..a47a42376f529a74bf177646d1978391ed7d56c8
+index 0000000000000000000000000000000000000000..f9595e5dc6cd0d560ebcb632d46cd765ddb38f57
 --- /dev/null
 +++ b/internal/balancer/eds.go
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,227 @@
 +package balancer
 +
 +import (
 +	"context"
 +	"fmt"
 +	"io"
++	"math/rand/v2"
 +	"strconv"
++	"sync"
 +	"time"
 +
 +	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -195,12 +197,8 @@ index 0000000000000000000000000000000000000000..a47a42376f529a74bf177646d1978391
 +	ready := make(chan error, 1)
 +	go func() {
 +		defer close(b.edsDone)
-+		first := func(err error) {
-+			select {
-+			case ready <- err:
-+			default:
-+			}
-+		}
++		var once sync.Once
++		first := func(err error) { once.Do(func() { ready <- err }) }
 +		var floor edsRoute
 +		delay := time.Duration(0)
 +		for ctx.Err() == nil {
@@ -208,7 +206,7 @@ index 0000000000000000000000000000000000000000..a47a42376f529a74bf177646d1978391
 +				select {
 +				case <-ctx.Done():
 +					return
-+				case <-time.After(delay):
++				case <-time.After(delay + rand.N(delay/4+1)):
 +				}
 +			}
 +			cc, err := b.discoveryConn(ctx)
@@ -228,7 +226,12 @@ index 0000000000000000000000000000000000000000..a47a42376f529a74bf177646d1978391
 +				return
 +			}
 +			if !assigned && err != nil {
-+				first(err)
++				switch status.Code(err) {
++				case codes.Unavailable, codes.DeadlineExceeded, codes.Internal, codes.ResourceExhausted:
++					// A transient bootstrap failure keeps discovery gated until recovery.
++				default:
++					first(err)
++				}
 +			}
 +			b.clearEDS(ctx)
 +			if assigned {

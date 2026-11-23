@@ -503,4 +503,5 @@ message TFeatureFlags {
     // Disables client access to built-in PostgreSQL compatibility in YDB.
     optional bool DisablePgCompatibility = 400 [default = false];
     optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
+    optional bool EnableChecksumTable = 402 [default = false];
 }

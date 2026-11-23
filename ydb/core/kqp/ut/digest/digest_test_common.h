@@ -11,6 +11,13 @@ namespace NKikimr::NKqp::NDigestTest {
 
 namespace NDigest = NYql::NDigest;
 
+inline TKikimrSettings ChecksumTableSettings() {
+    TKikimrSettings settings;
+    settings.SetWithSampleTables(false);
+    settings.FeatureFlags.SetEnableChecksumTable(true);
+    return settings;
+}
+
 inline const TString& DigestFactorySql() {
     static const TString sql = [] {
         TString result = NResource::Find("digest_factory.sql");

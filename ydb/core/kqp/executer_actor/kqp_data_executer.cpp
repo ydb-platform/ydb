@@ -32,6 +32,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <util/generic/is_in.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr {
@@ -587,6 +589,7 @@ private:
     }
 
     void DoExecute() {
+        const bool checksumEnabled = AppData()->FeatureFlags.GetEnableChecksumTable();
         const auto& requestContext = GetUserRequestContext();
         CreateStreamingQueryController();
 
@@ -597,6 +600,11 @@ private:
                 SecretNames.push_back(secretName);
             }
             for (const auto& stage : transaction.Body->GetStages()) {
+                if (!checksumEnabled && IsIn(stage.GetWasmUdfModules(), "DigestAggregate")) {
+                    ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, TIssue("CHECKSUM TABLE is disabled"));
+                    return;
+                }
+
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;

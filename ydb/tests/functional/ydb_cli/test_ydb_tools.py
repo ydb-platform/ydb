@@ -122,6 +122,18 @@ class TestToolsTableOperations(BaseCliTestWithDatabase):
         self.verify_table(staging, staged_rows)
         self.verify_table_names(directory, {'production', 'staging'})
 
+        # A missing release source must also roll back the move to backup.
+        rejected = self.execute_ydb_cli_command([
+            'tools', 'rename',
+            '--item', f'src={production},dst={tmp_path.name}/backup',
+            '--item', f'src={tmp_path.name}/missing,dst={production}',
+        ], check_exit_code=False)
+        assert rejected.exit_code != 0, rejected.stdout
+        assert 'SCHEME_ERROR' in rejected.stderr, rejected.stderr
+        self.verify_table_names(directory, {'production', 'staging'})
+        self.verify_table(production, original_rows)
+        self.verify_table(staging, staged_rows)
+
         self.execute_ydb_cli_command([
             'tools', 'rename',
             '--item', f'src={production},dst={tmp_path.name}/backup',

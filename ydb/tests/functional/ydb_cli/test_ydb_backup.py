@@ -1341,7 +1341,13 @@ class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
 
         # Create table and modify permissions on it
         create_table_with_data(session, "folder/table")
-        table_permissions = {"bob": {"ydb.generic.read", "ydb.generic.write"}}
+        table_permissions = {
+            "alice": {"ydb.generic.list"},
+            "bob": {"ydb.generic.read", "ydb.generic.write"},
+        }
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder/table", "alice", "-p", "ydb.generic.list",
+        ])
         self.execute_ydb_cli_command([
             "scheme", "permissions", "grant", "folder/table", "bob",
             "-p", "ydb.generic.read", "-p", "ydb.generic.write",
@@ -1356,7 +1362,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
         self.execute_ydb_cli_command([
             "scheme", "permissions", "revoke", "folder/table", "bob", "-p", "ydb.generic.write",
         ])
-        table_permissions = {"bob": {"ydb.generic.read"}}
+        table_permissions["bob"] = {"ydb.generic.read"}
         self.assert_permissions(
             "/Root/folder/table", table_permissions,
             self.merge_permissions(folder_effective_permissions, table_permissions),
@@ -1364,7 +1370,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
         self.execute_ydb_cli_command([
             "scheme", "permissions", "set", "folder/table", "bob", "-p", "ydb.generic.list",
         ])
-        table_permissions = {"bob": {"ydb.generic.list"}}
+        table_permissions["bob"] = {"ydb.generic.list"}
         self.assert_permissions(
             "/Root/folder/table", table_permissions,
             self.merge_permissions(folder_effective_permissions, table_permissions),
@@ -1430,7 +1436,7 @@ class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
             "/Root/restored/folder/table", table_permissions, table_effective_permissions,
         )
 
-        # Discard the restored table's local exception without changing its source.
+        # Clear the restored table's local permissions without changing its source.
         self.execute_ydb_cli_command(["scheme", "permissions", "clear", "restored/folder/table"])
         self.assert_permissions("/Root/restored/folder/table", {}, folder_effective_permissions, check_listing=True)
         self.assert_permissions("/Root/folder/table", table_permissions, table_effective_permissions)

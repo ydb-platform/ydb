@@ -327,18 +327,19 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             {"price", TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Int64).EndOptional().Build()},
         };
 
-        TCsvParser parser("warehouse,enabled,quantity,sku", ',', "", &tableColumnTypes, nullptr);
+        TCsvParser parser("enabled,warehouse,quantity,sku", ',', "", &tableColumnTypes, nullptr);
         parser.BuildLineType();
 
         // A bad row in a later batch should identify the source location and the value.
-        std::vector<TString> rows = {"west,true,255,A-17", "east,false,256,B-23"};
+        std::vector<TString> rows = {"true,west,255,A-17", "false,east,256,B-23"};
+        google::protobuf::Arena arena;
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            parser.BuildList(rows, "inventory.csv", 41),
+            parser.BuildListOnArena(rows, "inventory.csv", &arena, 41),
             TCsvParseException,
             "Error during CSV parsing in line 42 in column `quantity` in file `inventory.csv`:\n"
             "Expected Uint8 value, received: \"256\".");
 
-        rows.back() = "east,false,12,B-23";
+        rows.back() = "false,east,12,B-23";
         const auto expected = TValueBuilder().BeginList()
             .AddListItem().BeginStruct()
                 .AddMember("enabled").Bool(true)

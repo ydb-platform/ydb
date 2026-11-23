@@ -9,7 +9,10 @@ from urllib.request import urlopen
 
 import grpc
 
-from long_poll_balancer import Balancer
+if __package__:
+    from .long_poll_balancer import Balancer
+else:
+    from long_poll_balancer import Balancer
 
 
 def requests_completed(monitor, database):
@@ -79,6 +82,7 @@ async def run_direction(database, source, destination, command, timeout, balance
                     ports = {int(value.rsplit(":", 1)[1]) for value in (address, source[0], destination[0])}
                     before_sockets = established_sockets(process.pid, ports)
                     samples = []
+
                     async def sample():
                         while True:
                             current = established_sockets(process.pid, ports)

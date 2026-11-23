@@ -211,6 +211,7 @@ async def check_workload(replicas, probe_binary, workload):
 def test_cpp_data_client_moves_to_destination(replicas, workload):
     asyncio.run(check_workload(replicas, yatest.common.binary_path(PROBE), workload))
 
+
 async def check_retained_session(replicas, probe, workload):
     port = int(replicas[0].rsplit(":", 1)[1])
     async with route_for(replicas) as (route, address, _), sdk_process(address, probe, workload) as sdk:

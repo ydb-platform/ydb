@@ -139,7 +139,7 @@ index 74e9bca7fddc0bb7c471106a260856a937e7d871..f056bb42f2a4082d0e76d83fa409cf9f
              return self._first_error.result()
          return None
 diff --git a/ydb/aio/connection.py b/ydb/aio/connection.py
-index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a10a478bc 100644
+index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..a2286eadef905e99baced2853f03613ac1621c27 100644
 --- a/ydb/aio/connection.py
 +++ b/ydb/aio/connection.py
 @@ -2,6 +2,7 @@ from __future__ import annotations
@@ -150,7 +150,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a
  from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
  import collections
  import grpc
-@@ -122,13 +123,26 @@ class _SafeAsyncIterator:
+@@ -122,20 +123,42 @@ class _SafeAsyncIterator:
          self.on_disconnected_callback = on_disconnected_callback
  
      def cancel(self):
@@ -177,8 +177,28 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a
 +            raise issues.ConnectionLost("Endpoint route has changed")
          try:
              return await self.it.__anext__()
++        except asyncio.CancelledError as error:
++            if self.it is not None:
++                raise
++            # A retained reader error can otherwise keep the cancelled gRPC
++            # generator frame, and its native transport, alive indefinitely.
++            error.__traceback__ = None
          except grpc.RpcError as rpc_error:
-@@ -149,6 +163,7 @@ class Connection:
+-            ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
+-            if _is_disconnect_needed(ydb_error):
+-                await self.on_disconnected_callback()
+-            raise ydb_error
++            if self.it is not None:
++                ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
++                if _is_disconnect_needed(ydb_error):
++                    await self.on_disconnected_callback()
++                raise ydb_error
++            rpc_error.__traceback__ = None
++        raise issues.ConnectionLost("Endpoint route has changed")
+ 
+     def __getattr__(self, item):
+         return getattr(self.resp, item)
+@@ -149,6 +172,7 @@ class Connection:
          "_stub_instances",
          "_driver_config",
          "_cleanup_callbacks",
@@ -186,7 +206,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a
          "__weakref__",
          "lock",
          "calls",
-@@ -175,6 +190,7 @@ class Connection:
+@@ -175,6 +199,7 @@ class Connection:
          self._channel = channel_factory(self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options)
          self._driver_config = driver_config
  
@@ -194,7 +214,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a
          self._stub_instances: Dict[Any, Any] = {}
          self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
          for stub in _stubs_list:
-@@ -192,13 +208,12 @@ class Connection:
+@@ -192,13 +217,12 @@ class Connection:
      ) -> Tuple[_RpcState, float, List[Tuple[str, str]]]:
          timeout, metadata = _get_request_timeout(settings), await _construct_metadata(self._driver_config, settings)  # type: ignore[arg-type]
          _set_server_timeouts(request, settings, timeout)
@@ -210,7 +230,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a
          # Call successfully prepared and registered
          _log_request(rpc_state, request)
          return rpc_state, timeout, metadata
-@@ -238,6 +253,11 @@ class Connection:
+@@ -238,6 +262,11 @@ class Connection:
              if hasattr(response, "__aiter__"):
                  # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
                  response = _SafeAsyncIterator(response, rpc_state, on_disconnected)
@@ -222,7 +242,7 @@ index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..4384052112aac3e592b3708090fa658a
  
              return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
          except grpc.RpcError as rpc_error:
-@@ -253,6 +273,11 @@ class Connection:
+@@ -253,6 +282,11 @@ class Connection:
      def _finish_call(self, call_state: _RpcState) -> None:
          self.calls.pop(call_state.request_id, None)
  
@@ -508,10 +528,10 @@ index 988649804fa1645dc459c7d450c0a7728a4c26d6..3e3b31fc3c98453c3de795f4c1b2c7e6
      def set_database(self, database: str) -> "DriverConfig":
 diff --git a/ydb/long_poll_test.py b/ydb/long_poll_test.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..d6cecc906152ae46444ed7b04040552204efded2
+index 0000000000000000000000000000000000000000..7479cedae76e47b7daf78d895b1ff2206e756c38
 --- /dev/null
 +++ b/ydb/long_poll_test.py
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,162 @@
 +import asyncio
 +from concurrent.futures import ThreadPoolExecutor
 +from contextlib import contextmanager
@@ -631,6 +651,9 @@ index 0000000000000000000000000000000000000000..d6cecc906152ae46444ed7b040405522
 +                    await asyncio.to_thread(next, held)
 +                if Path("/proc/net/tcp").exists():
 +                    assert established(replicas.ports[0])
++                # Simulate the Topic reader's background read. Its application
++                # keeps the error for later while the driver replaces the route.
++                pending_read = asyncio.create_task(held.__anext__()) if async_driver else None
 +                args = (_apis.ydb_query.CreateSessionRequest(), _apis.QueryService.Stub, "CreateSession")
 +                call = asyncio.create_task(driver(*args) if async_driver else asyncio.to_thread(driver, *args))
 +                assert await asyncio.to_thread(replicas.unary_started.wait, 3)
@@ -643,6 +666,9 @@ index 0000000000000000000000000000000000000000..d6cecc906152ae46444ed7b040405522
 +                assert list(driver._store.connections) == [f"127.0.0.1:{replicas.ports[1]}"]
 +                with pytest.raises((ydb.Error, asyncio.CancelledError)):
 +                    await asyncio.wait_for(call, 3)
++                if pending_read is not None:
++                    with pytest.raises(ydb.issues.ConnectionLost):
++                        await pending_read
 +                if Path("/proc/net/tcp").exists():
 +                    for _ in range(50):
 +                        if not established(replicas.ports[0]):

@@ -192,7 +192,10 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !TopicHolder->IsAsyncReplication
+        && !TopicHolder->IsReplicationConsumer)
+    {
         CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
         return;
     }
@@ -748,6 +751,11 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
         InitStartReading(ctx);
     }
 
+    // The parent must send StartPartitionSessionRequest before any replication data.
+    for (auto& event : PendingReplicationData) {
+        ctx.Send(ParentId, event.Release());
+    }
+    PendingReplicationData.clear();
     MakeCommit(ctx);
 }
 
@@ -1655,6 +1663,21 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
+}
+
+void TPartitionActor::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (Protocol != EProtocol::Topic || record.GetSession() != Session
+        || record.GetPartitionId() != Partition.Partition
+        || record.GetGeneration() != Generation || record.GetStep() != Step) {
+        return;
+    }
+    ev->Get()->Record.SetPartitionSessionId(Partition.AssignId);
+    if (!InitDone) {
+        PendingReplicationData.emplace_back(ev->Release().Release());
+        return;
+    }
+    ctx.Send(ParentId, ev->Release().Release());
 }
 
 void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {

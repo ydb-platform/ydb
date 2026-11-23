@@ -1,5 +1,11 @@
 * Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
 
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+* Fixed Topic read sessions treating replication control messages as data offsets, which could block commits after an offset gap.
+
+## v3.26.0
+
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.

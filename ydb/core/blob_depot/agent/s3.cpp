@@ -195,7 +195,7 @@ namespace NKikimr::NBlobDepot {
                     return;
                 }
                 reason = TStringBuilder() << "too many S3 SlowDown retries: " << error.GetMessage();
-            } else if (IsS3MissingObject(error)) {
+            } else if (IsS3MissingKey(error)) {
                 status = NKikimrProto::NODATA;
                 reason = "data has disappeared from S3";
             } else {

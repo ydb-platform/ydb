@@ -596,7 +596,7 @@ namespace NKikimr::NBlobDepot {
 
         TChannelInfo& channel = Channels[channels.front()];
         const ui64 bytes = MoveData.GetCopyBytes();
-        const auto allocation = TryAllocateInternalBlobSeqId(channel, bytes);
+        const auto allocation = TryAllocateInternalBlobSeqId(channel, bytes, SelfId());
         if (auto* error = std::get_if<EInternalWriteError>(&allocation)) {
             if (*error == EInternalWriteError::TooLarge) {
                 return false;
@@ -738,6 +738,7 @@ namespace NKikimr::NBlobDepot {
             {"id", GetLogId()},
             {"operationId", MoveDataOperationId});
 
+        ReleaseInternalHotWriteGrant(SelfId());
         for (const TBlobSeqId& blobSeqId : MoveData.ProtectedBlobSeqIds) {
             ReleaseInternalBlobSeqId(blobSeqId);
         }

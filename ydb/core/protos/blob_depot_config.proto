@@ -26,6 +26,8 @@ message TS3BackendSettings {
     message TAsyncMode {
         // Acknowledged data starts on Data channels. The tablet then packs eligible data into S3 objects.
         // Maximum referenced hot bytes plus outstanding write credits for this depot.
+        // After a tablet restart, writes requiring credit wait for the key index to finish loading
+        // so the tablet can account for all hot bytes. Caller deadlines still apply during this wait.
         optional uint64 MaxPendingBytes = 2;
 
         // Start throttling at this many charged bytes. Requires MaxPendingBytes.
@@ -36,10 +38,12 @@ message TS3BackendSettings {
         // Foreground write admission rate at ThrottleStartBytes. It drops linearly to zero at MaxPendingBytes.
         optional uint64 ThrottleMaxBytesPerSecond = 4;
 
-        // Number of concurrent background uploads and repacks.
+        // Number of concurrent background uploads and repacks (1..32).
         optional uint32 UploadPutsInFlight = 5 [default = 1];
         // Retain up to this many bytes of recent committed data on Data channels.
         optional uint64 HotTargetBytes = 6 [default = 0];
+        // Target pack size (1 byte..64 MiB). Each upload can hold at least one maximum-size blob.
+        // UploadPutsInFlight * max(TargetObjectBytes, 10 MiB) must fit within 512 MiB per depot.
         optional uint32 TargetObjectBytes = 7 [default = 16777216];
         // Sparse objects become eligible below this percentage of live bytes. Zero disables repacking.
         optional uint32 RepackBelowLivePercent = 8 [default = 50];

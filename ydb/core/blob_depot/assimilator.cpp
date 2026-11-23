@@ -143,7 +143,7 @@ namespace NKikimr::NBlobDepot {
     void TAssimilator::PassAway() {
         if (!Token.expired()) {
             if (HotWriteBlockedBlob) {
-                Self->CancelInternalHotWriteWait(HotWriteBlockedBlob->BlobSize(), SelfId());
+                Self->CancelInternalHotWriteWait(HotWriteBlockedBlob->Id.BlobSize(), SelfId());
             }
             YDB_LOG_DEBUG("TAssimilator::PassAway",
                 {"marker", "BDT52"},
@@ -171,6 +171,7 @@ namespace NKikimr::NBlobDepot {
             cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
             cFunc(TEvPrivate::EvRestartScanDataForCopying, RestartScanDataForCopying);
+            cFunc(TEvPrivate::EvRetryHotWrite, RetryHotWrite);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
             cFunc(TEvPrivate::EvUpdateBytesCopiedQ, UpdateBytesCopiedQ);
             cFunc(TEvents::TSystem::Poison, PassAway);
@@ -451,8 +452,7 @@ namespace NKikimr::NBlobDepot {
         if (HotWriteBlockedBlob) {
             // Drain earlier GET batches and commit their successful copies before waiting for capacity.
             if (Gets.empty()) {
-                Self->WaitForInternalHotWrite(HotWriteBlockedBlob->BlobSize(), SelfId(),
-                    TEvPrivate::EvRestartScanDataForCopying);
+                Self->WaitForInternalHotWrite(HotWriteBlockedBlob->Id.BlobSize(), SelfId(), TEvPrivate::EvRetryHotWrite);
             }
             return;
         }
@@ -567,6 +567,50 @@ namespace NKikimr::NBlobDepot {
         ScanDataForCopying();
     }
 
+    bool TAssimilator::TryCopyBlob(const TLogoBlobID& source, TRope& buffer, ui64 batchId) {
+        std::vector<ui8> channels(1);
+        if (!Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
+            CopyRetryNeeded = true;
+            return false;
+        }
+        auto& channel = Self->Channels[channels.front()];
+        const auto allocation = Self->TryAllocateInternalBlobSeqId(channel, source.BlobSize(), SelfId());
+        if (auto* error = std::get_if<TBlobDepot::EInternalWriteError>(&allocation)) {
+            if (*error == TBlobDepot::EInternalWriteError::TooLarge) {
+                OversizedBlob = source;
+            } else if (!HotWriteBlockedBlob) {
+                // Keep one source so its reservation can be used as soon as admission wakes us.
+                HotWriteBlockedBlob.emplace(TBlockedCopy{source, std::move(buffer)});
+            }
+            return false;
+        }
+        const auto id = std::get<TBlobSeqId>(allocation).MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, source.BlobSize());
+        const ui64 putId = NextPutId++;
+        // Assimilation copies user payload and is subject to the destination's USER write admission.
+        SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+            .BlobId = id,
+            .Buffer = std::move(buffer),
+            .Deadline = TInstant::Max(),
+            .WriteSource = TWriteSource::BlobDepotPut,
+        }), putId);
+        Y_ABORT_UNLESS(Puts.try_emplace(putId, TData::TKey(source), batchId).second);
+        // A deferred copy starts a new commit batch after its original GET batch has drained.
+        ++Gets[batchId].PutsPending;
+        return true;
+    }
+
+    void TAssimilator::RetryHotWrite() {
+        Y_ABORT_UNLESS(HotWriteBlockedBlob && Gets.empty());
+        auto copy = std::move(*HotWriteBlockedBlob);
+        HotWriteBlockedBlob.reset();
+        const auto* value = Self->Data->FindKey(TData::TKey(copy.Id));
+        if (value && value->GoingToAssimilate && TryCopyBlob(copy.Id, copy.Buffer, NextGetId++)) {
+            return;
+        }
+        Self->ReleaseInternalHotWriteGrant(SelfId());
+        ScanDataForCopying();
+    }
+
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
         (msg.Status == NKikimrProto::OK ? Self->AsStats.LatestOkGet : Self->AsStats.LatestErrorGet) = TInstant::Now();
@@ -590,34 +634,7 @@ namespace NKikimr::NBlobDepot {
                     Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_GET_BYTES] += resp.Buffer.GetSize();
                     ++Self->AsStats.BlobsReadOk;
 
-                    if (std::vector<ui8> channels(1); Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
-                        TChannelInfo& channel = Self->Channels[channels.front()];
-                        const auto allocation = Self->TryAllocateInternalBlobSeqId(channel, resp.Id.BlobSize());
-                        if (auto* error = std::get_if<TBlobDepot::EInternalWriteError>(&allocation)) {
-                            if (*error == TBlobDepot::EInternalWriteError::TooLarge) {
-                                OversizedBlob = resp.Id;
-                            } else if (!HotWriteBlockedBlob) {
-                                HotWriteBlockedBlob = resp.Id;
-                            }
-                            break;
-                        }
-                        const TLogoBlobID id = std::get<TBlobSeqId>(allocation).MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
-                        const ui64 putId = NextPutId++;
-                        // DataKind is deliberately left at USER: this copies user payload out of the
-                        // group being decommitted, and stalling that while the destination is short
-                        // of space is the wanted behaviour.
-                        SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
-                            .BlobId = id,
-                            .Buffer = TRope(TRcBuf(resp.Buffer)),
-                            .Deadline = TInstant::Max(),
-                            .WriteSource = TWriteSource::BlobDepotPut,
-                        }), putId);
-                        const bool inserted = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
-                        Y_ABORT_UNLESS(inserted);
-                        ++get.PutsPending;
-                    } else {
-                        CopyRetryNeeded = true;
-                    }
+                    TryCopyBlob(resp.Id, resp.Buffer, it->first);
                     break;
 
                 case NKikimrProto::NODATA:
@@ -917,9 +934,9 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::UpdateBytesCopiedQ() {
         if (HotWriteBlockedBlob) {
-            const auto* value = Self->Data->FindKey(TData::TKey(*HotWriteBlockedBlob));
+            const auto* value = Self->Data->FindKey(TData::TKey(HotWriteBlockedBlob->Id));
             if ((!value || !value->GoingToAssimilate) &&
-                    Self->CancelInternalHotWriteWait(HotWriteBlockedBlob->BlobSize(), SelfId())) {
+                    Self->CancelInternalHotWriteWait(HotWriteBlockedBlob->Id.BlobSize(), SelfId())) {
                 RestartScanDataForCopying();
             }
         }

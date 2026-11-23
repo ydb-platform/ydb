@@ -783,7 +783,7 @@ namespace NKikimr::NBlobDepot {
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
         void TrackPublishedRetriedPut(TS3Locator locator, TInstant retireAt);
-        enum class ECoolingPutOutcome { NotSent, Sent, MayArriveLate };
+        enum class ECoolingPutOutcome { NotStored, Stored, MayArriveLate };
         void FinishCoolingPut(TS3Locator locator, ECoolingPutOutcome outcome, bool published,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie,

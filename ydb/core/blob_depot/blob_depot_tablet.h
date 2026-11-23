@@ -256,6 +256,9 @@ namespace NKikimr::NBlobDepot {
         std::map<TBlobSeqId, ui64> InternalHotWriteCredits;
         // Smallest first so an unavailable large copy doesn't block another writer that fits.
         std::map<std::pair<ui64, TActorId>, ui32> InternalHotWriteWaiters;
+        // Charged before the retry event is sent, then transferred to the allocated sequence.
+        std::map<TActorId, ui64> InternalHotWriteGrants;
+        bool PreferInternalHotWrite = true;
         TTokenBucketBase<TMonotonic> HotWriteBucket;
         bool HotWriteAdmissionScheduled = false;
         TWakeupTimer HotWriteAdmissionTimer;
@@ -278,8 +281,9 @@ namespace NKikimr::NBlobDepot {
         bool IsInternalWriteTooLarge(ui64 bytes) const;
         void WaitForInternalHotWrite(ui64 bytes, TActorId actor, ui32 eventType);
         bool CancelInternalHotWriteWait(ui64 bytes, TActorId actor);
+        void ReleaseInternalHotWriteGrant(TActorId actor);
         void ReleaseInternalBlobSeqId(const TBlobSeqId& blobSeqId);
-        TInternalAllocation TryAllocateInternalBlobSeqId(TChannelInfo& channel, ui64 bytes);
+        TInternalAllocation TryAllocateInternalBlobSeqId(TChannelInfo& channel, ui64 bytes, TActorId actor);
         void ReleaseInternalHotWrite(const TBlobSeqId& id);
 
         void ProcessRegisterAgentQ();

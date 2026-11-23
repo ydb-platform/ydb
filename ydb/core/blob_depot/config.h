@@ -6,6 +6,7 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 #include <util/string/split.h>
@@ -21,6 +22,9 @@ namespace NKikimr::NBlobDepot {
     // Includes time waiting for a balancer, an SDK worker, and the upload itself.
     inline constexpr TDuration DefaultS3PutTimeout = TDuration::Minutes(10);
     inline constexpr TDuration MaxS3PutTimeout = TDuration::Days(1);
+    inline constexpr ui32 MaxCoolingObjectBytes = 64 << 20;
+    inline constexpr ui32 MaxCoolingUploadsInFlight = 32;
+    inline constexpr ui64 MaxCoolingUploadBufferBytes = 512ULL << 20;
 
     TDuration GetS3PutTimeout(const NKikimrSchemeOp::TS3Settings& settings,
         const NKikimrConfig::TAwsClientConfig& defaults);
@@ -74,6 +78,17 @@ namespace NKikimr::NBlobDepot {
         }
         if (!async.GetUploadPutsInFlight() || !async.GetTargetObjectBytes()) {
             return "UploadPutsInFlight and TargetObjectBytes must be positive";
+        }
+        if (async.GetTargetObjectBytes() > MaxCoolingObjectBytes) {
+            return "TargetObjectBytes must be at most 64 MiB";
+        }
+        if (async.GetUploadPutsInFlight() > MaxCoolingUploadsInFlight) {
+            return "UploadPutsInFlight must be at most 32";
+        }
+        // A single blob larger than the pack target is uploaded in its own object.
+        const ui64 bufferBytes = Max(MaxBlobSize, async.GetTargetObjectBytes());
+        if (bufferBytes * async.GetUploadPutsInFlight() > MaxCoolingUploadBufferBytes) {
+            return "Concurrent cooling upload buffers must fit within 512 MiB";
         }
         if (async.GetRepackBelowLivePercent() > 100) {
             return "RepackBelowLivePercent must be at most 100";

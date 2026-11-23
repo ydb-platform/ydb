@@ -448,7 +448,7 @@ namespace NKikimr::NBlobDepot {
             std::vector<ui8> channels(1);
             if (Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
                 TChannelInfo& channel = Self->Channels[channels.front()];
-                const auto allocation = Self->TryAllocateInternalBlobSeqId(channel, buffer.size());
+                const auto allocation = Self->TryAllocateInternalBlobSeqId(channel, buffer.size(), SelfId());
                 if (auto* error = std::get_if<TBlobDepot::EInternalWriteError>(&allocation)) {
                     if (*error == TBlobDepot::EInternalWriteError::Retry) {
                         Self->WaitForInternalHotWrite(buffer.size(), SelfId(), TEvPrivate::EvRetryPut);
@@ -479,6 +479,7 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(inserted);
                 ++PutsInFlight;
             } else { // we couldn't restore this blob -- there was no place to write it to
+                Self->ReleaseInternalHotWriteGrant(SelfId());
                 ResolutionErrors.insert(key.GetBlobId());
             }
             return true;

@@ -132,7 +132,7 @@ namespace NKikimr::NBlobDepot {
             if (ev->Get()->IsSuccess()) {
                 Timer.SendWithTimeout(Router, new TEvExternalStorage::TEvDeleteObjectRequest(
                     Aws::S3::Model::DeleteObjectRequest().WithBucket(Bucket).WithKey(Key)));
-            } else if (IsS3MissingObject(ev->Get()->GetError())) {
+            } else if (IsS3MissingHead(ev->Get()->GetError())) {
                 Finish(EProbeResult::Missing);
             } else {
                 YDB_LOG_WARN("Failed to probe unfinished S3 PUT", {"key", Key}, {"error", ev->Get()->GetError().GetMessage().c_str()});

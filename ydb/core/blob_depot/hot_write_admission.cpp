@@ -179,10 +179,28 @@ namespace NKikimr::NBlobDepot {
             }
             return false;
         });
-        while (!HotWriteCreditQueue.empty()) {
+        while (!HotWriteCreditQueue.empty() || !InternalHotWriteWaiters.empty()) {
+            ui64 available = GetAvailableHotWriteBytes();
+            const auto internal = InternalHotWriteWaiters.begin();
+            const bool hasInternal = internal != InternalHotWriteWaiters.end();
+            if (hasInternal && (PreferInternalHotWrite || HotWriteCreditQueue.empty())) {
+                const auto [bytes, actor] = internal->first;
+                if (available >= bytes) {
+                    Y_ABORT_UNLESS(InternalHotWriteGrants.emplace(actor, bytes).second);
+                    ChargeHotWriteCredits(bytes);
+                    TActivationContext::Send(new IEventHandle(internal->second, 0, actor, SelfId(), nullptr, 0));
+                    InternalHotWriteWaiters.erase(internal);
+                    PreferInternalHotWrite = false;
+                    continue;
+                }
+                // Let capacity and rate tokens accumulate for this copy, even under continuous foreground load.
+                if (HotWriteCreditQueue.empty()) {
+                    break;
+                }
+                available = 0;
+            }
             auto& ev = HotWriteCreditQueue.front();
             const auto& request = ev->Get()->Record;
-            const ui64 available = GetAvailableHotWriteBytes();
             const ui64 minBytes = request.GetMinBytes();
             if (available < minBytes) {
                 if (request.GetFailOnSlowDown()) {
@@ -192,7 +210,7 @@ namespace NKikimr::NBlobDepot {
                 }
                 break;
             }
-            ui64 granted = Min(available, Max(minBytes, CreditBatchBytes));
+            ui64 granted = hasInternal ? minBytes : Min(available, Max(minBytes, CreditBatchBytes));
             const auto& mode = Config.GetS3BackendSettings().GetAsyncMode();
             if (mode.HasThrottleStartBytes() && HotWriteBucket.IsUnlimited()) {
                 // Let a single PUT cross the threshold, but keep speculative credit below the rate limit.
@@ -203,6 +221,7 @@ namespace NKikimr::NBlobDepot {
             ChargeHotWriteCredits(granted);
             Reply(*ev, NKikimrProto::OK, nullptr, granted);
             HotWriteCreditQueue.pop_front();
+            PreferInternalHotWrite = true;
         }
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_HOT_WRITE_WAITERS] = HotWriteCreditQueue.size();
 
@@ -212,14 +231,9 @@ namespace NKikimr::NBlobDepot {
         }
         const auto now = TActivationContext::Monotonic();
         auto wakeAt = HotWriteCreditQueue.empty() ? TMonotonic::Max() : now + AdmissionRetry;
-        if (auto it = InternalHotWriteWaiters.begin(); it != InternalHotWriteWaiters.end()) {
-            const auto& [bytes, actor] = it->first;
-            if (GetAvailableHotWriteBytes() >= bytes) {
-                TActivationContext::Send(new IEventHandle(it->second, 0, actor, SelfId(), nullptr, 0));
-                InternalHotWriteWaiters.erase(it);
-                // The writer retries on this mailbox. Recheck the next waiter after its reservation.
-                ScheduleHotWriteAdmission();
-            } else if (GetHotWriteHeadroom() >= bytes && HotWriteBucket.GetRate() > 0) {
+        if (Data->IsLoaded() && !InternalHotWriteWaiters.empty() && (PreferInternalHotWrite || HotWriteCreditQueue.empty())) {
+            const ui64 bytes = InternalHotWriteWaiters.begin()->first.first;
+            if (GetHotWriteHeadroom() >= bytes && HotWriteBucket.GetRate() > 0) {
                 // Headroom changes wake admission directly. Only token refill needs a clock.
                 const auto refill = TDuration::Seconds((bytes - HotWriteBucket.Available()) / HotWriteBucket.GetRate());
                 wakeAt = Min(wakeAt, now + Max(refill, TDuration::MilliSeconds(1)));
@@ -243,22 +257,34 @@ namespace NKikimr::NBlobDepot {
             ScheduleHotWriteAdmission();
             return true;
         }
+        // If admission already sent the retry, it will still arrive. Its caller must not send a second one.
+        ReleaseInternalHotWriteGrant(actor);
         return false;
     }
 
-    TBlobDepot::TInternalAllocation TBlobDepot::TryAllocateInternalBlobSeqId(TChannelInfo& channel, ui64 bytes) {
+    void TBlobDepot::ReleaseInternalHotWriteGrant(TActorId actor) {
+        if (auto grant = InternalHotWriteGrants.extract(actor)) {
+            ReleaseHotWriteCredits(grant.mapped());
+        }
+    }
+
+    TBlobDepot::TInternalAllocation TBlobDepot::TryAllocateInternalBlobSeqId(TChannelInfo& channel, ui64 bytes, TActorId actor) {
         const ui64 sequence = channel.NextBlobSeqId;
         const auto id = TBlobSeqId::FromSequentalNumber(channel.Index, Executor()->Generation(), sequence);
         if (IsHotWriteAdmissionEnabled()) {
             if (IsInternalWriteTooLarge(bytes)) {
                 return EInternalWriteError::TooLarge;
             }
-            RefreshHotWriteRate();
-            if (bytes > GetAvailableHotWriteBytes()) {
-                return EInternalWriteError::Retry;
+            if (auto grant = InternalHotWriteGrants.extract(actor)) {
+                Y_ABORT_UNLESS(grant.mapped() == bytes);
+            } else {
+                RefreshHotWriteRate();
+                if (!HotWriteCreditQueue.empty() || !InternalHotWriteWaiters.empty() || bytes > GetAvailableHotWriteBytes()) {
+                    return EInternalWriteError::Retry;
+                }
+                ChargeHotWriteCredits(bytes);
             }
             Y_ABORT_UNLESS(InternalHotWriteCredits.emplace(id, bytes).second);
-            ChargeHotWriteCredits(bytes);
         }
 
         ++channel.NextBlobSeqId;

@@ -711,11 +711,14 @@ message TReconfigureVirtualGroup {
     bool ConfirmS3RouteChange = 3;
     // Offline namespace migration. Quiesce the depot, fence old S3 mutations and drain outstanding
     // requests. Copy its referenced objects with the same locator suffixes into a dedicated empty
-    // destination, or verify there are no S3 references when disabling S3. Keep writers quiescent
-    // and the source readable until the tablet and agents use the new configuration.
+    // destination. Keep writers quiescent and the source readable until the tablet and agents
+    // use the new configuration.
     bool ConfirmS3NamespaceMigration = 4;
     // Replacement physical suffix for a malformed pre-UUID S3 storage name. The group name is unchanged.
     optional string MigratedS3Name = 5;
+    // Remove the S3 route. The operator has quiesced writers and verified that no values reference
+    // S3, outstanding writes have been fenced and drained, and pending S3 deletes have completed.
+    bool ConfirmS3Empty = 6;
 }
 
 message TRecommissionGroups {

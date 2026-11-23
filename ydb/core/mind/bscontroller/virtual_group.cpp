@@ -537,6 +537,13 @@ namespace NKikimr::NBsController {
         }
         const bool hasExistingBucket = !previous.GetSettings().GetBucket().empty();
         const bool hasNextBucket = !next.GetSettings().GetBucket().empty();
+        if (cmd.GetConfirmS3Empty() && (!cmd.HasS3BackendSettings() || hasNextBucket)) {
+            throw TExError() << "ConfirmS3Empty requires explicit S3BackendSettings without a bucket";
+        }
+        if (hasExistingBucket && !hasNextBucket && !cmd.GetConfirmS3Empty()) {
+            throw TExError() << "Removing the S3 route requires ConfirmS3Empty after verifying that no S3 references,"
+                << " unfinished writes, or pending deletes remain";
+        }
         const bool namespaceChanged = GetS3Namespace(config) != GetS3Namespace(next, storageName);
         const bool routeChanged = hasExistingBucket && hasNextBucket && cmd.HasS3BackendSettings() &&
             !google::protobuf::util::MessageDifferencer::Equals(GetS3Route(previous), GetS3Route(next));
@@ -558,7 +565,7 @@ namespace NKikimr::NBsController {
         }
         if (checkOwnership) {
             CheckBlobDepotS3Prefix(next, cmd.GetName(), storageName, groupId);
-            if (hasExistingBucket && namespaceChanged && !cmd.GetConfirmS3NamespaceMigration()) {
+            if (hasExistingBucket && hasNextBucket && namespaceChanged && !cmd.GetConfirmS3NamespaceMigration()) {
                 throw TExError() << "Changing the S3 bucket or key prefix requires migrating existing BlobDepot objects"
                     << " and setting ConfirmS3NamespaceMigration";
             }
@@ -583,7 +590,7 @@ namespace NKikimr::NBsController {
         if (cmd.HasMigratedS3Name()) {
             config.SetName(storageName);
         }
-        if (cmd.HasS3BackendSettings() && !hasNextBucket && cmd.GetConfirmS3NamespaceMigration()) {
+        if (cmd.HasS3BackendSettings() && !hasNextBucket) {
             config.ClearS3BackendSettings();
         } else if (cmd.HasS3BackendSettings()) {
             config.MutableS3BackendSettings()->CopyFrom(next);

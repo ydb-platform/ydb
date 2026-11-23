@@ -24,9 +24,9 @@ namespace NKikimr::NBlobDepot {
         return error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY || IsS3MissingKey(error.GetExceptionName());
     }
 
-    inline bool IsS3MissingObject(const Aws::S3::S3Error& error) {
+    inline bool IsS3MissingHead(const Aws::S3::S3Error& error) {
         const auto type = error.GetErrorType();
-        // HEAD can report a bare HTTP 404. Deletion requires a successful reply or an explicit missing key.
+        // Unlike GET, HEAD has no error body to identify NoSuchKey.
         return IsS3MissingKey(error) || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND ||
             (type != Aws::S3::S3Errors::NO_SUCH_BUCKET && error.GetResponseCode() == Aws::Http::HttpResponseCode::NOT_FOUND);
     }

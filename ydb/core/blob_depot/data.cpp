@@ -577,7 +577,7 @@ namespace NKikimr::NBlobDepot {
         } else if (!retireAt) {
             stage.Delete();
         }
-        if (!published && outcome != ECoolingPutOutcome::NotSent) {
+        if (!published && outcome != ECoolingPutOutcome::NotStored) {
             AddToS3Trash(locator, txc, cookie, retireAt);
         }
     }

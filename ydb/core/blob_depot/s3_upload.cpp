@@ -165,7 +165,7 @@ namespace NKikimr::NBlobDepot {
             const auto [begin, end] = response.GetReadInterval();
             const auto it = response.Key ? PendingS3Reads.find(std::tuple{*response.Key, begin, end}) : PendingS3Reads.end();
             if (!response.IsSuccess()) {
-                const bool missing = IsS3MissingObject(response.GetError());
+                const bool missing = IsS3MissingKey(response.GetError());
                 const auto failed = missing && it != PendingS3Reads.end()
                     ? std::optional(Reads[it->second].ItemIndex) : std::nullopt;
                 return Finish(TStringBuilder() << "S3 read failed: " << response.GetError().GetMessage().c_str(), failed);
@@ -186,18 +186,18 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
             if (ev->Get()->IsSuccess()) {
-                Finish({}, {}, PutRetried->load() ? ECoolingPutOutcome::MayArriveLate : ECoolingPutOutcome::Sent);
+                Finish({}, {}, PutRetried->load() ? ECoolingPutOutcome::MayArriveLate : ECoolingPutOutcome::Stored);
             } else {
                 const auto& error = ev->Get()->GetError();
                 const int status = static_cast<int>(error.GetResponseCode());
-                const bool ambiguous = PutRetried->load() || status <= 0 || status >= 500 || status == 408;
+                const bool rejected = !PutRetried->load() && status >= 400 && status < 500 && status != 408;
                 Finish(TStringBuilder() << "S3 upload failed: " << error.GetMessage().c_str(), {},
-                    ambiguous ? ECoolingPutOutcome::MayArriveLate : ECoolingPutOutcome::Sent);
+                    rejected ? ECoolingPutOutcome::NotStored : ECoolingPutOutcome::MayArriveLate);
             }
         }
 
         void Finish(TString error, std::optional<size_t> failedSource = std::nullopt,
-                ECoolingPutOutcome outcome = ECoolingPutOutcome::NotSent) {
+                ECoolingPutOutcome outcome = ECoolingPutOutcome::NotStored) {
             Send(Owner, new TEvUploadResult(std::move(error), failedSource, outcome));
             PassAway();
         }
@@ -215,7 +215,7 @@ namespace NKikimr::NBlobDepot {
             const auto& msg = *ev->Get();
             const bool putMayHaveArrived = msg.SourceType == TEvExternalStorage::TEvPutObjectRequest::EventType && msg.Unsure;
             Finish("cooling I/O request was undelivered", {},
-                putMayHaveArrived ? ECoolingPutOutcome::MayArriveLate : ECoolingPutOutcome::NotSent);
+                putMayHaveArrived ? ECoolingPutOutcome::MayArriveLate : ECoolingPutOutcome::NotStored);
         }
 
         void HandleTimeout() {

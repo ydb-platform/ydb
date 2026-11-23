@@ -2,6 +2,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/generic/scope.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -598,15 +600,17 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             UNIT_ASSERT(stats);
             UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*stats).compilation().from_cache(), fromCache);
         };
-        auto checkPgRejected = [](const TDataQueryResult& result) {
+        auto checkPgRejected = [](const TStatus& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
         };
+        const bool originalDisablePgCompatibility = appData.FeatureFlags.GetDisablePgCompatibility();
         auto setDisablePgCompatibility = [&](bool disable) {
             NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
             flags.SetDisablePgCompatibility(disable);
             appData.UpdateRuntimeFlags(flags);
         };
+        Y_DEFER { setDisablePgCompatibility(originalDisablePgCompatibility); };
 
         checkResult(execute(pgQuery), "[[42]]", false);
         checkResult(execute(pgQuery), "[[42]]", true);
@@ -627,6 +631,12 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         checkPgRejected(execute(pgQuery));
         checkPgRejected(pgPrepared.Execute(txControl, execSettings).ExtractValueSync());
         checkPgRejected(nativePrepared.Execute(txControl, unusedPgParams, execSettings).ExtractValueSync());
+
+        NScripting::TScriptingClient scripting(kikimr.GetDriver());
+        const auto scriptResult = scripting.ExecuteYqlScript(nativeQuery, unusedPgParams).ExtractValueSync();
+        checkPgRejected(scriptResult);
+        UNIT_ASSERT_STRING_CONTAINS(scriptResult.GetIssues().ToString(), "parameter $unused has a PostgreSQL type");
+
         checkResult(execute(nativeQuery), "[[43]]", false);
         checkResult(execute(nativeQuery), "[[43]]", true);
         checkResult(nativePrepared.Execute(txControl, execSettings).ExtractValueSync(), "[[44]]", false);

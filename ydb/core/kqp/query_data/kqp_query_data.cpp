@@ -20,6 +20,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
 #include <library/cpp/protobuf/util/walk.h>
 
 namespace NKikimr::NKqp {
@@ -28,7 +29,7 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
 
-void TQueryData::ValidateNoPgParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
+void TQueryData::ValidateNoPgParameters(const NProtoBuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
     for (const auto& [name, param] : params) {
         if (param.type().has_type_id()) {
             continue;

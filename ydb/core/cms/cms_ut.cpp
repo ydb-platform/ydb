@@ -10,6 +10,7 @@
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/service/mon_service_http_request.h>
@@ -1298,9 +1299,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(RequestRestartServicesPartial)
+    Y_UNIT_TEST_TWIN(RequestRestartServicesPartial, block82)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(block82 ? 12 : 8);
+        opts.BlockErasure = block82 ? TErasureType::Erasure8Plus2Block : TErasureType::Erasure4Plus2Block;
+        TCmsTestEnv env(opts);
 
         auto rec = env.CheckPermissionRequest
             ("user", true, false, false, true, TStatus::ALLOW_PARTIAL,
@@ -1473,9 +1476,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckRejectPermission("user", id + "-bad", false, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(RequestReplaceDevices)
+    Y_UNIT_TEST_TWIN(RequestReplaceDevices, block82)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts opts(block82 ? 12 : 8);
+        opts.BlockErasure = block82 ? TErasureType::Erasure8Plus2Block : TErasureType::Erasure4Plus2Block;
+        TCmsTestEnv env(opts);
 
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
                                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
@@ -2385,27 +2390,31 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
     }
 
-    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes)
+    void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes,
+            TErasureType::EErasureSpecies erasure = TErasureType::Erasure4Plus2Block)
     {
         Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
 
-        TCmsTestEnv env(8);
+        const ui32 nodes = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        TTestEnvOpts opts(nodes);
+        opts.BlockErasure = erasure;
+        TCmsTestEnv env(opts);
         env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
                                         true, mode, TStatus::ALLOW,
-                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)));
+                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(nodes - 2), 60000000)));
         if (disconnectNodes) {
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 2)].Connected = false;
         }
 
         env.CheckPermissionRequest("user", false, false, false,
                                    true, mode, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(nodes - 1), 60000000));
         if (disconnectNodes) {
-            TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 1)].Connected = false;
         }
 
         env.CheckPermissionRequest("user", false, false, false,
@@ -2415,6 +2424,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return;
         }
 
+        env.RestartCms();
+        env.CheckListPermissions("user", 2);
         env.CheckDonePermission("user", res1.second[0]);
 
         env.CheckPermissionRequest("user", false, false, false,
@@ -2424,7 +2435,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return;
         }
 
-        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(nodes - 2)].Connected = true;
 
         env.CheckPermissionRequest("user", false, false, false,
                                    true, mode, TStatus::ALLOW,
@@ -2449,6 +2460,35 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     Y_UNIT_TEST(TestForceRestartModeDisconnects)
     {
         TestAvailabilityMode(MODE_FORCE_RESTART, true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestKeepAvailableModeBlock82, disconnectNodes)
+    {
+        TestAvailabilityMode(MODE_KEEP_AVAILABLE, disconnectNodes, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST_TWIN(TestForceRestartModeBlock82, disconnectNodes)
+    {
+        TestAvailabilityMode(MODE_FORCE_RESTART, disconnectNodes, TErasureType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST_TWIN(BlockParityMaxAvailability, block82)
+    {
+        TTestEnvOpts opts(block82 ? 12 : 8);
+        opts.BlockErasure = block82 ? TErasureType::Erasure8Plus2Block : TErasureType::Erasure4Plus2Block;
+        TCmsTestEnv env(opts);
+        auto result = env.ExtractPermissions(env.CheckPermissionRequest("user", false, false, false,
+            true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 1), 60000000, "storage")));
+        env.RestartCms();
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY,
+            TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 2), 60000000, "storage"));
+        env.CheckDonePermission("user", result.second[0]);
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(opts.NodeCount - 1)].Connected = false;
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY,
+            TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(opts.NodeCount - 2), 60000000, "storage"));
     }
 
     void TestKeepAvailabileModeScheduled(bool disconnectNodes)

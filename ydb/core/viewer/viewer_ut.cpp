@@ -25,6 +25,7 @@
 #include "viewer_cluster.h"
 #include "viewer_bridge_storage.h"
 #include "viewer_groups.h"
+#include "viewer_counters.h"
 #include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
 
@@ -369,6 +370,68 @@ Y_UNIT_TEST_SUITE(Viewer) {
         void Output(IMonHttpRequest&) override {
         }
     };
+
+    Y_UNIT_TEST_TWIN(WideGroupCounterHistograms, block82) {
+        const ui32 width = block82 ? 12 : 8;
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134)).SetNodeCount(1).SetUseRealThreads(false)
+            .SetDomainName("Root").SetUseSectorMap(true).InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto groups = runtime.AddObserver<TEvWhiteboard::TEvBSGroupStateResponse>([&](auto& event) {
+            if (!dynamic_cast<TJsonCounters*>(runtime.FindActor(event->GetRecipientRewrite()))) {
+                return;
+            }
+            auto& record = event->Get()->Record;
+            record.Clear();
+            for (ui32 group = 1; group <= 3; ++group) {
+                auto* info = record.AddBSGroupStateInfo();
+                info->SetGroupID(group);
+                info->SetGroupGeneration(1);
+                info->SetErasureSpecies(block82 ? "block-8-2" : "block-4-2");
+                for (ui32 disk = 0; disk < width; ++disk) {
+                    info->AddVDiskIds()->SetDomain(disk);
+                }
+            }
+        });
+        auto disks = runtime.AddObserver<TEvWhiteboard::TEvVDiskStateResponse>([&](auto& event) {
+            if (!dynamic_cast<TJsonCounters*>(runtime.FindActor(event->GetRecipientRewrite()))) {
+                return;
+            }
+            auto& record = event->Get()->Record;
+            record.Clear();
+            for (ui32 group = 2; group <= 3; ++group) {
+                for (ui32 disk = 0; disk < width; ++disk) {
+                    auto* info = record.AddVDiskStateInfo();
+                    info->MutableVDiskId()->SetGroupID(group);
+                    info->MutableVDiskId()->SetGroupGeneration(1);
+                    info->MutableVDiskId()->SetDomain(disk);
+                    info->SetVDiskState(group == 2 ? NKikimrWhiteboard::OK : NKikimrWhiteboard::PDiskError);
+                    info->SetReplicated(true);
+                }
+            }
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/counters", nullptr);
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NMon::TEvHttpInfo(monReq)));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        const size_t body = response->Answer.find("\r\n\r\n");
+        UNIT_ASSERT(body != TString::npos);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Answer.substr(body + 4), &json, true);
+        TSet<TString> found;
+        for (const auto& sensor : json["sensors"].GetArray()) {
+            const auto& labels = sensor["labels"];
+            if (labels["subsystem"].GetString() == "BSGroups" && labels["bin"].GetString() == ToString(width)) {
+                UNIT_ASSERT_VALUES_EQUAL(sensor["value"].GetIntegerRobust(), 1);
+                found.insert(labels["sensor"].GetString());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 3);
+    }
 
     Y_UNIT_TEST(TraceVerbositySetupWithoutActorContext) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
@@ -4138,7 +4201,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             std::optional<ui32> Count;
             std::vector<ui32> FailedDomains;
         };
-        const TCase cases[] = {
+        std::vector<TCase> cases = {
             {TErasureType::ErasureNone, {{0, TStatus::READY}}, "ok", "ok", {}, {}},
             {TErasureType::ErasureNone, {{0, TStatus::INIT_PENDING}}, "starting:1", "starting", 1, {}},
             {TErasureType::ErasureNone, {{0, TStatus::ERROR}}, "dead:1", "dead", 1, {}},
@@ -4155,6 +4218,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
             {TErasureType::ErasureMirror3dc, {{0, TStatus::ERROR}, {1, TStatus::ERROR}, {2, TStatus::ERROR}}, "dead:3(1,1,1)", "dead", 3, {1, 1, 1}},
             {TErasureType::ErasureMirror3dc, {{0, TStatus::READY}}, "ok", "ok", {}, {}},
         };
+        for (size_t i = 0, count = cases.size(); i < count; ++i) {
+            if (cases[i].Erasure == TErasureType::Erasure4Plus2Block) {
+                auto wide = cases[i];
+                wide.Erasure = TErasureType::Erasure8Plus2Block;
+                cases.push_back(std::move(wide));
+            }
+        }
         TStorageGroups::TGroup group;
         for (const auto& test : cases) {
             group.ErasureSpecies = test.Erasure;
@@ -4183,6 +4253,58 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
             const auto& domains = group.StateInfo.GetFailedDomainsPerRealm();
             UNIT_ASSERT_VALUES_EQUAL(std::vector<ui32>(domains.begin(), domains.end()), test.FailedDomains);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(BlockParityGroupStates, block82) {
+        const auto erasure = block82 ? TErasureType::Erasure8Plus2Block : TErasureType::Erasure4Plus2Block;
+        const ui32 disks = TBlobStorageGroupType(erasure).BlobSubgroupSize();
+        const NKikimrViewer::EFlag flags[] = {NKikimrViewer::Green, NKikimrViewer::Yellow,
+            NKikimrViewer::Orange, NKikimrViewer::Red};
+        for (bool missing : {false, true}) {
+            for (ui32 failed = 0; failed <= 3; ++failed) {
+                TStorageGroups::TGroup group;
+                group.ErasureSpecies = erasure;
+                NKikimrWhiteboard::TBSGroupStateInfo info;
+                info.SetErasureSpecies(TErasureType::ErasureSpeciesName(erasure));
+                std::vector<NKikimrWhiteboard::TVDiskStateInfo> states(disks);
+                NKikimrWhiteboard::TPDiskStateInfo pdisk;
+                pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> vdisks;
+                TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> pdisks;
+                for (ui32 i = 0; i < disks; ++i) {
+                    const bool bad = i >= disks - failed;
+                    auto& disk = group.VDisks.emplace_back();
+                    disk.VDiskId = TVDiskID(0, 1, 0, i, 0);
+                    disk.Present = !(bad && missing);
+                    if (disk.Present) {
+                        disk.VDiskStatus = bad ? NKikimrBlobStorage::ERROR : NKikimrBlobStorage::READY;
+                    }
+                    auto* id = info.AddVDiskIds();
+                    VDiskIDFromVDiskID(disk.VDiskId, id);
+                    if (disk.Present) {
+                        auto& state = states[i];
+                        state.SetNodeId(i + 1);
+                        state.SetPDiskId(1);
+                        state.SetVDiskState(bad ? NKikimrWhiteboard::LocalRecoveryError : NKikimrWhiteboard::OK);
+                        state.SetReplicated(true);
+                        vdisks.emplace(*id, state);
+                        pdisks.emplace(std::make_pair(i + 1, 1), pdisk);
+                    }
+                }
+                group.CalcState();
+                const auto legacy = GetBSGroupOverallStateWithoutLatency(info, vdisks, pdisks);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(legacy.Overall), static_cast<int>(flags[failed]));
+                UNIT_ASSERT_VALUES_EQUAL(legacy.MissingDisks, failed);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(group.Overall), static_cast<int>(flags[failed]));
+                UNIT_ASSERT_VALUES_EQUAL(group.State, failed ? TStringBuilder() << (failed == 3 ? "dead:" : "degraded:") << failed : TString("ok"));
+                UNIT_ASSERT_VALUES_EQUAL(group.StateSortKey, failed == 3 ? 100 : failed ? 50 + failed : 0);
+                UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.GetStatus(), failed == 3 ? "dead" : failed ? "degraded" : "ok");
+                UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.HasCount(), failed != 0);
+                if (failed) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.GetCount().GetDisks().GetValue(), failed);
+                }
+            }
         }
     }
 

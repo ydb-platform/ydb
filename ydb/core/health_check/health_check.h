@@ -75,6 +75,7 @@ struct TEvPrivate {
 
 extern const TString NONE;
 extern const TString BLOCK_4_2;
+extern const TString BLOCK_8_2;
 extern const TString MIRROR_3_DC;
 
 }

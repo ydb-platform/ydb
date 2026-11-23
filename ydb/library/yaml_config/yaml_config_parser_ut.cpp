@@ -188,6 +188,16 @@ feature_flags:
         UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("-1"), yexception);
     }
 
+    Y_UNIT_TEST(ErasureSpeciesFromString) {
+        UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum("block-4-2"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum("4"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum("block-8-2"), 19);
+        UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum("19"), 19);
+        for (const TString& name : {"unknown", "1", "20", "4294967295"}) {
+            UNIT_CHECK_GENERATED_EXCEPTION(ErasureStrToNum(name), yexception);
+        }
+    }
+
     Y_UNIT_TEST(AllowDefaultHostConfigId) {
         TString config = "{erasure: block-4-2, self_management_config: {enabled: true, erasure_species: block-4-2, pdisk_type: NVME}, "
             "host_configs: [{nvme: [disk1, disk2]}], hosts: [{host: fqdn1}, {host: fqdn2}]}";

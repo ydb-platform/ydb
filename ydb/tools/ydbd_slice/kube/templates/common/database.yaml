@@ -8,7 +8,7 @@ metadata:
     ydb.tech/node-claim: {{ nodeclaim_name }}.{{ nodeclaim_namespace }}
 spec:
   image:
-    name: cr.yandex/crpl7ipeu79oseqhcgn2/ydb:23.2.9
+    name: {{ ydb_image | default("cr.yandex/crpl7ipeu79oseqhcgn2/ydb:23.2.9") }}
     pullPolicy: IfNotPresent
   nodes: 3
   domain: Root

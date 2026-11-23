@@ -604,6 +604,10 @@ public:
             Self->StoragePoolStat->AddStoragePool(TStoragePoolStat::ConvertId(id), info.Name, allocatedSizeMap[id]);
         }
         for (const auto& [groupId, group] : Self->GroupMap) {
+            if (!group->VDisksInGroup.empty()) {
+                Self->StoragePoolStat->SetGroupErasure(TStoragePoolStat::ConvertId(group->StoragePoolId),
+                    groupId.GetRawId(), group->ErasureSpecies);
+            }
             group->StatusFlags = group->GetStorageStatusFlags();
             Self->StoragePoolStat->Update(TStoragePoolStat::ConvertId(group->StoragePoolId), std::nullopt, group->StatusFlags);
         }

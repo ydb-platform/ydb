@@ -23,7 +23,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 STATIC_GROUP_ID = 0
 
 
-def create_cluster(dynamic_pdisks=None):
+def create_cluster(dynamic_pdisks=None, erasure=Erasure.BLOCK_4_2):
     log_configs = {
         'BS_NODE': LogLevels.DEBUG,
         'BS_CONTROLLER': LogLevels.DEBUG,
@@ -31,8 +31,8 @@ def create_cluster(dynamic_pdisks=None):
     }
 
     configurator = KikimrConfigGenerator(
-        Erasure.BLOCK_4_2,
-        nodes=10,
+        erasure,
+        nodes=erasure.min_fail_domains + 2,
         use_in_memory_pdisks=False,
         use_config_store=True,
         metadata_section={
@@ -54,8 +54,8 @@ def create_cluster(dynamic_pdisks=None):
     return cluster
 
 
-def running_cluster(dynamic_pdisks=None):
-    cluster = create_cluster(dynamic_pdisks)
+def running_cluster(dynamic_pdisks=None, erasure=Erasure.BLOCK_4_2):
+    cluster = create_cluster(dynamic_pdisks, erasure)
 
     try:
         yield cluster
@@ -63,14 +63,14 @@ def running_cluster(dynamic_pdisks=None):
         cluster.stop()
 
 
-@pytest.fixture(scope="function")
-def cluster():
-    yield from running_cluster()
+@pytest.fixture(scope="function", params=[Erasure.BLOCK_4_2, Erasure.BLOCK_8_2], ids=str)
+def cluster(request):
+    yield from running_cluster(erasure=request.param)
 
 
-@pytest.fixture(scope="function")
-def cluster_with_local_spare_pdisk():
-    yield from running_cluster([{}])
+@pytest.fixture(scope="function", params=[Erasure.BLOCK_4_2, Erasure.BLOCK_8_2], ids=str)
+def cluster_with_local_spare_pdisk(request):
+    yield from running_cluster([{}], request.param)
 
 
 def fetch_config(cluster):
@@ -280,7 +280,7 @@ class TestStaticGroupManualReassign:
             stub = distributed_storage_grpc.DistributedStorageServiceStub(channel)
             vdisks = wait_static_vdisks_ready(stub)
 
-            previous_vdisk = min(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))
+            previous_vdisk = max(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))
             reassign_static_vdisk(stub, previous_vdisk)
 
     def test_reassign_static_vdisk(self, cluster):
@@ -289,9 +289,15 @@ class TestStaticGroupManualReassign:
             stub = distributed_storage_grpc.DistributedStorageServiceStub(channel)
             vdisks = wait_static_vdisks_ready(stub)
 
-            previous_vdisk = min(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))
+            previous_vdisk = sorted(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))[-2]
             target_pdisk = find_target_pdisk(cluster, vdisks)
-            reassign_static_vdisk(stub, previous_vdisk, target_pdisk)
+            replacement = reassign_static_vdisk(stub, previous_vdisk, target_pdisk)
+            target = cluster.nodes[replacement.slot_id.node_id]
+            target.stop()
+            target.start()
+            restored = wait_static_vdisk_reassigned(stub, previous_vdisk, replacement.slot_id)
+            assert restored.id.group_generation == replacement.id.group_generation
+            assert len(wait_static_vdisks_ready(stub)) == len(vdisks)
 
 
 class TestStaticGroupSelfHealAllowedNodes:

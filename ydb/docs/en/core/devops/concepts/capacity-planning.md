@@ -13,6 +13,7 @@ To manage resources, the user has access to the [storage group](../../concepts/g
 | Mode | Data centers | Racks in the data center<br/>(minimum) | VDisk in storage group | Redundancy factor `RF` |
 | --- | --- | --- | --- | --- |
 | `block-4-2` | 1 | 8* (10+ recommended) | 8 | 1.5 |
+| `block-8-2` | 1 | 12 (spare domains required for SelfHeal) | 12 | 1.25 |
 | `mirror-3-dc` | 3 | 3* (recommended 4+) | 9 | 3 (up to 6**) |
 | `mirror-3of4` | 1 | 8* (10+ recommended) | 8 | 4 |
 | `none` | 1 | 1 | 1 | 1 |
@@ -24,6 +25,8 @@ To manage resources, the user has access to the [storage group](../../concepts/g
 From the user's perspective, a storage group can be viewed as a fixed set of resources: IOPS, read and write bandwidth, capacity. Each database owns one or more storage groups. Each storage group belongs to one specific database.
 
 User tables consist of [tablets](../../concepts/glossary.md#tablet). Each tablet manages a fragment of user or system data. Tablets store data in groups; each tablet can write data to multiple storage groups, and many tablets write to each storage group.
+
+For `block-8-2`, coding overhead `10/8 = 1.25` counts the ten encoded parts. The logical capacity factor for twelve equal-size slots is `12 × 8/10 = 9.6` slots. These factors do not measure actual allocated bytes or include reserve capacity, metadata, fragmentation and temporary copies on handoff disks. Keep fractional factors when calculating capacity.
 
 ## Quantities used {#metrics}
 
@@ -51,6 +54,12 @@ Database Storage = Tablet Storage × RF × Overhead
 In all calculations the unit symbols are in accordance with IEC 60027-2:
 1 kB = 1000 byte, 1 MB = 1000 kB, 1 GB = 1000 MB, 1 TB = 1000 GB;
 1 KiB = 1024 byte, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
+
+### Group erasure mapping {#group-erasure-mapping}
+
+BSC exports `GroupErasureSpecies=1` in the `storage_pool_stat` counter tree for each materialized dynamic group backed by VDisks. Its labels are `storagePoolId` (`BoxId:StoragePoolId`), `storagePool` (pool name), `group` (decimal group ID) and `erasureSpecies` (the actual group encoding). Join usage counters such as `DskUsedBytes` by `storagePool` and `group` within the same cluster; the pool default can differ from a physical group's encoding.
+
+There is one current mapping per group: pool rename or group move replaces the old labels, deletion removes the mapping, and BSC reload reconstructs it. An empty pool exports no group mapping. Static group `0` has no entry in this dynamic-pool metric. Consumers must treat missing, duplicate or unknown mappings as unavailable data or an error, without assuming `block-4-2`. The mapping adds no encoding label to existing usage counters.
 
 ## Estimating Required Equipment {#hardware-estimation}
 

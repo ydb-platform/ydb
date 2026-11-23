@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/library/testlib/helpers.h>
 // #include <ydb/core/load_test/events.h>
 #include <ydb/core/load_test/service_actor.h>
 
@@ -6,11 +7,11 @@
 
 
 struct TTetsEnv {
-    TTetsEnv()
+    TTetsEnv(TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block)
     : Env({
-        .NodeCount = 8,
+        .NodeCount = erasure.BlobSubgroupSize(),
         .VDiskReplPausedAtStart = false,
-        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        .Erasure = erasure,
     })
     , Counters(new ::NMonitoring::TDynamicCounters())
     {
@@ -194,8 +195,8 @@ struct TTetsEnv {
 
 Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
 
-    Y_UNIT_TEST(TestReads) {
-        TTetsEnv env;
+    Y_UNIT_TEST_TWIN(TestReads, block82) {
+        TTetsEnv env(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
 
         Cerr << "=== Trying to put and get a blob ===" << Endl;
         ui32 step = 0;
@@ -204,23 +205,23 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         env.ReadAllBlobs(step);
 
 
-        for (ui32 i = 0; i < 7; ++i) {
+        for (ui32 i = 0; i + 1 < env.GroupInfo->GetTotalVDisksNum(); ++i) {
             Cerr << "=== Putting VDisk #" << i << " to read-only ===" << Endl;
             env.SetVDiskReadOnly(i, true);
             env.ReadAllBlobs(step);
             env.SendCutLog(i);
-            env.SendCutLog((i + 1) % 7);
+            env.SendCutLog((i + 1) % (env.GroupInfo->GetTotalVDisksNum() - 1));
         }
 
-        for (ui32 i = 0; i < 7; ++i) {
+        for (ui32 i = 0; i + 1 < env.GroupInfo->GetTotalVDisksNum(); ++i) {
             Cerr << "=== Restoring to normal VDisk #" << i << " ===" << Endl;
             env.SetVDiskReadOnly(i, false);
             env.ReadAllBlobs(step);
         }
     }
 
-    Y_UNIT_TEST(TestWrites) {
-        TTetsEnv env;
+    Y_UNIT_TEST_TWIN(TestWrites, block82) {
+        TTetsEnv env(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
 
         Cerr << "=== Trying to put and get a blob ===" << Endl;
         ui32 step = 0;
@@ -268,8 +269,8 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         env.ReadAllBlobs(step);
     }
 
-    Y_UNIT_TEST(TestGetWithMustRestoreFirst) {
-        TTetsEnv env;
+    Y_UNIT_TEST_TWIN(TestGetWithMustRestoreFirst, block82) {
+        TTetsEnv env(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
 
         Cerr << "=== Trying to put and get a blob ===" << Endl;
         ui32 step = 0;
@@ -411,18 +412,18 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         checkDiscoverOk();
     }
 
-    Y_UNIT_TEST(TestSync) {
-        TTetsEnv env;
+    Y_UNIT_TEST_TWIN(TestSync, block82) {
+        TTetsEnv env(block82 ? TBlobStorageGroupType::Erasure8Plus2Block : TBlobStorageGroupType::Erasure4Plus2Block);
         ui32 step = 0;
 
-        for (ui32 i = 0; i < 7; ++i) {
+        for (ui32 i = 0; i + 1 < env.GroupInfo->GetTotalVDisksNum(); ++i) {
             env.SetVDiskReadOnly(i, true);
-            env.SetVDiskReadOnly((i + 1) % 7, true);
+            env.SetVDiskReadOnly((i + 1) % (env.GroupInfo->GetTotalVDisksNum() - 1), true);
             env.SendPut(step++, NKikimrProto::OK);
             env.SendCutLog(i);
-            env.SendCutLog((i + 1) % 7);
+            env.SendCutLog((i + 1) % (env.GroupInfo->GetTotalVDisksNum() - 1));
             env.SetVDiskReadOnly(i, false);
-            env.SetVDiskReadOnly((i + 1) % 7, false);
+            env.SetVDiskReadOnly((i + 1) % (env.GroupInfo->GetTotalVDisksNum() - 1), false);
         }
 
         env.ReadAllBlobs(step);

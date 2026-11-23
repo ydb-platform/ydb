@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
+from ydb.public.api.protos import ydb_keyvalue_pb2
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
 import yatest
 from ydb.tests.library.common.delayed import wait_tablets_are_active
@@ -30,11 +32,14 @@ AliveTabletStates = frozenset((
 
 
 class TestHive(object):
+    erasure = Erasure.BLOCK_4_2
+    value = b"drain-persistent-value" * 4096
+
     @classmethod
     def setup_class(cls):
         cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                Erasure.BLOCK_4_2,
+                cls.erasure,
                 use_in_memory_pdisks=False,
                 hive_config={
                     'max_node_usage_to_kick': 100,
@@ -66,12 +71,24 @@ class TestHive(object):
 
         retry_assertions(check, timeout_seconds=TimeoutSeconds)
 
+    def write_probe(self, table_path):
+        response = self.cluster.kv_client.kv_write(table_path, 0, 'persistent-key', self.value)
+        assert response.operation.status == StatusIds.SUCCESS
+
+    def check_probe(self, table_path):
+        response = self.cluster.kv_client.kv_read(table_path, 0, 'persistent-key')
+        assert response.operation.status == StatusIds.SUCCESS
+        result = ydb_keyvalue_pb2.ReadResult()
+        assert response.operation.result.Unpack(result)
+        assert result.value == self.value
+
     def test_drain_tablets(self):
         path = '/Root/mydb'
         table_path = '/Root/mydb/mytable'
         self.cluster.scheme_client.make_directory(path)
         all_tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, TabletsCount, table_path)
         self.wait_storage_ready()
+        self.write_probe(table_path)
         for node_id, node in self.cluster.nodes.items():
             if node_id == 1:
                 continue
@@ -96,8 +113,10 @@ class TestHive(object):
                 all_tablet_ids,
             )
 
+            self.check_probe(table_path)
             node.start()
             self.wait_storage_ready()
+            self.check_probe(table_path)
 
     def test_drain_on_stop(self):
         path = '/Root/mydb'
@@ -105,6 +124,7 @@ class TestHive(object):
         self.cluster.scheme_client.make_directory(path)
         all_tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, TabletsCount, table_path)
         self.wait_storage_ready()
+        self.write_probe(table_path)
         for node_id, node in self.cluster.nodes.items():
             if node_id == 1:
                 continue
@@ -121,5 +141,11 @@ class TestHive(object):
                     active_states=AliveTabletStates,
                 )
 
+            self.check_probe(table_path)
             node.start()
             self.wait_storage_ready()
+            self.check_probe(table_path)
+
+
+class TestHiveBlock82(TestHive):
+    erasure = Erasure.BLOCK_8_2

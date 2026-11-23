@@ -10,5 +10,5 @@ spec:
   nodes:
     - flavor:
         name: {{ nodeclaim_flavor_name }}
-        amount: 8
+        amount: {{ node_count | default(8) }}
 

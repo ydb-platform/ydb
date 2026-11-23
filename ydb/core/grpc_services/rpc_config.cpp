@@ -518,8 +518,20 @@ public:
             return;
         }
 
-        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+        const auto* userToken = Request_->GetInternalToken().Get();
+        const auto& request = *GetProtoRequest();
+        const auto transform = request.all().config_transform_case();
+        const bool isNodeBootstrap = request.has_seed_node_fetch_requestor() &&
+            request.mode_case() == Ydb::Config::FetchConfigRequest::ModeCase::kAll &&
+            (transform == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::CONFIG_TRANSFORM_NOT_SET ||
+             transform == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kNone);
+
+        if (!NKikimr::IsAdministrator(AppData(), userToken) &&
+            !(isNodeBootstrap && NKikimr::IsTokenAllowed(userToken, AppData()->RegisterDynamicNodeAllowedSIDs))) {
+            const char* errorMessage = isNodeBootstrap
+                ? "User is not a cluster administrator and is not authorized to register dynamic nodes."
+                : "User is not a cluster administrator.";
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, errorMessage,
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }

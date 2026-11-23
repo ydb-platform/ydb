@@ -1,3 +1,5 @@
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 

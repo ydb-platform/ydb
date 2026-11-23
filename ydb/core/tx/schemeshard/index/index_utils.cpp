@@ -8,6 +8,12 @@
 namespace NKikimr {
 namespace NTableIndex {
 
+void ClearGenerationTierIds(NKikimrCompaction::TCompactionPolicy& policy) {
+    for (auto& generation : *policy.MutableGeneration()) {
+        generation.ClearTierId();
+    }
+}
+
 bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType) {
     return indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
         || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
@@ -153,7 +159,9 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
         result.SetNamedCompactionPolicy(baseTablePartitionConfig.GetNamedCompactionPolicy());
     }
     if (baseTablePartitionConfig.HasCompactionPolicy()) {
-        result.MutableCompactionPolicy()->CopyFrom(baseTablePartitionConfig.GetCompactionPolicy());
+        auto& policy = *result.MutableCompactionPolicy();
+        policy.CopyFrom(baseTablePartitionConfig.GetCompactionPolicy());
+        ClearGenerationTierIds(policy);
     }
     // skip optional uint64 FollowerCount = 3;
     if (baseTablePartitionConfig.HasExecutorCacheSize()) {

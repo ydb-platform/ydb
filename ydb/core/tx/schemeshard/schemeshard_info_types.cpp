@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "index/index_utils.h"
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
@@ -1303,7 +1304,7 @@ bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
     const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
-    const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
+    const TAppData *appData, const bool isServerlessDomain, TString &errDescr, bool isIndexImplTable)
 {
     for (const auto& family : changes.GetColumnFamilies()) {
         if ((family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD
@@ -1364,6 +1365,10 @@ bool TPartitionConfigMerger::ApplyChanges(
         policyPtr->Serialize(*result.MutableCompactionPolicy());
     }
 
+    // Named and default policies can also supply tier bindings. Index tables use the default family.
+    if (isIndexImplTable && result.HasCompactionPolicy()) {
+        NTableIndex::ClearGenerationTierIds(*result.MutableCompactionPolicy());
+    }
 
     if (changes.FollowerGroupsSize()) {
         // use FollowerGroups

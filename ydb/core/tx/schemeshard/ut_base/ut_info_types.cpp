@@ -1,6 +1,8 @@
+#include <ydb/core/base/domain.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/string/printf.h>
@@ -98,6 +100,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(config, nullptr, false, error), error);
     }
 
+    Y_UNIT_TEST(IndexImplTableDoesNotInheritGenerationTierIds) {
+        auto base = MakeCompactionTierConfig();
+        AddCompactionTierFamily(base);
+        base.MutableCompactionPolicy()->MutableGeneration(0)->SetTierId(0);
+        AppendCompactionTierGeneration(base, 42);
+
+        const auto index = NTableIndex::CalcVectorKmeansTreeLevelImplTableDesc(base, {});
+        const auto& indexConfig = index.GetPartitionConfig();
+        auto expected = base.GetCompactionPolicy();
+        for (auto& generation : *expected.MutableGeneration()) {
+            generation.ClearTierId();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(indexConfig.GetCompactionPolicy().DebugString(), expected.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(base.GetCompactionPolicy().GetGeneration(1).GetTierId(), 42u);
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(indexConfig, nullptr, false, error), error);
+    }
+
     Y_UNIT_TEST(AlterCompactionGenerationTierRequiresAMergedFamily) {
         const auto source = MakeCompactionTierConfig();
         NKikimrSchemeOp::TPartitionConfig changes;
@@ -128,6 +148,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         TString error;
         UNIT_ASSERT_C(TPartitionConfigMerger::ApplyChanges(result, source, changes, columns, nullptr, false, error), error);
         UNIT_ASSERT_C(TPartitionConfigMerger::VerifyAlterParams(source, result, nullptr, false, error), error);
+    }
+
+    Y_UNIT_TEST(IndexImplTableInheritsNamedPolicyWithoutGenerationTierIds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->DefaultTaskPriority = 37;
+        policy->Generations.front().TierId = 0;
+        policy->Generations.back().TierId = 42;
+        NKikimrCompaction::TCompactionPolicy expectedPolicy;
+        policy->Serialize(expectedPolicy);
+        runtime.GetAppData().DomainsInfo->AddCompactionPolicy("WithArchive", policy);
+
+        const ui64 txId = 100;
+        TestCreateIndexedTable(runtime, txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    NamedCompactionPolicy: "WithArchive"
+                    ColumnFamilies { Id: 42 Name: "archive" }
+                }
+            }
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto table = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(table, {NLs::IsTable});
+        const auto& tablePolicy = table.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+        UNIT_ASSERT_VALUES_EQUAL(tablePolicy.DebugString(), expectedPolicy.DebugString());
+
+        const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true);
+        TestDescribeResult(index, {NLs::IsTable});
+        const auto& indexPolicy = index.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy();
+        for (auto& generation : *expectedPolicy.MutableGeneration()) {
+            generation.ClearTierId();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(indexPolicy.DebugString(), expectedPolicy.DebugString());
     }
 
     NKikimrCompaction::TCompactionPolicy CompactionPolicyWithGenerationIds(

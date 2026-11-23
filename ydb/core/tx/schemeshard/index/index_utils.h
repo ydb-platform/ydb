@@ -25,6 +25,8 @@ struct TIndexObjectCounts {
 
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+void ClearGenerationTierIds(NKikimrCompaction::TCompactionPolicy& policy);
+
 // Compact posting lists encode integer document ids and cannot represent NULL.
 bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType);
 

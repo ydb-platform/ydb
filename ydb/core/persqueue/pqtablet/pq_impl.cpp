@@ -2061,6 +2061,8 @@ void TPersQueue::HandleReadRequest(
     } else if (cmd.GetClientId() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "cannot read with internal clinetId: " << cmd.GetClientId());
+    } else if (const auto error = GetWriteModeError(Config)) { // read from topics are unavailable too
+        ReplyError(ctx, responseCookie, error->Code, error->Reason);
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
         ui32 count = cmd.HasCount() ? cmd.GetCount() : Max<ui32>();
@@ -2721,13 +2723,14 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    if (IsTopicMutateDisabled(ctx)
+    if (const auto error = GetWriteModeError(Config);
+        (IsTopicMutateDisabled(ctx) || error)
         && req.HasCmdSetClientOffset())
     {
         const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
         if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
-                       "Topic mutations are temporarily disabled");
+            ReplyError(ctx, responseCookie, error ? error->Code : NPersQueue::NErrorCode::ERROR,
+                       error ? error->Reason : "Topic mutations are temporarily disabled");
             return;
         }
     }
@@ -3208,14 +3211,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
-        if (IsTopicMutateDisabled(ctx)
+        if (const auto error = GetWriteModeError(Config);
+            (IsTopicMutateDisabled(ctx) || error)
             && !Txs.contains(event.GetTxId())
             && !AnyOf(EvProposeTransactionQueue, [&](const auto& pending) {
                 return pending->GetRecord().GetTxId() == event.GetTxId();
             }))
         {
             // Retries of accepted proposals must continue the transaction protocol.
-            const TString reason = "Topic mutations are temporarily disabled";
+            const TString reason = error ? error->Reason : "Topic mutations are temporarily disabled";
             ev->Get()->ExecuteSpan.EndError(reason);
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                        event.GetTxId(),

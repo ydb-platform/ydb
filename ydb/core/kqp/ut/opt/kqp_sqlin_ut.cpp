@@ -601,6 +601,45 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         }
     }
 
+    Y_UNIT_TEST(DisablePgCompatibilityAllowsNativeProjection) {
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Mixed (
+                id Uint64 NOT NULL,
+                legacy PgInt4,
+                PRIMARY KEY (id)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto populated = session.ExecuteDataQuery("UPSERT INTO Mixed (id, legacy) VALUES (1u, 42p);", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+
+        const auto native = session.ExecuteDataQuery("SELECT id FROM Mixed;", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(native.IsSuccess(), native.GetIssues().ToString());
+        CompareYson("[[1u]]", FormatResultSetYson(native.GetResultSet(0)));
+
+        for (const TString query : {
+            "SELECT legacy FROM Mixed;",
+            "SELECT * FROM Mixed;",
+            "SELECT id FROM Mixed WHERE legacy IS NULL;",
+        }) {
+            const auto pg = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(pg.GetStatus(), EStatus::UNSUPPORTED, pg.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(pg.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        }
+
+        const auto explicitPgType = session.ExecuteDataQuery("SELECT id, PgType('int4') FROM Mixed;", txControl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explicitPgType.GetStatus(), EStatus::BAD_REQUEST, explicitPgType.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(explicitPgType.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+    }
+
     Y_UNIT_TEST(SecondaryIndex_PgKey) {
         TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();

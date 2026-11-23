@@ -1,4 +1,5 @@
 #include "cdc_aggregated_heartbeats.h"
+#include "cdc_stream_key_range.h"
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_record.h"
@@ -48,11 +49,6 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
 
 namespace {
 
-bool ShouldUseKeyRangeHeartbeats(const TUserTable::TCdcStream& stream, const TVector<NScheme::TTypeInfo>& topicKeySchema) {
-    return stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange
-        && !topicKeySchema.empty();
-}
-
 template <typename TItem, typename TCallback>
 void ForEachPairwise(const TVector<TItem>& items, TCallback&& callback) {
     const TItem* prev = nullptr;
@@ -73,20 +69,9 @@ TPartitionKeyRange MakeTopicPartitionKeyRange(const TKeyDesc::TPartitionInfo* pr
     return range;
 }
 
-TPartitionKeyRange MakeShardKeyRange(const TSerializedTableRange& shardKeyRange) {
-    TPartitionKeyRange range;
-    if (!shardKeyRange.From.GetCells().empty()) {
-        range.FromBound = shardKeyRange.From;
-    }
-    if (!shardKeyRange.To.GetCells().empty()) {
-        range.ToBound = shardKeyRange.To;
-    }
-    return range;
-}
-
 TVector<ui64> MakeIntersectingPartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions,
         const TSerializedTableRange& shardKeyRange, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    const auto shardRange = MakeShardKeyRange(shardKeyRange);
+    const auto shardRange = MakeKeyRange(shardKeyRange.From, shardKeyRange.To);
     TVector<ui64> partitionIds;
     ForEachPairwise(partitions, [&](const TKeyDesc::TPartitionInfo* prev, const TKeyDesc::TPartitionInfo& partition) {
         if (Intersects(MakeTopicPartitionKeyRange(prev, partition), shardRange, keyTypes)) {
@@ -664,7 +649,7 @@ class TCdcChangeSenderMain
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
-        const bool shouldUseKeyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(Stream, entry.PQGroupInfo->Schema);
+        const bool shouldUseKeyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(Stream.HeartbeatMode, entry.PQGroupInfo->Schema);
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));

@@ -49,6 +49,7 @@ SRCS(
     build_index/secondary_index.cpp
     cdc_aggregated_heartbeats.cpp
     cdc_stream_heartbeat.cpp
+    cdc_stream_key_range.cpp
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
     change_record_cdc_serializer.cpp

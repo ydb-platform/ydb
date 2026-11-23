@@ -82,7 +82,7 @@ struct TCdcPqPartParams {
 // Replication autopartitioning caps max at maxShardsInPath and min at that limit / 4.
 // An explicit TopicPartitions stays the initial count and the strategy minimum, capped by that max.
 TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
-    ui64 maxShardsInPath, bool keyRangeHeartbeats = false);
+    ui64 maxShardsInPath, const TFeatureFlags& featureFlags);
 
 void DoCreatePqPart(
     TVector<ISubOperation::TPtr>& result,

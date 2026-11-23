@@ -38,8 +38,8 @@ bool SendsPeriodicResolvedHeartbeats(const NKikimrSchemeOp::TCdcStreamDescriptio
     return streamDesc.GetResolvedTimestampsIntervalMs() > 0;
 }
 
-bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    return AppData()->FeatureFlags.GetEnableCdcKeyRangeHeartbeats()
+bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc, const TFeatureFlags& featureFlags) {
+    return featureFlags.GetEnableCdcKeyRangeHeartbeats()
         && SendsPeriodicResolvedHeartbeats(streamDesc)
         && HasCapabilityInStreamDescription(streamDesc, "supports_key_range_autopartitioning");
 }
@@ -371,7 +371,7 @@ public:
             return result;
         }
 
-        const bool keyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(streamDesc);
+        const bool keyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(streamDesc, AppData()->FeatureFlags);
         if (keyRangeHeartbeats && (op.HasTopicPartitions() || op.GetTopicAutoPartitioning())) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
                 "TopicPartitions and TopicAutoPartitioning are not supported for CDC streams with key range heartbeats");
@@ -800,8 +800,8 @@ TCdcPqPartParams MakeRequestedCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcS
 } // anonymous
 
 TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
-        ui64 maxShardsInPath, bool keyRangeHeartbeats) {
-    if (keyRangeHeartbeats) {
+        ui64 maxShardsInPath, const TFeatureFlags& featureFlags) {
+    if (ShouldUseKeyRangeHeartbeats(op.GetStreamDescription(), featureFlags)) {
         return MakeKeyRangeCdcPqPartParams(tablePartitionCount);
     }
     if (ShouldUseHashAutoPartitioning(op.GetStreamDescription())) {
@@ -825,8 +825,7 @@ void DoCreatePqPart(
     outTx.SetFailOnExist(!acceptExisted);
 
     const ui64 maxShardsInPath = streamPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
-    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath,
-        ShouldUseKeyRangeHeartbeats(op.GetStreamDescription()));
+    const auto pqParams = MakeCdcPqPartParams(op, table->GetPartitions().size(), maxShardsInPath, AppData()->FeatureFlags);
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");

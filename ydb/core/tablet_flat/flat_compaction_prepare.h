@@ -20,13 +20,9 @@ namespace NKikimr::NTable {
         TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
         bool enableDataTiering, TInstant now);
 
-    // Must be called before replacing any table data or publishing outputs.
-    // Known parallel publications may advance Tiering.ExpectedInventory; the
-    // pinned inputs and closed epoch interval must still match the context.
+    // Check the schema and cooling flag before publishing outputs.
     bool IsTieringCompactionCurrent(const TCompactionParams& params,
         const TScheme::TTableInfo& table, TIntrusiveConstPtr<TRowScheme> rowScheme,
-        TConstArrayRef<TPartView> parts,
-        TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
         bool enableDataTiering);
 
 }

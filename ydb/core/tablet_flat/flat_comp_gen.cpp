@@ -1641,7 +1641,7 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
     }
     auto& settings = *params.Tiering;
     for (const auto& [generation, active] : TierCompactions) {
-        if (active.Params->Tiering->HasMemoryInputs) {
+        if (active.HasMemoryInputs) {
             settings.HasUnknownRemaining = true;
         }
         Y_UNUSED(generation);
@@ -1653,7 +1653,7 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
     }
     auto& active = TierCompactions[params.Generation];
     active.Context = params.Context;
-    active.Params = &params;
+    active.HasMemoryInputs = settings.HasMemoryInputs;
     for (const auto& part : params.Context->Inputs) {
         Y_ENSURE(BusyTierParts.emplace(part.Label(), params.Generation).second,
             "Compaction input was reserved twice");
@@ -2090,39 +2090,12 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
     }
     RebuildTierStats();
 
-    // Preparation and reservation run synchronously on the executor actor,
-    // capturing the full disk inventory, not just the selected epoch interval.
-    // Every managed publication updates all active inventories, including new
-    // labels from memory flushes. External additions/removals and schema changes
-    // cancel active operations (PartMerged, PartsRemoved, ReflectSchema).
-    // Thus every leaving label must be known to every still-active operation.
-    // Advance only this known lineage; other changes still invalidate publication.
-    for (auto& [generation, active] : TierCompactions) {
+    for (const auto& [generation, active] : TierCompactions) {
         Y_UNUSED(generation);
         Y_ENSURE(!params.Context->Epochs || !active.Context->Epochs
             || params.Context->Epochs->Max < active.Context->Epochs->Min
             || active.Context->Epochs->Max < params.Context->Epochs->Min,
             "Concurrent compactions have overlapping epoch intervals");
-        auto& other = *active.Params->Tiering;
-        auto& inventory = other.ExpectedInventory;
-        size_t erased = 0;
-        for (auto it = inventory.begin(); it != inventory.end();) {
-            if (leaving.contains(it->Label())) {
-                it = inventory.erase(it);
-                ++erased;
-            } else {
-                ++it;
-            }
-        }
-        Y_ENSURE(erased == leaving.size(), "Concurrent publication lineage is incomplete");
-        for (const auto& label : leaving) {
-            other.PartLevels.erase(label);
-        }
-        for (const auto& part : result.Parts) {
-            const ui32 level = changes.NewPartLevels.at(part->Label);
-            inventory.emplace_back(Backend->TablePart(Table, part->Label), level, TierForLevel(level));
-            other.PartLevels[part->Label] = level;
-        }
     }
 
     if (params.Generation == 0 && ForcedMemCompactionId == compactionId) {

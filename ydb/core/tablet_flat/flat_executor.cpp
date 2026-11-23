@@ -3966,7 +3966,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     const auto* currentTable = Scheme().GetTableInfo(tableId);
     const bool stale = currentTable && msg->Params->Tiering
         && !NTable::IsTieringCompactionCurrent(*msg->Params, *currentTable,
-            RowScheme(tableId), TableParts(tableId), TableColdParts(tableId), IsDataTieringEnabled());
+            RowScheme(tableId), IsDataTieringEnabled());
 
     if (msg->Params->TaskId != 0) {
         // We have taken over this task, mark it as finished in the broker

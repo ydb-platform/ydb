@@ -63,7 +63,6 @@ void PrepareTieringCompaction(TCompactionParams& params,
     TCompactionState state;
     state.PartLevels = settings.PartLevels;
     const auto inventory = DescribeCompactionParts(parts, coldParts, state, *table.CompactionPolicy);
-    settings.ExpectedInventory = inventory;
     settings.HasMemoryInputs = !subset.Frozen.empty();
     const auto closeInputs = [&] {
         params.Context = TCompactionContext::Build(inventory, subset);
@@ -146,8 +145,6 @@ void PrepareTieringCompaction(TCompactionParams& params,
 
 bool IsTieringCompactionCurrent(const TCompactionParams& params,
         const TScheme::TTableInfo& table, TIntrusiveConstPtr<TRowScheme> rowScheme,
-        TConstArrayRef<TPartView> parts,
-        TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
         bool enableDataTiering)
 {
     if (!params.Tiering) {
@@ -159,49 +156,12 @@ bool IsTieringCompactionCurrent(const TCompactionParams& params,
         return false;
     }
     const auto& before = *settings.Schema;
-    if (!(*before.CompactionPolicy == *table.CompactionPolicy)
-            || before.TieringPolicy != table.TieringPolicy
-            || before.Families != table.Families || before.Rooms != table.Rooms
-            || before.ByKeyFilterPrefixes != table.ByKeyFilterPrefixes
-            || before.SpecialTableType != table.SpecialTableType
-            || before.ColdBorrow != table.ColdBorrow) {
-        return false;
-    }
-    TCompactionState state;
-    state.PartLevels = settings.PartLevels;
-    const auto current = DescribeCompactionParts(parts, coldParts, state, *table.CompactionPolicy);
-    if (current.size() != settings.ExpectedInventory.size()) {
-        return false;
-    }
-    // Only publications admitted by the strategy may replace remaining
-    // sources in this inventory. The original context stays pinned: its
-    // underlay mask still covers the keys of those known publications.
-    THashMap<TLogoBlobID, const TCompactionPartInfo*> expected;
-    for (const auto& part : settings.ExpectedInventory) {
-        if (!expected.emplace(part.Label(), &part).second) {
-            return false;
-        }
-    }
-    THashSet<TLogoBlobID> inputs;
-    for (const auto& part : params.Context->Inputs) {
-        const auto it = expected.find(part.Label());
-        if (it == expected.end() || !part.SameState(*it->second)) {
-            return false;
-        }
-        inputs.insert(part.Label());
-    }
-    for (const auto& part : current) {
-        const auto it = expected.find(part.Label());
-        if (it == expected.end() || !it->second->SameState(part)) {
-            return false;
-        }
-        if (params.Context->Epochs && params.Context->Epochs->Contains(part.Epoch())
-                && !inputs.contains(part.Label())) {
-            return false;
-        }
-        expected.erase(it);
-    }
-    return expected.empty();
+    return *before.CompactionPolicy == *table.CompactionPolicy
+        && before.TieringPolicy == table.TieringPolicy
+        && before.Families == table.Families && before.Rooms == table.Rooms
+        && before.ByKeyFilterPrefixes == table.ByKeyFilterPrefixes
+        && before.SpecialTableType == table.SpecialTableType
+        && before.ColdBorrow == table.ColdBorrow;
 }
 
 }

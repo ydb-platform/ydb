@@ -15,8 +15,7 @@ namespace NKikimr {
 namespace NTable {
 
     struct TTieringCompaction {
-        // Placement before the operation, used to resolve every input and to
-        // validate the remaining sources before publication.
+        // Placement supplied by the strategy to prepare the compaction context.
         THashMap<TLogoBlobID, ui32> PartLevels;
         std::shared_ptr<const TScheme::TTableInfo> Schema;
         TIntrusiveConstPtr<TRowScheme> RowScheme;
@@ -28,9 +27,6 @@ namespace NTable {
         // that are absent from this operation's captured underlay mask.
         bool HasUnknownRemaining = false;
         bool HasMemoryInputs = false;
-        // Executor-thread validation state, advanced only by known successful
-        // publications. Context keeps the original metadata for scan masks.
-        TVector<TCompactionPartInfo> ExpectedInventory;
     };
 
     /**
@@ -59,8 +55,8 @@ namespace NTable {
         // Tier-aware compaction also prepares this output to retain keys.
         ui32 TierId = 0;
 
-        // Prepared inputs and remaining sources. The strategy must protect and
-        // revalidate this context before publishing the compaction.
+        // Prepared inputs and remaining sources. The strategy reserves the
+        // inputs and cancels the compaction on external part changes.
         TIntrusiveConstPtr<TCompactionContext> Context;
 
         // Non-null for the tier-managed strategy path. The backend

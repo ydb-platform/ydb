@@ -221,7 +221,7 @@ namespace NCompGen {
         struct TTierCompaction {
             ui64 CompactionId = 0;
             TIntrusiveConstPtr<TCompactionContext> Context;
-            TCompactionParams* Params = nullptr;
+            bool HasMemoryInputs = false;
         };
 
     private:

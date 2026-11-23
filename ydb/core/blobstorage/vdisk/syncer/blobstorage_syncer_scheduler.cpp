@@ -269,7 +269,7 @@ namespace NKikimr {
 
         void RequestFullSyncWithAvailablePeers() {
             for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
-                const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
                 if (!peer.Myself && !GInfo->IsFailRealmExcluded(realm)) {
                     FullSyncRequested.insert(peer.OrderNumber);
                 }
@@ -507,8 +507,8 @@ namespace NKikimr {
             if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
                 return;
             }
-            const ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
-            const bool localRealmReturned = GInfo->IsFailRealmExcluded(localRealm)
+            ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
+            bool localRealmReturned = GInfo->IsFailRealmExcluded(localRealm)
                 && msg->NewInfo->IsFailRealmRecovering(localRealm);
             GInfo = msg->NewInfo;
             if (localRealmReturned) {

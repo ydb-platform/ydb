@@ -242,6 +242,73 @@ Y_UNIT_TEST_TWIN(WriteWithoutWsnIsBrokenByTransfer, Merge) {
     UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table` ORDER BY key;"), "");
 }
 
+Y_UNIT_TEST_TWIN(ExclusiveRowLockSurvivesColdRestartAndSplit, WithAncestor) {
+    return; // TODO: Enable when split preserves exclusive EvLockRows locks without WSN.
+
+    TTestEnv env({});
+    auto& runtime = env.GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+    ui64 ancestor = 0;
+    if (WithAncestor) {
+        env.Split(0, 10);
+        ancestor = env.Shards.front();
+        WriteAt(env, tx, ancestor, {}, 1, TWriteOperation::Upsert(1, 100));
+        env.Merge(0, 1);
+    }
+
+    const ui64 source = env.Shards.front();
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(env.TableId, source, {15}), "OK");
+    const auto* rowLock = tx.FindLastLock(source);
+    UNIT_ASSERT(rowLock);
+    UNIT_ASSERT_VALUES_EQUAL(rowLock->GetCreatedOn(), source);
+    UNIT_ASSERT_VALUES_EQUAL(rowLock->WriteSeqNumsSize(), 0);
+    const auto generation = rowLock->GetGeneration();
+    const auto counter = rowLock->GetCounter();
+    RebootTablet(runtime, source, env.Sender);
+
+    env.Split(0, 10);
+    const ui64 left = env.Shards.at(0);
+    const ui64 right = env.Shards.at(1);
+    tx.MapAncestorShard(left, source);
+    tx.MapAncestorShard(right, source);
+    if (WithAncestor) {
+        tx.MapAncestorShard(left, ancestor);
+    }
+
+    // The right slice contains an actual row lock, even though the inherited
+    // ancestor (when present) covers only the left slice.
+    TTransactionState competitor(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    auto waiting = competitor.SendLockRows(env.TableId, right, {15});
+    UNIT_ASSERT_VALUES_EQUAL(waiting.NextString(TDuration::Seconds(1)), "<timeout>");
+
+    // WSN 1 continues the confirmed (source, source) identity on both copies.
+    for (ui64 shard : env.Shards) {
+        auto operation = shard == right ? TWriteOperation::Upsert(15, 1500) : TWriteOperation::Upsert({});
+        const auto echo = WriteAt(env, tx, shard, {source}, 1, std::move(operation));
+        UNIT_ASSERT_VALUES_EQUAL(echo.GetDataShard(), source);
+        UNIT_ASSERT_VALUES_EQUAL(echo.GetCreatedOn(), source);
+        UNIT_ASSERT_VALUES_EQUAL(echo.GetGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(echo.GetCounter(), counter);
+        UNIT_ASSERT_VALUES_EQUAL(echo.WriteSeqNumsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(echo.GetWriteSeqNums(0).GetWriteSeqNum(), 1);
+    }
+
+    tx.InitCommit({left, right});
+    auto prepareLeft = tx.PrepareCommit(env.TableId, left);
+    auto prepareRight = tx.PrepareCommit(env.TableId, right);
+    tx.SendPlan();
+    UNIT_ASSERT_VALUES_EQUAL(prepareLeft.NextString(), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(prepareRight.NextString(), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(waiting.NextString(TDuration::Seconds(5)), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table` ORDER BY key;"),
+        WithAncestor ? "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+            "{ items { uint32_value: 15 } items { int32_value: 1500 } }"
+            : "{ items { uint32_value: 15 } items { int32_value: 1500 } }");
+}
+
 Y_UNIT_TEST_QUAD(BorrowedTransactionOutsideSliceAllowsCurrentLock, Resplit, LargeSlice) {
     TTestEnv env({});
     auto& runtime = env.GetRuntime();

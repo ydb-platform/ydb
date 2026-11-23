@@ -965,6 +965,7 @@ public:
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(request.GetTxId());
+        ev->Record.SetTaskStartOutcomeComplete(true);
         for (const auto& task : request.GetTasks()) {
             AddNotStartedTask(ev->Record, task.GetId(), reason, requestId, message);
         }

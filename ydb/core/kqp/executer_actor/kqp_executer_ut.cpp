@@ -30,6 +30,31 @@ enum class ELateRemoteTaskStart {
     Undelivered,
 };
 
+TKikimrSettings RemoteTaskSettings(ui32 channelVersion) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetNodeCount(2);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    config->SetDqChannelVersion(channelVersion);
+    config->MutableResourceManager()->SetMaxNonParallelDataQueryTasksLimit(0);
+    config->MutableResourceManager()->SetMaxNonParallelTasksExecutionLimit(0);
+    config->MutableQueryLimits()->SetWaitCAStatsTimeoutMs(1000);
+    return settings;
+}
+
+TActorId StartDistributedCount(TTestActorRuntime& runtime) {
+    auto edge = runtime.AllocateEdgeActor();
+    auto query = MakeHolder<TEvKqp::TEvQueryRequest>();
+    ActorIdToProto(edge, query->Record.MutableRequestActorId());
+    auto& request = *query->Record.MutableRequest();
+    request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    request.SetDatabase("/Root");
+    request.SetQuery("SELECT COUNT(*) FROM `/Root/EightShard`;");
+    request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    request.MutableTxControl()->set_commit_tx(true);
+    NDataShard::NKqpHelpers::SendRequest(runtime, edge, std::move(query));
+    return edge;
+}
+
 void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) {
     using NYql::NDq::TEvDqCompute::TEvState;
     using NYql::NDqProto::StatusIds;
@@ -39,13 +64,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
     const bool startsRemoteActors = outcome == ELateRemoteTaskStart::ComputeState
         || outcome == ELateRemoteTaskStart::StartResponse || legacyInternalError;
 
-    auto settings = TKikimrSettings().SetUseRealThreads(false).SetNodeCount(2);
-    auto* config = settings.AppConfig.MutableTableServiceConfig();
-    config->SetDqChannelVersion(channelVersion);
-    config->MutableResourceManager()->SetMaxNonParallelDataQueryTasksLimit(0);
-    config->MutableResourceManager()->SetMaxNonParallelTasksExecutionLimit(0);
-    config->MutableQueryLimits()->SetWaitCAStatsTimeoutMs(1000);
-    TKikimrRunner kikimr(settings);
+    TKikimrRunner kikimr(RemoteTaskSettings(channelVersion));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
     TActorId executer;
@@ -101,17 +120,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
     NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
     Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
 
-    auto edge = runtime.AllocateEdgeActor();
-    auto query = MakeHolder<TEvKqp::TEvQueryRequest>();
-    ActorIdToProto(edge, query->Record.MutableRequestActorId());
-    auto& request = *query->Record.MutableRequest();
-    request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-    request.SetDatabase("/Root");
-    request.SetQuery("SELECT COUNT(*) FROM `/Root/EightShard`;");
-    request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-    request.MutableTxControl()->set_commit_tx(true);
-    NDataShard::NKqpHelpers::SendRequest(runtime, edge, std::move(query));
+    const auto edge = StartDistributedCount(runtime);
 
     runtime.WaitFor("local compute actor and remote start request", [&] {
         return localComputeActor && !startRequests.empty();
@@ -228,6 +237,51 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
     Y_UNIT_TEST(LateRemoteTaskUndeliveredDuringShutdown) {
         TestLateRemoteTaskStart(2, ELateRemoteTaskStart::Undelivered);
+    }
+
+    Y_UNIT_TEST(LateRemoteTaskMixedStartReplyTriggersShutdown) {
+        TKikimrRunner kikimr(RemoteTaskSettings(2));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        TBlockEvents<TEvKqpNode::TEvStartKqpTasksRequest> starts(runtime, [](const auto& ev) {
+            return ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId();
+        });
+        const auto client = StartDistributedCount(runtime);
+        runtime.WaitFor("remote start request", [&] { return !starts.empty(); }, TDuration::Seconds(10));
+        const auto& request = starts.front();
+        const auto& tasks = request->Get()->Record.GetTasks();
+        UNIT_ASSERT_GT(tasks.size(), 1);
+
+        const auto executer = request->Sender;
+        const auto nodeIndex = request->GetRecipientRewrite().NodeId() - runtime.GetFirstNodeId();
+        const auto computeActor = runtime.AllocateEdgeActor(nodeIndex);
+        auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+        reply->Record.SetTxId(request->Get()->Record.GetTxId());
+        reply->Record.SetTaskStartOutcomeComplete(true);
+        auto* started = reply->Record.AddStartedTasks();
+        started->SetTaskId(tasks[0].GetId());
+        ActorIdToProto(computeActor, started->MutableActorId());
+        for (int i = 1; i < tasks.size(); ++i) {
+            auto* failed = reply->Record.AddNotStartedTasks();
+            failed->SetTaskId(tasks[i].GetId());
+            failed->SetReason(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
+            failed->SetRequestId(request->Cookie);
+        }
+        runtime.Send(new IEventHandle(executer, request->Recipient, reply.Release(), 0, request->Cookie), nodeIndex, true);
+
+        auto abort = runtime.GrabEdgeEventRethrow<TEvKqp::TEvAbortExecution>(computeActor, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(abort, "The executer must abort the actor from the mixed start reply");
+        UNIT_ASSERT_VALUES_EQUAL(abort->Sender, executer);
+        UNIT_ASSERT_EQUAL(abort->Get()->Record.GetStatusCode(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_C(!runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(client, TDuration::MilliSeconds(100)),
+            "The executer must wait for the started actor's final state");
+
+        auto state = MakeHolder<NYql::NDq::TEvDqCompute::TEvState>();
+        state->Record.SetTaskId(tasks[0].GetId());
+        state->Record.SetState(NYql::NDqProto::COMPUTE_STATE_FAILURE);
+        runtime.Send(new IEventHandle(executer, computeActor, state.Release()), nodeIndex, true);
+        auto result = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(client, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(result, "The executer waited for tasks that never started");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetYdbStatus(), Ydb::StatusIds::INTERNAL_ERROR);
     }
 
     /* Scenario:

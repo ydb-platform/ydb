@@ -446,7 +446,7 @@ private:
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
+                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
                 hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
@@ -473,6 +473,14 @@ private:
             }
         }
         ReportEventElapsedTime();
+    }
+
+    void HandleExecute(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
+        HandleStartKqpTasksResponse(ev);
+        if (CurrentStateFunc() == &TThis::WaitShutdownState) {
+            // A failed start can both initiate shutdown and report which tasks started.
+            HandleShutdown(ev);
+        }
     }
 
     void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {

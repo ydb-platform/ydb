@@ -143,9 +143,23 @@ message TEvReadLocalBaseResult {
     optional bytes Scheme = 5;
 }
 
+message TReadyFollower {
+    // Set by the leader. In a message from a follower its actor ID is the sender.
+    optional NActorsProto.TActorId ActorId = 1;
+    optional NActorsProto.TActorId UserActorId = 2;
+    optional uint32 FollowerId = 3;
+}
+
 message TEvFollowerAttach {
     optional fixed64 TabletId = 1;
     optional uint32 FollowerAttempt = 2;
+    optional TReadyFollower ReadyFollower = 3;
+}
+
+message TEvFollowerReady {
+    optional fixed64 TabletId = 1;
+    optional uint32 FollowerAttempt = 2;
+    optional TReadyFollower ReadyFollower = 3;
 }
 
 message TEvFollowerUpdate {
@@ -282,6 +296,7 @@ message TEvLeaseDropped {
 message TEvTabletStateSubscribe {
     optional fixed64 TabletId = 1;
     optional uint64 SeqNo = 2;
+    optional bool WatchFollowers = 3;
 }
 
 message TEvTabletStateUnsubscribe {
@@ -302,6 +317,8 @@ message TEvTabletStateUpdate {
     optional uint64 SeqNo = 2;
     optional EState State = 3;
     optional NActorsProto.TActorId UserActorId = 4;
+    // Ready follower announcements are additive.
+    repeated TReadyFollower ReadyFollowers = 5;
 }
 
 message TEvMoveData {

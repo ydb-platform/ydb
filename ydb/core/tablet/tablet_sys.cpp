@@ -46,8 +46,14 @@ void TTablet::NextFollowerAttempt() {
 void TTablet::SendFollowerAttach(const TActorId& leader) {
     FollowerInfo.KnownLeaderID = leader;
     FollowerInfo.LastCookie = ++LastInterconnectSubscribeCookie;
+    auto attach = MakeHolder<TEvTablet::TEvFollowerAttach>(TabletID(), FollowerInfo.FollowerAttempt);
+    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
+        auto* ready = attach->Record.MutableReadyFollower();
+        ActorIdToProto(UserTablet, ready->MutableUserActorId());
+        ready->SetFollowerId(FollowerId);
+    }
     Send(FollowerInfo.KnownLeaderID,
-        new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt),
+        attach.Release(),
         IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
         FollowerInfo.LastCookie);
 
@@ -631,6 +637,10 @@ TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnection
     followerInfo.InterconnectSession = {};
     followerInfo.LastCookie = -1;
     followerInfo.Unlink();
+    if (permanent) {
+        followerInfo.FollowerTablet = {};
+        followerInfo.TabletFollowerId = 0;
+    }
 
     auto moveToIgnore = [&]() {
         shouldEraseEntry = !followerInfo.PresentInList;
@@ -861,6 +871,36 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerAttach::TPtr &ev) {
 
     if (UserTablet)
         Send(UserTablet, new TEvTablet::TEvNewFollowerAttached(LeaderInfo.size()));
+
+    if (record.HasReadyFollower()) {
+        UpdateReadyFollower(followerInfo, record.GetReadyFollower());
+    }
+}
+
+void TTablet::HandleByLeader(TEvTablet::TEvFollowerReady::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+    auto* follower = LeaderInfo.FindPtr(ev->Sender);
+    if (record.GetTabletId() == TabletID() && follower && follower->FollowerAttempt == record.GetFollowerAttempt()) {
+        UpdateReadyFollower(*follower, record.GetReadyFollower());
+    }
+}
+
+void TTablet::UpdateReadyFollower(TLeaderInfo& follower, const NKikimrTabletBase::TReadyFollower& ready) {
+    const TActorId userActorId = ActorIdFromProto(ready.GetUserActorId());
+    const ui32 followerId = ready.GetFollowerId();
+    if (!userActorId || !followerId ||
+            (follower.FollowerTablet == userActorId && follower.TabletFollowerId == followerId)) {
+        return;
+    }
+    follower.FollowerTablet = userActorId;
+    follower.TabletFollowerId = followerId;
+    if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
+        for (const auto& [actorId, subscriber] : TabletStateSubscribers) {
+            if (subscriber.WatchFollowers) {
+                SendTabletStateUpdate(subscriber, NKikimrTabletBase::TEvTabletStateUpdate::StateActive, &follower);
+            }
+        }
+    }
 }
 
 void TTablet::HandleByLeader(TEvTablet::TEvFollowerGcAck::TPtr &ev) {
@@ -1167,6 +1207,10 @@ void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) {
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 
     Send(FollowerStStGuardian, new TEvTablet::TEvFollowerUpdateState(false, SelfId(), UserTablet));
+    if (FollowerInfo.KnownLeaderID) {
+        Send(FollowerInfo.KnownLeaderID,
+            new TEvTablet::TEvFollowerReady(TabletID(), FollowerInfo.FollowerAttempt, FollowerId, UserTablet));
+    }
     ReportTabletStateChange(TTabletStateInfo::Active, StateStorageInfo.KnownGeneration);
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
 }
@@ -2239,6 +2283,7 @@ void TTablet::Handle(TEvTablet::TEvTabletStateSubscribe::TPtr& ev) {
     }
     subscriber.Cookie = ev->Cookie;
     subscriber.SeqNo = msg->Record.GetSeqNo();
+    subscriber.WatchFollowers = msg->Record.GetWatchFollowers();
     subscriber.InterconnectSession = ev->InterconnectSession;
 
     if (subscriber.InterconnectSession) {
@@ -2267,8 +2312,26 @@ void TTablet::Handle(TEvTablet::TEvTabletStateUnsubscribe::TPtr& ev) {
     }
 }
 
-void TTablet::SendTabletStateUpdate(const TTabletStateSubscriber& subscriber, NKikimrTabletBase::TEvTabletStateUpdate::EState state) {
+void TTablet::SendTabletStateUpdate(const TTabletStateSubscriber& subscriber,
+        NKikimrTabletBase::TEvTabletStateUpdate::EState state, const TLeaderInfo* readyFollower) {
     auto replyMsg = MakeHolder<TEvTablet::TEvTabletStateUpdate>(TabletID(), subscriber.SeqNo, state, UserTablet);
+    if (state == NKikimrTabletBase::TEvTabletStateUpdate::StateActive && subscriber.WatchFollowers && Leader) {
+        auto addFollower = [&replyMsg](const TLeaderInfo& follower) {
+            if (follower.FollowerTablet && follower.SyncState != EFollowerSyncState::Ignore) {
+                auto* ready = replyMsg->Record.AddReadyFollowers();
+                ActorIdToProto(follower.FollowerId, ready->MutableActorId());
+                ActorIdToProto(follower.FollowerTablet, ready->MutableUserActorId());
+                ready->SetFollowerId(follower.TabletFollowerId);
+            }
+        };
+        if (readyFollower) {
+            addFollower(*readyFollower);
+        } else {
+            for (const auto& [actorId, follower] : LeaderInfo) {
+                addFollower(follower);
+            }
+        }
+    }
 
     SendViaSession(
         subscriber.InterconnectSession,

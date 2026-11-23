@@ -94,6 +94,7 @@ struct TEvTablet {
         EvFollowerListRefresh, // from guardian to leader
         EvReserved_00,
         EvFollowerGcAck, // from follower to leader
+        EvFollowerReady, // from follower to leader
 
         // from leader to follower
         EvFollowerUpdate = EvBoot + 2560,
@@ -584,6 +585,18 @@ struct TEvTablet {
         {
             Record.SetTabletId(tabletId);
             Record.SetFollowerAttempt(followerAttempt);
+        }
+    };
+
+    struct TEvFollowerReady : TEventPB<TEvFollowerReady, NKikimrTabletBase::TEvFollowerReady, EvFollowerReady> {
+        TEvFollowerReady() = default;
+
+        TEvFollowerReady(ui64 tabletId, ui32 followerAttempt, ui32 followerId, const TActorId& userTablet) {
+            Record.SetTabletId(tabletId);
+            Record.SetFollowerAttempt(followerAttempt);
+            auto* ready = Record.MutableReadyFollower();
+            ActorIdToProto(userTablet, ready->MutableUserActorId());
+            ready->SetFollowerId(followerId);
         }
     };
 

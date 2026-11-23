@@ -1545,28 +1545,44 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 7ul;", "[[2]]");
     }
 
-    // A DEFAULT expression reaches SchemeShard only through the internal CREATE TABLE path. ALTER
-    // travels as a public Ydb::Table::AlterTableRequest, which carries no column expressions
-    Y_UNIT_TEST(SetDefaultExprRejected) {
+    Y_UNIT_TEST(SetDefaultExpr) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL("v Uint64"));
 
-        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";",
-            "can only be defined in CREATE TABLE");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, v;", "[[2;[42u]]]");
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (3, 7ul);");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;[42u]];[3;[7u]]]");
+
+        const TString replacement = "RandomNumber(1) * 0ul + 9ul";
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << replacement << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), replacement);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (4) RETURNING k, v;", "[[4;[9u]]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;[42u]];[3;[7u]];[4;[9u]]]");
     }
 
-    Y_UNIT_TEST_TWIN(SetCoercedDefaultExprRejected, FeatureEnabled) {
+    Y_UNIT_TEST_TWIN(SetCoercedDefaultExpr, FeatureEnabled) {
         TTestFixture fixture(FeatureEnabled);
         fixture.Exec(DefaultExprDDL("v Int64"));
 
-        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";",
-            "can only be defined in CREATE TABLE");
-        const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT_C(!column.HasDefaultFromExpression() && !column.HasDefaultFromLiteral(),
-            column.ShortDebugString());
+        const TString query = TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";";
+        if (FeatureEnabled) {
+            fixture.Exec(query);
+            AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+            fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42]]]");
+            fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42]]]");
+        } else {
+            fixture.Rejects(query, "DEFAULT expressions are disabled");
+            const auto column = fixture.ColumnDesc("/Root/TestTable", "v");
+            UNIT_ASSERT_C(!column.HasDefaultFromExpression() && !column.HasDefaultFromLiteral(),
+                column.ShortDebugString());
+        }
     }
 
-    Y_UNIT_TEST(SetDefaultExprOnPrimaryKeyColumnRejected) {
+    Y_UNIT_TEST(SetDefaultExprOnPrimaryKeyColumn) {
         TTestFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE TestTable (
@@ -1576,11 +1592,14 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             );
         )");
 
-        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN id SET DEFAULT " << DefaultExpr << ";",
-            "can only be defined in CREATE TABLE");
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN id SET DEFAULT " << DefaultExpr << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "id"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (v) VALUES (7) RETURNING id, v;", "[[42u;[7]]]");
+        fixture.Exec("INSERT INTO TestTable (id, v) VALUES (8ul, 9);");
+        fixture.Check("SELECT id, v FROM TestTable ORDER BY id;", "[[8u;[9]];[42u;[7]]]");
     }
 
-    // Literal defaults are unaffected: they fit the public request
+    // Literal defaults retain their metadata kind when replacing an expression.
     Y_UNIT_TEST(SetLiteralDefaultOverExprColumn) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());

@@ -2695,14 +2695,57 @@ private:
 
                         const bool columnNotNull = column && (column->NotNull || column->SetNotNullInProgress);
 
-                        // ALTER cannot persist expression defaults. Keep nonconstant expressions
-                        // unevaluated so coercion cannot turn them into supported literals.
+                        // Fold constants first, preserving nonconstant SQL for expression defaults.
                         if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
                             alterColumnList.Ptr()->ChildRef(1) = std::move(expr);
                             ctx.Step.Repeat(TExprStep::ExprEval);
                         }, columnNotNull, ShouldPreserveDefaultExpression(defaultExpr)))
                         {
                             return *status;
+                        }
+
+                        if (!IsYqlNullExprNode(defaultExpr) && !IsLiteralDefaultValue(defaultExpr)) {
+                            if (!SessionCtx->Config().FeatureFlags.GetEnableDefaultFromExpression()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "DEFAULT expressions are disabled. Column: " << name));
+                                return TStatus::Error;
+                            }
+                            if (alterColumnList.Size() < 4 || !alterColumnList.Item(3).Maybe<TCoAtom>()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "DEFAULT expression SQL text is missing"));
+                                return TStatus::Error;
+                            }
+                            if (!column || !columnType) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "Cannot determine the type of column " << name));
+                                return TStatus::Error;
+                            }
+
+                            auto expressionColumn = *column;
+                            expressionColumn.DefaultExpression = TDefaultExpressionColumnInfo{};
+                            expressionColumn.DefaultExpression->ExprText = TString(alterColumnList.Item(3).Cast<TCoAtom>().Value());
+                            expressionColumn.DefaultExpression->Stored = true;
+                            expressionColumn.DefaultExpression->Writable = true;
+                            expressionColumn.SetDefaultFromExpression();
+                            const TString query = AssembleDefaultQuery(expressionColumn.DefaultExpression->ExprText);
+                            NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
+                                EKikimrQueryType::Query, TString(node.DataSink().Cluster()), query,
+                                SessionCtx->Config().GetYqlBindingsMode(), nullptr);
+                            settingsBuilder.SetFromConfig(SessionCtx->Config());
+
+                            auto lambda = CompileDefaultExpr(query, name, ctx, settingsBuilder, Types.Modules);
+                            const auto* emptyRowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+                            if (!lambda || !UpdateLambdaAllArgumentsTypes(lambda, {emptyRowType}, ctx)
+                                || !InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, Types))
+                            {
+                                return TStatus::Error;
+                            }
+
+                            const auto& targetType = columnNotNull ? RemoveOptionality(*columnType) : *columnType;
+                            if (auto status = ValidateColumnExprType(expressionColumn, targetType, *lambda, ctx, Types);
+                                status != TStatus::Ok)
+                            {
+                                return status;
+                            }
                         }
                     } else if (alterColumnAction == "dropDefault") {
                         auto* column = table->Metadata->Columns.FindPtr(name);

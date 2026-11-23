@@ -2429,18 +2429,19 @@ public:
                                 }
 
                                 if (!IsLiteralDefaultValue(defaultExpr)) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), TStringBuilder()
-                                        << "Cannot set a DEFAULT expression on the existing column "
-                                        << columnName.Value()
-                                        << ": a DEFAULT expression can only be defined in CREATE TABLE"));
-                                    return SyncError();
-                                }
-
-                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
-                                if (err) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
-                                    return SyncError();
+                                    YQL_ENSURE(alterColumnList.Size() >= 4);
+                                    alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
+                                    auto* expression = alter_columns->MutableDefaultFromExpression();
+                                    expression->SetExprText(TString(alterColumnList.Item(3).Cast<TCoAtom>().Value()));
+                                    expression->SetStored(true);
+                                    expression->SetWritable(true);
+                                } else {
+                                    alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                                    auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
+                                    if (err) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                        return SyncError();
+                                    }
                                 }
                             }
                         } else if (alterColumnAction == "dropDefault") {

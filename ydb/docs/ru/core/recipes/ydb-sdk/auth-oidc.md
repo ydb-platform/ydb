@@ -1,6 +1,6 @@
 # Аутентификация при помощи OIDC
 
-В этой статье показано, как подключить приложение к {{ ydb-short-name }} через [OIDC](../../concepts/glossary.md#oidc) с помощью C++ SDK: по секрету приложения, с готовым токеном доступа или по коду устройства.
+В этой статье показано, как подключить приложение к {{ ydb-short-name }} через [OIDC](../../concepts/glossary.md#oidc) с помощью SDK: по секрету приложения, с готовым токеном доступа или по коду устройства.
 
 Базовое подключение описано в рецепте [инициализации драйвера](init.md), а другие способы аутентификации перечислены в [обзоре](auth.md).
 
@@ -8,17 +8,19 @@
 
 Для каждого способа ниже показано создание драйвера с выбранным провайдером учётных данных. Дополнительно приведены [полный пример приложения](#client-application) и [реализация кеша токенов](#token-cache).
 
-В примерах `connectionString` содержит эндпоинт и путь базы данных, например `grpcs://ydb.example.com:2135/?database=/Root/mydb`. Параметр `issuer` содержит точный HTTPS-адрес издателя, например `https://idp.example.com/realms/ydb`. Получите `clientId`, секрет приложения или готовый токен средствами вашего окружения. Значения секретов не следует хранить в исходном коде.
-
-В примерах используется C++20. Функция `CreateOidcProviderFactory()` создаёт фабрику учётных данных выбранного режима, а `SetCredentialsProviderFactory()` подключает её к драйверу. `SetDiscoveryMode(NYdb::EDiscoveryMode::Async)` включает асинхронное обнаружение узлов базы данных; получение токенов у IdP выполняется отдельно.
+В примерах строка подключения содержит эндпоинт и путь базы данных, например `grpcs://ydb.example.com:2135/?database=/Root/mydb`. Параметр `issuer` содержит точный HTTPS-адрес издателя, например `https://idp.example.com/realms/ydb`. Получите идентификатор приложения, секрет приложения или готовый токен средствами вашего окружения. Значения секретов не следует хранить в исходном коде.
 
 ## Подключение с секретом приложения {#client-secret}
 
-Используйте этот способ, когда приложение подключается к базе данных от собственного имени без входа пользователя в браузере: например, серверный сервис или скрипт, запускаемый по расписанию. Задайте идентификатор и секрет зарегистрированного в IdP приложения в `TClientOidcConfig`. Параметр `clientSecret` содержит сам секрет зарегистрированного в IdP приложения, а не путь к файлу.
+Используйте этот способ, когда приложение подключается к базе данных от собственного имени без входа пользователя в браузере: например, серверный сервис или скрипт, запускаемый по расписанию.
 
 {% list tabs %}
 
 - C++
+
+  Задайте идентификатор и секрет зарегистрированного в IdP приложения в `TClientOidcConfig`. Параметр `clientSecret` содержит сам секрет зарегистрированного в IdP приложения, а не путь к файлу.
+
+  Функция `CreateOidcProviderFactory()` создаёт фабрику учётных данных выбранного режима, а `SetCredentialsProviderFactory()` подключает её к драйверу. `SetDiscoveryMode(NYdb::EDiscoveryMode::Async)` включает асинхронное обнаружение узлов базы данных; получение токенов у IdP выполняется отдельно.
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -54,11 +56,13 @@
 
 ## Подключение с готовым токеном {#static-token}
 
-Используйте этот способ, если приложение уже получило токен доступа от другого инструмента или компонента и самостоятельно отвечает за его замену после истечения срока действия. Передайте готовый токен через `TStaticOidcConfig`. Параметр `accessToken` содержит только значение токена, без префикса `Bearer` и разделяющего пробела. Необязательный `expiresAt` задаёт момент истечения срока действия токена типа `TInstant`.
+Используйте этот способ, если приложение уже получило токен доступа от другого инструмента или компонента и самостоятельно отвечает за его замену после истечения срока действия.
 
 {% list tabs %}
 
 - C++
+
+  Передайте готовый токен через `TStaticOidcConfig`. Параметр `accessToken` содержит только значение токена, без префикса `Bearer` и разделяющего пробела. Необязательный `expiresAt` задаёт момент истечения срока действия токена типа `TInstant`.
 
   ```cpp
   #include <ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
@@ -103,11 +107,13 @@
 
 ## Подключение по коду устройства {#device-code}
 
-Используйте этот способ, когда приложение должно подключиться от имени пользователя, который может подтвердить вход в браузере, в том числе на другом устройстве. Задайте `TDeviceOidcConfig` и обработчик `IAuthAcceptor`, который покажет ссылку и код.
+Используйте этот способ, когда приложение должно подключиться от имени пользователя, который может подтвердить вход в браузере, в том числе на другом устройстве.
 
 {% list tabs %}
 
 - C++
+
+  Задайте `TDeviceOidcConfig` и обработчик `IAuthAcceptor`, который покажет ссылку и код.
 
   Следующий обработчик пишет инструкции в стандартный поток ошибок, защищает вывод от одновременных вызовов и заменяет непечатные байты и байты вне диапазона ASCII символом `?`.
 
@@ -162,103 +168,115 @@
 
 ## Полный пример приложения с секретом {#client-application}
 
-Программа в следующем примере читает секрет из переменной окружения `APP_OIDC_CLIENT_SECRET` вызовом `std::getenv()`, создаёт драйвер и выполняет запрос `SELECT 1`. Имя этой переменной задано в коде примера; SDK не читает её автоматически. Аргументы программы: эндпоинт и путь базы данных, `issuer` и `client_id`. Секрет не передаётся аргументом командной строки.
+{% list tabs %}
 
-```cpp
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+- C++
 
-#include <cstdlib>
-#include <exception>
-#include <iostream>
+  Программа в следующем примере читает секрет из переменной окружения `APP_OIDC_CLIENT_SECRET` вызовом `std::getenv()`, создаёт драйвер и выполняет запрос `SELECT 1`. Имя этой переменной задано в коде примера; SDK не читает её автоматически. Аргументы программы: эндпоинт и путь базы данных, `issuer` и `client_id`. Секрет не передаётся аргументом командной строки.
 
-int main(int argc, char** argv) {
-    if (argc != 5) {
-        std::cerr << "Укажите эндпоинт, базу данных, issuer и client_id\n";
-        return 1;
-    }
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+  #include <ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 
-    const char* secret = std::getenv("APP_OIDC_CLIENT_SECRET");
-    if (secret == nullptr || *secret == '\0') {
-        std::cerr << "Не задана переменная APP_OIDC_CLIENT_SECRET\n";
-        return 1;
-    }
+  #include <cstdlib>
+  #include <exception>
+  #include <iostream>
 
-    try {
-        NYdb::NOidc::TOidcConfig oidc;
-        oidc.Issuer = argv[3];
-        oidc.FlowConfig = NYdb::NOidc::TClientOidcConfig{
-            .ClientId = argv[4],
-            .ClientSecret = secret,
-            .Scopes = {},
-        };
+  int main(int argc, char** argv) {
+      if (argc != 5) {
+          std::cerr << "Укажите эндпоинт, базу данных, issuer и client_id\n";
+          return 1;
+      }
 
-        auto factory = NYdb::NOidc::CreateOidcProviderFactory(oidc);
-        auto config = NYdb::TDriverConfig(argv[1])
-            .SetDatabase(argv[2])
-            .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .SetCredentialsProviderFactory(factory);
+      const char* secret = std::getenv("APP_OIDC_CLIENT_SECRET");
+      if (secret == nullptr || *secret == '\0') {
+          std::cerr << "Не задана переменная APP_OIDC_CLIENT_SECRET\n";
+          return 1;
+      }
 
-        NYdb::TDriver driver(config);
-        NYdb::NQuery::TQueryClient client(driver);
-        auto result = client.ExecuteQuery(
-            "SELECT 1", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        if (!result.IsSuccess()) {
-            std::cerr << result.GetIssues().ToString() << '\n';
-            return 1;
-        }
-        std::cout << "Запрос выполнен\n";
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-}
-```
+      try {
+          NYdb::NOidc::TOidcConfig oidc;
+          oidc.Issuer = argv[3];
+          oidc.FlowConfig = NYdb::NOidc::TClientOidcConfig{
+              .ClientId = argv[4],
+              .ClientSecret = secret,
+              .Scopes = {},
+          };
 
-`SetDiscoveryMode(NYdb::EDiscoveryMode::Async)` включает асинхронное обнаружение узлов базы данных. Оно отличается от OIDC Discovery, которое получает адреса IdP. `TQueryClient` выполняет запрос, `TTxControl::NoTx()` не задаёт явную транзакцию и оставляет её обработку неявным правилам {{ ydb-short-name }}, а `ExtractValueSync()` ожидает результат. Подробнее об управлении транзакциями см. [{#T}](tx-control.md).
+          auto factory = NYdb::NOidc::CreateOidcProviderFactory(oidc);
+          auto config = NYdb::TDriverConfig(argv[1])
+              .SetDatabase(argv[2])
+              .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
+              .SetCredentialsProviderFactory(factory);
 
-Программа использует синтаксис инициализации C++20. Например, после сборки в исполняемый файл `oidc-client` и передачи секрета через окружение её можно запустить так:
+          NYdb::TDriver driver(config);
+          NYdb::NQuery::TQueryClient client(driver);
+          auto result = client.ExecuteQuery(
+              "SELECT 1", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+          if (!result.IsSuccess()) {
+              std::cerr << result.GetIssues().ToString() << '\n';
+              return 1;
+          }
+          std::cout << "Запрос выполнен\n";
+      } catch (const std::exception& error) {
+          std::cerr << error.what() << '\n';
+          return 1;
+      }
+  }
+  ```
 
-```bash
-./oidc-client grpcs://ydb.example.com:2135 /Root/mydb \
-  https://idp.example.com/realms/ydb ydb-service
-```
+  `SetDiscoveryMode(NYdb::EDiscoveryMode::Async)` включает асинхронное обнаружение узлов базы данных. Оно отличается от OIDC Discovery, которое получает адреса IdP. `TQueryClient` выполняет запрос, `TTxControl::NoTx()` не задаёт явную транзакцию и оставляет её обработку неявным правилам {{ ydb-short-name }}, а `ExtractValueSync()` ожидает результат. Подробнее об управлении транзакциями см. [{#T}](tx-control.md).
 
-В примере заданы условные адреса базы данных и IdP, а также идентификатор `ydb-service`; замените их параметрами вашей установки. Пустой список `Scopes` всё равно приводит к запросу `openid`. Получение и последующее обновление токена выполняются провайдером автоматически по [правилам обновления токенов](../../reference/ydb-sdk/auth.md#oidc-refresh).
+  Программа использует синтаксис инициализации C++20. Например, после сборки в исполняемый файл `oidc-client` и передачи секрета через окружение её можно запустить так:
+
+  ```bash
+  ./oidc-client grpcs://ydb.example.com:2135 /Root/mydb \
+    https://idp.example.com/realms/ydb ydb-service
+  ```
+
+  В примере заданы условные адреса базы данных и IdP, а также идентификатор `ydb-service`; замените их параметрами вашей установки. Пустой список `Scopes` всё равно приводит к запросу `openid`. Получение и последующее обновление токена выполняются провайдером автоматически по [правилам обновления токенов](../../reference/ydb-sdk/auth.md#oidc-refresh).
+
+{% endlist %}
 
 ## Кеш токенов в памяти {#token-cache}
 
 В режимах секрета приложения и кода устройства провайдер сам хранит полученные токены в памяти и обновляет их. Для запросов через один работающий провайдер дополнительный кеш не нужен.
 
-Кеш `ITokenCacher` полезен, если приложение создаёт новый провайдер и хочет использовать токены, полученные предыдущим, вместо нового входа у IdP. Например, приложение может сохранить объект кеша при пересоздании фабрики и драйвера. SDK сам вызывает методы чтения и записи кеша; приложению не нужно извлекать и передавать токен при каждом запросе.
+Кеш полезен, если приложение создаёт новый провайдер и хочет использовать токены, полученные предыдущим, вместо нового входа у IdP. Например, приложение может сохранить объект кеша при пересоздании фабрики и драйвера. SDK сам вызывает методы чтения и записи кеша; приложению не нужно извлекать и передавать токен при каждом запросе.
 
-Ниже показан кеш в памяти. Он позволяет передать токены новому провайдеру в том же процессе, пока объект кеша существует:
+{% list tabs %}
 
-```cpp
-#include <ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+- C++
 
-#include <mutex>
+  Ниже показан кеш в памяти. Он позволяет передать токены новому провайдеру в том же процессе, пока объект кеша существует:
 
-class TMemoryTokenCacher final : public NYdb::NOidc::ITokenCacher {
-public:
-    std::optional<NYdb::NOidc::TTokenCache> Read() const override {
-        std::lock_guard<std::mutex> guard(Mutex);
-        return Tokens;
-    }
+  ```cpp
+  #include <ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 
-    void Write(const NYdb::NOidc::TTokenCache& tokens) override {
-        std::lock_guard<std::mutex> guard(Mutex);
-        Tokens = tokens;
-    }
+  #include <mutex>
 
-private:
-    mutable std::mutex Mutex;
-    std::optional<NYdb::NOidc::TTokenCache> Tokens;
-};
-```
+  class TMemoryTokenCacher final : public NYdb::NOidc::ITokenCacher {
+  public:
+      std::optional<NYdb::NOidc::TTokenCache> Read() const override {
+          std::lock_guard<std::mutex> guard(Mutex);
+          return Tokens;
+      }
 
-Создайте объект кеша, сохраните его `shared_ptr` в приложении и передайте в `oidc.Cacher(...)` до создания фабрики. При пересоздании фабрики и драйвера передайте тот же объект в новую конфигурацию. Используйте его только для тех же настроек IdP, приложения и пользовательской сессии.
+      void Write(const NYdb::NOidc::TTokenCache& tokens) override {
+          std::lock_guard<std::mutex> guard(Mutex);
+          Tokens = tokens;
+      }
 
-Такой кеш не сохраняет токены после завершения процесса. Чтобы повторно использовать их при следующем запуске приложения, нужна реализация `ITokenCacher` с постоянным хранилищем. Общий кеш не предотвращает одновременный вход нескольких провайдеров и не координирует обновление токенов между ними.
+  private:
+      mutable std::mutex Mutex;
+      std::optional<NYdb::NOidc::TTokenCache> Tokens;
+  };
+  ```
 
-Требования к потокобезопасности и обработке ошибок описаны в [контракте](../../reference/ydb-sdk/auth.md#oidc-cacher) `ITokenCacher`.
+  Создайте объект кеша, сохраните его `shared_ptr` в приложении и передайте в `oidc.Cacher(...)` до создания фабрики. При пересоздании фабрики и драйвера передайте тот же объект в новую конфигурацию. Используйте его только для тех же настроек IdP, приложения и пользовательской сессии.
+
+{% endlist %}
+
+Такой кеш не сохраняет токены после завершения процесса. Чтобы повторно использовать их при следующем запуске приложения, нужен кеш с постоянным хранилищем. Общий кеш не предотвращает одновременный вход нескольких провайдеров и не координирует обновление токенов между ними.
+
+Требования к потокобезопасности и обработке ошибок описаны в [справочнике SDK](../../reference/ydb-sdk/auth.md#oidc-cacher).

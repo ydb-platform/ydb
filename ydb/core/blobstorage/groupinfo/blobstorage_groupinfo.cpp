@@ -1,6 +1,7 @@
 #include "blobstorage_groupinfo.h"
 #include "blobstorage_groupinfo_blobmap.h"
 #include "blobstorage_groupinfo_iter.h"
+#include "blobstorage_groupinfo_mirror3dc_write_quorum.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
 #include "blobstorage_groupinfo_data_check.h"
@@ -215,6 +216,11 @@ public:
 };
 
 class TQuorumCheckerMirror3dc : public TQuorumCheckerBase {
+    bool CheckReadFailModelForGroup(const TBlobStorageGroupInfo& info,
+            const TBlobStorageGroupInfo::TGroupVDisks& failedGroupDisks) const override {
+        return TMirror3dcWriteQuorumChecker::CheckReadFailModelForGroup(info, failedGroupDisks);
+    }
+
     static bool CheckFailModel(ui32 num1, ui32 num2) {
         return num1 <= 2 && num2 <= 1;
     }

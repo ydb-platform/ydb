@@ -170,6 +170,10 @@ public:
         virtual ~IQuorumChecker() = default;
         virtual bool CheckFailModelForSubgroup(const TSubgroupVDisks& failedSubgroupDisks) const = 0;
         virtual bool CheckFailModelForGroup(const TGroupVDisks& failedGroupDisks) const = 0;
+        // The topology can be shared by several generations with different read guarantees.
+        virtual bool CheckReadFailModelForGroup(const TBlobStorageGroupInfo&, const TGroupVDisks& failedGroupDisks) const {
+            return CheckFailModelForGroup(failedGroupDisks);
+        }
         virtual bool CheckFailModelForGroupDomains(const TGroupFailDomains& failedDomains) const = 0;
         virtual bool CheckQuorumForSubgroup(const TSubgroupVDisks& subgroupDisks) const = 0;
         virtual bool CheckQuorumForGroup(const TGroupVDisks& groupDisks) const = 0;

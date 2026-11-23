@@ -1,6 +1,5 @@
 #include "blob_recovery_impl.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
@@ -72,9 +71,7 @@ namespace NKikimr {
                 connected |= {&Info->GetTopology(), vdiskId};
             }
         }
-        IsConnected = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-            ? TMirror3dcWriteQuorumChecker::CheckReadFailModelForGroup(*Info, ~connected)
-            : Info->GetQuorumChecker().CheckFailModelForGroup(~connected);
+        IsConnected = Info->GetQuorumChecker().CheckReadFailModelForGroup(*Info, ~connected);
         if (IsConnected) {
             SendPendingQueries();
         }

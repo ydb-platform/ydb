@@ -3,6 +3,8 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
+#include <algorithm>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -842,6 +844,12 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
             } else if (minActivePartitions == 0) {
                 minActivePartitions = 1;
             }
+            if (minActivePartitions > Max<ui32>()) {
+                // Internal fields are uint32, a larger value would silently truncate.
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "min_active_partitions must not exceed " << Max<ui32>();
+                return false;
+            }
             op->SetTopicPartitions(minActivePartitions);
 
             if (add.topic_partitioning_settings().has_auto_partitioning_settings()) {
@@ -855,7 +863,17 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
                     error = "Topic max active partitions count must be positive";
                     return false;
                 } else if (maxActivePartitions == 0) {
-                    maxActivePartitions = 50;
+                    // Unset max keeps the historical ceiling of 50, but never
+                    // below the requested min. The effective value is
+                    // materialized on the wire so older schemeshards keep
+                    // accepting the request during a rolling upgrade.
+                    maxActivePartitions = std::max<i64>(minActivePartitions, 50);
+                }
+                if (maxActivePartitions > Max<ui32>()) {
+                    // Internal fields are uint32, a larger value would silently truncate.
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "max_active_partitions must not exceed " << Max<ui32>();
+                    return false;
                 }
                 op->SetMaxPartitionCount(maxActivePartitions);
             }

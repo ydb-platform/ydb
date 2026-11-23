@@ -19,13 +19,16 @@ class TestStaticRecovery(TestCase):
     def test_unconfirmed_state_stops_before_writing_and_restarts_nodes(self):
         self.check_recovery(group_state="DC_FAILURE_INV2_PENDING", rejected=True)
 
+    def test_recovery_uses_configured_pdisk_paths(self):
+        self.check_recovery(custom_paths=True)
+
     def test_state_storage_two_active_datacenters(self):
         self.check_recovery(["dc1", "dc2"])
 
-    def check_recovery(self, state_dcs=None, group_state="DC_FAILURE_INV1", rejected=False):
+    def check_recovery(self, state_dcs=None, group_state="DC_FAILURE_INV1", rejected=False, custom_paths=False):
         inventory = {}
         nodes, disks, rings = [], [], []
-        records, states = {}, {}
+        records, states, paths_by_dc = {}, {}, {}
         for dc in range(1, 4):
             domains = []
             for node in range(1, 4):
@@ -33,12 +36,17 @@ class TestStaticRecovery(TestCase):
                 inventory[unit] = {"dc": f"dc{dc}", "node": node}
                 states[unit] = "active" if (dc == 1 or state_dcs and dc == 2 and node == 1) else "inactive"
                 path = f"/dev/mapper/ydb_dc{dc}_node{node}_pdisk"
+                if custom_paths:
+                    path = f"/dev/nvme{dc}n1p{node}"
+                    inventory[unit]["pdisk"] = path
+                paths_by_dc.setdefault(f"dc{dc}", []).append(path)
                 location = {"NodeID": dc * 10 + node, "PDiskID": 1}
                 disks.append({**location, "Path": path})
                 nodes.append({"NodeId": location["NodeID"], "Location": {"DataCenter": f"dc{dc}"}})
                 domains.append({"VDiskLocations": [location]})
                 records[path] = None
             rings.append({"State": "EXCLUDED" if dc == 3 else "INCLUDED", "FailDomains": domains})
+        selected_paths = {p for dc in state_dcs or ["dc1"] for p in paths_by_dc[dc]}
         initial_states = states.copy()
         group = {"GroupID": 0, "Mirror3dcState": group_state, "Rings": rings}
         source = {
@@ -72,7 +80,7 @@ class TestStaticRecovery(TestCase):
                 self.assertEqual(args[3:], state_dcs or ["dc2", "dc1"])
                 output = json.dumps(target)
             elif args[5] == "read":
-                self.assertTrue(any(dc in args[-1] for dc in state_dcs or ["dc1"]))
+                self.assertIn(args[-1], selected_paths)
                 output = json.dumps(records[args[-1]])
             else:
                 self.assertEqual(args[5], "write")
@@ -93,7 +101,7 @@ class TestStaticRecovery(TestCase):
                 self.assertEqual(states, initial_states)
                 self.assertFalse((archive / "pending").exists())
                 return
-            path = "/dev/mapper/ydb_dc1_node3_pdisk"
+            path = paths_by_dc["dc1"][2]
             records[path] = {"CommittedStorageConfig": {**source["CommittedStorageConfig"], "Generation": "4"}}
             with self.assertRaisesRegex(ValueError, "diff -q"):
                 static_recovery.run_recovery(
@@ -116,6 +124,12 @@ class TestStaticRecovery(TestCase):
             self.assertEqual(progress[-1].count("$ diff -q "), 4 if state_dcs else 2)
             self.assertEqual(progress[-1].count(diff.rstrip()), 1)
             self.assertEqual(json.loads((pending / "target.json").read_text()), target)
+            if custom_paths:
+                unit = "ydb_dc1_node1.service"
+                with patch.dict(inventory[unit], pdisk="/dev/another-disk"):
+                    with self.assertRaisesRegex(ValueError, "Пути PDisk изменились"):
+                        static_recovery.run_recovery("dc1", inventory, "ydbd", archive, progress=progress.append)
+                self.assertEqual(len(writes), 2)
             static_recovery.run_recovery(
                 "dc1", inventory, "ydbd", archive, progress=progress.append, state_dcs=state_dcs
             )
@@ -123,6 +137,6 @@ class TestStaticRecovery(TestCase):
             self.assertFalse((archive / "pending").exists())
             self.assertEqual(writes.count(writes[0]), 1)
             for path, record in records.items():
-                self.assertEqual(record, target if any(dc in path for dc in state_dcs or ["dc1"]) else source)
+                self.assertEqual(record, target if path in selected_paths else source)
             for unit, state in states.items():
                 self.assertEqual(state, initial_states[unit])

@@ -68,10 +68,15 @@ def run_recovery(dc, inventory, ydbd, archive, cancel=None, progress=None, state
         "Требуется по три ноды в каждом выбранном DC.",
     )
     units = sorted(u for u, h in inventory.items() if h["dc"] in selected)
-    paths = {u: Path("/dev/mapper") / (u[: -len(".service")] + "_pdisk") for u in units}
+    legacy_paths = {u: "/dev/mapper/" + u.removesuffix(".service") + "_pdisk" for u in units}
+    disk_paths = {u: inventory[u].get("pdisk", legacy_paths[u]) for u in units}
+    paths = {}
     devices = {}
-    for u, path in paths.items():
+    for u, value in disk_paths.items():
+        require(isinstance(value, str) and Path(value).is_absolute(), f"Для {u} нужен абсолютный путь PDisk.")
+        path = Path(value)
         require(path.is_block_device(), f"Устройство {path} недоступно.")
+        paths[u] = path
         devices.setdefault(inventory[u]["dc"], set()).add(path.resolve())
     require(
         len({p.resolve() for p in paths.values()}) == len(units), "Пути PDisk должны указывать на разные устройства."
@@ -121,6 +126,7 @@ def run_recovery(dc, inventory, ydbd, archive, cancel=None, progress=None, state
         require(
             operation["mode"] == mode and operation["datacenters"] == selected, "Продолжите ранее начатую операцию."
         )
+        require(operation.get("pdisks", legacy_paths) == disk_paths, "Пути PDisk изменились после начала операции.")
         restart = operation["restart"]
         require(restart and set(restart) <= set(units), "Некорректный список сервисов в архиве.")
     else:
@@ -137,7 +143,9 @@ def run_recovery(dc, inventory, ydbd, archive, cancel=None, progress=None, state
             f.write(",".join(selected))
             f.flush()
             os.fsync(f.fileno())
-        save(folder / "operation.json", {"mode": mode, "datacenters": selected, "restart": restart})
+        save(
+            folder / "operation.json", {"mode": mode, "datacenters": selected, "restart": restart, "pdisks": disk_paths}
+        )
         sync_dir(folder)
         pending.symlink_to(folder.resolve())
         sync_dir(archive)

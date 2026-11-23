@@ -81,6 +81,11 @@ class AdminServer(ThreadingHTTPServer):
         self.command = cli(endpoint, database)
         inventory = os.environ.get("DC_ADMIN_NODES")
         self.nodes = json.loads(Path(inventory).read_text()) if inventory else {}
+        for node in self.nodes.values():
+            if "pdisk" in node:
+                unit = node["unit"].removesuffix(".service") + ".service"
+                if unit in self.host_units:
+                    self.host_units[unit]["pdisk"] = node["pdisk"]
         self.monitor_urls = [f"http://[::1]:{node['mon']}/" for node in self.nodes.values()] or [monitoring_url]
         self.storage = StorageViewer(monitoring_url, self.monitor_urls)
         self.command += ["-y"]
@@ -192,7 +197,9 @@ class AdminHandler(BaseHTTPRequestHandler):
                     properties = dict(line.split("=", 1) for line in block.splitlines() if "=" in line)
                     by_unit[properties.get("Id")] = properties.get("ActiveState")
                 for unit, location in self.server.host_units.items():
-                    hosts.append({**location, "unit": unit, "state": by_unit.get(unit)})
+                    hosts.append(
+                        {"dc": location["dc"], "node": location["node"], "unit": unit, "state": by_unit.get(unit)}
+                    )
             archive = self.server.recovery_archive
             pending_dc = None
             pending_operation = None

@@ -133,6 +133,33 @@ class TestDataCenterAdmin(unittest.TestCase):
                     self.assertEqual(shlex.split(result["command"]), ["sudo", "-n", "systemctl", action, unit])
                     self.assertEqual(run.call_args.args[0], shlex.split(result["command"]))
 
+    def test_static_recovery_uses_server_node_manifest(self):
+        unit = "ydb_zone-a_node1.service"
+        manifest = self.cli.parent / "nodes.json"
+        nodes = {
+            "1": {
+                "unit": unit.removesuffix(".service"),
+                "dc": "zone-a",
+                "pdisk": "/dev/test-pdisk",
+                "mon": 1234,
+                "grpc": 0,
+            }
+        }
+        manifest.write_text(json.dumps(nodes))
+        env = {"DC_ADMIN_NODES": str(manifest), "DC_ADMIN_STATIC_RECOVERY_DIR": str(self.cli.parent / "archive")}
+        with patch.dict(server.os.environ, env), patch.object(Path, "glob", return_value=[Path(unit)]):
+            self.start_server()
+        headers = {"Content-Type": "application/json"}
+        with patch.object(server, "run_recovery", return_value={"output": "", "exitCode": 0}) as recover:
+            status, _ = self.request(
+                "POST", "/api/static-recovery", {"datacenter": "zone-a", "pdisk": "/dev/other"}, headers
+            )
+            self.assertEqual(status, 400)
+            recover.assert_not_called()
+            status, _ = self.request("POST", "/api/static-recovery", {"datacenter": "zone-a"}, headers)
+            self.assertEqual(status, 200)
+            self.assertEqual(recover.call_args.args[1][unit]["pdisk"], "/dev/test-pdisk")
+
     def test_host_action_targets_all_units_in_one_dc(self):
         units = [Path(f"ydb_zone-{dc}_node{node}.service") for dc in ("a", "b") for node in (1, 2)]
         with patch.object(Path, "glob", return_value=units):

@@ -247,6 +247,44 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
 
+    Y_UNIT_TEST(ColdTierIndexPlacementSurvivesDisablingBTree) {
+        TEnv env;
+        auto& flags = env.Env.GetAppData().FeatureFlags;
+        flags.SetEnableLocalDBFlatIndex(true);
+        flags.SetEnableLocalDBBtreeIndexV2(false);
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter().SetFamilyIndexPlacement(TableId, ColdTier, false, false);
+            return true;
+        });
+        env.Enable();
+
+        const TRowVersion oldVersion(1, 10);
+        env.Write({{1, 0, "old", 0, oldVersion}});
+        const auto mixed = env.FlushPart({{1, 0, "new", 0, TRowVersion(2, 20)}});
+        const auto checkPlacement = [](const NTable::TPartView& part) {
+            UNIT_ASSERT_VALUES_EQUAL(ui32(part->GetSlotChannel(part->DescriptorSlot())), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(part->GetDataChannel({})), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(part->IndexSlot({}), part->DataSlot({}));
+        };
+        checkPlacement(mixed);
+        UNIT_ASSERT(mixed->IndexPages.HasFlat() && mixed->IndexPages.HasBTree());
+
+        flags.SetEnableLocalDBBtreeIndex(false);
+        env.Restart();
+        const auto restored = env.Parts();
+        UNIT_ASSERT_VALUES_EQUAL(restored.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(restored.front()->Label, mixed->Label);
+        checkPlacement(restored.front());
+        UNIT_ASSERT(restored.front()->IndexPages.HasFlat() && !restored.front()->IndexPages.HasBTree());
+        env.Read(1, "old", oldVersion);
+        env.Read(1, "new");
+
+        const auto flat = env.FlushPart({{2, 0, "flat", 0, TRowVersion(3, 30)}});
+        checkPlacement(flat);
+        UNIT_ASSERT(flat->IndexPages.HasFlat() && !flat->IndexPages.HasBTree());
+        env.Read(2, "flat");
+    }
+
     Y_UNIT_TEST(RegularTierFinalizationKeepsErasesForOtherTierFinals) {
         for (ui32 tier : {0u, ColdTier, ArchiveTier}) {
             TEnv env;

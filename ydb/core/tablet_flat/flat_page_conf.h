@@ -104,7 +104,7 @@ namespace NPage {
         IKeySpace* UnderlayMask = nullptr;
         ISplitKeys* SplitKeys = nullptr;
         TRowVersion MinRowVersion = TRowVersion::Min();
-        TPartLayout Layout;             /* Page collections of written parts, needs b-tree index only when separate */
+        TPartLayout Layout;             /* Placement of descriptor, data and index pages in page collections */
 
         TVector<TGroupConf> Groups;
 

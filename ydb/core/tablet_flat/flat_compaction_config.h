@@ -168,9 +168,6 @@ namespace NKikimr::NTabletFlatExecutor {
             if (NWriter::ApplyDescriptorChannel(output.Layout, output.Writer, descriptorChannel)) {
                 addChannel(descriptorChannel);
             }
-            Y_ENSURE(output.Layout.Layout.SeparateDescriptorCollection
-                    || (output.Layout.Layout.KeyIndexInDescriptor && output.Layout.Layout.GroupIndexesInDescriptor),
-                "Compaction output index placement requires a separate descriptor collection");
         }
     }
 

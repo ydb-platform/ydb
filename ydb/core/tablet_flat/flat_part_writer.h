@@ -63,14 +63,9 @@ namespace NTable {
         {
             Y_ENSURE(!(conf.WriteFlatIndex && conf.WriteBTreeIndexV2),
                      "V2 b-tree index replaces the flat index, can't write both");
-            if (conf.Layout.SeparateDescriptorCollection) {
-                // Sticky flat index pages would be loaded from page collections in other channels on every part load
-                Y_ENSURE(WriteBTreeIndex && !WriteFlatIndex,
-                    "Separate descriptor page collection requires b-tree index only");
-            } else {
-                Y_ENSURE(conf.Layout.KeyIndexInDescriptor && conf.Layout.GroupIndexesInDescriptor,
-                    "Indexes out of the descriptor require a separate descriptor page collection");
-            }
+            Y_ENSURE(conf.Layout.SeparateDescriptorCollection
+                    || (conf.Layout.KeyIndexInDescriptor && conf.Layout.GroupIndexesInDescriptor),
+                "Indexes out of the descriptor require a separate descriptor page collection");
             for (ui32 group : xrange(conf.Groups.size())) {
                 Groups.emplace_back(scheme, conf, tags, NPage::TGroupId(group), Slots);
                 Histories.emplace_back(scheme, conf, tags, NPage::TGroupId(group, true), Slots);

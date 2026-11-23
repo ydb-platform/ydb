@@ -973,7 +973,7 @@ namespace NTabletFlatExecutor {
                     std::move(resultingPageCollections));
 
                 // do not preload index as it may be already offloaded
-                auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
+                auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false, .PreferBTreeIndex = true});
 
                 if (Y_UNLIKELY(fetch)) {
                     TStringBuilder error;

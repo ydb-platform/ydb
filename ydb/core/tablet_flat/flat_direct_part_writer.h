@@ -301,7 +301,7 @@ namespace NTabletFlatExecutor {
                 // Pass pre-built collections so the shared cache sees active refs for the written pages.
                 NTable::TLoader loader(std::move(parts), std::move(pageCollections));
 
-                auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
+                auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false, .PreferBTreeIndex = true});
                 Y_ENSURE(!fetch, "Just written part needs to load page collection pages");
 
                 result->Parts.push_back(loader.Result());

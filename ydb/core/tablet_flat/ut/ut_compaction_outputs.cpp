@@ -772,25 +772,6 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
         outputs.Start(*env.RowLayout);
     }
 
-    Y_UNIT_TEST(TierAwareSupportsBTreeV2WithOrWithoutShadow) {
-        for (bool shadow : {false, true}) {
-            TOutputConfigFixture env;
-            env.Settings.WriteBTreeIndexV1 = shadow;
-            env.Settings.WriteBTreeIndexV2 = true;
-            TCompactCfg conf(MakeHolder<TCompactionParams>());
-            conf.Params->Mode = TCompactionParams::EMode::TierAware;
-            env.Prepare(conf);
-            for (const auto& output : conf.Outputs) {
-                UNIT_ASSERT(!output.Layout.WriteFlatIndex);
-                UNIT_ASSERT_VALUES_EQUAL(output.Layout.WriteBTreeIndexV1, shadow);
-                UNIT_ASSERT(output.Layout.WriteBTreeIndexV2);
-            }
-            TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
-                MakeHolder<TDefaultCompactionRouter>());
-            outputs.Start(*env.RowLayout);
-        }
-    }
-
     Y_UNIT_TEST(RegularDefaultSupportsLegacyLayoutWithoutBTree) {
         TOutputConfigFixture env;
         env.Settings.WriteBTreeIndexV1 = false;
@@ -818,45 +799,58 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
         cold.Room = TScheme::DefaultRoom;
         cold.KeyIndexInDescriptor = false;
 
-        TCompactCfg conf(MakeHolder<TCompactionParams>());
-        conf.Params->Mode = TCompactionParams::EMode::TierAware;
-        env.Prepare(conf);
+        struct TIndexMode {
+            bool Flat = false;
+            bool V1 = false;
+            bool V2 = false;
+        };
+        constexpr TIndexMode modes[] = {
+            {.Flat = true},
+            {.Flat = true, .V1 = true},
+            {.V1 = true},
+            {.Flat = true, .V2 = true},
+            {.Flat = true, .V1 = true, .V2 = true},
+        };
+        for (const auto mode : modes) {
+            env.Settings.WriteFlatIndex = mode.Flat;
+            env.Settings.WriteBTreeIndexV1 = mode.V1;
+            env.Settings.WriteBTreeIndexV2 = mode.V2;
+            TCompactCfg conf(MakeHolder<TCompactionParams>());
+            conf.Params->Mode = TCompactionParams::EMode::TierAware;
+            env.Prepare(conf);
 
-        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 3);
-        UNIT_ASSERT(!conf.Outputs[0].Layout.Layout.SeparateDescriptorCollection);
-        const auto& output = conf.Outputs[1];
-        UNIT_ASSERT_VALUES_EQUAL(output.TierId, TOutputConfigFixture::ColdTier);
-        UNIT_ASSERT(output.Layout.Layout.SeparateDescriptorCollection);
-        UNIT_ASSERT(!output.Layout.Layout.KeyIndexInDescriptor);
-        UNIT_ASSERT(!output.Layout.Layout.GroupIndexesInDescriptor);
-        UNIT_ASSERT(!output.Layout.WriteFlatIndex);
+            UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 3);
+            UNIT_ASSERT(!conf.Outputs[0].Layout.Layout.SeparateDescriptorCollection);
+            for (const auto& output : conf.Outputs) {
+                UNIT_ASSERT_VALUES_EQUAL(output.Layout.WriteFlatIndex, mode.Flat && !mode.V2);
+                UNIT_ASSERT_VALUES_EQUAL(output.Layout.WriteBTreeIndexV1, mode.V1);
+                UNIT_ASSERT_VALUES_EQUAL(output.Layout.WriteBTreeIndexV2, mode.V2);
+                UNIT_ASSERT_VALUES_EQUAL(output.Writer.StickyFlatIndex, !mode.V1 && !mode.V2);
+            }
 
-        const TPartSlots slots(output.Layout.Groups.size(), output.Layout.Layout);
-        UNIT_ASSERT_VALUES_EQUAL(output.Writer.Groups.size(), slots.SlotsCount());
-        const auto descriptorSlot = slots.DescriptorSlot();
-        const auto channel = env.Table.Rooms.at(TScheme::DefaultRoom).Main;
-        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[descriptorSlot].Channel), ui32(channel));
-        for (ui32 group = 0; group < output.Layout.Groups.size(); ++group) {
-            const NPage::TGroupId groupId(group);
-            const auto dataSlot = slots.DataSlot(groupId);
-            UNIT_ASSERT_UNEQUAL(dataSlot, descriptorSlot);
-            UNIT_ASSERT_VALUES_EQUAL(slots.IndexSlot(groupId), dataSlot);
-            UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[dataSlot].Channel), ui32(channel));
+            const auto& output = conf.Outputs[1];
+            UNIT_ASSERT_VALUES_EQUAL(output.TierId, TOutputConfigFixture::ColdTier);
+            UNIT_ASSERT(output.Layout.Layout.SeparateDescriptorCollection);
+            UNIT_ASSERT(!output.Layout.Layout.KeyIndexInDescriptor);
+            UNIT_ASSERT(!output.Layout.Layout.GroupIndexesInDescriptor);
+            const TPartSlots slots(output.Layout.Groups.size(), output.Layout.Layout);
+            UNIT_ASSERT_VALUES_EQUAL(output.Writer.Groups.size(), slots.SlotsCount());
+            const auto channel = env.Table.Rooms.at(TScheme::DefaultRoom).Main;
+            UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[slots.DescriptorSlot()].Channel), ui32(channel));
+            for (ui32 group = 0; group < output.Layout.Groups.size(); ++group) {
+                const NPage::TGroupId groupId(group);
+                const auto dataSlot = slots.DataSlot(groupId);
+                UNIT_ASSERT_UNEQUAL(dataSlot, slots.DescriptorSlot());
+                UNIT_ASSERT_VALUES_EQUAL(slots.IndexSlot(groupId), dataSlot);
+                UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[dataSlot].Channel), ui32(channel));
+            }
+
+            TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+                MakeHolder<TDefaultCompactionRouter>());
+            outputs.Start(*env.RowLayout);
+            TWriteStats stats;
+            UNIT_ASSERT(outputs.Finish(stats).empty());
         }
-
-        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
-            MakeHolder<TDefaultCompactionRouter>());
-        outputs.Start(*env.RowLayout);
-        TWriteStats stats;
-        UNIT_ASSERT(outputs.Finish(stats).empty());
-    }
-
-    Y_UNIT_TEST(IndexPlacementRequiresBTree) {
-        TOutputConfigFixture env;
-        env.Settings.WriteBTreeIndexV1 = false;
-        TCompactCfg conf(MakeHolder<TCompactionParams>());
-        conf.Params->TierId = TOutputConfigFixture::ColdTier;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "requires a separate descriptor collection");
     }
 
     Y_UNIT_TEST(TierAwareFulltextIsRejected) {
@@ -1322,6 +1316,39 @@ Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
 }
 
 Y_UNIT_TEST_SUITE(TCompactionScanOutputsTest) {
+    Y_UNIT_TEST(MixedIndexTierOutputSurvivesDisablingBTreeV1DuringCompaction) {
+        TCompactionScanEnv env;
+        auto& flags = env.Runtime.GetAppData().FeatureFlags;
+        flags.SetEnableLocalDBBtreeIndex(true);
+        flags.SetEnableLocalDBBtreeIndexV2(false);
+        flags.SetEnableLocalDBFlatIndex(true);
+
+        auto input = TierScanInput();
+        AddMemRow(*input, *NTest::TSchemedCookRow(*TierScanLayout()).Col(
+            ui32(1), ui32(100), TString("value")), {20, 1});
+        auto conf = TierScanConfig(input);
+        for (auto& output : conf->Outputs) {
+            output.Writer.Groups[0].Cache = NPage::ECache::None;
+            output.Writer.StickyFlatIndex = false;
+        }
+        ConfigureOutlinedTierOutputs(*conf, /*sharedChannels*/ false, /*btreeV2*/ false,
+            /*indexInDescriptor*/ false);
+        auto router = TierScanRouter(*conf);
+        env.Start(std::move(conf), input, std::move(router));
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+
+        flags.SetEnableLocalDBBtreeIndex(false);
+        env.Complete();
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        UNIT_ASSERT_VALUES_EQUAL(product.Results.size(), 1);
+        const auto& result = product.Results.front();
+        UNIT_ASSERT_VALUES_EQUAL(result.OutputId, 31);
+        UNIT_ASSERT(result.Part->IndexPages.HasFlat());
+        UNIT_ASSERT(result.Part->IndexPages.HasBTree());
+    }
+
     Y_UNIT_TEST(TierAwareOutlinedValuesUseTheirOwnChannelsAndPreserveMvccHistory) {
         for (bool btreeV2 : {false, true}) {
             for (bool indexInDescriptor : {false, true}) {

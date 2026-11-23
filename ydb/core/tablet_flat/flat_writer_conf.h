@@ -44,20 +44,18 @@ namespace NWriter {
 
     /**
      * Descriptor pages are written to the main channel of the leader family room. A separate descriptor
-     * collection requires a B-tree index and is used when the main group goes to another channel or
-     * an index goes into its group's data collection. Returns true if a collection was added.
+     * collection is used when the main group goes to another channel or an index goes into its
+     * group's data collection. Returns true if a collection was added.
      */
     inline bool ApplyDescriptorChannel(NTable::NPage::TConf& layout, TConf& writer, ui8 descriptorChannel) {
         Y_ENSURE(!writer.Groups.empty());
 
-        const bool writeBTreeIndex = layout.WriteBTreeIndexV1 || layout.WriteBTreeIndexV2;
         const bool indexesInDescriptor = layout.Layout.KeyIndexInDescriptor && layout.Layout.GroupIndexesInDescriptor;
-        if (!writeBTreeIndex || (descriptorChannel == writer.Groups[0].Channel && indexesInDescriptor)) {
+        if (descriptorChannel == writer.Groups[0].Channel && indexesInDescriptor) {
             return false;
         }
 
         layout.Layout.SeparateDescriptorCollection = true;
-        layout.WriteFlatIndex = false;
 
         auto descriptor = writer.Groups[0];
         descriptor.Channel = descriptorChannel;

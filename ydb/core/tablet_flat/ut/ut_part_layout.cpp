@@ -20,10 +20,14 @@ namespace {
     using namespace NTest;
 
     enum class EIndex {
+        Flat,
+        FlatAndV1,
         V1,
         V2,
         V2WithV1Shadow,
     };
+
+    constexpr EIndex AllIndexes[] = { EIndex::Flat, EIndex::FlatAndV1, EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow };
 
     const TVector<TPartLayout> SeparateLayouts = {
         { .SeparateDescriptorCollection = true, .KeyIndexInDescriptor = false, .GroupIndexesInDescriptor = false },
@@ -49,14 +53,21 @@ namespace {
     }
 
     TString Describe(const TPartLayout& layout, EIndex index) {
-        return TStringBuilder() << Describe(layout) << " "
-            << (index == EIndex::V1 ? "V1" : index == EIndex::V2 ? "V2" : "V2WithV1Shadow");
+        TStringBuf name;
+        switch (index) {
+            case EIndex::Flat: name = "Flat"; break;
+            case EIndex::FlatAndV1: name = "FlatAndV1"; break;
+            case EIndex::V1: name = "V1"; break;
+            case EIndex::V2: name = "V2"; break;
+            case EIndex::V2WithV1Shadow: name = "V2WithV1Shadow"; break;
+        }
+        return TStringBuilder() << Describe(layout) << " " << name;
     }
 
     void SetIndex(NPage::TConf& conf, EIndex index) {
-        conf.WriteFlatIndex = false;
-        conf.WriteBTreeIndexV1 = index != EIndex::V2;
-        conf.WriteBTreeIndexV2 = index != EIndex::V1;
+        conf.WriteFlatIndex = index == EIndex::Flat || index == EIndex::FlatAndV1;
+        conf.WriteBTreeIndexV1 = index == EIndex::V1 || index == EIndex::FlatAndV1 || index == EIndex::V2WithV1Shadow;
+        conf.WriteBTreeIndexV2 = index == EIndex::V2 || index == EIndex::V2WithV1Shadow;
     }
 
     NPage::TConf MassConf(size_t groups, const TPartLayout& layout, EIndex index) {
@@ -184,11 +195,12 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL_C(part.Store->GetPageType(0, part.Store->PageCollectionPagesCount(0) - 1), EPage::Schem2, message);
 
         ui32 indexPages = rooms[0].Index;
-        bool hasDescriptorIndexLevels = false;
+        bool hasDescriptorIndexes = false;
         for (ui32 group : xrange(part.GroupsCount)) {
             const auto& room = rooms[group + 1];
             const bool inDescriptor = group == 0 ? layout.KeyIndexInDescriptor : layout.GroupIndexesInDescriptor;
-            const bool hasLevels = HasIndexLevels(part, NPage::TGroupId(group)) || HasIndexLevels(part, NPage::TGroupId(group, true));
+            const bool hasIndexes = part.IndexPages.HasFlat()
+                || HasIndexLevels(part, NPage::TGroupId(group)) || HasIndexLevels(part, NPage::TGroupId(group, true));
 
             UNIT_ASSERT_VALUES_EQUAL_C(part.DataSlot(NPage::TGroupId(group)), group + 1, message);
             UNIT_ASSERT_VALUES_EQUAL_C(part.DataSlot(NPage::TGroupId(group, true)), group + 1, message);
@@ -199,13 +211,13 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL_C(room.Descriptor, 0, message << " group " << group);
             if (inDescriptor) {
                 UNIT_ASSERT_VALUES_EQUAL_C(room.Index, 0, message << " group " << group);
-                hasDescriptorIndexLevels |= hasLevels;
+                hasDescriptorIndexes |= hasIndexes;
             } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(room.Index > 0, hasLevels, message << " group " << group);
+                UNIT_ASSERT_VALUES_EQUAL_C(room.Index > 0, hasIndexes, message << " group " << group);
             }
             indexPages += room.Index;
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(rooms[0].Index > 0, hasDescriptorIndexLevels, message);
+        UNIT_ASSERT_VALUES_EQUAL_C(rooms[0].Index > 0, hasDescriptorIndexes, message);
         UNIT_ASSERT_VALUES_EQUAL_C(indexPages, oldRooms[0].Index, message);
 
         // Parts with a separate descriptor page collection cannot be read by older versions
@@ -238,7 +250,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TPartLayout) {
 
     Y_UNIT_TEST(Placement) {
-        for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
+        for (EIndex index : AllIndexes) {
             const auto oldMass = MassEggs({ }, index);
             const auto oldHistory = HistoryEggs({ }, index);
 
@@ -281,7 +293,7 @@ Y_UNIT_TEST_SUITE(TPartLayout) {
     }
 
     Y_UNIT_TEST(History) {
-        for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
+        for (EIndex index : AllIndexes) {
             for (const auto& layout : SeparateLayouts) {
                 const auto message = Describe(layout, index);
                 Cerr << "Checking " << message << Endl;
@@ -295,16 +307,18 @@ Y_UNIT_TEST_SUITE(TPartLayout) {
 
     Y_UNIT_TEST(IndexesOutOfDescriptorRequireSeparateDescriptor) {
         for (TPartLayout layout : { TPartLayout{ .KeyIndexInDescriptor = false }, TPartLayout{ .GroupIndexesInDescriptor = false } }) {
-            UNIT_ASSERT_EXCEPTION_CONTAINS(MassEggs(layout, EIndex::V1), yexception,
-                "Indexes out of the descriptor require a separate descriptor page collection");
+            for (EIndex index : AllIndexes) {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(MassEggs(layout, index), yexception,
+                    "Indexes out of the descriptor require a separate descriptor page collection");
+            }
         }
     }
 
-    Y_UNIT_TEST(SeparateDescriptorRequiresBTreeIndexOnly) {
-        auto conf = MassConf(Mass().Model->Scheme->Families.size(), SeparateLayouts[0], EIndex::V1);
+    Y_UNIT_TEST(FlatIndexIncompatibleWithBTreeV2) {
+        auto conf = MassConf(Mass().Model->Scheme->Families.size(), SeparateLayouts[0], EIndex::V2);
         conf.WriteFlatIndex = true;
         UNIT_ASSERT_EXCEPTION_CONTAINS(TPartCook::Make(Mass(), conf), yexception,
-            "Separate descriptor page collection requires b-tree index only");
+            "V2 b-tree index replaces the flat index");
     }
 }
 
@@ -381,14 +395,16 @@ namespace {
         for (ui32 slot : xrange(slots.SlotsCount())) {
             // Descriptor pages go to channel 1, group pages to channel 2
             writerConf.Groups[slot].Channel = layout.SeparateDescriptorCollection && slot != slots.DescriptorSlot() ? 2 : 1;
-            writerConf.Groups[slot].Cache = NPage::ECache::Once; /* Keep all data pages in results */
+            // Keep data pages and non-sticky flat indexes in the bundle result to serve loader fetches.
+            writerConf.Groups[slot].Cache = NPage::ECache::Once;
+            writerConf.Groups[slot].CacheMode = NPage::ECacheMode::TryKeepInMemory;
         }
         writerConf.BlobsChannels = { 3 };
         writerConf.OuterChannel = 3;
         writerConf.ChannelsShares = NUtil::TChannelsShares({ { 3, 1.0f } });
         writerConf.WriteBTreeIndexV1 = conf.WriteBTreeIndexV1;
         writerConf.WriteBTreeIndexV2 = conf.WriteBTreeIndexV2;
-        writerConf.StickyFlatIndex = false;
+        writerConf.StickyFlatIndex = !(conf.WriteBTreeIndexV1 || conf.WriteBTreeIndexV2);
 
         NWriter::TBundle bundle(TLogoBlobID(1, 3, 7, 0, 0, 0), writerConf);
 
@@ -518,7 +534,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
 
     Y_UNIT_TEST(Load) {
-        for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
+        for (EIndex index : AllIndexes) {
             TVector<TPartLayout> layouts = SeparateLayouts;
             layouts.insert(layouts.begin(), TPartLayout{ });
 
@@ -542,14 +558,20 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
                         auto partView = LoadBundlePart(bundlePart, withSlices, preloadData, stats);
                         CheckLoadedPart(bundlePart, partView, layout, message);
 
-                        // Only descriptor pages and roots of b-tree indexes are loaded, data and outer pages are not
+                        // The loader fetches b-tree roots if present, otherwise flat index pages.
                         TSet<ui32> expected{ slots.DescriptorSlot() };
                         const auto& indexPages = partView->IndexPages;
+                        UNIT_ASSERT_VALUES_EQUAL_C(indexPages.HasFlat(), index == EIndex::Flat || index == EIndex::FlatAndV1, message);
+                        UNIT_ASSERT_VALUES_EQUAL_C(indexPages.HasBTree(), index != EIndex::Flat, message);
                         for (bool historic : { false, true }) {
-                            const auto& metas = historic ? indexPages.BTreeHistoric : indexPages.BTreeGroups;
-                            for (ui32 group : xrange(metas.size())) {
-                                if (metas[group].LevelCount()) {
-                                    expected.insert(slots.IndexSlot(NPage::TGroupId(group, historic)));
+                            const ui32 groups = historic ? partView->HistoricGroupsCount : partView->GroupsCount;
+                            for (ui32 group : xrange(groups)) {
+                                const NPage::TGroupId groupId(group, historic);
+                                if (indexPages.HasFlat()) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(partView->GetIndexPageType(indexPages.GetFlat(groupId), groupId), EPage::FlatIndex, message);
+                                }
+                                if (!indexPages.HasBTree() || HasIndexLevels(*partView, groupId)) {
+                                    expected.insert(slots.IndexSlot(groupId));
                                 }
                             }
                         }
@@ -702,61 +724,47 @@ namespace {
         conf.Groups[1].Channel = 5;
         return conf;
     }
+
+    void CheckDescriptorChannel(ui8 mainChannel) {
+        for (EIndex index : AllIndexes) {
+            NPage::TConf indexConf;
+            SetIndex(indexConf, index);
+            for (auto placement : SeparateLayouts) {
+                auto conf = indexConf;
+                conf.Layout = placement;
+                conf.Layout.SeparateDescriptorCollection = false;
+                auto writer = DescriptorChannelWriterConf(mainChannel);
+
+                const bool separate = mainChannel != 1 || !placement.KeyIndexInDescriptor || !placement.GroupIndexesInDescriptor;
+                placement.SeparateDescriptorCollection = separate;
+                const auto message = Describe(placement, index) + " main channel " + ToString(ui32(mainChannel));
+                UNIT_ASSERT_VALUES_EQUAL_C(NWriter::ApplyDescriptorChannel(conf, writer, 1), separate, message);
+                UNIT_ASSERT_C(conf.Layout == placement, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(conf.WriteFlatIndex, indexConf.WriteFlatIndex, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(conf.WriteBTreeIndexV1, indexConf.WriteBTreeIndexV1, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(conf.WriteBTreeIndexV2, indexConf.WriteBTreeIndexV2, message);
+
+                // The descriptor inherits cache and blob settings of the main group.
+                UNIT_ASSERT_VALUES_EQUAL_C(writer.Groups.size(), separate ? 3u : 2u, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(ui32(writer.Groups[0].Channel), 1u, message);
+                UNIT_ASSERT_C(writer.Groups[0].Cache == NPage::ECache::Ever, message);
+                UNIT_ASSERT_C(writer.Groups[0].CacheMode == NPage::ECacheMode::TryKeepInMemory, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(writer.Groups[0].MaxBlobSize, 1234u, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(ui32(writer.Groups[separate ? 1 : 0].Channel), ui32(mainChannel), message);
+                UNIT_ASSERT_VALUES_EQUAL_C(ui32(writer.Groups.back().Channel), 5u, message);
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDescriptorChannel) {
 
     Y_UNIT_TEST(SameChannel) {
-        NPage::TConf layout;
-        auto writer = DescriptorChannelWriterConf(1);
-
-        UNIT_ASSERT(!NWriter::ApplyDescriptorChannel(layout, writer, 1));
-        UNIT_ASSERT(layout.Layout == TPartLayout{ });
-        UNIT_ASSERT(layout.WriteFlatIndex);
-        UNIT_ASSERT_VALUES_EQUAL(writer.Groups.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[0].Channel), 1u);
-    }
-
-    Y_UNIT_TEST(NoBTreeIndex) {
-        NPage::TConf layout;
-        layout.WriteBTreeIndexV1 = false;
-        layout.WriteBTreeIndexV2 = false;
-        auto writer = DescriptorChannelWriterConf(2);
-
-        // Flat index pages are sticky, so they would be loaded from the other channel on every part load
-        UNIT_ASSERT(!NWriter::ApplyDescriptorChannel(layout, writer, 1));
-        UNIT_ASSERT(layout.Layout == TPartLayout{ });
-        UNIT_ASSERT(layout.WriteFlatIndex);
-        UNIT_ASSERT_VALUES_EQUAL(writer.Groups.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[0].Channel), 2u);
+        CheckDescriptorChannel(1);
     }
 
     Y_UNIT_TEST(OtherChannel) {
-        for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
-            NPage::TConf layout;
-            layout.WriteBTreeIndexV1 = index != EIndex::V2;
-            layout.WriteBTreeIndexV2 = index != EIndex::V1;
-            layout.WriteFlatIndex = index == EIndex::V1;
-            layout.Layout.GroupIndexesInDescriptor = false;
-            auto writer = DescriptorChannelWriterConf(2);
-
-            UNIT_ASSERT(NWriter::ApplyDescriptorChannel(layout, writer, 1));
-
-            // Index placement flags are kept as configured
-            UNIT_ASSERT(layout.Layout == (TPartLayout{ .SeparateDescriptorCollection = true, .GroupIndexesInDescriptor = false }));
-            UNIT_ASSERT(!layout.WriteFlatIndex);
-            UNIT_ASSERT_VALUES_EQUAL(layout.WriteBTreeIndexV1, index != EIndex::V2);
-            UNIT_ASSERT_VALUES_EQUAL(layout.WriteBTreeIndexV2, index != EIndex::V1);
-
-            // The descriptor page collection goes first, with settings of the main group in the descriptor channel
-            UNIT_ASSERT_VALUES_EQUAL(writer.Groups.size(), 3u);
-            UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[0].Channel), 1u);
-            UNIT_ASSERT(writer.Groups[0].Cache == NPage::ECache::Ever);
-            UNIT_ASSERT(writer.Groups[0].CacheMode == NPage::ECacheMode::TryKeepInMemory);
-            UNIT_ASSERT_VALUES_EQUAL(writer.Groups[0].MaxBlobSize, 1234u);
-            UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[1].Channel), 2u);
-            UNIT_ASSERT_VALUES_EQUAL(ui32(writer.Groups[2].Channel), 5u);
-        }
+        CheckDescriptorChannel(2);
     }
 }
 

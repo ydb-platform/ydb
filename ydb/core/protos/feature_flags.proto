@@ -366,4 +366,5 @@ message TFeatureFlags {
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
+    optional bool EnableChecksumTable = 402 [default = false];
 }

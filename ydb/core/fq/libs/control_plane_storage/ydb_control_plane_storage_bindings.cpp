@@ -420,17 +420,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(read)");
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("binding_id", bindingId);
-    readQueryBuilder.AddText("$selected = SELECT `" BINDING_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME
-                             "`\n"
-                             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME
-                             "` = $binding_id;\n"
-                             "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME
-                             "` FROM $selected;\n"
-                             "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
-                             "` FROM $selected;\n"
-                             "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
-                             "`\n"
-                             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
+    readQueryBuilder.AddText(
+        "$selected = SELECT `" BINDING_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" BINDINGS_TABLE_NAME
+        "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME
+        "` = $binding_id;\n"
+        "$connection_id = SELECT `" CONNECTION_ID_COLUMN_NAME
+        "` FROM $selected;\n"
+        "SELECT `" BINDING_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
+        "` FROM $selected;\n"
+        "SELECT `" VISIBILITY_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
+        "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response =
         std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
@@ -523,11 +524,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("binding", binding.SerializeAsString());
         InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + idempotencyKeyTtl);
-        writeQueryBuilder.AddText(
-            "UPDATE `" BINDINGS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME
-            "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" BINDING_COLUMN_NAME
-            "` = $binding\n"
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;\n");
+        writeQueryBuilder.AddText("UPDATE `" BINDINGS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME
+                                  "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" BINDING_COLUMN_NAME
+                                  "` = $binding\n"
+                                  "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;\n");
         const auto writeQuery = writeQueryBuilder.Build();
         return make_pair(writeQuery.Sql, writeQuery.Params);
     };

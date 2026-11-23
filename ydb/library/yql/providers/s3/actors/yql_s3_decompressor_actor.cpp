@@ -1,8 +1,6 @@
-<<<<<<< HEAD
-#include <queue>
-=======
 #include "yql_s3_decompressor_actor.h"
->>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
+
+#include <queue>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>

@@ -65,24 +65,26 @@ namespace NYql::NDq {
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg,
             ::NMonitoring::TDynamicCounterPtr counters,
-            bool allowLocalFiles) override {
+            bool allowLocalFiles,
+            ::NMonitoring::TDynamicCounterPtr cpuCounters) override {
 
             #if defined(_linux_) || defined(_darwin_)
                 NDB::registerFormats();
                 factory.RegisterSource<NS3::TSource>("S3Source",
-                    [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+                    [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles, cpuCounters](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
                         YQL_LOG(DEBUG) << "S3Source factory: cfg.EnableScheduling=" << cfg.EnableScheduling << " args.SchedulableWorkFactory=" << (args.SchedulableWorkFactory ? "set" : "null");
                         auto workFactory = cfg.EnableScheduling ? std::move(args.SchedulableWorkFactory) : nullptr;
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, std::move(args.Alloc), gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
                             args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(workFactory));
+                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(workFactory), cpuCounters);
                     });
             #else
                 Y_UNUSED(factory);
                 Y_UNUSED(credentialsFactory);
                 Y_UNUSED(gateway);
                 Y_UNUSED(counters);
+                Y_UNUSED(cpuCounters);
             #endif
         }
     };
@@ -91,54 +93,4 @@ namespace NYql::NDq {
         return std::make_shared<TS3ActorsFactory>();
     }
 
-<<<<<<< HEAD
-=======
-    void RegisterS3WriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) override {
-        factory.RegisterSink<NS3::TSink>("S3Sink", [credentialsFactory, gateway, retryPolicy](
-                                                       NS3::TSink&& settings, IDqAsyncIoFactory::TSinkArguments&& args) {
-            TStringBuilder prefixBuilder;
-
-            auto jobId = args.TaskParams.Value("fq.job_id", "");
-            if (jobId) {
-                prefixBuilder << jobId << "_";
-            }
-
-            auto restartCount = args.TaskParams.Value("fq.restart_count", "");
-            if (restartCount) {
-                prefixBuilder << restartCount << "_";
-            }
-
-            return CreateS3WriteActor(args.TypeEnv, *args.HolderFactory.GetFunctionRegistry(), args.RandomProvider, gateway, std::move(settings),
-                args.OutputIndex, args.StatsLevel, args.TxId, prefixBuilder, args.SecureParams, args.Callback, credentialsFactory, retryPolicy);
-        });
-    }
-
-    void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& cfg,
-        ::NMonitoring::TDynamicCounterPtr counters, bool allowLocalFiles, ::NMonitoring::TDynamicCounterPtr cpuCounters) override {
-#if defined(_linux_) || defined(_darwin_)
-        NDB::registerFormats();
-        factory.RegisterSource<NS3::TSource>("S3Source", [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles, cpuCounters](
-                                                             NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
-            YQL_LOG(DEBUG) << "S3Source factory: cfg.EnableScheduling=" << cfg.EnableScheduling
-                           << " args.SchedulableWorkFactory=" << (args.SchedulableWorkFactory ? "set" : "null");
-            auto workFactory = cfg.EnableScheduling ? std::move(args.SchedulableWorkFactory) : nullptr;
-            return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, std::move(args.Alloc), gateway, std::move(settings), args.InputIndex,
-                args.StatsLevel, args.TxId, args.SecureParams, args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory,
-                retryPolicy, cfg, counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(workFactory), cpuCounters);
-        });
-#else
-        Y_UNUSED(factory);
-        Y_UNUSED(credentialsFactory);
-        Y_UNUSED(gateway);
-        Y_UNUSED(counters);
-        Y_UNUSED(cpuCounters);
-#endif
-    }
-};
-
-std::shared_ptr<IS3ActorsFactory> CreateS3ActorsFactory() {
-    return std::make_shared<TS3ActorsFactory>();
->>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 }

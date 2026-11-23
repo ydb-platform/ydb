@@ -56,18 +56,11 @@ namespace NDq {
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg = {},
             ::NMonitoring::TDynamicCounterPtr counters = nullptr,
-            bool allowLocalFiles = false) = 0;
+            bool allowLocalFiles = false,
+            ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr) = 0;
     };
 
-<<<<<<< HEAD
     std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();
-=======
-    virtual void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& cfg = {},
-        ::NMonitoring::TDynamicCounterPtr counters = nullptr, bool allowLocalFiles = false,
-        ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr) = 0;
-};
->>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 
     TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
 } // namespace NDq

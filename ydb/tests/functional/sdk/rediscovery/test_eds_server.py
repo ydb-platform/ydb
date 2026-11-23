@@ -103,6 +103,7 @@ async def check_membership(address, start_slot, stop_slot):
         try:
             expected_more = expected | {extra.grpc_port}
             list_endpoints = unary.DiscoveryServiceStub(channel).ListEndpoints
+
             async def wait_for_board():
                 while True:
                     reply = await list_endpoints(discovery.ListEndpointsRequest(database=DATABASE), metadata=AUTH, timeout=5)
@@ -111,6 +112,7 @@ async def check_membership(address, start_slot, stop_slot):
                     if {endpoint.port for endpoint in result.endpoints} == expected_more:
                         return
                     await asyncio.sleep(0.1)
+
             await asyncio.wait_for(wait_for_board(), timeout=30)
 
             stale = subscribe()

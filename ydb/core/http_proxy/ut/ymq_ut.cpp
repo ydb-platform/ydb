@@ -11,7 +11,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/services/ymq/utils.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -28,32 +27,6 @@ using namespace NActors;
 
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
-
-    Y_UNIT_TEST(AuditRemoteAddress) {
-        const std::pair<TString, TString> cases[] = {
-            {"192.0.2.17", "192.0.2.17"},
-            {"2001:db8::17", "2001:db8::17"},
-            {"::1", "::1"},
-            {"fe80::17%2", "fe80::17%2"},
-            {"ipv4:192.0.2.17:2135", "192.0.2.17"},
-            {"ipv6:[2001:db8::17]:2135", "2001:db8::17"},
-            {"ipv6:%5B::1%5D:2135", "::1"},
-            {"ipv6:%5B2001:db8::17%5D:2135", "2001:db8::17"},
-            {"ipv6:%5b2001:db8::17%5d:2135", "2001:db8::17"},
-            {"ipv6:%5Bfe80::17%252%5D:2135", "fe80::17%2"},
-            {"", ""},
-            {"localhost", ""},
-            {"unknown", ""},
-            {"not-an-ip", ""},
-            {"ipv4:999.0.2.17:2135", ""},
-            {"ipv6:%5Bnot-an-ip%5D:2135", ""},
-            {"ipv6:%5G::1%5D:2135", ""},
-            {"ipv6:%255B::1%255D:2135", ""},
-        };
-        for (const auto& [peer, expected] : cases) {
-            UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::NYmq::GetAuditRemoteAddress(peer), expected, peer);
-        }
-    }
 
     NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
         TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;

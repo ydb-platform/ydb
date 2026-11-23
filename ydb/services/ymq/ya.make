@@ -8,7 +8,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/ipv6_address
-    library/cpp/string_utils/quote
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/server

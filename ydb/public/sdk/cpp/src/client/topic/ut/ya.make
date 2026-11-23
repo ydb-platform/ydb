@@ -37,6 +37,7 @@ RESOURCE(
 END()
 
 RECURSE_FOR_TESTS(
+    replication
     with_direct_read_ut
     slow
 )

@@ -1,6 +1,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <optional>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -409,6 +411,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         )pb");
         env.TestWaitNotification(runtime, txId);
 
+        TVector<TCell> cells = {TCell::Make(ui32(1))};
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1}, TSerializedCellMatrix(cells, 1, 1), true);
+
         if (!AddColumn) {
             TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
                 Name: "Table"
@@ -428,6 +435,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         expression->SetExprText("CurrentUtcTimestamp()");
         expression->SetStored(true);
         expression->SetWritable(true);
+        if (AddColumn) {
+            TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
+                {{NKikimrScheme::StatusInvalidParameter, "Adding a column with a DEFAULT expression is not supported"}});
+            UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "ts"));
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1u);
+            return;
+        }
         TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString());
         env.TestWaitNotification(runtime, txId);
 
@@ -442,6 +456,96 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
+    }
+
+    Y_UNIT_TEST(RejectsEmptyDefaultExpressionText) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto& text : {std::optional<TString>{}, std::optional<TString>{""}, std::optional<TString>{" \t\r\n"}}) {
+            NKikimrSchemeOp::TTableDescription schema;
+            schema.SetName("Invalid");
+            auto* column = schema.AddColumns();
+            column->SetName("value");
+            column->SetType("Uint64");
+            schema.AddKeyColumnNames("value");
+            auto* expression = column->MutableDefaultFromExpression();
+            expression->SetStored(true);
+            expression->SetWritable(true);
+            if (text) {
+                expression->SetExprText(*text);
+            }
+            TestCreateTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
+                {{NKikimrScheme::StatusSchemeError, "DEFAULT expression column 'value' must have non-empty expression text"}});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Invalid"), {NLs::PathNotExist});
+
+            schema.SetName("Table");
+            schema.ClearKeyColumnNames();
+            column->SetName("ts");
+            column->ClearType();
+            TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
+                {{NKikimrScheme::StatusInvalidParameter, "DEFAULT expression column 'ts' must have non-empty expression text"}});
+            CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "ts", "CurrentUtcTimestamp()");
+        }
+    }
+
+    Y_UNIT_TEST(AlterExpressionDefaultPreservesSerialSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"pb(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint64" DefaultFromSequence: "_serial_column_id" }
+                KeyColumnNames: ["id"]
+            }
+            SequenceDescription { Name: "_serial_column_id" MinValue: 1 }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns {
+                Name: "id"
+                DefaultFromExpression { ExprText: "RandomNumber(1)" Stored: true Writable: true }
+            }
+        )pb", {{NKikimrScheme::StatusInvalidParameter, "Cannot alter serial column 'id'"}});
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* column = FindColumn(describe, "id");
+        UNIT_ASSERT(column && column->HasDefaultFromSequence());
+        UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultFromSequence(), "_serial_column_id");
+        TestLs(runtime, "/MyRoot/Table/_serial_column_id",
+            TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(AlterExpressionDefaultRejectsDisabledPgCompatibility) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
+        EnableDefaultFromExpression(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "pgint8" }
+            KeyColumnNames: ["key"]
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+            Name: "Table"
+            Columns {
+                Name: "value"
+                DefaultFromExpression { ExprText: "RandomNumber(1)" Stored: true Writable: true }
+            }
+        )pb", {{NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for column 'value'"}});
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* column = FindColumn(describe, "value");
+        UNIT_ASSERT(column && !column->HasDefaultFromExpression());
     }
 
     Y_UNIT_TEST_TWIN(AlterDropDefaultExpression, FeatureEnabled) {

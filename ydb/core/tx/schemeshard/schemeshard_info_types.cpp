@@ -555,6 +555,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 errStr = Sprintf("DEFAULT expression column '%s' cannot have dependencies", colName.c_str());
                 return nullptr;
             }
+            if (expression.GetExprText().find_first_not_of(" \t\r\n\f\v") == TString::npos) {
+                errStr = Sprintf("DEFAULT expression column '%s' must have non-empty expression text", colName.c_str());
+                return nullptr;
+            }
         }
 
         bool isAlterColumn = (source && colName2Id.contains(colName));
@@ -625,13 +629,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (featureFlags.DisablePgCompatibility && sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
-                    && (col.HasDefaultFromSequence() || col.HasDefaultFromLiteral())) {
+                    && (col.HasDefaultFromSequence() || col.HasDefaultFromLiteral() || col.HasDefaultFromExpression())) {
                 errStr = Sprintf("PostgreSQL compatibility is disabled for column '%s'", colName.c_str());
                 return nullptr;
             }
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
+                if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily || col.HasDefaultFromExpression()) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
                 }
@@ -821,6 +825,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 const auto& defaultExpression = col.GetDefaultFromExpression();
                 const bool stored = defaultExpression.GetStored();
                 if (defaultExpression.GetWritable()) {
+                    if (source) {
+                        errStr = "Adding a column with a DEFAULT expression is not supported";
+                        return nullptr;
+                    }
                     if (!featureFlags.EnableDefaultFromExpression) {
                         errStr = Sprintf("DEFAULT expressions are disabled. Column: %s", colName.c_str());
                         return nullptr;

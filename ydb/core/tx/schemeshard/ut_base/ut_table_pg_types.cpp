@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
 
     Y_UNIT_TEST(ExternalTablePgColumnsRespectCompatibilityFlag) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(false).EnableReplaceIfExistsForExternalEntities(true));
         ui64 txId = 100;
         const auto updatePgCompatibility = [&](bool disabled) {
             for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
@@ -181,10 +181,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
             DataSourcePath: "/MyRoot/ExternalDataSource"
             Location: "/"
             Columns { Name: "key" Type: "Uint64" }
-            Columns { Name: "value" Type: "pgint4" }
+            Columns { Name: "value" Type: "pgvarchar:10" }
         )";
         const TVector<TExpectedResult> rejected{{NKikimrScheme::StatusSchemeError,
-            "PostgreSQL compatibility is disabled for column 'value' of type 'pgint4' (DisablePgCompatibility feature flag is on)"}};
+            "PostgreSQL compatibility is disabled for column 'value' of type 'pgvarchar:10' (DisablePgCompatibility feature flag is on)"}};
 
         updatePgCompatibility(true);
         TestCreateExternalTable(runtime, ++txId, "/MyRoot", table, rejected);

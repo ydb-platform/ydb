@@ -69,6 +69,7 @@ private:
     TEndpointElectorSafe Elector_;
     bool UsesWatch_ = false; // Set before publishing the driver state.
     TPlainStatus WatchStatus_;
+    std::unordered_map<std::string, std::shared_ptr<NYdbGrpc::TEndpointAdmission>> WatchAdmissions_;
     std::vector<std::pair<std::string, std::weak_ptr<NYdbGrpc::IQueueClientContext>>> WatchStreams_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
     std::atomic_bool TransportUpdatePending_ = false;

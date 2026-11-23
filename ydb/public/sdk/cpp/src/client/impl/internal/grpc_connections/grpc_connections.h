@@ -154,6 +154,7 @@ public:
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
         TRpcRequestSettings::TEndpointPolicy endpointPolicy, NThreading::TFuture<TEndpointUpdateResult>& pending)
     {
+        TEndpointKey selected;
         auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
         clientConfig.SslCredentials = {.pem_root_certs = TStringType{sslCredentials.CaCert}, .pem_private_key = TStringType{sslCredentials.PrivateKey}, .pem_cert_chain = TStringType{sslCredentials.Cert}};
@@ -181,6 +182,7 @@ public:
                 if (!endpoint) {
                     return {nullptr, TEndpointKey()};
                 }
+                selected.Admission = std::move(endpoint.Admission);
                 clientConfig.Locator = endpoint.Endpoint;
                 clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
                 if (GRpcKeepAliveTimeout_ > TDeadline::Duration::zero()) {
@@ -210,7 +212,8 @@ public:
         Y_UNUSED(pending);
         conn = std::move(GRpcClientLow_.CreateGRpcServiceConnection<TService>(clientConfig));
 #endif
-        return {std::move(conn), TEndpointKey(clientConfig.Locator, 0)};
+        selected.Endpoint = clientConfig.Locator;
+        return {std::move(conn), std::move(selected)};
     }
 
     template<class TService, class TRequest, class TResponse>
@@ -381,6 +384,7 @@ public:
 
                     try {
                         meta = MakeCallMeta(requestSettings, dbState, authInfo);
+                        meta.EndpointAdmission = endpoint.Admission;
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunResponseCallback<TResponse>(
@@ -622,6 +626,7 @@ public:
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState, authInfo);
+                    meta.EndpointAdmission = endpoint.Admission;
                 } catch (const TYdbException& e) {
                     context.reset();
                     RunStreamCallback(
@@ -731,6 +736,7 @@ public:
                     TCallMeta meta;
                     try {
                         meta = MakeCallMeta(requestSettings, dbState, authInfo);
+                        meta.EndpointAdmission = endpoint.Admission;
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunStreamCallback(

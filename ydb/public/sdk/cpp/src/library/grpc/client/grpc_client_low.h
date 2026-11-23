@@ -234,10 +234,29 @@ template<typename TResponse>
 using TAdvancedResponseCallback = std::function<void (const grpc::ClientContext&, TGrpcStatus&&, TResponse&&)>;
 
 // Call associated metadata
+// Keep an endpoint admitted through submission to the gRPC stub. Old handles
+// keep their retired guard even when the same address appears after failback.
+class TEndpointAdmission {
+public:
+    std::shared_lock<std::shared_mutex> Acquire() const {
+        std::shared_lock lock(Mutex_);
+        return Open_ ? std::move(lock) : std::shared_lock<std::shared_mutex>{};
+    }
+    void Retire() {
+        std::unique_lock lock(Mutex_);
+        Open_ = false;
+    }
+
+private:
+    mutable std::shared_mutex Mutex_;
+    bool Open_ = true;
+};
+
 struct TCallMeta {
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
     std::vector<std::pair<std::string, std::string>> Aux;
     std::variant<std::monostate, NYdb::TDeadline, NYdb::TDeadline::Duration> Timeout; // timeout as duration from now or time point in future
+    std::shared_ptr<TEndpointAdmission> EndpointAdmission;
 };
 
 class TGRpcRequestProcessorCommon {
@@ -314,13 +333,18 @@ private:
         return this;
     }
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             Replied_ = true;
             RunGuarded([&] {
-                Callback_(TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+                Callback_(std::move(status), std::move(Reply_));
             });
             Callback_ = nullptr;
             return;
@@ -331,6 +355,7 @@ private:
             Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
             Reader_->Finish(&Reply_, &Status, FinishedEvent());
         }
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Stop();
         });
@@ -401,13 +426,18 @@ private:
         return this;
     }
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             Replied_ = true;
             RunGuarded([&] {
-                Callback_(Context, TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
+                Callback_(Context, std::move(status), std::move(Reply_));
             });
             Callback_ = nullptr;
             return;
@@ -418,6 +448,7 @@ private:
             Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
             Reader_->Finish(&Reply_, &Status, FinishedEvent());
         }
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Stop();
         });
@@ -766,12 +797,16 @@ public:
     }
 
 private:
-    void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             auto callback = std::move(Callback);
-            TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
             RunGuarded([&] {
                 callback(std::move(status), nullptr);
             });
@@ -784,6 +819,7 @@ private:
             Stream = (stub.*asyncRequest)(&Context, request, context->CompletionQueue(), OnStartDoneTag.Prepare());
         }
 
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Cancel();
         });
@@ -1173,12 +1209,16 @@ private:
     template<typename> friend class TServiceConnection;
     friend struct TStreamRequestReadWriteProcessorTestAccess;
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider,
+               const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
+        if (!context || (admission && !dispatch)) {
+            auto status = context
+                ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
+                : TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down");
             auto callback = std::move(ConnectedCallback);
-            TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
             RunGuarded([&] {
                 callback(std::move(status), nullptr);
             });
@@ -1191,6 +1231,7 @@ private:
             Stream = (stub.*asyncRequest)(&Context, context->CompletionQueue(), OnConnectedTag.Prepare());
         }
 
+        dispatch = {};
         context->SubscribeStop([self = TPtr(this)] {
             self->Cancel();
         });
@@ -1466,7 +1507,7 @@ public:
     {
         auto processor = MakeIntrusive<TSimpleRequestProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_);
+        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
     /*
@@ -1481,7 +1522,7 @@ public:
     {
         auto processor = MakeIntrusive<TAdvancedRequestProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_);
+        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
     /*
@@ -1495,7 +1536,7 @@ public:
     {
         auto processor = MakeIntrusive<TStreamRequestReadWriteProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, std::move(asyncRequest), provider ? provider : Provider_);
+        processor->Start(*Stub_, std::move(asyncRequest), provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
     /*
@@ -1510,7 +1551,7 @@ public:
     {
         auto processor = MakeIntrusive<TStreamRequestReadProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, request, std::move(asyncRequest), provider ? provider : Provider_);
+        processor->Start(*Stub_, request, std::move(asyncRequest), provider ? provider : Provider_, metas.EndpointAdmission);
     }
 
 private:

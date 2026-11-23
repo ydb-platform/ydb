@@ -146,7 +146,7 @@ int main() {
     const char* configuredProbe = std::getenv("YDB_PROBE");
     const std::string probe = configuredProbe ? configuredProbe : "scheme";
     auto config = NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase(database);
-    if (const char* mode = std::getenv("YDB_DISCOVERY_MODE"); mode && std::string(mode) == "eds") {
+    if (const char* enabled = std::getenv("YDB_EDS_DISCOVERY"); enabled && std::string(enabled) == "1") {
         config.SetDiscoveryMode(NYdb::EDiscoveryMode::Eds);
     }
     const NYdb::TDriver driver(config);

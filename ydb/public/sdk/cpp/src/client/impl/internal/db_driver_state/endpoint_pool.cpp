@@ -264,6 +264,25 @@ std::vector<std::string> TEndpointPool::Install(const Ydb::Discovery::ListEndpoi
             records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId, std::move(location));
         }
     }
+    if (UsesWatch_) {
+        // The subscription serializes installations. Retire stale dispatches
+        // before SetNewState notifies sessions or publishes new endpoints.
+        decltype(WatchAdmissions_) next;
+        for (auto& record : records) {
+            auto& admission = next[record.Endpoint];
+            if (!admission) {
+                auto it = WatchAdmissions_.find(record.Endpoint);
+                admission = it == WatchAdmissions_.end() ? std::make_shared<NYdbGrpc::TEndpointAdmission>() : it->second;
+            }
+            record.Admission = admission;
+        }
+        for (auto& [endpoint, admission] : WatchAdmissions_) {
+            if (!next.contains(endpoint)) {
+                admission->Retire();
+            }
+        }
+        WatchAdmissions_.swap(next);
+    }
     LastUpdateTime_ = TInstant::Now().MicroSeconds();
     return Elector_.SetNewState(std::move(records), penalties);
 }

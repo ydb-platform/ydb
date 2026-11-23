@@ -5,6 +5,7 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <grpcpp/server_builder.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/grpc/draft/xds/codec/codec.h>
 #include <ydb/public/api/grpc/draft/xds/eds.grpc.pb.h>
 #if defined(_unix_)
@@ -251,6 +252,34 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(EndpointRediscovery) {
+    Y_UNIT_TEST(RetiredEndpointHandleCannotDispatchAnotherRpc) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TTableService table;
+        auto live = StartServer(port, table);
+        NYdbGrpc::TGRpcClientLow client;
+        using TService = Ydb::Table::V1::TableService;
+        auto connection = client.CreateGRpcServiceConnection<TService>(NYdbGrpc::TGRpcClientConfig(Address(port)));
+        auto request = [&](const NYdbGrpc::TCallMeta& meta) {
+            auto completed = NThreading::NewPromise<int>();
+            connection->DoAdvancedRequest<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>({},
+                [completed](const auto&, NYdbGrpc::TGrpcStatus&& status, auto&&) mutable {
+                    completed.SetValue(status.GRpcStatusCode);
+                }, &TService::Stub::AsyncBulkUpsert, meta);
+            return completed.GetFuture().GetValueSync();
+        };
+        NYdbGrpc::TCallMeta stale;
+        stale.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
+        stale.EndpointAdmission->Retire();
+        UNIT_ASSERT_VALUES_EQUAL(request(stale), int(grpc::StatusCode::UNAVAILABLE));
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 0);
+        NYdbGrpc::TCallMeta replacement;
+        replacement.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
+        UNIT_ASSERT_VALUES_EQUAL(request(replacement), int(grpc::StatusCode::OK));
+        UNIT_ASSERT_VALUES_EQUAL(request(stale), int(grpc::StatusCode::UNAVAILABLE));
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
+    }
+
     Y_UNIT_TEST(WatchPermissionDeniedDoesNotFallBackToListEndpoints) {
         TPortManager ports;
         const auto port = ports.GetPort();

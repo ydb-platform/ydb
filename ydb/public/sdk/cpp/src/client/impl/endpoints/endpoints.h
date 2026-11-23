@@ -7,6 +7,8 @@
 #include <string>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 
+namespace NYdbGrpc::inline Dev { class TEndpointAdmission; }
+
 namespace NYdb::inline Dev {
 
 struct TEndpointRecord {
@@ -15,6 +17,7 @@ struct TEndpointRecord {
     std::string SslTargetNameOverride;
     std::uint64_t NodeId = 0;
     std::string Location;
+    std::shared_ptr<NYdbGrpc::TEndpointAdmission> Admission;
 
     TEndpointRecord()
         : Endpoint()
@@ -44,6 +47,7 @@ struct TEndpointRecord {
 };
 
 struct TEndpointKey {
+    std::shared_ptr<NYdbGrpc::TEndpointAdmission> Admission;
     std::string Endpoint;
     std::uint64_t NodeId = 0;
 

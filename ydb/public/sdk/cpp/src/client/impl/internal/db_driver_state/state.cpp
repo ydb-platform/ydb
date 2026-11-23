@@ -56,8 +56,7 @@ TDbDriverState::TDbDriverState(
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    if (DiscoveryMode == EDiscoveryMode::Eds && !Database.empty()
-        && GetBalancingPolicyType() != TBalancingPolicy::TImpl::EPolicyType::UsePreferablePileState) {
+    if (DiscoveryMode == EDiscoveryMode::Eds && !Database.empty()) {
         EndpointPool.EnableWatch();
     }
 #endif

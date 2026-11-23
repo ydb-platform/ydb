@@ -824,12 +824,11 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         const std::string expression = R"sql(CAST(RandomNumber(1) * 0ul AS String) || '\n' || 'it''s@@')sql";
         if (Alter) {
             fixture.Exec(DefaultExprDDL("v String"));
-            fixture.Exec("--!ansi_lexer\nALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " + expression
-                + "; INSERT INTO TestTable (k) VALUES (1);");
+            fixture.Exec("--!ansi_lexer\nALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " + expression + ";");
         } else {
-            fixture.Exec(DefaultExprDDL("v String DEFAULT " + expression, "--!ansi_lexer\n")
-                + "INSERT INTO TestTable (k) VALUES (1);");
+            fixture.Exec(DefaultExprDDL("v String DEFAULT " + expression, "--!ansi_lexer\n"));
         }
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
         fixture.RestartSchemeShard("/Root/TestTable");
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Check(R"sql(SELECT k, v = "0\\nit's@@" FROM TestTable ORDER BY k;)sql",
@@ -960,7 +959,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, PRIMARY KEY (k));");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT EXISTS (SELECT k FROM Source)"), "subquery");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT NOT EXISTS (SELECT k FROM Source)"), "subquery");
-        fixture.Rejects(DefaultExprDDL("v Uint64 DEFAULT (SELECT COUNT(*) FROM Source)"), "subquery");
+        fixture.Rejects(DefaultExprDDL("v Uint64 DEFAULT ListLength((SELECT COUNT(*) FROM Source))"), "subquery");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT 1 NOT IN (SELECT k FROM Source)"), "subquery");
     }
 
@@ -1877,7 +1876,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable WHERE k = 2u;", "[]");
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE other = 12;", "[]");
 
-        fixture.Exec("BATCH UPDATE TestTable SET v = v + 1ul WHERE v = 42ul;");
+        fixture.Exec("BATCH UPDATE TestTable SET v = 43ul WHERE v = 42ul;");
         fixture.Check("SELECT k FROM TestTable VIEW idx_v WHERE v = 42ul;", "[]");
         fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;",
             "[[1u;11;7u];[1500000000u;20;43u];[2500000000u;21;43u];[3500000000u;31;43u]]");
@@ -2350,7 +2349,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec(ValueTableDDL());
 
         fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN missing SET DEFAULT " << DefaultExpr << ";",
-            "Cannot determine the type of column missing");
+            "Column: \"missing\" does not exist");
         fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT AsList(RandomNumber(1));", "type mismatch");
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
         fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42u]]]");
@@ -2387,7 +2386,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());
 
-        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT (SELECT v FROM TestTable LIMIT 1);",
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT ListLength((SELECT v FROM TestTable LIMIT 1));",
             "subquery");
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
         fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42u]]]");

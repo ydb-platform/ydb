@@ -27,6 +27,7 @@
 {% if backend_name == "YDB" %}
 
 * [ANALYZE](analyze.md)
+* [CHECKSUM TABLE](checksum-table.md)
 
 {% endif %}
 

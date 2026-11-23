@@ -128,13 +128,16 @@ TEST_F(TTlsTest, SimplePingPong)
 
 TEST_F(TTlsTest, FailedCompressedWriteReleasesConnection)
 {
-    Listener = Context->CreateListener(TNetworkAddress::CreateIPv6Loopback(0), Poller, Poller);
+    Listener = Context->CreateListener(TNetworkAddress::CreateIPv6Loopback(/*port*/ 0), Poller, Poller);
     Dialer = CreateDialer(New<TDialerConfig>(), Poller, NetLogger());
-    auto client = WaitForFast(Dialer->Dial(Listener->GetAddress())).ValueOrThrow();
-    auto connection = WaitForFast(Listener->Accept()).ValueOrThrow();
+    auto client = WaitForFast(Dialer->Dial(Listener->GetAddress()))
+        .ValueOrThrow();
+    auto connection = WaitForFast(Listener->Accept())
+        .ValueOrThrow();
     auto weakConnection = MakeWeak(connection);
 
-    WaitForFast(connection->Abort()).ThrowOnError();
+    WaitForFast(connection->Abort())
+        .ThrowOnError();
 
     auto response = New<NHttp::THttpOutput>(
         connection,
@@ -152,9 +155,14 @@ TEST_F(TTlsTest, FailedCompressedWriteReleasesConnection)
     response.Reset();
     connection.Reset();
 
-    WaitForPredicate([&] {
-        return weakCompressor.IsExpired() && weakConnection.IsExpired();
-    }, 100, TDuration::MilliSeconds(10));
+    WaitForPredicate(
+        [&] {
+            return weakCompressor.IsExpired() && weakConnection.IsExpired();
+        },
+        TWaitForPredicateOptions{
+            .IterationCount = 100,
+            .Period = TDuration::MilliSeconds(10),
+        });
 }
 
 TEST_F(TTlsTest, LoadCertificatesFromValues)

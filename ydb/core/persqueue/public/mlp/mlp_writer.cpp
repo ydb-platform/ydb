@@ -53,6 +53,11 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     switch(topic.Status) {
         case NDescriber::EStatus::Success: {
             TopicInfo = topic.Info;
+            if (const auto blocked = GetWriteProhibitedError(TopicInfo->Description.GetPQTabletConfig())) {
+                Status = blocked->Status;
+                ErrorDescription = blocked->Description;
+                return ReplyErrorAndDie();
+            }
             return DoWrite();
         }
         default: {
@@ -288,6 +293,8 @@ void TWriterActor::ReplyIfPossible() {
     }
 
     auto response = std::make_unique<TEvWriteResponse>();
+    response->Status = Status;
+    response->ErrorDescription = ErrorDescription;
     response->DescribeStatus = DescribeStatus;
     if (TopicInfo) {
         response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();

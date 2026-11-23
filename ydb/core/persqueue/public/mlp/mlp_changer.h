@@ -87,6 +87,10 @@ private:
                         TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
                 }
 
+                if (const auto blocked = GetWriteProhibitedError(TopicInfo->Description.GetPQTabletConfig())) {
+                    return ReplyErrorAndDie(blocked->Status, TString(blocked->Description));
+                }
+
                 return DoChanges();
             }
             case NDescriber::EStatus::BadRequest: {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/events.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -36,6 +37,10 @@ struct TMessageId {
 };
 
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, static_cast<ui32>(EEv::EvWriteResponse)> {
+
+    // Non-retryable when the topic write mode rejects the modification before any tablet call.
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+    TString ErrorDescription;
 
     NDescriber::EStatus DescribeStatus;
     ui64 BalancerTabletId = 0;
@@ -224,5 +229,13 @@ struct TDescribeSettings {
 
 // Return TEvDescribeResponse
 IActor* CreateDescriber(const NActors::TActorId& parentId, TDescribeSettings&& settings);
+
+// Set only for WRITE_PROHIBITED. The status is BAD_REQUEST, which callers must not retry.
+struct TWriteProhibitedError {
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::BAD_REQUEST;
+    TString Description;
+};
+
+std::optional<TWriteProhibitedError> GetWriteProhibitedError(const NKikimrPQ::TPQTabletConfig& config);
 
 } // namespace NKikimr::NPQ::NMLP

@@ -38,6 +38,9 @@ void TPurgerActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     switch(topic.Status) {
         case NDescriber::EStatus::Success: {
             TopicInfo = topic;
+            if (const auto blocked = GetWriteProhibitedError(TopicInfo.Info->Description.GetPQTabletConfig())) {
+                return ReplyErrorAndDie(blocked->Status, TString(blocked->Description));
+            }
             return DoPurge();
         }
         case NDescriber::EStatus::BadRequest: {

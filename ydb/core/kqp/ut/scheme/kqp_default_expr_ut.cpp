@@ -1129,6 +1129,54 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         }
     }
 
+    Y_UNIT_TEST_OCTET(UpsertPreparesOmittedDefaultKeys, CompileTimeDefaults, StreamWrite, WithIndex) {
+        TTestFixture fixture(TFixtureOptions{
+            .IndexStreamWrite = StreamWrite,
+            .CompileTimeDefaults = CompileTimeDefaults});
+        fixture.Exec(TStringBuilder() << R"(
+            CREATE TABLE LiteralKeyTable (
+                k Int32 NOT NULL DEFAULT 1,
+                other Int32,
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
+                PRIMARY KEY (k)
+            );
+            CREATE TABLE CompositeKeyTable (
+                k Int32 NOT NULL DEFAULT 1,
+                part Uint64 NOT NULL DEFAULT RandomNumber(2) * 0ul + 2ul,
+                other Int32,
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
+                PRIMARY KEY (k, part)
+            );
+        )");
+        if (WithIndex) {
+            fixture.Exec("ALTER TABLE LiteralKeyTable ADD INDEX idx GLOBAL SYNC ON (other) COVER (v);");
+            fixture.Exec("ALTER TABLE CompositeKeyTable ADD INDEX idx GLOBAL SYNC ON (other) COVER (v);");
+        }
+
+        UNIT_ASSERT(fixture.ColumnDesc("/Root/LiteralKeyTable", "k").HasDefaultFromLiteral());
+        UNIT_ASSERT(fixture.ColumnDesc("/Root/CompositeKeyTable", "k").HasDefaultFromLiteral());
+        AssertFromExpression(fixture.ColumnDesc("/Root/CompositeKeyTable", "part"),
+            "RandomNumber(2) * 0ul + 2ul");
+
+        fixture.Check("UPSERT INTO LiteralKeyTable (other) VALUES (5) RETURNING k, other, v;",
+            "[[1;[5];[42u]]]");
+        fixture.Exec("UPSERT INTO LiteralKeyTable (k, v) VALUES (1, 7ul);");
+        fixture.Check("UPSERT INTO LiteralKeyTable (other) VALUES (6) RETURNING k, other, v;",
+            "[[1;[6];[7u]]]");
+        fixture.Check("SELECT k, other, v FROM LiteralKeyTable;", "[[1;[6];[7u]]]");
+
+        fixture.Check("UPSERT INTO CompositeKeyTable (other) VALUES (5) RETURNING k, part, other, v;",
+            "[[1;2u;[5];[42u]]]");
+        fixture.Exec("UPSERT INTO CompositeKeyTable (k, part, v) VALUES (1, 2ul, 7ul);");
+        fixture.Check("UPSERT INTO CompositeKeyTable (other) VALUES (6) RETURNING k, part, other, v;",
+            "[[1;2u;[6];[7u]]]");
+        fixture.Check("SELECT k, part, other, v FROM CompositeKeyTable;", "[[1;2u;[6];[7u]]]");
+        if (WithIndex) {
+            fixture.Check("SELECT k, other, v FROM LiteralKeyTable VIEW idx;", "[[1;[6];[7u]]]");
+            fixture.Check("SELECT k, part, other, v FROM CompositeKeyTable VIEW idx;", "[[1;2u;[6];[7u]]]");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(ExpressionSequenceAndLiteralDefaultCombinations, CompileTimeDefaults) {
         TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
         fixture.Exec(TStringBuilder() << R"(

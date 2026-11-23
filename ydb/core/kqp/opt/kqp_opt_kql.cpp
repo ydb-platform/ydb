@@ -531,15 +531,21 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
             (keys.contains(TString(col.Value())) ? keyDefaults : valueDefaults).push_back(col);
         }
         lookupDefaults = !valueDefaults.empty();
-        if (lookupDefaults && !keyDefaults.empty()) {
-            auto keyColumns = Build<TCoAtomList>(ctx, pos).Add(keyDefaults).Done();
-            auto emptyColumns = Build<TCoAtomList>(ctx, pos).Done();
-            auto keyInput = ExtendInputRowsWithDefaultColumns(input, inputCols.value(), emptyColumns,
-                keyColumns, table, /* upsert */ false, pos, ctx);
-            input = keyInput.Input;
-            inputCols = keyInput.Columns;
-        }
         if (lookupDefaults) {
+            TVector<TCoAtom> literalKeyDefaults;
+            TVector<TCoAtom> literalValueDefaults;
+            for (const auto& col : literalDefaultCols) {
+                (keys.contains(TString(col.Value())) ? literalKeyDefaults : literalValueDefaults).push_back(col);
+            }
+            if (!keyDefaults.empty() || !literalKeyDefaults.empty()) {
+                auto keyColumns = Build<TCoAtomList>(ctx, pos).Add(keyDefaults).Done();
+                auto literalKeyColumns = Build<TCoAtomList>(ctx, pos).Add(literalKeyDefaults).Done();
+                auto keyInput = ExtendInputRowsWithDefaultColumns(input, inputCols.value(), literalKeyColumns,
+                    keyColumns, table, /* upsert */ false, pos, ctx);
+                input = keyInput.Input;
+                inputCols = keyInput.Columns;
+            }
+            literalDefaultCols = Build<TCoAtomList>(ctx, pos).Add(literalValueDefaults).Done();
             defaultExprCols = Build<TCoAtomList>(ctx, pos).Add(valueDefaults).Done();
         }
     }

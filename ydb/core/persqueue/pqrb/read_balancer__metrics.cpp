@@ -240,7 +240,8 @@ void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletCo
         return;
     }
 
-    if (DynamicCounters) {
+    // UpdateConfig can run before the database metadata arrives from SchemeCache.
+    if (DynamicCounters || database.DatabasePath.empty()) {
         return;
     }
 

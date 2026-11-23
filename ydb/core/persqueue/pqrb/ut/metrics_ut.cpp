@@ -93,6 +93,13 @@ Y_UNIT_TEST_TWIN(DisableMonitoringMetrics, initiallyDisabled) {
         consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
         TTopicMetricsHandler handler;
+        // Config is loaded before SchemeCache provides the database path and labels.
+        database.DatabasePath.clear();
+        handler.UpdateConfig(config, database, topicPath, ctx);
+        UNIT_ASSERT(!root->FindSubgroup("counters", "topics"));
+        UNIT_ASSERT(!root->FindSubgroup("counters", "topics_serverless"));
+
+        database.DatabasePath = "/Root";
         handler.Initialize(config, database, topicPath, ctx);
         const auto initial = exportMetrics();
         UNIT_ASSERT_VALUES_EQUAL(initial.Counters.empty(), initiallyDisabled);

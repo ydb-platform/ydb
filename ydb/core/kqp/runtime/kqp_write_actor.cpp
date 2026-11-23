@@ -282,8 +282,8 @@ namespace NKqp {
 struct IKqpTableWriterCallbacks {
     virtual ~IKqpTableWriterCallbacks() = default;
 
-    // Ready to accept writes
-    virtual void OnReady() = 0;
+    // False if processing a ready writer failed and the owner stopped it.
+    virtual bool OnReady() = 0;
 
     // EvWrite statuses
     virtual void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) = 0;
@@ -302,7 +302,7 @@ struct IKqpTableWriterCallbacks {
     // A RefreshPartitioning() round (pre-prepare re-resolve) has finished for this
     // actor: the resolve completed and all in-flight (re-routed) batches were
     // acknowledged, so it is safe to switch the actor to PREPARE mode.
-    virtual void OnResolveCompleted() {}
+    virtual bool OnResolveCompleted() { return false; }
 };
 
 struct TKqpTableWriterStatistics {
@@ -431,39 +431,9 @@ struct TKqpTableWriterStatistics {
     }
 };
 
-// Compute the shards of `newPartitioning` that now cover the key range of the removed
-// shard with `removedShardMeta` partitioning metadata. Used on split/merge: the removed
-// shard's pending batches are re-routed to these shards, and its TxManager participant
-// state (locks, flags) is moved to them. The range comes from the removed shard's
-// registered metadata (registered by the caller from the pre-update partitioning);
-// the intersection with the new partitioning yields exactly the covering shards.
-TVector<ui64> FindCoveringShards(
-        const TShardMeta& removedShardMeta,
-        const TPartitioning::TCPtr& newPartitioning,
-        const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
-    YDB_LOG_ENSURE(newPartitioning);
-    // The removed shard's metadata must be filled: it is registered from the
-    // pre-update partitioning before the covering computation. A miss means a
-    // re-homing would silently break the commit — fail closed instead.
-    YDB_LOG_ENSURE(removedShardMeta.IsKnown());
-    YDB_LOG_ENSURE(!removedShardMeta.Borders.From.empty());
-
-    auto intersections = newPartitioning->GetIntersectionWithRange(
-        keyColumnTypes, removedShardMeta.Borders);
-    // The removed shard's range must remain covered by the new partitioning; an empty
-    // intersection means a desync — fail closed.
-    YDB_LOG_ENSURE(!intersections.empty());
-    TVector<ui64> result;
-    result.reserve(intersections.size());
-    for (const auto& intersection : intersections) {
-        result.push_back(intersection.ShardId);
-    }
-    return result;
-}
-
 // Whether writes of this transaction participate in the WriteSeqNum protocol —
 // the only user of the split/merge partitioning metadata
-// (FindCoveringShards/MoveShardTo), so shard metas are collected only then.
+// for write ordering and commit participants, so shard metas are collected only then.
 // Shared by the table write actor (its AttachWriteSeqNum member) and the buffer
 // write actor (which serves tables with different schemas and becomes
 // InconsistentTx only with the first write task).
@@ -585,6 +555,12 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
+        Become(&TKqpTableWriteActor::StateProcessing);
+        // Rollback may start between registration and delivery of the bootstrap event.
+        // The buffer still owns this writer, but its rollback targets are already fixed.
+        if (TxManager->IsRollBack()) {
+            return;
+        }
         try {
             const auto partitioning = TxManager->GetTableMeta(TableId).InitialPartitioning;
             if (!partitioning) {
@@ -599,16 +575,12 @@ public:
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.");
-            return;
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage());
-            return;
         }
-
-        Become(&TKqpTableWriteActor::StateProcessing);
     }
 
     static constexpr char ActorName[] = "KQP_TABLE_WRITE_ACTOR";
@@ -728,6 +700,12 @@ public:
     }
 
     STFUNC(StateProcessing) {
+        // The buffer may start rollback while this writer awaits SchemeCache.
+        // A late reply would reroute writes after the rollback targets were chosen.
+        // The buffer receives the rollback replies and keeps the writer for stats.
+        if (TxManager->IsRollBack()) {
+            return;
+        }
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
@@ -924,7 +902,9 @@ public:
             {"tableId", TableId},
             {"partitionsCount", Partitioning->Size()});
 
-        Prepare();
+        if (!Prepare()) {
+            return;
+        }
 
         // Flush old data to new shards
         UpdateShards();
@@ -1416,33 +1396,20 @@ public:
 
             // TxManager must know all shards that will participate in commit
             // before Prepare/Commit is sent to them.
-            // The partitioning metadata is consumed only by the split/merge
-            // handling (FindCoveringShards/MoveShardTo), so it is filled only
-            // under the WriteSeqNum protocol; everywhere else shards are
-            // registered without metadata. A shard already registered with
-            // borders is left untouched: the shard never changes borders between
-            // resolves (a split/merge removes the tablet id entirely), so
-            // re-adding it would only rebuild and re-merge the same metadata. A
-            // shard registered without borders (e.g. a fresh MoveShardTo transfer
-            // target) still needs this UpdateShards pass — that is how it learns
-            // its exact borders.
-            if (AttachWriteSeqNum && (!TxManager->HasShard(shardInfo.ShardId)
-                    || TxManager->GetShardMeta(shardInfo.ShardId).Borders.From.empty())) {
-                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
-            } else {
-                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
-            }
+            // Record table identity independently of partitioning. The first
+            // EvWrite to this tablet registers its creation range before send.
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, TableId.PathId);
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
 
     // Borders/version of the shard in the partitioning this actor currently works
-    // with. Called only under the WriteSeqNum protocol (UpdateShards gates on
+    // with. Called only under the WriteSeqNum protocol (SendDataToShard gates on
     // AttachWriteSeqNum): row tables only, where the resolved partitioning always
     // has representable per-shard key ranges.
     TShardMeta MakeShardMeta(const ui64 shardId) const {
         YDB_LOG_ENSURE(AttachWriteSeqNum);
-        return NKqp::MakeShardMeta(TableId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
+        return NKqp::MakeShardMeta(TableId.PathId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
     }
 
     void FlushBuffer(const TWriteToken token) {
@@ -1609,6 +1576,12 @@ public:
 
         YDB_LOG_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
 
+        if (AttachWriteSeqNum && Mode == EMode::WRITE
+                && TxManager->GetShardMeta(shardId).Borders.From.empty()) {
+            // Save the range before delivery. A lost ACK followed by split
+            // may first expose this tablet's logical lock on a successor.
+            TxManager->AddShard(shardId, IsOlap, TablePath, TableId.PathId, MakeShardMeta(shardId));
+        }
         LinkedPipeCache = true;
         Send(
             PipeCacheId,
@@ -1860,12 +1833,12 @@ public:
             tabletId, /* subscribe */ true), 0, ++state.Cookie, NWilson::TTraceId(ParentTraceId));
     }
 
-    void Prepare() {
+    // Callers may flush only after accepting the resolve. A retry defers
+    // the flush, and owner callbacks may synchronously terminate this writer.
+    bool Prepare() {
         if (TableWriteActorSpan) {
             TableWriteActorSpan.EndOk(); // Resolve finished
         }
-
-        ResolveAttempts = 0;
 
         if (Mode != EMode::WRITE) {
             // TODO: allow resolve during PREPARE/COMMIT,
@@ -1878,7 +1851,7 @@ public:
                     << (RetryResolveByShard.empty()
                         ? TString{}
                         : TStringBuilder() << "Tablet: " << RetryResolveByShard.begin()->first));
-            return;
+            return false;
         }
 
         if (IsOlap) {
@@ -1886,6 +1859,27 @@ public:
             ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
         } else {
             YQL_ENSURE(Partitioning);
+            const bool readCommitted = TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
+            const bool updateTableParticipants = readCommitted && AttachWriteSeqNum
+                && AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+            // This also covers bootstrap from InitialPartitioning. A newer lock
+            // echo can arrive before this reply, even if the writer has no batches.
+            // Retry before replacing the controller's routing or moving any locks.
+            if (updateTableParticipants) {
+                const ui64 knownVersion = TxManager->GetTablePartitioningVersion(TableId.PathId);
+                if (Partitioning->GetVersion() < knownVersion) {
+                    if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
+                        RuntimeError(NYql::NDqProto::StatusIds::UNAVAILABLE,
+                            NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                            TStringBuilder() << "Could not resolve partitioning version " << knownVersion
+                                << " or newer for table `" << TablePath << "`.");
+                    } else {
+                        Partitioning.reset();
+                        RetryResolve();
+                    }
+                    return false;
+                }
+            }
             // The controller's Partitioning member is overwritten by
             // OnPartitioningChanged: it still holds the pre-update partitioning here,
             // needed to register the partitioning metadata of the shards removed by
@@ -1895,7 +1889,23 @@ public:
             ShardedWriteController->OnPartitioningChanged(Partitioning);
 
             const auto deletedShards = ShardedWriteController->GetDeletedShards();
+            // Serializable read locks remain on the original participant. Rerouting
+            // its pending writes would leave those reads outside commit validation.
+            if (!deletedShards.empty() && !InconsistentTx && !readCommitted) {
+                RuntimeError(NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    "A write shard disappeared. Lock transfer requires ReadCommittedRW.");
+                return false;
+            }
             if (!deletedShards.empty() && (InconsistentTx || AttachWriteSeqNum)) {
+                if (AttachWriteSeqNum && !AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit()) {
+                    // Successors cannot validate the old lock when transfer is
+                    // disabled. Keep this transaction from committing unchecked.
+                    RuntimeError(NYql::NDqProto::StatusIds::UNAVAILABLE,
+                        NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                        "Table partitioning changed while lock transfer is disabled.");
+                    return false;
+                }
                 // A split/merge removed shards while this table had pending writes:
                 // re-route their batches to the shards now covering their key ranges
                 // (preserving WriteSeqNum and extending Ancestors) and transfer the removed shards'
@@ -1903,7 +1913,6 @@ public:
                 // commit survives. Row tables only: column tables can't change sharding.
                 YDB_LOG_ENSURE(!IsOlap);
                 YDB_LOG_ENSURE(oldPartitioning);
-                TVector<std::pair<ui64, TVector<ui64>>> transferTargets;
                 if (AttachWriteSeqNum) {
                     // The inconsistent-tx TxManager is collect-only: nothing to transfer.
                     // The removed shards' partitioning metadata must be registered from
@@ -1913,17 +1922,19 @@ public:
                     // consumed by the UpdateShards pass below, which runs against the
                     // new partitioning). Removed shards are always a part of the
                     // pre-update partitioning.
-                    for (const ui64 shardId : deletedShards) {
-                        TxManager->AddShard(shardId, IsOlap, TablePath, NKqp::MakeShardMeta(TableId, oldPartitioning, shardId, KeyColumnTypes.size()));
-                    }
-                    transferTargets.reserve(deletedShards.size());
-                    for (const ui64 shardId : deletedShards) {
-                        transferTargets.emplace_back(shardId, FindCoveringShards(TxManager->GetShardMeta(shardId), Partitioning, KeyColumnTypes));
-                    }
                     THashMap<ui64, ui32> sourcesPerTarget;
-                    for (const auto& [shardId, targets] : transferTargets) {
-                        for (const ui64 target : targets) {
-                            ++sourcesPerTarget[target];
+                    for (const ui64 shardId : deletedShards) {
+                        TxManager->AddShard(shardId, IsOlap, TablePath, TableId.PathId,
+                            NKqp::MakeShardMeta(TableId.PathId, oldPartitioning, shardId, KeyColumnTypes.size()));
+                        // A single source cannot introduce a merge-order conflict.
+                        if (deletedShards.size() > 1) {
+                            const auto& meta = TxManager->GetShardMeta(shardId);
+                            YDB_LOG_ENSURE(meta.IsKnown() && !meta.Borders.From.empty());
+                            const auto targets = Partitioning->GetIntersectionWithRange(KeyColumnTypes, meta.Borders);
+                            YDB_LOG_ENSURE(!targets.empty());
+                            for (const auto& target : targets) {
+                                ++sourcesPerTarget[target.ShardId];
+                            }
                         }
                     }
                     for (const auto& [target, sources] : sourcesPerTarget) {
@@ -1940,37 +1951,25 @@ public:
                                     << "Shards of table `" << TablePath
                                     << "` were merged to shard " << target
                                     << " during the transaction; cannot preserve the write order.");
-                            return;
+                            return false;
                         }
                     }
                 }
                 ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
                 UpdateShards();
-                bool locksConsistent = true;
-                for (const auto& [shardId, targets] : transferTargets) {
-                    // Every covering shard must join the commit: it holds the
-                    // DataShard-side transferred chain of the removed shard even when
-                    // no rows/locks were transferred to it. The empty record guarantees a
-                    // covering prepare at commit time (without it such a target would
-                    // be an unreachable commit participant and the prepare would wait
-                    // for it forever).
-                    ShardedWriteController->EnsureShards(targets);
-                    locksConsistent &= TxManager->MoveShardTo(shardId, targets);
-                }
-                if (!locksConsistent) {
-                    // A transferred ancestor lock merged inconsistently with a lock
-                    // already stored on a target: the transaction cannot proceed.
-                    // Abort here — an earlier AddLock failure does the same, and
-                    // proceeding to prepare would hit the BrokenLocks assumption of
-                    // StartPrepare.
-                    YDB_LOG_ENSURE(TxManager->BrokenLocks());
-                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
-                    return;
-                }
             }
 
+            // Resolve even if the writer lost no shards: the first ancestor echo
+            // may have arrived since the previous resolve of the same partitioning.
+            if (updateTableParticipants && !TxManager->UpdateTableParticipants(
+                    TableId.PathId, ShardedWriteController->GetShardPartitionIndex(), KeyColumnTypes)) {
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager));
+                return false;
+            }
             Partitioning.reset();
         }
+
+        ResolveAttempts = 0;
 
         if (InconsistentTx && Closed) {
             FlushBuffers();
@@ -1988,10 +1987,17 @@ public:
             // completion is immediate.
             YDB_LOG_ENSURE(ShardedWriteController->IsEmpty());
             YDB_LOG_ENSURE(ShardedWriteController->ExtractShardUpdates().empty());
-            Callbacks->OnResolveCompleted();
+            if (!Callbacks->OnResolveCompleted()) {
+                return false;
+            }
+            YDB_LOG_ENSURE(ShardedWriteController);
         }
 
-        Callbacks->OnReady();
+        if (!Callbacks->OnReady()) {
+            return false;
+        }
+        YDB_LOG_ENSURE(ShardedWriteController);
+        return true;
     }
 
     void RuntimeError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues = {}) {
@@ -2049,7 +2055,7 @@ public:
     // Entry of the pre-prepare re-resolve round (Read Committed): re-resolve the
     // table's partitioning before the distributed commit starts, so a quiet
     // split/merge that happened after all writes were acknowledged is observed and
-    // the removed shards' state is transferred (reroute + MoveShardTo) before prepare.
+    // the table participants are updated before prepare.
     // Runs in the same reroute window (EMode::WRITE) as the regular resolve; if a
     // resolve is already in flight (retry path), the completion fires after it.
     void RefreshPartitioning() {
@@ -3602,8 +3608,9 @@ private:
         Callbacks->ResumeExecution();
     }
 
-    void OnReady() override {
+    bool OnReady() override {
         Process();
+        return true;
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&&, ui64) override {
@@ -3853,7 +3860,7 @@ public:
     // possibly re-routing/reroute-draining) before StartPrepare. The round completes
     // via OnResolveCompleted() callbacks; errors terminate the transaction through
     // OnError as usual. Note: unlike StateWaitTasks there is no task-finish branch,
-    // so Process() must not re-enter OnAllTasksFinised during the round.
+    // so Process() must not re-enter OnAllTasksFinished during the round.
     STFUNC(StateResolveRound) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -4850,7 +4857,7 @@ public:
         ProcessAckQueue();
 
         if (CurrentStateFunc() == &TThis::StateWaitTasks && WriteTasks.empty()) {
-            OnAllTasksFinised();
+            return OnAllTasksFinished();
         } else if (CurrentStateFunc() == &TThis::StateFlush) {
             bool isEmpty = true;
             ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
@@ -4859,7 +4866,7 @@ public:
                 }
             });
             if (isEmpty) {
-                OnFlushed();
+                return OnFlushed();
             }
         }
         return true;
@@ -5014,7 +5021,7 @@ public:
         return Process();
     }
 
-    void Commit(ui64 txId, NWilson::TTraceId traceId) {
+    bool Commit(ui64 txId, NWilson::TTraceId traceId) {
         YDB_LOG_ENSURE(WriteTasks.empty());
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->FlushBuffers();
@@ -5025,7 +5032,8 @@ public:
                 YDB_LOG_ENSURE(actor->IsEmpty());
             });
             Rollback(std::move(traceId), /* waitForResult */ true);
-            return;
+            // The writer must stop processing even when rollback has no shards to wait for.
+            return false;
         }
         UpdateTracingState({"Commit", "Commit", "TKqpBufferWriteActor"}, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
         if (TxManager->BrokenLocks()) {
@@ -5034,7 +5042,7 @@ public:
             ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 std::move(issues));
-            return;
+            return false;
         } else if ((!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->CanUseImmediateCommit()) {
             if (NeedResolveBeforeCommit()) {
                 // Read Committed single-shard commit: a quiet split since the last
@@ -5048,7 +5056,7 @@ public:
                 StartResolveRound();
             } else {
                 TxManager->StartExecute();
-                ImmediateCommit();
+                return ImmediateCommit();
             }
         } else {
             YDB_LOG_ENSURE(txId);
@@ -5060,14 +5068,15 @@ public:
             });
 
             if (needToFlushBeforeCommit) {
-                Flush({});
+                return Flush({});
             } else if (NeedResolveBeforeCommit()) {
                 StartResolveRound();
             } else {
                 TxManager->StartPrepare();
-                Prepare();
+                return Prepare();
             }
         }
+        return true;
     }
 
     // Read Committed only: survive a quiet split/merge that happened after all writes
@@ -5081,7 +5090,8 @@ public:
     // prepare with UNAVAILABLE. Transferring them needs a buffer-actor-driven
     // re-resolve of the read tables' partitioning at commit time.
     bool NeedResolveBeforeCommit() const {
-        if (TxManager->GetIsolationLevel() != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+        if (TxManager->GetIsolationLevel() != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW
+                || !AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit()) {
             return false;
         }
         bool hasRowWriteActors = false;
@@ -5116,13 +5126,13 @@ public:
         YDB_LOG_ENSURE(PendingResolveRoundActors > 0);
     }
 
-    void OnResolveCompleted() override {
+    bool OnResolveCompleted() override {
         // ONLY READ COMMITTED
         YDB_LOG_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         if (CurrentStateFunc() == &TThis::StateError || CurrentStateFunc() == &TThis::StateRollback) {
             YDB_LOG_WARN("Ignoring late OnResolveCompleted: the transaction has already failed.",
                 {"logPrefix", this->LogPrefix});
-            return;
+            return false;
         }
         YDB_LOG_ENSURE(CurrentStateFunc() == &TThis::StateResolveRound);
         YDB_LOG_ENSURE(PendingResolveRoundActors > 0);
@@ -5134,12 +5144,13 @@ public:
                 // resolve revealed a split, CanUseImmediateCommit() is false and
                 // the distributed prepare path below takes over (TxId is set).
                 TxManager->StartExecute();
-                ImmediateCommit();
+                return ImmediateCommit();
             } else {
                 TxManager->StartPrepare();
-                Prepare();
+                return Prepare();
             }
         }
+        return true;
     }
 
     bool Prepare() {
@@ -5250,57 +5261,38 @@ public:
     }
 
     // Count shards that actually participate in prepare/commit: write-actor
-    // shards + external shards that have locks + topic shards.  Shards tracked
-    // by TxManager but having neither writes nor locks are excluded because no
-    // prepare/commit message is ever sent to them, so no response will arrive.
+    // shards, external participants and topic shards. A tracked tablet with
+    // no actions or locks gets no request and cannot send a response.
     size_t CountParticipatingShards() const {
-        THashSet<ui64> writeActorShards;
-        ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
-            for (const auto& shardId : actor->GetShardsIds()) {
-                writeActorShards.insert(shardId);
-            }
-        });
-
-        size_t count = writeActorShards.size();
-
-        for (const auto& shardId : TxManager->GetShards()) {
-            if (writeActorShards.contains(shardId)) {
-                continue;
-            }
-            if (TxManager->GetLocks(shardId).empty()) {
-                continue;
-            }
-            ++count;
-        }
-
+        auto shards = TxManager->GetParticipatingShards();
         if (TxManager->HasTopics()) {
-            TTopicTabletTxs topicTxs;
-            TxManager->BuildTopicTxs(topicTxs);
-            count += topicTxs.size();
+            for (const ui64 shardId : TxManager->GetTopicOperations().GetReceivingTabletIds()) {
+                shards.insert(shardId);
+            }
         }
-
-        return count;
+        return shards.size();
     }
 
     void SendToExternalShards(const bool isImmediateCommit) {
-        auto shards = TxManager->GetShards();
+        auto shards = TxManager->GetParticipatingShards();
         YDB_LOG_ENSURE(!isImmediateCommit || CountParticipatingShards() == 1);
 
-        // Exclude shards prepared by write actors
+        // Exclude shards prepared by write actors. Their locks are attached
+        // when the prepare/immediate write is filled (via GetLocks).
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
-            // Only write-actor shards are erased: their locks are attached
-            // when their prepare/immediate write is filled (via GetLocks).
-            // Shards that hold only locks are not write-actor shards — they
-            // are sent by the loop below, which requires non-empty locks.
             for (const auto& shardId : actor->GetShardsIds()) {
                 shards.erase(shardId);
             }
         });
-
-        for (const ui64 shardId : shards) {
-            if (TxManager->GetLocks(shardId).empty()) {
-                continue;
+        if (TxManager->HasTopics()) {
+            // SendToTopics builds and sends their payloads separately.
+            for (const ui64 shardId : TxManager->GetTopicOperations().GetReceivingTabletIds()) {
+                shards.erase(shardId);
             }
+        }
+        // Lock-only shards use the same prepare path and response accounting as
+        // writers. Their requests contain Locks.Op=Commit and an empty payload.
+        for (const ui64 shardId : shards) {
             SendToExternalShard(shardId, isImmediateCommit, /* isRollback */ false);
         }
     }
@@ -5947,7 +5939,7 @@ public:
         ExecuterActorId = ev->Get()->ExecuterActorId;
     }
 
-    void OnAllTasksFinised() {
+    bool OnAllTasksFinished() {
         YDB_LOG_ENSURE(AfterWaitTasksState);
         auto afterWaitTasksState = std::move(*AfterWaitTasksState);
         AfterWaitTasksState = std::nullopt;
@@ -5961,10 +5953,9 @@ public:
         });
 
         if (afterWaitTasksState.IsCommit) {
-            Commit(afterWaitTasksState.TxId, std::move(afterWaitTasksState.TraceId));
-        } else {
-            Flush(std::move(afterWaitTasksState.TraceId));
+            return Commit(afterWaitTasksState.TxId, std::move(afterWaitTasksState.TraceId));
         }
+        return Flush(std::move(afterWaitTasksState.TraceId));
     }
 
     void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -6369,8 +6360,8 @@ public:
         OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
     }
 
-    void OnReady() override {
-        Process();
+    bool OnReady() override {
+        return Process();
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
@@ -6472,7 +6463,7 @@ public:
         Process();
     }
 
-    void OnFlushed() {
+    bool OnFlushed() {
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateFlush);
         CommitPhase.End(Ydb::StatusIds::SUCCESS);
         if (!TxId) {
@@ -6502,11 +6493,10 @@ public:
                 // between its last ack and this point) still transfers the removed
                 // shards before the distributed prepare.
                 StartResolveRound();
-                return;
+                return true;
             }
             TxManager->StartPrepare();
-            Prepare();
-            return;
+            return Prepare();
         }
         Become(&TKqpBufferWriteActor::StateWrite);
 
@@ -6515,6 +6505,7 @@ public:
         });
         ExecuterActorId = {};
         YDB_LOG_ENSURE(GetTotalMemory() == 0);
+        return true;
     }
 
     void OnLookupTaskFinished() override {

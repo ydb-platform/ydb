@@ -208,7 +208,6 @@ public:
 
         FillLocksFromExtraData();
         TxManager->SetHasSnapshot(GetSnapshot().IsValid());
-
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
             Become(&TKqpDataExecuter::FinalizeState);
             MakeResponseAndPassAway();
@@ -1246,24 +1245,25 @@ private:
                 const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                 THashMap<ui64, TShardMeta> shardMetas;
                 for (const auto& shardInfo : info.GetShardPartitioningInfo()) {
-                    // Each meta carries the id of the table its partitioning was
-                    // resolved against (e.g. the lookup table), which is not
-                    // necessarily the producing stage's table meta: a stage with a
-                    // table sink has the sink table's id in its meta.
+                    // A lookup may resolve a different table from the stage's sink.
+                    // Keep the table id supplied by the actor that resolved these borders.
                     shardMetas.emplace(shardInfo.GetShardId(), ToShardMeta(shardInfo));
                 }
                 for (const auto& lock : info.GetLocks()) {
-                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                    const bool isOlap = stageInfo.Meta.TableKind == ETableKind::Olap;
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), isOlap, stageInfo.Meta.TablePath);
 
                     // Partitioning metadata is shipped by the input actor for the
                     // shards it sent EvLocks to; other shards (e.g. locked by plain
                     // reads) are registered without it.
                     if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
                         YDB_LOG_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
-                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
+                        // Older producers omit the table id from partitioning metadata.
+                        const auto& pathId = meta->PathId ? meta->PathId : stageInfo.Meta.TableId.PathId;
+                        TxManager->AddShard(lock.GetDataShard(), isOlap, stageInfo.Meta.TablePath, pathId, *meta);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
                     } else {
-                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddShard(lock.GetDataShard(), isOlap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                     }
                     TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId, deferredVictimSpanId);

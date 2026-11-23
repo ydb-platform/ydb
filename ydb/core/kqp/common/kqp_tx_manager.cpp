@@ -1,4 +1,5 @@
 #include "kqp_tx_manager.h"
+#include "kqp_shard_meta.h"
 
 #include <algorithm>
 #include <ydb/core/tx/locks/sys_tables.h>
@@ -53,26 +54,24 @@ struct TKqpLock {
         return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
     }
 
-    // Merge the shard echo's per-writer WriteSeqNums into the stored lock.
-    // Returns false when an incoming WriteSeqNum for a known writer regresses
-    // below the stored one, i.e. the shard's uncommitted write chain collapsed
-    // underneath us so the stored lock is no longer consistent with the shard.
+    // A current lock's WSN is monotonic per writer. Ancestor copies can
+    // report different branch maxima, so their callers only use the merged WSNs.
     bool MergeWriteSeqNums(const NKikimrDataEvents::TLock& incoming) {
-        bool consistent = true;
+        bool nonDecreasing = true;
         for (const auto& writeSeqNum : incoming.GetWriteSeqNums()) {
             auto* existing = FindIfPtr(*Proto.MutableWriteSeqNums(),
                 [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
             if (existing) {
-                if (writeSeqNum.GetWriteSeqNum() >= existing->GetWriteSeqNum()) {
-                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
+                if (writeSeqNum.GetWriteSeqNum() < existing->GetWriteSeqNum()) {
+                    nonDecreasing = false;
                 } else {
-                    consistent = false;
+                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
                 }
             } else {
                 *Proto.AddWriteSeqNums() = writeSeqNum;
             }
         }
-        return consistent;
+        return nonDecreasing;
     }
 
     TKqpLock(const NKikimrDataEvents::TLock& proto)
@@ -93,10 +92,15 @@ public:
     TKqpTransactionManager(bool collectOnly)
         : CollectOnly(collectOnly) {}
 
-    void AddShard(ui64 shardId, bool isOlap, const TString& path, const TShardMeta& meta) override {
+    void AddShard(ui64 shardId, bool isOlap, const TString& path, const TPathId& pathId, const TShardMeta& meta) override {
         YDB_LOG_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(shardId);
-        auto& shardInfo = ShardsInfo[shardId];
+        auto [shard, inserted] = ShardsInfo.try_emplace(shardId);
+        auto& shardInfo = shard->second;
+        // Repeated registration of a DataShard is expected. Its tablet kind is fixed.
+        // Column tables may share a tablet, so a ColumnShard has no row partition metadata.
+        YDB_LOG_ENSURE(inserted || shardInfo.IsOlap == isOlap);
+        YDB_LOG_ENSURE(!isOlap || (!meta.IsKnown() && !meta.PathId && meta.Borders.From.empty() && meta.Borders.To.empty()));
         shardInfo.IsOlap = isOlap;
         HasOlapTableShard |= isOlap;
 
@@ -104,24 +108,42 @@ public:
         const TStringBuf pathBuf = *stringsIter;
         shardInfo.Pathes.insert(pathBuf);
 
+        if (isOlap) {
+            return;
+        }
+        auto& stored = ShardMetas[shardId];
+        if (inserted || !stored.PathId) {
+            // A plain read may arrive before the first writer supplies a path, or
+            // after this tablet was retired. In the latter case its path is still known.
+            if (!stored.PathId) {
+                stored.PathId = pathId;
+            }
+            if (stored.PathId) {
+                RowTables[stored.PathId].Shards.insert(shardId);
+            }
+        }
+
         // Keep the freshest known metadata: a shard discovered through several
         // paths (write batch, lock echo) may arrive with the same borders from
         // different partitioning snapshots; only the version moves forward.
-        if (meta.IsKnown()) {
-            auto& stored = shardInfo.Meta;
-            if (stored.IsKnown()) {
-                YDB_LOG_ENSURE(stored.TableId == meta.TableId,
-                    {"stored", stored.TableId},
-                    {"incoming", meta.TableId});
+        // A partitioning can supply borders even when its version is unknown.
+        // Those borders still identify the creation range of a later lock echo.
+        if (meta.IsKnown() || !meta.Borders.From.empty()) {
+            YDB_LOG_ENSURE(!meta.PathId || meta.PathId == stored.PathId,
+                {"registered", stored.PathId}, {"incoming", meta.PathId});
+            if (stored.PathId && meta.IsKnown()) {
+                auto& version = RowTables[stored.PathId].PartitioningVersion;
+                version = Max(version, meta.PartitioningVersion);
+            }
+            if (stored.IsKnown() || !stored.Borders.From.empty()) {
                 // Metadata may arrive as borders-with-version or version-only (the
                 // caller had no resolved partitioning at hand). Compare borders only
                 // when both sides carry them. A version-only meta describes a shard
                 // absent from the caller's partitioning snapshot (e.g. a shard removed
                 // by a split/merge): it carries no borders, so it must not move the
                 // version of a stored meta that has borders — the stored version must
-                // keep matching the stored borders, or MoveShardTo's
-                // strictly-newer-version check between two borders-known metas breaks
-                // (from == to).
+                // keep matching the stored borders to identify an older partitioning
+                // when checking the retired participant.
                 const bool bordersKnown = stored.Borders.From.size() > 0 || stored.Borders.To.size() > 0;
                 const bool incomingBorders = meta.Borders.From.size() > 0 || meta.Borders.To.size() > 0;
                 if (bordersKnown && incomingBorders) {
@@ -150,7 +172,8 @@ public:
                     stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
                 }
             } else {
-                stored = meta;
+                stored.Borders = meta.Borders;
+                stored.PartitioningVersion = meta.PartitioningVersion;
             }
         }
     }
@@ -197,12 +220,16 @@ public:
         }
     }
 
-    bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto, ui64 querySpanId, ui64 deferredVictimQuerySpanId) override {
+    bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto, ui64 querySpanId,
+            ui64 deferredVictimQuerySpanId) override {
         YDB_LOG_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         TKqpLock lock(lockProto);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
         bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
                             || (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
+        // CreatedOn identifies the logical lock whose WSN the shard acknowledged.
+        YDB_LOG_ENSURE(lock.Proto.GetCreatedOn() || !lock.Proto.WriteSeqNumsSize(),
+            {"lockId", lock.Proto.GetLockId()});
         bool isLocksAcquireFailure = isError && !isInvalidated;
         bool broken = false;
 
@@ -213,19 +240,27 @@ public:
             ? deferredVictimQuerySpanId : querySpanId;
 
         auto& shardInfo = ShardsInfo.at(shardId);
+        // Plain read locks may omit CreatedOn. When present, copies with the same
+        // owner must agree on whether the chain was created on that owner.
+        if (lock.Proto.GetCreatedOn()) {
+            const auto ownerKey = std::make_tuple(lock.Proto.GetLockId(), lock.Proto.GetDataShard(),
+                lock.Proto.GetSchemeShard(), lock.Proto.GetPathId());
+            const bool createdOnOwner = lock.Proto.GetCreatedOn() == lock.Proto.GetDataShard();
+            auto [mode, inserted] = IsCreatedOnOwner.emplace(ownerKey, createdOnOwner);
+            isInvalidated |= !inserted && mode->second != createdOnOwner;
+        }
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
-            // Merge per writer so an echo from a later write can't drop another writer's entry.
-            // A regression (incoming < stored for a known writer) means the shard's uncommitted
-            // write chain collapsed and the stored lock no longer matches the shard, so treat it
-            // as an invalidation rather than crashing.
-            const bool writeSeqNumsConsistent = lockPtr->Lock.MergeWriteSeqNums(lock.Proto);
+            // Only a reply from the creation tablet must be monotonic. Successors
+            // can echo different branch maxima for the same writer.
+            const bool nonDecreasing = lockPtr->Lock.MergeWriteSeqNums(lock.Proto);
+            isInvalidated |= lock.Proto.GetCreatedOn() == shardId && !nonDecreasing;
 
             lockPtr->LocksAcquireFailure |= isLocksAcquireFailure;
             if (!lockPtr->LocksAcquireFailure) {
-                isInvalidated |= lockPtr->Lock.Invalidated(lock) || !writeSeqNumsConsistent;
+                isInvalidated |= lockPtr->Lock.Invalidated(lock);
                 lockPtr->Invalidated |= isInvalidated;
             }
             broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
@@ -275,106 +310,155 @@ public:
         return true;
     }
 
-    // A shard removed by a split/merge had its participant state moved to every shard
-    // covering its range
-    bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
+    ui64 GetTablePartitioningVersion(const TPathId& pathId) const override {
+        const auto* table = RowTables.FindPtr(pathId);
+        return table ? table->PartitioningVersion : 0;
+    }
+
+    bool UpdateTableParticipants(const TPathId& pathId, const TShardPartitionIndex& index,
+            const TVector<NScheme::TTypeInfo>& keyTypes) override {
         YDB_LOG_ENSURE(State == ETransactionState::COLLECTING);
-        YDB_LOG_ENSURE(!toShardIds.empty());
-
-        // The removed shard's tablet id is gone: GetDeletedShards only returns shards
-        // absent from the new partitioning, so the targets cannot contain it. A target
-        // equal to the removed shard would corrupt the participant state on the erase
-        // below — fail closed.
-        YDB_LOG_ENSURE(!FindPtr(toShardIds, fromShardId));
-        auto fromIt = ShardsInfo.find(fromShardId);
-        YDB_LOG_ENSURE(fromIt != ShardsInfo.end());
-        const TShardInfo from = std::move(fromIt->second);
-        ShardsInfo.erase(fromIt);
-        ShardsIds.erase(fromShardId);
-        YDB_LOG_ENSURE(from.State == EShardState::PROCESSING);
-        YDB_LOG_ENSURE(!from.IsOlap);
-        YDB_LOG_ENSURE(from.Meta.IsKnown());
-
-        bool locksConsistent = true;
-        for (const ui64 toShardId : toShardIds) {
-            YDB_LOG_ENSURE(toShardId != fromShardId);
-            // MoveShard to may be called for toShardIds several times in case of merge.
-            auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
-            auto& to = toIt->second;
-            // Verify the partitioning meta when both sides carry it (unknown or
-            // borders-less metadata — e.g. a fresh EnsureShards-only target — is
-            // safely skipped): the target must be a shard of a strictly newer
-            // partitioning whose range intersects the removed shard's range. The
-            // border comparison uses the moved table's key schema (SetTableMeta),
-            // stored by the executer for every resolved table; the lookup is kept
-            // inside the checked branch so paths that skip the comparison do not
-            // require it. Both metas carry the exact table id (path + schema
-            // version) the partitioning was resolved against, so they must match
-            // exactly — a schema version mismatch means the borders are not
-            // comparable byte-wise.
-            const bool fromMetaUsable = from.Meta.IsKnown() && !from.Meta.Borders.From.empty();
-            const bool toMetaUsable = to.Meta.IsKnown() && !to.Meta.Borders.From.empty();
-            if (fromMetaUsable && toMetaUsable) {
-                const auto* tableMeta = TableMetas.FindPtr(from.Meta.TableId);
-                YDB_LOG_ENSURE(tableMeta,
-                    {"tableId", from.Meta.TableId});
-                const auto& keyColumnTypes = tableMeta->KeyColumnTypes;
-                YDB_LOG_ENSURE(from.Meta.TableId == to.Meta.TableId,
-                    {"fromShardId", fromShardId},
-                    {"toShardId", toShardId},
-                    {"fromTableId", from.Meta.TableId},
-                    {"toTableId", to.Meta.TableId});
-                YDB_LOG_ENSURE(from.Meta.PartitioningVersion < to.Meta.PartitioningVersion,
-                    {"fromShardId", fromShardId},
-                    {"toShardId", toShardId},
-                    {"fromVersion", from.Meta.PartitioningVersion},
-                    {"toVersion", to.Meta.PartitioningVersion});
-                YDB_LOG_ENSURE(!Intersect(keyColumnTypes, from.Meta.Borders, to.Meta.Borders).IsEmptyRange(keyColumnTypes),
-                    {"fromShardId", fromShardId},
-                    {"toShardId", toShardId},
-                    {"keyColumnsCount", keyColumnTypes.size()});
-            }
-            // Metadata is not inherited from the removed shard: after a split/merge
-            // the target covers a different key range, and the targets that receive
-            // the transferred writes learn their exact borders from their own
-            // UpdateShards pass (AddShard with the new partitioning).
-            to.IsOlap = from.IsOlap;
-            // A merge may transfer several removed shards onto the same target:
-            // merge the flags instead of overwriting, or an earlier shard's
-            // flag (e.g. READ, used to build SendingShards in StartPrepare)
-            // would be lost.
-            to.Flags |= from.Flags;
-            to.Pathes.insert(from.Pathes.begin(), from.Pathes.end());
-            for (const ui64 querySpanId : from.BreakerQuerySpanIds) {
-                AddBreakerQuerySpanId(to, querySpanId);
-            }
-            for (const auto& [key, lockInfo] : from.Locks) {
-                if (auto existing = to.Locks.FindPtr(key)) {
-                    // The same ancestor lock reached the target through two removed
-                    // shards (e.g. shards merged back after a split). A WriteSeqNum
-                    // regression means the stored lock no longer matches the shard's
-                    // uncommitted write chain: mirror AddLock and treat it as an
-                    // invalidation instead of crashing — the caller aborts the
-                    // transaction with the recorded locks issue.
-                    if (!existing->Lock.MergeWriteSeqNums(lockInfo.Lock.Proto)) {
-                        // TODO: What if shards merged back after split???
-                        SetVictimQuerySpanId(existing->VictimQuerySpanId != 0
-                            ? existing->VictimQuerySpanId
-                            : lockInfo.VictimQuerySpanId);
-                        existing->Invalidated = true;
-                        if (!LocksIssue && State != ETransactionState::ERROR) {
-                            MakeLocksIssue(to);
-                        }
-                        locksConsistent = false;
+        const auto& partitioning = index.GetPartitioning();
+        YDB_LOG_ENSURE(partitioning);
+        auto& table = RowTables[pathId];
+        table.PartitioningVersion = Max(table.PartitioningVersion, partitioning->GetVersion());
+        if (table.Shards.empty()) {
+            return true;
+        }
+        // Snapshot ids before adding successors and removing retired tablets.
+        // Each table resolve visits only that table's current participants.
+        const auto tableShards = table.Shards;
+        YDB_LOG_ENSURE(!keyTypes.empty());
+        struct TExpectedLock {
+            TShardInfo::TLockInfo Info;
+            TActionFlags Flags;
+            TOwnedTableRange CreationRange{};
+        };
+        THashMap<TKqpLock::TKey, TExpectedLock> expected;
+        THashSet<TStringBuf> paths;
+        TVector<ui64> retired;
+        // Several physical participants may hold the same logical lock. Merge
+        // their observations before replacing any of the old participant entries.
+        for (const ui64 shardId : tableShards) {
+            auto& shard = ShardsInfo.at(shardId);
+            const bool isRetired = index.FindPartitionIndex(shardId) == partitioning->Size();
+            for (auto& [key, lock] : shard.Locks) {
+                const auto& proto = lock.Lock.Proto;
+                const TPathId lockPathId(proto.GetSchemeShard(), proto.GetPathId());
+                if (lockPathId != pathId) {
+                    // Removing the participant would discard the other table's lock.
+                    YDB_LOG_ENSURE(!isRetired, {"shardId", shardId}, {"pathId", pathId}, {"lockPathId", lockPathId});
+                    continue;
+                }
+                // Copy the lock only when this logical key is first seen.
+                auto [entry, inserted] = expected.try_emplace(key, lock, shard.Flags);
+                if (!inserted) {
+                    entry->second.Flags |= shard.Flags;
+                    if (!MergeLockInfo(entry->second.Info, lock)) {
+                        lock.Invalidated = true;
+                        SetVictimQuerySpanId(entry->second.Info.VictimQuerySpanId);
+                        MakeLocksIssue(shard);
+                        return false;
                     }
-                } else {
-                    to.Locks.emplace(key, lockInfo);
+                }
+                if (lock.Invalidated || lock.LocksAcquireFailure) {
+                    lock.Invalidated = true;
+                    SetVictimQuerySpanId(entry->second.Info.VictimQuerySpanId);
+                    MakeLocksIssue(shard);
+                    return false;
+                }
+                if (inserted) {
+                    // Resolve once per logical key, while the old participant set is intact.
+                    entry->second.CreationRange = GetCreationRange(proto);
                 }
             }
-            ShardsIds.insert(toShardId);
+            paths.insert(shard.Pathes.begin(), shard.Pathes.end());
+            if (isRetired) {
+                if (shard.Flags) {
+                    // Roles follow the physical shard range, which may be narrower than a lock's creation range.
+                    const auto& meta = GetShardMeta(shardId);
+                    YDB_LOG_ENSURE(!meta.Borders.From.empty(), {"shardId", shardId}, {"pathId", pathId});
+                    const auto version = partitioning->GetVersion();
+                    YDB_LOG_ENSURE(!meta.IsKnown() || !version || meta.PartitioningVersion < version,
+                        {"shardId", shardId}, {"shardVersion", meta.PartitioningVersion}, {"resolvedVersion", version});
+                }
+                retired.push_back(shardId);
+            }
+        }
+        if (expected.empty() && retired.empty()) {
+            return true;
+        }
+
+        YDB_LOG_ENSURE(!paths.empty());
+        const TString path(*paths.begin());
+        THashSet<ui64> registeredTargets;
+        auto targetFor = [&](ui64 shardId) -> TShardInfo& {
+            // Roles and many logical locks may select the same target. Register
+            // its current borders once, including targets with no writer batch.
+            if (registeredTargets.insert(shardId).second) {
+                AddShard(shardId, false, path, pathId, MakeShardMeta(pathId, index, shardId, keyTypes.size()));
+            }
+            return ShardsInfo.at(shardId);
+        };
+
+        for (const ui64 shardId : retired) {
+            auto from = std::move(ShardsInfo.at(shardId));
+            ShardsInfo.erase(shardId);
+            ShardsIds.erase(shardId);
+            YDB_LOG_ENSURE(table.Shards.erase(shardId));
+            YDB_LOG_ENSURE(!from.IsOlap && from.State == EShardState::PROCESSING);
+            if (from.Flags) {
+                // Roles and their query spans follow the retired tablet's physical
+                // range, even when no lock or pending write covers a successor.
+                const auto targets = partitioning->GetIntersectionWithRange(keyTypes, GetShardMeta(shardId).Borders);
+                YDB_LOG_ENSURE(!targets.empty());
+                for (const auto& target : targets) {
+                    auto& to = targetFor(target.ShardId);
+                    to.Flags |= from.Flags;
+                    to.Pathes.insert(from.Pathes.begin(), from.Pathes.end());
+                    for (const ui64 spanId : from.BreakerQuerySpanIds) {
+                        AddBreakerQuerySpanId(to, spanId);
+                    }
+                }
+                ShardsTransferred = true;
+            }
+        }
+        if (expected.empty()) {
+            return true;
+        }
+        // Surviving tablets keep their roles. Replace their copies only after
+        // validating the whole table, so a rejected merge can still roll back.
+        for (const ui64 shardId : tableShards) {
+            if (auto* shard = ShardsInfo.FindPtr(shardId)) {
+                for (auto it = shard->Locks.begin(); it != shard->Locks.end();) {
+                    const auto current = it++;
+                    const auto& proto = current->second.Lock.Proto;
+                    if (TPathId(proto.GetSchemeShard(), proto.GetPathId()) == pathId) {
+                        shard->Locks.erase(current);
+                    }
+                }
+            }
+        }
+        for (const auto& [key, lock] : expected) {
+            // CreatedOn is part of the logical key, so every copy uses the same
+            // original range, including partitions with no pending rows to write.
+            const auto intersections = partitioning->GetIntersectionWithRange(keyTypes, lock.CreationRange);
+            YDB_LOG_ENSURE(!intersections.empty());
+            for (const auto& intersection : intersections) {
+                auto& target = targetFor(intersection.ShardId);
+                target.Pathes.insert(paths.begin(), paths.end());
+                target.Locks.emplace(key, lock.Info);
+                // Empty copies need the same commit role as the original lock.
+                auto flags = lock.Flags;
+                if (!flags) {
+                    flags = lock.Info.Lock.Proto.GetHasWrites() ? EAction::WRITE : EAction::READ;
+                }
+                target.Flags |= flags;
+                ReadOnly &= !(flags & (EAction::WRITE | EAction::PESSIMISTIC_LOCK));
+            }
         }
         ShardsTransferred = true;
-        return locksConsistent;
+        return true;
     }
 
     void BreakLock(ui64 shardId) override {
@@ -394,7 +478,11 @@ public:
     }
 
     const TShardMeta& GetShardMeta(ui64 shardId) const override {
-        return ShardsInfo.at(shardId).Meta;
+        if (const auto* meta = ShardMetas.FindPtr(shardId)) {
+            return *meta;
+        }
+        static const TShardMeta unknown;
+        return unknown;
     }
 
     EShardState GetState(ui64 shardId) const override {
@@ -668,6 +756,16 @@ public:
         return ShardsIds;
     }
 
+    THashSet<ui64> GetParticipatingShards() const override {
+        THashSet<ui64> result;
+        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+            if (ParticipatesInCommit(shardInfo)) {
+                result.insert(shardId);
+            }
+        }
+        return result;
+    }
+
     ui64 GetShardsCount() const override {
         return ShardsIds.size();
     }
@@ -692,6 +790,8 @@ public:
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
 
+        // IsVolatile() may count all participants. Their membership is fixed during prepare.
+        const bool isVolatile = IsVolatile();
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if (!ParticipatesInCommit(shardInfo)) {
                 // Phantom shard holds no reads/writes/locks and does not take
@@ -699,12 +799,12 @@ public:
                 YDB_LOG_ENSURE(shardInfo.State == EShardState::PROCESSING);
                 continue;
             }
-            if ((shardInfo.Flags & EAction::WRITE)) {
+            if (shardInfo.Flags & (EAction::WRITE | EAction::PESSIMISTIC_LOCK)) {
                 ReceivingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
                     receivingColumnShardsSet.insert(shardId);
                 }
-                if (IsVolatile()) {
+                if (isVolatile) {
                     SendingShards.insert(shardId);
                 }
             }
@@ -720,9 +820,7 @@ public:
         }
 
         constexpr size_t minArbiterMeshSize = 5;
-        if ((IsVolatile() &&
-            ReceivingShards.size() >= minArbiterMeshSize))
-        {
+        if (isVolatile && ReceivingShards.size() >= minArbiterMeshSize) {
             std::vector<ui64> candidates;
             candidates.reserve(ReceivingShards.size());
             for (ui64 candidate : ReceivingShards) {
@@ -739,7 +837,7 @@ public:
         }
 
         if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
-            YDB_LOG_ENSURE(!IsVolatile());
+            YDB_LOG_ENSURE(!isVolatile);
             const auto& shards = receivingColumnShardsSet.empty()
                 ? sendingColumnShardsSet
                 : receivingColumnShardsSet;
@@ -803,6 +901,9 @@ public:
                     && IsSingleShard()));
         YDB_LOG_ENSURE(NeedCommit());
         YDB_LOG_ENSURE(!BrokenLocks());
+        // The chosen PREPARE path can have one receiver, including a lone
+        // external lock owner. Validate the entry state of this commit path.
+        YDB_LOG_ENSURE(State == ETransactionState::PREPARING || ReceivingShards.empty());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
@@ -818,7 +919,6 @@ public:
 
         ShardsToWait = GetParticipatingShards();
 
-        YDB_LOG_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -900,9 +1000,9 @@ private:
 
     struct TShardInfo {
         EShardState State = EShardState::PROCESSING;
+        // Accumulate direct and inherited roles, even when repartitioning
+        // leaves this participant without a local lock copy or pending writes.
         TActionFlags Flags = 0;
-
-        TShardMeta Meta;
 
         struct TLockInfo {
             TKqpLock Lock;
@@ -925,6 +1025,26 @@ private:
         THashSet<ui64> BreakerQuerySpanIdsSet;
     };
 
+    // CreatedOn can name a retired tablet. Its range is retained independently
+    // of the current participant set and table partitioning.
+    const TOwnedTableRange& GetCreationRange(const NKikimrDataEvents::TLock& lock) const {
+        const ui64 createdOn = lock.GetCreatedOn() ? lock.GetCreatedOn() : lock.GetDataShard();
+        const auto& range = GetShardMeta(createdOn).Borders;
+        YDB_LOG_ENSURE(!range.From.empty(), {"lockId", lock.GetLockId()}, {"createdOn", createdOn});
+        return range;
+    }
+
+    static bool MergeLockInfo(TShardInfo::TLockInfo& stored, const TShardInfo::TLockInfo& incoming) {
+        stored.Invalidated |= incoming.Invalidated || stored.Lock.Invalidated(incoming.Lock);
+        stored.LocksAcquireFailure |= incoming.LocksAcquireFailure;
+        stored.Lock.Proto.SetHasWrites(stored.Lock.Proto.GetHasWrites() || incoming.Lock.Proto.GetHasWrites());
+        stored.Lock.MergeWriteSeqNums(incoming.Lock.Proto);
+        if (!stored.VictimQuerySpanId) {
+            stored.VictimQuerySpanId = incoming.VictimQuerySpanId;
+        }
+        return !stored.Invalidated && !stored.LocksAcquireFailure;
+    }
+
     static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {
         if (querySpanId != 0 && shardInfo.BreakerQuerySpanIdsSet.emplace(querySpanId).second) {
             shardInfo.BreakerQuerySpanIds.push_back(querySpanId);
@@ -934,16 +1054,6 @@ private:
     static bool ParticipatesInCommit(const TShardInfo& shardInfo) {
         // Only shards with reads/writes/locks.
         return shardInfo.Flags != 0 || !shardInfo.Locks.empty();
-    }
-
-    THashSet<ui64> GetParticipatingShards() const {
-        THashSet<ui64> result;
-        for (const auto& [shardId, shardInfo] : ShardsInfo) {
-            if (ParticipatesInCommit(shardInfo)) {
-                result.insert(shardId);
-            }
-        }
-        return result;
     }
 
     ui64 GetParticipatingShardsCount() const {
@@ -978,6 +1088,19 @@ private:
 
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
+    // Group participants by stable table path so ALTER does not split one
+    // table's locks into separate buckets by schema version.
+    struct TRowTable {
+        THashSet<ui64> Shards;
+        // Writers and lock actors resolve independently. A delayed reply must
+        // not retire participants registered against a newer partitioning.
+        ui64 PartitioningVersion = 0;
+    };
+    THashMap<TPathId, TRowTable> RowTables;
+    // One set of borders per row tablet, including retired ones: a successor's
+    // first lock echo may name a tablet whose last write ACK was lost before split.
+    THashMap<ui64, TShardMeta> ShardMetas;
+
     std::unordered_set<TString> TablePathes;
     ui64 ActionsCount = 0;
     bool ShardsTransferred = false;
@@ -985,6 +1108,10 @@ private:
     THashSet<ui32> ParticipantNodes;
 
     THashMap<TTableId, TTableMeta> TableMetas;
+    // Keyed by (LockId, Owner, SchemeShard, PathId), across all physical copies.
+    // True means CreatedOn == Owner. A different mode for the same key invalidates
+    // the transaction. Retain this check even after the original shard is retired.
+    THashMap<std::tuple<ui64, ui64, ui64, ui64>, bool> IsCreatedOnOwner;
 
     bool AllowVolatile = false;
     bool ReadOnly = true;

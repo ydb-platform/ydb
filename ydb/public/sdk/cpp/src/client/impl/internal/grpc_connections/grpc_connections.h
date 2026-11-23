@@ -156,7 +156,9 @@ public:
                 || dbState->Database.empty()
                 || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
             {
-                SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+                if (!dbState->EndpointPool.UsesWatch()) {
+                    SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+                }
             } else {
                 auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
                 if (!endpoint) {
@@ -171,7 +173,7 @@ public:
             }
         }
 
-        if (UsePerChannelTcpConnection_ || selected.Admission) {
+        if (UsePerChannelTcpConnection_) {
             clientConfig.IntChannelParams[GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL] = 1;
         }
 

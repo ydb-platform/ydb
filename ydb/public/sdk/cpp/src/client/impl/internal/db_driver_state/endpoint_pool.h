@@ -33,7 +33,7 @@ public:
     TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client);
     ~TEndpointPool();
     void EnableWatch();
-    enum class ERouteUpdate { Refresh, Switch };
+    enum class ERouteUpdate { Refresh, Switch, LegacyRefresh };
     void PublishWatchResult(TListEndpointsResult result, ERouteUpdate update = ERouteUpdate::Refresh);
     bool UsesWatch() const { return UsesWatch_; }
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();

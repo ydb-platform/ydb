@@ -38,7 +38,6 @@ public:
         IInternalClient* client
     );
 
-    ~TDbDriverState();
     std::weak_ptr<NYdbGrpc::IQueueClientContext> EndpointWatchContext;
     std::mutex BootstrapPinMutex;
     std::shared_ptr<void> BootstrapPin;

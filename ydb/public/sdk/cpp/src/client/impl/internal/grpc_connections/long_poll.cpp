@@ -21,6 +21,7 @@ void TGRpcConnectionsImpl::StartEndpointWatch(TDbDriverStatePtr state) {
 NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDbDriverState> weak,
     IQueueClientContextPtr context) {
     std::optional<std::uint64_t> generation;
+    bool installedLegacy = false;
     unsigned failures = 0;
     while (!context->IsCancelled()) {
         auto state = weak.lock();
@@ -36,7 +37,8 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
         }
         TDuration delay;
         TListEndpointsResult result;
-        auto update = TEndpointPool::ERouteUpdate::Refresh;
+        auto update = installedLegacy && !generation
+            ? TEndpointPool::ERouteUpdate::LegacyRefresh : TEndpointPool::ERouteUpdate::Refresh;
         try {
             auto call = ListEndpoints(state, std::move(settings), context);
             state.reset();
@@ -45,6 +47,7 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
                 const auto& metadata = result.DiscoveryStatus.Metadata;
                 const auto [it, end] = metadata.equal_range("x-ydb-route-generation");
                 if (it == end && !generation) {
+                    installedLegacy |= !result.Result.endpoints().empty();
                     delay = TDuration::Minutes(1); // Unmodified worker. Probe again on the next normal refresh.
                 } else {
                     std::uint64_t next = 0;
@@ -55,7 +58,7 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
                         valid = ec == std::errc{} && ptr == value.data() + value.size() && (!generation || next >= *generation);
                     }
                     if (valid) {
-                        if (generation && next > *generation) {
+                        if ((!generation && installedLegacy) || (generation && next > *generation)) {
                             update = TEndpointPool::ERouteUpdate::Switch;
                         }
                         generation = next;
@@ -68,8 +71,11 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
             result = {{}, TPlainStatus(EStatus::CLIENT_INTERNAL_ERROR, error.what())};
         }
         state = weak.lock();
-        if (!state || context->IsCancelled()) {
+        if (!state) {
             co_return;
+        }
+        if (context->IsCancelled()) {
+            break;
         }
         if (!result.DiscoveryStatus.Ok() || result.Result.endpoints().empty()) {
             failures = std::min(6u, failures + 1);
@@ -82,8 +88,12 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
         state->SignalDiscoveryCompleted();
         state.reset();
         if (delay && !(co_await ScheduleFuture(delay, context))) {
-            co_return;
+            break;
         }
+    }
+    if (auto state = weak.lock()) {
+        state->EndpointPool.PublishWatchResult({{}, MakeClientStoppedStatus()});
+        state->SignalDiscoveryCompleted();
     }
 }
 

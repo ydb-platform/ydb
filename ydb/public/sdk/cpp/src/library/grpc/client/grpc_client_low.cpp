@@ -152,17 +152,17 @@ void TEndpointAdmission::Retire() {
     }
 }
 
-void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {
+void TGRpcRequestProcessorCommon::ApplyMeta(grpc::ClientContext& context, const TCallMeta& meta) {
     for (const auto& rec : meta.Aux) {
-        Context->AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
+        context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
     }
     if (meta.CallCredentials) {
-        Context->set_credentials(meta.CallCredentials);
+        context.set_credentials(meta.CallCredentials);
     }
     if (const NYdb::TDeadline::Duration* timeout = std::get_if<NYdb::TDeadline::Duration>(&meta.Timeout)) {
-        Context->set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
+        context.set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
     } else if (const NYdb::TDeadline* deadline = std::get_if<NYdb::TDeadline>(&meta.Timeout)) {
-        Context->set_deadline(*deadline);
+        context.set_deadline(*deadline);
     }
 }
 

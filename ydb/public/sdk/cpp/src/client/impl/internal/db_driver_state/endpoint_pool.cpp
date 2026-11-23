@@ -33,7 +33,9 @@ void TEndpointPool::PublishWatchResult(TListEndpointsResult result, ERouteUpdate
         result.DiscoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, "Discovery returned an empty endpoint assignment");
     }
     update.DiscoveryStatus = std::move(result.DiscoveryStatus);
-    update.Removed = Install(update.DiscoveryStatus.Ok() ? result.Result : Ydb::Discovery::ListEndpointsResult{});
+    if (update.DiscoveryStatus.Ok() || routeUpdate != ERouteUpdate::LegacyRefresh) {
+        update.Removed = Install(update.DiscoveryStatus.Ok() ? result.Result : Ydb::Discovery::ListEndpointsResult{});
+    }
     NThreading::TPromise<TEndpointUpdateResult> promise;
     {
         std::lock_guard guard(Mutex_);

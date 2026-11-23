@@ -64,12 +64,6 @@ TDbDriverState::TDbDriverState(
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
 }
 
-TDbDriverState::~TDbDriverState() {
-    if (auto watch = EndpointWatchContext.lock()) {
-        watch->Cancel();
-    }
-}
-
 void TDbDriverState::InitCredentials(
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
@@ -262,6 +256,18 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
 
             lock.lock(); // re-acquire lock
             Y_ABORT_UNLESS(weakState.expired());
+            if (strongState->EndpointPool.UsesWatch()) {
+                // A discovery RPC uses shared_from_this() internally. Only application owners
+                // keep this separate reference alive, so the last client cancels its idle poll.
+                auto* state = strongState.get();
+                strongState = TDbDriverStatePtr(state, [resource = std::move(strongState)](TDbDriverState*) mutable {
+                    if (auto context = resource->EndpointWatchContext.lock()) {
+                        context->Cancel();
+                    }
+                    // The tracker keeps a weak reference to this control block.
+                    resource.reset();
+                });
+            }
             weakState = strongState; // reference remains valid
             Notify_.notify_all();
         }

@@ -174,6 +174,97 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT_VALUES_EQUAL(metadata.find("replica")->second, "source");
     }
 
+    Y_UNIT_TEST(StoppingDuringInitialPollCompletesPendingRequests) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TDiscovery bootstrap;
+        auto held = NThreading::NewPromise<void>();
+        bootstrap.Lookup = [&](auto* context, auto&) {
+            held.TrySetValue();
+            while (!context->IsCancelled()) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            return grpc::Status::CANCELLED;
+        };
+        auto server = StartServer(port, bootstrap);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll));
+        NTable::TTableClient client(driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        auto result = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings);
+        UNIT_ASSERT(held.GetFuture().Wait(TDuration::Seconds(5)));
+        driver.Stop(true);
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(3)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValueSync().GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+
+    Y_UNIT_TEST(IndependentDriversKeepSharingDataSockets) {
+        TPortManager ports;
+        const auto bootPort = ports.GetPort(), dataPort = ports.GetPort();
+        TTableService table;
+        auto node = StartServer(dataPort, table);
+        TDiscovery discovery;
+        discovery.Lookup = [&](auto*, auto& result) {
+            auto* endpoint = result.add_endpoints();
+            endpoint->set_address("127.0.0.1");
+            endpoint->set_port(dataPort);
+            return grpc::Status::OK;
+        };
+        auto bootstrap = StartServer(bootPort, discovery);
+        auto config = TDriverConfig().SetEndpoint(Address(bootPort)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll);
+        TDriver first(config), second(config);
+        NTable::TTableClient firstClient(first), secondClient(second);
+        const auto dataPeer = [](NTable::TTableClient& client) {
+            auto status = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            const auto& headers = status.GetResponseMetadata();
+            UNIT_ASSERT(headers.contains("test-peer"));
+            return headers.find("test-peer")->second;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(dataPeer(firstClient), dataPeer(secondClient));
+    }
+
+    Y_UNIT_TEST(LastClientCancelsDatabasePoll) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TDiscovery bootstrap;
+        auto held = NThreading::NewPromise<void>();
+        auto cancelled = NThreading::NewPromise<void>();
+        std::atomic_uint openings = 0;
+        auto reopened = NThreading::NewPromise<void>();
+        bootstrap.Lookup = [&](auto* context, auto& result) {
+            if (context->client_metadata().contains("x-ydb-if-route-generation")) {
+                held.TrySetValue();
+                while (!context->IsCancelled()) {
+                    Sleep(TDuration::MilliSeconds(10));
+                }
+                cancelled.TrySetValue();
+                return grpc::Status::CANCELLED;
+            }
+            if (++openings == 2) {
+                reopened.TrySetValue();
+            }
+            context->AddInitialMetadata("x-ydb-route-generation", "1");
+            auto* node = result.add_endpoints();
+            node->set_address("127.0.0.1");
+            node->set_port(port);
+            return grpc::Status::OK;
+        };
+        auto server = StartServer(port, bootstrap);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDiscoveryMode(EDiscoveryMode::Off));
+        {
+            NTable::TTableClient client(driver, NTable::TClientSettings()
+                .Database("/Root/temporary").DiscoveryMode(EDiscoveryMode::LongPoll));
+            UNIT_ASSERT(held.GetFuture().Wait(TDuration::Seconds(5)));
+        }
+        UNIT_ASSERT_C(cancelled.GetFuture().Wait(TDuration::Seconds(3)), "poll outlived its database client");
+        NTable::TTableClient replacement(driver, NTable::TClientSettings()
+            .Database("/Root/temporary").DiscoveryMode(EDiscoveryMode::LongPoll));
+        UNIT_ASSERT(reopened.GetFuture().Wait(TDuration::Seconds(3)));
+    }
+
     Y_UNIT_TEST(LongPollCutsInFlightRequestsAndReusesBootstrap) {
         TPortManager ports;
         const auto sourcePort = ports.GetPort(), targetPort = ports.GetPort(), bootstrapPort = ports.GetPort();

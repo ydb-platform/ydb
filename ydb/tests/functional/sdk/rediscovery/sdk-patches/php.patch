@@ -1,8 +1,8 @@
 diff --git a/README.md b/README.md
-index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..5287f4471e8a103cd0171f903e9d76a6a5bb3093 100644
+index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..5bc532cf9a12cc9784782a141ce9e1f22f2ef657 100644
 --- a/README.md
 +++ b/README.md
-@@ -651,3 +651,16 @@ $config = [
+@@ -651,3 +651,25 @@ $config = [
  ];
  $ydb = new \YdbPlatform\Ydb\Ydb($config);
  ```
@@ -16,9 +16,18 @@ index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..5287f4471e8a103cd0171f903e9d76a6
 +clients. For idle workers, pass the running ReactPHP `LoopInterface` as
 +`discoveryLoop` (requires PHP 7.4+). The loop checks for a completed poll every
 +100 ms using the same bootstrap connection. A synchronous process without a
-+running loop processes the update on its next SDK call or stream read.
++running loop processes the update on its next SDK call or stream read. A
++blocking native gRPC receive also pauses the loop until a message, error, or
++RPC deadline arrives. During that pause the old socket stays open. On return the SDK checks for an
++available discovery response before yielding data. Once a response has started
++it waits for its generation trailers within the discovery timeout.
 +Legacy servers use the configured discovery interval. The opt-in requires a
 +host:port endpoint, HTTP/2 support in libcurl, and default gRPC channel options.
++TLS uses `root_cert_file`, `GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`, or the gRPC PHP
++package's bundled roots. If the process has already installed an in-memory gRPC
++root bundle, provide its file explicitly. Bootstrap honors gRPC's HTTP CONNECT
++proxy and bypass environment variables. Address-based gRPC proxy mapping
++requires native periodic discovery.
 diff --git a/src/AuthService.php b/src/AuthService.php
 index 40964713da3a74efc682ecf472a590ca86515183..0518db18494f7b9392983f146f56a3f34bc49ebd 100644
 --- a/src/AuthService.php
@@ -47,10 +56,10 @@ index 34c6cee3b3695364d191a45ba6c4aa0fe8c5b628..8714649fa75de7c8d06a0e341ce6032f
  
 diff --git a/src/Internal/LongPoll.php b/src/Internal/LongPoll.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db670f0fd2
+index 0000000000000000000000000000000000000000..07e6e95d16bc97bf3c01526fec07f9c10cd84c26
 --- /dev/null
 +++ b/src/Internal/LongPoll.php
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,294 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Internal;
@@ -69,6 +78,7 @@ index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db
 +    private $multi;
 +    private $call;
 +    private $tlsRoot;
++    private $proxy;
 +    private $generation;
 +    private $snapshot;
 +    private $nextPoll = 0;
@@ -76,6 +86,7 @@ index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db
 +    private $generations;
 +    private $status;
 +    private $body;
++    private $receivingReply = false;
 +
 +    public function __construct(Ydb $ydb, string $bootstrap, array $options)
 +    {
@@ -88,8 +99,79 @@ index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db
 +        $this->ydb = $ydb;
 +        $this->url = ($ydb->iam()->config('insecure') ? 'http://' : 'https://') . $bootstrap
 +            . '/Ydb.Discovery.V1.DiscoveryService/ListEndpoints';
-+        $this->tlsRoot = $ydb->iam()->config('root_cert_file');
++        $this->proxy = self::proxyFor(trim(parse_url($this->url, PHP_URL_HOST), '[]'));
++        if (!$ydb->iam()->config('insecure')) {
++            $this->tlsRoot = self::rootFile($ydb->iam()->config('root_cert_file'));
++        }
 +        $this->multi = curl_multi_init();
++    }
++
++    /** Match the trust anchor selection of the native gRPC bootstrap stub. */
++    public static function rootFile(?string $configured): string
++    {
++        $path = $configured ?: getenv('GRPC_DEFAULT_SSL_ROOTS_FILE_PATH');
++        if (!$path) {
++            if (\Grpc\ChannelCredentials::isDefaultRootsPemSet()) {
++                // The extension exposes no getter for an application-installed PEM.
++                throw new \InvalidArgumentException('Set root_cert_file for discovery with process-wide gRPC roots');
++            }
++            $stub = new \ReflectionClass(\Grpc\BaseStub::class);
++            $path = dirname($stub->getFileName(), 3) . '/etc/roots.pem';
++        }
++        if (!is_file($path) || !is_readable($path)) {
++            throw new \InvalidArgumentException('Cannot read the gRPC discovery trust roots');
++        }
++        return $path;
++    }
++
++    public static function proxyFor(string $host): string
++    {
++        if (getenv('GRPC_ADDRESS_HTTP_PROXY') && getenv('GRPC_ADDRESS_HTTP_PROXY_ENABLED_ADDRESSES')) {
++            throw new \InvalidArgumentException('Address-based gRPC proxy mapping requires native discovery');
++        }
++        $proxy = false;
++        foreach (['grpc_proxy', 'https_proxy', 'http_proxy'] as $key) {
++            $proxy = getenv($key);
++            if ($proxy !== false) {
++                break;
++            }
++        }
++        if (!$proxy) {
++            return '';
++        }
++        $bypass = getenv('no_grpc_proxy');
++        if ($bypass === false) {
++            $bypass = getenv('no_proxy');
++        }
++        foreach (explode(',', (string)$bypass) as $entry) {
++            $entry = trim($entry);
++            if ($entry !== '' && (strcasecmp(substr($host, -strlen($entry)), $entry) === 0
++                || self::inSubnet($host, $entry))) {
++                return '';
++            }
++        }
++        if (parse_url($proxy, PHP_URL_SCHEME) !== 'http' || !parse_url($proxy, PHP_URL_HOST)) {
++            throw new \InvalidArgumentException('Invalid gRPC HTTP CONNECT proxy');
++        }
++        return $proxy;
++    }
++
++    private static function inSubnet(string $host, string $entry): bool
++    {
++        $parts = explode('/', $entry, 2);
++        if (count($parts) !== 2 || !ctype_digit($parts[1])) {
++            return false;
++        }
++        $ip = inet_pton($host);
++        $network = inet_pton($parts[0]);
++        $bits = (int)$parts[1];
++        if ($ip === false || $network === false || strlen($ip) !== strlen($network) || $bits > strlen($ip) * 8) {
++            return false;
++        }
++        $bytes = intdiv($bits, 8);
++        $tail = $bits % 8;
++        return substr($ip, 0, $bytes) === substr($network, 0, $bytes) &&
++            ($tail === 0 || ((ord($ip[$bytes]) ^ ord($network[$bytes])) >> (8 - $tail)) === 0);
 +    }
 +
 +    public static function generation(array $values, ?string $previous): ?string
@@ -121,16 +203,24 @@ index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db
 +        }
 +        $request = (new ListEndpointsRequest(['database' => $this->ydb->database()]))->serializeToString();
 +        $this->body = '';
++        $this->receivingReply = false;
 +        $this->generations = [];
 +        $this->status = null;
 +        $this->call = curl_init($this->url);
 +        $options = [
 +            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE,
-+            CURLOPT_HTTPHEADER => $headers, CURLOPT_NOSIGNAL => true, CURLOPT_PROXY => '',
++            CURLOPT_HTTPHEADER => $headers, CURLOPT_NOSIGNAL => true,
++            CURLOPT_PROXY => $this->proxy, CURLOPT_HTTPPROXYTUNNEL => true,
++            CURLOPT_NOPROXY => '', CURLOPT_HEADEROPT => CURLHEADER_SEPARATE,
 +            CURLOPT_TIMEOUT_MS => 45000,
 +            CURLOPT_POSTFIELDS => pack('CN', 0, strlen($request)) . $request,
 +            CURLOPT_HEADERFUNCTION => function ($curl, $line) {
-+                if (($pos = strpos($line, ':')) !== false) {
++                if (strncmp($line, 'HTTP/', 5) === 0) {
++                    // HTTP CONNECT uses a separate response before the HTTP/2 RPC.
++                    $this->receivingReply = strncmp($line, 'HTTP/2 ', 7) === 0;
++                    $this->generations = [];
++                    $this->status = null;
++                } elseif ($this->receivingReply && ($pos = strpos($line, ':')) !== false) {
 +                    $key = strtolower(substr($line, 0, $pos));
 +                    $value = trim(substr($line, $pos + 1));
 +                    if ($key === 'x-ydb-route-generation') {
@@ -151,6 +241,9 @@ index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db
 +        ];
 +        if ($this->tlsRoot) {
 +            $options[CURLOPT_CAINFO] = $this->tlsRoot;
++            // libcurl also loads hashed roots from its system CA directory.
++            // Our installed PHP source directory contains no hashed CAs.
++            $options[CURLOPT_CAPATH] = __DIR__;
 +        }
 +        curl_setopt_array($this->call, $options);
 +        curl_multi_add_handle($this->multi, $this->call);
@@ -187,43 +280,61 @@ index 0000000000000000000000000000000000000000..f0fbe1142ffeba825be22371b93bd1db
 +        }
 +    }
 +
++    private function advance()
++    {
++        if (!$this->call && microtime(true) >= $this->nextPoll) {
++            $this->start();
++        }
++        if (!$this->call) {
++            return;
++        }
++        do {
++            $code = curl_multi_exec($this->multi, $running);
++            $finished = curl_multi_info_read($this->multi);
++        } while (!$finished && ($code === CURLM_CALL_MULTI_PERFORM
++            || ($code === CURLM_OK && curl_multi_select($this->multi, 0) > 0)));
++        if (!$finished && $code === CURLM_OK) {
++            return;
++        }
++        $this->closeCall();
++        if ($code !== CURLM_OK || $finished['result'] !== CURLE_OK) {
++            throw new \RuntimeException('Discovery bootstrap unavailable');
++        }
++        $this->accept();
++        // Start the next held call before returning to the application.
++        if ($this->generation !== null) {
++            $this->start();
++            curl_multi_exec($this->multi, $running);
++        }
++    }
++
 +    public function poll(int $timeoutMs): array
 +    {
 +        $deadline = microtime(true) + $timeoutMs / 1000;
 +        do {
-+            if (!$this->call && microtime(true) >= $this->nextPoll) {
-+                $this->start();
-+            }
-+            if ($this->call) {
-+                do {
-+                    $code = curl_multi_exec($this->multi, $running);
-+                } while ($code === CURLM_CALL_MULTI_PERFORM);
-+                $finished = curl_multi_info_read($this->multi);
-+                if ($finished || $code !== CURLM_OK) {
-+                    try {
-+                        if ($code !== CURLM_OK || $finished['result'] !== CURLE_OK) {
-+                            throw new \RuntimeException('Discovery bootstrap unavailable');
-+                        }
-+                        $this->accept();
-+                    } catch (\Throwable $error) {
-+                        $this->snapshot = null;
-+                        $this->nextPoll = microtime(true) + $this->retryDelay;
-+                        $this->retryDelay = min(5, 2 * $this->retryDelay);
-+                        throw $error;
-+                    } finally {
-+                        $this->closeCall();
-+                    }
-+                    // Start the next held call before returning to the application.
-+                    if ($this->generation !== null) {
-+                        $this->start();
-+                        curl_multi_exec($this->multi, $running);
-+                    }
++            try {
++                $this->advance();
++            } catch (\Throwable $error) {
++                $this->closeCall();
++                $this->nextPoll = microtime(true) + $this->retryDelay;
++                $this->retryDelay = min(5, 2 * $this->retryDelay);
++                if ($this->generation === null && $this->snapshot) {
++                    return [null, $this->snapshot];
 +                }
++                $this->snapshot = null;
++                throw $error;
 +            }
-+            if ($this->snapshot !== null) {
++            // gRPC trailers can carry the generation in a separate HTTP/2 frame.
++            // Once a managed reply has started, data dispatch must wait for its
++            // trailers. The event loop's nonblocking tick can finish it later.
++            $receiving = $this->call && $this->generation !== null && $this->receivingReply;
++            if ($this->snapshot !== null && (!$receiving || $timeoutMs === 0)) {
 +                return [$this->generation, $this->snapshot];
 +            }
 +            if (microtime(true) >= $deadline) {
++                if ($receiving && $timeoutMs > 0) {
++                    $this->snapshot = null;
++                }
 +                break;
 +            }
 +            if ($this->call) {
@@ -296,7 +407,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..42788061a9fb703e51ebadade7364521
          $this->meta = $ydb->meta();
  
 diff --git a/src/Traits/RequestTrait.php b/src/Traits/RequestTrait.php
-index 500b3c3e6d3c9938eced88caeac997ba00376db8..9c0203d846ebf8341636638febf4f4595df9f81c 100644
+index 500b3c3e6d3c9938eced88caeac997ba00376db8..4432ad6c24c39cdd65b4c9bcbf72eef4e29d5fc8 100644
 --- a/src/Traits/RequestTrait.php
 +++ b/src/Traits/RequestTrait.php
 @@ -49,6 +49,7 @@ trait RequestTrait
@@ -307,18 +418,78 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..9c0203d846ebf8341636638febf4f459
  
  
  
-@@ -169,7 +170,9 @@ trait RequestTrait
-             // $status = $call->getStatus();
-             // $this->checkStatus($service, $method, $status);
+@@ -143,40 +144,44 @@ trait RequestTrait
+             $this->take();
+         }
+ 
+-        $requestClass = '\\Ydb\\' . $service . '\\' . $method . 'Request';
++        try {
++            $requestClass = '\\Ydb\\' . $service . '\\' . $method . 'Request';
+ 
+-        switch ($method) {
+-            case 'StreamReadTable':
+-                $requestClass = '\\Ydb\\' . $service . '\\ReadTableRequest';
+-                $resultClass = '\\Ydb\\' . $service . '\\ReadTableResult';
+-                break;
++            switch ($method) {
++                case 'StreamReadTable':
++                    $requestClass = '\\Ydb\\' . $service . '\\ReadTableRequest';
++                    $resultClass = '\\Ydb\\' . $service . '\\ReadTableResult';
++                    break;
+ 
+-            case 'StreamExecuteScanQuery':
+-                $requestClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryRequest';
+-                $resultClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryPartialResult';
+-                break;
++                case 'StreamExecuteScanQuery':
++                    $requestClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryRequest';
++                    $resultClass = '\\Ydb\\' . $service . '\\ExecuteScanQueryPartialResult';
++                    break;
+ 
+-            default:
+-                $resultClass = '\\Ydb\\' . $service . '\\' . $method . 'Result';
+-        }
++                default:
++                    $resultClass = '\\Ydb\\' . $service . '\\' . $method . 'Result';
++            }
+ 
+-        $request = new $requestClass($data);
++            $request = new $requestClass($data);
+ 
+-        $options = $this->buildGrpcOptions();
+-        $call = $this->client->$method($request, $this->meta, $options);
++            $options = $this->buildGrpcOptions();
++            $call = $this->client->$method($request, $this->meta, $options);
+ 
+-        if (method_exists($call, 'responses')) {
+-            // $status = $call->getStatus();
+-            // $this->checkStatus($service, $method, $status);
++            if (method_exists($call, 'responses')) {
++                // $status = $call->getStatus();
++                // $this->checkStatus($service, $method, $status);
  
 -            foreach ($call->responses() as $response) {
-+            $responses = $this->routeEpoch === null ? $call->responses() : $this->ydb->dataResponses($call);
-+            unset($call);
-+            foreach ($responses as $response) {
-                 $result = $this->processResponse($service, $method, $response, $resultClass);
-                 yield $result ? new QueryResult($result) : true;
+-                $result = $this->processResponse($service, $method, $response, $resultClass);
+-                yield $result ? new QueryResult($result) : true;
++                $responses = $this->routeEpoch === null ? $call->responses() : $this->ydb->dataResponses($call);
++                unset($call);
++                foreach ($responses as $response) {
++                    $result = $this->processResponse($service, $method, $response, $resultClass);
++                    yield $result ? new QueryResult($result) : true;
++                }
++            }
++        } finally {
++            if (method_exists($this, 'release')) {
++                $this->release();
              }
-@@ -204,7 +207,7 @@ trait RequestTrait
+-        }
+-
+-        if (method_exists($this, 'release')) {
+-            $this->release();
+         }
+     }
+ 
+@@ -204,7 +209,7 @@ trait RequestTrait
              if ($this->ydb->needDiscovery() && count($this->ydb->cluster()->all()) > 0){
                  $endpoint = $this->ydb->cluster()->all()[array_rand($this->ydb->cluster()->all())]->endpoint();
              }
@@ -327,7 +498,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..9c0203d846ebf8341636638febf4f459
              if (isset(self::$grpcExceptions[$status->code])) {
                  throw new self::$grpcExceptions[$status->code]($message);
              } else {
-@@ -327,6 +330,15 @@ trait RequestTrait
+@@ -327,6 +332,15 @@ trait RequestTrait
          if (!$this->ydb->needDiscovery()) {
              return;
          }
@@ -508,10 +679,10 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..40428c0b31239084e5c101eae53d0688
      /**
 diff --git a/tests/Internal/LongPollTest.php b/tests/Internal/LongPollTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..cc1bacff941b840b76075d514a56077edfb4e767
+index 0000000000000000000000000000000000000000..8bc3c8819229c455995c79f790a6ac597c850565
 --- /dev/null
 +++ b/tests/Internal/LongPollTest.php
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,169 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -554,6 +725,119 @@ index 0000000000000000000000000000000000000000..cc1bacff941b840b76075d514a56077e
 +        self::assertTrue($call->cancelled);
 +        $this->expectException(\RuntimeException::class);
 +        $held->next();
++    }
++
++    public function testSessionReleasedOnInterruptedStream()
++    {
++        $service = new class {
++            use \YdbPlatform\Ydb\Traits\RequestTrait;
++            public $busy = false;
++            public $meta = [];
++            public function checkDiscovery() {}
++            public function take() { $this->busy = true; }
++            public function release() { $this->busy = false; }
++            public function buildGrpcOptions() { return []; }
++            public function read() { return $this->doStreamRequest('Table', 'StreamReadTable', ['skip_get_token'=>true]); }
++            public function __construct() {
++                $this->client = new class {
++                    public function StreamReadTable($request, $meta, $opts) {
++                        return new class {
++                            public function responses() { throw new \RuntimeException('stream retired'); yield; }
++                        };
++                    }
++                };
++            }
++        };
++        try {
++            $service->read()->current();
++            self::fail('Expected stream retirement');
++        } catch (\RuntimeException $error) {
++            self::assertSame('stream retired', $error->getMessage());
++        }
++        self::assertFalse($service->busy);
++    }
++
++    public function testUsesGrpcRootsAndProxyPrecedence()
++    {
++        $env = ['GRPC_DEFAULT_SSL_ROOTS_FILE_PATH','grpc_proxy','https_proxy','http_proxy','no_grpc_proxy','no_proxy'];
++        $saved = [];
++        foreach ($env as $key) {
++            $saved[$key] = getenv($key);
++            putenv($key);
++        }
++        try {
++            putenv('GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=' . __FILE__);
++            putenv('grpc_proxy=http://127.0.0.1:1234');
++            putenv('https_proxy=http://127.0.0.1:2345');
++            putenv('no_grpc_proxy=cluster.example,127.0.0.0/8');
++            putenv('no_proxy=unrelated.example');
++            self::assertSame(__FILE__, LongPoll::rootFile(null));
++            self::assertSame('', LongPoll::proxyFor('node.cluster.example'));
++            self::assertSame('', LongPoll::proxyFor('127.0.0.42'));
++            self::assertSame('http://127.0.0.1:1234', LongPoll::proxyFor('unrelated.example'));
++            putenv('grpc_proxy=');
++            self::assertSame('', LongPoll::proxyFor('unrelated.example'));
++        } finally {
++            foreach ($saved as $key=>$value) {
++                putenv($value === false ? $key : $key.'='.$value);
++            }
++        }
++    }
++
++    public function testDataDispatchWaitsForGenerationTrailers()
++    {
++        $driver = new \YdbPlatform\Ydb\Ydb(['database'=>'/db', 'iam_config'=>['anonymous'=>true, 'insecure'=>true]]);
++        // Hold a real transport open so the queued reply cannot complete.
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        try {
++            $poll = new LongPoll($driver, stream_socket_get_name($listener, false), []);
++            $start = new \ReflectionMethod($poll, 'start');
++            $start->setAccessible(true);
++            $start->invoke($poll);
++            foreach (['generation'=>'1', 'snapshot'=>[['address'=>'source']], 'receivingReply'=>true] as $key=>$value) {
++                $field = new \ReflectionProperty($poll, $key);
++                $field->setAccessible(true);
++                $field->setValue($poll, $value);
++            }
++            $this->expectException(\RuntimeException::class);
++            $poll->poll(30);
++        } finally {
++            fclose($listener);
++        }
++    }
++
++    /** @dataProvider routeBeforeRefresh */
++    public function testFailedRefreshPreservesOnlyInstalledLegacyAssignment($generation, $snapshot, $keep)
++    {
++        $driver = new \YdbPlatform\Ydb\Ydb(['database'=>'/db', 'iam_config'=>['anonymous'=>true, 'insecure'=>true]]);
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        $endpoint = stream_socket_get_name($listener, false);
++        fclose($listener);
++        $poll = new LongPoll($driver, $endpoint, []);
++        foreach (['generation'=>$generation, 'snapshot'=>$snapshot] as $name=>$value) {
++            $property = new \ReflectionProperty($poll, $name);
++            $property->setAccessible(true);
++            $property->setValue($poll, $value);
++        }
++
++        // Drive a native curl refresh until the failed connection is observed.
++        $backoff = new \ReflectionProperty($poll, 'nextPoll');
++        $backoff->setAccessible(true);
++        if (!$keep) {
++            $this->expectException(\RuntimeException::class);
++        }
++        $deadline = microtime(true) + 2;
++        do {
++            $result = $poll->poll(100);
++        } while ($backoff->getValue($poll) == 0 && microtime(true) < $deadline);
++        self::assertGreaterThan(0, $backoff->getValue($poll));
++        self::assertSame([null, $snapshot], $result);
++    }
++
++    public function routeBeforeRefresh()
++    {
++        $snapshot = [['address'=>'127.0.0.1', 'port'=>2135]];
++        return [[null, $snapshot, true], ['1', $snapshot, false], [null, null, false]];
 +    }
 +
 +    /** @dataProvider invalidGenerations */

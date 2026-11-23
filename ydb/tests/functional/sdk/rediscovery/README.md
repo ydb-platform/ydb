@@ -10,7 +10,7 @@ A managed bootstrap route can wake an idle driver after a replica switch. The SD
 
 The route owner advances the generation on every switch, including failback. A successful response carries one decimal unsigned 64-bit generation in its initial or trailing metadata. The driver maintains one outstanding poll per discovery context. A worker that omits the generation on initial negotiation gets periodic ordinary discovery. Once a driver accepts a managed generation, an unstamped or older response cannot reinstall source endpoints. Rollback of an enrolled route therefore needs a worker that understands the protocol, or a driver restart to renegotiate a legacy route.
 
-After a switch the driver retires old data channels and cancels calls attached to them. Applications with node-bound sessions may have to create new sessions. An RPC that reached the old database before cancellation may already have taken effect.
+After a switch the driver retires the old route and cancels its calls. It closes each old data socket when the route was its last owner. An unrelated database sharing the same transport can finish its own RPCs. A newer generation also retires a route when both replicas advertise the same address and node ID. Applications with node-bound sessions may have to create new sessions. An RPC that reached the old database before cancellation may already have taken effect.
 
 ## SDK drafts
 
@@ -25,7 +25,7 @@ After a switch the driver retires old data channels and cancels calls attached t
 | PHP | `'discovery' => true, 'discoveryLongPoll' => true` |
 | Rust | `?use_discovery=long_poll` |
 
-For PHP, pass a running ReactPHP event loop in `discoveryLoop` to close sockets while application code makes no YDB calls. A synchronous PHP process checks the poll on the next SDK call or stream iteration.
+For PHP, pass a running ReactPHP event loop in `discoveryLoop` to close sockets while application code makes no YDB calls. A synchronous PHP process checks the poll on the next SDK call or stream iteration. A blocked native gRPC receive also pauses the ReactPHP loop. An old socket can remain open until that receive returns, at which point the SDK rechecks discovery before yielding the frame. PHP applications with a custom in-memory gRPC trust bundle must also supply its CA file for the discovery poll.
 
 The seven external SDK patches target the public revisions in `sdk-patches/sources.json`. Apply them into new local checkouts with `python3 sdk-patches/prepare.py /tmp/ydb-long-poll-sdks`.
 
@@ -41,4 +41,4 @@ python3 run_long_poll_probe.py --database /Root/tenant \
   --replica localhost:3136 http://localhost:9765 -- /path/to/probe
 ```
 
-The runner cuts over in both directions and checks source and destination Scheme request counters, the bootstrap TCP peer, and old-node sockets on Linux. Use monitoring endpoints and data-node ports that belong to the supplied tenants.
+The runner cuts over in both directions and checks source and destination Scheme request counters, the bootstrap TCP peer, and old-node sockets on Linux. With one data node per replica it expects two sockets before and after cutover and fails if it samples a third. Use monitoring endpoints and data-node ports that belong to the supplied tenants.

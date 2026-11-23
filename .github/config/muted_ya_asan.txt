@@ -9,6 +9,7 @@ ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk

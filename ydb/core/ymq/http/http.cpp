@@ -344,6 +344,8 @@ TString THttpRequest::HttpHeadersLogString(const THttpInput& input) {
 }
 
 void THttpRequest::ParseHeaders(const THttpInput& input) {
+    const TString peerAddress = NKikimr::NNet::PeerSourceAddressFromSocket(Socket());
+    AuditRemoteAddress_ = peerAddress == "unknown" ? TString() : peerAddress;
     TString sourceReqId;
     for (const auto& header : input.Headers()) {
         if (AsciiEqualsIgnoreCase(header.Name(), AUTHORIZATION_HEADER)) {
@@ -362,7 +364,7 @@ void THttpRequest::ParseHeaders(const THttpInput& input) {
     GenerateRequestId(sourceReqId);
 
     if (SourceAddress_.empty()) {
-        ExtractSourceAddressFromSocket();
+        SourceAddress_ = peerAddress;
     }
 
     RLOG_SQS_BASE_TRACE(*Parent_->ActorSystem_, HttpHeadersLogString(input));
@@ -989,10 +991,6 @@ void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
     for (const auto& key : QueryParams_.TagKeys) {
         req->AddTagKeys(key.second);
     }
-}
-
-void THttpRequest::ExtractSourceAddressFromSocket() {
-    SourceAddress_ = NKikimr::NNet::PeerSourceAddressFromSocket(Socket());
 }
 
 void THttpRequest::GenerateRequestId(const TString& sourceReqId) {

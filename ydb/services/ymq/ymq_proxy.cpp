@@ -8,18 +8,22 @@
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/util/address_classifier.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
-#include <util/folder/path.h>
 #include <ydb/core/ymq/actor/auth_factory.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 
 #include <ydb/services/ymq/rpc_params.h>
+
+#include <library/cpp/ipv6_address/ipv6_address.h>
+
+#include <util/folder/path.h>
 
 #include "utils.h"
 #include "ydb/core/ymq/actor/log.h"
@@ -75,6 +79,16 @@ namespace NKikimr::NYmq::V1 {
 
     static TString GetMetaValue(NKikimr::NGRpcService::IRequestOpCtx* request, const TString& key) {
         return request->GetPeerMetaValues(key).GetOrElse("");
+    }
+
+    static TString GetAuditRemoteAddress(NKikimr::NGRpcService::IRequestOpCtx* request) {
+        TString peer = request->GetPeerName();
+        if (peer.StartsWith("ipv4:") || peer.StartsWith("ipv6:")) {
+            peer = NAddressClassifier::ExtractAddress(peer);
+        }
+        bool valid = false;
+        TIpv6Address::FromString(peer, valid);
+        return valid ? peer : TString();
     }
 
     template<class TResponse, class TResult>
@@ -136,6 +150,7 @@ namespace NKikimr::NYmq::V1 {
         , SecurityToken(GetMetaValue(request, SECURITY_TOKEN))
         , SanitizedToken(GetMetaValue(request, SANITIZED_TOKEN))
         , SourceAddress(GetMetaValue(request, SOURCE_ADDRESS))
+        , AuditRemoteAddress(GetAuditRemoteAddress(request))
         {
         }
 
@@ -158,6 +173,7 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserSID(UserSid);
             request->MutableAuth()->SetSanitizedToken(SanitizedToken);
             request->MutableAuth()->SetSourceAddress(SourceAddress);
+            request->MutableAuth()->SetAuditRemoteAddress(AuditRemoteAddress);
 
             if (SecurityToken) {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);
@@ -183,6 +199,7 @@ namespace NKikimr::NYmq::V1 {
 
     protected:
         const TString SourceAddress;
+        const TString AuditRemoteAddress;
     };
 
     template<class TEvYmqRequest, class TRequest, class TReplyCallback>

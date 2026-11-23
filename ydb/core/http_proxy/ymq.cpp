@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/net/source_address.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/services/ymq/grpc_service.h>
@@ -108,9 +109,13 @@ namespace NKikimr::NHttpProxy {
                 };
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                         std::move(Request),
-                        HttpContext.DatabasePath,
-                        HttpContext.SerializedUserToken,
-                        Nothing(),
+                        {
+                            .DatabaseName = HttpContext.DatabasePath,
+                            .Token = HttpContext.SerializedUserToken,
+                            // Keep the transport peer separate from header-derived SourceAddress.
+                            .PeerName = NKikimr::NNet::FormatSourceAddress(
+                                HttpContext.Request->Address ? HttpContext.Request->Address->SockAddr() : nullptr),
+                        },
                         ctx.ActorSystem(),
                         peerMetadata
                 );

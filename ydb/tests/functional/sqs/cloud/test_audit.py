@@ -92,8 +92,10 @@ class TestYmqActionAudit(get_test_with_sqs_tenant_installation(YandexCloudSqsTes
         return wait_for_and_assert(read_records, has_length(1), step_seconds=0.1)[0]
 
     @pytest.mark.parametrize('protocol', ['xml', 'json'])
-    @pytest.mark.parametrize('remote_address', [None, '192.0.2.17', '2001:db8::17'], ids=['socket', 'ipv4', 'ipv6'])
-    def test_queue_audit_fields(self, protocol, remote_address):
+    @pytest.mark.parametrize('peer_address', ['127.0.0.1', '::1'], ids=['ipv4', 'ipv6'])
+    @pytest.mark.parametrize('forwarded_for', [None, '192.0.2.17', '2001:db8::17', 'not-an-ip'],
+                             ids=['no-forwarded-for', 'spoofed-ipv4', 'spoofed-ipv6', 'invalid-ip'])
+    def test_queue_audit_fields(self, protocol, peer_address, forwarded_for):
         node = self.cluster_nodes[0]
         queue_url = None
         for action, queue_name, http_status, audit_status in [
@@ -104,23 +106,29 @@ class TestYmqActionAudit(get_test_with_sqs_tenant_installation(YandexCloudSqsTes
             request_id = uuid.uuid4().hex
             headers = auth_headers(self.cloud_id, iam_token=self.token)
             headers['X-Request-Id'] = request_id
-            if remote_address is not None:
-                headers['X-Forwarded-For'] = f'{remote_address}, 198.51.100.7'
+            if forwarded_for is not None:
+                headers['X-Forwarded-For'] = f'{forwarded_for}, 198.51.100.7'
+                headers['sourceAddress'] = forwarded_for
+                headers['auditRemoteAddress'] = forwarded_for
+                headers['peerName'] = forwarded_for
             params = {'QueueUrl': queue_url} if action == 'DeleteQueue' else {'QueueName': queue_name}
             started_at = datetime.now(timezone.utc)
-            if protocol == 'xml':
-                response = requests.post(
-                    f'http://localhost:{node.sqs_port}',
-                    data={'Action': action, 'folderId': self.folder_id, **params},
-                    headers=headers, timeout=REQUEST_TIMEOUT,
-                )
-            else:
-                headers['X-Amz-Target'] = f'AmazonSQS.{action}'
-                response = requests.post(
-                    f'http://localhost:{node.http_proxy_port}{self.database}',
-                    params={'folderId': self.folder_id}, json=params,
-                    headers=headers, timeout=REQUEST_TIMEOUT,
-                )
+            host = f'[{peer_address}]' if ':' in peer_address else peer_address
+            with requests.Session() as session:
+                session.trust_env = False
+                if protocol == 'xml':
+                    response = session.post(
+                        f'http://{host}:{node.sqs_port}',
+                        data={'Action': action, 'folderId': self.folder_id, **params},
+                        headers=headers, timeout=REQUEST_TIMEOUT,
+                    )
+                else:
+                    headers['X-Amz-Target'] = f'AmazonSQS.{action}'
+                    response = session.post(
+                        f'http://{host}:{node.http_proxy_port}{self.database}',
+                        params={'folderId': self.folder_id}, json=params,
+                        headers=headers, timeout=REQUEST_TIMEOUT,
+                    )
             assert response.status_code == http_status, response.text
 
             if protocol == 'xml':
@@ -139,13 +147,10 @@ class TestYmqActionAudit(get_test_with_sqs_tenant_installation(YandexCloudSqsTes
             record = self._wait_for_audit_record(response_request_id)
             timestamp = datetime.fromisoformat(record['@timestamp'].replace('Z', '+00:00'))
             assert started_at <= timestamp <= datetime.now(timezone.utc), record
-            if remote_address is None:
-                address = ipaddress.ip_address(record['remote_address'])
-                if isinstance(address, ipaddress.IPv6Address):
-                    address = address.ipv4_mapped or address
-                assert address.is_loopback, record
-            else:
-                assert record['remote_address'] == remote_address, record
+            address = ipaddress.ip_address(record['remote_address'])
+            if isinstance(address, ipaddress.IPv6Address):
+                address = address.ipv4_mapped or address
+            assert address == ipaddress.ip_address(peer_address), record
 
             expected = {
                 '@timestamp': record['@timestamp'],

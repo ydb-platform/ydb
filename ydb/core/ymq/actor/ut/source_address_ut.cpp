@@ -204,31 +204,37 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(SourceAddress) {
-    Y_UNIT_TEST(AuthSourceAddressIsWrittenToAuditLog) {
-        for (const TString sourceAddress : {"192.0.2.1", "2001:db8::1"}) {
+    Y_UNIT_TEST(AuditRemoteAddressIsIndependentOfSourceAddress) {
+        for (const TString peerAddress : {"192.0.2.1", "2001:db8::1"}) {
             NKikimrClient::TSqsRequest request;
             request.SetRequestId("audit-source-address");
             auto& actionRequest = *request.MutableCreateQueue();
-            FillCommonAuth(actionRequest, sourceAddress);
+            FillCommonAuth(actionRequest, "203.0.113.1");
             actionRequest.SetSourceAddress("192.0.2.2");
+            actionRequest.MutableAuth()->SetAuditRemoteAddress(peerAddress);
 
             TSourceAddressProbeRuntime probe;
-            const auto line = probe.RejectAndGetAuditLine(request, sourceAddress);
-            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "remote_address=" << sourceAddress);
+            const auto line = probe.RejectAndGetAuditLine(request, "203.0.113.1");
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "remote_address=" << peerAddress);
             UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
         }
     }
 
-    Y_UNIT_TEST(LegacySourceAddressIsWrittenToAuditLog) {
-        NKikimrClient::TSqsRequest request;
-        request.SetRequestId("audit-legacy-source-address");
-        auto& actionRequest = *request.MutableCreateQueue();
-        FillCommonAuthWithoutSourceAddress(actionRequest);
-        actionRequest.SetSourceAddress("192.0.2.3");
+    Y_UNIT_TEST(MissingAuditRemoteAddressDoesNotFallBackToSourceAddress) {
+        for (bool useAuthSourceAddress : {false, true}) {
+            NKikimrClient::TSqsRequest request;
+            request.SetRequestId("audit-missing-peer-address");
+            auto& actionRequest = *request.MutableCreateQueue();
+            FillCommonAuthWithoutSourceAddress(actionRequest);
+            actionRequest.SetSourceAddress("192.0.2.3");
+            if (useAuthSourceAddress) {
+                actionRequest.MutableAuth()->SetSourceAddress("192.0.2.3");
+            }
 
-        TSourceAddressProbeRuntime probe;
-        const auto line = probe.RejectAndGetAuditLine(request, "192.0.2.3");
-        UNIT_ASSERT_STRING_CONTAINS(line, "remote_address=192.0.2.3");
+            TSourceAddressProbeRuntime probe;
+            const auto line = probe.RejectAndGetAuditLine(request, "192.0.2.3");
+            UNIT_ASSERT_STRING_CONTAINS(line, "remote_address={none}");
+        }
     }
 
     Y_UNIT_TEST(MissingSourceAddressIsWrittenAsNoneToAuditLog) {

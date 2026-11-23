@@ -53,8 +53,10 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
         return wait_for_and_assert(read_records, has_length(1), step_seconds=0.1)[0]
 
     @pytest.mark.parametrize('security_token', [token, None], ids=['authenticated', 'anonymous'])
-    @pytest.mark.parametrize('remote_address', [None, '192.0.2.17', '2001:db8::17'], ids=['socket', 'ipv4', 'ipv6'])
-    def test_queue_audit_fields(self, security_token, remote_address):
+    @pytest.mark.parametrize('peer_address', ['127.0.0.1', '::1'], ids=['ipv4', 'ipv6'])
+    @pytest.mark.parametrize('forwarded_for', [None, '192.0.2.17', '2001:db8::17', 'not-an-ip'],
+                             ids=['no-forwarded-for', 'spoofed-ipv4', 'spoofed-ipv6', 'invalid-ip'])
+    def test_queue_audit_fields(self, security_token, peer_address, forwarded_for):
         if security_token is not None:
             self._sqs_api.modify_permissions('Grant', security_token, self._username, ['CreateQueue', 'DeleteQueue'])
 
@@ -67,15 +69,21 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
             request_id = uuid.uuid4().hex
             headers = auth_headers(self._username, security_token=security_token)
             headers['X-Request-Id'] = request_id
-            if remote_address is not None:
-                headers['X-Forwarded-For'] = f'{remote_address}, 198.51.100.7'
+            if forwarded_for is not None:
+                headers['X-Forwarded-For'] = f'{forwarded_for}, 198.51.100.7'
+                headers['sourceAddress'] = forwarded_for
+                headers['auditRemoteAddress'] = forwarded_for
+                headers['peerName'] = forwarded_for
             params = {'QueueUrl': queue_url} if action == 'DeleteQueue' else {'QueueName': queue_name}
             started_at = datetime.now(timezone.utc)
-            response = requests.post(
-                f'http://localhost:{self.sqs_port}',
-                data={'Action': action, **params},
-                headers=headers, timeout=REQUEST_TIMEOUT,
-            )
+            host = f'[{peer_address}]' if ':' in peer_address else peer_address
+            with requests.Session() as session:
+                session.trust_env = False
+                response = session.post(
+                    f'http://{host}:{self.sqs_port}',
+                    data={'Action': action, **params},
+                    headers=headers, timeout=REQUEST_TIMEOUT,
+                )
             assert response.status_code == http_status, response.text
 
             body = ET.fromstring(response.text)
@@ -88,13 +96,10 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
             record = self._wait_for_audit_record(response_request_id)
             timestamp = datetime.fromisoformat(record['@timestamp'].replace('Z', '+00:00'))
             assert started_at <= timestamp <= datetime.now(timezone.utc), record
-            if remote_address is None:
-                address = ipaddress.ip_address(record['remote_address'])
-                if isinstance(address, ipaddress.IPv6Address):
-                    address = address.ipv4_mapped or address
-                assert address.is_loopback, record
-            else:
-                assert record['remote_address'] == remote_address, record
+            address = ipaddress.ip_address(record['remote_address'])
+            if isinstance(address, ipaddress.IPv6Address):
+                address = address.ipv4_mapped or address
+            assert address == ipaddress.ip_address(peer_address), record
 
             expected = {
                 '@timestamp': record['@timestamp'],

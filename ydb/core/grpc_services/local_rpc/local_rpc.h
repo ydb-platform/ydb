@@ -419,9 +419,9 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
 }
 
 template <typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token,
-    const TMaybe<TString>& requestType, TActorSystem* actorSystem, const TMap<TString, TString>& peerMeta, bool internalCall = false,
-    NWilson::TTraceId traceId = {})
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto,
+    typename TLocalRpcCtx<TRpc, TPromiseWrapper<typename TRpc::TResponse>>::TSettings settings,
+    TActorSystem* actorSystem, const TMap<TString, TString>& peerMeta)
 {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
@@ -429,7 +429,7 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
     auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(
-        std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall, std::move(traceId));
+        std::move(proto), TCbWrapper(promise), std::move(settings));
 
     for (const auto& [key, value] : peerMeta) {
         req->PutPeerMeta(key, value);
@@ -439,6 +439,20 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
     actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
 
     return promise.GetFuture();
+}
+
+template <typename TRpc>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token,
+    const TMaybe<TString>& requestType, TActorSystem* actorSystem, const TMap<TString, TString>& peerMeta, bool internalCall = false,
+    NWilson::TTraceId traceId = {})
+{
+    return DoLocalRpc<TRpc>(std::move(proto), {
+        .DatabaseName = database,
+        .Token = token,
+        .RequestType = requestType,
+        .InternalCall = internalCall,
+        .WilsonTraceId = std::move(traceId),
+    }, actorSystem, peerMeta);
 }
 
 template <typename TRpc>

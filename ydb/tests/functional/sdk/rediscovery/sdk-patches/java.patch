@@ -87,7 +87,7 @@ index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff7427aafe2ea291c64f3f39d0ee5302
              BooleanSupplier hook = settings.getPessimizationHook();
 diff --git a/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b21b2775f3737d32e48638d7ce95cb43af38a4fd
+index 0000000000000000000000000000000000000000..313927f0be6c9f20c8315843b5d486737ef6127e
 --- /dev/null
 +++ b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
 @@ -0,0 +1,322 @@
@@ -249,7 +249,7 @@ index 0000000000000000000000000000000000000000..b21b2775f3737d32e48638d7ce95cb43
 +    private void watch() {
 +        ClientCall<DiscoveryRequest, DiscoveryResponse> call = bootstrap.getChannel(SETTINGS).getReadyChannel()
 +                .newCall(EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod(),
-+                        bootstrap.getAuthCallOptions().getGrpcCallOptions());
++                        bootstrap.getAuthCallOptions().getGrpcCallOptions().withDeadline(null));
 +        active = call;
 +        DiscoveryRequest.Builder request = DiscoveryRequest.newBuilder().addResourceNames(database).setTypeUrl(TYPE);
 +        timer = bootstrap.getScheduler().schedule(() -> call.cancel("First EDS response timed out", null),
@@ -655,20 +655,32 @@ index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..24a1b84b5b8f0b6b5986cc40eab89aa4
              return CompletableFuture.completedFuture(Boolean.TRUE);
 diff --git a/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4e51151a63d530ef6c114866e4d2cba6b9fa6399
+index 0000000000000000000000000000000000000000..f91d2c45aa5a7e15cd8809327b99c12d42bef71b
 --- /dev/null
 +++ b/core/src/test/java/tech/ydb/core/impl/EdsDiscoveryTest.java
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,90 @@
 +package tech.ydb.core.impl;
++
++import java.time.Duration;
++import java.time.ZoneOffset;
++import java.util.concurrent.TimeUnit;
 +
 +import com.google.protobuf.Any;
 +import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 +import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 +import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
++import io.envoyproxy.envoy.service.endpoint.v3.EndpointDiscoveryServiceGrpc;
++import io.grpc.CallOptions;
++import io.grpc.ManagedChannel;
 +import io.grpc.Metadata;
 +import io.grpc.Status;
 +import org.junit.Assert;
 +import org.junit.Test;
++import org.mockito.ArgumentCaptor;
++import org.mockito.Mockito;
++
++import tech.ydb.core.impl.auth.AuthCallOptions;
++import tech.ydb.core.impl.pool.EndpointRecord;
 +
 +import tech.ydb.proto.discovery.DiscoveryProtos.EndpointInfo;
 +import tech.ydb.proto.discovery.DiscoveryProtos.ListEndpointsResult;
@@ -692,6 +704,27 @@ index 0000000000000000000000000000000000000000..4e51151a63d530ef6c114866e4d2cba6
 +        group.getLbEndpointsBuilder(0).getEndpointBuilder().getAddressBuilder().getSocketAddressBuilder()
 +                .setPortValue(2136);
 +        Assert.assertThrows(IllegalArgumentException.class, () -> EdsDiscovery.decode(database, response(assignment)));
++    }
++
++    @Test
++    public void longLivedWatchDoesNotInheritTheReadDeadline() {
++        MockedScheduler scheduler = new MockedScheduler(MockedClock.create(ZoneOffset.UTC));
++        ManagedChannel channel = Mockito.mock(ManagedChannel.class);
++        AuthCallOptions auth = Mockito.mock(AuthCallOptions.class);
++        Mockito.when(auth.getGrpcCallOptions()).thenReturn(CallOptions.DEFAULT.withDeadlineAfter(2, TimeUnit.SECONDS));
++        Mockito.when(channel.newCall(Mockito.eq(EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod()), Mockito.any()))
++                .thenReturn(MockedCall.neverAnswer());
++        FixedCallOptionsTransport transport = new FixedCallOptionsTransport(scheduler, auth, "/Root/test", "test",
++                new EndpointRecord("localhost", 2135), (host, port, authority) -> channel);
++        EdsDiscovery discovery = new EdsDiscovery(transport, Mockito.mock(YdbDiscovery.class), Duration.ofSeconds(8));
++        discovery.start();
++        scheduler.runNextTask();
++
++        ArgumentCaptor<CallOptions> options = ArgumentCaptor.forClass(CallOptions.class);
++        Mockito.verify(channel).newCall(Mockito.eq(EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod()),
++                options.capture());
++        Assert.assertNull(options.getValue().getDeadline());
++        scheduler.hasTasksCount(1); // The first response still has a timeout.
 +    }
 +
 +    @Test

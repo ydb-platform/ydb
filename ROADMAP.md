@@ -58,11 +58,9 @@ We use the following symbols as abbreviations:
 1. ✅ **Allow administrators to stop another user’s query**.
 1. ✅ ㉖ **TRUNCATE TABLE**
 1. ✅ ㉖ **`SET NOT NULL` for existing table columns**
-1. 🚧 ㉗ **SnapshotRW isolation level** (stronger than read-committed; snapshot reads and writes use a consistent snapshot)
-1. 🚧 ㉗ **CHECKSUM TABLE** (verify data integrity)
-1. ㉗ **Spatial indexes (rtree)**
+1. ㉗ **SnapshotRW isolation level** (stronger than read-committed; snapshot reads and writes use a consistent snapshot)
+1. ㉗ **CHECKSUM TABLE** (verify data integrity)
 1. ㉗ **Functional (expression-based) secondary indexes** for row tables
-1. ㉗ **Whole-partition `DELETE`** and declarative **partition drop**
 
 ## Database Core (Tablets, etc)
 1. ✅ ㉔ **Exact Nearest Neighbor Vector Search**
@@ -70,8 +68,7 @@ We use the following symbols as abbreviations:
 1. ✅ ㉔ **Volatile transactions**. YDB Distributed transactions v2, minimize network round trips in happy path (enabled by default in 24.4)
 1. 🚧 ㉔ **Table statistics** for cost-based optimizer
     * ✅ ㉔ **Basic statistics** as table size and number of rows;
-    * ㉕ **Column statistics**
-    * ✅ ㉕ **Column statistics** collected via **ANALYZE** (basic sampling, background auto-collection)
+    * ㉕ **Column statistics** collected via **ANALYZE** (basic sampling, background auto-collection)
 1. ✅ ㉔ **Evictable B-tree indexes for Row Tables** (enabled in 25.1)
 1. ✅ ㉔ Reduce minimum requirements for **the number of cores to 2** for YDB dynamic node. Two-core testing support is recorded, a general production sizing requires 4 cores.
 1. 🐌 ㉔ **Incremental backup** (incremental backup is disabled by default and is evolving)
@@ -105,18 +102,18 @@ We use the following symbols as abbreviations:
 1. ✅ ㉖ **Transactional Locks Invalidated (TLI) resolution project** (reduce TLI errors for users, extended diagnostics)
 1. ✅ ㉖ **Full-text search** in row tables (segmented index with compaction, range/PREFIX filtering, stop-words & synonyms, improved tokenizers)
 1. 🚧 ㉖ **JSON GIN index**
-1. 🚧 ㉖ **HNSW vector index**
-1. 🚧 ㉗ **AI functions in YDB**: `ONNX` UDF, built-in embeddings
-1. 🚧 ㉖ **SST-level backup restore** (faster restore)
-1. 🚧 ㉖ **Per-table metrics** in YDB
-1. 🚧 ㉖ **Savepoints** in DataShards
-1. 🚧 ㉖ **Automatic data tiering** (hot/cold) for row tables
-1. 🚧 ㉗ **Consistent snapshot of one or more tables** (user-facing mechanism to take and use a consistent snapshot)
-1. 🚧 ㉗ **Split/Merge DataShards latency improvements** (move split/merge locks before commit, split by load on timeout-heavy shards)
+1. ㉖ **HNSW vector index**
+1. ㉗ **AI functions in YDB**: `ONNX` UDF, built-in embeddings
+1. ㉖ **SST-level backup restore** (faster restore)
+1. ㉖ **Per-table metrics** in YDB
+1. ㉖ **Savepoints** in DataShards
+1. ㉖ **Automatic data tiering** (hot/cold) for row tables
+1. ㉗ **Consistent snapshot of one or more tables** (user-facing mechanism to take and use a consistent snapshot)
+1. ㉗ **Split/Merge DataShards latency improvements** (move split/merge locks before commit, split by load on timeout-heavy shards)
 storage
-1. 🚧 ㉗ **Range-based Bloom filters** (read performance on row tables)
-1. 🚧 ㉗ **Local index as a scheme object** (index ownership and management via schema)
-1. 🚧 ㉗ **Zstd compression** for row tables
+1. ㉗ **Range-based Bloom filters** (read performance on row tables)
+1. ㉗ **Local index as a scheme object** (index ownership and management via schema)
+1. ㉗ **Zstd compression** for row tables
 1. ㉗ **Lock-free shared cache for tablets**, cache warm-up on tablet restart
 1. ㉗ **BigString support in DataShard** and large BLOB/CLOB/UTF8 (>8MB)
 
@@ -133,8 +130,8 @@ storage
 1. ㉔ Authentication via KeyCloack
 1. ✅ ㉔ Support for SASL framework (SCRAM-SHA-256 is implemented for Kafka/PG APIs; broader framework coverage is not established)
 1. ✅ ㉕ **Built-in secrets storage** inside YDB
-1. 🚧 ㉖ **SSO rollout**: OIDC/OAuth authentication in **CLI and SDKs**
-1. 🚧 ㉗ **Encrypted backups of secrets**
+1. ㉖ **SSO rollout**: OIDC/OAuth authentication in **CLI and SDKs**
+1. ㉗ **Encrypted backups of secrets**
 1. ㉗ **Static credentials: faster repeated logins**
 1. ㉗ **Fine-grained access control**: IAM-based object permissions, SQL permission inheritance, schema viewer access with/without schema rights, IDM integration for granting permissions
 1. ㉗ **Security options hot-reload** from config without restart

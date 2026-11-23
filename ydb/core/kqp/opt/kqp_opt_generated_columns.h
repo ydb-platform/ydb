@@ -28,7 +28,8 @@ TVector<const NYql::TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const 
 // Applies each generated column's compiled lambda to depRow and produces the matching
 // (column name, name-value member) pair
 TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const NYql::TKikimrColumnMetadata*>& generatedColumns,
-    const NYql::NNodes::TExprBase& depRow, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TExprBase& depRow, NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
 
 // Replaces requested VIRTUAL generated columns with their physical dependencies
 // Returns logicalColumns itself when no virtual column is present

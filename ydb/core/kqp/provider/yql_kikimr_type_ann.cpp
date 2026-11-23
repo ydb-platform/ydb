@@ -263,8 +263,8 @@ IGraphTransformer::TStatus CoerceColumnLambdaToColumnType(TExprNode::TPtr& lambd
 IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription& table, const TString& cluster,
     TKikimrSessionContext& sessionCtx, TTypeAnnotationContext& typeCtx, TExprContext& ctx)
 {
-    for (auto& [name, col] : table.Metadata->Columns) {
-        if (!col.DefaultExpression || col.DefaultExpression->Expr || !col.DefaultExpression->IsGenerated()) {
+    for (const auto& [name, col] : table.Metadata->Columns) {
+        if (!col.DefaultExpression || !col.DefaultExpression->IsGenerated() || table.DefaultExpressionLambdas.contains(name)) {
             continue;
         }
 
@@ -287,7 +287,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
             }
         }
 
-        col.DefaultExpression->Expr = lambda;
+        table.DefaultExpressionLambdas.emplace(name, std::move(lambda));
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -973,19 +973,6 @@ namespace {
             {
                 return status;
             }
-
-            if (const TTypeAnnotationNode* exprType = lambda->GetTypeAnn();
-                exprType && !IsSameAnnotation(RemoveOptionality(*columnAnnType), RemoveOptionality(*exprType)))
-            {
-                TExprNode::TPtr converted = lambda->TailPtr();
-                if (TryConvertTo(converted, *columnAnnType, ctx, typeCtx) != IGraphTransformer::TStatus::Error
-                    && converted != lambda->TailPtr())
-                {
-                    lambda = ctx.NewLambda(lambda->Pos(), lambda->HeadPtr(), std::move(converted));
-                }
-            }
-
-            columnMeta.DefaultExpression->Expr = lambda;
         }
 
         return IGraphTransformer::TStatus::Ok;

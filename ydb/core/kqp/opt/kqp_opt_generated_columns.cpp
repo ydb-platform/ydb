@@ -113,7 +113,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
                 .Done());
     }
 
-    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, generatedInputRow, pos, ctx);
+    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, table, generatedInputRow, pos, ctx);
     for (auto& name : std::move(genColumnNames)) {
         allColumns.push_back(std::move(name));
     }
@@ -317,7 +317,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                 .Done());
     }
 
-    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, mergedRow, pos, ctx);
+    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, table, mergedRow, pos, ctx);
     for (auto& name : std::move(genColumnNames)) {
         allColumns.push_back(std::move(name));
     }
@@ -384,7 +384,7 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
 }
 
 TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
-    const TExprBase& depRow, TPositionHandle pos, TExprContext& ctx)
+    const TKikimrTableDescription& table, const TExprBase& depRow, TPositionHandle pos, TExprContext& ctx)
 {
     TGeneratedColumnMembers result;
     result.Names.reserve(generatedColumns.size());
@@ -392,10 +392,11 @@ TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrC
 
     for (const auto* colMeta : generatedColumns) {
         YQL_ENSURE(colMeta->DefaultExpression.Defined(), "Generated column " << colMeta->Name << " has no expression metadata");
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "Generated column " << colMeta->Name << " has no compiled expression");
+        const auto* lambda = table.DefaultExpressionLambdas.FindPtr(colMeta->Name);
+        YQL_ENSURE(lambda, "Generated column " << colMeta->Name << " has no compiled expression");
 
         auto value = Build<TExprApplier>(ctx, pos)
-            .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+            .Apply(TCoLambda(*lambda))
             .With(0, depRow)
             .Done();
 
@@ -485,7 +486,7 @@ TExprBase BuildVirtualGeneratedColumnProjection(
     auto row = Build<TCoArgument>(ctx, pos)
         .Name("row")
         .Done();
-    auto generated = BuildGeneratedColumnMembers(virtualColumns, row, pos, ctx);
+    auto generated = BuildGeneratedColumnMembers(virtualColumns, table, row, pos, ctx);
 
     TVector<TExprBase> members;
     members.reserve(logicalColumns.Size());

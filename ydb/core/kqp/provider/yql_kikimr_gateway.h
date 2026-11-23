@@ -631,7 +631,6 @@ using TColumnEncodingsList = TVector<TColumnEncoding>;
 
 struct TDefaultExpressionColumnInfo {
     TString ExprText;
-    NYql::TExprNode::TPtr Expr; // Compiled ExprText
     TVector<TString> Dependencies;
     bool Stored = false;
     bool Writable = false;

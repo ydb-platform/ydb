@@ -1027,7 +1027,7 @@ TVector<TExprBase> BuildUpdatedRowMembers(const TKikimrTableDescription& tableDa
     if (!generatedColumns.empty()) {
         auto dependencyRow = BuildGeneratedDependencyRow(generatedColumns, updateStructType, updateStruct, rowArg, pos, ctx);
 
-        auto generated = BuildGeneratedColumnMembers(generatedColumns, dependencyRow, pos, ctx);
+        auto generated = BuildGeneratedColumnMembers(generatedColumns, tableData, dependencyRow, pos, ctx);
         for (auto& member : generated.Members) {
             members.push_back(member);
         }

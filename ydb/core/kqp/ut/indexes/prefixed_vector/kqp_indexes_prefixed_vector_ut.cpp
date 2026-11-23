@@ -410,7 +410,8 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UPSERT INTO FrozenPrefix (id, tenant, emb, label, payload) VALUES
                 (1u, "a", Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), "deleted", "gone"),
                 (2u, "a", Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"), "stored", "old"),
-                (3u, "a", Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), "other", "other");
+                (3u, "a", Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), "other", "other"),
+                (4u, "b", Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"), "other", "other");
         )");
         ddl = session.ExecuteSchemeQuery(R"(
             ALTER TABLE FrozenPrefix ADD INDEX idx GLOBAL USING hnsw ON (tenant, emb) COVER (label)
@@ -426,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             $q = Knn::ToBinaryStringFloat([0.0f, 0.0f]);
             SELECT id, label, payload, tenant FROM FrozenPrefix VIEW idx WHERE tenant = "a"
             ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
-            SELECT id, tenant FROM FrozenPrefix VIEW idx WHERE tenant = "a"
+            SELECT id, tenant FROM FrozenPrefix VIEW idx WHERE tenant IN ("a", "b")
             ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
         )");
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(read.GetResultSet(0)), R"([[2u;["stored"];["new"];["a"]]])");
@@ -497,7 +498,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 DECLARE $tenant AS String;
                 DECLARE $limit AS Uint64;
                 SELECT id FROM PrefixTarget VIEW idx WHERE tenant = $tenant
-                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT $limit;
+                ORDER BY Knn::EuclideanDistance($q, emb) LIMIT $limit;
             )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
         };
         const auto vector = session.ExecuteDataQuery(R"(

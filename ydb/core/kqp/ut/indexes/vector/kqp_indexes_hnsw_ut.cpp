@@ -1076,6 +1076,77 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
+    Y_UNIT_TEST(HnswHybridRankPreservesNullableKey) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto db = kikimr.GetQueryClient();
+        const auto ddl = db.ExecuteQuery(R"(
+            CREATE TABLE HybridNullable (
+                id Uint64, a String, b String, PRIMARY KEY(id),
+                INDEX idx_a GLOBAL USING hnsw ON (a)
+                    WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1),
+                INDEX idx_b GLOBAL USING hnsw ON (b)
+                    WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        const auto write = db.ExecuteQuery(R"(
+            $near = Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector");
+            $far = Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector");
+            UPSERT INTO HybridNullable (id, a, b) VALUES (NULL, $near, $near), (1u, $far, $far);
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto result = db.ExecuteQuery(R"(
+            $near = Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector");
+            SELECT id FROM HybridNullable
+            ORDER BY HybridRank(
+                Knn::EuclideanDistance(a, $near),
+                Knn::EuclideanDistance(b, $near),
+                ($ranks) -> {
+                    RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)) +
+                           1.0 / (60 + COALESCE($ranks[1], 100000));
+                } AS RankLambda)
+            LIMIT 1;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[#]]");
+    }
+
+    Y_UNIT_TEST(HnswChecksProjectedEmbeddingAndMappedTarget) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto ddl = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Projected (
+                id Uint64 NOT NULL, emb String NOT NULL, other_emb String NOT NULL, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb) COVER (other_emb)
+                WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        const auto write = ExecuteDataQuery(session, R"(
+            $near = Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector");
+            $far = Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector");
+            UPSERT INTO Projected (id, emb, other_emb) VALUES (1u, $near, $far), (2u, $far, $near);
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto projected = ExecuteDataQuery(session, R"(
+            SELECT id FROM (SELECT id, other_emb AS emb FROM Projected VIEW idx)
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+        )");
+        UNIT_ASSERT_C(projected.IsSuccess(), projected.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(projected.GetResultSet(0)), "[[2u]]");
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder();
+        params.AddParam("$coords").BeginOptional().BeginList()
+            .AddListItem().Float(0.0f).AddListItem().Float(0.0f).EndList().EndOptional().Build();
+        const auto mapped = session.ExecuteDataQuery(R"(
+            DECLARE $coords AS List<Float>?;
+            SELECT id FROM Projected VIEW idx
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat($coords)) LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(mapped.IsSuccess(), mapped.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(mapped.GetResultSet(0)), "[[1u]]");
+    }
+
     Y_UNIT_TEST(HnswTopKAfterFlatten) {
         TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

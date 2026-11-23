@@ -31,6 +31,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](query_service_config.md) | No | Federated query connector configuration ||
 || [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||
 || [{#T}](security_config.md) | No | Security configuration settings ||
+|| [{#T}](statistics_config.md) | No | Column statistics collection for the cost-based optimizer ||
 || [{#T}](table_service_config.md) | No | Query processing configuration||
 || [{#T}](tli_config.md) | No | [Transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) diagnostics parameters ||
 || [{#T}](tls.md) | No | TLS configuration for secure connections ||

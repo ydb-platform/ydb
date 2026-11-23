@@ -49,6 +49,7 @@
 #include <util/folder/path.h>
 #include <util/folder/pathsplit.h>
 #include <util/generic/ptr.h>
+#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -577,6 +578,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
 
     auto iter = client.StreamExecuteQuery(query, tx, params, settings).GetValueSync();
     VerifyStatus(iter, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
+    Y_DEFER {
+        iter.Cancel();
+    };
 
     // Deferred until the first result set arrives, so that a table with no (more) rows
     // to read never creates an IncompleteData file, mirroring TryReadTable's behavior.

@@ -47,7 +47,9 @@ std::optional<TSplitKeyRanges> ParseSplitKeyRanges(ui64 srcTabletId, const TVect
     const auto* srcRange = FindIfPtr(splitDescription->GetSourceRanges(), [&](const auto& range) {
         return range.GetTabletID() == srcTabletId;
     });
-    Y_ENSURE(srcRange);
+    if (!srcRange) {
+        return std::nullopt;
+    }
 
     TSplitKeyRanges keyRanges;
     keyRanges.SrcKeyRange = MakeKeyRange(TSerializedCellVec(srcRange->GetKeyRangeBegin()), TSerializedCellVec(srcRange->GetKeyRangeEnd()));
@@ -56,7 +58,9 @@ std::optional<TSplitKeyRanges> ParseSplitKeyRanges(ui64 srcTabletId, const TVect
             MakeKeyRange(TSerializedCellVec(range.GetKeyRangeBegin()), TSerializedCellVec(range.GetKeyRangeEnd())));
     }
     for (const auto dstTabletId : dstTabletIds) {
-        Y_ENSURE(keyRanges.DstTabletIdToKeyRange.contains(dstTabletId));
+        if (!keyRanges.DstTabletIdToKeyRange.contains(dstTabletId)) {
+            return std::nullopt;
+        }
     }
 
     return keyRanges;

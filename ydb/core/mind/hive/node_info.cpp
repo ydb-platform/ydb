@@ -479,6 +479,8 @@ void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
     } else {
         Hive.ObjectDistributions.AddNode(*this);
         Hive.ProcessWaitQueue();
+        // a pile drain may have been waiting for a node to move the tablets to
+        Hive.ProcessPileDrains();
     }
 }
 

@@ -206,6 +206,7 @@ TBuildWriteInputResult ExtendInputRowsWithDefaultColumns(const TExprBase& input,
             .Done();
         TKqpStreamLookupSettings settings;
         settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+        settings.AllowNullKeysPrefixSize = tableDesc.Metadata->KeyColumnNames.size();
         rows = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(BuildTableMeta(tableDesc, pos, ctx))
             .LookupKeys(keys)

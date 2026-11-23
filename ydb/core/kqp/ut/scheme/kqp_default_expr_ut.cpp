@@ -1357,6 +1357,73 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;[9];#]]");
     }
 
+    Y_UNIT_TEST_QUAD(NullKeyUpsertPreservesLazyDefaults, StreamWrite, WithIndex) {
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
+        fixture.Exec(TStringBuilder() << R"(
+            CREATE TABLE NullKeyTable (
+                k Int32,
+                other Int32,
+                v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"),
+                PRIMARY KEY (k)
+            );
+            CREATE TABLE CompositeNullKeyTable (
+                k Int32,
+                part Int32,
+                other Int32,
+                v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"),
+                PRIMARY KEY (k, part)
+            );
+            CREATE TABLE NullKeyInsertTable (
+                k Int32,
+                part Int32,
+                other Int32,
+                v Uint64 DEFAULT )" << DefaultExpr << R"(,
+                PRIMARY KEY (k, part)
+            );
+        )");
+        if (WithIndex) {
+            for (const TString table : {"NullKeyTable", "CompositeNullKeyTable", "NullKeyInsertTable"}) {
+                fixture.Exec(TStringBuilder() << "ALTER TABLE " << table
+                    << " ADD INDEX idx GLOBAL SYNC ON (other) COVER (v);");
+            }
+        }
+
+        fixture.Exec("INSERT INTO NullKeyTable (k, v) VALUES (NULL, 7ul);");
+        fixture.Check("UPSERT INTO NullKeyTable (k, other) VALUES (NULL, 5) RETURNING k, other, v;",
+            "[[#;[5];[7u]]]");
+        fixture.Exec("UPSERT INTO NullKeyTable (k, v) VALUES (NULL, NULL);");
+        fixture.Check("UPSERT INTO NullKeyTable (k, other) VALUES (NULL, 6) RETURNING k, other, v;",
+            "[[#;[6];#]]");
+        fixture.Check("SELECT k, other, v FROM NullKeyTable;", "[[#;[6];#]]");
+        if (WithIndex) {
+            fixture.Check("SELECT k, other, v FROM NullKeyTable VIEW idx;", "[[#;[6];#]]");
+        }
+        fixture.Exec("DELETE FROM NullKeyTable WHERE k IS NULL;");
+        fixture.Rejects("UPSERT INTO NullKeyTable (k, other) VALUES (NULL, 7);", "default evaluated");
+        fixture.Check("SELECT COUNT(*) FROM NullKeyTable;", "[[0u]]");
+        fixture.Rejects("UPSERT INTO NullKeyTable (other) VALUES (8);", "Missing key column in input: k");
+
+        fixture.Exec("INSERT INTO CompositeNullKeyTable (k, part, v) VALUES (1, NULL, 7ul), (NULL, 1, NULL);");
+        const TString existingRows = "[[[1];#;[5];[7u]];[#;[1];[6];#]]";
+        fixture.CheckUnordered("UPSERT INTO CompositeNullKeyTable (k, part, other) "
+            "VALUES (1, NULL, 5), (NULL, 1, 6) RETURNING k, part, other, v;", existingRows);
+        fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable;", existingRows);
+        fixture.Rejects("UPSERT INTO CompositeNullKeyTable (k, part, other) VALUES (NULL, NULL, 7);",
+            "default evaluated");
+        fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable;", existingRows);
+        if (WithIndex) {
+            fixture.CheckUnordered("SELECT k, part, other, v FROM CompositeNullKeyTable VIEW idx;", existingRows);
+        }
+
+        const TString insertedRows = "[[#;[1];[10];[42u]];[[1];#;[20];[42u]];[#;#;[30];[42u]]]";
+        fixture.CheckUnordered("UPSERT INTO NullKeyInsertTable (k, part, other) "
+            "VALUES (NULL, 1, 10), (1, NULL, 20), (NULL, NULL, 30) RETURNING k, part, other, v;", insertedRows);
+        fixture.CheckUnordered("SELECT k, part, other, v FROM NullKeyInsertTable;", insertedRows);
+        if (WithIndex) {
+            fixture.CheckUnordered("SELECT k, part, other, v FROM NullKeyInsertTable VIEW idx;", insertedRows);
+        }
+    }
+
     Y_UNIT_TEST(UpsertOmittedLiteralDefaultKeepsExistingRow) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL("v Uint64"));

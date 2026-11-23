@@ -909,6 +909,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "SecureParam");
     }
 
+    Y_UNIT_TEST(ListHasItemsAcceptsScalarAndRejectsSubquery) {
+        TTestFixture fixture;
+        const TString expression = "ListHasItems(ListFilter(AsList(RandomNumber(1)), ($x) -> ($x >= 0ul)))";
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Bool DEFAULT " << expression));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, v FROM TestTable;", "[[1;[%true]]]");
+        fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, PRIMARY KEY (k));");
+        fixture.Rejects("CREATE TABLE Invalid (k Int32 NOT NULL, v Bool DEFAULT "
+            "ListHasItems((SELECT k FROM Source)), PRIMARY KEY (k));", "subquery");
+    }
+
     Y_UNIT_TEST(SingleRowExpressionWithNestedLambdaAccepted) {
         TTestFixture fixture;
         const TString expression = "ListSum(ListMap(AsList(RandomNumber(1), RandomNumber(2)), "
@@ -955,37 +967,26 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;#]]");
     }
 
-    Y_UNIT_TEST(OptionalDefaultAfterSetNotNull) {
+    Y_UNIT_TEST_TWIN(OptionalDefaultRejectedBeforeSetNotNull, ProducesNull) {
         auto appConfig = DefaultExprAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
         TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
-        const TString expression = R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64))";
+        const TString expression = ProducesNull
+            ? R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Uint64))"
+            : R"(CAST(CAST(RandomNumber(1) AS String) AS Uint64))";
         fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Uint64 DEFAULT " << expression));
         const auto before = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT(!before.GetNotNull());
-        AssertFromExpression(before, expression);
         fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
 
-        // Exec waits for the Query API operation, including validation of stored rows.
-        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET NOT NULL;");
+        fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET NOT NULL;", "declared NOT NULL");
         const auto after = fixture.ColumnDesc("/Root/TestTable", "v");
-        UNIT_ASSERT(after.GetNotNull());
+        UNIT_ASSERT(!after.GetNotNull());
         UNIT_ASSERT(!after.GetSetNotNullInProgress());
-        AssertFromExpression(after, expression);
         UNIT_ASSERT_VALUES_EQUAL(before.GetDefaultFromExpression().SerializeAsString(),
             after.GetDefaultFromExpression().SerializeAsString());
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
-
-        // An omitted write compiles the saved optional expression against the new
-        // non-optional column type; explicit non-NULL values bypass that expression.
-        const TString diagnostic = "The DEFAULT expression of column v is not convertible to the column type";
-        fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", diagnostic);
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
-        fixture.Rejects("REPLACE INTO TestTable (k) VALUES (1);", diagnostic);
-        fixture.Check("SELECT k, v FROM TestTable;", "[[1;7u]]");
-        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 8ul);");
-        fixture.Exec("REPLACE INTO TestTable (k, v) VALUES (1, 9ul);");
-        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;9u];[2;8u]]");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Check("SELECT k, v FROM TestTable WHERE k = 1;", "[[1;[7u]]]");
+        fixture.Check("SELECT COUNT(*) FROM TestTable;", "[[2u]]");
     }
 
     Y_UNIT_TEST(DefaultAndGeneratedRejected) {

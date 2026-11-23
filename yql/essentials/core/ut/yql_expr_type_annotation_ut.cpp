@@ -116,6 +116,28 @@ void CheckCommonTypeBothCastable(TCommonTypeFn commonTypeFn, const TString& pipe
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TCompileTimeExpressions) {
+    Y_UNIT_TEST(RejectsRuntimeInputsAndAllowsBoundArguments) {
+        TExprContext ctx;
+        TTypeAnnotationContext types;
+        const auto pos = TPositionHandle();
+        const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        auto argument = ctx.NewArgument(pos, "x");
+        auto identity = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), argument);
+        UNIT_ASSERT(UpdateLambdaAllArgumentsTypes(identity, {type}, ctx));
+        UNIT_ASSERT(InstantAnnotateTypes(identity, ctx, false, types));
+        UNIT_ASSERT(CanEvaluateAtCompileTime(*identity));
+        UNIT_ASSERT(!CanEvaluateAtCompileTime(*argument));
+        for (const TStringBuf callable : {"RandomNumber", "CurrentUtcTimestamp", "CurrentActorId",
+                "HostRuntimeSetting", "UdfRuntimeSetting", "Parameter"})
+        {
+            auto node = ctx.NewCallable(pos, callable, {});
+            node->SetTypeAnn(type);
+            UNIT_ASSERT_C(!CanEvaluateAtCompileTime(*node), callable);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(TYqlTryConvertToDecimal) {
 
 Y_UNIT_TEST(CommonTypeBothCastable) {

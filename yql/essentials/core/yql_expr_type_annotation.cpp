@@ -5895,6 +5895,33 @@ bool IsPureIsolatedLambda(const TExprNode& lambdaBody, TSyncMap* syncList) {
     return IsPureIsolatedLambdaImpl(lambdaBody, visited, syncList);
 }
 
+bool CanEvaluateAtCompileTime(const TExprNode& expression) {
+    if (expression.HasSideEffects() || !IsPureIsolatedLambda(expression)) {
+        return false;
+    }
+    TNodeSet boundArguments;
+    bool hasRuntimeInput = false;
+    VisitExpr(expression, [&](const TExprNode& node) {
+        if (node.IsLambda()) {
+            for (const auto& argument : node.Head().Children()) {
+                boundArguments.insert(argument.Get());
+            }
+        }
+        hasRuntimeInput |= node.HasSideEffects() || TCoNonDeterministicBase::Match(&node)
+            || node.IsCallable({"Parameter", "CurrentActorId", "HostRuntimeSetting", "UdfRuntimeSetting"});
+        return true;
+    });
+    if (hasRuntimeInput) {
+        return false;
+    }
+    bool hasFreeArgument = false;
+    VisitExpr(expression, [&](const TExprNode& node) {
+        hasFreeArgument |= node.IsArgument() && !boundArguments.contains(&node);
+        return true;
+    });
+    return !hasFreeArgument;
+}
+
 TString GetIntegralAtomValue(ui64 value, bool hasSign) {
     return (hasSign) ? "-" + ToString(value) : ToString(value);
 }

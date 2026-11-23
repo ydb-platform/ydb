@@ -2418,7 +2418,7 @@ public:
                                 return SyncError();
                             }
 
-                            auto defaultExpr = TExprBase(alterColumnList.Item(1));
+                            auto defaultExpr = alterColumnList.Cast<TCoSetDefaultValue>().Expression();
 
                             if (IsYqlNullExprNode(defaultExpr)) {
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
@@ -2429,10 +2429,10 @@ public:
                                 }
 
                                 if (!IsLiteralDefaultValue(defaultExpr)) {
-                                    YQL_ENSURE(alterColumnList.Size() >= 4);
+                                    YQL_ENSURE(alterColumnList.Cast<TCoSetDefaultValue>().SqlText());
                                     alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
                                     auto* expression = alter_columns->MutableDefaultFromExpression();
-                                    expression->SetExprText(TString(alterColumnList.Item(3).Cast<TCoAtom>().Value()));
+                                    expression->SetExprText(TString(alterColumnList.Cast<TCoSetDefaultValue>().SqlText().Cast().Value()));
                                     expression->SetStored(true);
                                     expression->SetWritable(true);
                                 } else {

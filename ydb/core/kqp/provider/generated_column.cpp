@@ -95,7 +95,6 @@ const THashSet<TStringBuf>& ReadsDataCallables() {
         "Sync!",
         "DataSource",
         "DataSink",
-        "HasItems",
     };
     return callables;
 }
@@ -138,7 +137,7 @@ bool IsReadsDataNode(const TExprNode& node) {
     return TCoRight::Match(&node) || TCoLeft::Match(&node) || TCoCons::Match(&node)
         || TCoRead::Match(&node) || TCoWrite::Match(&node) || TCoCommit::Match(&node)
         || TCoDataSource::Match(&node) || TCoDataSink::Match(&node) || TCoSync::Match(&node)
-        || TCoConfigure::Match(&node) || TCoWithWorld::Match(&node) || TCoHasItems::Match(&node)
+        || TCoConfigure::Match(&node) || TCoWithWorld::Match(&node)
         || ReadsDataCallables().contains(node.Content());
 }
 
@@ -343,6 +342,8 @@ TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& di
     return checks.ProjectionLambda;
 }
 
+}   // namespace
+
 // Names of the columns the lambda body reads off its row argument
 void CollectColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<TString>& refs) {
     VisitExpr(body, [&](const TExprNode& node) {
@@ -352,8 +353,6 @@ void CollectColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<
         return true;
     });
 }
-
-}   // namespace
 
 bool IsNonRowColumnNode(const TExprNode& node) {
     return node.IsCallable() && IsNonRowNode(node);

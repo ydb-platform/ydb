@@ -51,6 +51,9 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cfc693434de (LOGBROKER-10828 Better)
         // Ordinary SDK settings do not expose the system _write_mode attribute.
         if (sourceTabletConfig.HasWriteMode()) {
             targetConfig.MutablePQTabletConfig()->SetWriteMode(sourceTabletConfig.GetWriteMode());

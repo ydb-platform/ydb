@@ -166,6 +166,9 @@ TResult ProcessTopicAttributes(
                 }
             }
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cfc693434de (LOGBROKER-10828 Better)
         } else if (attrName == "_write_mode") {
             if (attrValue == "available") {
                 tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);

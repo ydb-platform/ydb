@@ -885,7 +885,9 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
             }
         });
 
-        auto config = MakePQTabletConfig({.deleteTime = 3600, .partitions = 1}, {{"client", true}}, *tc.Runtime, 1);
+        auto config = MakePQTabletConfig(
+            {.deleteTime = 3600, .partitions = 1},
+            {{.Name = "client", .Important = true}}, *tc.Runtime, 1);
         const auto applyConfig = [&] {
             SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
                 tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
@@ -918,7 +920,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
         checkStoredCounters(true);
 
         config.SetVersion(config.GetVersion() + 1);
-        config.SetMetricsDisabled(true);
+        config.SetMetricsLevel(METRICS_LEVEL_DISABLED);
         applyConfig();
         // Drain events sent before the config was applied.
         tc.Runtime->SimulateSleep(TDuration::Seconds(1));
@@ -930,7 +932,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
         UNIT_ASSERT(labeledDrops > 0);
         checkStoredCounters(false);
 
-        // The persisted flag must suppress labeled counters after a reboot too.
+        // The persisted metrics level must suppress labeled counters after a reboot too.
         tabletUpdates = 0;
         RebootTablet(*tc.Runtime, tc.TabletId, tc.Edge);
         CmdWrite(0, "after-reboot", TestData(), tc, false);
@@ -940,7 +942,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
         checkStoredCounters(false);
 
         config.SetVersion(config.GetVersion() + 1);
-        config.SetMetricsDisabled(false);
+        config.SetMetricsLevel(METRICS_LEVEL_OBJECT);
         applyConfig();
         CmdWrite(0, "re-enabled", TestData(), tc, false);
         tc.Runtime->SimulateSleep(TDuration::Seconds(30));

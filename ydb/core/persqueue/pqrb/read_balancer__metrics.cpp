@@ -226,20 +226,7 @@ const absl::flat_hash_map<ui32, TPartitionMetrics>& TTopicMetricsHandler::GetPar
 }
 
 void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
-    if (tabletConfig.GetMetricsDisabled()) {
-        // All published counters are expiring: releasing them removes them on the next scrape.
-        ActivePartitionCountCounter.Reset();
-        InactivePartitionCountCounter.Reset();
-        PartitionLabeledCounters = {};
-        PartitionExtendedLabeledCounters = {};
-        PartitionKeyCompactionLabeledCounters = {};
-        ConsumerCounters.clear();
-        SqsMetricsHandler_.reset();
-        DynamicCounters.Reset();
-        return;
-    }
-
-    if (DynamicCounters || database.DatabasePath.empty()) {
+    if (DynamicCounters) {
         return;
     }
 
@@ -312,7 +299,9 @@ void TTopicMetricsHandler::InitializeKeyCompactionCounters(const NKikimrPQ::TPQT
 }
 
 void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
-    Initialize(tabletConfig, database, topicPath, ctx);
+    Y_UNUSED(database);
+    Y_UNUSED(topicPath);
+
     if (!DynamicCounters) {
         return;
     }
@@ -344,7 +333,7 @@ void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse_TPartResult&& parti
 }
 
 void TTopicMetricsHandler::UpdateMetrics() {
-    if (PartitionStatuses.empty()) {
+    if (!DynamicCounters || PartitionStatuses.empty()) {
         return;
     }
 
@@ -357,11 +346,6 @@ void TTopicMetricsHandler::UpdateMetrics() {
     PartitionStatuses.erase(PartitionStatuses.begin(), PartitionStatuses.end());
 
     TopicMetrics = collector.TopicMetrics;
-
-    // Keep partition and topic statistics current for SchemeShard while publication is disabled.
-    if (!DynamicCounters) {
-        return;
-    }
 
     SetCounters(PartitionLabeledCounters, collector.PartitionLabeledCounters);
     SetCounters(PartitionExtendedLabeledCounters, collector.PartitionExtendedLabeledCounters);

@@ -35,7 +35,6 @@ SRCS(
     describe_ut.cpp
     balancing_ut.cpp
     commitoffset_ut.cpp
-    metrics_disabled_ut.cpp
     mirrorer_autoscaling_ut.cpp
     mirrorer_ut.cpp
     topic_timestamp_ut.cpp

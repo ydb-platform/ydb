@@ -1,6 +1,7 @@
 # Changelog
 
-## [18.1.0-hotfix.3](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0-hotfix.2...v18.1.0-hotfix.3)
+## [18.1.0-hotfix.3](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0-hotfix.2...v18.1.0-hotfix.3) (2026-11-22)
+
 
 ### Features
 

@@ -1216,8 +1216,7 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     // The materialized DEFAULT value is used only for the insert half of UPSERT: when the row
-    // already exists, omitting the column leaves its stored value alone. The expression is still
-    // evaluated eagerly before the existing-row lookup, as pinned down by the next test
+    // already exists, omitting the column leaves its stored value alone.
     Y_UNIT_TEST(UpsertOmittedExistingRowKeepsValue) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());
@@ -1287,19 +1286,27 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "[[1;9u;[2u];11u];[2;4u;[3u];7u]]");
     }
 
-    Y_UNIT_TEST(EagerDefaultFailureOnExistingUpsert) {
-        TTestFixture fixture;
+    Y_UNIT_TEST_QUAD(FailingDefaultOnlyRunsOnUpsertInsert, StreamWrite, WithIndex) {
+        TTestFixture fixture(TFixtureOptions{.IndexStreamWrite = StreamWrite});
         fixture.Exec(DefaultExprDDL(
             R"(v Uint64 DEFAULT Ensure(RandomNumber(1), false, "default evaluated"))"));
-
+        if (WithIndex) {
+            fixture.Exec("ALTER TABLE TestTable ADD INDEX idx GLOBAL SYNC ON (other) COVER (v);");
+        }
         fixture.Exec("INSERT INTO TestTable (k, v) VALUES (1, 7ul);");
-        // Missing defaults are intentionally evaluated while building the candidate UPSERT row,
-        // before KQP learns that the key exists. Its value is discarded, but an error is observable
-        fixture.Rejects("UPSERT INTO TestTable (k, other) VALUES (1, 5);", "default evaluated");
-
-        // Supplying the column explicitly bypasses its DEFAULT expression
-        fixture.Exec("UPSERT INTO TestTable (k, other, v) VALUES (1, 6, 7ul);");
-        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[6];[7u]]]");
+        fixture.Check("UPSERT INTO TestTable (k, other) VALUES (1, 5) RETURNING k, other, v;",
+            "[[1;[5];[7u]]]");
+        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[5];[7u]]]");
+        if (WithIndex) {
+            fixture.Check("SELECT k, other, v FROM TestTable VIEW idx;", "[[1;[5];[7u]]]");
+        }
+        fixture.Rejects("UPSERT INTO TestTable (k, other) VALUES (2, 6);", "default evaluated");
+        fixture.Check("SELECT k, other, v FROM TestTable;", "[[1;[5];[7u]]]");
+        fixture.Exec("UPSERT INTO TestTable (k, other, v) VALUES (2, 6, 8ul);");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", "[[1;[5];[7u]];[2;[6];[8u]]]");
+        fixture.Exec("UPSERT INTO TestTable (k, v) VALUES (1, NULL);");
+        fixture.Check("UPSERT INTO TestTable (k, other) VALUES (1, 9) RETURNING k, other, v;",
+            "[[1;[9];#]]");
     }
 
     Y_UNIT_TEST(UpsertOmittedLiteralDefaultKeepsExistingRow) {

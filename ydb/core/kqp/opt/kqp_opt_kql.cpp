@@ -166,15 +166,55 @@ TExprBase BuildYqlLiteralFromTypedValue(const Ydb::TypedValue& proto, TPositionH
     return TExprBase(NYql::NCommon::ValueToExprLiteral(typeAnnotation, unboxedValue, ctx, pos));
 }
 
-// Appends DEFAULT_KIND_LITERAL column values to every row in the input stream.
-std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const TExprBase& input, const TCoAtomList& inputColumns,
-    const TCoAtomList& literalDefaultColumns, const TKikimrTableDescription& tableDesc, TPositionHandle pos, TExprContext& ctx)
+// Appends both literal and expression defaults in one projection, after sequence generation.
+TBuildWriteInputResult ExtendInputRowsWithDefaultColumns(const TExprBase& input, const TCoAtomList& inputColumns,
+    const TCoAtomList& literalDefaultColumns, const TCoAtomList& defaultExprColumns,
+    const TKikimrTableDescription& tableDesc, bool upsert, TPositionHandle pos, TExprContext& ctx)
 {
-    if (literalDefaultColumns.Ref().ChildrenSize() == 0) {
-        return {input, inputColumns};
+    if (literalDefaultColumns.Size() == 0 && defaultExprColumns.Size() == 0) {
+        return {.Input=input, .Columns=inputColumns, .EmittedStreamLookup=false};
     }
 
     auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
+    TExprBase sourceRow = rowArg;
+    TExprBase rows = input;
+    std::optional<TCoNth> fetched;
+    if (upsert && defaultExprColumns.Size()) {
+        // Key defaults have already been evaluated. Non-key defaults belong only to
+        // the missing-row branch, so fetch the existing values before applying them.
+        TVector<TExprBase> keyMembers;
+        TVector<TCoAtom> lookupColumns;
+        auto lookupRow = Build<TCoArgument>(ctx, pos).Name("lookup_row").Done();
+        for (const auto& key : tableDesc.Metadata->KeyColumnNames) {
+            keyMembers.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(key)
+                .Value<TCoMember>().Struct(lookupRow).Name().Build(key).Build()
+                .Done());
+            lookupColumns.push_back(TCoAtom(ctx.NewAtom(pos, key)));
+        }
+        for (const auto& col : defaultExprColumns) {
+            lookupColumns.push_back(col);
+        }
+        auto keys = Build<TCoMap>(ctx, pos)
+            .Input(input)
+            .Lambda().Args({lookupRow})
+                .Body<TExprList>()
+                    .Add(lookupRow)
+                    .Add<TCoJust>().Input<TCoAsStruct>().Add(keyMembers).Build().Build()
+                    .Build()
+                .Build()
+            .Done();
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+        rows = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(BuildTableMeta(tableDesc, pos, ctx))
+            .LookupKeys(keys)
+            .Columns<TCoAtomList>().Add(lookupColumns).Build()
+            .Settings(settings.BuildNode(ctx, pos))
+            .Done();
+        sourceRow = Build<TCoNth>(ctx, pos).Tuple(rowArg).Index().Build("0").Done();
+        fetched = Build<TCoNth>(ctx, pos).Tuple(rowArg).Index().Build("1").Done();
+    }
 
     TVector<TCoAtom> allColumns;
     TVector<TExprBase> allMembers;
@@ -185,7 +225,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name(col)
                 .Value<TCoMember>()
-                    .Struct(rowArg)
+                    .Struct(sourceRow)
                     .Name().Build(col.Value())
                     .Build()
                 .Done());
@@ -217,8 +257,27 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
                 .Done());
     }
 
+    for (const auto& member : BuildDefaultExpressionMembers(defaultExprColumns, tableDesc, pos, ctx)) {
+        const auto value = member.Cast<TCoNameValueTuple>();
+        TExprBase expression = value.Value().Cast();
+        if (fetched) {
+            auto present = Build<TCoArgument>(ctx, pos).Name("existing_row").Done();
+            expression = Build<TCoIfPresent>(ctx, pos)
+                .Optional(*fetched)
+                .PresentHandler<TCoLambda>()
+                    .Args({present})
+                    .Body<TCoMember>().Struct(present).Name(value.Name()).Build()
+                    .Build()
+                .MissingValue(expression)
+                .Done();
+        }
+        allColumns.push_back(value.Name());
+        allMembers.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name(value.Name()).Value(expression).Done());
+    }
+
     auto writeData = Build<TCoMap>(ctx, pos)
-        .Input(input)
+        .Input(rows)
         .Lambda()
             .Args({rowArg})
             .Body<TCoAsStruct>()
@@ -231,7 +290,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
         .Add(allColumns)
         .Done();
 
-    return {writeData, columnList};
+    return {.Input=writeData, .Columns=columnList, .EmittedStreamLookup=fetched.has_value()};
 }
 
 bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
@@ -461,13 +520,33 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
         input = BuildKqlSequencer(input, table, inputColsAfterSequencer, sequenceCols, pos, ctx);
     }
 
-    std::tie(input, inputCols) = ExtendInputRowsWithDefaultLiteralColumns(input, inputColsAfterSequencer,
-        literalDefaultCols, table, pos, ctx);
-
-    std::tie(input, inputCols) = ExtendInputRowsWithDefaultExpressionColumns(input, inputCols.value(),
-        defaultExprCols, table, pos, ctx);
-
-    YQL_ENSURE(inputCols.has_value());
+    const bool upsert = GetTableOp(write) == TYdbOperation::Upsert;
+    bool lookupDefaults = false;
+    inputCols = inputColsAfterSequencer;
+    if (upsert && defaultExprCols.Size()) {
+        TVector<TCoAtom> keyDefaults;
+        TVector<TCoAtom> valueDefaults;
+        const THashSet<TString> keys(table.Metadata->KeyColumnNames.begin(), table.Metadata->KeyColumnNames.end());
+        for (const auto& col : defaultExprCols) {
+            (keys.contains(TString(col.Value())) ? keyDefaults : valueDefaults).push_back(col);
+        }
+        lookupDefaults = !valueDefaults.empty();
+        if (lookupDefaults && !keyDefaults.empty()) {
+            auto keyColumns = Build<TCoAtomList>(ctx, pos).Add(keyDefaults).Done();
+            auto emptyColumns = Build<TCoAtomList>(ctx, pos).Done();
+            auto keyInput = ExtendInputRowsWithDefaultColumns(input, inputCols.value(), emptyColumns,
+                keyColumns, table, /* upsert */ false, pos, ctx);
+            input = keyInput.Input;
+            inputCols = keyInput.Columns;
+        }
+        if (lookupDefaults) {
+            defaultExprCols = Build<TCoAtomList>(ctx, pos).Add(valueDefaults).Done();
+        }
+    }
+    auto defaults = ExtendInputRowsWithDefaultColumns(input, inputCols.value(), literalDefaultCols,
+        defaultExprCols, table, lookupDefaults, pos, ctx);
+    input = defaults.Input;
+    inputCols = defaults.Columns;
 
     std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols.value(), table, write.Pos(), ctx, kqpCtx);
     auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, input, inputCols.value(), table, pos, ctx,
@@ -478,7 +557,7 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
         .Columns(GetPgNotNullColumns(table, pos, ctx))
         .Done();
 
-    return {.Input=baseInput, .Columns=generatedRewrite.Columns, .EmittedStreamLookup=generatedRewrite.EmittedStreamLookup};
+    return {.Input=baseInput, .Columns=generatedRewrite.Columns, .EmittedStreamLookup=defaults.EmittedStreamLookup || generatedRewrite.EmittedStreamLookup};
 }
 
 
@@ -533,12 +612,11 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         settings = AddSetting(*settings, write.Pos(), "AllowInconsistentWrites", nullptr, ctx);
     }
 
-    const auto [input, columns, needsGeneratedLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
+    const auto [input, columns, needsLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
         write.Pos(), ctx, kqpCtx, /* generatedLookup */ true);
 
-    // A partial UPSERT of a table with STORED generated columns reads the current dependency values
-    // back via a streaming lookup-join on the same table
-    if (needsGeneratedLookup) {
+    // Partial UPSERT reads existing defaults and generated dependencies before choosing insert values.
+    if (needsLookup) {
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 
@@ -572,12 +650,11 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
-    const auto [input, columns, needsGeneratedLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
+    const auto [input, columns, needsLookup] = BuildWriteInput(write, table, inputColumns, autoincrement,
         write.Pos(), ctx, kqpCtx, /* generatedLookup */ true);
 
-    // A partial UPSERT of a table with STORED generated columns reads the current dependency values
-    // back via a streaming lookup-join on the same table
-    if (needsGeneratedLookup) {
+    // Partial UPSERT reads existing defaults and generated dependencies before choosing insert values.
+    if (needsLookup) {
         settings = AddSetting(*settings, write.Pos(), "IsConditionalUpdate", nullptr, ctx);
     }
 

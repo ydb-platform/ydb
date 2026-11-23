@@ -12,7 +12,7 @@ namespace NKikimr::NKqp::NOpt {
 struct TBuildWriteInputResult {
     NYql::NNodes::TExprBase Input;
     NYql::NNodes::TCoAtomList Columns;
-    // True when the rewrite injected a stream lookup that reads dependency values back
+    // True when the rewrite injected a stream lookup into the write input.
     bool EmittedStreamLookup = false;
 };
 
@@ -68,10 +68,8 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const NYql::NNo
     const NYql::NNodes::TExprBase& input, const NYql::NNodes::TCoAtomList& inputColumns,
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool generatedLookup);
 
-// Appends DEFAULT-expression column values to every row of the input stream by applying each
-// compiled lambda to an empty struct: a DEFAULT expression has no dependencies to read
-std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TCoAtomList> ExtendInputRowsWithDefaultExpressionColumns(
-    const NYql::NNodes::TExprBase& input, const NYql::NNodes::TCoAtomList& inputColumns,
+// Applies DEFAULT lambdas to empty structs and builds members without projecting the input row.
+TVector<NYql::NNodes::TExprBase> BuildDefaultExpressionMembers(
     const NYql::NNodes::TCoAtomList& defaultExprColumns, const NYql::TKikimrTableDescription& table,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 

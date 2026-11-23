@@ -631,42 +631,16 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
     return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=false };
 }
 
-std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultExpressionColumns(const TExprBase& input,
-    const TCoAtomList& inputColumns, const TCoAtomList& defaultExprColumns, const TKikimrTableDescription& table,
-    TPositionHandle pos, TExprContext& ctx)
+TVector<TExprBase> BuildDefaultExpressionMembers(const TCoAtomList& defaultExprColumns,
+    const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
 {
-    if (defaultExprColumns.Ref().ChildrenSize() == 0) {
-        return {input, inputColumns};
-    }
-
-    auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
-
-    TVector<TCoAtom> allColumns;
-    TVector<TExprBase> allMembers;
-
-    for (const auto& col : inputColumns) {
-        allColumns.push_back(col);
-        allMembers.push_back(
-            Build<TCoNameValueTuple>(ctx, pos)
-                .Name(col)
-                .Value<TCoMember>()
-                    .Struct(rowArg)
-                    .Name().Build(col.Value())
-                    .Build()
-                .Done());
-    }
-
-    // A DEFAULT expression cannot reference columns, so it is applied to an empty row
+    TVector<TExprBase> members;
     auto emptyRow = Build<TCoAsStruct>(ctx, pos).Done();
-
     for (const auto& col : defaultExprColumns) {
-        const TString colName(col.Value());
-        const auto* colMeta = table.Metadata->Columns.FindPtr(colName);
-        YQL_ENSURE(colMeta && colMeta->IsDefaultFromExpression(), "Column " << colName << " has no DEFAULT expression");
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "DEFAULT expression of column " << colName << " is not compiled");
-
-        allColumns.push_back(col);
-        allMembers.push_back(
+        const auto* colMeta = table.Metadata->Columns.FindPtr(col.Value());
+        YQL_ENSURE(colMeta && colMeta->IsDefaultFromExpression(), "Column " << col.Value() << " has no DEFAULT expression");
+        YQL_ENSURE(colMeta->DefaultExpression->Expr, "DEFAULT expression of column " << col.Value() << " is not compiled");
+        members.push_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name(col)
                 .Value<TExprApplier>()
@@ -675,22 +649,7 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultExpressionColumns(co
                     .Build()
                 .Done());
     }
-
-    auto writeData = Build<TCoMap>(ctx, pos)
-        .Input(input)
-        .Lambda()
-            .Args({rowArg})
-            .Body<TCoAsStruct>()
-                .Add(allMembers)
-                .Build()
-            .Build()
-        .Done();
-
-    auto columnList = Build<TCoAtomList>(ctx, pos)
-        .Add(allColumns)
-        .Done();
-
-    return {writeData, columnList};
+    return members;
 }
 
 }   // namespace NKikimr::NKqp::NOpt

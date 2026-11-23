@@ -1,4 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -9,7 +11,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <algorithm>
@@ -1157,6 +1161,11 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 PRIMARY KEY (k)
             ) WITH (STORE = COLUMN);
         )", "column tables");
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (k Uint64 NOT NULL, v Uint64, PRIMARY KEY (k)) WITH (STORE = COLUMN);
+        )");
+        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";",
+            "Default values are not supported in column tables");
     }
 
     Y_UNIT_TEST(ExternalTableRejectsExpressionDefault) {
@@ -1211,8 +1220,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v, w FROM TestTable ORDER BY k;", "[[1;[42u];5];[2;[42u];5]]");
     }
 
-    Y_UNIT_TEST(OnlyRequiredExpressionDefaultsAreCompiledIntoWriteAst) {
-        TTestFixture fixture;
+    Y_UNIT_TEST_TWIN(OnlyRequiredExpressionDefaultsAreCompiledIntoWriteAst, CompileTimeDefaults) {
+        TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
         fixture.Exec(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
@@ -1904,6 +1913,26 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1u;[1]]]");
     }
 
+    Y_UNIT_TEST(UpsertUsesMaterializedNullDefaultKey) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 DEFAULT CAST("invalid" || CAST(RandomNumber(1) AS String) AS Int32),
+                other Int32,
+                v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k)
+            );
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "k"),
+            R"(CAST("invalid" || CAST(RandomNumber(1) AS String) AS Int32))");
+        fixture.Check("UPSERT INTO TestTable (other) VALUES (5) RETURNING k, other, v;", "[[#;[5];[42u]]]");
+        fixture.Exec(R"(
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT Ensure(RandomNumber(1), false, "unused default");
+        )");
+        fixture.Check("UPSERT INTO TestTable (other) VALUES (6) RETURNING k, other, v;", "[[#;[6];[42u]]]");
+        fixture.Check("SELECT k, other, v FROM TestTable;", "[[#;[6];[42u]]]");
+    }
+
     Y_UNIT_TEST(PrimaryKeyDefaultCollision) {
         TTestFixture fixture;
         fixture.Exec(TStringBuilder() << R"(
@@ -2218,8 +2247,63 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         const TString replacement = "RandomNumber(1) * 0ul + 9ul";
         fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << replacement << ";");
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), replacement);
+        UNIT_ASSERT_STRING_CONTAINS(fixture.ShowCreateTable("/Root/TestTable"), TStringBuilder() << "DEFAULT " << replacement);
         fixture.Check("INSERT INTO TestTable (k) VALUES (4) RETURNING k, v;", "[[4;[9u]]]");
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;#];[2;[42u]];[3;[7u]];[4;[9u]]]");
+    }
+
+    Y_UNIT_TEST_TWIN(SetAndDropDefaultsInOneAlter, CompileTimeDefaults) {
+        TTestFixture fixture(TFixtureOptions{.CompileTimeDefaults = CompileTimeDefaults});
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                b Uint64,
+                c Uint64 DEFAULT RandomNumber(1) * 0ul + 9ul,
+                PRIMARY KEY (k)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Rejects(R"(
+            ALTER TABLE TestTable
+                ALTER COLUMN a SET DEFAULT RandomNumber(1) * 0ul + 50ul,
+                ALTER COLUMN c SET DEFAULT AsList(RandomNumber(1));
+        )", "type mismatch");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "a"), DefaultExpr);
+
+        fixture.Exec(R"(
+            ALTER TABLE TestTable
+                ALTER COLUMN a SET DEFAULT RandomNumber(1) * 0ul + 50ul,
+                ALTER COLUMN b SET DEFAULT 8ul,
+                ALTER COLUMN c DROP DEFAULT;
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "a"), "RandomNumber(1) * 0ul + 50ul");
+        const auto literal = fixture.ColumnDesc("/Root/TestTable", "b");
+        UNIT_ASSERT_C(literal.HasDefaultFromLiteral(), literal.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(literal.GetDefaultFromLiteral().value().uint64_value(), 8u);
+        const auto dropped = fixture.ColumnDesc("/Root/TestTable", "c");
+        UNIT_ASSERT_VALUES_EQUAL(dropped.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        fixture.Exec("UPSERT INTO TestTable (k) VALUES (1), (2);");
+        fixture.Check("SELECT k, a, b, c FROM TestTable ORDER BY k;", "[[1;[42u];#;[9u]];[2;[50u];[8u];#]]");
+    }
+
+    Y_UNIT_TEST(NotNullColumnRequiresValueAfterDropDefault) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Uint64 NOT NULL"));
+        fixture.Rejects("INSERT INTO TestTable (k) VALUES (1);", "Missing not null column in input: v");
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;42u]]");
+
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        for (TStringBuf operation : {"INSERT", "REPLACE", "UPSERT"}) {
+            fixture.Rejects(TStringBuilder() << operation << " INTO TestTable (k) VALUES (2);",
+                "Missing not null column in input: v");
+        }
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (2, 7ul);");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT RandomNumber(1) * 0ul + 9ul;");
+        fixture.Check("REPLACE INTO TestTable (k) VALUES (3) RETURNING k, v;", "[[3;9u]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;42u];[2;7u];[3;9u]]");
     }
 
     Y_UNIT_TEST_TWIN(SetCoercedDefaultExpr, FeatureEnabled) {
@@ -2254,13 +2338,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "id"), DefaultExpr);
         fixture.Check("INSERT INTO TestTable (v) VALUES (7) RETURNING id, v;", "[[42u;[7]]]");
         fixture.Exec("INSERT INTO TestTable (id, v) VALUES (8ul, 9);");
-        fixture.Check("SELECT id, v FROM TestTable ORDER BY id;", "[[8u;[9]];[42u;[7]]]");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN id DROP DEFAULT;");
+        fixture.Rejects("UPSERT INTO TestTable (v) VALUES (11);", "Missing key column in input: id");
+        fixture.Exec("UPSERT INTO TestTable (id, v) VALUES (10ul, 11);");
+        fixture.Check("SELECT id, v FROM TestTable ORDER BY id;", "[[8u;[9]];[10u;[11]];[42u;[7]]]");
     }
 
     Y_UNIT_TEST(SetDefaultExprTypeMismatchPreservesDefault) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());
 
+        fixture.Rejects(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN missing SET DEFAULT " << DefaultExpr << ";",
+            "Cannot determine the type of column missing");
         fixture.Rejects("ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT AsList(RandomNumber(1));", "type mismatch");
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
         fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[42u]]]");
@@ -2361,6 +2450,86 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable VIEW idx_v ORDER BY k;", "[[1;[7u]];[2;[42u]];[3;#]]");
     }
 
+    Y_UNIT_TEST(SetAndDropExpressionDefaultWithAsyncIndexes) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, other Int32, v Uint64, PRIMARY KEY (k),
+                INDEX idx_v GLOBAL ASYNC ON (v) COVER (other),
+                INDEX idx_other GLOBAL ASYNC ON (other) COVER (v)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec(TStringBuilder() << "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT " << DefaultExpr << ";");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (1, 11), (2, 20);");
+
+        const auto check = [&](const TString& expected) {
+            fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", expected);
+            fixture.CheckEventually("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;", expected);
+            fixture.CheckEventually("SELECT k, other, v FROM TestTable VIEW idx_other ORDER BY k;", expected);
+        };
+        check("[[1;[11];#];[2;[20];[42u]]]");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (2, 21), (3, 30);");
+        check("[[1;[11];#];[2;[21];[42u]];[3;[30];#]]");
+        fixture.Exec("REPLACE INTO TestTable (k, other) VALUES (2, 22);");
+        check("[[1;[11];#];[2;[22];#];[3;[30];#]]");
+    }
+
+    Y_UNIT_TEST(ChangefeedUsesCurrentExpressionDefault) {
+        TTestFixture fixture;
+        fixture.Exec(DefaultExprDDL("v Int32"));
+        fixture.Exec("ALTER TABLE TestTable ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON');");
+        fixture.Exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER test_consumer;");
+        fixture.Exec(R"(
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT IF(RandomNumber(1) * 0ul = 0ul, 42, 0);
+        )");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), "IF(RandomNumber(1) * 0ul = 0ul, 42, 0)");
+        fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec("REPLACE INTO TestTable (k, other) VALUES (2, 20);");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        fixture.Exec("UPSERT INTO TestTable (k, other) VALUES (3, 30);");
+        fixture.Exec("REPLACE INTO TestTable (k, other) VALUES (4, 40);");
+
+        NTopic::TTopicClient topicClient(fixture.Runner().GetDriver());
+        NTopic::TReadSessionSettings settings;
+        settings.ConsumerName("test_consumer");
+        settings.AppendTopics(NTopic::TTopicReadSettings().Path("/Root/TestTable/feed"));
+        auto reader = topicClient.CreateReadSession(settings);
+
+        THashMap<i64, NJson::TJsonValue> messages;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (messages.size() < 4) {
+            const auto now = TInstant::Now();
+            if (now >= deadline || !reader->WaitEvent().Wait(deadline - now)) {
+                break;
+            }
+            for (auto& event : reader->GetEvents(false)) {
+                if (auto* start = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                    start->Confirm();
+                } else if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                    for (const auto& message : data->GetMessages()) {
+                        NJson::TJsonValue json;
+                        UNIT_ASSERT_C(NJson::ReadJsonTree(message.GetData(), &json), message.GetData());
+                        const auto key = json["key"][0].GetInteger();
+                        UNIT_ASSERT_C(messages.emplace(key, std::move(json)).second, message.GetData());
+                    }
+                    data->Commit();
+                } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                    UNIT_FAIL(closed->GetIssues().ToString());
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(messages.at(1)["update"]["v"].GetInteger(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(messages.at(2)["reset"]["v"].GetInteger(), 42);
+        UNIT_ASSERT(messages.at(3).Has("update"));
+        UNIT_ASSERT(!messages.at(3)["update"].Has("v"));
+        UNIT_ASSERT(messages.at(4)["reset"].Has("v"));
+        UNIT_ASSERT(messages.at(4)["reset"]["v"].IsNull());
+    }
+
     // Literal defaults retain their metadata kind when replacing an expression.
     Y_UNIT_TEST(SetLiteralDefaultOverExprColumn) {
         TTestFixture fixture;
@@ -2378,20 +2547,62 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     }
 
     // DROP DEFAULT removes the persisted default. Prepared-plan invalidation is checked below.
-    Y_UNIT_TEST(DropDefaultAffectsNewWrites) {
+    Y_UNIT_TEST_TWIN(DropDefaultAffectsNewWrites, ClearWithNull) {
         TTestFixture fixture;
         fixture.Exec(ValueTableDDL());
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
 
+        fixture.Exec(ClearWithNull ? "ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT NULL;"
+                                   : "ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
+        const auto col = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT_VALUES_EQUAL(col.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
+        UNIT_ASSERT_C(ddl.find("DEFAULT") == std::string::npos, ddl);
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP DEFAULT;");
-        {
-            const auto col = fixture.ColumnDesc("/Root/TestTable", "v");
-            UNIT_ASSERT_C(!col.HasDefaultFromExpression(), col.ShortDebugString());
-        }
 
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;#]]");
+    }
+
+    Y_UNIT_TEST_TWIN(PublicAlterClearsExpressionDefault, UseNullLiteral) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                required Uint64 NOT NULL DEFAULT RandomNumber(1) * 0ul + 42ul,
+                PRIMARY KEY (k)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/TestTable");
+        for (const char* name : {"v", "required"}) {
+            AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", name), DefaultExpr);
+            auto& column = *request.add_alter_columns();
+            column.set_name(name);
+            if constexpr (UseNullLiteral) {
+                auto& literal = *column.mutable_from_literal();
+                literal.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+                literal.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+            } else {
+                column.set_empty_default(NProtoBuf::NULL_VALUE);
+            }
+        }
+        using TEvRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>;
+        const auto response = NRpcService::DoLocalRpc<TEvRequest>(std::move(request), "/Root", Nothing(),
+            fixture.Runner().GetTestServer().GetRuntime()->GetActorSystem(0)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+        const auto nullable = fixture.ColumnDesc("/Root/TestTable", "v");
+        const auto required = fixture.ColumnDesc("/Root/TestTable", "required");
+        UNIT_ASSERT_VALUES_EQUAL(nullable.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT_VALUES_EQUAL(required.GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        UNIT_ASSERT(!nullable.GetNotNull());
+        UNIT_ASSERT(required.GetNotNull());
+        fixture.Rejects("INSERT INTO TestTable (k) VALUES (2);", "Missing not null column in input: required");
+        fixture.Exec("INSERT INTO TestTable (k, required) VALUES (2, 7ul);");
+        fixture.Check("SELECT k, v, required FROM TestTable ORDER BY k;", "[[1;[42u];42u];[2;#;7u]]");
     }
 
     Y_UNIT_TEST_TWIN(PreparedInsertIsRecompiledAfterDefaultChange, DropDefault) {

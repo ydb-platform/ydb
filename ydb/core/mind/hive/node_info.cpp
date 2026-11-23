@@ -176,7 +176,7 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
 }
 
-bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState) const {
+bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState, bool checkPile) const {
     const auto& effectiveAllowedDomains = filter.GetEffectiveAllowedDomains();
     bool result = false;
 
@@ -218,7 +218,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
-    if (Hive.BridgeInfo) {
+    if (checkPile && Hive.BridgeInfo) {
         if (!filter.IsAllowedPile(BridgePileId)) {
             return false;
         }

@@ -1164,20 +1164,23 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
     // the query or burning the resend budget; the query then completes on the
     // resend's own result.
     Y_UNIT_TEST(LateSupersededRetryableResultIsDropped) {
-        TSinkFixture fixture;
-        fixture.Write(1, Nothing(), true);
-        const auto original = fixture.GrabWrite();
+        using TResult = NKikimrDataEvents::TEvWriteResult;
+        for (auto status : {TResult::STATUS_OVERLOADED, TResult::STATUS_WRONG_SHARD_STATE}) {
+            TSinkFixture fixture;
+            fixture.Write(1, Nothing(), true);
+            const auto original = fixture.GrabWrite();
 
-        fixture.Retry(original);
-        const auto retried = fixture.GrabWrite();
+            fixture.Retry(original);
+            const auto retried = fixture.GrabWrite();
 
-        fixture.FailWrite(original, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
-        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
-        UNIT_ASSERT(!fixture.Callbacks.Finished);
+            fixture.FailWrite(original, status);
+            UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+            UNIT_ASSERT(!fixture.Callbacks.Finished);
 
-        fixture.Acknowledge(retried);
-        UNIT_ASSERT(fixture.Callbacks.Finished);
-        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+            fixture.Acknowledge(retried);
+            UNIT_ASSERT(fixture.Callbacks.Finished);
+            UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+        }
     }
 
     // A late fatal error of a superseded message must fail the query

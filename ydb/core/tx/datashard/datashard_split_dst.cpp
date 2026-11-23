@@ -214,6 +214,10 @@ private:
                 state.SerializedResult = protoState.GetSerializedResult();
                 if (protoState.HasGcWriteSeqNum()) {
                     state.GcWriteSeqNum = protoState.GetGcWriteSeqNum();
+                    AFL_ENSURE(ancestor.TabletId == ancestor.CreatedOn && *state.GcWriteSeqNum
+                            && *state.GcWriteSeqNum <= state.WriteSeqNum)
+                        ("owner", ancestor.TabletId)("createdOn", ancestor.CreatedOn)("writer", state.WriterIndex)
+                        ("gcWriteSeqNum", *state.GcWriteSeqNum)("writeSeqNum", state.WriteSeqNum);
                 }
                 ui64 maxBranchWriteSeqNum = 0;
                 TSet<TVector<ui64>> paths;
@@ -237,9 +241,12 @@ private:
                     }
                     maxBranchWriteSeqNum = Max(maxBranchWriteSeqNum, branch.WriteSeqNum);
                 }
-                // Deduplication uses branches. An aggregate without its latest
-                // branch could let a retry execute again with the same WSN.
-                if (state.WriteSeqNum != maxBranchWriteSeqNum) {
+                // For its own chain the sending tablet emits a branch at its current WSN.
+                // Compare the owner with the immediate sender: after another split an
+                // inherited (owner, owner) lock still names the original tablet. Its
+                // aggregate survives GC for commit validation, so even the highest
+                // remaining branch may be below it, or all branches may be gone.
+                if (ancestor.TabletId == sourceRange.GetTabletID() && maxBranchWriteSeqNum != state.WriteSeqNum) {
                     return TStringBuilder() << "Aggregate WSN does not match branches for writer " << state.WriterIndex;
                 }
                 if (!ancestor.WriteSeqNumStates.emplace(state.WriterIndex, std::move(state)).second) {
@@ -604,8 +611,7 @@ public:
             }
         }
         // Apply erases after traversal to keep the GetLocks() iterator valid.
-        // TODO: Bound erase redo and continue in another transaction. LockLimit
-        // does not bound the number of ancestor branches deleted with each lock.
+        // Ancestor metadata and branch keys are reclaimed separately.
         Self->SysLocksTable().ApplyLocks();
         // SwitchToWork starts the ordinary orphan cleanup after Ready. Leave
         // unknown localdb ids without a lock so that cleanup can identify them.

@@ -102,6 +102,24 @@ Y_UNIT_TEST_SUITE(DataShardLockTransferState) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardWriteSeqNums) {
+    Y_UNIT_TEST(AncestorLimitsIncludeEarlierOperationsOfTheSameWrite) {
+        auto lock = MakeLock();
+        TUpdate update(7, 1);
+        auto stage = [&](ui64 owner, ui64 via, ui64 wsn) {
+            return update.StageOperation(lock.Get(), 40, TVector<ui64>{owner, via}, wsn, Table).Status;
+        };
+        constexpr ui64 firstPath = 100;
+        constexpr ui64 excessPath = firstPath + TAncestorLock::MaxPaths;
+        for (ui64 via = firstPath; via < excessPath; ++via) {
+            UNIT_ASSERT(stage(10, via, 1) == EStatus::Fresh);
+        }
+        UNIT_ASSERT(stage(10, firstPath, 1) == EStatus::Duplicate);
+        UNIT_ASSERT(stage(10, firstPath, 2) == EStatus::Fresh);
+        UNIT_ASSERT(stage(10, excessPath, 1) == EStatus::AncestorLimit);
+        UNIT_ASSERT(stage(20, firstPath, 1) == EStatus::AncestorLimit);
+        UNIT_ASSERT(lock->GetAncestorLocks().empty());
+    }
+
     Y_UNIT_TEST(CurrentDuplicatesAndFreshSuffixAreStaged) {
         auto lock = MakeLock();
         lock->SetWriteSeqNum(7, 2, nullptr);
@@ -218,6 +236,18 @@ Y_UNIT_TEST_SUITE(DataShardWriteSeqNums) {
         TUpdate order(7);
         UNIT_ASSERT(Stage(order, lock.Get(), {}, 1).Status == EStatus::Duplicate);
         UNIT_ASSERT(Stage(order, lock.Get(), {10}, 1).Status == EStatus::BadRequest);
+    }
+
+    Y_UNIT_TEST(TransferredGcBoundAppliesOnlyToPathsThroughItsShard) {
+        auto lock = MakeLock();
+        auto closed = MakeTransferredLock({{{10}, 8, "closed"}});
+        lock->AddAncestorLock(std::move(closed));
+        TUpdate retry(7);
+        UNIT_ASSERT(Stage(retry, lock.Get(), {10, 20}, 4).Status == EStatus::WrongShardState);
+        UNIT_ASSERT(Stage(retry, lock.Get(), {10, 20}, 5).Status == EStatus::Duplicate);
+        UNIT_ASSERT(Stage(retry, lock.Get(), {30, 10}, 1).Status == EStatus::WrongShardState);
+        UNIT_ASSERT(Stage(retry, lock.Get(), {30, 20}, 1).Status == EStatus::Fresh);
+        UNIT_ASSERT(Stage(retry, lock.Get(), {}, 1).Status == EStatus::Fresh);
     }
 
     Y_UNIT_TEST(InvalidPathsAndOtherWritersAreRejected) {

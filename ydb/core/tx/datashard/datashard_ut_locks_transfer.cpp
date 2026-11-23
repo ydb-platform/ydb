@@ -2,6 +2,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common_tx.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/protos/query_stats.pb.h>
@@ -93,7 +94,8 @@ struct TTestEnv {
 using TTransferSnapshot = TEvDataShard::TEvSplitTransferSnapshot;
 
 NKikimrDataEvents::TLock WriteAt(TTestEnv& env, TTransactionState& tx, ui64 shard,
-        TVector<ui64> ancestors, ui64 wsn, TWriteOperation op) {
+        TVector<ui64> ancestors, ui64 wsn, TWriteOperation op,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
     auto req = tx.CreateWrite(env.TableId, ancestors, shard, op);
     req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(wsn);
     auto& runtime = env.GetRuntime();
@@ -102,8 +104,12 @@ NKikimrDataEvents::TLock WriteAt(TTestEnv& env, TTransactionState& tx, ui64 shar
     TTransactionState::TWritePromise promise{tx, sender};
     auto result = promise.NextResult();
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(), expected,
         result->Record.ShortDebugString());
+    if (expected != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.TxLocksSize(), 0);
+        return {};
+    }
     UNIT_ASSERT_VALUES_EQUAL(result->Record.TxLocksSize(), 1);
     return result->Record.GetTxLocks(0);
 }
@@ -488,6 +494,253 @@ Y_UNIT_TEST(EmptyCopiesFollowCreatedOnRange) {
     UNIT_ASSERT_VALUES_EQUAL(tx.ReadKey(env.TableId, env.Shards[0], 1), "1, 100\n");
 }
 
+Y_UNIT_TEST_TWIN(AncestorPathLimitBreaksLockUntilRemoval, SplitInsteadOfRollback) {
+    TTestEnv env({});
+    auto& runtime = env.GetRuntime();
+    const ui64 shard = env.Shards[0];
+    const ui64 owner = shard - 1;
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+    constexpr ui64 firstPath = 100;
+    constexpr ui64 excessPath = firstPath + NDataShard::TAncestorLock::MaxPaths;
+    for (ui64 path = firstPath; path < excessPath; ++path) {
+        WriteAt(env, tx, shard, {owner, path}, 1, TWriteOperation::Upsert(1, 10));
+    }
+    WriteAt(env, tx, shard, {owner, firstPath}, 1, TWriteOperation::Upsert(1, 999));
+    WriteAt(env, tx, shard, {owner, firstPath}, 2, TWriteOperation::Upsert(1, 20));
+    const auto broken = NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
+    WriteAt(env, tx, shard, {owner, excessPath}, 1, TWriteOperation::Upsert(2, 30), broken);
+
+    if (!SplitInsteadOfRollback) {
+        RebootTablet(runtime, shard, env.Sender);
+    }
+    WriteAt(env, tx, shard, {owner, firstPath}, 2, TWriteOperation::Upsert(1, 999), broken);
+    runtime.SendToPipe(shard, env.Sender, new TEvDataShard::TEvGetOpenTxs(env.TableId.PathId));
+    auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(env.Sender);
+    UNIT_ASSERT(open->Get()->OpenTxs.contains(tx.LockTxId));
+
+    if (SplitInsteadOfRollback) {
+        // The source removes the broken lock before lending data to destinations.
+        env.Split(0, 10);
+        for (ui64 destination : env.Shards) {
+            CheckNoOpenTxs(env, destination);
+        }
+    } else {
+        tx.MapAncestorShard(shard, owner);
+        UNIT_ASSERT_VALUES_EQUAL(tx.Rollback(shard), "OK");
+        CheckNoOpenTxs(env, shard);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT * FROM `/Root/table`;"), "");
+}
+
+Y_UNIT_TEST_TWIN(LockIdReuseWaitsForLastAncestorBranchGcBatch, SinglePrefix) {
+    TTestEnv env({});
+    auto& runtime = env.GetRuntime();
+    const ui64 shard = env.Shards[0];
+    const ui64 owner = shard - 1;
+    UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime,
+        "UPSERT INTO `/Root/table` (key, value) VALUES (1, 100);"), "<empty>");
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+    // Empty writes consume WSNs without leaving user data that also blocks reuse.
+    if (SinglePrefix) {
+        // Each sibling contributes a distinct key to the same (lock, owner, createdOn, writer).
+        // The keys alone exceed the deletion budget, forcing a continuation for that prefix.
+        size_t keyBytes = 0;
+        for (ui64 i = 0; i < 10; ++i) {
+            TVector<ui64> path{owner, 100 + i};
+            for (ui64 hop = 0; hop < 3500; ++hop) {
+                path.push_back((ui64(1) << 55) + hop);
+            }
+            keyBytes += NDataShard::SerializeLockShardsPath(path).size();
+            WriteAt(env, tx, shard, std::move(path), 1, TWriteOperation::Upsert({}));
+        }
+        UNIT_ASSERT_GT(keyBytes, 256 * 1024);
+    } else {
+        WriteAt(env, tx, shard, {owner}, 1, TWriteOperation::Upsert({}));
+        WriteAt(env, tx, shard, {shard - 2}, 1, TWriteOperation::Upsert({}));
+    }
+    using namespace NTabletFlatExecutor::NFlatExecutorSetup;
+    const auto* tablet = dynamic_cast<ITablet*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+    UNIT_ASSERT(tablet);
+    const auto executorId = tablet->ExecutorID();
+    const auto* executor = dynamic_cast<IExecutor*>(runtime.FindActor(executorId));
+    UNIT_ASSERT(executor);
+    TBlockEvents<IEventHandle> gc(runtime, [&](const IEventHandle::TPtr& ev) {
+        return ev->GetRecipientRewrite() == executorId && ev->GetTypeName().Contains("TEvActivateLowExecution");
+    });
+    WriteAt(env, tx, shard, {}, 1, TWriteOperation::Upsert({}));
+    runtime.WaitFor("first GC batch queued", [&] { return !gc.empty(); });
+    // The boundary rejects an ancestor replay even with the worker blocked.
+    WriteAt(env, tx, shard, {owner}, 1, TWriteOperation::Upsert({}),
+        NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+    UNIT_ASSERT_VALUES_EQUAL(tx.Rollback(shard), "OK");
+    tx.Locks.clear();
+    CheckNoOpenTxs(env, shard);
+
+    if (SinglePrefix) {
+        gc.Unblock(1);
+        runtime.WaitFor("second GC batch queued", [&] { return !gc.empty(); });
+    }
+    WriteAt(env, tx, shard, {owner}, 1, Increment(1, 10), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+
+    gc.Stop().Unblock();
+    // The queued batch counts as in-flight until its commit is confirmed.
+    runtime.WaitFor("GC drained", [&] { return executor->GetStats().TxInFly == 0; });
+    WriteAt(env, tx, shard, {owner}, 1, Increment(1, 10));
+    // Replaying the new chain after reboot must find its own persisted WSN.
+    RebootTablet(runtime, shard, env.Sender);
+    WriteAt(env, tx, shard, {owner}, 1, Increment(1, 999));
+    tx.MapAncestorShard(shard, owner);
+    UNIT_ASSERT_VALUES_EQUAL(tx.WriteCommit(env.TableId, shard), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT value FROM `/Root/table` WHERE key = 1;"),
+        "{ items { int32_value: 110 } }");
+}
+
+Y_UNIT_TEST(AncestorGcBatchesSmallLocksAndReservesIdsUntilCommit) {
+    TTestEnv env({});
+    auto& runtime = env.GetRuntime();
+    const ui64 shard = env.Shards[0];
+    const ui64 owner = shard - 1;
+    TTransactionState first(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    TTransactionState second(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    for (auto* tx : {&first, &second}) {
+        tx->WriterIndex = 123;
+        // No current write queues a writer task. No user deltas can mask LockId reuse.
+        WriteAt(env, *tx, shard, {owner}, 1, TWriteOperation::Upsert({}));
+        tx->MapAncestorShard(shard, owner);
+    }
+
+    using namespace NTabletFlatExecutor::NFlatExecutorSetup;
+    const auto shardActor = ResolveTablet(runtime, shard);
+    const auto* tablet = dynamic_cast<ITablet*>(runtime.FindActor(shardActor));
+    UNIT_ASSERT(tablet);
+    const auto executorId = tablet->ExecutorID();
+    auto* executor = dynamic_cast<IExecutor*>(runtime.FindActor(executorId));
+    UNIT_ASSERT(executor);
+    TBlockEvents<IEventHandle> gc(runtime, [&](const IEventHandle::TPtr& ev) {
+        return ev->GetRecipientRewrite() == executorId && ev->GetTypeName().Contains("TEvActivateLowExecution");
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(first.Rollback(shard), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(second.Rollback(shard), "OK");
+    CheckNoOpenTxs(env, shard);
+    runtime.WaitFor("ancestor GC activation", [&] { return !gc.empty(); });
+    UNIT_ASSERT_VALUES_EQUAL(gc.size(), 1);
+
+    TBlockEvents<TEvTablet::TEvCommitResult> gcCommit(runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == executorId && ev->Get()->TabletID == shard;
+    });
+    gc.Unblock(1);
+    runtime.WaitFor("ancestor GC commit result", [&] { return !gcCommit.empty(); });
+    UNIT_ASSERT_VALUES_EQUAL(executor->GetStats().TxInFly, 1);
+
+    // A read-only rejection can wait for the earlier commit in the executor's
+    // completion queue. Wait for Execute before delivering that confirmation.
+    const auto finished = [&] {
+        return executor->GetCounters()->Cumulative()[NTabletFlatExecutor::TExecutorCounters::TX_FINISHED].Get();
+    };
+    const auto beforeRetry = finished();
+    auto retry = first.CreateWrite(env.TableId, TVector<ui64>{owner}, shard, TWriteOperation::Upsert({}));
+    retry->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
+    const auto retrySender = runtime.AllocateEdgeActor();
+    runtime.Send(new IEventHandle(shardActor, retrySender, retry.release()), 0, true);
+    runtime.WaitFor("LockId reuse executed before GC confirmation", [&] { return finished() > beforeRetry; });
+    UNIT_ASSERT_VALUES_EQUAL(gcCommit.size(), 1);
+    gcCommit.Stop().Unblock();
+
+    TTransactionState::TWritePromise promise{first, retrySender};
+    auto result = promise.NextResult();
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+    runtime.WaitFor("GC completed or scheduled another batch", [&] {
+        return executor->GetStats().TxInFly == 0 || !gc.empty();
+    });
+    UNIT_ASSERT_C(gc.empty(), "Both small full tasks should fit in the first GC transaction");
+
+    for (auto* tx : {&first, &second}) {
+        WriteAt(env, *tx, shard, {owner}, 1, TWriteOperation::Upsert({}));
+    }
+}
+
+Y_UNIT_TEST(MergePreservesGcBoundOnlyOnItsSourcePath) {
+    TTestEnv env({});
+    auto& runtime = env.GetRuntime();
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+    const ui64 owner = env.Shards[0];
+    WriteAt(env, tx, owner, {}, 1, TWriteOperation::Upsert({{1, 1}, {15, 1}}));
+    env.Split(0, 10);
+    const ui64 left = env.Shards[0], right = env.Shards[1];
+    WriteAt(env, tx, left, {owner}, 2, Increment(1, 10));
+    WriteAt(env, tx, left, {owner}, 3, Increment(1, 10));
+    WriteAt(env, tx, left, {}, 1, Increment(1, 1));
+    WriteAt(env, tx, left, {}, 2, Increment(1, 1));
+    RebootTablet(runtime, left, env.Sender);
+
+    bool sawPrunedState = false;
+    auto observer = runtime.AddObserver<TTransferSnapshot>([&](TTransferSnapshot::TPtr& ev) {
+        for (const auto& lock : ev->Get()->Record.GetLocks()) {
+            for (const auto& ancestor : lock.GetAncestorLocks()) {
+                if (ancestor.GetTabletId() == owner && ev->Get()->Record.GetSrcTabletId() == left) {
+                    const auto& state = ancestor.GetWriteSeqNumStates(0);
+                    UNIT_ASSERT_VALUES_EQUAL(state.GetWriteSeqNum(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(state.BranchesSize(), 0);
+                    sawPrunedState = true;
+                }
+            }
+        }
+    });
+    env.Merge(0, 1);
+    observer.Remove();
+    UNIT_ASSERT(sawPrunedState);
+    const auto merged = env.Shards[0];
+    RebootTablet(runtime, merged, env.Sender);
+    const auto stale = NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE;
+    WriteAt(env, tx, merged, {owner, left}, 3, Increment(1, 999), stale);
+    WriteAt(env, tx, merged, {left}, 1, Increment(1, 999), stale);
+    WriteAt(env, tx, merged, {left}, 2, Increment(1, 999));
+    // The other source still needs position 2. Its echo includes the maximum
+    // of 3 retained for the collected branch, while its own increment applies.
+    auto echo = WriteAt(env, tx, merged, {owner, right}, 2, Increment(15, 20));
+    UNIT_ASSERT_VALUES_EQUAL(echo.GetWriteSeqNums(0).GetWriteSeqNum(), 3);
+    bool sawSurvivingBranch = false;
+    auto splitObserver = runtime.AddObserver<TTransferSnapshot>([&](TTransferSnapshot::TPtr& ev) {
+        for (const auto& lock : ev->Get()->Record.GetLocks()) {
+            for (const auto& ancestor : lock.GetAncestorLocks()) {
+                if (ancestor.GetTabletId() == owner) {
+                    const auto& state = ancestor.GetWriteSeqNumStates(0);
+                    ui64 maxBranch = 0;
+                    for (const auto& branch : state.GetBranches()) {
+                        maxBranch = Max(maxBranch, branch.GetWriteSeqNum());
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(maxBranch, 2);
+                    UNIT_ASSERT_VALUES_EQUAL(state.GetWriteSeqNum(), 3);
+                    sawSurvivingBranch = true;
+                }
+            }
+        }
+    });
+    env.Split(0, 10);
+    splitObserver.Remove();
+    UNIT_ASSERT(sawSurvivingBranch);
+    // The second split preserves both the acknowledged maximum and the result
+    // needed to deduplicate the surviving right-hand branch.
+    echo = WriteAt(env, tx, env.Shards[1], {owner, right, merged}, 2, Increment(15, 999));
+    UNIT_ASSERT_VALUES_EQUAL(echo.GetWriteSeqNums(0).GetWriteSeqNum(), 3);
+    tx.MapAncestorShard(env.Shards[0], owner);
+    tx.MapAncestorShard(env.Shards[0], left);
+    tx.MapAncestorShard(env.Shards[1], owner);
+    tx.InitCommit({env.Shards[0], env.Shards[1]});
+    auto leftCommit = tx.PrepareCommit(env.TableId, env.Shards[0]);
+    auto rightCommit = tx.PrepareCommit(env.TableId, env.Shards[1]);
+    tx.SendPlan();
+    UNIT_ASSERT_VALUES_EQUAL(leftCommit.NextString(), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(rightCommit.NextString(), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT value FROM `/Root/table` ORDER BY key;"),
+        "{ items { int32_value: 23 } }, { items { int32_value: 21 } }");
+}
+
 Y_UNIT_TEST(MergeRetainsSiblingBranchesAcrossAnotherSplit) {
     TTestEnv env({});
     auto& runtime = env.GetRuntime();
@@ -683,13 +936,24 @@ Y_UNIT_TEST(LargeRejectedLockFollowsOwnerLifetime) {
     const ui64 mergeTx = AsyncMergeTable(env.Server, env.Sender, "/Root/table", env.Shards);
     runtime.WaitFor("two snapshots", [&] { return snapshots.size() >= 2; });
     for (auto& snapshot : snapshots) {
-        auto* state = snapshot->Get()->Record.MutableLocks(0)->MutableAncestorLocks(0)->MutableWriteSeqNumStates(0);
-        // Rejection keeps a large valid subtree until ordinary owner cleanup.
-        for (ui64 i = 0; i != 2000; ++i) {
-            auto* branch = state->AddBranches();
-            branch->AddShardsPath(owner);
-            branch->AddShardsPath(1000000 + i);
-            branch->SetWriteSeqNum(1);
+        auto* lock = snapshot->Get()->Record.MutableLocks(0);
+        const auto original = lock->GetAncestorLocks(0);
+        // Both sources must agree on the large subtree. Only the counter below
+        // should reject the merge, so distribute the paths over distinct ancestors.
+        for (ui64 i = 0; i < 200; ++i) {
+            const ui64 ancestorId = 1000000 + i;
+            auto* ancestor = lock->AddAncestorLocks();
+            *ancestor = original;
+            ancestor->SetTabletId(ancestorId);
+            ancestor->SetCreatedOn(ancestorId);
+            auto* state = ancestor->MutableWriteSeqNumStates(0);
+            state->ClearBranches();
+            for (ui64 child = 1; child <= 10; ++child) {
+                auto* branch = state->AddBranches();
+                branch->AddShardsPath(ancestorId);
+                branch->AddShardsPath(child);
+                branch->SetWriteSeqNum(1);
+            }
         }
     }
     auto* conflicting = snapshots[1]->Get()->Record.MutableLocks(0)->MutableAncestorLocks(0);
@@ -707,6 +971,32 @@ Y_UNIT_TEST(LargeRejectedLockFollowsOwnerLifetime) {
     runtime.SimulateSleep(TDuration::Seconds(1));
     CheckNoOpenTxs(env, env.Shards[0]);
     UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT * FROM `/Root/table`;"), "");
+}
+
+Y_UNIT_TEST(InheritedBranchAboveAggregateAfterSecondSplitBreaksLock) {
+    TTestEnv env({});
+    auto& runtime = env.GetRuntime();
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+    const ui64 owner = env.Shards[0];
+    WriteAt(env, tx, owner, {}, 1, TWriteOperation::Upsert(1, 10));
+    env.Split(0, 10);
+    const ui64 left = env.Shards[0];
+    WriteAt(env, tx, left, {owner}, 2, Increment(1, 1));
+    TBlockEvents<TTransferSnapshot> snapshots(runtime);
+    const ui64 split = AsyncSplitTable(env.Server, env.Sender, "/Root/table", left, 5);
+    runtime.WaitFor("two snapshots", [&] { return snapshots.size() >= 2; });
+    for (auto& snapshot : snapshots) {
+        auto* state = snapshot->Get()->Record.MutableLocks(0)->MutableAncestorLocks(0)->MutableWriteSeqNumStates(0);
+        UNIT_ASSERT_VALUES_EQUAL(state->BranchesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(state->GetWriteSeqNum(), 2);
+        state->SetWriteSeqNum(1);
+    }
+    snapshots.Stop().Unblock();
+    WaitTxNotification(env.Server, env.Sender, split);
+    const auto shards = GetTableShards(env.Server, env.Sender, "/Root/table");
+    WriteAt(env, tx, shards[0], {owner, left}, 2, Increment(1, 1),
+        NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 }
 
 Y_UNIT_TEST(InconsistentWsnBranchesBreakLock) {
@@ -1279,9 +1569,7 @@ Y_UNIT_TEST(WriteSeqNumsAncestorAfterCurrentShardRejected) {
         "");
 }
 
-// Already applied ancestor positions may be replayed after the current shard
-// chain has started, but a new ancestor position must still be rejected: the
-// writer sends the re-routed ancestor chain before its fresh current-shard writes.
+// A pure current request closes the ancestor chain on this shard.
 Y_UNIT_TEST(WriteSeqNumsAncestorContinuationAfterCurrentShardRejected) {
     TTestEnv env({});
     auto [server, runtime, sender, tableId, initialShards] = env.GetAll();
@@ -1325,9 +1613,7 @@ Y_UNIT_TEST(WriteSeqNumsAncestorContinuationAfterCurrentShardRejected) {
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(
             result->Record.GetStatus(),
-            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        UNIT_ASSERT(result->Record.GetIssues(0).message().Contains(
-            "Fresh ancestor writes are forbidden after current writes"));
+            NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
     }
 
     // Commit the current shard's write and check that the rejected ancestor row

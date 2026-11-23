@@ -262,7 +262,10 @@ void TLockInfo::PersistAncestorLock(TAncestorLock lock, ILocksDb& db) {
 void TLockInfo::AddAncestorLock(TAncestorLock lock) {
     const auto key = lock.GetKey();
     Y_ENSURE(key.Owner && key.CreatedOn);
-    AncestorLocks[key] = std::move(lock);
+    const bool inserted = AncestorLocks.insert_or_assign(key, std::move(lock)).second;
+    if (Locker && inserted) {
+        ++Locker->AncestorCount;
+    }
 }
 
 void TLockInfo::SetAncestorBranch(TLockKey key, ui64 writerIndex,
@@ -449,15 +452,14 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     }
     WriteSeqNumStates.clear();
 
-    // Remove ancestor shard records
-    for (const auto& [key, ancestorLock] : AncestorLocks) {
-        db->PersistRemoveAncestorLock(LockId, key);
-        for (const auto& [writerIdx, state] : ancestorLock.WriteSeqNumStates) {
-            for (const auto& branch : state.Branches) {
-                db->PersistRemoveAncestorLockBranch(LockId, key, writerIdx, branch.ShardsPath);
-            }
-            db->PersistRemoveAncestorLockWriteSeqNum(LockId, key, writerIdx);
-        }
+    // Release the parent immediately. Its persisted children can exceed the
+    // redo budget and remain reserved until their background deletes commit.
+    if (!AncestorLocks.empty()) {
+        db->ScheduleAncestorGc({LockId, std::nullopt});
+    }
+    if (Locker) {
+        AFL_ENSURE(Locker->AncestorCount >= AncestorLocks.size());
+        Locker->AncestorCount -= AncestorLocks.size();
     }
     AncestorLocks.clear();
 
@@ -767,6 +769,36 @@ bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db)
         return true;
     }
     return false;
+}
+
+bool TLockInfo::SetWriteSeqNumWithGc(ui64 writerIndex, std::optional<ui64> freshWriteSeqNum, ui64 bound, ILocksDb& db) {
+    if (freshWriteSeqNum) {
+        // Persist the fresh WSN and the bound in a single row update below.
+        SetWriteSeqNum(writerIndex, *freshWriteSeqNum, nullptr);
+    }
+    auto& current = WriteSeqNumStates.at(writerIndex);
+    AFL_ENSURE(IsPersistent() && bound && bound <= current.WriteSeqNum);
+    if (current.GcWriteSeqNum) {
+        AFL_ENSURE(bound >= *current.GcWriteSeqNum);
+        if (!freshWriteSeqNum && bound == *current.GcWriteSeqNum) {
+            return false;
+        }
+    } else {
+        // The first bound closes every ancestor path on this shard. Later advances
+        // only move the current bound. Keep ancestor maxima for lock validation.
+        for (auto& [key, ancestor] : AncestorLocks) {
+            if (auto* state = ancestor.WriteSeqNumStates.FindPtr(writerIndex); state && !state->Branches.empty()) {
+                // Persisting the bound makes all these rows unreachable. Reclaim them
+                // in separate transactions so the write's redo is independent of their size.
+                db.ScheduleAncestorGc({LockId, std::tuple{key.Owner, key.CreatedOn, writerIndex}});
+                TVector<TWriteSeqNumBranch>().swap(state->Branches);
+            }
+        }
+    }
+    // The current chain stores only its latest WSN and result.
+    current.GcWriteSeqNum = bound;
+    db.PersistLockWriteSeqNum(LockId, writerIndex, current.WriteSeqNum, current.SerializedResult, bound);
+    return true;
 }
 
 void TLockInfo::SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult, ILocksDb* db) {
@@ -1424,6 +1456,20 @@ TLocksUpdate::TWriteSeqNumUpdate::TResult TLocksUpdate::TWriteSeqNumUpdate::Stag
                 << "Multiple writers per lock are not supported: lock already has writer "
                 << *other << ", got " << WriterIndex, {}};
         }
+        // Check committed bounds before classifying even a duplicate. A transferred
+        // bound belongs to the former current lock (S, S) and only covers paths via S.
+        const auto* current = lock->FindWriteSeqNumState(WriterIndex);
+        if (current && current->GcWriteSeqNum && (!ancestors.empty() || writeSeqNum < *current->GcWriteSeqNum)) {
+            return {EStatus::WrongShardState, "Write precedes the current shard's GC bound", {}};
+        }
+        for (ui64 shard : ancestors) {
+            if (const auto* ancestor = lock->FindAncestorLock({shard, shard})) {
+                const auto* state = ancestor->WriteSeqNumStates.FindPtr(WriterIndex);
+                if (state && state->GcWriteSeqNum && (shard != ancestors.front() || writeSeqNum < *state->GcWriteSeqNum)) {
+                    return {EStatus::WrongShardState, "Write precedes a transferred shard's GC bound", {}};
+                }
+            }
+        }
     }
 
     // Include the receiver in the full path; a current operation has only this shard.
@@ -1466,6 +1512,9 @@ TLocksUpdate::TWriteSeqNumUpdate::SelectLogicalLock(
                 return TResult{EStatus::LocksBroken, "Ancestor lock is missing for the writer chain", {}};
             }
             // No ancestor copy exists: create the logical lock on the receiver.
+            if (NewLocks.size() >= AvailableAncestors) {
+                return TResult{EStatus::AncestorLimit, "Too many ancestor locks on the shard", {}};
+            }
             NewLocks.insert(selected.Key);
         } else if (ancestor) {
             if (TSysLocks::TLock::IsError(ancestor->Counter)) {
@@ -1547,6 +1596,11 @@ TLocksUpdate::TWriteSeqNumUpdate::TResult TLocksUpdate::TWriteSeqNumUpdate::Clas
         auto branch = std::find_if(state.Branches.begin(), state.Branches.end(),
             [&](const auto& item) { return item.ShardsPath == path; });
         if (branch == state.Branches.end()) {
+            // SelectLogicalLock rules out other writers on this ancestor. This copy
+            // includes earlier operations in the same EvWrite; retries consume no slot.
+            if (state.Branches.size() >= TAncestorLock::MaxPaths) {
+                return {EStatus::AncestorLimit, "Too many paths on an ancestor lock", {}};
+            }
             state.Branches.push_back({path, writeSeqNum, {}});
         } else {
             branch->WriteSeqNum = writeSeqNum;
@@ -1616,6 +1670,7 @@ void TSysLocks::ActivateLock(TLockInfo& lock, ILocksDb& db) {
         lock->ConflictLocks.clear();
         lock->VolatileDependencies.clear();
         lock->WriteSeqNumStates.clear();
+        Locker.AncestorCount -= lock->AncestorLocks.size();
         lock->AncestorLocks.clear();
         lock->Flags = flags & ~ELockFlags::TrackingOnly;
         lock->SetTrackingOnly(true);
@@ -1696,7 +1751,9 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     } else {
         if (Update->Lock) {
             lock = std::move(Update->Lock);
-        } else {
+        } else if (Locker.FindLockPtr(Update->LockTxId) || !Db || !Db->HasPendingAncestorGc(Update->LockTxId)) {
+            // Some callers acquire optimistic locks directly in ApplyLocks.
+            // They must also leave ids with pending ancestor deletes reserved.
             lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
         }
         if (lock && Update->QuerySpanId != 0 && lock->GetVictimQuerySpanId() == 0) {
@@ -1795,14 +1852,20 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                     lock->PersistAncestorLock(std::move(ancestor), *Db);
                     waitPersistent = true;
                 }
+                std::optional<ui64> freshCurrent;
                 for (const auto& branch : seqNumUpdate.Branches) {
                     if (branch.Key.Owner == Self->TabletID()) {
                         // Current updates share the pending list but use the scalar WSN state.
-                        waitPersistent |= lock->SetWriteSeqNum(seqNumUpdate.WriterIndex, branch.Branch.WriteSeqNum, Db);
+                        freshCurrent = branch.Branch.WriteSeqNum;
                     } else {
                         lock->SetAncestorBranch(branch.Key, seqNumUpdate.WriterIndex, branch.Branch, Db);
                         waitPersistent = true;
                     }
+                }
+                if (seqNumUpdate.GcWriteSeqNum) {
+                    waitPersistent |= lock->SetWriteSeqNumWithGc(seqNumUpdate.WriterIndex, freshCurrent, *seqNumUpdate.GcWriteSeqNum, *Db);
+                } else if (freshCurrent) {
+                    waitPersistent |= lock->SetWriteSeqNum(seqNumUpdate.WriterIndex, *freshCurrent, Db);
                 }
                 // Allow result storage only after the prepared updates have been applied.
                 seqNumUpdate.Applied = true;
@@ -2304,6 +2367,11 @@ bool TSysLocks::Load(ILocksDb& db) {
         return false;
     }
 
+    Load(std::move(rows));
+    return true;
+}
+
+void TSysLocks::Load(TVector<ILocksDb::TLockRow> rows) {
     Locker.Clear();
 
     for (auto& lockRow : rows) {
@@ -2329,8 +2397,6 @@ bool TSysLocks::Load(ILocksDb& db) {
             lock->RestorePersistentVolatileDependency(txId);
         }
     }
-
-    return true;
 }
 
 void TSysLocks::RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows) {
@@ -2393,6 +2459,44 @@ TRuntimeLockHolder TSysLocks::AddRuntimeLock(const TTableId& tableId, TConstArra
     return table->AddRuntimeLock(key, Update->Lock);
 }
 
+size_t TSysLocks::AvailableAncestorLocks() const {
+    // The quota counts attached locks. Pending GC reserves the id separately.
+    const size_t used = Locker.AncestorCount;
+    return used < TAncestorLock::MaxPerShard ? TAncestorLock::MaxPerShard - used : 0;
+}
+
+TLockInfo::TPtr TSysLocks::PersistBrokenLock(ui64 lockId, ui32 nodeId, ILocksDb& locksDb) {
+    auto lock = Locker.GetLock(lockId);
+    // A failed transfer still has an ordinary persistent lock. Keep the
+    // owner even when the logical metadata was missing from the snapshot.
+    if (!lock) {
+        lock = Locker.AddLockToPersist(lockId, nodeId);
+        lock->PersistLock(&locksDb);
+    } else if (!lock->LockNodeId && nodeId) {
+        lock->LockNodeId = nodeId;
+        locksDb.PersistAddLock(lockId, lock->LockNodeId, lock->Generation,
+            lock->Counter, lock->CreationTime.MicroSeconds(), ui64(lock->Flags & ELockFlags::PersistentMask));
+        Locker.PendingSubscribeLocks.emplace_back(lockId, nodeId);
+    }
+    ActivateLock(*lock, locksDb);
+    if (!lock->IsPersistent()) {
+        lock->PersistLock(&locksDb);
+    }
+    Locker.ForceBreakLock(lockId);
+    Locker.SaveBrokenPersistentLocks(&locksDb);
+    return lock;
+}
+
+bool TSysLocks::RejectAncestorLimit() {
+    // EvWrite uses ordinary lock admission even when the new lock will be
+    // created broken. Restoring snapshots can persist an existing remote id.
+    if (EnsureCurrentLock() != EEnsureCurrentLock::Success) {
+        return false;
+    }
+    PersistBrokenLock(Update->LockTxId, Update->LockNodeId, *Db);
+    return true;
+}
+
 bool TSysLocks::RestoreLockFromSplitSrc(ILocksDb::TLockRow&& row, ILocksDb& locksDb, TString* error) {
     Y_ENSURE(row.ReadTables.empty(), "Read locks are not supported");
     auto fail = [&](TString reason) {
@@ -2407,27 +2511,14 @@ bool TSysLocks::RestoreLockFromSplitSrc(ILocksDb::TLockRow&& row, ILocksDb& lock
 
     auto lock = Locker.GetLock(row.LockId);
     if (row.Counter == Max<ui64>()) {
-        // A failed transfer still has an ordinary persistent lock. Keep the
-        // owner even when the logical metadata was missing from the snapshot.
-        if (!lock) {
-            lock = Locker.AddLockToPersist(row.LockId, row.LockNodeId);
-            lock->PersistLock(&locksDb);
-        } else if (!lock->LockNodeId && row.LockNodeId) {
-            lock->LockNodeId = row.LockNodeId;
-            locksDb.PersistAddLock(row.LockId, lock->LockNodeId, lock->Generation,
-                lock->Counter, lock->CreationTime.MicroSeconds(), ui64(lock->Flags & ELockFlags::PersistentMask));
-            Locker.PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
-        }
-        ActivateLock(*lock, locksDb);
-        if (!lock->IsPersistent()) {
-            lock->PersistLock(&locksDb);
-        }
-        Locker.ForceBreakLock(row.LockId);
-        Locker.SaveBrokenPersistentLocks(&locksDb);
+        PersistBrokenLock(row.LockId, row.LockNodeId, locksDb);
         return true;
     }
     if (lock && lock->IsBroken()) {
         return fail("Lock was already rejected");
+    }
+    if ((!lock || lock->IsTrackingOnly()) && locksDb.HasPendingAncestorGc(row.LockId)) {
+        return fail("Previous ancestor state is still being removed");
     }
     if (lock && lock->GetLockNodeId() != row.LockNodeId) {
         return fail("Different LockNodeId across sources");
@@ -2440,6 +2531,18 @@ bool TSysLocks::RestoreLockFromSplitSrc(ILocksDb::TLockRow&& row, ILocksDb& lock
         return fail("TrackingOnly requires an owner and no logical state");
     }
     // Validate every logical copy before publishing any of this source's state.
+    size_t available = AvailableAncestorLocks();
+    auto withinPathLimit = [](const TAncestorLock& ancestor) {
+        size_t paths = 0;
+        for (const auto& [_, state] : ancestor.WriteSeqNumStates) {
+            paths += state.Branches.size();
+        }
+        return paths <= TAncestorLock::MaxPaths;
+    };
+    auto rejectLimit = [&](const char* reason) {
+        PersistBrokenLock(row.LockId, row.LockNodeId, locksDb);
+        return fail(reason);
+    };
     TVector<TAncestorLock> mergedAncestors;
     mergedAncestors.reserve(row.AncestorLocks.size());
     for (const auto& ancestor : row.AncestorLocks) {
@@ -2452,9 +2555,19 @@ bool TSysLocks::RestoreLockFromSplitSrc(ILocksDb::TLockRow&& row, ILocksDb& lock
                 if (!merged.Merge(ancestor, error)) {
                     return false;
                 }
+                if (!withinPathLimit(merged)) {
+                    return rejectLimit("Too many paths on a merged ancestor lock");
+                }
                 mergedAncestors.push_back(std::move(merged));
                 continue;
             }
+        }
+        if (!available) {
+            return rejectLimit("Too many ancestor locks on the shard");
+        }
+        --available;
+        if (!withinPathLimit(ancestor)) {
+            return rejectLimit("Too many paths on an ancestor lock");
         }
         mergedAncestors.push_back(ancestor);
     }

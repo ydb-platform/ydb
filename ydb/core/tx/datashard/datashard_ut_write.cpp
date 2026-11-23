@@ -4584,12 +4584,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "{ items { int32_value: 13 } items { int32_value: 1004 } }");
     }
 
-    Y_UNIT_TEST(UncommittedUpdateLockMissingRow) {
+    Y_UNIT_TEST_TWIN(UncommittedUpdateLockMissingRow, WithWriteSeqNum) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
 
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(WithWriteSeqNum);
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
@@ -4658,9 +4659,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
         {
             const auto& lock = writeLocks.back();
-            UNIT_ASSERT_C(
-                !lock.GetHasWrites() && lock.GetCounter() < 1000000,
-                "Unexpected lock: " << lock.DebugString());
+            // A no-op with WSN keeps a write lock for deduplication, even though
+            // the missing row produced no uncommitted data for this transaction.
+            UNIT_ASSERT_VALUES_EQUAL_C(lock.GetHasWrites(), WithWriteSeqNum, lock.DebugString());
+            UNIT_ASSERT_LT(lock.GetCounter(), 1000000u);
+            UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), WithWriteSeqNum ? 1 : 0);
+            runtime.SendToPipe(lock.GetDataShard(), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT(!open->Get()->OpenTxs.contains(lock.GetLockId()));
         }
 
         // Upsert a value which conflicts with the update above
@@ -4897,12 +4903,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(UncommittedUpdateLockUncommittedNewRow) {
+    Y_UNIT_TEST_TWIN(UncommittedUpdateLockUncommittedNewRow, WithWriteSeqNum) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
 
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(WithWriteSeqNum);
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
@@ -4998,9 +5005,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
         {
             const auto& lock = writeLocks.back();
-            UNIT_ASSERT_C(
-                !lock.GetHasWrites() && lock.GetCounter() < 1000000,
-                "Unexpected lock: " << lock.DebugString());
+            // A no-op with WSN keeps a write lock for deduplication, even though
+            // the missing row produced no uncommitted data for this transaction.
+            UNIT_ASSERT_VALUES_EQUAL_C(lock.GetHasWrites(), WithWriteSeqNum, lock.DebugString());
+            UNIT_ASSERT_LT(lock.GetCounter(), 1000000u);
+            UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), WithWriteSeqNum ? 1 : 0);
+            runtime.SendToPipe(lock.GetDataShard(), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT(!open->Get()->OpenTxs.contains(lock.GetLockId()));
         }
 
         // Now we commit tx2, which makes it impossible to commit tx1
@@ -5574,8 +5586,28 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         RebootTablet(runtime, shard, sender);
         result = send({{3, 1, {owner, left}}, {1, 10, {owner, right}}});
         UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 3);
-        CommitLock(runtime, sender, shard, result.GetTxLocks(0));
-        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "key = 1, value = 112\n");
+        const auto ancestorLock = result.GetTxLocks(0);
+        // A mixed batch starts the current chain but can still be replayed in full.
+        send({{3, 999, {owner, left}}, {1, 1, {}}, {2, 1, {}}});
+        send({{3, 999, {owner, left}}, {1, 1, {}}, {2, 1, {}}});
+        // Failing after staging a pure current request must leave the paths intact.
+        send({{3, 1, {}}, {4, 1, {}, TOperation::OPERATION_INSERT}},
+            NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+        send({{3, 999, {owner, left}}});
+        // Even a duplicate-only current batch establishes a bound. Its result
+        // survives reboot, as does the ancestor aggregate used by commit.
+        const auto beforeReboot = send({{2, 999, {}}});
+        UNIT_ASSERT(beforeReboot.GetTxStats().TableAccessStatsSize());
+        const auto rowsUpdated = beforeReboot.GetTxStats().GetTableAccessStats(0).GetUpdateRow().GetRows();
+        UNIT_ASSERT_GT(rowsUpdated, 0u);
+        RebootTablet(runtime, shard, sender);
+        send({{3, 999, {owner, left}}}, NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        send({{1, 999, {}}}, NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        result = send({{2, 999, {}}});
+        UNIT_ASSERT(result.GetTxStats().TableAccessStatsSize());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetTxStats().GetTableAccessStats(0).GetUpdateRow().GetRows(), rowsUpdated);
+        CommitLock(runtime, sender, shard, ancestorLock);
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "key = 1, value = 114\n");
     }
 
     Y_UNIT_TEST(UncommittedWriteSeqNumChain) {
@@ -5835,10 +5867,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            // Older positions are duplicates too; echo the aggregate maximum.
-            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
-                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks(0)).GetWriteSeqNum(), 2);
+            // The second flush began at WSN 2, so the first flush is obsolete.
+            UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
+                NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
         }
 
         CommitLock(runtime, sender, shard, lock);

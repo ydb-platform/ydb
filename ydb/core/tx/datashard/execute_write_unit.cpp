@@ -203,20 +203,38 @@ public:
         }
         // TPipeline::BuildOperation validates that all operations have WSNs with the same WriterIndex.
         const ui64 writerIndex = operations.front().GetWriteSeqNum().WriterIndex;
-        auto& update = guardLocks.WriteSeqNumUpdate.Emplace(writerIndex);
+        auto& update = guardLocks.WriteSeqNumUpdate.Emplace(writerIndex, guardLocks.SysLocksTable.AvailableAncestorLocks());
+        ui64 minWriteSeqNum = operations.front().GetWriteSeqNum().WriteSeqNum;
         THashSet<TString> replayedResults;
         for (size_t index = 0; index < operations.size(); ++index) {
             const auto& op = operations[index];
             auto result = update.StageOperation(guardLocks.Lock.Get(), DataShard.TabletID(),
                 op.GetAncestors(), op.GetWriteSeqNum().WriteSeqNum, op.GetTableId().PathId);
             using EStatus = TLocksUpdate::TWriteSeqNumUpdate::EStatus;
-            if (result.Status == EStatus::BadRequest || result.Status == EStatus::LocksBroken) {
-                writeOp->SetError(result.Status == EStatus::LocksBroken
-                    ? NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN
-                    : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, result.Error);
+            if (result.Status == EStatus::AncestorLimit) {
+                // Publish only the rejection. None of this request's staged paths
+                // or row operations may be applied, including its valid prefix.
+                guardLocks.WriteSeqNumUpdate.Clear();
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, result.Error);
+                if (!guardLocks.SysLocksTable.RejectAncestorLimit()) {
+                    return EExecutionStatus::Executed;
+                }
+                DataShard.SubscribeNewLocks();
+                writeOp->SetWaitCompletionFlag(true);
+                return EExecutionStatus::ExecutedNoMoreRestarts;
+            }
+            if (result.Status != EStatus::Fresh && result.Status != EStatus::Duplicate) {
+                auto status = NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+                if (result.Status == EStatus::LocksBroken) {
+                    status = NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
+                } else if (result.Status == EStatus::WrongShardState) {
+                    status = NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE;
+                }
+                writeOp->SetError(status, result.Error);
                 guardLocks.WriteSeqNumUpdate.Clear();
                 return EExecutionStatus::Executed;
             }
+            minWriteSeqNum = Min(minWriteSeqNum, op.GetWriteSeqNum().WriteSeqNum);
             if (result.Status != EStatus::Duplicate) {
                 continue;
             }
@@ -234,6 +252,11 @@ public:
                     writeOp->DuplicateTxStats.push_back(stored.GetTxStats());
                 }
             }
+        }
+        // StageOperation requires ancestor operations to precede current ones.
+        // Only a pure current request proves the writer has finished every ancestor.
+        if (operations.front().GetAncestors().empty()) {
+            update.GcWriteSeqNum = minWriteSeqNum;
         }
         return std::nullopt;
     }

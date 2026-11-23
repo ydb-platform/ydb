@@ -99,7 +99,7 @@ public:
         return FindByUidImpl(uid, promote);
     }
 
-    void Replace(const TKqpCompileResult::TConstPtr& compileResult);
+    bool Replace(const TKqpCompileResult::TConstPtr& compileResult);
 
     TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) {
         TGuard<TAdaptiveLock> guard(Lock);
@@ -124,6 +124,12 @@ public:
     bool EraseByUid(const TString& uid) {
         TGuard<TAdaptiveLock> guard(Lock);
         return EraseByUidImpl(uid);
+    }
+
+    bool EraseIfCurrent(const TKqpCompileResult::TConstPtr& compileResult) {
+        TGuard<TAdaptiveLock> guard(Lock);
+        const auto& uid = compileResult->Uid;
+        return FindByUidImpl(uid, false) == compileResult && EraseByUidImpl(uid);
     }
 
     size_t Size() const {

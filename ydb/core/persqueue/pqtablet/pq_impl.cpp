@@ -369,12 +369,12 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
-bool TPersQueue::IsWriteUnavailable() const {
-    return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
-}
-
-bool TPersQueue::IsWriteProhibited() const {
-    return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED;
+bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
+    if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
+        return false;
+    }
+    const auto* consumer = GetConsumer(Config, consumerName);
+    return !consumer || consumer->GetReplicateOffsets();
 }
 
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
@@ -3047,16 +3047,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    if (req.CmdWriteSize() > 0 && IsWriteUnavailable()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
-                   "Write to topic is temporarily disabled");
-        return;
-    }
-
-    if (req.CmdWriteSize() > 0 && IsWriteProhibited()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                   "Write to topic is prohibited");
-        return;
+    // Write sessions and MLP reject earlier, but late requests and protocols without
+    // that check (e.g. kafka_proxy) must still be stopped here.
+    if (req.CmdWriteSize() > 0) {
+        if (const auto error = GetWriteModeError(Config)) {
+            ReplyError(ctx, responseCookie, error->Code, error->Reason);
+            return;
+        }
     }
 
     if (IsTopicMutateDisabled(ctx)

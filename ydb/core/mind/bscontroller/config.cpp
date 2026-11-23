@@ -1497,9 +1497,7 @@ namespace NKikimr::NBsController {
                         const auto key = rows.template GetValue<typename T::Filter>();
                         NKikimrBlobStorage::TPDiskFilter proto;
                         Y_ABORT_UNLESS(proto.ParseFromString(key));
-                        auto filter = TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), proto);
-                        filter.SerializedFilter = key;
-                        PDiskFilters.insert(std::move(filter));
+                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), proto, &key));
                     }
                     if (!rows.Next()) {
                         return false;
@@ -1536,7 +1534,7 @@ namespace NKikimr::NBsController {
 
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
-                const NKikimrBlobStorage::TPDiskFilter& proto) {
+                const NKikimrBlobStorage::TPDiskFilter& proto, const TString* serialized) {
             TPDiskFilter filter;
             filter.BoxId = boxId;
             filter.StoragePoolId = storagePoolId;
@@ -1589,7 +1587,7 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TPDiskFilter did not specify Type property";
             }
 
-            filter.SerializedFilter = proto.SerializeAsString();
+            filter.SerializedFilter = serialized ? *serialized : proto.SerializeAsString();
             return filter;
         }
 

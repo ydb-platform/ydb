@@ -1308,7 +1308,8 @@ public:
                 RequiredLocation = std::make_shared<const TNodeLocation>(TNodeLocation::FromSerialized, serialized);
             }
 
-            static TPDiskFilter Parse(ui64 boxId, ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto);
+            static TPDiskFilter Parse(ui64 boxId, ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto,
+                const TString* serialized = nullptr);
 
             template<typename TRowset>
             static TPDiskFilter CreateFromRowset(const TRowset &rowset) {

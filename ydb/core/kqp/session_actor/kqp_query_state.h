@@ -77,7 +77,11 @@ public:
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
-        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(AppData()->FeatureFlags.GetDisablePgCompatibility()))
+        , DisablePgCompatibility_(ev->Get()->DisablePgCompatibility.value_or(
+            AppData()->FeatureFlags.GetDisablePgCompatibility()
+            && !(ev->Get()->IsInternalCall()
+                && ev->Get()->GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && IsAnalyzeRequest(ev->Get()->GetRequestType()))))
         , StartTime(TInstant::Now())
         , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)

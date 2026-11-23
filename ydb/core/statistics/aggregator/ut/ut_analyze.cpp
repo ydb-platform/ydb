@@ -4,6 +4,7 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
+#include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -1485,6 +1486,15 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
+        auto setDisablePgCompatibility = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
+        setDisablePgCompatibility(false);
         ExecuteYqlScript(env, R"(
             CREATE TABLE `Root/Database/Table` (
                 Key pgint8,
@@ -1499,7 +1509,19 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         )");
 
         const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        setDisablePgCompatibility(true);
+
+        bool sawAnalyzeCompilation = false;
+        const auto observeCompile = runtime.AddObserver<NKqp::NPrivateEvents::TEvCompileRequest>([&](auto& ev) {
+            const auto& request = *ev->Get();
+            if (request.Query && request.Query->Settings.IsAnalyze && request.Query->Text.Contains("/Root/Database/Table")) {
+                UNIT_ASSERT(!request.DisablePgCompatibility.value_or(true));
+                sawAnalyzeCompilation = true;
+            }
+        });
+
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        UNIT_ASSERT(sawAnalyzeCompilation);
         CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
     }
 }

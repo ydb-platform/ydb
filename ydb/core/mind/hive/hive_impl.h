@@ -155,6 +155,12 @@ class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveShar
 public:
     using IActorOps::Register;
 
+    struct TNodePing {
+        TActorId Local;
+        bool SendSettings = false;
+        bool SendCapabilities = false;
+    };
+
 protected:
     friend class THiveBalancer;
     friend class THiveDrain;
@@ -170,6 +176,7 @@ protected:
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
+    friend struct TTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
 
@@ -356,6 +363,8 @@ protected:
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetricsDefaults; // built from CurrentConfig
+    TNamedResourceRegistry NamedResourceRegistry; // configured from CurrentConfig
+    size_t NextNamedResourceToCheck = 0; // round robin over named resources in balancer triggers
     std::unordered_map<TString, TStoragePoolInfo> StoragePools;
     std::unordered_map<TSubDomainKey, TDomainInfo> Domains;
     std::unordered_set<TOwnerId> BlockedOwners;
@@ -453,7 +462,7 @@ protected:
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
     std::vector<TActorId> ActorsWaitingToMoveTablets;
-    std::queue<TActorId> NodePingQueue;
+    std::queue<TNodePing> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
     TFollowerUpdates PendingFollowerUpdates;
     std::queue<TTabletId> StopTenantTabletsQueue;
@@ -765,8 +774,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
-    void QueuePing(const TActorId& local);
-    void SendPing(const TActorId& local, TNodeId id);
+    void QueuePing(TNodePing ping);
+    void SendPing(const TNodePing& nodePing);
+    void FillLocalSettings(NKikimrLocal::THiveSettings* settings) const;
+    // Call when the HiveConfig settings relevant to Local change.
+    void UpdateLocalSettings();
     void RemoveFromPingInProgress(TNodeId node);
     void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);
@@ -1112,7 +1124,34 @@ protected:
     void ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;
+    // The move has to improve at least one of the built-in resources (as a whole) and the balanced
+    // named resources of the tablet, and must not worsen any of them. The built-in resources may worsen
+    // by up to BUILTIN_STDEV_WORSENING_TOLERANCE, any worsening of a named resource vetoes the move.
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    struct TNamedResourcesMoveEffect {
+        bool Improved = false;
+        bool Worsened = false;
+        TString Resource;
+        double Before = 0;
+        double After = 0;
+    };
+    // How moving the tablet to the node changes the imbalance of each balanced named resource of the tablet:
+    // the total amount over capacity for SATURATION, the usage stdev for SCATTER
+    TNamedResourcesMoveEffect CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    // growth of the built-in resources stdev that a move is allowed to cause when it improves something else
+    static constexpr double BUILTIN_STDEV_WORSENING_TOLERANCE = 0.01;
+    void ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline);
+    void Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void RegisterNamedResource(const TString& name) {
+        NamedResourceRegistry.Register(name);
+    }
+    const TNamedResourceSettings& GetNamedResourceSettings(const TString& name) const {
+        return NamedResourceRegistry.GetSettings(name);
+    }
+    // Returns settings of the balancer for a named resource which needs balancing among the nodes, if any
+    template<std::forward_iterator TIter>
+    std::optional<TBalancerSettings> CheckNamedResources(TIter begin, TIter end);
     TResourceRawValues GetDefaultResourceInitialMaximumValues();
     double GetScatter() const;
     double GetUsage() const;

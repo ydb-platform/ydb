@@ -1,12 +1,13 @@
 import asyncio
 import os
+import socket
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 
 import grpc
 import pytest
 import yatest.common
 
-from run_long_poll_probe import established_sockets
+from run_long_poll_probe import established_sockets, tcp_peers
 from long_poll_balancer import Balancer, CONDITION, GENERATION, OPT_IN
 from ydb.public.api.grpc import ydb_coordination_v1_pb2_grpc, ydb_discovery_v1_pb2_grpc, ydb_scheme_v1_pb2_grpc, ydb_topic_v1_pb2_grpc
 from ydb.public.api.protos import ydb_coordination_pb2, ydb_discovery_pb2, ydb_scheme_pb2, ydb_topic_pb2
@@ -20,6 +21,27 @@ DATABASE = "/Root/tenant"
 METADATA = (("x-ydb-database", DATABASE),)
 MARKERS = ("poll-replica-a", "poll-replica-b")
 PROBE = "ydb/tests/functional/sdk/rediscovery/clients/cpp/rediscovery-probe"
+
+
+@pytest.mark.skipif(not os.path.exists("/proc/self/net/tcp"), reason="requires Linux socket inspection")
+def test_old_node_socket_with_same_port_on_destination():
+    with ExitStack() as stack:
+        def listen(ip, port):
+            listener = stack.enter_context(socket.socket())
+            listener.bind((ip, port))
+            listener.listen()
+            return listener.getsockname()
+
+        source = listen("127.0.0.1", 0)
+        destination = listen("127.0.0.2", source[1])
+        old = stack.enter_context(socket.create_connection(source))
+        stack.enter_context(socket.create_connection(destination))
+        ports = {source[1]}
+        old_peer = tcp_peers("%s:%d" % source)
+        assert established_sockets(os.getpid(), ports, old_peer) == 1
+        old.close()
+        assert established_sockets(os.getpid(), ports, old_peer) == 0
+        assert established_sockets(os.getpid(), ports) == 1
 
 
 @pytest.fixture(scope="module")

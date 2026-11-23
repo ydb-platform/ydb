@@ -211,7 +211,7 @@ index 79cfd840bad49d4c89eb4e4e9c842fcf7e161e43..814e126d4fd99231e1a173a47a3f3b52
  		assert.ok(response.operation, new DriverResponseError('Missing operation data.'))
  
 diff --git a/packages/core/src/endpoints/endpoints-runtime.ts b/packages/core/src/endpoints/endpoints-runtime.ts
-index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c9e3d1555 100644
+index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6301ececb69f903f0a9a7ae769a376612a9ce513 100644
 --- a/packages/core/src/endpoints/endpoints-runtime.ts
 +++ b/packages/core/src/endpoints/endpoints-runtime.ts
 @@ -62,6 +62,8 @@ export type DiscoveryResult = {
@@ -232,7 +232,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  	connectionFactory: ConnectionFactory
  
  	// I/O-owned channel state — NEVER touched by the transition.
-@@ -270,23 +274,42 @@ let effects = {
+@@ -270,23 +274,43 @@ let effects = {
  	// them to the discovery span — the async #consume loop has no active span, so
  	// publishing them there would silently drop them from traces.
  	'endpoints.effect.run_discovery_round': (ctx: FullCtx, _effect, runtime) => {
@@ -271,6 +271,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
 +							runtime.dispatch({
 +								type: 'endpoints.discovery.round_succeeded',
 +								...update,
++								authoritative: true,
 +							})
 +						} else {
 +							runtime.dispatch({ type: 'endpoints.discovery.watch_lost' })
@@ -281,7 +282,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  				let result = await discoveryCh.tracePromise(
  					async () => {
  						let r = await ctx.listEndpoints(link.signal)
-@@ -311,6 +334,7 @@ let effects = {
+@@ -311,6 +335,7 @@ let effects = {
  				if (ctx.ac.signal.aborted) return
  				// A per-round timeout (not the pool abort) is retryable — keep the
  				// interval/backoff cadence rather than treating it as terminal.
@@ -289,7 +290,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  				let timedOut = timeoutAc.signal.aborted
  				runtime.dispatch({
  					type: 'endpoints.discovery.round_failed',
-@@ -318,6 +342,7 @@ let effects = {
+@@ -318,6 +343,7 @@ let effects = {
  					retryable: timedOut || isRetryableError(error, true),
  				})
  			} finally {
@@ -297,7 +298,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  				clearTimeout(timer)
  				link[Symbol.dispose]()
  			}
-@@ -350,7 +375,9 @@ let effects = {
+@@ -350,7 +376,9 @@ let effects = {
  					ctx.timers.delete(key)
  					runtime.dispatch(event)
  				}, delay)
@@ -308,7 +309,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  		ctx.timers.set(key, handle)
  	},
  
-@@ -436,6 +463,10 @@ export class EndpointPool implements Disposable {
+@@ -436,6 +464,10 @@ export class EndpointPool implements Disposable {
  		return this.#snapshot
  	}
  
@@ -319,7 +320,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  	get closed(): boolean {
  		return (
  			this.#machine.signal.aborted ||
-@@ -540,7 +571,7 @@ export class EndpointPool implements Disposable {
+@@ -540,7 +572,7 @@ export class EndpointPool implements Disposable {
  		signal?.throwIfAborted()
  		this.#machine.signal.throwIfAborted()
  		if (this.#env.isFinalized) throw new Error('Endpoints closed')
@@ -328,7 +329,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  			let waiter = Promise.withResolvers<void>()
  			let onAbort = () => {
  				this.#env.readyWaiters.delete(waiter)
-@@ -819,6 +850,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
+@@ -819,6 +851,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
  export type EndpointsRuntimeConfig = {
  	identity: DriverIdentity
  	listEndpoints: ListEndpoints
@@ -336,7 +337,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  	secure?: boolean
  	transportOptions?: ClientOptions | undefined
  	connectionFactory?: ConnectionFactory | undefined
-@@ -845,6 +877,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
+@@ -845,6 +878,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
  		identity: config.identity,
  		hooks: config.hooks,
  		listEndpoints: config.listEndpoints,
@@ -345,19 +346,137 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..07788853cd6d01bca1e30b21ac90e48c
  		connectionFactory: config.connectionFactory ?? defaultFactory,
  		channels: new Map(),
  		pinnedChannels: new Map(),
+diff --git a/packages/core/src/endpoints/endpoints-state.test.ts b/packages/core/src/endpoints/endpoints-state.test.ts
+index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf33852fb3367 100644
+--- a/packages/core/src/endpoints/endpoints-state.test.ts
++++ b/packages/core/src/endpoints/endpoints-state.test.ts
+@@ -170,6 +170,49 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
+ 	expect(h.ctx.byNodeId.get(2n)!.subState).toBe('retired')
+ })
+ 
++test('a watched assignment closes removed endpoints while preserving those still advertised', () => {
++	let h = toReady([ep(1), ep(2)])
++	step(h, {
++		type: 'endpoints.discovery.round_succeeded',
++		endpoints: [ep(2), ep(3)],
++		selfLocation: 'A',
++		pileStates: [],
++		authoritative: true,
++	})
++	expect(h.ctx.byNodeId.has(1n)).toBe(false)
++	expect(h.effects.filter((effect) => effect.type === 'endpoints.effect.close_channel')).toEqual([
++		{ type: 'endpoints.effect.close_channel', nodeId: 1n, store: 'discovered' },
++	])
++})
++
++test('replacement of the whole watched assignment closes direct pins from the previous cluster', () => {
++	let h = toReady([ep(1)])
++	step(h, {
++		type: 'endpoints.pin',
++		nodeId: 99n,
++		host: 'direct-source',
++		port: 2136,
++		location: '',
++		sslTargetNameOverride: '',
++		ipV4: [],
++		ipV6: [],
++		generation: 0,
++	})
++	step(h, {
++		type: 'endpoints.discovery.round_succeeded',
++		endpoints: [ep(1, { host: 'target' })],
++		selfLocation: 'A',
++		pileStates: [],
++		authoritative: true,
++	})
++	expect(h.ctx.pinned.size).toBe(0)
++	expect(h.effects).toContainEqual({
++		type: 'endpoints.effect.close_channel',
++		nodeId: 99n,
++		store: 'pinned',
++	})
++})
++
+ test('a reappearing retired node is revived in place, never closed', () => {
+ 	let h = toReady([ep(1), ep(2)])
+ 	step(h, round([ep(1)])) // node 2 retired
 diff --git a/packages/core/src/endpoints/endpoints-state.ts b/packages/core/src/endpoints/endpoints-state.ts
-index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..282b610be2a85e2c31cbae1251cf47bc6bcd883c 100644
+index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4ccc64b6c32 100644
 --- a/packages/core/src/endpoints/endpoints-state.ts
 +++ b/packages/core/src/endpoints/endpoints-state.ts
-@@ -154,6 +154,7 @@ export type TimerRef = { which: TimerName }
+@@ -154,8 +154,10 @@ export type TimerRef = { which: TimerName }
  export type EndpointsEvent =
  	| { type: 'endpoints.discovery.start' }
  	| { type: 'endpoints.discovery.force' }
 +	| { type: 'endpoints.discovery.watch_lost' }
  	| {
  			type: 'endpoints.discovery.round_succeeded'
++			authoritative?: true
  			endpoints: DiscoveredEndpoint[]
-@@ -614,6 +615,18 @@ export let endpointsTransition = function endpointsTransition(
+ 			selfLocation: string
+ 			pileStates: PileState[]
+@@ -384,14 +386,35 @@ let rejectEmptyRound = function rejectEmptyRound(
+ // from `computeRoundDiff`; the loop below only mutates the registry.
+ let applyRound = function applyRound(
+ 	ctx: EndpointsCtx,
+-	endpoints: DiscoveredEndpoint[],
+-	selfLocation: string,
+-	pileStates: PileState[],
++	{
++		endpoints,
++		selfLocation,
++		pileStates,
++		authoritative,
++	}: Extract<EndpointsEvent, { type: 'endpoints.discovery.round_succeeded' }>,
+ 	runtime: EndpointsTransitionRuntime
+ ): EndpointsEffect[] {
+ 	let { added, retired } = computeRoundDiff(ctx.byNodeId, endpoints)
+ 	let effects: EndpointsEffect[] = []
+ 
++	if (authoritative && ctx.pinned.size && ctx.byNodeId.size) {
++		let addresses = new Map(endpoints.map((ep) => [ep.nodeId, `${ep.host}:${ep.port}`]))
++		let overlaps = endpoints.some(
++			(ep) => ctx.byNodeId.get(ep.nodeId)?.address === addresses.get(ep.nodeId)
++		)
++		for (let id of ctx.pinned.keys()) {
++			let previous = ctx.byNodeId.get(id)
++			if (!overlaps || (previous && previous.address !== addresses.get(id))) {
++				ctx.pinned.delete(id)
++				effects.push({
++					type: 'endpoints.effect.close_channel',
++					nodeId: id,
++					store: 'pinned',
++				})
++			}
++		}
++	}
++
+ 	// Mutate: add new entries, revive retired, un-ban pessimized, refresh dial info.
+ 	for (let ep of endpoints) {
+ 		let existing = ctx.byNodeId.get(ep.nodeId)
+@@ -441,10 +464,18 @@ let applyRound = function applyRound(
+ 		}
+ 	}
+ 
+-	// Retire the vanished endpoints from the diff. Channel stays open to drain.
+ 	for (let r of retired) {
+-		ctx.byNodeId.get(r.nodeId)!.subState = 'retired'
+-		effects.push({ type: 'endpoints.effect.retire_channel', nodeId: r.nodeId })
++		if (authoritative) {
++			ctx.byNodeId.delete(r.nodeId)
++			effects.push({
++				type: 'endpoints.effect.close_channel',
++				nodeId: r.nodeId,
++				store: 'discovered',
++			})
++		} else {
++			ctx.byNodeId.get(r.nodeId)!.subState = 'retired'
++			effects.push({ type: 'endpoints.effect.retire_channel', nodeId: r.nodeId })
++		}
+ 	}
+ 
+ 	// Emit the add/retire outputs from the single-sourced diff.
+@@ -614,6 +645,18 @@ export let endpointsTransition = function endpointsTransition(
  		return terminate(ctx, new Error('Endpoints closed'), runtime)
  	}
  
@@ -376,6 +495,36 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..282b610be2a85e2c31cbae1251cf47bc
  	if (state !== 'closed' && event.type === 'endpoints.invalidate') {
  		return applyInvalidate(ctx, event.nodeId, runtime)
  	}
+@@ -637,13 +680,7 @@ export let endpointsTransition = function endpointsTransition(
+ 			switch (event.type) {
+ 				case 'endpoints.discovery.round_succeeded': {
+ 					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
+-					let effects = applyRound(
+-						ctx,
+-						event.endpoints,
+-						event.selfLocation,
+-						event.pileStates,
+-						runtime
+-					)
++					let effects = applyRound(ctx, event, runtime)
+ 					effects.push({
+ 						type: 'endpoints.effect.timer.schedule',
+ 						which: 'discovery_interval',
+@@ -687,13 +724,7 @@ export let endpointsTransition = function endpointsTransition(
+ 					// would retire every node and black-hole balanced RPCs until the
+ 					// next interval while the state still reads 'ready'.
+ 					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
+-					let effects = applyRound(
+-						ctx,
+-						event.endpoints,
+-						event.selfLocation,
+-						event.pileStates,
+-						runtime
+-					)
++					let effects = applyRound(ctx, event, runtime)
+ 					effects.push({
+ 						type: 'endpoints.effect.timer.schedule',
+ 						which: 'discovery_interval',
 diff --git a/packages/core/src/endpoints/long-poll.ts b/packages/core/src/endpoints/long-poll.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..b2c24492cf9e853edf196e34513d6e271e5b5568

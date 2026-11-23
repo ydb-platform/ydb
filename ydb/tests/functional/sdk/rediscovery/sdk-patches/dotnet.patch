@@ -58,7 +58,7 @@ index d608296ab2011c30a8f6f68a90c3f28912ebd208..b9411908fe492582a3807100351caf81
                      (builder, poolName) => builder.PoolName = poolName),
                  "PoolName", "Pool Name");
 diff --git a/src/Ydb.Sdk/src/Driver.cs b/src/Ydb.Sdk/src/Driver.cs
-index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badfe0c0b84c 100644
+index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..22a68983bbb2e932ef706c0bad88d6ed7cfb8d7a 100644
 --- a/src/Ydb.Sdk/src/Driver.cs
 +++ b/src/Ydb.Sdk/src/Driver.cs
 @@ -20,7 +20,7 @@ namespace Ydb.Sdk;
@@ -86,7 +86,16 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badf
          return driver;
      }
  
-@@ -145,6 +152,7 @@ internal sealed class Driver : BaseDriver
+@@ -98,6 +105,8 @@ internal sealed class Driver : BaseDriver
+         }
+     }
+ 
++    protected override bool IsCurrentEndpoint(EndpointInfo endpoint) => _endpointPool.Contains(endpoint);
++
+     protected override EndpointInfo GetEndpoint(long nodeId) => _endpointPool.GetEndpoint(nodeId);
+ 
+     protected override void OnRpcError(EndpointInfo endpointInfo, RpcException e)
+@@ -145,6 +154,7 @@ internal sealed class Driver : BaseDriver
      /// </summary>
      protected override async ValueTask DisposeAsyncCore()
      {
@@ -94,7 +103,7 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badf
          if (_discoveryTimer != null)
          {
              await _discoveryTimer.DisposeAsync().ConfigureAwait(false);
-@@ -176,62 +184,67 @@ internal sealed class Driver : BaseDriver
+@@ -176,62 +186,69 @@ internal sealed class Driver : BaseDriver
              }
  
              var resultProto = operation.Result.Unpack<ListEndpointsResult>();
@@ -168,23 +177,6 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badf
                      );
                  }
              }
--
--            Logger.LogDebug(
--                "Successfully discovered endpoints: {EndpointsCount}, self location: {SelfLocation}, preferred location: {PreferredLocation}, sdk version: {YdbSdkVersion}",
--                resultProto.Endpoints.Count,
--                resultProto.SelfLocation,
--                preferredLocation ?? "<disabled>",
--                YdbSdkVersion.Value
--            );
--
--            await ChannelPool.RemoveChannels(_endpointPool.Reset(
--                discoveredEndpoints,
--                preferredLocation
--            )).ConfigureAwait(false);
--        }
--        catch (RpcException e)
--        {
--            throw new YdbException(e);
 +            catch (Exception e)
 +            {
 +                Logger.LogWarning(
@@ -192,8 +184,15 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badf
 +                    "Failed to detect nearest DC via TCP latency, no preferred location will be used"
 +                );
 +            }
-         }
-+
++        }
+ 
+-            Logger.LogDebug(
+-                "Successfully discovered endpoints: {EndpointsCount}, self location: {SelfLocation}, preferred location: {PreferredLocation}, sdk version: {YdbSdkVersion}",
+-                resultProto.Endpoints.Count,
+-                resultProto.SelfLocation,
+-                preferredLocation ?? "<disabled>",
+-                YdbSdkVersion.Value
+-            );
 +        Logger.LogDebug(
 +            "Successfully discovered endpoints: {EndpointsCount}, self location: {SelfLocation}, preferred location: {PreferredLocation}, sdk version: {YdbSdkVersion}",
 +            resultProto.Endpoints.Count,
@@ -201,11 +200,20 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..c5a716ab067d06619abe2a34c896badf
 +            preferredLocation ?? "<disabled>",
 +            YdbSdkVersion.Value
 +        );
-+
-+        await ChannelPool.RemoveChannels(_endpointPool.Reset(
-+            discoveredEndpoints,
-+            preferredLocation
-+        )).ConfigureAwait(false);
+ 
+-            await ChannelPool.RemoveChannels(_endpointPool.Reset(
+-                discoveredEndpoints,
+-                preferredLocation
+-            )).ConfigureAwait(false);
+-        }
+-        catch (RpcException e)
++        ValueTask shutdown;
++        lock (RouteLock)
+         {
+-            throw new YdbException(e);
++            shutdown = ChannelPool.RemoveChannels(_endpointPool.Reset(discoveredEndpoints, preferredLocation));
+         }
++        await shutdown.ConfigureAwait(false);
      }
  }
 diff --git a/src/Ydb.Sdk/src/DriverConfig.cs b/src/Ydb.Sdk/src/DriverConfig.cs
@@ -221,7 +229,7 @@ index e25d06a5ab5ba7a0426df56ec7c07b214fa6052c..d6523e7b683f3383921ed2419ca53f51
      internal TimeSpan EndpointDiscoveryTimeout = TimeSpan.FromSeconds(10);
      internal EndpointInfo EndpointInfo { get; }
 diff --git a/src/Ydb.Sdk/src/IDriver.cs b/src/Ydb.Sdk/src/IDriver.cs
-index fd2f07d3234b9ad53760b652befee173e99047b4..84b84155cb9041bfdc4700be9297a2da97f66c66 100644
+index fd2f07d3234b9ad53760b652befee173e99047b4..7c746dfa9fde9e83550122eec494507a441471d9 100644
 --- a/src/Ydb.Sdk/src/IDriver.cs
 +++ b/src/Ydb.Sdk/src/IDriver.cs
 @@ -104,6 +104,9 @@ public interface IDriver : IAsyncDisposable
@@ -288,7 +296,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..84b84155cb9041bfdc4700be9297a2da
  
          return new ServerStream<TResponse>(call, e => { OnRpcError(endpointInfo, e); });
      }
-@@ -266,23 +258,39 @@ internal abstract class BaseDriver : IDriver
+@@ -266,25 +258,43 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -325,7 +333,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..84b84155cb9041bfdc4700be9297a2da
 +        }
 +        lock (RouteLock)
 +        {
-+            if (epoch != RouteEpoch)
++            if (epoch != RouteEpoch || !IsCurrentEndpoint(endpoint))
 +            {
 +                throw new YdbException(StatusCode.Unavailable, "Discovery route changed");
 +            }
@@ -335,8 +343,12 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..84b84155cb9041bfdc4700be9297a2da
 +
      protected abstract EndpointInfo GetEndpoint(long nodeId);
  
++    protected virtual bool IsCurrentEndpoint(EndpointInfo endpoint) => true;
++
      protected abstract void OnRpcError(EndpointInfo endpointInfo, RpcException e);
-@@ -436,11 +444,17 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
+ 
+     protected async ValueTask<CallOptions> GetCallOptions(GrpcRequestSettings settings, EndpointInfo endpointInfo)
+@@ -436,11 +446,17 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
      private readonly Action<RpcException> _rpcErrorAction;
      private readonly ICredentialsProvider? _credentialsProvider;
  
@@ -486,10 +498,20 @@ index 0000000000000000000000000000000000000000..83228bbeb48f3be84ee69c69b132def4
 +    }
 +}
 diff --git a/src/Ydb.Sdk/src/Pool/EndpointPool.cs b/src/Ydb.Sdk/src/Pool/EndpointPool.cs
-index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..aaba2e3ae90a6606a1003743b2ec468b02d74a39 100644
+index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..8053c41620163cb3e9ff3b81a676236af4b1b4ab 100644
 --- a/src/Ydb.Sdk/src/Pool/EndpointPool.cs
 +++ b/src/Ydb.Sdk/src/Pool/EndpointPool.cs
-@@ -28,6 +28,10 @@ internal class EndpointPool
+@@ -16,6 +16,9 @@ internal class EndpointPool
+     private IReadOnlyList<EndpointInfo> _sortedByPriorityEndpoints = ImmutableArray<EndpointInfo>.Empty;
+     private Dictionary<long, EndpointInfo> _nodeIdToEndpoint = new();
+     private int _preferredEndpointCount;
++    private volatile HashSet<string> _addresses = new();
++
++    public bool Contains(EndpointInfo endpoint) => _addresses.Contains(endpoint.Endpoint);
+ 
+     internal EndpointPool(ILoggerFactory loggerFactory, IRandom? random = null)
+     {
+@@ -28,6 +31,10 @@ internal class EndpointPool
          _rwLock.EnterReadLock();
          try
          {
@@ -500,6 +522,14 @@ index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..aaba2e3ae90a6606a1003743b2ec468b
              return nodeId > 0 && _nodeIdToEndpoint.TryGetValue(nodeId, out var endpoint)
                  ? endpoint
                  : _sortedByPriorityEndpoints[_random.Next(_preferredEndpointCount)];
+@@ -87,6 +94,7 @@ internal class EndpointPool
+                 .Where(priorityEndpoint => !newEndpoints.Contains(priorityEndpoint.Endpoint))
+                 .ToImmutableArray();
+ 
++            _addresses = newEndpoints;
+             _sortedByPriorityEndpoints =
+             [
+                 ..prioritizedEndpoints
 diff --git a/src/Ydb.Sdk/src/Topic/TopicSession.cs b/src/Ydb.Sdk/src/Topic/TopicSession.cs
 index 56e1287dca00f3679fe2f7fa5f65c87f69335324..714486f59156d8c6eee6dd8ca7f743951d44407d 100644
 --- a/src/Ydb.Sdk/src/Topic/TopicSession.cs
@@ -540,6 +570,32 @@ index 0000000000000000000000000000000000000000..0cd9b0c3cfff76b4e56b367a9fa33143
 +        Assert.Throws<InvalidDataException>(() => Driver.Generation(2, headers, new Grpc.Core.Metadata()));
 +    }
 +}
+diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs
+index 4cdb55e9bc1631b5e01c1bdfa5add9a0d37f71f5..ef69fa7e245e19661a450d4dd6fc30cb7c0fd35e 100644
+--- a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs
++++ b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs
+@@ -8,6 +8,21 @@ namespace Ydb.Sdk.Ado.Tests.Pool;
+ 
+ public class EndpointPoolTests
+ {
++    [Fact]
++    public void ReplacementRejectsPreviouslySelectedAddressEvenWhenNodeIdIsReused()
++    {
++        var pool = new EndpointPool(TestUtils.LoggerFactory);
++        var source = new EndpointInfo(1, false, "source", 2136, "");
++        var target = new EndpointInfo(1, false, "target", 2136, "");
++        var retained = new EndpointInfo(2, false, "retained", 2136, "");
++        pool.Reset([source, retained]);
++        var selected = pool.GetEndpoint(1);
++        pool.Reset([target, retained]);
++        Assert.False(pool.Contains(selected));
++        Assert.True(pool.Contains(target));
++        Assert.True(pool.Contains(retained));
++    }
++
+     private static List<EndpointInfo> CreateEndpointSettingsList() =>
+     [
+         new(1, false, "n1.ydb.tech", 2136, "MAN"),
 diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs
 index 99f6cb6b309ba1c34ca2417243451a052a44e554..86e4fa08068ffb7f0bf4ba3c2f7c041dc4ef68c4 100644
 --- a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/YdbConnectionStringBuilderTests.cs

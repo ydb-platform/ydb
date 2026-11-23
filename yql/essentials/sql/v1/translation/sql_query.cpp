@@ -2627,7 +2627,7 @@ bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_co
 
     TDefaultExpression defaultExpression{
         .ContextPrefix = Context().ContextRecreationQuery(),
-        .ExprText = Context().QueryText(defaultValueRule.GetRule_expr2()),
+        .ExprText = Context().QueryText(defaultValueRule.GetRule_expr2(), {.NormalizeAnsiQuotes = Context().Settings.AnsiLexer}),
         .Expr = std::move(defaultExpr),
     };
 

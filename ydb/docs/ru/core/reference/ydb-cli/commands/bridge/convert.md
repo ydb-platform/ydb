@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-С помощью команды `admin cluster bridge convert` можно преобразовать обычный кластер в [кластер bridge](../../../../concepts/bridge.md) с одним pile. Существующие данные сохраняются. Преобразование необратимо.
+С помощью команды `admin cluster bridge convert` можно преобразовать обычный кластер в [кластер bridge](../../../../concepts/bridge.md) с одним pile. Существующие данные сохраняются. При соблюдении условий кластер можно [вернуть в обычный режим](rollback.md).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -29,8 +29,8 @@
 
 ## Требования {#requirements}
 
-- Должны использоваться конфигурация V2 и автоматическое управление.
-- На каждом статическом и динамическом узле должна работать поддерживающая сборка, а узлы должны быть перезапущены с `bridge_config`, содержащим один pile.
+- Должны использоваться конфигурация V2 и автоматическое управление конфигурацией (`self_management_config.enabled: true`).
+- На каждом статическом и динамическом узле должна работать сборка {{ ydb-short-name }} с поддержкой преобразования кластера в режим bridge, а узлы должны быть перезапущены с `bridge_config`, содержащим один pile.
 - Конфигурация должна содержать ровно один pile.
 - С `--skip-storage-pool-conversion` параметр `bridge_config.enable_non_uniform_storage` должен быть `true`. При преобразовании по умолчанию он не должен быть задан до завершения преобразования.
 
@@ -52,4 +52,4 @@
 
 ### Проверка результата {#verify}
 
-С помощью [list](list.md) дождитесь завершения преобразования. Пока вывод содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`, список pile изменять нельзя. После завершения единственный pile отображается как `PRIMARY`.
+С помощью [list piles](list.md#piles) дождитесь завершения преобразования. Пока вывод содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`, список pile изменять нельзя. После завершения единственный pile отображается как `PRIMARY`. Для диагностики синхронизации отдельных баз данных используйте `admin cluster bridge list databases --not-synced`.

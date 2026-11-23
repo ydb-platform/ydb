@@ -3,6 +3,7 @@ items:
   href: index.md
 - { name: DateTime,               href: datetime.md }
 - { name: Digest,                 href: digest.md }
+- { name: DigestAggregate,        href: digest-aggregate.md, when: backend_name == "YDB" }
 - { name: Histogram,              href: histogram.md }
 - { name: Hyperscan,              href: hyperscan.md }
 - { name: Ip,                     href: ip.md }

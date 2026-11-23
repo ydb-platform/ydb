@@ -11,7 +11,7 @@ namespace {
         const TActorId NotifyId;
         const TActorId SkeletonId;
         const TIntrusivePtr<TVDiskConfig> Cfg;
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+        const TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TEvVRestorePart::TPtr Ev;
         TLogoBlobID BlobId;
         TInstant Deadline;
@@ -39,7 +39,7 @@ namespace {
                 return Reply(NKikimrProto::ERROR, "TEvRecoverBlobResult has no requested part");
             }
             const TRope& data = item.GetPartData(BlobId);
-            if (data.size() != Top->GType.PartSize(BlobId)) {
+            if (data.size() != Info->Type.PartSize(BlobId)) {
                 return Reply(NKikimrProto::ERROR, "Recovered part size mismatch");
             }
             if (TActivationContext::Now() >= Deadline) {
@@ -66,8 +66,8 @@ namespace {
             recover->Deadline = Deadline;
             recover->IgnoreConnectionQuorum = true;
             recover->Items.emplace_back(BlobId.FullID(),
-                NMatrix::TVectorType::MakeOneHot(BlobId.PartId() - 1, Top->GType.TotalPartCount()),
-                Top->GType, TDiskPart());
+                NMatrix::TVectorType::MakeOneHot(BlobId.PartId() - 1, Info->Type.TotalPartCount()),
+                Info->Type, TDiskPart());
             Send(SkeletonId, recover.release(), IEventHandle::FlagTrackDelivery);
             Become(&TThis::StateRecover);
         }
@@ -96,18 +96,18 @@ namespace {
 
     public:
         TVRestorePartActor(const TVDiskID& selfVDiskId, const TActorId& notifyId, const TActorId& skeletonId,
-                TIntrusivePtr<TVDiskConfig> cfg, std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+                TIntrusivePtr<TVDiskConfig> cfg, TIntrusivePtr<TBlobStorageGroupInfo> info,
                 TEvVRestorePart::TPtr& ev)
             : SelfVDiskId(selfVDiskId)
             , NotifyId(notifyId)
             , SkeletonId(skeletonId)
             , Cfg(std::move(cfg))
-            , Top(std::move(top))
+            , Info(std::move(info))
             , Ev(ev)
         {}
 
         void Bootstrap() {
-            if (Top->GType.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+            if (Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
                 return Reply(NKikimrProto::ERROR, "VRestorePart is only supported for mirror-3-dc");
             }
             const auto& record = Ev->Get()->Record;
@@ -117,8 +117,11 @@ namespace {
                 return Reply(NKikimrProto::RACE, TStringBuilder() << "VDiskId mismatch: expected# " << SelfVDiskId
                     << " provided# {" << vdisk.ShortDebugString() << "}");
             }
+            if (!IsWritable(Info->GetFailRealmState(SelfVDiskId.FailRealm))) {
+                return Reply(NKikimrProto::ERROR, "realm does not accept restored parts");
+            }
             BlobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            if (!BlobId || !BlobId.BlobSize() || !BlobId.PartId() || BlobId.PartId() > Top->GType.TotalPartCount()) {
+            if (!BlobId || !BlobId.BlobSize() || !BlobId.PartId() || BlobId.PartId() > Info->Type.TotalPartCount()) {
                 return Reply(NKikimrProto::ERROR, "Invalid BlobId or PartId for this group");
             }
             if (Cfg->BaseInfo.ReadOnly || Cfg->BaseInfo.DonorMode) {
@@ -150,9 +153,9 @@ namespace {
 } // anonymous namespace
 
 IActor* CreateVRestorePartActor(const TVDiskID& selfVDiskId, const TActorId& notifyId, const TActorId& skeletonId,
-        TIntrusivePtr<TVDiskConfig> cfg, std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
+        TIntrusivePtr<TVDiskConfig> cfg, TIntrusivePtr<TBlobStorageGroupInfo> info,
         TEvVRestorePart::TPtr& ev) {
-    return new TVRestorePartActor(selfVDiskId, notifyId, skeletonId, std::move(cfg), std::move(top), ev);
+    return new TVRestorePartActor(selfVDiskId, notifyId, skeletonId, std::move(cfg), std::move(info), ev);
 }
 
 } // NKikimr

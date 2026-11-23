@@ -36,6 +36,20 @@ Automatic JSON index selection is rule-based: it uses the query structure and sc
 
 {% endnote %}
 
+## Searching with filter columns {#filtered}
+
+For an index [created](../create_table/json_index.md#filtered) with `ON (user_id, payload)`, specify an equality condition on `user_id` together with the JSON condition:
+
+```yql
+DECLARE $user_id AS Uint64;
+
+SELECT id, payload
+FROM documents VIEW json_idx
+WHERE user_id = $user_id AND JSON_EXISTS(payload, '$.kind');
+```
+
+If the index has several filter columns, an equality condition is required for each of them. Without these conditions, a query with an explicit `VIEW` fails, and automatic selection does not use this index.
+
 ## JSON_EXISTS
 
 [JSON_EXISTS(doc, jsonpath)](../../builtins/json.md#json_exists) checks for the existence of a path or value inside a JSON document:
@@ -68,7 +82,7 @@ When checking equality conditions or whether a value is in a given list (`IN`), 
 
 The indexed predicates do not support `ERROR ON ERROR` in `JSON_EXISTS`, or `ERROR ON EMPTY` and `ERROR ON ERROR` in `JSON_VALUE`; for more details, see [supported predicates](../../../../dev/json-indexes.md#predicates).
 
-### Parameters
+## Parameters
 
 Three ways to pass query parameters are supported:
 
@@ -96,21 +110,19 @@ Three ways to pass query parameters are supported:
     WHERE JSON_EXISTS(payload, '$.k ? (@ == $v)' PASSING $v AS v);
     ```
 
-    To search for an intersection with a JSON array of arbitrary length, you can pass a parameter of type `Json`:
+### JSON parameters {#json-parameters}
 
-    ```yql
-    DECLARE $values AS Json;
+`PASSING` also accepts parameters of type `Json`. For example, find documents whose `tags` array contains at least one of the supplied values:
 
-    SELECT id
-    FROM documents VIEW json_idx
-    WHERE JSON_EXISTS(
-        payload,
-        '$.tags[*] ? (@ == $values)'
-        PASSING $values AS values
-    );
-    ```
+```yql
+DECLARE $values AS Json;
 
-    When an array is passed in `$values`, the equality comparison `@ == $values` in `lax` mode (the default) looks for a match with any element of the array. For such a condition, the JSON index at runtime searches for rows by the individual values of the parameter and combines the results via `OR`. A single query is suitable for arrays of any length. Duplicate values do not produce duplicate rows, and an empty array returns an empty result. The original JsonPath condition is verified by a post-filter.
+SELECT id
+FROM documents VIEW json_idx
+WHERE JSON_EXISTS(payload, '$.tags[*] ? (@ == $values)' PASSING $values AS values);
+```
+
+With `$values` containing the JSON array `["red", "large"]`, the query finds documents tagged `red` or `large`. In `lax` mode (the default), equality checks for a match with any array element. Repeated values do not produce duplicate rows, and an empty array returns no rows. The full JsonPath condition is checked after the index lookup.
 
 ## AND and OR combinations
 
@@ -128,3 +140,7 @@ WHERE JSON_VALUE(payload, '$.user.name' RETURNING Utf8) = "Charlie"u
 Query execution via a JSON index can only use a subset of expressions based on `JSON_EXISTS` and `JSON_VALUE` (see [{#T}](../../../../dev/json-indexes.md#predicates)). Conditions that do not fall under these rules (for example, negations, comparisons with another column, comparison of two `JSON_VALUE` from different columns) are not indexed; in `AND` they go into a post-filter, in `OR` they lead to rejection of index usage for the entire group of conditions combined via `OR`.
 
 {% endnote %}
+
+## Error handling {#error-handling}
+
+Conditions with `ERROR ON EMPTY` or `ERROR ON ERROR` cannot be used for index lookup: it could skip rows that should raise an error. Such a condition can still be checked after lookup if another condition joined by `AND` uses the index. Otherwise, a query with an explicit `VIEW` fails, and automatic selection does not use this index.

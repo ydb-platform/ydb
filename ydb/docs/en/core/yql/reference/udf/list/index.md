@@ -6,6 +6,13 @@ Many application functions that on the one hand are too specific to become part 
 
 * [DateTime](datetime.md)
 * [Digest](digest.md)
+
+{% if backend_name == "YDB" %}
+
+* [DigestAggregate](digest-aggregate.md)
+
+{% endif %}
+
 * [Histogram](histogram.md)
 * [Hyperscan](hyperscan.md)
 * [Ip](ip.md)

@@ -3493,7 +3493,7 @@ TNodeResult TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     return Wrap(BuildStructure(pos, values, labels));
 }
 
-bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc) {
+bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc, TMap<TString, TPosition>* hintPositions) {
     // table_hint:
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
@@ -3501,6 +3501,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //    | WATERMARK AS LPAREN expr RPAREN
     //    | WATERMARK EQUALS expr;
 
+    TString hintName;
     switch (rule.Alt_case()) {
         case TRule_table_hint::kAltTableHint1: {
             const auto& alt = rule.GetAlt_table_hint1();
@@ -3534,7 +3535,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
                         YQL_ENSURE(false, "Unreachable");
                 }
             }
-            hints[id] = hint_val;
+            hintName = id;
+            hints[hintName] = hint_val;
             break;
         }
 
@@ -3545,7 +3547,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
                 return false;
             }
 
-            hints["user_" + to_lower(alt2.GetToken1().GetValue())] = {node};
+            hintName = "user_" + to_lower(alt2.GetToken1().GetValue());
+            hints[hintName] = {node};
             break;
         }
 
@@ -3608,13 +3611,14 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
 
             TPosition pos = Ctx_.TokenPosition(alt.GetToken1());
             TNodePtr structType = new TCallNodeImpl(pos, "StructType", structTypeItems);
+            hintName = "user_" + to_lower(alt.GetToken1().GetValue());
             bool shouldEmitLabel = provider != YtProviderName || TCiString(keyFunc) == "object";
             if (shouldEmitLabel) {
                 auto labelsTuple = BuildTuple(pos, labels);
-                hints["user_" + to_lower(alt.GetToken1().GetValue())] = {structType, labelsTuple};
+                hints[hintName] = {structType, labelsTuple};
                 break;
             } else {
-                hints["user_" + to_lower(alt.GetToken1().GetValue())] = {structType};
+                hints[hintName] = {structType};
                 break;
             }
         }
@@ -3627,7 +3631,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             if (!expr) {
                 return false;
             }
-            hints["watermark"] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
+            hintName = "watermark";
+            hints[hintName] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
             break;
         }
 
@@ -3635,22 +3640,25 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             YQL_ENSURE(false, "Unreachable");
     }
 
+    if (hintPositions) {
+        (*hintPositions)[hintName] = Ctx_.Position(rule);
+    }
     return true;
 }
 
-TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc) {
+TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc, TMap<TString, TPosition>* hintPositions) {
     TTableHints hints;
     auto& block = node.GetBlock2();
     bool hasErrors = false;
     switch (block.Alt_case()) {
         case TRule_table_hints::TBlock2::kAlt1: {
-            hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints, provider, keyFunc);
+            hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints, provider, keyFunc, hintPositions);
             break;
         }
         case TRule_table_hints::TBlock2::kAlt2: {
-            hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints, provider, keyFunc);
+            hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints, provider, keyFunc, hintPositions);
             for (const auto& x : block.GetAlt2().GetBlock3()) {
-                hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints, provider, keyFunc);
+                hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints, provider, keyFunc, hintPositions);
             }
 
             break;
@@ -4895,9 +4903,10 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
     return true;
 }
 
-bool TSqlTranslation::ValidateSubqueryOrViewBody(const TBlocks& blocks, TMaybe<TPosition> position) {
+bool TSqlTranslation::ValidateSubqueryOrViewBody(const TBlocks& blocks, TPosition position) {
     ui32 topLevelSelects = 0;
     bool hasTailOps = false;
+    TMaybe<TPosition> invalidPosition;
     for (auto& block : blocks) {
         if (block->SubqueryAlias()) {
             continue;
@@ -4908,12 +4917,14 @@ bool TSqlTranslation::ValidateSubqueryOrViewBody(const TBlocks& blocks, TMaybe<T
         } else if (topLevelSelects) {
             hasTailOps = true;
         }
+        if (!invalidPosition && (topLevelSelects > 1 || hasTailOps)) {
+            invalidPosition = block->GetPos();
+        }
     }
 
     if (topLevelSelects != 1 || hasTailOps) {
-        auto& error = position ? Ctx_.Error(*position) : Error();
-        error << "Strictly one select/process/reduce statement is expected at the end of "
-              << (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
+        Ctx_.Error(invalidPosition.GetOrElse(position)) << "Strictly one select/process/reduce statement is expected at the end of "
+                                                        << (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
         return false;
     }
 

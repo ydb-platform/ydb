@@ -17,8 +17,7 @@ The current implementation supports two indexes:
 * [fulltext_plain](#basic) — basic fulltext index
 * [fulltext_relevance](#relevance) — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring
 
-Additionally, a fulltext index can be **covering** (via `COVER`), meaning it includes a copy of extra columns from the base table.
-
+A fulltext index can be **covering**: `COVER` stores copies of additional columns in the index. A query can avoid reading the main table if all the columns it needs are in the index. To avoid these reads with `LIKE`, `ILIKE`, or `Wildcard`, include the text column in `COVER` too.
 
 ## Types of Fulltext Indexes {#types}
 
@@ -124,7 +123,11 @@ WHERE body LIKE "%learn%ing%"
 LIMIT 20;
 ```
 
-`LIKE` / `ILIKE` use the n-gram index to select candidates, then check the original text. `LIKE` is case-sensitive; `ILIKE` is case-insensitive. See [wildcard restrictions](../yql/reference/builtins/fulltext.md#wildcard).
+`LIKE` is case-sensitive; `ILIKE` is not. To use `ILIKE` with a fulltext index, set `use_filter_lowercase=true` in the `WITH` clause when creating the index.
+
+A pattern can be a parameter or an expression; `ESCAPE` is supported. The index also supports equality and the `StartsWith` / `EndsWith` functions. See the [query examples](../yql/reference/syntax/select/fulltext_index.md#like-ilike).
+
+Short patterns work too, but may require reading the main table. See [Searching with short patterns](../yql/reference/syntax/select/fulltext_index.md#scan-fallback).
 
 ### Filtered fulltext index {#filtered}
 
@@ -150,6 +153,14 @@ LIMIT 20;
 Multiple filter columns are supported. The equality predicates may appear in any order in `WHERE`; {{ ydb-short-name }} reorders them internally to match the index column order.
 
 ## Primary key types {#primary-key}
+
+{% if feature_flags.enable_fulltext_index_row_id == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_fulltext_index_row_id`](../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
 
 Inside the inverted index, every indexed document is identified by a numeric document id (`doc_id`). How {{ ydb-short-name }} derives the `doc_id` depends on the base table's [primary key](../concepts/glossary.md#primary-key):
 
@@ -203,7 +214,7 @@ This limitation may be removed in future versions of {{ ydb-short-name }}.
 
 ## Updating Fulltext Indexes {#update}
 
-Fulltext indexes are maintained automatically on data modifications. Tables with fulltext indexes support:
+Fulltext indexes are maintained automatically on data modifications. A query through a fulltext index sees rows inserted earlier in the same transaction, before commit. Tables with fulltext indexes support:
 
 * `INSERT`
 * `UPSERT`

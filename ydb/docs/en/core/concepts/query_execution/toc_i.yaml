@@ -27,5 +27,7 @@ items:
     href: scan_query.md
   - name: Query Execution Process
     href: execution_process.md
+  - name: Compilation cache warmup
+    href: compile-cache-warmup.md
   - name: YQL queries to topics
     href: topics.md

@@ -151,7 +151,12 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
         AFL_ENSURE(it != Topics.end());
 
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
+            if (!entry.ListNodeEntry || entry.ListNodeEntry->Children.size() != 1) {
+                return CloseSession(
+                    TStringBuilder() << "CDC stream '" << JoinPath(entry.Path)
+                        << "' describe error, reason: could not retrieve child topic description",
+                    PersQueue::ErrorCode::ERROR, ctx);
+            }
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
             // primary path used to re-describe

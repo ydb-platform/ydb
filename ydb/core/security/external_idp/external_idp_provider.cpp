@@ -79,7 +79,7 @@ const std::unordered_map<NSecurity::EJwkAlg, void (*)(TJwtVerifier&, const std::
 bool AllowKeyAlgorithms(TJwtVerifier& verifier, const NSecurity::TJwk& jwk, const std::string& pem, std::string& error) {
     bool added = false;
     for (const auto& [alg, allow] : SUPPORTED_ALGOS) {
-        if ((jwk.Algorithm && *jwk.Algorithm != alg) || NSecurity::GetKeyType(alg) != jwk.Type) {
+        if ((jwk.Algorithm.has_value() && jwk.Algorithm.value() != alg) || NSecurity::GetKeyType(alg) != jwk.Type) {
             continue;
         }
         try {

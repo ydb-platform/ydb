@@ -14,7 +14,6 @@ PEERDIR(
     library/cpp/json
     ydb/core/backup/common/proto
     ydb/core/base
-    ydb/core/tx/replication/common
     ydb/core/util
     ydb/library/yverify_stream
     ydb/public/api/protos

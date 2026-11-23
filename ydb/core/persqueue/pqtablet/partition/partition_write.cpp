@@ -930,7 +930,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup");
 
-    auto& body = ev->Get()->Body;
+    const auto& body = ev->Get()->Body;
 
     auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
     if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
@@ -946,9 +946,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             if (!body.AfterSplit) {
                 return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                     "AfterSplit must be set");
-            }
-            if (!body.KeyRange && it->second.KeyRange) {
-                it->second.KeyRange->Serialize(body.KeyRange.ConstructInPlace());
             }
             break;
         default:

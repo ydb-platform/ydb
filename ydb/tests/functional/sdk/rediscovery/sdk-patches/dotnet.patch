@@ -221,10 +221,20 @@ index e25d06a5ab5ba7a0426df56ec7c07b214fa6052c..ff461a0bf8508a2a05f2534bbb876a96
      internal TimeSpan EndpointDiscoveryTimeout = TimeSpan.FromSeconds(10);
      internal EndpointInfo EndpointInfo { get; }
 diff --git a/src/Ydb.Sdk/src/IDriver.cs b/src/Ydb.Sdk/src/IDriver.cs
-index fd2f07d3234b9ad53760b652befee173e99047b4..87fa633c450043d14501a1ac9497b57d4deed981 100644
+index fd2f07d3234b9ad53760b652befee173e99047b4..9e42316ddb820be086e08c63439d200880e4e1b0 100644
 --- a/src/Ydb.Sdk/src/IDriver.cs
 +++ b/src/Ydb.Sdk/src/IDriver.cs
-@@ -209,21 +209,15 @@ internal abstract class BaseDriver : IDriver
+@@ -104,6 +104,9 @@ public interface IDriver : IAsyncDisposable
+ /// <typeparam name="TResponse">The type of response messages.</typeparam>
+ public interface IBidirectionalStream<in TRequest, out TResponse> : IDisposable
+ {
++    /// <summary>Whether discovery has retired the route that accepted this stream.</summary>
++    public bool IsRouteRetired => false;
++
+     /// <summary>
+     /// Writes a request message to the stream.
+     /// </summary>
+@@ -209,21 +212,15 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -249,7 +259,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..87fa633c450043d14501a1ac9497b57d
  
              return await call.ResponseAsync.ConfigureAwait(false);
          }
-@@ -233,7 +227,7 @@ internal abstract class BaseDriver : IDriver
+@@ -233,7 +230,7 @@ internal abstract class BaseDriver : IDriver
  
              throw new YdbException(e);
          }
@@ -258,7 +268,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..87fa633c450043d14501a1ac9497b57d
          {
              throw new YdbException(StatusCode.ClientTransportUnknown, "Unexpected transport exception", e);
          }
-@@ -246,16 +240,11 @@ internal abstract class BaseDriver : IDriver
+@@ -246,16 +243,11 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -278,7 +288,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..87fa633c450043d14501a1ac9497b57d
  
          return new ServerStream<TResponse>(call, e => { OnRpcError(endpointInfo, e); });
      }
-@@ -266,15 +255,11 @@ internal abstract class BaseDriver : IDriver
+@@ -266,23 +258,39 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -297,7 +307,10 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..87fa633c450043d14501a1ac9497b57d
  
          return new BidirectionalStream<TRequest, TResponse>(
              call,
-@@ -283,6 +268,25 @@ internal abstract class BaseDriver : IDriver
+             e => { OnRpcError(endpointInfo, e); },
+-            _credentialsProvider
++            _credentialsProvider,
++            Config.EnableEdsDiscovery ? () => epoch != Volatile.Read(ref RouteEpoch) : null
          );
      }
  
@@ -323,9 +336,28 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..87fa633c450043d14501a1ac9497b57d
      protected abstract EndpointInfo GetEndpoint(long nodeId);
  
      protected abstract void OnRpcError(EndpointInfo endpointInfo, RpcException e);
+@@ -436,11 +444,17 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
+     private readonly Action<RpcException> _rpcErrorAction;
+     private readonly ICredentialsProvider? _credentialsProvider;
+ 
++    private readonly Func<bool>? _isRouteRetired;
++
++    public bool IsRouteRetired => _isRouteRetired?.Invoke() == true;
++
+     internal BidirectionalStream(
+         AsyncDuplexStreamingCall<TRequest, TResponse> stream,
+         Action<RpcException> rpcErrorAction,
+-        ICredentialsProvider? credentialsProvider)
++        ICredentialsProvider? credentialsProvider,
++        Func<bool>? isRouteRetired = null)
+     {
++        _isRouteRetired = isRouteRetired;
+         _stream = stream;
+         _rpcErrorAction = rpcErrorAction;
+         _credentialsProvider = credentialsProvider;
 diff --git a/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..a46a6db1173330168f59ef638c873905e1f9e2fa
+index 0000000000000000000000000000000000000000..8deaab334bfbaa70913c7f964912e6d73e41a9c9
 --- /dev/null
 +++ b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
 @@ -0,0 +1,232 @@
@@ -556,7 +588,7 @@ index 0000000000000000000000000000000000000000..a46a6db1173330168f59ef638c873905
 +    {
 +        lock (RouteLock)
 +        {
-+            ++RouteEpoch;
++            Interlocked.Increment(ref RouteEpoch);
 +            return ChannelPool.RemoveChannels(_endpointPool.Reset(Array.Empty<EndpointInfo>()));
 +        }
 +    }
@@ -659,6 +691,19 @@ index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..aaba2e3ae90a6606a1003743b2ec468b
              return nodeId > 0 && _nodeIdToEndpoint.TryGetValue(nodeId, out var endpoint)
                  ? endpoint
                  : _sortedByPriorityEndpoints[_random.Next(_preferredEndpointCount)];
+diff --git a/src/Ydb.Sdk/src/Topic/TopicSession.cs b/src/Ydb.Sdk/src/Topic/TopicSession.cs
+index 56e1287dca00f3679fe2f7fa5f65c87f69335324..714486f59156d8c6eee6dd8ca7f743951d44407d 100644
+--- a/src/Ydb.Sdk/src/Topic/TopicSession.cs
++++ b/src/Ydb.Sdk/src/Topic/TopicSession.cs
+@@ -17,7 +17,7 @@ internal abstract class TopicSession<TFromClient, TFromServer>(
+     private int _isActive = 1;
+     private string? _lastToken = lastToken;
+ 
+-    public bool IsActive => Volatile.Read(ref _isActive) == 1;
++    public bool IsActive => Volatile.Read(ref _isActive) == 1 && !Stream.IsRouteRetired;
+ 
+     protected void ReconnectSession(StatusCode statusCode = StatusCode.Unspecified)
+     {
 diff --git a/src/Ydb.Sdk/src/Ydb.Sdk.csproj b/src/Ydb.Sdk/src/Ydb.Sdk.csproj
 index e74e4d66e32673d97e0fdc0e4a3882131bddcb9f..8e8cf0b4d30328e20b1b53e3429ae0a325eeffb6 100644
 --- a/src/Ydb.Sdk/src/Ydb.Sdk.csproj
@@ -693,3 +738,42 @@ index 99f6cb6b309ba1c34ca2417243451a052a44e554..0f126a0506b4c99ad92fb3d7405803a3
      private const int MessageSize = 64 * 1024 * 1024;
  
      [Fact]
+diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs
+index b8f7914d6d6740c7ce894021334d448c4d5252ad..1f95b6789f39b0c837d90cc7df128fd24b911ac0 100644
+--- a/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs
++++ b/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs
+@@ -38,6 +38,34 @@ public class ReaderUnitTests
+         });
+     }
+ 
++    [Theory]
++    [InlineData(false)]
++    [InlineData(true)]
++    public async Task ReaderDiscardsPrefetchedDataWhenDiscoveryRetiresRoute(bool batch)
++    {
++        _mockStream.SetupSequence(stream => stream.MoveNextAsync())
++            .ReturnsAsync(true).ReturnsAsync(true).ReturnsAsync(true).Returns(_lastMoveNext);
++        _mockStream.SetupSequence(stream => stream.Current)
++            .Returns(InitResponse).Returns(StartPartitionSessionRequest())
++            .Returns(ReadResponse(0, "first"u8.ToArray(), "stale"u8.ToArray()));
++
++        await using var reader = new ReaderBuilder<string>(_driverFactoryMock)
++        {
++            ConsumerName = "Consumer",
++            SubscribeSettings = { new SubscribeSettings("/topic") }
++        }.Build();
++        Assert.Equal("first", (await reader.ReadAsync()).Data);
++        _mockStream.SetupGet(stream => stream.IsRouteRetired).Returns(true);
++        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
++        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
++        {
++            if (batch)
++                await reader.ReadBatchAsync(deadline.Token);
++            else
++                await reader.ReadAsync(deadline.Token);
++        });
++    }
++
+     /*
+      * Performed invocations:
+ 

@@ -15,6 +15,22 @@ index 37d2e5176b2a496a681038a3162063e3fa9dc916..3dc92e9dbdf0e737821a15b620db6a06
          <!-- Netty is used only for special helper NettyChannelFactory -->
          <dependency>
              <groupId>io.grpc</groupId>
+diff --git a/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java b/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java
+index 1db63b33807c277a9a184fe86dea4d5edd535547..369afe3fc08e350af09004b16f6d21f5651cdbf3 100644
+--- a/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java
++++ b/core/src/main/java/tech/ydb/core/grpc/GrpcReadWriteStream.java
+@@ -10,6 +10,11 @@ package tech.ydb.core.grpc;
+ public interface GrpcReadWriteStream<R, W> extends GrpcReadStream<R> {
+     String authToken();
+ 
++    /** Whether messages buffered by this stream still belong to the current discovery route. */
++    default boolean isRouteCurrent() {
++        return true;
++    }
++
+     /**
+      * Send a request message to the server.
+      * @param message message to be sent to the server.
 diff --git a/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java b/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
 index a014bf782fac172ded2388d7c72017928fbb5a41..b20fd7f85cc459be8b4db9cbec9de9f244f5c2ea 100644
 --- a/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java
@@ -45,7 +61,7 @@ index a014bf782fac172ded2388d7c72017928fbb5a41..b20fd7f85cc459be8b4db9cbec9de9f2
          return discoveryTimeoutMillis;
      }
 diff --git a/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java b/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
-index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff572324844aa8d758f5f865e6e49a761f72ac5a 100644
+index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff7427aafe2ea291c64f3f39d0ee5302bb1e92d9 100644
 --- a/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
 +++ b/core/src/main/java/tech/ydb/core/impl/BaseGrpcTransport.java
 @@ -247,7 +247,7 @@ public abstract class BaseGrpcTransport implements GrpcTransport {
@@ -57,6 +73,18 @@ index e15eb5c5a2b8a1b0fac906342bae44e64b108af8..ff572324844aa8d758f5f865e6e49a76
          Metadata metadata = new Metadata();
          metadata.put(YdbHeaders.BUILD_INFO, buildInfo);
          String token = getAuthCallOptions().getToken();
+@@ -333,6 +333,11 @@ public abstract class BaseGrpcTransport implements GrpcTransport {
+             }
+         }
+ 
++        @Override
++        public boolean isRouteCurrent() {
++            return channel.isRouteCurrent();
++        }
++
+         @Override
+         public void postComplete() {
+             BooleanSupplier hook = settings.getPessimizationHook();
 diff --git a/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java b/core/src/main/java/tech/ydb/core/impl/EdsDiscovery.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..f7421611e5078be8483d59ecd147b9cc68177cae
@@ -543,8 +571,65 @@ index dd6410b6f752cafb5d9bb02c16df96230ec82c76..ff0141ecd6d6fca0bb003b3020d71711
          }
  
          @Override
+diff --git a/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java b/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java
+index 83ab1f1999042c7555255b625c5f36958562c95e..585ef8674512c282fff3a3875308ff08029eda2b 100644
+--- a/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java
++++ b/core/src/main/java/tech/ydb/core/impl/call/GrpcStatusHandler.java
+@@ -11,4 +11,8 @@ public interface GrpcStatusHandler {
+     void accept(Status status, Metadata trailers);
+ 
+     void postComplete();
++
++    default boolean isRouteCurrent() {
++        return true;
++    }
+ }
+diff --git a/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java b/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java
+index 013522b011f9b14d1bb5bfe69d8b438d828ed3cd..810c8f1705372536431520551ba8930fee596391 100644
+--- a/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java
++++ b/core/src/main/java/tech/ydb/core/impl/call/ReadWriteStreamCall.java
+@@ -59,6 +59,11 @@ public class ReadWriteStreamCall<R, W> extends ClientCall.Listener<R> implements
+         this.flow = flowCtrl.newCall(this::nextRequest);
+     }
+ 
++    @Override
++    public boolean isRouteCurrent() {
++        return statusConsumer.isRouteCurrent();
++    }
++
+     @Override
+     public String authToken() {
+         return callOptions.getToken();
+diff --git a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java
+index 2e9a1135d38e4ed4e28895f8c76e52801f4c0bb6..ce3f31da6e3c35cd3c13cc997e6231c6bc616200 100644
+--- a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java
++++ b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannel.java
+@@ -19,6 +19,7 @@ public final class GrpcChannel implements Runnable {
+ 
+     private final EndpointRecord endpoint;
+     private final ManagedChannel channel;
++    private volatile boolean routeCurrent = true;
+ 
+     public GrpcChannel(EndpointRecord endpoint, ManagedChannelFactory factory) {
+         try {
+@@ -39,6 +40,15 @@ public final class GrpcChannel implements Runnable {
+         return channel;
+     }
+ 
++    public boolean isRouteCurrent() {
++        return routeCurrent;
++    }
++
++    void retire() {
++        routeCurrent = false;
++        shutdownNow();
++    }
++
+     public boolean isShutdown() {
+         return channel.isShutdown();
+     }
 diff --git a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
-index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..188f601ad7c992fcbb7d95c49f6473c9ffaf4825 100644
+index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..24a1b84b5b8f0b6b5986cc40eab89aa4866127f8 100644
 --- a/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
 +++ b/core/src/main/java/tech/ydb/core/impl/pool/GrpcChannelPool.java
 @@ -78,6 +78,15 @@ public class GrpcChannelPool {
@@ -555,7 +640,7 @@ index f36a8b1b9ccd8aa80ffcfa3e23988de32787242c..188f601ad7c992fcbb7d95c49f6473c9
 +        for (EndpointRecord record : removed) {
 +            GrpcChannel channel = channels.remove(record.getHostAndPort());
 +            if (channel != null) {
-+                channel.shutdownNow();
++                channel.retire();
 +            }
 +        }
 +    }
@@ -608,3 +693,85 @@ index 0000000000000000000000000000000000000000..f106d9be29c1d4ae9d9fc95add63fdd1
 +                .setVersionInfo("v1").setNonce("n1").build();
 +    }
 +}
+diff --git a/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java b/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java
+index 9a36605cd23b84b6086dd6a56d3c956573b4c66b..854d1473d6b88a2380e672b55e09c5157d80a879 100644
+--- a/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java
++++ b/topic/src/main/java/tech/ydb/topic/impl/TopicStreamBase.java
+@@ -28,6 +28,11 @@ public abstract class TopicStreamBase<R extends Message, W extends Message> impl
+         this.token = stream.authToken();
+     }
+ 
++    public boolean isRouteCurrent() {
++        GrpcReadWriteStream<R, W> stream = ref.get();
++        return stream != null && stream.isRouteCurrent();
++    }
++
+     protected abstract W updateTokenMessage(String token);
+     protected abstract Status parseMessageStatus(R message);
+ 
+diff --git a/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java b/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java
+index ec4c7c8d3c986544e2aca178f57750e01a160b38..a904a1e607ddc2f2e54a66b794ef0cae6022924c 100644
+--- a/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java
++++ b/topic/src/main/java/tech/ydb/topic/read/impl/ReadPartition.java
+@@ -85,7 +85,7 @@ public class ReadPartition implements PartitionControl {
+ 
+     @Override
+     public boolean isActive() {
+-        return State.IS_ACTIVE.contains(state.get());
++        return session.isRouteCurrent() && State.IS_ACTIVE.contains(state.get());
+     }
+ 
+     @Override
+@@ -162,7 +162,7 @@ public class ReadPartition implements PartitionControl {
+                 return;
+             }
+ 
+-            while (state.get() == State.STARTED || state.get() == State.PRE_STOPPED) {
++            while (session.isRouteCurrent() && (state.get() == State.STARTED || state.get() == State.PRE_STOPPED)) {
+                 List<Message> list = queue.getNextBatch();
+                 if (list == null) {
+                     break;
+diff --git a/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java b/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java
+index f901546033db59961fb0c11de34aad802d9ab5ca..1cd5cb53b593cc8b69c2e827775f4a6fd722a1b6 100644
+--- a/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java
++++ b/topic/src/test/java/tech/ydb/topic/read/impl/SyncReaderImplTest.java
+@@ -3,6 +3,7 @@ package tech.ydb.topic.read.impl;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import org.junit.Assert;
+ import org.junit.Rule;
+@@ -146,6 +147,31 @@ public class SyncReaderImplTest {
+                 ex2.getMessage());
+     }
+ 
++    @Test
++    public void prefetchedMessageFromRetiredRouteIsDiscarded() throws InterruptedException {
++        AtomicBoolean current = new AtomicBoolean(true);
++        ReadStreamMock stream = new ReadStreamMock(true) {
++            @Override
++            public boolean isRouteCurrent() {
++                return current.get();
++            }
++        };
++        ReaderSettings settings = ReaderSettings.newBuilder()
++                .addTopic(TopicReadSettings.newBuilder().setPath("/topic").build())
++                .setConsumerName("consumer")
++                .build();
++        SyncReader reader = new SyncReaderImpl(mockRpc(stream), settings, REGISTRY);
++        reader.init();
++        stream.responseInit("source");
++        stream.responseStartPartition("/topic", 1, 0);
++        stream.responseData(100).partition(1, 0).batch(Codec.RAW, MSG1, MSG2).and().send();
++
++        Assert.assertArrayEquals(MSG1, reader.receive().getData());
++        current.set(false);
++        Assert.assertNull(reader.receive(0, TimeUnit.MILLISECONDS));
++        reader.shutdown();
++    }
++
+     @Test
+     public void readClosedPartitionTest() throws InterruptedException {
+         ReadStreamMock mock = new ReadStreamMock(true);

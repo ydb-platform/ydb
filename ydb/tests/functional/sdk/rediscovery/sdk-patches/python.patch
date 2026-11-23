@@ -56,10 +56,10 @@ index 064ff46ef3855ff2eb296e1ba6ed67ee6c5a8e7b..22d1ccf1b9b664c33830ead2d68d2c7e
 +commands = pytest -v ydb/eds_test.py
 diff --git a/ydb/_eds.py b/ydb/_eds.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92f0e8ace5
+index 0000000000000000000000000000000000000000..5d53b77eb7e98cb6468607bc4799297fe65fc003
 --- /dev/null
 +++ b/ydb/_eds.py
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,229 @@
 +"""State-of-the-world endpoint discovery on the driver's bootstrap channel."""
 +
 +from __future__ import annotations
@@ -185,6 +185,7 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +        self.route = route
 +        self.channel = channel
 +        self.active = None
++        self.received = False
 +
 +    def cancel(self):
 +        active = self.active
@@ -200,6 +201,7 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +            iter(requests.get, None), metadata=metadata
 +        )
 +        self.active = call
++        self.received = False
 +        try:
 +            if stopped():
 +                return False
@@ -212,6 +214,7 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +                    requests.put(route.request(version, response.nonce, str(error)))
 +                    continue
 +                apply(resolved)
++                self.received = True
 +                version = response.version_info
 +                requests.put(route.request(version, response.nonce))
 +            route.lost(call.code(), call.trailing_metadata())
@@ -240,6 +243,7 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +        self.route = route
 +        self.channel = channel
 +        self.active = None
++        self.received = False
 +
 +    def cancel(self):
 +        if self.active is not None:
@@ -250,6 +254,7 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +        metadata = await aio_connection._construct_metadata(route.config, None) + route.headers()
 +        call = eds_pb2_grpc.EndpointDiscoveryServiceStub(self.channel).StreamEndpoints(metadata=metadata)
 +        self.active = call
++        self.received = False
 +        try:
 +            if stopped():
 +                return False
@@ -263,6 +268,7 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +                    await call.write(route.request(version, response.nonce, str(error)))
 +                    continue
 +                await apply(resolved)
++                self.received = True
 +                version = response.version_info
 +                await call.write(route.request(version, response.nonce))
 +            route.lost(await call.code(), await call.trailing_metadata())
@@ -283,8 +289,102 @@ index 0000000000000000000000000000000000000000..ce1bed34ba770801a5020feba4e71c92
 +            call.cancel()
 +            self.active = None
 +        return False
+diff --git a/ydb/_topic_reader/topic_reader_asyncio.py b/ydb/_topic_reader/topic_reader_asyncio.py
+index 74e9bca7fddc0bb7c471106a260856a937e7d871..310162bbdeb794b8f0c262cf1c058c371e27af7a 100644
+--- a/ydb/_topic_reader/topic_reader_asyncio.py
++++ b/ydb/_topic_reader/topic_reader_asyncio.py
+@@ -548,6 +548,7 @@ class ReaderStream:
+             self._session_id,
+         )
+         self._stream = None
++        self._eds_route = None
+         self._started = False
+         self._background_tasks = set()
+         self._partition_sessions = dict()
+@@ -583,6 +584,9 @@ class ReaderStream:
+         stream = GrpcWrapperAsyncIO(StreamReadMessage.FromServer.from_proto)
+         reader = None
+         try:
++            # A prepared source batch can outlive cancellation of its network stream.
++            store = getattr(driver, "_store", None)
++            epoch = getattr(store, "eds_epoch", None)
+             await stream.start(driver, _apis.TopicService.Stub, _apis.TopicService.StreamRead)
+ 
+             creds = driver._credentials
+@@ -591,6 +595,8 @@ class ReaderStream:
+                 settings,
+                 get_token_function=creds.get_auth_token if creds else None,
+             )
++            if isinstance(epoch, int):
++                reader._eds_route = (store, epoch)
+             await reader._start(stream, settings._init_message())
+         except BaseException:
+             # If create() is interrupted (e.g. reader.close() cancels the connection loop
+@@ -1053,6 +1059,10 @@ class ReaderStream:
+             pass
+ 
+     def _get_first_error(self) -> Optional[YdbError]:
++        if self._eds_route is not None:
++            store, epoch = self._eds_route
++            if store.eds_epoch != epoch:
++                return issues.ConnectionLost("Topic reader route has changed")
+         if self._first_error.done():
+             return self._first_error.result()
+         return None
+diff --git a/ydb/aio/connection.py b/ydb/aio/connection.py
+index 3bc72f920477c3a4d2d10b0cd39e1a214ba53447..7c59d5cd4c2e0bfde5383542ad05565a9ece4051 100644
+--- a/ydb/aio/connection.py
++++ b/ydb/aio/connection.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ import logging
+ import asyncio
++from weakref import WeakSet
+ from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+ import collections
+ import grpc
+@@ -149,6 +150,7 @@ class Connection:
+         "_stub_instances",
+         "_driver_config",
+         "_cleanup_callbacks",
++        "_eds_streams",
+         "__weakref__",
+         "lock",
+         "calls",
+@@ -175,6 +177,7 @@ class Connection:
+         self._channel = channel_factory(self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options)
+         self._driver_config = driver_config
+ 
++        self._eds_streams = WeakSet() if getattr(driver_config, "use_eds", False) else None
+         self._stub_instances: Dict[Any, Any] = {}
+         self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
+         for stub in _stubs_list:
+@@ -238,6 +241,11 @@ class Connection:
+             if hasattr(response, "__aiter__"):
+                 # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
+                 response = _SafeAsyncIterator(response, rpc_state, on_disconnected)
++                if self._eds_streams is not None:
++                    if self.closing:
++                        response.cancel()
++                        raise issues.ConnectionLost("Endpoint route changed while opening the stream")
++                    self._eds_streams.add(response)
+ 
+             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+         except grpc.RpcError as rpc_error:
+@@ -253,6 +261,11 @@ class Connection:
+     def _finish_call(self, call_state: _RpcState) -> None:
+         self.calls.pop(call_state.request_id, None)
+ 
++    def retire_eds(self):
++        self.closing = True
++        for stream in list(self._eds_streams):
++            stream.cancel()
++
+     async def destroy(self, grace: float = 0) -> None:
+         """
+         Destroys the underlying gRPC channel
 diff --git a/ydb/aio/pool.py b/ydb/aio/pool.py
-index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5fc0a2f50 100644
+index 150274368d9238a9969df34306c6142c6b40f4e4..9ac36ae69f83e86d64bca0feb5d9019c274abe12 100644
 --- a/ydb/aio/pool.py
 +++ b/ydb/aio/pool.py
 @@ -81,7 +81,10 @@ class ConnectionsCache(_ConnectionsCache):
@@ -326,7 +426,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
          resolved_endpoints = set(
              endpoint
              for resolved_endpoint in resolve_details.endpoints
-@@ -213,9 +222,46 @@ class Discovery:
+@@ -213,9 +222,53 @@ class Discovery:
  
      def stop(self) -> None:
          self._should_stop = True
@@ -336,6 +436,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
  
 +    async def _run_eds(self):
 +        failures = 0
++        drains = set()
 +        while not self._should_stop:
 +            try:
 +                legacy_ready = await self._watch.subscribe(self._apply_endpoints, lambda: self._should_stop)
@@ -345,15 +446,20 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
 +            except Exception as error:
 +                self._resolver._add_debug_details("EDS subscription failed: %s", error)
 +                legacy_ready = False
++            if self._watch.received:
++                failures = 0
 +            if legacy_ready:
 +                failures = 0
 +                delay = self._discovery_interval()
 +            else:
++                self._cache.eds_epoch += 1
 +                retired = self._cache.values()
 +                for conn in retired:
 +                    self._cache.remove(conn)
-+                    conn.closing = True
-+                await asyncio.gather(*(conn.close(grace=0) for conn in retired))
++                    conn.retire_eds()
++                    drain = asyncio.create_task(conn.close())
++                    drains.add(drain)
++                    drain.add_done_callback(drains.discard)
 +                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
 +                delay = 0 if failures == 0 else min(20, 2 ** min(failures - 1, 4)) * self._emergency_retry_interval()
 +                failures += 1
@@ -365,6 +471,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
 +                pass
 +            self._wake_up_event.clear()
 +        await self._cache.cleanup()
++        await asyncio.gather(*drains)
 +
      async def run(self) -> None:
 +        if self._watch:
@@ -373,7 +480,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
          while True:
              try:
                  successful = await self.execute_discovery()
-@@ -284,6 +330,10 @@ class ConnectionPool(IConnectionPool):
+@@ -284,6 +337,10 @@ class ConnectionPool(IConnectionPool):
          else:
              # Start discovery as usual
              self._discovery = Discovery(self._store, self._driver_config)
@@ -384,7 +491,7 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
              self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
  
      async def stop(self, timeout: int = 10) -> None:  # type: ignore[override]  # async override of sync method
-@@ -305,6 +355,8 @@ class ConnectionPool(IConnectionPool):
+@@ -305,6 +362,8 @@ class ConnectionPool(IConnectionPool):
  
      def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
          async def __wrapper__() -> None:
@@ -393,6 +500,69 @@ index 150274368d9238a9969df34306c6142c6b40f4e4..c6c27fddd6e0611a1140d88a0f7244c5
              await connection.close()
              if self._discovery:
                  self._discovery.notify_disconnected()
+@@ -352,7 +411,7 @@ class ConnectionPool(IConnectionPool):
+         try:
+             connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
+         except BaseException:
+-            if self._discovery:
++            if self._discovery and not self._driver_config.use_eds:
+                 self._discovery.notify_disconnected()
+             raise
+ 
+diff --git a/ydb/connection.py b/ydb/connection.py
+index 052b563ef0392013a5c9fb64906f4ae503a2e5cf..650da4df78a8a835cbfb0386e9a551195e36e176 100644
+--- a/ydb/connection.py
++++ b/ydb/connection.py
+@@ -5,6 +5,7 @@ from concurrent import futures
+ import uuid
+ import threading
+ import collections
++from weakref import WeakSet
+ from typing import (
+     Any,
+     Callable,
+@@ -408,6 +409,7 @@ class Connection(object):
+         "_stub_instances",
+         "_driver_config",
+         "_cleanup_callbacks",
++        "_eds_streams",
+         "__weakref__",
+         "lock",
+         "calls",
+@@ -439,6 +441,7 @@ class Connection(object):
+         self.endpoint_key = EndpointKey(endpoint, getattr(endpoint_options, "node_id", None))
+         self._channel = channel_factory(self.endpoint, driver_config, endpoint_options=endpoint_options)
+         self._driver_config = driver_config
++        self._eds_streams = WeakSet() if getattr(driver_config, "use_eds", False) else None
+         self._call_states: Dict[Any, "_RpcState"] = {}
+         self._stub_instances: Dict[Any, Any] = {}
+         self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
+@@ -555,6 +558,12 @@ class Connection(object):
+             if hasattr(response, "__iter__"):
+                 # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
+                 response = _SafeSyncIterator(response, rpc_state, on_disconnected)
++                if self._eds_streams is not None:
++                    with self.lock:
++                        if self.closing:
++                            response.cancel()
++                            raise issues.ConnectionLost("Endpoint route changed while opening the stream")
++                        self._eds_streams.add(response)
+ 
+             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
+         except grpc.RpcError as rpc_error:
+@@ -603,6 +612,12 @@ class Connection(object):
+                 # everything is cancelled/completed and channel can be destroyed
+                 self.destroy()
+ 
++    def retire_eds(self):
++        with self.lock:
++            self.close()
++            for stream in list(self._eds_streams):
++                stream.cancel()
++
+     def destroy(self):
+         channel = getattr(self, "_channel", None)
+         if channel is not None and hasattr(channel, "close"):
 diff --git a/ydb/driver.py b/ydb/driver.py
 index 988649804fa1645dc459c7d450c0a7728a4c26d6..ac4c26fb4d461473a082a0b113938a00db0cc2e6 100644
 --- a/ydb/driver.py
@@ -565,10 +735,18 @@ index 0000000000000000000000000000000000000000..31a1dcceae7f6bf3a1a7ef3c497d7ac7
 +
 +    asyncio.run(run())
 diff --git a/ydb/pool.py b/ydb/pool.py
-index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058ef6ce9e0f 100644
+index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..c2a7090e95514c047c74fdea49dd456d29138ed6 100644
 --- a/ydb/pool.py
 +++ b/ydb/pool.py
-@@ -155,7 +155,10 @@ class ConnectionsCache:
+@@ -34,6 +34,7 @@ class ConnectionsCache:
+         self.subscriptions: Set["futures.Future[None]"] = set()
+         self.preferred: collections.OrderedDict[str, Connection] = collections.OrderedDict()
+         self.logger = logging.getLogger(__name__)
++        self.eds_epoch = 0
+         self.use_all_nodes = use_all_nodes
+         self.conn_lst_order = (self.connections,) if self.use_all_nodes else (self.preferred, self.connections)
+         self.fast_fail_subscriptions: Set["futures.Future[None]"] = set()
+@@ -155,7 +156,10 @@ class ConnectionsCache:
  
      def remove(self, connection: Connection) -> None:
          with self.lock:
@@ -580,7 +758,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
              self.preferred.pop(connection.endpoint, None)
              self.connections.pop(connection.endpoint, None)
              self.outdated.pop(connection.endpoint, None)
-@@ -179,6 +182,7 @@ class Discovery(threading.Thread):
+@@ -179,6 +183,7 @@ class Discovery(threading.Thread):
          self._cache = store
          self._driver_config = driver_config
          self._resolver = resolver.DiscoveryEndpointsResolver(self._driver_config)
@@ -588,7 +766,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
          self._base_discovery_interval = 60
          self._ready_timeout = 4
          self._discovery_request_timeout = 2
-@@ -199,6 +203,8 @@ class Discovery(threading.Thread):
+@@ -199,6 +204,8 @@ class Discovery(threading.Thread):
          return (1 + random.random()) * self._base_discovery_interval
  
      def notify_disconnected(self) -> None:
@@ -597,7 +775,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
          self._send_wake_up()
  
      def _send_wake_up(self) -> None:
-@@ -228,79 +234,82 @@ class Discovery(threading.Thread):
+@@ -228,79 +235,82 @@ class Discovery(threading.Thread):
              if resolve_details is None:
                  return False
  
@@ -740,7 +918,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
  
          self._cache.cleanup_outdated()
  
-@@ -308,9 +317,40 @@ class Discovery(threading.Thread):
+@@ -308,9 +318,42 @@ class Discovery(threading.Thread):
  
      def stop(self) -> None:
          self._should_stop.set()
@@ -756,18 +934,20 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
 +            except Exception as error:
 +                self._resolver._add_debug_details("EDS subscription failed: %s", error)
 +                legacy_ready = False
++            if self._watch.received:
++                failures = 0
 +            if legacy_ready:
 +                failures = 0
 +                delay = self._discovery_interval()
 +            else:
 +                # First remove every affinity, then cancel data and Topic streams.
 +                with self._cache.lock:
++                    self._cache.eds_epoch += 1
 +                    retired = self._cache.values()
 +                    for conn in retired:
 +                        self._cache.remove(conn)
 +                for conn in retired:
-+                    conn.close()
-+                    conn.destroy()
++                    conn.retire_eds()
 +                self._cache.complete_discovery(issues.ConnectionFailure(self.discovery_debug_details()))
 +                delay = 0 if failures == 0 else min(20, 2 ** min(failures - 1, 4)) * self._emergency_retry_interval()
 +                failures += 1
@@ -781,7 +961,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
          with self.condition:
              while True:
                  if self._should_stop.is_set():
-@@ -425,6 +465,10 @@ class ConnectionPool(IConnectionPool):
+@@ -425,6 +468,10 @@ class ConnectionPool(IConnectionPool):
          else:
              # Start discovery thread as usual
              self._discovery_thread = Discovery(self._store, self._driver_config)
@@ -792,7 +972,7 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
              self._discovery_thread.start()
  
      def _init_connection(self) -> None:
-@@ -494,6 +538,8 @@ class ConnectionPool(IConnectionPool):
+@@ -494,6 +541,8 @@ class ConnectionPool(IConnectionPool):
          :param connection: A disconnected connection
          :return: None
          """
@@ -801,6 +981,24 @@ index 2ba1c33abb2756bb8ee2c71c9d1e1014cde617b4..affdce972baa32aff22d0db5aa67058e
          connection.close()
          if self._discovery_thread:
              self._discovery_thread.notify_disconnected()
+@@ -547,7 +596,7 @@ class ConnectionPool(IConnectionPool):
+         try:
+             connection = self._store.get(preferred_endpoint)
+         except Exception:
+-            if self._discovery_thread:
++            if self._discovery_thread and not self._driver_config.use_eds:
+                 self._discovery_thread.notify_disconnected()
+             raise
+ 
+@@ -592,7 +641,7 @@ class ConnectionPool(IConnectionPool):
+         try:
+             connection = self._store.get(preferred_endpoint)
+         except Exception:
+-            if self._discovery_thread:
++            if self._discovery_thread and not self._driver_config.use_eds:
+                 self._discovery_thread.notify_disconnected()
+             raise
+ 
 diff --git a/ydb/resolver.py b/ydb/resolver.py
 index 40a04980748334a180e11514bfdbd0e07c0edee6..4354cd5d6b678bc3da7a1604333793a2b8a1b27b 100644
 --- a/ydb/resolver.py

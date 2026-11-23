@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TestScriptStats) {
         UNIT_ASSERT_VALUES_EQUAL(fetchedColumns[1].Id, 2);
 
         const auto& assembledColumns = std::get<NKikimr::NColumnShard::TAssembleStepDetails>(stats[2].Details).Columns;
-        const std::vector<NKikimr::NColumnShard::TStepColumn> expectedColumns = { { 1, "c1" }, { 2, "c2" } };
+        const std::vector<NKikimr::NColumnShard::TStepColumn> expectedColumns = { { 1, {} }, { 2, {} } };
         UNIT_ASSERT(assembledColumns == expectedColumns);
 
         const auto handle = script->GetStep(4)->GetStepStatsHandle();

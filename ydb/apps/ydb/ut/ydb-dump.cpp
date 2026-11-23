@@ -105,12 +105,12 @@ Y_UNIT_TEST(NotNullTypeDump) {
         UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
         auto schemaResult = client.Restore(tableDumpPath.GetPath(), destination, NYdb::NDump::TRestoreSettings().DryRun(true));
         UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
-        auto replaceResult = client.Restore(tableDumpPath.GetPath(), destination + "/" + name + (absolute ? "/." : "/"),
+        auto replaceResult = client.Restore(tableDumpPath.GetPath(), destination,
             NYdb::NDump::TRestoreSettings().Replace(true).VerifyExistence(true));
         UNIT_ASSERT_C(replaceResult.IsSuccess(), replaceResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(
-            RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM \\`%s/%s/%s\\`;",
-                GetYdbDatabase().c_str(), destination.c_str(), name.c_str())}, {}),
+            RunYdb({"yql", "-s", Sprintf("SELECT k, v, ov FROM \\`%s/%sRestored/%s\\`;",
+                GetYdbDatabase().c_str(), name.c_str(), tableName)}, {}),
             expected);
     }
     for (const TString destination : {"", "/"}) {

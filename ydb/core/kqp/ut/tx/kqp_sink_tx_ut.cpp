@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -1155,6 +1156,31 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             runtime.DispatchEvents(opts, TDuration::MilliSeconds(50));
         }
         ythrow yexception() << "merge was not accepted within the retry budget";
+    }
+
+    static void CompactMergeSources(Tests::TServer& server, TActorId sender, const TString& path,
+            const TVector<ui64>& shards) {
+        auto& runtime = *server.GetRuntime();
+        const auto table = Navigate(runtime, sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto pathId = table->ResultSet.at(0).TableId.PathId;
+        // The preceding split loaned parts to the children. Wait for their
+        // borrowed compaction before proposing another merge.
+        for (ui64 shard : shards) {
+            runtime.SendToPipe(shard, sender, new TEvDataShard::TEvCompactBorrowed(pathId),
+                0, GetPipeConfigWithRetries());
+            runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactBorrowedResult>(sender);
+        }
+    }
+
+    static void LoseLockOnShard(TTestActorRuntime& runtime, TActorId sender, ui64 shard, ui64 lockId, ui32 lockNodeId) {
+        auto* tablet = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+        UNIT_ASSERT(tablet);
+        UNIT_ASSERT(tablet->SysLocksTable().GetRawLock(lockId));
+        runtime.SendToPipe(shard, sender, new NLongTxService::TEvLongTxService::TEvLockStatus(
+            lockId, lockNodeId, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE));
+        // An empty copy has no open user transaction even before it is removed.
+        runtime.WaitFor("lock removed on the source shard", [&] { return !tablet->SysLocksTable().GetRawLock(lockId); },
+            TDuration::Seconds(30));
     }
 
     // Common setup for the uncommitted-write (WriteSeqNum) split/merge tests: enable
@@ -2324,7 +2350,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-    template<bool LoseEmptyCopy>
+    template<bool LoseEmptyCopy, bool MergeBeforeCommit = false>
     class TQuietSplitWithEmptyLockCopy : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -2353,6 +2379,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             ui32 lockNodeId = 0;
             THashSet<ui64> affectedShards;
             THashMap<ui64, size_t> prepareCounts;
+            THashSet<ui64> ancestorCommitTargets;
             auto savedObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvPipeCache::EvForward) {
                     const auto* forward = ev->Get<TEvPipeCache::TEvForward>();
@@ -2365,6 +2392,17 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                         if (record.GetLockTxId()) {
                             lockId = record.GetLockTxId();
                             lockNodeId = record.GetLockNodeId();
+                        }
+                        if (record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
+                            UNIT_ASSERT_VALUES_EQUAL(record.OperationsSize(), 0);
+                            for (const auto& lock : record.GetLocks().GetLocks()) {
+                                if (lock.GetDataShard() == before[0] && lock.GetCreatedOn() == before[0]) {
+                                    ancestorCommitTargets.insert(forward->TabletId);
+                                }
+                            }
+                            if (record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+                                return TTestActorRuntime::EEventAction::PROCESS;
+                            }
                         }
                     }
                     if (forward->Ev && forward->Ev->Type() == TEvTxProxy::TEvProposeTransaction::EventType) {
@@ -2391,29 +2429,38 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             SetSplitMergePartCountLimit(&runtime, -1);
             const auto split = AsyncSplitTable(Kikimr->GetTestServer(), edge, "/Root/QuietEmptyCopy", before[0], 100u);
             WaitTxNotification(Kikimr->GetTestServer(), edge, split);
-            const auto after = GetTableShards(&Kikimr->GetTestServer(), edge, "/Root/QuietEmptyCopy");
+            auto after = GetTableShards(&Kikimr->GetTestServer(), edge, "/Root/QuietEmptyCopy");
             UNIT_ASSERT_VALUES_EQUAL(after.size(), 2);
             if constexpr (LoseEmptyCopy) {
                 // Only the empty copy is lost. The data-bearing neighbor still
                 // has a valid ancestor and must not hide the missing obligation.
-                runtime.SendToPipe(after[1], edge, new NLongTxService::TEvLongTxService::TEvLockStatus(
-                    lockId, lockNodeId, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE));
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                LoseLockOnShard(runtime, edge, after[1], lockId, lockNodeId);
+            }
+            if constexpr (MergeBeforeCommit) {
+                auto& server = Kikimr->GetTestServer();
+                CompactMergeSources(server, edge, "/Root/QuietEmptyCopy", after);
+                WaitTxNotification(server, edge, AsyncMergeTable(server, edge, "/Root/QuietEmptyCopy", after));
+                after = GetTableShards(&server, edge, "/Root/QuietEmptyCopy");
+                UNIT_ASSERT_VALUES_EQUAL(after.size(), 1);
             }
             auto commit = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
             UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), LoseEmptyCopy ? EStatus::ABORTED : EStatus::SUCCESS,
                 commit.GetIssues().ToString());
-            const auto prepares = wire.PrepareAncestorsSnapshot();
-            for (const ui64 shard : after) {
-                UNIT_ASSERT(prepares.contains(shard));
-                UNIT_ASSERT(prepares.at(shard).contains(before[0]));
-                if constexpr (!LoseEmptyCopy) {
-                    UNIT_ASSERT_VALUES_EQUAL(prepareCounts.at(shard), 1);
-                    UNIT_ASSERT(affectedShards.contains(shard));
+            if constexpr (MergeBeforeCommit) {
+                UNIT_ASSERT(ancestorCommitTargets.contains(after.front()));
+            } else {
+                const auto prepares = wire.PrepareAncestorsSnapshot();
+                for (const ui64 shard : after) {
+                    UNIT_ASSERT(prepares.contains(shard));
+                    UNIT_ASSERT(prepares.at(shard).contains(before[0]));
+                    if constexpr (!LoseEmptyCopy) {
+                        UNIT_ASSERT_VALUES_EQUAL(prepareCounts.at(shard), 1);
+                        UNIT_ASSERT(affectedShards.contains(shard));
+                    }
                 }
             }
-            // All data was acknowledged before the split. Both destinations
-            // must be reached through the lock-only prepare path, without writes.
+            // All data was acknowledged before resharding. The final shards
+            // receive a lock-only commit or prepare without replaying the writes.
             UNIT_ASSERT_VALUES_EQUAL(wire.NewShardSends.load(), 0);
 
             // A failed prepare on the empty shard must also keep the neighbor's
@@ -2433,6 +2480,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
+    }
+
+    Y_UNIT_TEST(QuietMergeAbortsAfterLosingEmptyLockCopy) {
+        TQuietSplitWithEmptyLockCopy<true, true> tester;
+        tester.SetUseRealThreads(false);
+        tester.Execute(/*prepareTables=*/false);
     }
 
     // A split where all of the removed shard's rows land in one of the two new shards
@@ -2636,17 +2689,29 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             TUncommittedWriteWire wire;
             wire.InitialShards = initialShards;
-            // Both writes are applied but their results are suppressed, so both batches
-            // stay pending while the merge runs. No SELECT in the query: a read would
-            // mark the locks with read tables and break the lock transfer.
-            wire.SuppressResultsFrom = {splitShard, unaffectedShard};
-            auto observer = [&wire](TAutoPtr<IEventHandle>& ev) { return wire.Observe(ev); };
-            auto saveObserver = runtime.SetObserverFunc(observer);
+            THashSet<ui64> appliedSources;
+            auto savedObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                const auto action = wire.Observe(ev);
+                if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    const auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    const auto origin = record.GetOrigin();
+                    // Keep applied batches pending across merge, but let the
+                    // writer report errors from either source immediately.
+                    if ((origin == splitShard || origin == unaffectedShard)
+                            && record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                        appliedSources.insert(origin);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                return action;
+            });
+            Y_DEFER { runtime.SetObserverFunc(savedObserver); };
 
             auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
             auto tx = Kikimr->RunCall([&] {
                 return session.BeginTransaction(TTxSettings::ReadCommittedRW()).ExtractValueSync().GetTransaction(); });
 
+            // A read would add read tables to the locks and prevent their transfer.
             auto future = Kikimr->RunInThreadPool([&] {
                 return session.ExecuteQuery(Q_(R"(
                     UPSERT INTO `/Root/SplitKVMerge` (Key, Value) VALUES
@@ -2655,14 +2720,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                         (2000000000u, "VMid"), (3000000000u, "Big");
                 )"), TTxControl::Tx(tx)).ExtractValueSync(); });
 
-            {
-                TDispatchOptions opts;
-                opts.FinalEvents.emplace_back([&](IEventHandle&) {
-                    return wire.SuppressedAckCompleted.load() >= 2;
-                });
-                runtime.DispatchEvents(opts, TDuration::Seconds(30));
-                UNIT_ASSERT_C(wire.SuppressedAckCompleted.load() >= 2, "the writes were not applied on both merged shards");
-            }
+            runtime.WaitFor("writes applied on both merge sources", [&] {
+                return appliedSources.size() == 2 || future.IsReady();
+            }, TDuration::Seconds(30));
+            UNIT_ASSERT_C(!future.IsReady(), "Write finished before merge: " << future.GetValue().GetStatus()
+                << ". " << future.GetValue().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(appliedSources.size(), 2);
 
             // Disable the readiness gate that would otherwise reject a merge of a
             // freshly created table whose shards have not reported stats yet.
@@ -2723,8 +2786,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
-            runtime.SetObserverFunc(saveObserver);
-
             {
                 const auto prepareAncestors = wire.PrepareAncestorsSnapshot();
                 UNIT_ASSERT_C(prepareAncestors.contains(mergedShard),
@@ -2750,11 +2811,441 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST(UncommittedWriteSeqNumMergeReroutesBothShards) {
-        return; // TODO
         TUncommittedWriteSeqNumMergeReroutesBothShards tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
-        tester.Execute();
+        tester.Execute(/*prepareTables=*/false);
+    }
+
+    enum class EMergeAfterSplit { RetryFirstWrite, RetryTail, LoseIndependentCopy, QuietMerge };
+
+    template<EMergeAfterSplit Scenario>
+    class TMergeAfterPartialWrite : public TTableDataModificationTester {
+        static constexpr bool FirstWrite = Scenario == EMergeAfterSplit::RetryFirstWrite
+            || Scenario == EMergeAfterSplit::LoseIndependentCopy;
+        static constexpr bool LoseIndependentCopy = Scenario == EMergeAfterSplit::LoseIndependentCopy;
+        static constexpr bool QuietMerge = Scenario == EMergeAfterSplit::QuietMerge;
+        static constexpr bool HasPendingRetry = !LoseIndependentCopy && !QuietMerge;
+
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            SetupUncommittedWriteSeqNum(settings);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardInMemoryStateMigration(false);
+        }
+
+        void DoExecute() override {
+            const TString path = "/Root/MergeBranches";
+            auto& server = Kikimr->GetTestServer();
+            auto& runtime = *server.GetRuntime();
+            const auto edge = runtime.AllocateEdgeActor();
+            auto client = Kikimr->GetQueryClient();
+            auto create = Kikimr->RunCall([&] {
+                return client.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/MergeBranches` (
+                        Key Uint32 NOT NULL, Value Int64 NOT NULL, PRIMARY KEY (Key)
+                    ) WITH (AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                        AUTO_PARTITIONING_BY_LOAD = DISABLED);
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+            const auto initial = GetTableShards(&server, edge, path);
+            UNIT_ASSERT_VALUES_EQUAL(initial.size(), 1);
+            const ui64 source = initial.front();
+            const ui64 tailWsn = FirstWrite ? 1 : 2;
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::ReadCommittedRW()).ExtractValueSync().GetTransaction();
+            });
+            if constexpr (!FirstWrite) {
+                auto seed = Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/MergeBranches` (Key, Value) VALUES (1u, 10l), (101u, 20l);
+                    )"), TTxControl::Tx(tx)).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(seed.GetStatus(), EStatus::SUCCESS, seed.GetIssues().ToString());
+            }
+
+            ui64 left = 0;
+            ui64 right = 0;
+            ui64 merged = 0;
+            ui64 lockId = 0;
+            ui32 lockNodeId = 0;
+            std::unique_ptr<IEventHandle> heldOriginal;
+            std::unique_ptr<IEventHandle> heldLeft;
+            bool dropMergedAck = Scenario == EMergeAfterSplit::RetryFirstWrite;
+            THashSet<ui64> applied;
+            THashMap<ui64, THashMap<ui64, ui64>> echoedLocks;
+            THashMap<ui64, THashMap<ui64, ui64>> commitLocks;
+            TUncommittedWriteWire wire;
+            wire.InitialShards.insert(source);
+            auto savedObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                const auto observed = wire.Observe(ev);
+                if (ev->GetTypeRewrite() == TEvPipeCache::EvForward) {
+                    auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+                    if (forward->Ev && forward->Ev->Type() == NEvents::TDataEvents::TEvWrite::EventType) {
+                        auto& record = static_cast<NEvents::TDataEvents::TEvWrite&>(*forward->Ev).Record;
+                        const ui64 dest = forward->TabletId;
+                        if (record.OperationsSize() && record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+                            lockId = record.GetLockTxId();
+                            lockNodeId = record.GetLockNodeId();
+                            // Delivery to a retired shard must reach the pipe cache, which
+                            // wakes the writer even if it had no prior subscription.
+                            if (dest == source && !right) {
+                                if (!heldOriginal) {
+                                    heldOriginal.reset(ev.Release());
+                                }
+                                return TTestActorRuntime::EEventAction::DROP;
+                            }
+                            if (HasPendingRetry && dest == left && !merged) {
+                                if (!heldLeft) {
+                                    heldLeft.reset(ev.Release());
+                                }
+                                return TTestActorRuntime::EEventAction::DROP;
+                            }
+                            // An increment makes duplicate application visible in the row.
+                            for (auto& op : *record.MutableOperations()) {
+                                UNIT_ASSERT_VALUES_EQUAL(op.GetType(), NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT);
+                                op.SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT);
+                            }
+                        }
+                        if (record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
+                            for (const auto& lock : record.GetLocks().GetLocks()) {
+                                if (lock.GetDataShard() == source) {
+                                    UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), 1);
+                                    commitLocks[dest][lock.GetCreatedOn()] = lock.GetWriteSeqNums(0).GetWriteSeqNum();
+                                }
+                            }
+                        }
+                    }
+                } else if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    const auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED && record.TxLocksSize()) {
+                        applied.insert(record.GetOrigin());
+                        if (HasPendingRetry && record.GetOrigin() == right) {
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        if (dropMergedAck && record.GetOrigin() != source
+                                && record.GetOrigin() != left && record.GetOrigin() != right) {
+                            dropMergedAck = false;
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        // Only replies delivered to the writer can establish its commit expectations.
+                        for (const auto& lock : record.GetTxLocks()) {
+                            if (lock.GetDataShard() == source) {
+                                UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), 1);
+                                echoedLocks[record.GetOrigin()][lock.GetCreatedOn()] = lock.GetWriteSeqNums(0).GetWriteSeqNum();
+                            }
+                        }
+                    }
+                }
+                return observed;
+            });
+            Y_DEFER { runtime.SetObserverFunc(savedObserver); };
+
+            // These first-write cases need a source with no lock. LockRows would
+            // leave an abort decision in the snapshot when the source has no WSN.
+            const TString pragma = FirstWrite ? "PRAGMA kikimr.KqpDisablePessimisticLocks=\"true\";\n" : "";
+            // The left fragment still creates a WSN lock. With no rows there,
+            // removing that lock cannot pass a RemoveTx decision to the merged shard.
+            const TString rows = LoseIndependentCopy ? "(101u, 7l)" : "(1u, 3l), (101u, 7l)";
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(Q_(pragma + "UPSERT INTO `/Root/MergeBranches` (Key, Value) VALUES " + rows + ";"),
+                    TTxControl::Tx(tx)).ExtractValueSync();
+            });
+            const auto checkWriteResultIfReady = [&] {
+                if (future.IsReady()) {
+                    const auto& result = future.GetValue();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                }
+            };
+            runtime.WaitFor("write blocked on original shard", [&] { return heldOriginal || future.IsReady(); }, TDuration::Seconds(30));
+            checkWriteResultIfReady();
+            UNIT_ASSERT(heldOriginal);
+            SetSplitMergePartCountLimit(&runtime, -1);
+            WaitTxNotification(server, edge, AsyncSplitTable(server, edge, path, source, 100u));
+            const auto children = GetTableShards(&server, edge, path);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+            left = children[0];
+            right = children[1];
+            runtime.Send(heldOriginal.release());
+            runtime.WaitFor("right child applied its fragment and left child was reached", [&] {
+                return (applied.contains(right) && (!HasPendingRetry || heldLeft)) || future.IsReady();
+            }, TDuration::Seconds(30));
+            checkWriteResultIfReady();
+            UNIT_ASSERT(applied.contains(right) && (!HasPendingRetry || heldLeft));
+
+            if constexpr (!HasPendingRetry) {
+                auto written = runtime.WaitFuture(future, TDuration::Seconds(60));
+                UNIT_ASSERT_VALUES_EQUAL_C(written.GetStatus(), EStatus::SUCCESS, written.GetIssues().ToString());
+                UNIT_ASSERT(applied.contains(left));
+                // Both children acknowledged before the writer can observe the merge.
+                UNIT_ASSERT_VALUES_EQUAL(echoedLocks.at(left).at(FirstWrite ? left : source), tailWsn);
+                UNIT_ASSERT_VALUES_EQUAL(echoedLocks.at(right).at(FirstWrite ? right : source), tailWsn);
+            } else {
+                UNIT_ASSERT(!applied.contains(left));
+                // A cold reboot must preserve the WSN of the branch whose reply was lost.
+                RebootTablet(runtime, right, edge);
+            }
+
+            if constexpr (LoseIndependentCopy) {
+                const auto table = Navigate(runtime, edge, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+                runtime.SendToPipe(left, edge, new TEvDataShard::TEvGetOpenTxs(table->ResultSet.at(0).TableId.PathId));
+                const auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(edge);
+                UNIT_ASSERT(!open->Get()->OpenTxs.contains(lockId));
+                LoseLockOnShard(runtime, edge, left, lockId, lockNodeId);
+            }
+
+            CompactMergeSources(server, edge, path, children);
+            WaitTxNotification(server, edge, AsyncMergeTable(server, edge, path, children));
+            const auto mergedShards = GetTableShards(&server, edge, path);
+            UNIT_ASSERT_VALUES_EQUAL(mergedShards.size(), 1);
+            merged = mergedShards.front();
+
+            if constexpr (LoseIndependentCopy) {
+                // The commit must fail on the missing left key even though the
+                // merged shard preserved the right key under the same LockTxId.
+                auto* tablet = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, merged)));
+                UNIT_ASSERT(tablet);
+                // Snapshot acknowledgement can precede the final lock checks.
+                runtime.WaitFor("merged shard is ready", [&] { return tablet->GetState() == NDataShard::TShardState::Ready; },
+                    TDuration::Seconds(30));
+                const auto lock = tablet->SysLocksTable().GetRawLock(lockId);
+                UNIT_ASSERT(lock && !lock->IsBroken() && !lock->IsTrackingOnly());
+                UNIT_ASSERT(!lock->FindAncestorLock({source, left}));
+                const auto* surviving = lock->FindAncestorLock({source, right});
+                UNIT_ASSERT(surviving && !NDataShard::TSysLocks::TLock::IsError(surviving->Counter));
+                UNIT_ASSERT_VALUES_EQUAL(surviving->WriteSeqNumStates.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(surviving->WriteSeqNumStates.begin()->second.WriteSeqNum, tailWsn);
+            }
+
+            if constexpr (HasPendingRetry) {
+                runtime.Send(heldLeft.release());
+                if constexpr (FirstWrite) {
+                    runtime.WaitFor("reply lost after applying the merged retry", [&] {
+                        return !dropMergedAck || future.IsReady();
+                    }, TDuration::Seconds(30));
+                    checkWriteResultIfReady();
+                    UNIT_ASSERT(!dropMergedAck);
+                    // Force another delivery to D with both logical locks already persisted.
+                    RebootTablet(runtime, merged, edge);
+                }
+                auto written = runtime.WaitFuture(future, TDuration::Seconds(60));
+                UNIT_ASSERT_VALUES_EQUAL_C(written.GetStatus(), EStatus::SUCCESS, written.GetIssues().ToString());
+                THashMap<ui64, size_t> retriedChildren;
+                for (const auto& [dest, wsn, owner, rows, ancestors] : wire.WriteOpsSnapshot()) {
+                    if (dest == merged) {
+                        UNIT_ASSERT_VALUES_EQUAL(owner, source);
+                        UNIT_ASSERT_VALUES_EQUAL(wsn, tailWsn);
+                        UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+                        UNIT_ASSERT_VALUES_EQUAL(ancestors.size(), 2);
+                        ++retriedChildren[ancestors.back()];
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(retriedChildren.size(), 2);
+                UNIT_ASSERT(retriedChildren.contains(left) && retriedChildren.contains(right));
+                const auto& mergedCreationShards = echoedLocks.at(merged);
+                if constexpr (FirstWrite) {
+                    UNIT_ASSERT_GE(retriedChildren.at(left), 2);
+                    UNIT_ASSERT_GE(retriedChildren.at(right), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(mergedCreationShards.size(), 2);
+                    UNIT_ASSERT(mergedCreationShards.contains(right) && mergedCreationShards.contains(merged));
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(mergedCreationShards.size(), 1);
+                    UNIT_ASSERT(mergedCreationShards.contains(source));
+                }
+            }
+
+            if constexpr (Scenario == EMergeAfterSplit::RetryFirstWrite || QuietMerge) {
+                // Split the merged range with all writes acknowledged. The writer
+                // must include the empty right shard in commit. In the quiet case
+                // its last known participants are the two original split children.
+                WaitTxNotification(server, edge, AsyncSplitTable(server, edge, path, merged, 150u));
+            }
+
+            const auto final = GetTableShards(&server, edge, path);
+            auto commit = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), LoseIndependentCopy ? EStatus::ABORTED : EStatus::SUCCESS,
+                commit.GetIssues().ToString());
+            if constexpr (LoseIndependentCopy) {
+                UNIT_ASSERT_C(HasIssue(commit.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), commit.GetIssues().ToString());
+                const auto& expected = commitLocks.at(merged);
+                UNIT_ASSERT_VALUES_EQUAL(expected.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(left), tailWsn);
+                UNIT_ASSERT_VALUES_EQUAL(expected.at(right), tailWsn);
+            } else if constexpr (FirstWrite || QuietMerge) {
+                UNIT_ASSERT_VALUES_EQUAL(final.size(), 2);
+                for (ui64 shard : final) {
+                    const auto& expected = commitLocks.at(shard);
+                    UNIT_ASSERT_VALUES_EQUAL(expected.at(FirstWrite ? merged : source), tailWsn);
+                    if constexpr (FirstWrite) {
+                        // Both creation ranges cross the last split boundary.
+                        UNIT_ASSERT_VALUES_EQUAL(expected.at(right), tailWsn);
+                    }
+                }
+            }
+            auto read = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    SELECT Key, Value FROM `/Root/MergeBranches` ORDER BY Key;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(read.GetStatus(), EStatus::SUCCESS, read.GetIssues().ToString());
+            CompareYson(LoseIndependentCopy ? "[]" : FirstWrite ? "[[1u;3];[101u;7]]" : "[[1u;13];[101u;27]]",
+                FormatResultSetYson(read.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(MergeRetriesPartialSplitWrite, FirstWrite) {
+        TMergeAfterPartialWrite<FirstWrite ? EMergeAfterSplit::RetryFirstWrite : EMergeAfterSplit::RetryTail> tester;
+        tester.SetUseRealThreads(false);
+        tester.Execute(/*prepareTables=*/false);
+    }
+
+    Y_UNIT_TEST(MergeAbortsAfterLosingIndependentAncestorLock) {
+        TMergeAfterPartialWrite<EMergeAfterSplit::LoseIndependentCopy> tester;
+        tester.SetUseRealThreads(false);
+        tester.Execute(/*prepareTables=*/false);
+    }
+
+    Y_UNIT_TEST(QuietMergeAndSplitKeepBothExpectedCopies) {
+        TMergeAfterPartialWrite<EMergeAfterSplit::QuietMerge> tester;
+        tester.SetUseRealThreads(false);
+        tester.Execute(/*prepareTables=*/false);
+    }
+
+    template<bool Lost>
+    class TMergeCreatesWideAncestorLock : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            SetupUncommittedWriteSeqNum(settings);
+        }
+
+        void DoExecute() override {
+            const TString path = "/Root/MergeWideLock";
+            auto& server = Kikimr->GetTestServer();
+            auto& runtime = *server.GetRuntime();
+            const auto edge = runtime.AllocateEdgeActor();
+            auto client = Kikimr->GetQueryClient();
+            auto create = Kikimr->RunCall([&] {
+                return client.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/MergeWideLock` (
+                        Key Uint32 NOT NULL, Value String NOT NULL, PRIMARY KEY (Key)
+                    ) WITH (AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1, UNIFORM_PARTITIONS = 2);
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+            const auto sources = GetTableShards(&server, edge, path);
+            UNIT_ASSERT_VALUES_EQUAL(sources.size(), 2);
+            const ui64 owner = sources[0];
+            ui64 createdOn = 0;
+            ui64 lockId = 0;
+            ui32 lockNodeId = 0;
+            std::unique_ptr<IEventHandle> held;
+            TVector<ui64> firstRetryWsns;
+            THashMap<ui64, ui64> prepareWsns;
+            THashSet<ui64> affectedShards;
+            auto savedObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvPipeCache::EvForward) {
+                    auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+                    if (forward->Ev && forward->Ev->Type() == NEvents::TDataEvents::TEvWrite::EventType) {
+                        const auto& record = static_cast<const NEvents::TDataEvents::TEvWrite&>(*forward->Ev).Record;
+                        if (forward->TabletId == owner && !createdOn && record.OperationsSize()) {
+                            if (!held) {
+                                lockId = record.GetLockTxId();
+                                lockNodeId = record.GetLockNodeId();
+                                held.reset(ev.Release());
+                            }
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        if (forward->TabletId == createdOn && record.OperationsSize() && firstRetryWsns.empty()) {
+                            for (const auto& op : record.GetOperations()) {
+                                UNIT_ASSERT_VALUES_EQUAL(op.AncestorsSize(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(op.GetAncestors(0), owner);
+                                firstRetryWsns.push_back(op.GetWriteSeqNum().GetWriteSeqNum());
+                            }
+                        }
+                        if (record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
+                            UNIT_ASSERT_VALUES_EQUAL(record.OperationsSize(), 0);
+                            for (const auto& lock : record.GetLocks().GetLocks()) {
+                                if (lock.GetDataShard() == owner && lock.GetCreatedOn() == createdOn) {
+                                    UNIT_ASSERT_VALUES_EQUAL(lock.WriteSeqNumsSize(), 1);
+                                    prepareWsns[forward->TabletId] = lock.GetWriteSeqNums(0).GetWriteSeqNum();
+                                }
+                            }
+                        }
+                    } else if (forward->Ev && forward->Ev->Type() == TEvTxProxy::TEvProposeTransaction::EventType) {
+                        const auto& tx = static_cast<const TEvTxProxy::TEvProposeTransaction&>(*forward->Ev).Record.GetTransaction();
+                        for (const auto& affected : tx.GetAffectedSet()) {
+                            affectedShards.insert(affected.GetTabletId());
+                        }
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            Y_DEFER { runtime.SetObserverFunc(savedObserver); };
+
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::ReadCommittedRW()).ExtractValueSync().GetTransaction();
+            });
+            // Each value exceeds half the row-batch limit. They get separate WSNs
+            // while the writer can still send both batches in a single request.
+            auto params = TParamsBuilder().AddParam("$value").String(TString(5 * 1024 * 1024, 'x')).Build().Build();
+            // No lock may exist on the source before the merge. The retry must
+            // create (Owner, CreatedOn) on a tablet with a wider key range.
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    DECLARE $value AS String;
+                    UPSERT INTO `/Root/MergeWideLock` (Key, Value) VALUES (1u, $value), (2u, $value);
+                )"), TTxControl::Tx(tx), std::move(params)).ExtractValueSync();
+            });
+            runtime.WaitFor("first request held before merge", [&] { return held || future.IsReady(); }, TDuration::Seconds(30));
+            if (future.IsReady()) {
+                const auto& result = future.GetValue();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(held);
+            SetSplitMergePartCountLimit(&runtime, -1);
+            WaitTxNotification(server, edge, AsyncMergeTable(server, edge, path, sources));
+            const auto merged = GetTableShards(&server, edge, path);
+            UNIT_ASSERT_VALUES_EQUAL(merged.size(), 1);
+            createdOn = merged.front();
+            runtime.Send(held.release());
+            auto written = runtime.WaitFuture(future, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(written.GetStatus(), EStatus::SUCCESS, written.GetIssues().ToString());
+            UNIT_ASSERT(firstRetryWsns == TVector<ui64>({1, 2}));
+
+            // The right destination intersects the creation range on D but
+            // lies outside the original A range and has no rows of this write.
+            WaitTxNotification(server, edge, AsyncSplitTable(server, edge, path, createdOn, 3000000000u));
+            const auto final = GetTableShards(&server, edge, path);
+            UNIT_ASSERT_VALUES_EQUAL(final.size(), 2);
+            if constexpr (Lost) {
+                LoseLockOnShard(runtime, edge, final[1], lockId, lockNodeId);
+            }
+            auto commit = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), Lost ? EStatus::ABORTED : EStatus::SUCCESS, commit.GetIssues().ToString());
+            for (ui64 shard : final) {
+                UNIT_ASSERT_VALUES_EQUAL(prepareWsns.at(shard), 2);
+                if constexpr (!Lost) {
+                    UNIT_ASSERT(affectedShards.contains(shard));
+                }
+            }
+            auto read = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    SELECT Key, CAST(LENGTH(Value) AS Uint64) FROM `/Root/MergeWideLock` ORDER BY Key;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(read.GetStatus(), EStatus::SUCCESS, read.GetIssues().ToString());
+            CompareYson(Lost ? "[]" : "[[1u;5242880u];[2u;5242880u]]", FormatResultSetYson(read.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(MergeTransfersCompleteTailToWideAncestorLock, Lost) {
+        TMergeCreatesWideAncestorLock<Lost> tester;
+        tester.SetUseRealThreads(false);
+        tester.Execute(/*prepareTables=*/false);
     }
 
     // A split whose boundary leaves one covering target with no re-routed rows and no

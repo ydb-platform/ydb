@@ -1916,45 +1916,20 @@ public:
                 if (AttachWriteSeqNum) {
                     // The inconsistent-tx TxManager is collect-only: nothing to transfer.
                     // The removed shards' partitioning metadata must be registered from
-                    // the pre-update partitioning before the covering computation: a
+                    // the pre-update partitioning before updating commit participants: a
                     // shard whose first batches were flushed by OnPartitioningChanged
                     // above has no TxManager metadata yet (its shard update is only
                     // consumed by the UpdateShards pass below, which runs against the
                     // new partitioning). Removed shards are always a part of the
                     // pre-update partitioning.
-                    THashMap<ui64, ui32> sourcesPerTarget;
                     for (const ui64 shardId : deletedShards) {
                         TxManager->AddShard(shardId, IsOlap, TablePath, TableId.PathId,
                             NKqp::MakeShardMeta(TableId.PathId, oldPartitioning, shardId, KeyColumnTypes.size()));
-                        // A single source cannot introduce a merge-order conflict.
-                        if (deletedShards.size() > 1) {
-                            const auto& meta = TxManager->GetShardMeta(shardId);
-                            YDB_LOG_ENSURE(meta.IsKnown() && !meta.Borders.From.empty());
-                            const auto targets = Partitioning->GetIntersectionWithRange(KeyColumnTypes, meta.Borders);
-                            YDB_LOG_ENSURE(!targets.empty());
-                            for (const auto& target : targets) {
-                                ++sourcesPerTarget[target.ShardId];
-                            }
-                        }
-                    }
-                    for (const auto& [target, sources] : sourcesPerTarget) {
-                        if (sources > 1) {
-                            YDB_LOG_ERROR("Shard merge detected while re-routing consistent tx writes.",
-                                {"logPrefix", this->LogPrefix},
-                                {"targetShardId", target},
-                                {"mergedShards", sources},
-                                {"tablePath", TablePath});
-                            RuntimeError(
-                                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                                TStringBuilder()
-                                    << "Shards of table `" << TablePath
-                                    << "` were merged to shard " << target
-                                    << " during the transaction; cannot preserve the write order.");
-                            return false;
-                        }
                     }
                 }
+                // On merge the controller keeps each source's FIFO. For WSN writes,
+                // it sends the source tablet in Ancestors so the destination can
+                // deduplicate its retry without skipping another source's writes.
                 ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
                 UpdateShards();
             }

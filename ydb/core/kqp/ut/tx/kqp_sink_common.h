@@ -23,7 +23,7 @@ protected:
     virtual void Setup(TKikimrSettings&) {}
     virtual void DoExecute() = 0;
 public:
-    void Execute() {
+    void Execute(bool prepareTables = true) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(UseRealThreads);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
@@ -36,18 +36,19 @@ public:
         Kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*Kikimr).Initialize();
 
-        auto client = Kikimr->GetQueryClient();
-
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
 
-        if (UseRealThreads) {
-            PrepareTables(client);
-        } else {
-            Kikimr->RunCall([&]{
+        if (prepareTables) {
+            auto client = Kikimr->GetQueryClient();
+            if (UseRealThreads) {
                 PrepareTables(client);
-            });
+            } else {
+                Kikimr->RunCall([&] {
+                    PrepareTables(client);
+                });
+            }
         }
 
         DoExecute();

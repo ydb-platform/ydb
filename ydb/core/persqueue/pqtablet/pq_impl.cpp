@@ -91,12 +91,7 @@ static bool IsDirectReadCmd(const auto& cmd) {
 
 namespace {
 
-struct TPartitionKeyRangeFilter {
-    TVector<NScheme::TTypeInfo> KeyTypes;
-    TPartitionKeyRange PartitionKeyRange;
-};
-
-TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
+TVector<NScheme::TTypeInfo> MakeTopicKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
     TVector<NScheme::TTypeInfo> keyTypes;
     keyTypes.reserve(tabletConfig.PartitionKeySchemaSize());
     for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
@@ -107,75 +102,51 @@ TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConf
     return keyTypes;
 }
 
-bool TryParseKeyBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
-    TSerializedCellVec cells;
-    if (!TSerializedCellVec::TryParse(data, cells)) {
-        return false;
-    }
-    bound = std::move(cells);
-    return true;
-}
-
-std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
+TPartitionKeyRange ParseTopicPartitionKeyRange(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
     if (!tabletConfig.PartitionKeySchemaSize()) {
-        return std::nullopt;
+        return {};
     }
-
     const auto* partition = FindIfPtr(tabletConfig.GetPartitions(), [&](const auto& p) {
         return p.GetPartitionId() == partitionId;
     });
-    if (!partition) {
-        return std::nullopt;
-    }
+    AFL_ENSURE(partition)("partition_id", partitionId);
+    return TPartitionKeyRange::Parse(partition->GetKeyRange());
+}
 
-    TPartitionKeyRange partitionKeyRange;
-    const auto& keyRange = partition->GetKeyRange();
-    if (keyRange.HasFromBound() && !TryParseKeyBound(keyRange.GetFromBound(), partitionKeyRange.FromBound)) {
-        return std::nullopt;
+void AddParentMessageGroups(TEvPQ::TMessageGroups& messageGroups, const NKikimrPQ::TPartitions& partitionsData,
+        const TPartitionGraph& graph, ui32 partitionId) {
+    if (!graph) {
+        return;
     }
-    if (keyRange.HasToBound() && !TryParseKeyBound(keyRange.GetToBound(), partitionKeyRange.ToBound)) {
-        return std::nullopt;
+    auto* node = graph.GetPartition(partitionId);
+    AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
+    for (const auto& p : partitionsData.GetPartition()) {
+        if (node->IsParent(p.GetPartitionId())) {
+            for (const auto& g : p.GetMessageGroup()) {
+                auto& group = messageGroups[g.GetId()];
+                group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+            }
+        }
     }
-
-    return TPartitionKeyRangeFilter{MakePartitionKeyTypes(tabletConfig), std::move(partitionKeyRange)};
 }
 
 } // anonymous
 
 TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
-    TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
+    const auto keyTypes = MakeTopicKeyTypes(tabletConfig);
+    const auto topicPartitionKeyRange = ParseTopicPartitionKeyRange(tabletConfig, partitionId);
 
-    const bool hasKeyRanges = AnyOf(bootstrapCfg.GetExplicitMessageGroups(), [](const auto& mg) {
-        return mg.HasKeyRange();
-    });
-    const auto keyRangeFilter = hasKeyRanges ? MakePartitionKeyRangeFilter(tabletConfig, partitionId) : std::nullopt;
-
+    TEvPQ::TMessageGroups messageGroups;
     for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
-        TPartitionKeyRange keyRange;
-        if (mg.HasKeyRange()) {
-            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
-            if (keyRangeFilter && !Intersects(keyRange, keyRangeFilter->PartitionKeyRange, keyRangeFilter->KeyTypes)) {
-                continue;
-            }
+        auto dataShardKeyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+        if (!keyTypes.empty() && !Intersects(dataShardKeyRange, topicPartitionKeyRange, keyTypes)) {
+            continue;
         }
-
-        (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
+        messageGroups[mg.GetId()] = {.SeqNo = 0, .KeyRange = std::move(dataShardKeyRange)};
     }
 
-    if (graph) {
-        auto* node = graph.GetPartition(partitionId);
-        AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
-        for (const auto& p : partitionsData.GetPartition()) {
-            if (node->IsParent(p.GetPartitionId())) {
-                for (const auto& g : p.GetMessageGroup()) {
-                    auto& group = (*explicitMessageGroups)[g.GetId()];
-                    group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
-                }
-            }
-        }
-    }
-
-    return explicitMessageGroups;
+    AddParentMessageGroups(messageGroups, partitionsData, graph, partitionId);
+    return std::make_shared<TEvPQ::TMessageGroups>(std::move(messageGroups));
 }
 
 /******************************************************* AnswerBuilderProxy *********************************************************/

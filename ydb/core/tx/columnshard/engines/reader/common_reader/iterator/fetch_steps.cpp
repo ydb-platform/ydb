@@ -1,6 +1,5 @@
 #include "fetch_steps.h"
 
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set_serialized.h>
 #include "source.h"
 
 #include <ydb/core/formats/arrow/container/container.h>

@@ -1,6 +1,6 @@
 LIBRARY()
 
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(columns_set.h)
+GENERATE_ENUM_SERIALIZATION(columns_set.h)
 
 SRCS(
     accessor_callback.cpp
@@ -15,6 +15,5 @@ PEERDIR(
     ydb/core/tx/columnshard/data_accessor
 )
 
-GENERATE_ENUM_SERIALIZATION(columns_set.h)
 
 END()

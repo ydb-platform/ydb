@@ -1,11 +1,15 @@
 #include "s3_backup_test_base.h"
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/ut_helpers/fs_mock.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/folder/tempdir.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/random/fast.h>
@@ -850,6 +854,90 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
         auto changeFeed2Describe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable/TestChangeFeed2").GetValueSync();
         UNIT_ASSERT_C(changeFeed2Describe.IsSuccess(), changeFeed2Describe.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(UniqueWithAnonymousBloom, Legacy) {
+        auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableIndexMaterialization(true);
+        flags.SetEnableExportFiltering(true);
+        flags.SetEnableEncryptedExport(true);
+        flags.SetEnableLocalIndexAsSchemeObject(false);
+
+        const auto query = [&](const TString& sql) {
+            return YdbQueryClient().ExecuteQuery(sql, NQuery::TTxControl::NoTx()).GetValueSync();
+        };
+        const auto create = query(R"(
+            CREATE TABLE `/Root/BloomSource/T` (
+                Key Uint64, Subkey Uint64, Value Utf8, PRIMARY KEY (Key, Subkey),
+                INDEX idx_bloom_1 GLOBAL UNIQUE ON (Value)
+            );
+        )");
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto bloom = query(R"(
+            ALTER TABLE `/Root/BloomSource/T`
+                ADD INDEX first_key LOCAL USING bloom_filter ON (Key) WITH (false_positive_probability=0.05),
+                ADD INDEX full_key LOCAL USING bloom_filter ON (Key, Subkey);
+        )");
+        UNIT_ASSERT_C(bloom.IsSuccess(), bloom.GetIssues().ToString());
+        const auto insert = query("INSERT INTO `/Root/BloomSource/T` (Key, Subkey, Value) VALUES (1, 1, 'customer');");
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+
+        auto exportSettings = MakeExportSettings("/Root/BloomSource", "BloomBackup");
+        exportSettings.IncludeIndexData(true);
+        if (!Legacy) {
+            exportSettings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        }
+        WaitOpSuccess(YdbExportClient().ExportToS3(exportSettings).GetValueSync());
+        if (Legacy) {
+            // Old DataShards wrote the same two aliases to scheme.pb without recording their origin.
+            auto& data = S3Mock().GetData();
+            const TString path = "/test_bucket/BloomBackup/T/metadata.json";
+            NJson::TJsonValue metadata;
+            UNIT_ASSERT(NJson::ReadJsonTree(data.at(path), &metadata));
+            UNIT_ASSERT_VALUES_EQUAL(metadata["anonymous_bloom_prefixes"].GetArraySafe().size(), 2);
+            metadata.EraseValue("anonymous_bloom_prefixes");
+            data[path] = NJson::WriteJson(metadata, false);
+            data[NBackup::ChecksumKey(path)] = NBackup::ComputeChecksum(data.at(path));
+        }
+
+        flags.SetEnableLocalIndexAsSchemeObject(true);
+        Tests::TClient schemeClient(*Server().ServerSettings);
+        auto session = YdbTableClient().CreateSession().GetValueSync().GetSession();
+        for (auto mode : {NImport::EIndexPopulationMode::Build, NImport::EIndexPopulationMode::Import, NImport::EIndexPopulationMode::Auto}) {
+            const TString dir = TStringBuilder() << "/Root/Restored" << static_cast<int>(mode);
+            auto settings = MakeImportSettings("BloomBackup", dir);
+            settings.IndexPopulationMode(mode);
+            if (!Legacy) {
+                settings.SymmetricKey("Cool random key!");
+            }
+            WaitOpSuccess(YdbImportClient().ImportFromS3(settings).GetValueSync());
+            const TString path = dir + "/T";
+            const auto describe = session.DescribeTable(path).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            const auto indexes = describe.GetTableDescription().GetIndexDescriptions();
+            const auto unique = FindIf(indexes, [](const auto& index) {
+                return index.GetIndexType() == NYdb::NTable::EIndexType::GlobalUnique;
+            });
+            UNIT_ASSERT(unique != indexes.end());
+            UNIT_ASSERT_VALUES_EQUAL(unique->GetIndexName(), "idx_bloom_1");
+            const auto filter = FindIf(indexes, [](const auto& index) {
+                return index.GetIndexType() == NYdb::NTable::EIndexType::LocalBloomFilter
+                    && index.GetIndexColumns() == std::vector<std::string>{"Key"};
+            });
+            UNIT_ASSERT(filter != indexes.end());
+            const auto fpp = std::get<NYdb::NTable::TLocalBloomFilterSettings>(filter->GetIndexSettings()).FalsePositiveProbability;
+            UNIT_ASSERT(fpp);
+            UNIT_ASSERT_DOUBLES_EQUAL(*fpp, 0.05, 1e-9);
+            // Only the legacy, non-colliding alias retains the historical named-object behavior.
+            const auto physical = schemeClient.Ls(path);
+            UNIT_ASSERT(physical->Record.GetPathDescription().HasTable());
+            const auto& namedIndexes = physical->Record.GetPathDescription().GetTable().GetTableIndexes();
+            UNIT_ASSERT_VALUES_EQUAL(AnyOf(namedIndexes, [](const auto& index) {
+                return index.GetName() == "idx_bloom_2" && index.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter;
+            }), Legacy);
+            const auto duplicate = query(TStringBuilder() << "INSERT INTO `" << path << "` (Key, Subkey, Value) VALUES (2, 2, 'customer');");
+            UNIT_ASSERT_VALUES_EQUAL_C(duplicate.GetStatus(), EStatus::PRECONDITION_FAILED, duplicate.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST_QUAD(IndexesWithOmittedChangefeeds, ExportChangefeeds, Encrypted) {

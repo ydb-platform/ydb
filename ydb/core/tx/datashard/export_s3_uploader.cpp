@@ -1144,6 +1144,22 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.SetEnablePermissions(Task.GetEnablePermissions());
     metadata.SetSourceDatabase(Task.GetSourceDatabase());
 
+    const auto& table = Task.GetTable().GetTable();
+    if (scheme && table.GetPartitionConfig().ByKeyFilterPrefixesSize()) {
+        TSet<ui32> anonymousPrefixes;
+        for (const auto& index : scheme->indexes()) {
+            if (index.has_local_bloom_filter_index()) {
+                anonymousPrefixes.insert(index.index_columns_size());
+            }
+        }
+        for (const auto& index : table.GetTableIndexes()) {
+            if (index.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                anonymousPrefixes.erase(index.KeyColumnNamesSize());
+            }
+        }
+        metadata.SetAnonymousBloomPrefixes(std::move(anonymousPrefixes));
+    }
+
     const bool enableChangefeedsExport = AppData()->FeatureFlags.GetEnableChangefeedsExport();
 
     // Index impl tables listed in the table metadata. SchemeShard fixes their prefixes

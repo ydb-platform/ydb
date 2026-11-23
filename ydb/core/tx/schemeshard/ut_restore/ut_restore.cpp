@@ -8301,6 +8301,46 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(!s3Mock.GetData().empty());
     }
 
+    Y_UNIT_TEST_FLAG(BuildRejectsConflictingIndexDefinitions, DifferentType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        const TString scheme = TStringBuilder() << Utf8KeyValueScheme() << R"(
+            indexes { name: "by_value" index_columns: "value" global_index {} }
+        )" << (DifferentType
+            ? R"(indexes { name: "by_value" index_columns: "value" global_unique_index {} })"
+            : R"(indexes { name: "by_value" index_columns: "key" global_index {} })");
+        const auto id = Run(runtime, env, ConvertTestData(GenerateTestData(scheme)), R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d" scheme: HTTP
+                items { source_prefix: "" destination_path: "/MyRoot/Table" }
+                index_population_mode: INDEX_POPULATION_MODE_BUILD
+            }
+        )", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+            "Existing object '/MyRoot/Table/by_value' does not match the index definition");
+    }
+
+    Y_UNIT_TEST(RestoresLegacyBloomAliasMatchingAnotherBloom) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        const TString scheme = TStringBuilder() << Utf8KeyValueScheme() << R"(
+            primary_key: "value"
+            indexes { name: "idx_bloom_1" index_columns: ["key", "value"] local_bloom_filter_index {} }
+            indexes { name: "idx_bloom_1" index_columns: ["key"] local_bloom_filter_index {} }
+        )";
+        Run(runtime, env, ConvertTestData(GenerateTestData(scheme)), ImportTableRequest());
+
+        const auto result = DescribePath(runtime, "/MyRoot/Table", TDescribeOptionsBuilder().SetReturnPartitionConfig(true));
+        const auto& table = result.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionConfig().ByKeyFilterPrefixesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 1);
+        const auto& named = table.GetTableIndexes(0);
+        UNIT_ASSERT_VALUES_EQUAL(named.GetName(), "idx_bloom_1");
+        UNIT_ASSERT_VALUES_EQUAL(named.GetType(), EIndexTypeLocalBloomFilter);
+        UNIT_ASSERT_VALUES_EQUAL(named.KeyColumnNamesSize(), 2);
+    }
+
     Y_UNIT_TEST_FLAG(ShouldSucceedImportTableWithUniqueIndex, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -13980,7 +14020,7 @@ void RestoreGlobalIndexWithLocalBloom(bool isFs, bool encrypted) {
             }
         }
         IndexDescription {
-            Name: "a_bloom"
+            Name: "idx_bloom_1"
             Type: EIndexTypeLocalBloomFilter
             State: EIndexStateReady
             KeyColumnNames: ["key"]
@@ -14053,7 +14093,7 @@ void RestoreGlobalIndexWithLocalBloom(bool isFs, bool encrypted) {
         });
         UNIT_ASSERT_VALUES_EQUAL(bloom != restoredIndexes.end(), named);
         if (named) {
-            UNIT_ASSERT_VALUES_EQUAL(bloom->GetName(), "a_bloom");
+            UNIT_ASSERT_VALUES_EQUAL(bloom->GetName(), "idx_bloom_1");
             UNIT_ASSERT_VALUES_EQUAL(bloom->KeyColumnNamesSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(bloom->GetKeyColumnNames(0), "key");
             UNIT_ASSERT_DOUBLES_EQUAL(bloom->GetBloomFilterDescription().GetFalsePositiveProbability(), 0.01, 1e-9);

@@ -91,7 +91,8 @@ namespace {
 
 bool FillRowTableIndexesForRestore(
     NKikimrSchemeOp::TIndexedTableCreationConfig& out, const Ydb::Table::CreateTableRequest& scheme,
-    bool buildIndexes, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error)
+    const NBackup::TMetadata& metadata, bool buildIndexes, bool enableCompactFulltext,
+    Ydb::StatusIds::StatusCode& status, TString& error)
 {
     if (!AnyOf(scheme.indexes(), [](const auto& index) { return index.has_local_bloom_filter_index(); })) {
         return buildIndexes || FillIndexDescription(out, scheme, enableCompactFulltext, status, error);
@@ -99,7 +100,15 @@ bool FillRowTableIndexesForRestore(
 
     const bool named = AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject();
     Ydb::Table::CreateTableRequest globalIndexes;
-    THashSet<ui32> namedPrefixes;
+    THashMap<TStringBuf, ui32> nameCounts;
+    THashSet<TStringBuf> schemeObjectNames;
+    for (const auto& index : scheme.indexes()) {
+        ++nameCounts[index.name()];
+        if (!index.has_local_bloom_filter_index()) {
+            schemeObjectNames.insert(index.name());
+        }
+    }
+    THashSet<ui32> bloomPrefixes;
     for (const auto& index : scheme.indexes()) {
         if (!index.has_local_bloom_filter_index()) {
             if (!buildIndexes) {
@@ -129,8 +138,22 @@ bool FillRowTableIndexesForRestore(
         prefix->SetPrefixLength(length);
         prefix->SetFalsePositiveProbability(fpp);
         if (named) {
-            if (index.name().empty() || !namedPrefixes.insert(length).second) {
+            if (index.name().empty() || !bloomPrefixes.insert(length).second) {
                 error = "Local bloom indexes must have a name and distinct primary-key prefixes";
+                return false;
+            }
+
+            // In a legacy backup, a synthesized name can coincide with a real index.
+            // Two actual scheme objects could never share this name on the source.
+            const auto& anonymous = metadata.GetAnonymousBloomPrefixes();
+            const bool anonymousFilter = anonymous
+                ? anonymous->contains(length)
+                : nameCounts.at(index.name()) > 1 && index.name() == (TStringBuilder() << "idx_bloom_" << length);
+            if (anonymousFilter) {
+                continue;
+            }
+            if (!schemeObjectNames.insert(index.name()).second) {
+                error = TStringBuilder() << "Conflicting index definitions for '" << index.name() << "'";
                 return false;
             }
             auto* desc = out.AddIndexDescription();
@@ -260,7 +283,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
-        if (!FillRowTableIndexesForRestore(indexedTable, *item.Table, NeedToBuildIndexes(importInfo, itemIdx),
+        if (!FillRowTableIndexesForRestore(indexedTable, *item.Table, item.Metadata, NeedToBuildIndexes(importInfo, itemIdx),
                 ss->EnableCompactFulltextIndex, status, error)) {
             return nullptr;
         }

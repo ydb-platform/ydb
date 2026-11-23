@@ -56,6 +56,14 @@ const std::optional<std::vector<TIndexMetadata>>& TMetadata::GetIndexes() const 
     return Indexes;
 }
 
+void TMetadata::SetAnonymousBloomPrefixes(TSet<ui32> prefixes) {
+    AnonymousBloomPrefixes = std::move(prefixes);
+}
+
+const std::optional<TSet<ui32>>& TMetadata::GetAnonymousBloomPrefixes() const {
+    return AnonymousBloomPrefixes;
+}
+
 void TMetadata::SetRateLimiterResources(std::vector<TRateLimiterResourceMetadata> resources) {
     RateLimiterResources = std::move(resources);
 }
@@ -129,6 +137,14 @@ TString TMetadata::Serialize() const {
     }
     m["indexes"] = indexes;
 
+    if (AnonymousBloomPrefixes) {
+        NJson::TJsonArray prefixes;
+        for (ui32 length : *AnonymousBloomPrefixes) {
+            prefixes.AppendValue(length);
+        }
+        m["anonymous_bloom_prefixes"] = std::move(prefixes);
+    }
+
     if (RateLimiterResources) {
         NJson::TJsonArray resources;
         for (const auto& resource : *RateLimiterResources) {
@@ -181,6 +197,15 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
                 .ExportPrefix = changefeed["prefix"].GetString(),
                 .Name = changefeed["name"].GetString(),
             });
+        }
+    }
+
+    if (json.Has("anonymous_bloom_prefixes")) {
+        auto& prefixes = result.AnonymousBloomPrefixes.emplace();
+        for (const auto& value : json["anonymous_bloom_prefixes"].GetArraySafe()) {
+            const auto length = value.GetUIntegerSafe();
+            Y_ENSURE(length > 0 && length <= Max<ui32>(), "Invalid anonymous Bloom prefix length");
+            prefixes.insert(static_cast<ui32>(length));
         }
     }
 

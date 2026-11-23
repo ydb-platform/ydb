@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     dst_creator_ut.cpp
+    topic_mirroring_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

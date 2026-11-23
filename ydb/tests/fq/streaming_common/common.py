@@ -27,7 +27,6 @@ from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
-from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 
 logger = logging.getLogger(__name__)

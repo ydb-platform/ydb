@@ -23,6 +23,10 @@ def kikimr(request):
     config = get_ydb_config(request)
     config.set_binary_paths([main_binary_path])
 
+    if param.get("is_compatibility_tests", False):
+        # Older nodes register with a slashless database name.
+        config.yaml_config["feature_flags"]["enable_relative_paths"] = False
+
     config.yaml_config["feature_flags"]["enable_secure_script_executions"] = False
     if max_message_size := param.get("max_message_size"):
         config.yaml_config["grpc_config"]["max_message_size"] = max_message_size

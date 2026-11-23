@@ -95,6 +95,13 @@ class TestYmqHttpProxyBotoRollingUpdate(YmqRollingUpdateBase):
                     # Unique per attempt: retries must not hit FIFO deduplication.
                     send_kwargs["MessageDeduplicationId"] = uuid.uuid4().hex
                 client.send_message(**send_kwargs)
+                # Per-message DelaySeconds is rejected for FIFO queues.
+                if not is_fifo:
+                    client.send_message(
+                        QueueUrl=queue_url,
+                        MessageBody="delayed-{}-{}".format(step_name, uuid.uuid4().hex),
+                        DelaySeconds=1,
+                    )
 
                 messages = []
                 for _ in range(10):

@@ -96,6 +96,8 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
     request.mutable_attributes()->erase("_ydb_replication_consumer");
     // The destination must not inherit disabled monitoring from the source.
     request.mutable_attributes()->erase("_metrics_disabled");
+    // Source write restrictions must not block writes by the destination mirrorer.
+    request.mutable_attributes()->erase("_write_mode");
     EraseIf(*request.mutable_consumers(), [&](const auto& item) {
         return item.name() == consumer;
     });

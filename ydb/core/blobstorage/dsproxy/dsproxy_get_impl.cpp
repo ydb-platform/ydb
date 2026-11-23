@@ -37,6 +37,20 @@ bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
 
 } // namespace NDsProxyGetImpl
 
+bool TGetImpl::CheckVDiskReadFailure(const TVDiskID& vdisk, NKikimrProto::EReplyStatus status) {
+    if (Info->Type.GetErasure() != TErasureType::ErasureMirror3dc || PhantomCheck) {
+        return true;
+    }
+    if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
+        FailedReadDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+        return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, FailedReadDisks);
+    }
+    if (status == NKikimrProto::OK && FailedReadDisks) {
+        FailedReadDisks -= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
+    }
+    return true;
+}
+
 void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
     outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
@@ -83,7 +97,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {
                         const auto& disk = blobState.Disks[idxInSubgroup];
-                        if (Info->IsFailRealmExcluded(Info->GetVDiskId(disk.OrderNumber).FailRealm)) {
+                        if (!Info->IsFailRealmReadable(Info->GetVDiskId(disk.OrderNumber).FailRealm)) {
                             continue;
                         }
                         for (ui32 partIdx = 0; partIdx < disk.DiskParts.size(); ++partIdx) {

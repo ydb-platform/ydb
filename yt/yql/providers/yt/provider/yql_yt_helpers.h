@@ -162,6 +162,7 @@ NNodes::TYtReadTable ConvertContentInputToRead(NNodes::TExprBase input, NNodes::
 size_t GetMapDirectOutputsCount(const NNodes::TYtMapReduce& mapReduce);
 
 bool HasYtRowNumber(const TExprNode& node);
+bool HasYtTableIndex(const TExprNode& node);
 
 bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(const TString&)> unsupportedHandler);
 

@@ -121,11 +121,11 @@ WHERE JSON_VALUE(
 ) = 10;
 ```
 
-The following are not supported in indexed predicates: `ERROR ON ERROR` in `JSON_EXISTS`, and `ERROR ON EMPTY` and `ERROR ON ERROR` in `JSON_VALUE`; see [supported predicates](../../dev/json-indexes.md#predicates) for details.
+Indexed predicates do not support `ERROR ON ERROR` in `JSON_EXISTS`, or `ERROR ON EMPTY` and `ERROR ON ERROR` in `JSON_VALUE`. See [Error handling](../../yql/reference/syntax/select/json_index.md#error-handling).
 
-## Intersection of JSON arrays
+## Intersecting JSON arrays
 
-For documents `1: ["red", "large"]`, `2: ["blue"]`, `3: ["green", "large"]`, and `4: []`, a single static query accepts an array of any length:
+For documents `1: ["red", "large"]`, `2: ["blue"]`, `3: ["green", "large"]`, and `4: []`, one query accepts arrays of different lengths:
 
 ```yql
 DECLARE $values AS Json;
@@ -140,11 +140,11 @@ WHERE JSON_EXISTS(
 ORDER BY id;
 ```
 
-With `$values = ["red", "large"]`, the equality comparison `@ == $values` in `lax` mode by default checks for the presence of at least one of the labels. The index combines matches for `"red"` and `"large"` via `OR`, and the full JsonPath condition is checked by a post-filter. The query returns rows `1` and `3`. With `$values = []`, the query returns an empty result.
+With `$values = ["red", "large"]`, the equality comparison `@ == $values` in the default `lax` mode checks for at least one matching tag. The index combines matches for `"red"` and `"large"` using `OR`, and a post-filter checks the complete JsonPath condition. The query returns rows `1` and `3`. With `$values = []`, the query returns no rows.
 
 ## Supported parameter types
 
-Scalar parameters support `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), and `Bool`. Additionally, a parameter of type `Json` can be used in `PASSING` in an equality condition, including for searching by an array of values. Optional types (`Optional<T>`) are not supported in parameters.
+Supported scalar parameter types are `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), and `Bool`. `IN` accepts collections of these values. `PASSING` also accepts `Json` parameters for equality comparisons, including arrays of values. Optional types (`Optional<T>`) are not supported in parameters.
 
 For more details about types, see [{#T}](../../dev/json-indexes.md#json-value).
 

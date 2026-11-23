@@ -169,6 +169,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MaxKeyLengthViolation)               (505))
     ((CannotRemoveNonemptyCompositeNode)   (506))
     ((NoSuchYPathMethod)                   (507))
+    ((MaxDocumentFragmentSizeViolation)    (508))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

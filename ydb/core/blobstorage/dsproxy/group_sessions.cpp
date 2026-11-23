@@ -1,5 +1,5 @@
 #include "group_sessions.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
@@ -103,7 +103,8 @@ void TGroupSessions::Poison() {
     }
 }
 
-bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks) {
+bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo& info, bool waitForAllVDisks) {
+    const auto& topology = info.GetTopology();
     // create a set of connected disks
     TBlobStorageGroupInfo::TGroupVDisks connected(&topology);
     for (ui32 i = 0; i < ConnectedQueuesMask.size(); ++i) {
@@ -113,9 +114,13 @@ bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, 
     }
 
     // check if we have quorum; in force mode we wait for all disks
-    return waitForAllVDisks
-        ? connected.GetNumSetItems() == topology.GetTotalVDisksNum()
-        : topology.GetQuorumChecker().CheckQuorumForGroup(connected);
+    if (waitForAllVDisks) {
+        return connected.GetNumSetItems() == topology.GetTotalVDisksNum();
+    }
+    if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+        return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, connected);
+    }
+    return topology.GetQuorumChecker().CheckQuorumForGroup(connected);
 }
 
 void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,

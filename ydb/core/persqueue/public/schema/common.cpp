@@ -189,6 +189,17 @@ TResult ProcessTopicAttributes(
                 return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid _metrics_disabled: '" << attrValue
                     << "', expected true or false"};
             }
+        } else if (attrName == "_write_mode") {
+            if (attrValue == "available") {
+                tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+            } else if (attrValue == "unavailable") {
+                tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE);
+            } else if (attrValue == "prohibited") {
+                tabletConfig->SetWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED);
+            } else {
+                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid _write_mode: '" << attrValue
+                    << "', expected available, unavailable or prohibited"};
+            }
         } else if (attrName == "_abc_slug") {
             tabletConfig->SetAbcSlug(attrValue);
         }  else if (attrName == "_federation_account") {

@@ -761,7 +761,7 @@ public:
         ConductFallbackPatch(Runtime, Args);
     }
 
-    void CheckNaiveFallback(bool enableVPatchForTesting) {
+    void CheckNonNormalPatch(bool enableVPatchForTesting) {
         auto patch = CreatePatch(Runtime, Env, Args);
         auto patchActor = Env.CreatePatchRequestActor(patch, true, enableVPatchForTesting);
         PatchActorId = Runtime.Register(patchActor.release(), 0, 0, TMailboxType::Simple, 0, Env.FakeProxyActorId);
@@ -771,7 +771,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
-    Y_UNIT_TEST(NonNormalRealmsUseNaiveFallback) {
+    Y_UNIT_TEST(NonNormalRealmsRespectWritePolicy) {
         for (int value = NKikimrBlobStorage::TGroupState::EState_MIN; value <= NKikimrBlobStorage::TGroupState::EState_MAX; ++value) {
             const auto state = static_cast<EMirror3dcGroupState>(value);
             if (state == NKikimrBlobStorage::TGroupState::NORMAL) {
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
                 // Exercise both VPatch and VMovedPatch entry paths.
                 for (const bool enableVPatchForTesting : {false, true}) {
                     TMirror3dcVPatchActorTest test({realms.begin(), realms.end()}, state);
-                    test.CheckNaiveFallback(enableVPatchForTesting);
+                    test.CheckNonNormalPatch(enableVPatchForTesting);
                 }
             } while (std::next_permutation(realms.begin(), realms.end()));
         }

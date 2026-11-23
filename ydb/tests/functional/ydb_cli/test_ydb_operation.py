@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import json
+
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -134,3 +137,58 @@ class TestSetNotNullOperationCli(BaseCliTestWithDatabase):
                     if token.startswith("ydb://setnotnull"):
                         return token.strip(',"')
         return None
+
+
+class TestNfsTransferOperationCli(BaseCliTestWithDatabase):
+    @classmethod
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_fs_backups", "enable_export_filtering"])
+
+    def wait_for_transfer(self, args, kind):
+        result = self.execute_ydb_cli_command(args + ["--format", "proto-json-base64"])
+        operation_id = json.loads(result.stdout)["id"]
+        operation = {}
+
+        def is_ready():
+            nonlocal operation
+            result = self.execute_ydb_cli_command(["operation", "get", operation_id, "--format", "proto-json-base64"])
+            operation = json.loads(result.stdout)
+            return operation.get("ready", False)
+
+        assert wait_for(is_ready, timeout_seconds=60), operation
+        assert operation["id"] == operation_id
+        assert operation["status"] == "SUCCESS", operation
+        listing = self.execute_ydb_cli_command(["operation", "list", kind])
+        assert operation_id in listing.stdout, listing.stdout
+        self.execute_ydb_cli_command(["operation", "forget", operation_id])
+        listing = self.execute_ydb_cli_command(["operation", "list", kind])
+        assert operation_id not in listing.stdout, listing.stdout
+
+    def test_export_and_import_selected_tables(self, tmp_path):
+        source = f"{self.root_dir}/staging"
+        destination = f"{self.root_dir}/restored"
+        self.driver.scheme_client.make_directory(source)
+        self.driver.scheme_client.make_directory(destination)
+        with ydb.QuerySessionPool(self.driver, size=1) as pool:
+            for table in ("orders", "scratch"):
+                pool.execute_with_retries(
+                    f"CREATE TABLE `{source}/{table}` (id Uint64, quantity Uint64, PRIMARY KEY (id));"
+                )
+            pool.execute_with_retries(f"UPSERT INTO `{source}/orders` (id, quantity) VALUES (1, 7), (2, 19);")
+
+            self.wait_for_transfer([
+                "export", "nfs", "--fs-path", str(tmp_path), "--root-path", source,
+                "--item", "source=orders,destination=orders",
+                "--item", "source=scratch,destination=scratch",
+                "--exclude", "/scratch$", "--compression", "zstd-3",
+            ], "export/nfs")
+            assert (tmp_path / "orders" / "data_00.csv.zst").is_file()
+            assert not (tmp_path / "scratch").exists()
+
+            # Restore under a different name to keep the staging table available.
+            self.wait_for_transfer([
+                "import", "nfs", "--fs-path", str(tmp_path), "--destination-path", destination,
+                "--item", "source=orders,destination=orders_copy",
+            ], "import/nfs")
+            result = pool.execute_with_retries(f"SELECT id, quantity FROM `{destination}/orders_copy` ORDER BY id;")
+            assert [(row.id, row.quantity) for row in result[0].rows] == [(1, 7), (2, 19)]

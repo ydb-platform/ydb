@@ -1907,7 +1907,7 @@ namespace NKikimr {
             if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 return DatabaseAccessDeniedHandle(ev, ctx);
             }
-            auto aid = Register(CreateVRestorePartActor(SelfVDiskId, SelfId(), SkeletonId, Config, Top, ev));
+            auto aid = Register(CreateVRestorePartActor(SelfVDiskId, SelfId(), SkeletonId, Config, GInfo, ev));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2288,6 +2288,13 @@ namespace NKikimr {
             std::is_same_v<TEv, TEvBlobStorage::TEvVSyncFull>
         );
 
+        template <typename TEv>
+        static constexpr bool IsClientWrite = std::is_same_v<TEv, TEvBlobStorage::TEvVPut>
+            || std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut>
+            || std::is_same_v<TEv, TEvBlobStorage::TEvVBlock>
+            || std::is_same_v<TEv, TEvBlobStorage::TEvVCollectGarbage>
+            || IsPatchEvent<TEv>;
+
         template<typename TEventType>
         void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
             if constexpr (IsPatchEvent<TEventType>) {
@@ -2331,6 +2338,8 @@ namespace NKikimr {
             }
             if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 DatabaseAccessDeniedHandle(ev, ctx);
+            } else if (IsClientWrite<TEventType> && !GInfo->IsWriteTargetRealm(SelfVDiskId.FailRealm)) {
+                return Reply(ev, ctx, NKikimrProto::ERROR, "realm is not a write target", ctx.Now());
             } else if (Config->BaseInfo.ReadOnly && !IsReadOnlyCompatible<TEventType>) {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "Blocking request incompatible with",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},

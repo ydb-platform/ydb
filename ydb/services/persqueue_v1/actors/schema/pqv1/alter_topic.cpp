@@ -55,6 +55,10 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         if (sourceTabletConfig.HasMetricsDisabled()) {
             targetConfig.MutablePQTabletConfig()->SetMetricsDisabled(sourceTabletConfig.GetMetricsDisabled());
         }
+        // Ordinary SDK settings do not expose the system _write_mode attribute.
+        if (sourceTabletConfig.HasWriteMode()) {
+            targetConfig.MutablePQTabletConfig()->SetWriteMode(sourceTabletConfig.GetWriteMode());
+        }
         auto result = ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
         if (!result) {
             return result;

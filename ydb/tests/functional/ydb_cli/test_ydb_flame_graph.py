@@ -3,6 +3,8 @@
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+import csv
+import json
 import os
 import logging
 import pathlib
@@ -127,3 +129,48 @@ class TestExecuteWithFlameGraph(BaseTestFlameGraphServiceWithDatabase):
 
         self.scripting_yql_command('full', 'aaa',
                                    'Can\'t save resource usage flame graph, error: aaa is a directory')
+
+    def test_workload_query_reports(self, tmp_path):
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        early_rows = f"FROM `{self.table_path}` WHERE `key` < 4"
+        (run_dir / "rows.sql").write_text(f"SELECT `key`, `id`, `value` {early_rows} ORDER BY `key`;\n")
+        (run_dir / "rows.sql.result").write_text("key,id,value\n1,1111,one\n2,2222,two\n3,3333,three\n")
+        (run_dir / "totals.sql").write_text(f"SELECT COUNT(*) AS records, SUM(`id`) AS total {early_rows};\n")
+        # The totals reference predates the third row and should fail the check.
+        (run_dir / "totals.sql.result").write_text("records,total\n2,3333\n")
+        (run_dir / "full_scan.sql").write_text(f"SELECT * FROM `{self.table_path}`;\n")
+
+        csv_report = tmp_path / "summary.csv"
+        json_report = tmp_path / "metrics.json"
+        result = self.execute_ydb_cli_command([
+            "workload", "query", "run", "--suite-path", str(tmp_path),
+            "--include", "rows.sql,totals.sql", "--check-canonical", "--iterations", "2", "--threads", "1",
+            "--output", str(tmp_path / "results"), "--csv", str(csv_report), "--json", str(json_report),
+            "--ministat", str(tmp_path / "timings.csv"), "--plan", str(tmp_path / "plans" / "query"),
+        ], check_exit_code=False)
+        assert result.exit_code == 1, result.stdout + result.stderr
+
+        expected = {"rows.sql": (2, 0, 0), "totals.sql": (2, 0, 1)}
+        counters = ("SuccessCount", "FailsCount", "DiffsCount")
+        with csv_report.open() as report:
+            rows = {
+                row["Query #"]: tuple(int(row[field] or 0) for field in counters)
+                for row in csv.DictReader(report)
+                if row["Query #"] not in ("Sum", "Avg", "GAvg")
+            }
+        assert rows == expected, result.stderr
+        metrics = {
+            (metric["labels"]["query"], metric["sensor"]): metric["value"]
+            for metric in json.loads(json_report.read_text())
+        }
+        for query, counts in expected.items():
+            assert tuple(metrics[query, field] for field in counters) == counts
+            for execution in ("explain", "0", "1"):
+                path = tmp_path / "plans" / f"query.{query}.{execution}.json"
+                assert json.loads(path.read_text())["Plan"]
+
+        timings = (tmp_path / "timings.csv").read_text().splitlines()
+        assert len(timings) == len(expected)
+        assert all(len(line.split(",")) == 2 for line in timings)
+        assert "UNEXPECTED DIFF" in (tmp_path / "results.totals.sql.out").read_text()

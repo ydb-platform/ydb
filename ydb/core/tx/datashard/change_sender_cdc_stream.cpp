@@ -48,34 +48,51 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
 
 namespace {
 
-TVector<ui64> MakeIntersectingPartitionIds(
-        const TVector<TKeyDesc::TPartitionInfo>& partitions,
-        const TSerializedTableRange& shardKeyRange,
-        TConstArrayRef<NScheme::TTypeInfo> keyTypes)
-{
-    TPartitionKeyRange shardRange;
+bool ShouldUseKeyRangeHeartbeats(const TUserTable::TCdcStream& stream, const TVector<NScheme::TTypeInfo>& topicKeySchema) {
+    return stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange
+        && !topicKeySchema.empty();
+}
+
+template <typename TItem, typename TCallback>
+void ForEachPairwise(const TVector<TItem>& items, TCallback&& callback) {
+    const TItem* prev = nullptr;
+    for (const auto& item : items) {
+        callback(prev, item);
+        prev = &item;
+    }
+}
+
+TPartitionKeyRange MakeTopicPartitionKeyRange(const TKeyDesc::TPartitionInfo* prev, const TKeyDesc::TPartitionInfo& partition) {
+    TPartitionKeyRange range;
+    if (prev && prev->Range && !prev->Range->EndKeyPrefix.GetCells().empty()) {
+        range.FromBound = prev->Range->EndKeyPrefix;
+    }
+    if (partition.Range && !partition.Range->EndKeyPrefix.GetCells().empty()) {
+        range.ToBound = partition.Range->EndKeyPrefix;
+    }
+    return range;
+}
+
+TPartitionKeyRange MakeShardKeyRange(const TSerializedTableRange& shardKeyRange) {
+    TPartitionKeyRange range;
     if (!shardKeyRange.From.GetCells().empty()) {
-        shardRange.FromBound = shardKeyRange.From;
+        range.FromBound = shardKeyRange.From;
     }
     if (!shardKeyRange.To.GetCells().empty()) {
-        shardRange.ToBound = shardKeyRange.To;
+        range.ToBound = shardKeyRange.To;
     }
+    return range;
+}
 
+TVector<ui64> MakeIntersectingPartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions,
+        const TSerializedTableRange& shardKeyRange, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    const auto shardRange = MakeShardKeyRange(shardKeyRange);
     TVector<ui64> partitionIds;
-    TPartitionKeyRange partitionRange;
-    for (const auto& partition : partitions) {
-        partitionRange.ToBound.Clear();
-        if (partition.Range && !partition.Range->EndKeyPrefix.GetCells().empty()) {
-            partitionRange.ToBound = partition.Range->EndKeyPrefix;
-        }
-
-        if (Intersects(partitionRange, shardRange, keyTypes)) {
+    ForEachPairwise(partitions, [&](const TKeyDesc::TPartitionInfo* prev, const TKeyDesc::TPartitionInfo& partition) {
+        if (Intersects(MakeTopicPartitionKeyRange(prev, partition), shardRange, keyTypes)) {
             partitionIds.push_back(partition.ShardId);
         }
-
-        partitionRange.FromBound = partitionRange.ToBound;
-    }
-
+    });
     return partitionIds;
 }
 
@@ -647,18 +664,17 @@ class TCdcChangeSenderMain
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
-        const bool keyRangeHeartbeats = !topicAutoPartitioning
-            && Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+        const bool shouldUseKeyRangeHeartbeats = ShouldUseKeyRangeHeartbeats(Stream, entry.PQGroupInfo->Schema);
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
-        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format || keyRangeHeartbeats) {
+        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format || shouldUseKeyRangeHeartbeats) {
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
         } else {
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
-        CreateSenders(keyRangeHeartbeats
+        CreateSenders(shouldUseKeyRangeHeartbeats
             ? MakeIntersectingPartitionIds(KeyDesc->GetPartitions(), ShardKeyRange, entry.PQGroupInfo->Schema)
             : NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
         Become(&TThis::StateMain);

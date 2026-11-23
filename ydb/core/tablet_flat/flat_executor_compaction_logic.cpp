@@ -37,7 +37,12 @@ TCompactionLogic::~TCompactionLogic()
 {}
 
 void TCompactionLogic::Start() {
-    auto result = ReflectSchemeChanges();
+    const auto& tables = Backend->DatabaseScheme().Tables;
+    TVector<ui32> tableIds(Reserve(tables.size()));
+    for (const auto& entry : tables) {
+        tableIds.push_back(entry.first);
+    }
+    auto result = ReflectSchemeChanges(tableIds);
     Y_ENSURE(!result.StrategyChanges);
     State->Snapshots.clear();
 }
@@ -262,41 +267,48 @@ void TCompactionLogic::AllowBorrowedGarbageCompaction(ui32 table) {
     tableInfo->Strategy->AllowBorrowedGarbageCompaction();
 }
 
-TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
+TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges(TArrayRef<const ui32> tableIds)
 {
     TReflectSchemeChangesResult result;
 
     const auto& scheme = Backend->DatabaseScheme();
 
-    for (const auto &xpair : scheme.Tables) {
-        auto &info = xpair.second;
-        auto &table = State->Tables[info.Id];
-        table.TableId = info.Id;
+    for (ui32 tableId : tableIds) {
+        const auto* info = scheme.GetTableInfo(tableId);
+        if (!info) {
+            if (auto it = State->Tables.find(tableId); it != State->Tables.end()) {
+                StopTable(it->second);
+                State->Tables.erase(it);
+            }
+            continue;
+        }
+        auto &table = State->Tables[tableId];
+        table.TableId = tableId;
 
         if (auto *policy = table.Policy.Get()) {
             TString err;
-            bool ok = NLocalDb::ValidateCompactionPolicyChange(*policy, *info.CompactionPolicy, err);
-            Y_ENSURE(ok, "Cannot change compaction policy for table " << info.Name << " id " << info.Id << ": " << err);
+            bool ok = NLocalDb::ValidateCompactionPolicyChange(*policy, *info->CompactionPolicy, err);
+            Y_ENSURE(ok, "Cannot change compaction policy for table " << info->Name << " id " << tableId << ": " << err);
         }
 
-        table.Policy = info.CompactionPolicy;
+        table.Policy = info->CompactionPolicy;
 
-        auto newStrategyType = scheme.CompactionStrategyFor(info.Id);
+        auto newStrategyType = scheme.CompactionStrategyFor(tableId);
         Y_ENSURE(newStrategyType != NKikimrCompaction::CompactionStrategyUnset);
 
         if (table.StrategyType != newStrategyType) {
             if (table.StrategyType != NKikimrCompaction::CompactionStrategyUnset) {
-                result.StrategyChanges.push_back({ info.Id, newStrategyType });
+                result.StrategyChanges.push_back({ tableId, newStrategyType });
                 StrategyChanging(table);
             }
 
             Y_ENSURE(!table.Strategy);
             table.StrategyType = newStrategyType;
-            table.Strategy = CreateStrategy(info.Id, newStrategyType);
+            table.Strategy = CreateStrategy(tableId, newStrategyType);
             Y_ENSURE(table.Strategy);
 
             // Time to start the new strategy
-            if (auto* snapshot = State->Snapshots.FindPtr(info.Id)) {
+            if (auto* snapshot = State->Snapshots.FindPtr(tableId)) {
                 table.InMem.Steps = snapshot->InMemSteps;
                 if (snapshot->Strategy == newStrategyType) {
                     table.Strategy->Start(std::move(snapshot->State));
@@ -315,20 +327,11 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
             }
 
             if (!table.MemTableMemoryConsumer) {
-                MemTableMemoryConsumersCollection->Register(info.Id);
+                MemTableMemoryConsumersCollection->Register(tableId);
             }
         } else {
             Y_ENSURE(table.Strategy);
             table.Strategy->ReflectSchema();
-        }
-    }
-
-    for (auto it = State->Tables.begin(), end = State->Tables.end(); it != end; ) {
-        if (scheme.Tables.contains(it->first)) {
-            ++it;
-        } else {
-            StopTable(it->second);
-            it = State->Tables.erase(it);
         }
     }
 

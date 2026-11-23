@@ -2579,7 +2579,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
         if (auto alter = std::move(change->Scheme)) {
             LogicAlter->WriteLog(*commit, std::move(alter));
-            auto reflectResult = CompactionLogic->ReflectSchemeChanges();
+            auto reflectResult = CompactionLogic->ReflectSchemeChanges(change->AlteredTables);
 
             ReadResourceProfile();
             ReflectSchemeSettings();

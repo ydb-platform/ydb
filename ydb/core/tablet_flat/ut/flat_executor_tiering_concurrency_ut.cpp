@@ -159,6 +159,50 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
+    Y_UNIT_TEST(AlteringAnotherTablePreservesTheRunningFlushAndDiskCompaction) {
+        TEnv env;
+        constexpr ui32 otherTable = TableId + 1;
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter().AddTable("other", otherTable)
+                .AddColumn(otherTable, "key", KeyTag, NScheme::NTypeIds::Uint64, false, false)
+                .AddColumnToKey(otherTable, KeyTag);
+            return true;
+        });
+
+        env.FlushPart({{1, 0, "on disk"}});
+        env.Enable();
+        TBlockEvents<NOps::TEvResult> blocked(env.Env);
+        env.Tick();
+        env->WaitFor("held disk TAC", [&] { return blocked.size() == 1; }, TDuration::Seconds(10));
+        UNIT_ASSERT(Generation(blocked.front()) != 0);
+        UNIT_ASSERT(Product(blocked.front()).Params->Mode == NTable::TCompactionParams::EMode::TierAware);
+
+        env.Write({{2, 0, "in memory"}});
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env->WaitFor("held MemTable flush", [&] { return blocked.size() == 2; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.back()), 0);
+        const auto& disk = Product(blocked.front());
+        const auto& flush = Product(blocked.back());
+        UNIT_ASSERT_VALUES_EQUAL(disk.Results.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(flush.Results.size(), 1);
+        const auto diskOutput = disk.Results.front().Part->Label;
+        const auto flushOutput = flush.Results.front().Part->Label;
+
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter().AddColumn(otherTable, "value", ValueTag, NScheme::NTypeIds::String, false, false);
+            return true;
+        });
+        blocked.Stop().Unblock();
+        for (size_t i = 0; i < 2; ++i) {
+            const auto done = env->GrabEdgeEventRethrow<NFake::TEvCompacted>(env.Edge, TDuration::Seconds(10));
+            UNIT_ASSERT(done);
+            UNIT_ASSERT_VALUES_EQUAL(done->Get()->Table, TableId);
+        }
+        const auto levels = env.Levels();
+        UNIT_ASSERT(levels.contains(diskOutput));
+        UNIT_ASSERT(levels.contains(flushOutput));
+    }
+
     Y_UNIT_TEST(ParallelTacPublicationsKeepBothInputsAndReadsValid) {
         TEnv env;
         const auto policy = PrepareTwoGenerations(env);

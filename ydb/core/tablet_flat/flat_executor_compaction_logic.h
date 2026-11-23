@@ -233,7 +233,7 @@ public:
 
     void AllowBorrowedGarbageCompaction(ui32 table);
 
-    TReflectSchemeChangesResult ReflectSchemeChanges();
+    TReflectSchemeChangesResult ReflectSchemeChanges(TArrayRef<const ui32> tableIds);
     void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer);
     void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size, bool compactionComplete = false);

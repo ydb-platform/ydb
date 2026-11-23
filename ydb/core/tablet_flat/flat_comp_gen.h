@@ -221,7 +221,7 @@ namespace NCompGen {
 
         struct TTierCompaction {
             ui64 CompactionId = 0;
-            TIntrusiveConstPtr<TCompactionContext> Context;
+            std::optional<TCompactionEpochRange> Epochs;
             bool HasMemoryInputs = false;
         };
 
@@ -266,6 +266,8 @@ namespace NCompGen {
         void RebuildTierStats();
         void CheckTierGenerations();
         bool CanStartTierCompaction(ui32 generation) const;
+        bool OverlapsReservedEpochs(const TCompactionEpochRange& epochs) const;
+        bool IsEpochReserved(TEpoch epoch) const;
         bool HasFreeTierInputs(ui32 generation) const;
         void ReleaseTierCompaction(ui32 generation, ui64 compactionId);
         void DeferTierCompaction(ui32 generation);
@@ -303,7 +305,6 @@ namespace NCompGen {
 
         bool TierManaged = false;
         THashMap<ui32, TTierCompaction> TierCompactions;
-        THashMap<TLogoBlobID, ui32> BusyTierParts;
         // Blocked generations retry after the reservation set changes.
         THashMap<ui32, ui64> TierWaitRevisions;
         ui64 TierOccupancyRevision = 0;

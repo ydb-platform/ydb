@@ -372,7 +372,6 @@ void TGenCompactionStrategy::Stop() {
     Policy = nullptr;
     TierManaged = false;
     TierCompactions.clear();
-    BusyTierParts.clear();
     TierWaitRevisions.clear();
     TierOccupancyRevision = 0;
     TierSweepGeneration.reset();
@@ -1362,7 +1361,7 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
         }
         TPartAggregator available;
         for (const auto& part : gen.Parts) {
-            if (!BusyTierParts.contains(part.Label)) {
+            if (!IsEpochReserved(part.Epoch)) {
                 available.Add(part);
             }
         }
@@ -1371,7 +1370,7 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
         const ui32 finalLevel = Policy->GetFinalLevel(TierForLevel(generation));
         const auto& finalParts = GetFinalParts(finalLevel);
         for (const auto& part : ColdParts) {
-            if (!BusyTierParts.contains(part->Label)) {
+            if (!IsEpochReserved(part->Epoch)) {
                 const ui32 level = KnownParts.Value(part->Label, 255);
                 unloaded += level == generation;
                 unloadedFinal += level == finalLevel;
@@ -1379,7 +1378,7 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
         }
         const bool hasFinal = IsLastTierGeneration(generation)
             && (unloadedFinal != 0 || std::any_of(finalParts.begin(), finalParts.end(),
-                [&](const auto& part) { return !BusyTierParts.contains(part.Label); }));
+                [&](const auto& part) { return !IsEpochReserved(part.Epoch); }));
         if (unloaded != 0) {
             return EDesiredMode::Normal;
         }
@@ -1397,7 +1396,7 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
         if (hasFinal) {
             TEpoch previous = TEpoch::Max();
             for (const auto& part : finalParts) {
-                if (!BusyTierParts.contains(part.Label) && part.Epoch != previous) {
+                if (part.Epoch != previous && !IsEpochReserved(part.Epoch)) {
                     ++finalEpochs;
                     previous = part.Epoch;
                 }
@@ -1578,10 +1577,24 @@ bool TGenCompactionStrategy::CanStartTierCompaction(ui32 generation) const {
     return it == TierWaitRevisions.end() || it->second != TierOccupancyRevision;
 }
 
+bool TGenCompactionStrategy::OverlapsReservedEpochs(const TCompactionEpochRange& epochs) const {
+    for (const auto& entry : TierCompactions) {
+        const auto& reserved = entry.second.Epochs;
+        if (reserved && epochs.Min <= reserved->Max && reserved->Min <= epochs.Max) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TGenCompactionStrategy::IsEpochReserved(TEpoch epoch) const {
+    return OverlapsReservedEpochs({epoch, epoch});
+}
+
 bool TGenCompactionStrategy::HasFreeTierInputs(ui32 generation) const {
     const auto hasLoaded = [&](const auto& parts) {
         for (const auto& part : parts) {
-            if (!BusyTierParts.contains(part.Label)) {
+            if (!IsEpochReserved(part.Epoch)) {
                 return true;
             }
         }
@@ -1599,7 +1612,7 @@ bool TGenCompactionStrategy::HasFreeTierInputs(ui32 generation) const {
     for (const auto& part : ColdParts) {
         const ui32 level = KnownParts.Value(part->Label, 255);
         if ((level == generation || (withFinal && level == finalLevel))
-                && !BusyTierParts.contains(part->Label)) {
+                && !IsEpochReserved(part->Epoch)) {
             return true;
         }
     }
@@ -1616,26 +1629,10 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
     }
     auto& params = *CheckedCast<TGenCompactionParams*>(&rawParams);
     Y_ENSURE(params.Context, "Cannot reserve an unprepared compaction");
-    if (!CanStartTierCompaction(params.Generation)) {
+    const auto& epochs = params.Context->Epochs;
+    if (!CanStartTierCompaction(params.Generation) || (epochs && OverlapsReservedEpochs(*epochs))) {
         DeferTierCompaction(params.Generation);
         return false;
-    }
-    for (const auto& part : params.Context->Inputs) {
-        if (BusyTierParts.contains(part.Label())) {
-            DeferTierCompaction(params.Generation);
-            return false;
-        }
-    }
-    for (const auto& [generation, active] : TierCompactions) {
-        Y_UNUSED(generation);
-        if (params.Context->Epochs && active.Context->Epochs
-                && params.Context->Epochs->Min <= active.Context->Epochs->Max
-                && active.Context->Epochs->Min <= params.Context->Epochs->Max) {
-            // Frozen/status sources can make intervals overlap even when no
-            // existing disk label is shared. Their outputs must not overlap.
-            DeferTierCompaction(params.Generation);
-            return false;
-        }
     }
     auto& settings = *params.Tiering;
     for (const auto& [generation, active] : TierCompactions) {
@@ -1650,12 +1647,8 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
         settings.AllowCooling = false;
     }
     auto& active = TierCompactions[params.Generation];
-    active.Context = params.Context;
+    active.Epochs = epochs;
     active.HasMemoryInputs = settings.HasMemoryInputs;
-    for (const auto& part : params.Context->Inputs) {
-        Y_ENSURE(BusyTierParts.emplace(part.Label(), params.Generation).second,
-            "Compaction input was reserved twice");
-    }
     return true;
 }
 
@@ -1663,9 +1656,6 @@ void TGenCompactionStrategy::ReleaseTierCompaction(ui32 generation, ui64 compact
     const auto it = TierCompactions.find(generation);
     Y_ENSURE(it != TierCompactions.end() && it->second.CompactionId == compactionId,
         "Unexpected tier-managed compaction release");
-    for (const auto& part : it->second.Context->Inputs) {
-        Y_ENSURE(BusyTierParts.erase(part.Label()) == 1, "Compaction input was not reserved");
-    }
     TierCompactions.erase(it);
     TierWaitRevisions.erase(generation);
     // Both publication and cancellation change which inputs can be reserved.
@@ -1703,13 +1693,13 @@ void TGenCompactionStrategy::CheckTierGenerations() {
         size_t finalEpochs = 0;
         TEpoch previous = TEpoch::Max();
         for (const auto& part : GetFinalParts(level)) {
-            if (!BusyTierParts.contains(part.Label) && part.Epoch != previous) {
+            if (part.Epoch != previous && !IsEpochReserved(part.Epoch)) {
                 ++finalEpochs;
                 previous = part.Epoch;
             }
         }
         const bool hasUnloadedFinal = std::any_of(ColdParts.begin(), ColdParts.end(), [&](const auto& part) {
-            return KnownParts.Value(part->Label, 255) == level && !BusyTierParts.contains(part->Label);
+            return KnownParts.Value(part->Label, 255) == level && !IsEpochReserved(part->Epoch);
         });
         if (final.State == EState::Free && CanStartTierCompaction(level)
                 && HasFreeTierInputs(level)
@@ -1760,7 +1750,6 @@ void TGenCompactionStrategy::CancelTierCompactions() {
     FinalCompactionTaken = 0;
     TierSweepGeneration.reset();
     TierCompactions.clear();
-    BusyTierParts.clear();
     ++TierOccupancyRevision;
     if (TierWaitRevisions.contains(0)) {
         // ReflectSchema may switch back to the legacy path, which will no
@@ -1855,20 +1844,20 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
     } else {
         if (generation > 0 && !isFinal) {
             for (const auto& part : Generations[generation - 1].Parts) {
-                if (!BusyTierParts.contains(part.Label)) {
+                if (!IsEpochReserved(part.Epoch)) {
                     params->Parts.push_back(part.PartView);
                     extra.Add(part.Stats.BackingSize);
                 }
             }
             for (const auto& part : ColdParts) {
                 if (KnownParts.Value(part->Label, 255) == generation
-                        && !BusyTierParts.contains(part->Label)) {
+                        && !IsEpochReserved(part->Epoch)) {
                     params->ColdParts.push_back(part);
                 }
             }
             if (!IsLastTierGeneration(generation) && extra.ExtrasAllowed()) {
                 for (const auto& part : Generations[generation].Parts) {
-                    if (BusyTierParts.contains(part.Label) || !extra.ExtraAllowed(part.Stats.BackingSize)) {
+                    if (IsEpochReserved(part.Epoch) || !extra.ExtraAllowed(part.Stats.BackingSize)) {
                         break;
                     }
                     params->Parts.push_back(part.PartView);
@@ -1879,13 +1868,13 @@ ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edg
         if (isFinal || (generation != 0 && IsLastTierGeneration(generation))) {
             const ui32 finalLevel = Policy->GetFinalLevel(params->TierId);
             for (const auto& part : GetFinalParts(finalLevel)) {
-                if (!BusyTierParts.contains(part.Label)) {
+                if (!IsEpochReserved(part.Epoch)) {
                     params->Parts.push_back(part.PartView);
                 }
             }
             for (const auto& part : ColdParts) {
                 if (KnownParts.Value(part->Label, 255) == finalLevel
-                        && !BusyTierParts.contains(part->Label)) {
+                        && !IsEpochReserved(part->Epoch)) {
                     params->ColdParts.push_back(part);
                 }
             }
@@ -2090,13 +2079,8 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
     }
     RebuildTierStats();
 
-    for (const auto& [generation, active] : TierCompactions) {
-        Y_UNUSED(generation);
-        Y_ENSURE(!params.Context->Epochs || !active.Context->Epochs
-            || params.Context->Epochs->Max < active.Context->Epochs->Min
-            || active.Context->Epochs->Max < params.Context->Epochs->Min,
-            "Concurrent compactions have overlapping epoch intervals");
-    }
+    Y_ENSURE(!params.Context->Epochs || !OverlapsReservedEpochs(*params.Context->Epochs),
+        "Concurrent compactions have overlapping epoch intervals");
 
     if (params.ForcedMemRequestId) {
         Y_ENSURE(ForcedMemCompactionId == compactionId);

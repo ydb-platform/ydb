@@ -57,6 +57,7 @@ namespace NTable {
         TString Redo;           /* Serialized db redo log       */
         TMemGlobs Annex;        /* Enum of blobs used in redo   */
 
+        TVector<ui32> AlteredTables; // Tables created, altered or dropped by this transaction
         TVector<ui32> Affects;  /* This tables touched in redo  */
         TVector<ui32> RollbackAffects; // Tables whose memtable capacity may have changed on rollback
         TVector<ui32> Deleted;  /* Tables deleted in some alter */

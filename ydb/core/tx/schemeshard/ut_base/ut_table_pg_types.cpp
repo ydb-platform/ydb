@@ -154,9 +154,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
 
     Y_UNIT_TEST(ExternalTablePgColumnsRespectCompatibilityFlag) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(false).EnableReplaceIfExistsForExternalEntities(true));
-        auto& flags = runtime.GetAppData().FeatureFlags;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).EnableReplaceIfExistsForExternalEntities(true));
         ui64 txId = 100;
+        const auto updatePgCompatibility = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
             Name: "ExternalDataSource"
@@ -176,11 +183,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         const TVector<TExpectedResult> rejected{{NKikimrScheme::StatusSchemeError,
             "PostgreSQL compatibility is disabled for column 'value' (DisablePgCompatibility feature flag is on)"}};
 
-        flags.SetDisablePgCompatibility(true);
+        updatePgCompatibility(true);
         TestCreateExternalTable(runtime, ++txId, "/MyRoot", table, rejected);
         TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathNotExist);
 
-        flags.SetDisablePgCompatibility(false);
+        updatePgCompatibility(false);
         TestCreateExternalTable(runtime, ++txId, "/MyRoot", table, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
         const auto original = DescribePath(runtime, "/MyRoot/ExternalTable");
@@ -189,10 +196,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         UNIT_ASSERT_VALUES_EQUAL(description.ColumnsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(description.GetColumns(0).GetTypeId(), NScheme::NTypeIds::Pg);
 
-        flags.SetDisablePgCompatibility(true);
+        updatePgCompatibility(true);
         TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", table, rejected);
         const auto after = DescribePath(runtime, "/MyRoot/ExternalTable");
         TestDescribeResult(after, {NLs::Finished, NLs::IsExternalTable});
         UNIT_ASSERT_VALUES_EQUAL(after.GetPathDescription().GetExternalTableDescription().DebugString(), description.DebugString());
+
+        const auto nativeTable = [](const char* location) {
+            return Sprintf(R"(
+                Name: "NativeExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "%s"
+                Columns { Name: "value" Type: "Uint64" }
+            )", location);
+        };
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", nativeTable("/"), {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/NativeExternalTable"), {NLs::Finished, NLs::IsExternalTable});
+
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", nativeTable("/new_location"), {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+        const auto replaced = DescribePath(runtime, "/MyRoot/NativeExternalTable");
+        TestDescribeResult(replaced, {NLs::Finished, NLs::IsExternalTable});
+        UNIT_ASSERT_VALUES_EQUAL(replaced.GetPathDescription().GetExternalTableDescription().GetLocation(), "/new_location");
     }
 }

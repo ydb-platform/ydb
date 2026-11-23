@@ -22,5 +22,9 @@
   "python": {
     "base": "a1e8d261bb62eea99d00692fe6b2fbaa02172f01",
     "repository": "https://github.com/ydb-platform/ydb-python-sdk.git"
+  },
+  "rs": {
+    "base": "ef8e9376e6e650eea3840bed6059b03bcdb26b87",
+    "repository": "https://github.com/ydb-platform/ydb-rs-sdk.git"
   }
 }

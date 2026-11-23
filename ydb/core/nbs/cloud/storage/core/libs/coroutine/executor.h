@@ -12,6 +12,8 @@
 #include <util/generic/string.h>
 #include <util/system/sanitizers.h>
 
+#include <atomic>
+
 namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -23,6 +25,8 @@ class TExecutor final
 private:
     struct TThread;
     std::unique_ptr<TThread> Thread;
+    // First Stop joins the thread. Later calls must not enqueue again.
+    std::atomic<bool> Stopped{false};
 
 public:
     static const size_t DefaultStackSize = (NSan::ASanIsOn() ? 128 : 32) * 1024;

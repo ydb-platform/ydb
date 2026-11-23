@@ -5,6 +5,7 @@ SIZE(MEDIUM)
 SRCS(
     partition_scale_manager_ut.cpp
     partitions_location_queue_ut.cpp
+    metrics_ut.cpp
 )
 
 PEERDIR(

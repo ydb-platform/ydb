@@ -26,6 +26,7 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+using google::protobuf::util::MessageDifferencer;
 
 bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
     // return if we should create one child at the root level in the case when another child already exists
@@ -741,7 +742,7 @@ public:
         const bool configureManagedMirror = managedCdcTopic && !stopped
             && (Transaction.HasExpectedReplicationOwnerPathId()
                 || oldPartition.HasMirrorFrom() != newPartition.HasMirrorFrom()
-                || !google::protobuf::util::MessageDifferencer::Equals(oldPartition.GetMirrorFrom(), newPartition.GetMirrorFrom()));
+                || !MessageDifferencer::Equals(oldPartition.GetMirrorFrom(), newPartition.GetMirrorFrom()));
 
         if (managedCdcTopic && previousCdc.HasTrimTxId() && newPartition.HasMirrorFrom()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot restart CDC mirroring after trim");

@@ -1,11 +1,17 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/async.h>
+#include <util/thread/pool.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/core/kafka_proxy/actors/kafka_describe_configs_actor.h>
@@ -581,6 +587,109 @@ namespace NKafka::NTests {
             Cerr << "Response: " << ev->Response.DebugString() << Endl;
             UNIT_ASSERT(ev->Status == EKafkaErrors::NONE_ERROR);
             UNIT_ASSERT_VALUES_EQUAL(ev->Response.partitioning_settings().min_active_partitions(), 1);
+        }
+
+        // YDBBUGS-1205: a navigate result for a CDC stream must expose exactly one
+        // private topic; any other layout must be answered with an error instead of
+        // aborting the process.
+        // AddObserver only works with a simulated (non-real-threads) runtime, so a
+        // dedicated server instance is used here.
+        struct TSimulatedServer {
+            THolder<TThreadPool> Pool;
+            THolder<::NPersQueue::TTestServer> Server;
+
+            ~TSimulatedServer() {
+                Server.Reset();
+                if (Pool) {
+                    Pool->Stop();
+                }
+            }
+
+            NActors::TTestActorRuntime& GetRuntime() {
+                return *Server->CleverServer->GetRuntime();
+            }
+        };
+
+        std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
+            auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+            settings.SetUseRealThreads(false);
+
+            auto out = std::make_unique<TSimulatedServer>();
+            out->Server = MakeHolder<::NPersQueue::TTestServer>(settings, /*start=*/false);
+            out->Server->StartServer(/*doClientInit=*/false, TString("/Root"));
+
+            auto& runtime = out->GetRuntime();
+            runtime.UpdateCurrentTime(TInstant::Now());
+            out->Server->EnableLogs({NKikimrServices::PQ_SCHEMA}, NActors::NLog::PRI_DEBUG);
+
+            out->Server->AnnoyingClient->SetNoConfigMode();
+            out->Pool = MakeHolder<TThreadPool>();
+            out->Pool->Start(2);
+            auto* server = out->Server.Get();
+            auto future = NThreading::Async([server] {
+                server->AnnoyingClient->FullInit();
+                return true;
+            }, *out->Pool);
+            static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
+            return out;
+        }
+
+        TEvKafka::TEvTopicDescribeResponse* DescribeTopicAsCdcStream(size_t childrenCount, TAutoPtr<IEventHandle>& handle) {
+            auto server = CreateSimulatedServer();
+            auto* runtime = &server->GetRuntime();
+            const TString topicPath = "/Root/TopicForCdcDescribe";
+
+            const TString expectedPath = JoinPath(SplitPath(topicPath));
+            auto observer = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+                [&expectedPath, childrenCount](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                    for (auto& entry : ev->Get()->Request.Get()->ResultSet) {
+                        if (JoinPath(entry.Path) != expectedPath) {
+                            continue;
+                        }
+                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                        entry.Kind = NSchemeCache::TSchemeCacheNavigate::KindCdcStream;
+                        auto listEntry = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TListNodeEntry>();
+                        listEntry->Kind = NSchemeCache::TSchemeCacheNavigate::KindCdcStream;
+                        for (size_t i = 0; i < childrenCount; ++i) {
+                            listEntry->Children.emplace_back(
+                                "priv" + ToString(i),
+                                TPathId(),
+                                NSchemeCache::TSchemeCacheNavigate::KindTopic);
+                        }
+                        entry.ListNodeEntry = listEntry;
+                    }
+                });
+
+            auto edge = runtime->AllocateEdgeActor();
+            auto actorId = runtime->Register(new TKafkaDescribeTopicActor(edge, nullptr, topicPath, "/Root"));
+            Y_UNUSED(actorId);
+            return runtime->GrabEdgeEvent<TEvKafka::TEvTopicDescribeResponse>(handle);
+        }
+
+        Y_UNIT_TEST(DescribeCdcStreamWithoutChildren) {
+            TAutoPtr<IEventHandle> handle;
+            auto* ev = DescribeTopicAsCdcStream(0, handle);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+        }
+
+        Y_UNIT_TEST(DescribeCdcStreamWithTwoChildren) {
+            TAutoPtr<IEventHandle> handle;
+            auto* ev = DescribeTopicAsCdcStream(2, handle);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Status, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_STRING_CONTAINS(ev->Message, "unexpected scheme layout");
+        }
+
+        Y_UNIT_TEST(DescribeCdcStreamWithSingleChildContinuesToPrivateTopic) {
+            TAutoPtr<IEventHandle> handle;
+            auto* ev = DescribeTopicAsCdcStream(1, handle);
+            UNIT_ASSERT(ev);
+            // The single-child layout is processed without an abort and the describe
+            // continues into the (nonexisting) private topic which yields the regular
+            // "not found" error for it.
+            UNIT_ASSERT_STRING_CONTAINS(ev->Message, "does not exist or you do not have access rights");
         }
     }
 

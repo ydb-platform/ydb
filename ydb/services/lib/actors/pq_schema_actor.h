@@ -353,11 +353,24 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    AFL_ENSURE(response.ListNodeEntry)
-                        ("path", GetTopicPath())("database", TActorBase::Database);
-                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
-                        ("path", GetTopicPath())("database", TActorBase::Database)
-                        ("children", response.ListNodeEntry->Children.size());
+                    const size_t childrenCount = response.ListNodeEntry ? response.ListNodeEntry->Children.size() : 0;
+                    if (childrenCount != 1) {
+                        // YDBBUGS-1205: a CDC stream has exactly one private topic; a different
+                        // count means it is being created or dropped right now. Reply SCHEME_ERROR
+                        // instead of aborting the process, as rpc_describe_path.cpp does.
+                        auto ctx = *NActors::TlsActivationContext;
+                        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::PERSQUEUE,
+                            "Describe request for a cdc stream with unexpected scheme layout",
+                            {"database", TActorBase::Database},
+                            {"path", GetTopicPath()},
+                            {"childrenCount", childrenCount});
+                        AddIssue(FillIssue(
+                            TStringBuilder() << "path '" << GetTopicPath() << "' is not created yet or has an unexpected scheme layout",
+                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                        ));
+                        RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+                        return true;
+                    }
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {
@@ -603,7 +616,24 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    const size_t childrenCount = response.ListNodeEntry ? response.ListNodeEntry->Children.size() : 0;
+                    if (childrenCount != 1) {
+                        // YDBBUGS-1205: a CDC stream has exactly one private topic; a different
+                        // count means it is being created or dropped right now. Reply SCHEME_ERROR
+                        // instead of aborting the process, as rpc_describe_path.cpp does.
+                        auto ctx = *NActors::TlsActivationContext;
+                        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::PERSQUEUE,
+                            "Describe request for a cdc stream with unexpected scheme layout",
+                            {"database", TBase::Database},
+                            {"path", GetTopicPath()},
+                            {"childrenCount", childrenCount});
+                        AddIssue(FillIssue(
+                            TStringBuilder() << "path '" << GetTopicPath() << "' is not created yet or has an unexpected scheme layout",
+                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
+                        ));
+                        RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+                        return true;
+                    }
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
                     SendDescribeProposeRequest(true);
                     return true;

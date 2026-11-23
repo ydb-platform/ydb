@@ -3,6 +3,8 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <library/cpp/protobuf/util/walk.h>
+
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
@@ -1548,10 +1550,10 @@ namespace NKikimr::NBsController {
             bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
-                const bool hasUnknownFields = !property.GetReflection()->GetUnknownFields(property).empty();
-                if (hasUnknownFields) {
-                    // This may be a new oneof alternative, even if an older field is also present on the wire.
+                if (NProtoBuf::HasUnknownFieldsRecursive(property)) {
+                    // Preserve the whole constraint if any part of it is not understood.
                     filter.HasUnknownRequiredProperty = true;
+                    continue;
                 }
                 switch (property.GetPropertyCase()) {
 #define PROPERTY(NAME) \
@@ -1574,10 +1576,6 @@ namespace NKikimr::NBsController {
                         if (std::exchange(hasLocation, true)) {
                             throw TExError() << "Location already set";
                         }
-                        if (!property.GetLocation().unknown_fields().empty()) {
-                            filter.HasUnknownRequiredProperty = true;
-                            continue;
-                        }
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
                             throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
                         }
@@ -1588,9 +1586,6 @@ namespace NKikimr::NBsController {
                         continue;
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                        if (hasUnknownFields) {
-                            continue; // Keep the opaque constraint, but do not match any disks with this filter.
-                        }
                         throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
                 }
 

@@ -89,6 +89,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/util
     ydb/library/actors/core
     ydb/library/yaml_config
     ydb/core/base

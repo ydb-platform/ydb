@@ -1,5 +1,7 @@
 #include "cluster_balancing.h"
 
+#include <library/cpp/protobuf/util/walk.h>
+
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -120,8 +122,7 @@ namespace NKikimr::NBsController {
             const TNodeLocation* location
         ) {
             for (const auto& property : filter.GetProperty()) {
-                if (!property.GetReflection()->GetUnknownFields(property).empty()
-                        || (property.HasLocation() && !property.GetLocation().unknown_fields().empty())) {
+                if (NProtoBuf::HasUnknownFieldsRecursive(property)) {
                     return false;
                 }
                 switch (property.GetPropertyCase()) {

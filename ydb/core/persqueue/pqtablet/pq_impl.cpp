@@ -102,26 +102,28 @@ TVector<NScheme::TTypeInfo> MakeTopicKeyTypes(const NKikimrPQ::TPQTabletConfig& 
     return keyTypes;
 }
 
-TPartitionKeyRange ParseTopicPartitionKeyRange(const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
-    if (!tabletConfig.PartitionKeySchemaSize()) {
-        return {};
+bool IsKeyRangeBootstrap(const NKikimrPQ::TBootstrapConfig& bootstrapCfg) {
+    return AnyOf(bootstrapCfg.GetExplicitMessageGroups(), [](const auto& mg) {
+        return mg.HasKeyRange();
+    });
+}
+
+std::tuple<bool, TVector<NScheme::TTypeInfo>, TPartitionKeyRange> PrepareTopicPartitionKeys(const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+        const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
+    if (!IsKeyRangeBootstrap(bootstrapCfg) || !tabletConfig.PartitionKeySchemaSize()) {
+        return {false, {}, {}};
     }
     const auto* partition = GetPartitionConfig(tabletConfig, partitionId);
     AFL_ENSURE(partition)("partition_id", partitionId);
-    return TPartitionKeyRange::Parse(partition->GetKeyRange());
+    return {true, MakeTopicKeyTypes(tabletConfig), TPartitionKeyRange::Parse(partition->GetKeyRange())};
 }
 
 void AddBootstrapMessageGroups(TEvPQ::TMessageGroups& messageGroups, const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
         const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
-    const bool hasKeyRanges = AnyOf(bootstrapCfg.GetExplicitMessageGroups(), [](const auto& mg) {
-        return mg.HasKeyRange();
-    });
-    const auto keyTypes = hasKeyRanges ? MakeTopicKeyTypes(tabletConfig) : TVector<NScheme::TTypeInfo>();
-    const auto topicPartitionKeyRange = hasKeyRanges ? ParseTopicPartitionKeyRange(tabletConfig, partitionId) : TPartitionKeyRange();
-
+    const auto [shouldFilterDataShardsByKeyRange, keyTypes, topicPartitionKeyRange] = PrepareTopicPartitionKeys(bootstrapCfg, tabletConfig, partitionId);
     for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
         auto dataShardKeyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
-        if (!keyTypes.empty() && !Intersects(dataShardKeyRange, topicPartitionKeyRange, keyTypes)) {
+        if (shouldFilterDataShardsByKeyRange && !Intersects(dataShardKeyRange, topicPartitionKeyRange, keyTypes)) {
             continue;
         }
         messageGroups[mg.GetId()] = {.SeqNo = 0, .KeyRange = std::move(dataShardKeyRange)};

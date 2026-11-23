@@ -908,7 +908,7 @@ public:
             }
             auto* producer = cdc.AddCdcProducers();
             id.ToProto(producer->MutableStreamPathId());
-            producer->SetReplicationConsumer(config.GetReplicationSourceConsumer());
+            producer->SetSourceIdPrefix(config.GetReplicationSourceConsumer());
         }
 
         if (tableInfo->IsBackup) {

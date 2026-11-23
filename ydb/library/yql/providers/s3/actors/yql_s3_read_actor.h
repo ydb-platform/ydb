@@ -24,6 +24,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, const NActors::TActorId& computeActorId,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg, ::NMonitoring::TDynamicCounterPtr counters, ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager, bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory = nullptr);
+    IMemoryQuotaManager::TPtr memoryQuotaManager, bool allowLocalFiles, IDqSchedulableWorkFactoryPtr workFactory = nullptr,
+    ::NMonitoring::TDynamicCounterPtr cpuCounters = nullptr);
 
 }   // namespace NYql::NDq

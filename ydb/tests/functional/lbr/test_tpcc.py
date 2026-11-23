@@ -10,7 +10,6 @@ from ydb.tests.functional.lbr.lib.lbr import LbrCollector, parse_numeric_paramet
 from ydb.tests.functional.lbr.lib.conversion import LbrConversion
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
@@ -116,13 +115,6 @@ class TestTpccLocalLbr(tpcc.TpccSuiteBase, FunctionalTestBase):
                 pdisk_size=pdisk_size_gib * 1024**3,
                 static_pdisk_config={"expected_slot_count": 4},
                 storage_pool_erasure=Erasure.MIRROR_3_DC,
-            )
-            slot = next(iter(cls.cluster.slots.values()))
-            YdbCluster.reset(
-                ydb_endpoint=f"grpc://{slot.host}:{slot.grpc_port}",
-                ydb_database=f"{cls.cluster.domain_name}/test_db",
-                ydb_mon_port=slot.mon_port,
-                dyn_nodes_count=cls.DYNAMIC_NODES,
             )
             super().setup_class()
         except BaseException:

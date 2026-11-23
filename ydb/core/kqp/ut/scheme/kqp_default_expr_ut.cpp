@@ -12,6 +12,7 @@
 
 #include <library/cpp/random_provider/random_provider.h>
 
+#include <algorithm>
 #include <atomic>
 
 namespace NKikimr::NKqp {
@@ -543,6 +544,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 PRIMARY KEY (k)
             ) WITH (TTL = Interval("PT1H") ON ts);
         )");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT k, ts IS NOT NULL FROM TestTable;", "[[1;%true]]");
     }
 
     Y_UNIT_TEST(MultipleDefaultsIndependent) {
@@ -918,6 +921,13 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
     Y_UNIT_TEST(ColumnReferenceRejected) {
         TTestFixture fixture;
         fixture.Rejects(DefaultExprDDL("v Int32 DEFAULT other + 1"), "Column reference");
+        fixture.Rejects(DefaultExprDDL("v Int32 DEFAULT missing + 1"), "Column reference");
+    }
+
+    Y_UNIT_TEST(WholeRowReferenceRejected) {
+        TTestFixture fixture;
+        fixture.Rejects(DefaultExprDDL("v Int32 DEFAULT TableRow().other"), "TableRow requires data source");
+        fixture.Rejects(DefaultExprDDL("v Int32 DEFAULT JoinTableRow().other"), "JoinTableRow requires data source");
     }
 
     Y_UNIT_TEST(SelfReferenceRejected) {
@@ -946,6 +956,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, PRIMARY KEY (k));");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT EXISTS (SELECT k FROM Source)"), "subquery");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT NOT EXISTS (SELECT k FROM Source)"), "subquery");
+        fixture.Rejects(DefaultExprDDL("v Uint64 DEFAULT (SELECT COUNT(*) FROM Source)"), "subquery");
+        fixture.Rejects(DefaultExprDDL("v Bool DEFAULT 1 NOT IN (SELECT k FROM Source)"), "subquery");
     }
 
     Y_UNIT_TEST(NamedExpressionRejected) {
@@ -953,6 +965,8 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Exec("CREATE TABLE Source (k Int32 NOT NULL, PRIMARY KEY (k));");
         fixture.Rejects(DefaultExprDDL("v Bool DEFAULT 1 IN $ids", "$ids = (SELECT k FROM Source);\n"),
             "Unknown name: $ids");
+        fixture.Rejects(DefaultExprDDL("v Uint64 DEFAULT $value + RandomNumber(1)", "$value = 5ul;\n"),
+            "Unknown name: $value");
     }
 
     Y_UNIT_TEST(ParameterRejected) {
@@ -978,6 +992,15 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Rejects(
             DefaultExprDDL("v String DEFAULT TablePath() || CAST(RandomNumber(1) AS String)"),
             "TablePath");
+        fixture.Rejects(
+            DefaultExprDDL("v String DEFAULT TableName() || CAST(RandomNumber(1) AS String)"),
+            "TableName");
+        fixture.Rejects(
+            DefaultExprDDL("v Uint64 DEFAULT TableRecordIndex() + RandomNumber(1)"),
+            "TableRecord");
+        fixture.Rejects(
+            DefaultExprDDL("v String DEFAULT FileContent(\"f\") || CAST(RandomNumber(1) AS String)"),
+            "FileContent");
         fixture.Rejects(
             DefaultExprDDL("v Int32 DEFAULT EvaluateExpr(1 + 2) + CAST(RandomNumber(1) AS Int32)"),
             "EvaluateExpr");
@@ -1035,6 +1058,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
             "declared NOT NULL");
     }
 
+    Y_UNIT_TEST(JsonExistsDefaultRespectsNullability) {
+        TTestFixture fixture;
+        const TString expression = R"(JSON_EXISTS(
+            IF(RandomNumber(1) * 0ul = 0ul, Json(@@{"key":1}@@), NULL), "$.key" UNKNOWN ON ERROR))";
+        fixture.Rejects(DefaultExprDDL(TStringBuilder() << "v Bool NOT NULL DEFAULT " << expression),
+            "is declared NOT NULL");
+
+        fixture.Exec(DefaultExprDDL(TStringBuilder() << "v Bool DEFAULT " << expression));
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (1) RETURNING k, v;", "[[1;[%true]]]");
+    }
+
     Y_UNIT_TEST(NullableOptionalExprAccepted) {
         TTestFixture fixture;
         fixture.Exec(DefaultExprDDL(
@@ -1066,11 +1101,46 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT COUNT(*) FROM TestTable;", "[[2u]]");
     }
 
+    Y_UNIT_TEST(SetAndDropNotNullKeepExpressionDefault) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v SET NOT NULL;");
+        const auto required = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT(required.GetNotNull());
+        AssertFromExpression(required, DefaultExpr);
+        fixture.Check("INSERT INTO TestTable (k) VALUES (2) RETURNING k, v;", "[[2;42u]]");
+
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN v DROP NOT NULL;");
+        fixture.RestartSchemeShard("/Root/TestTable");
+        const auto nullable = fixture.ColumnDesc("/Root/TestTable", "v");
+        UNIT_ASSERT(!nullable.GetNotNull());
+        AssertFromExpression(nullable, DefaultExpr);
+        fixture.Exec("INSERT INTO TestTable (k, v) VALUES (3, NULL);");
+        fixture.Check("INSERT INTO TestTable (k) VALUES (4) RETURNING k, v;", "[[4;[42u]]]");
+        fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[42u]];[3;#];[4;[42u]]]");
+    }
+
     Y_UNIT_TEST(DefaultAndGeneratedRejected) {
         TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
         fixture.Rejects(DefaultExprDDL(TStringBuilder()
                 << "v Uint64 DEFAULT " << DefaultExpr << " GENERATED ALWAYS AS (CAST(k AS Uint64)) STORED"),
             "same time");
+    }
+
+    Y_UNIT_TEST(DefaultCannotReadGeneratedColumn) {
+        TTestFixture fixture(TFixtureOptions{.GeneratedStored = true});
+        fixture.Rejects(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                g Int32 GENERATED ALWAYS AS (k + 1) STORED,
+                v Int32 DEFAULT g,
+                PRIMARY KEY (k)
+            );
+        )", "Column reference");
     }
 
     Y_UNIT_TEST(DefaultAndSerialRejected) {
@@ -1128,15 +1198,17 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
 
     Y_UNIT_TEST(AddColumnWithDefaultLiteralAccepted) {
         TTestFixture fixture;
-        fixture.Exec(DefaultExprDDL("v Int32"));
-        fixture.Exec("ALTER TABLE TestTable ADD COLUMN w Int32 DEFAULT 5;");
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN w Int32 NOT NULL DEFAULT 5;");
         {
             const auto col = fixture.ColumnDesc("/Root/TestTable", "w");
             UNIT_ASSERT_C(col.HasDefaultFromLiteral(), col.ShortDebugString());
         }
 
-        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
-        fixture.Check("SELECT k, w FROM TestTable;", "[[1;[5]]]");
+        AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), DefaultExpr);
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
+        fixture.Check("SELECT k, v, w FROM TestTable ORDER BY k;", "[[1;[42u];5];[2;[42u];5]]");
     }
 
     Y_UNIT_TEST(OnlyRequiredExpressionDefaultsAreCompiledIntoWriteAst) {
@@ -2444,13 +2516,24 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         fixture.Check("SELECT k, v FROM TestTable;", "[[1;[42u]]]");
     }
 
-    Y_UNIT_TEST(DescribeTableHidesExpression) {
+    Y_UNIT_TEST_TWIN(DescribeTableHidesExpression, WithSequenceValue) {
         TTestFixture fixture;
-        fixture.Exec(ValueTableDDL());
+        if constexpr (WithSequenceValue) {
+            fixture.Exec(R"(
+                CREATE TABLE TestTable (
+                    k Serial,
+                    v Uint64 DEFAULT RandomNumber(1) * 0ul + 42ul,
+                    PRIMARY KEY (k)
+                );
+            )");
+        } else {
+            fixture.Exec(ValueTableDDL());
+        }
 
         auto tableClient = fixture.Runner().GetTableClient();
         auto session = tableClient.GetSession().GetValueSync().GetSession();
-        auto describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+        auto describe = session.DescribeTable("/Root/TestTable",
+            NYdb::NTable::TDescribeTableSettings().WithSetVal(WithSequenceValue)).GetValueSync();
         UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
 
         // Column expressions are not part of the public API: the column describes without a default
@@ -2465,6 +2548,18 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
                 static_cast<int>(Ydb::Table::ColumnMeta::DEFAULT_VALUE_NOT_SET), column.ShortDebugString());
         }
         UNIT_ASSERT_C(found, "column v not found in DescribeTable");
+
+        if constexpr (WithSequenceValue) {
+            const auto columns = describe.GetTableDescription().GetTableColumns();
+            const auto serial = std::find_if(columns.begin(), columns.end(), [](const auto& column) {
+                return column.Name == "k";
+            });
+            UNIT_ASSERT(serial != columns.end());
+            UNIT_ASSERT(serial->SequenceDescription);
+            UNIT_ASSERT_VALUES_EQUAL(serial->SequenceDescription->Name, "_serial_column_k");
+            UNIT_ASSERT(serial->SequenceDescription->StartValue);
+            UNIT_ASSERT_VALUES_EQUAL(*serial->SequenceDescription->StartValue, 1);
+        }
     }
 
     Y_UNIT_TEST(DumpDescribeRejectsDefaultExpression) {
@@ -2490,6 +2585,114 @@ Y_UNIT_TEST_SUITE(DefaultExpr) {
         AssertFromExpression(fixture.ColumnDesc("/Root/TestTable", "v"), expression);
         fixture.Exec("INSERT INTO TestTable (k) VALUES (2);");
         fixture.Check("SELECT k, v FROM TestTable ORDER BY k;", "[[1;[42u]];[2;[42u]]]");
+    }
+
+    Y_UNIT_TEST(StoredDefaultTypesAfterReload) {
+        TTestFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                d Decimal(22, 9) NOT NULL DEFAULT
+                    IF(RandomNumber(1) * 0ul = 0ul, Decimal("12.34", 22, 9), Decimal("0", 22, 9)),
+                s String NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, "bytes", ""),
+                u Utf8 NOT NULL DEFAULT Unicode::ToLower(IF(RandomNumber(1) * 0ul = 0ul, "MiXeD"u, ""u)),
+                dt Date NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Date("2021-01-01"), Date("2020-01-01")),
+                ts Datetime NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Datetime("2021-01-01T01:02:03Z"), Datetime("2020-01-01T00:00:00Z")),
+                stamp Timestamp NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Timestamp("2021-01-01T01:02:03.123456Z"), Timestamp("2020-01-01T00:00:00Z")),
+                span Interval NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, Interval("PT2H"), Interval("PT1H")),
+                id Uuid NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul,
+                    Uuid("550e8400-e29b-41d4-a716-446655440000"), Uuid("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")),
+                n DyNumber NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, DyNumber("15.15"), DyNumber("60.5")),
+                j JsonDocument NOT NULL DEFAULT IF(RandomNumber(1) * 0ul = 0ul, JsonDocument("[14]"), JsonDocument("[]")),
+                PRIMARY KEY (k)
+            );
+        )");
+        fixture.RestartSchemeShard("/Root/TestTable");
+        for (TStringBuf name : {"d", "s", "u", "dt", "ts", "stamp", "span", "id", "n", "j"}) {
+            const auto column = fixture.ColumnDesc("/Root/TestTable", TString(name));
+            UNIT_ASSERT_C(column.HasDefaultFromExpression(), column.ShortDebugString());
+            UNIT_ASSERT(column.GetDefaultFromExpression().GetStored());
+            UNIT_ASSERT(column.GetDefaultFromExpression().GetWritable());
+        }
+
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT d, s, u, dt, ts, stamp, span FROM TestTable;",
+            R"([["12.34";"bytes";"mixed";18628u;1609462923u;1609462923123456u;7200000000]])");
+        auto result = fixture.QuerySession().ExecuteQuery("SELECT id, n, j FROM TestTable;",
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("id").GetUuid().ToString(), "550e8400-e29b-41d4-a716-446655440000");
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("n").GetDyNumber(), ".1515e2");
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("j").GetJsonDocument(), "[14]");
+        UNIT_ASSERT(!parser.TryNextRow());
+    }
+
+    Y_UNIT_TEST(CopyAndTruncatePreserveExpressionDefault) {
+        TTestFixture fixture;
+        fixture.Exec(DmlMatrixDDL(ESecondaryIndexKind::Sync));
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (2, 20, 7ul);");
+        auto session = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        auto copy = session.CopyTable("/Root/TestTable", "/Root/Copy").ExtractValueSync();
+        UNIT_ASSERT_C(copy.IsSuccess(), copy.GetIssues().ToString());
+        AssertFromExpression(fixture.ColumnDesc("/Root/Copy", "v"), DefaultExpr);
+        UNIT_ASSERT_STRING_CONTAINS(fixture.ShowCreateTable("/Root/Copy"), TStringBuilder() << "DEFAULT " << DefaultExpr);
+
+        const TString original = "[[1;[10];[42u]];[2;[20];[7u]]]";
+        fixture.Check("SELECT k, other, v FROM Copy ORDER BY k;", original);
+        fixture.Check("SELECT k, other, v FROM Copy VIEW idx_v ORDER BY k;", original);
+        fixture.Exec("TRUNCATE TABLE Copy;");
+        fixture.Check("SELECT k, v FROM Copy;", "[]");
+        fixture.Check("SELECT k, v FROM Copy VIEW idx_v;", "[]");
+        fixture.Check("INSERT INTO Copy (k, other) VALUES (3, 30) RETURNING k, other, v;", "[[3;[30];[42u]]]");
+        fixture.Check("SELECT k, other, v FROM Copy VIEW idx_v WHERE v = 42ul;", "[[3;[30];[42u]]]");
+        fixture.Check("SELECT k, other, v FROM TestTable ORDER BY k;", original);
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v ORDER BY k;", original);
+    }
+
+    Y_UNIT_TEST_TWIN(StreamExecuteQueryMaterializesDefault, EnableStreamWrite) {
+        auto appConfig = DefaultExprAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+        TTestFixture fixture(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        fixture.Exec(DmlMatrixDDL(ESecondaryIndexKind::Sync));
+        auto client = fixture.Runner().GetQueryClient();
+        auto iterator = client.StreamExecuteQuery(R"(
+            INSERT INTO TestTable (k, other) VALUES (1, 10) RETURNING k, other, v;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        CompareYson("[[1;[10];[42u]]]", StreamResultToYson(iterator));
+        fixture.Check("SELECT k, other, v FROM TestTable VIEW idx_v;", "[[1;[10];[42u]]]");
+    }
+
+    Y_UNIT_TEST(ReadsUseStoredValuesAfterDefaultChanges) {
+        TTestFixture fixture;
+        fixture.Exec(ValueTableDDL());
+        fixture.Exec("INSERT INTO TestTable (k, other) VALUES (1, 10);");
+        fixture.Exec("INSERT INTO TestTable (k, other, v) VALUES (2, 20, NULL), (3, 30, 7ul);");
+        fixture.Exec(R"(
+            ALTER TABLE TestTable ALTER COLUMN v SET DEFAULT Ensure(RandomNumber(1), false, "default ran");
+        )");
+        fixture.RestartSchemeShard("/Root/TestTable");
+
+        fixture.Check("SELECT * FROM TestTable ORDER BY k;", "[[1;[10];[42u]];[2;[20];#];[3;[30];[7u]]]");
+        fixture.Check(R"(
+            SELECT v, COUNT(*) FROM TestTable WHERE v IS NOT NULL
+            GROUP BY v HAVING COUNT(*) = 1u ORDER BY v;
+        )", "[[[7u];1u];[[42u];1u]]");
+        fixture.Check(R"(
+            $rows = SELECT k, v FROM TestTable WHERE v IS NOT NULL;
+            SELECT l.k, r.v, ROW_NUMBER() OVER (ORDER BY r.v) AS pos
+            FROM $rows AS l INNER JOIN $rows AS r ON l.k = r.k
+            ORDER BY pos;
+        )", "[[3;[7u];1u];[1;[42u];2u]]");
+
+        auto session = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        auto settings = NYdb::NTable::TReadTableSettings().Ordered().AppendColumns("k").AppendColumns("v");
+        auto iterator = session.ReadTable("/Root/TestTable", settings).ExtractValueSync();
+        CompareYson("[[[1];[42u]];[[2];#];[[3];[7u]]]", StreamResultToYson(iterator));
     }
 
     Y_UNIT_TEST(BulkUpsert) {

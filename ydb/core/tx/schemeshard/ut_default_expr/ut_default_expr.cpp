@@ -1,5 +1,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <util/string/builder.h>
 
 #include <optional>
 
@@ -18,14 +21,29 @@ void DisableDefaultFromExpression(TTestActorRuntime& runtime) {
     runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(false);
 }
 
-const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name) {
-    const auto& table = describe.GetPathDescription().GetTable();
+const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrSchemeOp::TTableDescription& table, const TString& name) {
     for (const auto& column : table.GetColumns()) {
         if (column.GetName() == name) {
             return &column;
         }
     }
     return nullptr;
+}
+
+const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name) {
+    return FindColumn(describe.GetPathDescription().GetTable(), name);
+}
+
+NKikimrSchemeOp::TTableDescription GetDataShardTableDescription(TTestActorRuntime& runtime, const TString& path) {
+    const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, path);
+    UNIT_ASSERT_VALUES_EQUAL_C(shards.size(), 1u, path);
+
+    const auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(shards.front(), sender, new TEvDataShard::TEvGetInfoRequest(), 0, GetPipeConfigWithRetries());
+    const auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(sender);
+    const auto& info = response->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL_C(info.GetUserTables().size(), 1, info.ShortDebugString());
+    return info.GetUserTables(0).GetDescription();
 }
 
 void CheckDefaultExpression(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name,
@@ -114,9 +132,17 @@ void CheckMalformedDefaultExpression(ESchemaOperation operation, bool stored, bo
     if (alter) {
         TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
             {{NKikimrScheme::StatusInvalidParameter, error}});
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* existingColumn = FindColumn(describe, "value");
+        if (operation == ESchemaOperation::AlterColumn) {
+            UNIT_ASSERT(existingColumn && !existingColumn->HasDefaultFromExpression());
+        } else {
+            UNIT_ASSERT(!existingColumn);
+        }
     } else {
         TestCreateTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
             {{NKikimrScheme::StatusSchemeError, error}});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
     }
 }
 
@@ -168,11 +194,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         DisableDefaultFromExpression(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
 
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr,
             { { NKikimrScheme::StatusSchemeError, "DEFAULT expressions are disabled. Column: ts" } });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(LegacyVirtualExpressionAccepted) {
@@ -263,6 +291,39 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(column->GetFamily(), 0u);
     }
 
+    Y_UNIT_TEST(AlterColumnFamilyPreservesDefaultExpression) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+
+        ui64 txId = 100;
+        const TString tablePath = "/MyRoot/Table";
+        TestCreateTable(runtime, ++txId, "/MyRoot", TStringBuilder() << TableWithDefaultExpr << R"pb(
+              PartitionConfig {
+                  ColumnFamilies { Id: 0 StorageConfig { SysLog {} Log {} } }
+                  ColumnFamilies { Id: 1 Name: "alt" }
+              }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+              Name: "Table"
+              Columns { Name: "ts" FamilyName: "alt" }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePath(runtime, tablePath);
+        const auto* column = FindColumn(describe, "ts");
+        UNIT_ASSERT(column);
+        UNIT_ASSERT_VALUES_EQUAL(column->GetFamily(), 1u);
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
+
+        const auto shardSchema = GetDataShardTableDescription(runtime, tablePath);
+        const auto* shardColumn = FindColumn(shardSchema, "ts");
+        UNIT_ASSERT(shardColumn);
+        UNIT_ASSERT_VALUES_EQUAL(shardColumn->GetFamily(), 1u);
+    }
+
     // TTL is rejected on generated columns because their value is derived; a DEFAULT column holds
     // an ordinary stored value and may be the TTL column
     Y_UNIT_TEST(TtlOnDefaultExpressionColumnAllowed) {
@@ -290,7 +351,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         )pb");
         env.TestWaitNotification(runtime, txId);
 
-        CheckDefaultExpression(DescribePath(runtime, "/MyRoot/Table"), "expires", "CurrentUtcTimestamp()");
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto& ttl = describe.GetPathDescription().GetTable().GetTTLSettings();
+        UNIT_ASSERT(ttl.HasEnabled());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "expires");
+        CheckDefaultExpression(describe, "expires", "CurrentUtcTimestamp()");
+    }
+
+    Y_UNIT_TEST(AlterTableEnablesTtlOnDefaultExpressionColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+              Name: "Table"
+              TTLSettings { Enabled { ColumnName: "ts" ExpireAfterSeconds: 3600 } }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto& ttl = describe.GetPathDescription().GetTable().GetTTLSettings();
+        UNIT_ASSERT(ttl.HasEnabled());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "ts");
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600u);
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
     }
 
     Y_UNIT_TEST(DropNotNullOnDefaultExpressionColumn) {
@@ -323,6 +411,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         env.TestWaitNotification(runtime, txId);
 
         auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* column = FindColumn(describe, "ts");
+        UNIT_ASSERT(column && !column->GetNotNull());
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
+    }
+
+    Y_UNIT_TEST(DirectSetNotNullOnDefaultExpressionColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+              Name: "Table"
+              Columns { Name: "ts" NotNull: true }
+        )pb", {{NKikimrScheme::StatusInvalidParameter, "Cannot set NotNull to true on column 'ts'"}});
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto* column = FindColumn(describe, "ts");
         UNIT_ASSERT(column && !column->GetNotNull());
         CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
@@ -383,9 +491,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         EnableDefaultFromExpression(runtime);
 
         ui64 txId = 100;
+        const TString tablePath = "/MyRoot/Table";
 
         TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
         env.TestWaitNotification(runtime, txId);
+
+        const auto initialShardSchema = GetDataShardTableDescription(runtime, tablePath);
+        const auto* shardColumn = FindColumn(initialShardSchema, "ts");
+        UNIT_ASSERT(shardColumn && !shardColumn->HasDefaultFromExpression());
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
               Name: "Table"
@@ -393,8 +506,74 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         )pb");
         env.TestWaitNotification(runtime, txId);
 
-        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto describe = DescribePath(runtime, tablePath);
         UNIT_ASSERT(!FindColumn(describe, "ts"));
+        UNIT_ASSERT(FindColumn(describe, "a"));
+
+        const auto shardSchema = GetDataShardTableDescription(runtime, tablePath);
+        UNIT_ASSERT(!FindColumn(shardSchema, "ts"));
+        UNIT_ASSERT(FindColumn(shardSchema, "a"));
+    }
+
+    Y_UNIT_TEST(DropUnrelatedColumnPreservesDefaultExpression) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableDefaultFromExpression(runtime);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+              Name: "Table"
+              DropColumns { Name: "a" }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT(!FindColumn(describe, "a"));
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
+    }
+
+    Y_UNIT_TEST(SetAndDropLiteralDefaultOnUnrelatedColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+        EnableDefaultFromExpression(runtime);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", TableWithDefaultExpr);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+              Name: "Table"
+              Columns {
+                  Name: "a"
+                  DefaultFromLiteral {
+                      type { optional_type { item { type_id: INT32 } } }
+                      value { items { int32_value: 42 } }
+                  }
+              }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto describe = DescribePath(runtime, "/MyRoot/Table");
+            const auto* column = FindColumn(describe, "a");
+            UNIT_ASSERT(column && column->HasDefaultFromLiteral());
+            CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
+        }
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"pb(
+              Name: "Table"
+              Columns { Name: "a" EmptyDefault: NULL_VALUE }
+        )pb");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* column = FindColumn(describe, "a");
+        UNIT_ASSERT(column);
+        UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
+        CheckDefaultExpression(describe, "ts", "CurrentUtcTimestamp()");
     }
 
     Y_UNIT_TEST_FLAG(AlterDefaultExpressionSurvivesAlterAndRestart, AddColumn) {
@@ -436,10 +615,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         expression->SetStored(true);
         expression->SetWritable(true);
         if (AddColumn) {
-            TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
-                {{NKikimrScheme::StatusInvalidParameter, "Adding a column with a DEFAULT expression is not supported"}});
-            UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "ts"));
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1u);
+            for (const bool featureEnabled : {true, false}) {
+                runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(featureEnabled);
+                TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString(),
+                    {{NKikimrScheme::StatusInvalidParameter, "Adding a column with a DEFAULT expression is not supported"}});
+                UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "ts"));
+                UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1u);
+            }
             return;
         }
         TestAlterTable(runtime, ++txId, "/MyRoot", schema.DebugString());
@@ -583,6 +765,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         DisableDefaultFromExpression(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
 
         ui64 txId = 100;
 
@@ -605,6 +788,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardDefaultExprTest) {
               }
         )pb",
             { { NKikimrScheme::StatusInvalidParameter, "DEFAULT expressions are disabled. Column: ts" } });
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto* column = FindColumn(describe, "ts");
+        UNIT_ASSERT(column);
+        UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultValueCase(), NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET);
     }
 
     Y_UNIT_TEST(AlterSetDefaultExpressionOnGeneratedRejected) {

@@ -68,6 +68,15 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+<<<<<<< HEAD
+=======
+        const bool ReportVDiskMetricsInPDiskMock = false;
+        // Mock PDisks lay data chunks out in encrypted sectors and hand out the format context, as a real PDisk does.
+        // Off: plain data chunks with whole-sector append blocks.
+        const bool SectorFormatInPDiskMock = true;
+        // VDiskControls.EnableVDiskSectorPreparation: VDisks build and open data sectors themselves.
+        const bool EnableVDiskSectorPreparation = false;
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -302,6 +311,30 @@ struct TEnvironmentSetup {
 
     void Initialize() {
         Runtime = MakeRuntime();
+<<<<<<< HEAD
+=======
+        Runtime->SetupNodeSubSystems = [this](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TMockPDiskSubsystem>(&PDiskMockStates,
+                [this](ui32 nodeId, ui32 pdiskId, const TPDiskConfig& cfg) {
+                    const ui32 chunkSize = Settings.PDiskChunkSize
+                        ? static_cast<ui32>(Settings.PDiskChunkSize) : cfg.ChunkSize;
+                    const auto policy = Settings.TrackSharedQuotaInPDiskMock
+                        ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
+                        : TPDiskMockState::ESpaceColorPolicy::None;
+                    // Temporary and configured PDisk ids open the same physical metadata.
+                    auto& metadata = PDiskMetadataByPath[{nodeId, cfg.Path}];
+                    if (!metadata) {
+                        metadata = std::make_shared<TPDiskMockState::TMetadata>();
+                    }
+                    auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata,
+                        Settings.SectorFormatInPDiskMock);
+                    state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
+                    return state;
+                },
+                [this](TActorId actorId) { PDiskActors.push_back(actorId); }));
+        };
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
         TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
@@ -596,6 +629,13 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
                 ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+<<<<<<< HEAD
+=======
+                ADD_ICB_CONTROL(VDiskControls.EnableChecksumReadValidationOnVDisk, false, false, true, false);
+                ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
+                ADD_ICB_CONTROL(VDiskControls.EnableVDiskSectorPreparation, false, false, true,
+                    Settings.EnableVDiskSectorPreparation);
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL

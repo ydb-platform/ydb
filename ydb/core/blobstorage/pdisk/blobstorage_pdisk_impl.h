@@ -7,6 +7,8 @@
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
+#include "blobstorage_pdisk_chunk_nonces.h"
+#include "blobstorage_pdisk_format_context.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_gate.h"
@@ -331,6 +333,7 @@ public:
     // Chunk writing
     bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
+    bool ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -380,6 +383,16 @@ public:
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
+<<<<<<< HEAD
+=======
+    ui32 ReleaseUncommittedChunks(TOwner owner);
+    // Format context and chunk nonces for an owner that builds and checks its sectors itself.
+    // StateMutex must be held by the caller.
+    void FillFormatContext(NPDisk::TEvYardInitResult &result);
+    std::shared_ptr<TChunkNonces> ChunkNonces;
+    void ReturnChunkToFreeList(TOwner owner, TChunkIdx chunkIdx);
+    TFormatContextPtr FormatContextCache; // created on first use; the format does not change afterwards
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);

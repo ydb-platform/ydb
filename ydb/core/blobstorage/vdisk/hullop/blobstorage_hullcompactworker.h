@@ -472,7 +472,7 @@ namespace NKikimr {
             --InFlightReads;
 
             // apply read result to batcher
-            ReadBatcher.Apply(msg);
+            ReadBatcher.Apply(msg, PDiskCtx.get());
             return ProcessReadBatcher(now);
         }
 
@@ -656,9 +656,40 @@ namespace NKikimr {
 
             // if there is no active writer, create one and start writing
             if (!WriterPtr) {
+<<<<<<< HEAD
                 // ensure we have enough reserved chunks to do operation; or else request for allocation and wait
                 if (ReservedChunks.size() < ChunksToUse) {
                     return ETryProcessItemStatus::NeedMoreChunks;
+=======
+                if (UseStripeSst()) {
+                    if (StripeSstLocation.Empty()) {
+                        return ETryProcessItemStatus::NeedStripeSlot;
+                    }
+                    // The writer draws its single chunk from here rather than from
+                    // ReservedChunks, so a stripe it never gets round to using cannot be
+                    // handed out as an ordinary SST chunk and committed as ours while the
+                    // heap still owns it. Left unused it stays here, accounted all along by
+                    // AllocatedStripeBlobs.
+                    StripeChunk.assign(1, StripeSstLocation.ChunkIdx);
+                    WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
+                        1, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, StripeSstLocation.Size,
+                        PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
+                        false, StripeChunk, Arena, HullCtx->VCfg->BlobHeaderMode, StripeSstLocation.Offset, PDiskCtx.get());
+                    WriterHasPendingOperations = false;
+                } else {
+                    // ensure we have enough reserved chunks to do operation; or else request for allocation and wait
+                    if (ReservedChunks.size() < ChunksToUse) {
+                        return ETryProcessItemStatus::NeedMoreChunks;
+                    }
+
+                    // create new instance of writer
+                    WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
+                        ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
+                        PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
+                        false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode, 0, PDiskCtx.get());
+
+                    WriterHasPendingOperations = false;
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
                 }
 
                 // create new instance of writer
@@ -765,6 +796,8 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
             while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
+                // opened here, in the batch pool, rather than in the PDisk completion thread
+                readMsg->RawSectors = UseRawSectorReads(*PDiskCtx);
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));

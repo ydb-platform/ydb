@@ -289,6 +289,12 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
+<<<<<<< HEAD
+=======
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
+        TControlWrapper EnableVDiskSectorPreparation;
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
 
         TControlWrapper EnableChunkKeeper;
 

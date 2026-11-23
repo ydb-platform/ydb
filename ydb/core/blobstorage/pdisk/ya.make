@@ -71,6 +71,18 @@ SRCS(
     drivedata_serializer.cpp
 )
 
+<<<<<<< HEAD
+=======
+# Not joined: the VDisk tests without a PDisk take only TPDiskParams from this library. Joined with the other
+# sources, it would pull in all of the PDisk, with the compatibility info that only binaries define
+# (ydb/apps/version), and those tests would not link.
+SRCS(
+    blobstorage_pdisk_params.cpp
+    # Used by VDisk writers and readers to build and check sectors themselves; standalone like the params.
+    blobstorage_pdisk_format_context.cpp
+)
+
+>>>>>>> dc456f14820 (Move PDisk data-sector preparation and verification to VDisk actors (#57115))
 END()
 
 RECURSE(

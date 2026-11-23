@@ -1365,6 +1365,9 @@ private:
         if (itemIdx != ui32(-1)) {
             Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
             item = &importInfo.Items.at(itemIdx);
+            if (importInfo.Issue.empty()) {
+                importInfo.Issue = item->Issue;
+            }
         }
 
         TStringBuilder itemLogStr;

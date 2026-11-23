@@ -35,6 +35,8 @@
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/public/lib/value/value.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/hook/hook.h>
 
@@ -46,6 +48,7 @@
 
 #include <util/string/builder.h>
 #include <util/folder/tempdir.h>
+#include <util/generic/algorithm.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -433,13 +436,7 @@ namespace {
         }
 
         NKikimrExport::TListExportsResponse ListExports(ui64 pageSize = 10, const TString& pageToken = {}) {
-            AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
-                new TEvExport::TEvListExportsRequest("/MyRoot", pageSize, pageToken, "export/s3"));
-            TAutoPtr<IEventHandle> handle;
-            auto ev = Runtime().GrabEdgeEvent<TEvExport::TEvListExportsResponse>(handle);
-            const auto& response = ev->Record.GetResponse();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
-            return response;
+            return TestListExports(Runtime(), "/MyRoot", pageSize, pageToken);
         }
 
         void CheckExportsHiddenWhileForgetting(bool cancelled) {
@@ -578,6 +575,7 @@ namespace {
             bool success)
         {
             using namespace NKikimr::NWrappers::NExternalStorage;
+            Runtime().AuditLogBackends = CreateTestAuditLogBackends(AuditLines);
             Env();
             size_t attempts = 0;
             const TString fileName = operationMarker ? "export_complete.json" : "data_complete.json";
@@ -608,6 +606,22 @@ namespace {
                 const auto& entry = status.GetResponse().GetEntry();
                 UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
                 UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected marker upload failure");
+                UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+
+                const auto list = ListExports();
+                UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+                const auto& listed = list.GetEntries(0);
+                UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), exportId);
+                UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+                UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), entry.GetIssues(0).message());
+
+                Runtime().WaitFor("export end audit record", [&] {
+                    return AnyOf(AuditLines, [](const auto& line) { return line.find("operation=EXPORT END") != std::string::npos; });
+                }, TDuration::Seconds(10));
+                const auto line = FindAuditLine(AuditLines, "operation=EXPORT END");
+                UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+                UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
             }
         }
 
@@ -2320,6 +2334,7 @@ namespace {
     private:
         TPortManager PortManager;
         ui16 S3ServerPort = 0;
+        std::vector<std::string> AuditLines;
         TMaybe<TTestBasicRuntime> TestRuntime;
         TMaybe<TS3Mock::TSettings> S3ServerSettings;
         TMaybe<TS3Mock> S3ServerMock;
@@ -4927,6 +4942,21 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).message(), "Cancelled manually");
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+        const auto list = TestListExports(Runtime(), "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), exportId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), "Cancelled manually");
+
+        Runtime().WaitFor("export end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=EXPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
 
         // Check audit record for export end
         //

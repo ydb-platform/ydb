@@ -12,6 +12,10 @@
 namespace NKikimr {
 namespace NGRpcService {
 
+ NYdbGrpc::IGRpcService* CreateEndpointDiscoveryService(
+     NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+     const NActors::TActorId& proxy, bool rlAllowed);
+
  class IRequestOpCtx;
  class IFacilityProvider;
 

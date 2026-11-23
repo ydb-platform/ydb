@@ -84,11 +84,13 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 } else {
                     scope.ReaccountAdmittedGroup(externalGroupId);
                     if (!forced) {
-                        AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                        YDB_LOG_VERIFY(++allocationsCount <= allocationsLimit,
+                            {"count", allocationsCount},
+                            {"limit", allocationsLimit});
                     }
                 }
                 if (!forced) {
-                    AFL_VERIFY(groupedAllocations.Remove(i));
+                    YDB_LOG_VERIFY(groupedAllocations.Remove(i));
                 }
             }
             if (!groupedAllocations.IsEmpty()) {

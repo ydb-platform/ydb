@@ -33,7 +33,7 @@ public:
     }
 
     void AddAllocation(const std::shared_ptr<TAllocationInfo>& allocation) {
-        AFL_VERIFY(Allocations.emplace(allocation->GetIdentifier(), allocation).second);
+        YDB_LOG_VERIFY(Allocations.emplace(allocation->GetIdentifier(), allocation).second);
     }
 
     [[nodiscard]] bool Remove(const std::shared_ptr<TAllocationInfo>& allocation) {

@@ -11,6 +11,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
@@ -698,6 +699,11 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
+    if (const auto error = GetWriteModeError(InitialPQTabletConfig)) {
+        CloseSession(error->Reason, ConvertOldCode(error->Code), ctx);
+        return;
+    }
+
     State = ES_WAIT_PARTITION;
 
     if (PartitionChooser) {

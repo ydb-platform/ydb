@@ -1,5 +1,6 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -14,7 +15,10 @@ namespace {
 using namespace NYdb::NTopic;
 
 const TString TOPIC = "/Root/write-mode";
+const TString TOPIC_NAME = "write-mode";
 const TString CONSUMER = "reader";
+// NGRpcProxy::MAGIC_COOKIE_VALUE, skips ChooseProxy for pqv0.
+constexpr ui64 PQV0_PROXY_COOKIE = 123456789;
 const TString WRITE_MODE = "_write_mode";
 const TString AVAILABLE = "available";
 const TString UNAVAILABLE = "unavailable";
@@ -28,6 +32,7 @@ public:
     TTopicClient Client;
     NYdb::NPersQueue::TPersQueueClient PqClient;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
+    std::unique_ptr<NPersQueue::PersQueueService::Stub> PqV0Stub;
 
     TWriteModeEnv()
         : Setup("WriteMode", NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(), false)
@@ -35,6 +40,8 @@ public:
         , Client(Driver)
         , PqClient(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
+            Setup.GetEndpoint(), grpc::InsecureChannelCredentials())))
+        , PqV0Stub(NPersQueue::PersQueueService::NewStub(grpc::CreateChannel(
             Setup.GetEndpoint(), grpc::InsecureChannelCredentials())))
     {
     }
@@ -151,6 +158,7 @@ public:
         auto writer = Client.CreateSimpleBlockingWriteSession(WriteSettings());
         UNIT_ASSERT(writer->Write("message", seqNo, std::nullopt, TDuration::Seconds(10)));
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+        AssertPqV0(true);
     }
 
     template <class TEvents, class TWriter>
@@ -171,7 +179,6 @@ public:
                     UNIT_ASSERT_VALUES_EQUAL(ack.State, TEvents::TWriteAck::EES_DISCARDED);
                 }
             } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                UNIT_ASSERT(sent);
                 const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
                 const auto reason = mode == UNAVAILABLE ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
                 UNIT_ASSERT_VALUES_EQUAL_C(closed->GetStatus(), expected, closed->DebugString());
@@ -182,7 +189,36 @@ public:
         UNIT_FAIL("Write session did not close after a rejected write");
     }
 
+    // First pqv0 response is the error, so init never reaches the partition chooser.
+    void AssertPqV0(bool expectOk, const TString& mode = {}) {
+        grpc::ClientContext context;
+        InitContext(context);
+        auto stream = PqV0Stub->WriteSession(&context);
+        NPersQueue::WriteRequest request;
+        auto* init = request.mutable_init();
+        init->set_topic(TOPIC_NAME);
+        init->set_source_id("pqv0-producer");
+        init->set_proxy_cookie(PQV0_PROXY_COOKIE);
+        UNIT_ASSERT(stream->Write(request));
+        NPersQueue::WriteResponse response;
+        UNIT_ASSERT_C(stream->Read(&response), "pqv0 write session returned no message");
+        if (expectOk) {
+            UNIT_ASSERT_C(response.has_init(), response.ShortDebugString());
+            return;
+        }
+        UNIT_ASSERT_C(response.has_error(), response.ShortDebugString());
+        const auto expectedCode = mode == UNAVAILABLE
+            ? NPersQueue::NErrorCode::ERROR
+            : NPersQueue::NErrorCode::BAD_REQUEST;
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(response.error().code()), static_cast<int>(expectedCode));
+        const auto reason = mode == UNAVAILABLE
+            ? "Write to topic is temporarily disabled"
+            : "Write to topic is prohibited";
+        UNIT_ASSERT_STRING_CONTAINS(response.error().description(), reason);
+    }
+
     void RejectWrites(bool pqv1, const TString& mode) {
+        AssertPqV0(false, mode);
         for (const auto size : {16u, 600u * 1024}) {
             const TString data(size, 'x');
             if (pqv1) {

@@ -28,6 +28,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/services/deprecated/persqueue_v0/api/grpc
 )
 
 YQL_LAST_ABI_VERSION()

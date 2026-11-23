@@ -49,6 +49,22 @@ bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
+std::optional<TWriteModeError> GetWriteModeError(const NKikimrPQ::TPQTabletConfig& config) {
+    if (config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE) {
+        return TWriteModeError{
+            NPersQueue::NErrorCode::ERROR,
+            "Write to topic is temporarily disabled",
+        };
+    }
+    if (config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED) {
+        return TWriteModeError{
+            NPersQueue::NErrorCode::BAD_REQUEST,
+            "Write to topic is prohibited",
+        };
+    }
+    return std::nullopt;
+}
+
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
     return std::count_if(partitions.begin(), partitions.end(), [](const auto& p) {
         return p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active;

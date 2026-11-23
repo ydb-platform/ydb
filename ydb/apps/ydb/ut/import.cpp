@@ -477,16 +477,17 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             .ExpectS3AccessKey("test-key")
             .ExpectS3SecretKey("test-access-key")
             .ExpectDisableVirtualAddressing(true)
-            .ExpectItem("source/prefix/keep", "/test_database/import-root/keep")
-            .ExpectItem("source/prefix/report", "/test_database/import-root/report")
-            .ExpectItem("source/prefix/updates", "/test_database/import-root/updates")
+            .ExpectCommonDestinationPath("base")
+            .ExpectItem("source/prefix/keep", "./keep")
+            .ExpectItem("source/prefix/report", "./report")
+            .ExpectItem("source/prefix/updates", "./updates")
             .ExpectItem("source/standalone", "/test_database/import-root/renamed");
 
         RunCli(
             {
                 "-v",
                 "-e", GetEndpoint(),
-                "-d", GetDatabase(),
+                "-d", "tenant",
                 "import", "s3",
                 "--bucket", TEST_BUCKET,
                 "--s3-endpoint", s3Endpoint,
@@ -494,7 +495,8 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--access-key", "test-key",
                 "--secret-key", "test-access-key",
                 "--use-virtual-addressing", "false",
-                "--item", "src=source/prefix,dst=/test_database/import-root",
+                "--destination-path", "base",
+                "--item", "src=source/prefix,dst=.",
                 "--item", "src=source/standalone/,dst=/test_database/import-root/renamed",
                 "--exclude", "skip",
             }

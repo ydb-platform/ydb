@@ -113,7 +113,7 @@ public:
     };
 
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
-        CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
+        CheckClientMetadata(context, "x-ydb-database", Database);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
         } else {
@@ -193,6 +193,7 @@ public:
         ExpectedClientCert = cert;
     }
 
+    TString Database = TEST_DATABASE;
     TString Token;
     TString ExpectedClientCert;
     THashMap<TString, TDirectory> Directories;

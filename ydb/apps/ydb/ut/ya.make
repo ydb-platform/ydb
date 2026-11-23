@@ -21,6 +21,7 @@ SRCS(
     import.cpp
     mock_env.cpp
     read_table.cpp
+    relative_paths.cpp
     run_ydb.cpp
     sql_resource_pool.cpp
     supported_codecs.cpp

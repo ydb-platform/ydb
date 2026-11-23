@@ -250,7 +250,8 @@ Y_UNIT_TEST_SUITE(BurstDetection) {
     }
 
     Y_UNIT_TEST(TestOverlySensitive) {
-        TestBurst<TInflightActorPut>(10, 1, TDuration::Seconds(1), ELoadDistribution::DistributionBurst, 1);
+        // Allow each bounded burst to register in the millisecond counter.
+        TestBurst<TInflightActorPut>(10, 1, TDuration::Seconds(1), ELoadDistribution::DistributionBurst, 1'000'000);
     }
 }
 

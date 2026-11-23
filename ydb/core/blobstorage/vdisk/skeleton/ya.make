@@ -30,6 +30,8 @@ SRCS(
     blobstorage_takedbsnap.h
     skeleton_block_and_get.cpp
     skeleton_block_and_get.h
+    skeleton_burst_counter_publisher.cpp
+    skeleton_burst_counter_publisher.h
     skeleton_capturevdisklayout.h
     skeleton_compactionstate.cpp
     skeleton_compactionstate.h

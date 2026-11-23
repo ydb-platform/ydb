@@ -36,16 +36,24 @@ Y_UNIT_TEST_SUITE(TBlobStorageCostTrackerTest) {
         UNIT_ASSERT(!group->FindCounter("BurstDetector_count"));
 
         tracker.UpdatePDiskParameters(2, 4);
-        tracker.CountRequest(350'000'000); // 100 ms capacity, 250 ms debt, 500 ms/s refill
+        tracker.CountRequest(350'000'000); // 200 ms maximum debt at a refill rate of 500 ms/s
         clock->Time = TInstant::Seconds(12);
         tracker.PublishBurstCounters();
-        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 1500);
-        UNIT_ASSERT_VALUES_EQUAL(red->Val(), 500);
+        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 1600);
+        UNIT_ASSERT_VALUES_EQUAL(red->Val(), 400);
 
         clock->Time = TInstant::Seconds(13);
         tracker.PublishBurstCounters();
         tracker.PublishBurstCounters();
-        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 2500);
+        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 2600);
+        UNIT_ASSERT_VALUES_EQUAL(red->Val(), 400);
+
+        parameters.BurstThresholdNs = 25'000'000;
+        tracker.CountRequest(10'000'000'000);
+        clock->Time = TInstant::Seconds(14);
+        tracker.PublishBurstCounters();
+        // The first charge under the new capacity can create only 50 ms of debt.
+        UNIT_ASSERT_VALUES_EQUAL(green->Val(), 3500);
         UNIT_ASSERT_VALUES_EQUAL(red->Val(), 500);
     }
 

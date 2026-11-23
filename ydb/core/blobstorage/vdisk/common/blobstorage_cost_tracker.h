@@ -319,7 +319,7 @@ private:
     TControlWrapper DiskTimeAvailableScale;
     TLockFreeLightBucket Bucket;
 
-    // Owned by the skeleton front's single stats publisher.
+    // Only the burst-counter publisher updates these totals.
     ui64 PublishedGreenMs = 0;
     ui64 PublishedRedMs = 0;
 

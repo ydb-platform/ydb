@@ -50,7 +50,8 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , MonGroup(std::make_shared<NMonGroup::TCostTrackerGroup>(counters, "subsystem", "advancedCost"))
     , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
     , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
-    , Bucket(GetBucketCapacity(), 1'000'000'000, costMetricsParameters.TimeProvider)
+    , Bucket(GetBucketCapacity(), 1'000'000'000, costMetricsParameters.TimeProvider,
+        TLockFreeLightBucket::EDebtLimit::TwiceCapacity)
 {
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:
@@ -73,7 +74,7 @@ ui64 TBsCostTracker::GetBucketCapacity() const {
 }
 
 void TBsCostTracker::CountRequest(ui64 cost) {
-    Bucket.Take(cost);
+    Bucket.Take(cost, GetBucketCapacity());
 }
 
 void TBsCostTracker::UpdatePDiskParameters(ui32 numOwners, ui32 expectedSlotCount) {

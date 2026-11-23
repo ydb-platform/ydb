@@ -12,11 +12,19 @@ namespace NKikimr {
 // Balance saturates at the limits of i64.
 class TLockFreeLightBucket {
 public:
-    TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSecond, TIntrusivePtr<ITimeProvider> timeProvider = {});
+    enum class EDebtLimit : ui8 {
+        Unbounded = 0,
+        TwiceCapacity,
+    };
+
+    TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSecond, TIntrusivePtr<ITimeProvider> timeProvider = {},
+        EDebtLimit debtLimit = EDebtLimit::Unbounded);
 
     // Each call credits whole tokens earned since the last update. On platforms
     // without lock-free paired updates, a concurrent balance write can supersede this one.
     void Take(ui64 volume);
+    // Apply a live capacity change before charging the request.
+    void Take(ui64 volume, ui64 capacityLimit);
     // Cumulative {green, red} including idle time through this poll. An overlapping
     // writer can finish adding its interval after the counters have been sampled.
     std::pair<ui64, ui64> OverflowStats();
@@ -33,6 +41,7 @@ private:
 
     const THPTimer Timer;
     const TIntrusivePtr<ITimeProvider> TimeProvider;
+    const EDebtLimit DebtLimit;
     std::atomic<i64> Capacity;
     std::atomic<ui64> Rate;
     TState State;

@@ -93,6 +93,26 @@ Y_UNIT_TEST_SUITE(TLockFreeLightBucketTest) {
         CheckStats(bucket, Second + Second / 2, 3 * Second + Second / 2);
     }
 
+    Y_UNIT_TEST(DebtLimitFollowsCapacity) {
+        const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();
+        TLockFreeLightBucket bucket(100, 1'000, clock, TLockFreeLightBucket::EDebtLimit::TwiceCapacity);
+        bucket.Take(10'000);
+        bucket.Take(10'000);
+        clock->SetTimeNs(Second);
+        CheckStats(bucket, 800'000'000, 200'000'000);
+
+        bucket.Take(std::numeric_limits<ui64>::max());
+        clock->SetTimeNs(Second + 50'000'000);
+        bucket.SetCapacity(25); // The outstanding debt falls from 150 to 50.
+        clock->SetTimeNs(2 * Second);
+        CheckStats(bucket, 1'700'000'000, 300'000'000);
+
+        bucket.SetCapacity(0);
+        bucket.Take(10'000);
+        clock->SetTimeNs(3 * Second);
+        CheckStats(bucket, 2'700'000'000, 300'000'000);
+    }
+
     Y_UNIT_TEST(SaturatesAtSignedBalanceLimits) {
         constexpr ui64 maxVolume = std::numeric_limits<ui64>::max();
         const TIntrusivePtr<TTestClock> clock = MakeIntrusive<TTestClock>();

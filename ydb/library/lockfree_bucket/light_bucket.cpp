@@ -29,7 +29,14 @@ ui64 SaturateToUi64(double value) {
     return static_cast<ui64>(value);
 }
 
-TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, ui64 volume) {
+TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, ui64 volume,
+        TLockFreeLightBucket::EDebtLimit debtLimit) {
+    i64 minBalance = std::numeric_limits<i64>::min();
+    if (debtLimit == TLockFreeLightBucket::EDebtLimit::TwiceCapacity && capacity <= std::numeric_limits<i64>::max() / 2) {
+        minBalance = -2 * capacity;
+    }
+    // A lower capacity can forgive some of the debt at the start of this interval.
+    previousBalance = std::max(previousBalance, minBalance);
     const ui64 refill = SaturateToUi64(static_cast<double>(elapsedNs) * static_cast<double>(rate) / NsPerSecond);
 
     i64 replenishedBalance;
@@ -48,8 +55,8 @@ TUpdate Calculate(i64 previousBalance, ui64 elapsedNs, ui64 rate, i64 capacity, 
     }
 
     i64 nextBalance;
-    if (__builtin_sub_overflow(replenishedBalance, volume, &nextBalance)) {
-        nextBalance = std::numeric_limits<i64>::min();
+    if (__builtin_sub_overflow(replenishedBalance, volume, &nextBalance) || nextBalance < minBalance) {
+        nextBalance = minBalance;
     }
     return {nextBalance, redNs};
 }
@@ -63,8 +70,10 @@ ui64 TLockFreeLightBucket::NowNs() const {
     return SaturateToUi64(std::max(0.0, Timer.Passed()) * NsPerSecond);
 }
 
-TLockFreeLightBucket::TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSecond, TIntrusivePtr<ITimeProvider> timeProvider)
+TLockFreeLightBucket::TLockFreeLightBucket(ui64 capacityLimit, ui64 volumePerSecond,
+        TIntrusivePtr<ITimeProvider> timeProvider, EDebtLimit debtLimit)
     : TimeProvider(std::move(timeProvider))
+    , DebtLimit(debtLimit)
     , Capacity(CapacityLimit(capacityLimit))
     , Rate(volumePerSecond)
     , State{CapacityLimit(capacityLimit), NowNs()}
@@ -77,7 +86,7 @@ void TLockFreeLightBucket::Take(ui64 volume) {
     // additive counters publish no other data and can be sampled independently.
     const auto calculate = [&](i64 balance, ui64 elapsedNs) {
         return Calculate(balance, elapsedNs, Rate.load(std::memory_order_acquire),
-            Capacity.load(std::memory_order_acquire), volume);
+            Capacity.load(std::memory_order_acquire), volume, DebtLimit);
     };
 
     TUpdate update;
@@ -114,6 +123,13 @@ void TLockFreeLightBucket::Take(ui64 volume) {
     if (elapsedNs > update.RedNs) {
         GreenNs.fetch_add(elapsedNs - update.RedNs, std::memory_order_relaxed);
     }
+}
+
+void TLockFreeLightBucket::Take(ui64 volume, ui64 capacityLimit) {
+    if (CapacityLimit(capacityLimit) != Capacity.load(std::memory_order_acquire)) {
+        SetCapacity(capacityLimit);
+    }
+    Take(volume);
 }
 
 std::pair<ui64, ui64> TLockFreeLightBucket::OverflowStats() {

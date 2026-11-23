@@ -1190,9 +1190,6 @@ namespace NKikimr {
         void UpdateStats(const TActorContext &ctx) {
             UpdateWhiteboard(ctx);
 
-            if (VCtx->CostTracker) {
-                VCtx->CostTracker->PublishBurstCounters();
-            }
             VCtx->Histograms.UpdateCounters(TAppData::TimeProvider->Now());
 
             // Update internal queue counters that are dependant on external ticker

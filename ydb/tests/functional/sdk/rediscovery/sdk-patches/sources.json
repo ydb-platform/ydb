@@ -11,6 +11,10 @@
     "base": "a0a75608c76f8d845edd68bea09eba2e8d7c4ef5",
     "repository": "https://github.com/ydb-platform/ydb-java-sdk.git"
   },
+  "js": {
+    "base": "586f5b90f7acae62a0f95e202b2d0dd233342a96",
+    "repository": "https://github.com/ydb-platform/ydb-js-sdk.git"
+  },
   "php": {
     "base": "95214dffb63b5a5d78c61957f4176478860bcdd7",
     "repository": "https://github.com/ydb-platform/ydb-php-sdk.git"

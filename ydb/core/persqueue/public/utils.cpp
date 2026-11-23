@@ -50,17 +50,21 @@ bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 std::optional<TWriteModeError> GetWriteModeError(const NKikimrPQ::TPQTabletConfig& config) {
-    if (config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE) {
-        return TWriteModeError{
-            NPersQueue::NErrorCode::ERROR,
-            "Write to topic is temporarily disabled",
-        };
-    }
-    if (config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED) {
-        return TWriteModeError{
-            NPersQueue::NErrorCode::BAD_REQUEST,
-            "Write to topic is prohibited",
-        };
+    switch (config.GetWriteMode()) {
+        case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+            return std::nullopt;
+        case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::ERROR,
+                .Status = Ydb::StatusIds::UNAVAILABLE,
+                .Reason = "Write to topic is temporarily disabled",
+            };
+        case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::BAD_REQUEST,
+                .Status = Ydb::StatusIds::BAD_REQUEST,
+                .Reason = "Write to topic is prohibited",
+            };
     }
     return std::nullopt;
 }

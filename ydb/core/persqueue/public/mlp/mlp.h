@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/events.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -38,8 +37,8 @@ struct TMessageId {
 
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, static_cast<ui32>(EEv::EvWriteResponse)> {
 
-    // Set when the topic write mode rejects the modification before any tablet call.
-    // WRITE_UNAVAILABLE is UNAVAILABLE; WRITE_PROHIBITED is non-retryable BAD_REQUEST.
+    // Not SUCCESS when the topic write mode rejected the whole request before any tablet call.
+    // Then Messages is empty: UNAVAILABLE is retryable, BAD_REQUEST is not.
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
     TString ErrorDescription;
 
@@ -230,13 +229,5 @@ struct TDescribeSettings {
 
 // Return TEvDescribeResponse
 IActor* CreateDescriber(const NActors::TActorId& parentId, TDescribeSettings&& settings);
-
-// Set when writes are unavailable or prohibited. Callers must not send the modification to a tablet.
-struct TWriteBlockedError {
-    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::UNAVAILABLE;
-    TString Description;
-};
-
-std::optional<TWriteBlockedError> GetWriteBlockedError(const NKikimrPQ::TPQTabletConfig& config);
 
 } // namespace NKikimr::NPQ::NMLP

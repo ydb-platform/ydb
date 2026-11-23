@@ -4,6 +4,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
@@ -30,9 +31,10 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
-// Empty when writes are allowed. Otherwise the same code and text the tablet returns for CmdWrite.
+// Empty when writes are allowed. WRITE_UNAVAILABLE is retryable, WRITE_PROHIBITED is not.
 struct TWriteModeError {
     NPersQueue::NErrorCode::EErrorCode Code;
+    Ydb::StatusIds::StatusCode Status;
     TString Reason;
 };
 

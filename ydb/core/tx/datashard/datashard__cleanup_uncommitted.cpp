@@ -46,7 +46,8 @@ public:
                     continue;
                 }
 
-                // Changes are neither committed nor removed and are not tracked
+                // TrackingOnly objects also count as known locks above. An
+                // unknown open id has lost its metadata and must be aborted.
                 if (removed >= 1000) {
                     // Avoid removing more than 1k transactions per transaction
                     Reschedule = true;

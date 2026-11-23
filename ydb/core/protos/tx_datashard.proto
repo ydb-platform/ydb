@@ -974,6 +974,7 @@ message TWriteSeqNumState {
     // Opaque serialized NKikimrDataEvents.TWriteSeqNumResult
     optional bytes SerializedResult = 3;
     repeated TLockWriteSeqNumBranch Branches = 4;
+    optional uint64 GcWriteSeqNum = 5;
 }
 
 // Info about a lock being transferred from src to dst during split/merge.
@@ -987,6 +988,7 @@ message TSplitSrcLockInfo {
         optional uint64 Flags           = 5;
         repeated TWriteSeqNumState WriteSeqNumStates = 6;
         optional uint64 CreatedOn = 7;
+        optional NKikimrTx.TKeyRange CreatedOnRange = 8;
     }
 
     optional uint64 LockId          = 1;
@@ -1030,6 +1032,9 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccImmediateWriteEdgeStep = 17;
     optional uint64 MvccImmediateWriteEdgeTxId = 18;
     optional bool MvccPerformedUnprotectedReads = 19;
+    // Lock transfer must be disabled on all older binaries before deployment;
+    // mixed-version lock snapshots are not supported. Each record carries its
+    // owner's LockNodeId, including broken locks that still need lifetime tracking.
     repeated TSplitSrcLockInfo Locks = 20;
 }
 

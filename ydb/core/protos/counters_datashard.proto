@@ -39,6 +39,7 @@ enum ESimpleCounters {
     COUNTER_LOCK_ROWS_INFLIGHT = 29                                [(CounterOpts) = {Name: "LockRowsInFlight"}];
     COUNTER_LOCK_ROWS_WAITING = 30                                 [(CounterOpts) = {Name: "LockRowsWaiting"}];
     COUNTER_CHANGE_QUEUE_BYTES = 31                                [(CounterOpts) = {Name: "ChangeQueueBytes"}];
+    COUNTER_LOCKS_TRACKING_ONLY = 32                               [(CounterOpts) = {Name: "LocksTrackingOnly"}];
 }
 
 enum ECumulativeCounters {

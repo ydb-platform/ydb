@@ -459,6 +459,13 @@ public:
         DB.OnPersistent(std::move(callback));
     }
 
+    void OnRollback(std::function<void()> callback) override {
+        // Execute must see the activated lock for WSN and lock echo generation;
+        // deferring just its flag until commit would expose inconsistent state.
+        // Localdb rollback cannot undo the in-memory registrations by itself.
+        DB.OnRollback(std::move(callback));
+    }
+
 protected:
     TShard& Self;
     NTable::TDatabase& DB;

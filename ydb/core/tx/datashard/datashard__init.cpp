@@ -192,6 +192,12 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
         if (!Self->SplitSrcSnapshotSender.AllAcked()) {
             Self->SplitSrcSnapshotSender.DoSend(ctx);
         }
+    } else if (Self->State == TShardState::SplitDstReceivingSnapshot && Self->ReceiveSnapshotsFrom.empty()) {
+        // ReceiveSnapshotsFrom contains sources whose snapshots are still missing;
+        // init subtracts durable SplitDstReceivedSnapshots from all source ids.
+        // An empty set means reception finished before reboot. Finish activation,
+        // since no further snapshot will arrive to trigger the transition to Ready.
+        Self->Execute(Self->CreateTxSplitLastSnapshotReceived(), ctx);
     } else if (Self->State == TShardState::Offline) {
         // Remind the schemeshard that this shard is in Offline state and can be deleted
         Self->ReportState(ctx, Self->State);
@@ -201,6 +207,10 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     }
 
     Self->SwitchToWork(ctx);
+    if (Self->State != TShardState::SplitDstReceivingSnapshot) {
+        // In-memory migration adds subscriptions after ReadEverything has run.
+        Self->SubscribeNewLocks(ctx);
+    }
     Self->SendRegistrationRequestTimeCast(ctx);
 
     // Notify SchemeShard about any index build scans that were in progress before reboot.
@@ -741,7 +751,11 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    Self->SubscribeNewLocks();
+    // Owner notifications may remove data before asynchronous LoanTable finishes.
+    // Start subscriptions when the destination transitions to Ready.
+    if (Self->State != TShardState::SplitDstReceivingSnapshot) {
+        Self->SubscribeNewLocks();
+    }
 
     Self->ScheduleRemoveAbandonedLockChanges();
     Self->ScheduleRemoveAbandonedSchemaSnapshots();

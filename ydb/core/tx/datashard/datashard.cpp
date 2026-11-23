@@ -4212,6 +4212,7 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     AbortDirectImportsForSpace();
     PruneHnswIndexes();
     UpdateLagCounters(ctx);
+    SetCounter(COUNTER_LOCKS_TRACKING_ONLY, SysLocks.TrackingOnlyLocksCount());
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);

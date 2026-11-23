@@ -33,6 +33,7 @@ NLongTxService::TLockHandle MakeLockHandle(TTestActorRuntime& runtime, ui64 lock
 void TWriteOperation::ApplyTo(const TTableId& tableId, NEvents::TDataEvents::TEvWrite* req) {
     switch (Type) {
     case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+    case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
     case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
         TVector<TCell> cells;
         cells.reserve(Rows.size() * 2);
@@ -359,13 +360,13 @@ void TTransactionState::MapAncestorShard(ui64 descendantShard, ui64 ancestorShar
 }
 
 TVector<NKikimrDataEvents::TLock> TTransactionState::GetLocksForShard(ui64 shardId) const {
-    THashSet<std::tuple<ui64, ui64>> seen; // (LockId, DataShard)
+    THashSet<std::tuple<ui64, ui64, ui64>> seen; // (LockId, DataShard, CreatedOn)
     TVector<NKikimrDataEvents::TLock> result;
     const auto* ancestorSet = AncestorMappings.FindPtr(shardId);
 
     for (auto it = Locks.rbegin(); it != Locks.rend(); ++it) {
         const auto& lock = *it;
-        auto lockKey = std::make_tuple(lock.GetLockId(), lock.GetDataShard());
+        auto lockKey = std::make_tuple(lock.GetLockId(), lock.GetDataShard(), lock.GetCreatedOn());
         if (seen.contains(lockKey)) {
             continue;
         }

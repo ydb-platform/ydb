@@ -1,8 +1,10 @@
 #include "datashard_impl.h"
 #include "datashard_locks_db.h"
+#include "setup_sys_locks.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <util/generic/set.h>
 #include <util/string/escape.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
@@ -126,6 +128,229 @@ class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransa
 private:
     TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
 
+    bool RequiresLockCopy(const TAncestorLock& ancestor,
+            const NKikimrTxDataShard::TKeyRangeToTablet& source) const {
+        Y_ENSURE(ancestor.CreatedOnRange);
+        const auto& tableInfo = *Self->TableInfos.begin()->second;
+        const TSerializedTableRange sourceRange(source.GetKeyRangeBegin(), source.GetKeyRangeEnd(), true, false);
+        const auto intersection = Intersect(tableInfo.KeyColumnTypes,
+            ancestor.CreatedOnRange->ToTableRange(), sourceRange.ToTableRange());
+        return !Intersect(tableInfo.KeyColumnTypes, intersection,
+            tableInfo.GetTableRange()).IsEmptyRange(tableInfo.KeyColumnTypes);
+    }
+
+    // An empty result means success; otherwise it describes why this tx is rejected.
+    TString ParseLockFromSnapshot(const NKikimrTxDataShard::TSplitSrcLockInfo& protoLock,
+            const NKikimrTxDataShard::TKeyRangeToTablet& sourceRange,
+            THashSet<TLockKey, TLockKeyHash>& keys, ILocksDb::TLockRow& row) const {
+        if (!protoLock.GetLockId()) {
+            return "Missing LockId";
+        }
+        if (protoLock.GetCounter() == Max<ui64>()) {
+            return "Source lock is broken";
+        }
+        if (!protoLock.GetReadTables().empty() || protoLock.WriteSeqNumStatesSize()) {
+            // Do not synthesize identities or paths from legacy metadata.
+            return "Read locks or legacy root WSN state are not supported";
+        }
+        const auto previous = Self->SysLocksTable().GetRawLock(protoLock.GetLockId());
+        if (previous && previous->IsBroken()) {
+            return "Lock was already rejected by a previous snapshot";
+        }
+        row.LockId = protoLock.GetLockId();
+        row.LockNodeId = protoLock.GetLockNodeId();
+        row.Generation = protoLock.GetGeneration();
+        row.Counter = protoLock.GetCounter();
+        row.CreateTs = protoLock.GetCreateTimestamp();
+        row.Flags = protoLock.GetFlags();
+        if (!!(ELockFlags(row.Flags) & ELockFlags::TrackingOnly)) {
+            // This is a physical lifetime record, not an acquired logical lock.
+            if (!row.LockNodeId || row.Flags != ui64(ELockFlags::TrackingOnly)
+                    || protoLock.AncestorLocksSize() || protoLock.WriteTablesSize()
+                    || protoLock.ConflictsSize()) {
+                return "TrackingOnly requires an owner and no logical state";
+            }
+            return {};
+        }
+        if (!protoLock.AncestorLocksSize()) {
+            return "Missing logical locks";
+        }
+        for (const auto& proto : protoLock.GetAncestorLocks()) {
+            if (!proto.GetTabletId() || !proto.GetCreatedOn() || !proto.HasCreatedOnRange()
+                    || !!(ELockFlags(proto.GetFlags()) & ELockFlags::TrackingOnly)) {
+                return "Logical lock has no identity/range or has the TrackingOnly flag";
+            }
+            auto& ancestor = row.AncestorLocks.emplace_back();
+            ancestor.TabletId = proto.GetTabletId();
+            ancestor.CreatedOn = proto.GetCreatedOn();
+            ancestor.Generation = proto.GetGeneration();
+            ancestor.Counter = proto.GetCounter();
+            ancestor.CreationTime = TInstant::MicroSeconds(proto.GetCreateTimestamp());
+            ancestor.Flags = ELockFlags(proto.GetFlags());
+            ancestor.CreatedOnRange.emplace(proto.GetCreatedOnRange());
+            if (!keys.insert(ancestor.GetKey()).second) {
+                return "Repeated logical lock key";
+            }
+            if (!RequiresLockCopy(ancestor, sourceRange)) {
+                return "Logical lock range does not intersect source and destination";
+            }
+            if (!previous || !previous->FindAncestorLock(ancestor.GetKey())) {
+                for (const auto& source : Self->DstSplitDescription->GetSourceRanges()) {
+                    if (!Self->ReceiveSnapshotsFrom.contains(source.GetTabletID()) && RequiresLockCopy(ancestor, source)) {
+                        // This key was already required in a previous snapshot.
+                        return TStringBuilder() << "Logical lock copy missing from previous source " << source.GetTabletID();
+                    }
+                }
+            }
+            for (const auto& protoState : proto.GetWriteSeqNumStates()) {
+                TWriteSeqNumState state;
+                state.WriterIndex = protoState.GetWriterIndex();
+                state.WriteSeqNum = protoState.GetWriteSeqNum();
+                // An absent writer is valid, but a present state must record
+                // an applied operation, even if that operation wrote no rows.
+                if (!state.WriteSeqNum) {
+                    return TStringBuilder() << "Zero WSN for writer " << state.WriterIndex;
+                }
+                state.SerializedResult = protoState.GetSerializedResult();
+                if (protoState.HasGcWriteSeqNum()) {
+                    state.GcWriteSeqNum = protoState.GetGcWriteSeqNum();
+                }
+                ui64 maxBranchWriteSeqNum = 0;
+                TSet<TVector<ui64>> paths;
+                for (const auto& item : protoState.GetBranches()) {
+                    auto& branch = state.Branches.emplace_back();
+                    branch.ShardsPath.assign(item.GetShardsPath().begin(), item.GetShardsPath().end());
+                    branch.WriteSeqNum = item.GetWriteSeqNum();
+                    branch.SerializedResult = item.GetSerializedResult();
+                    if (branch.ShardsPath.empty() || branch.ShardsPath.front() != ancestor.TabletId
+                            || !branch.WriteSeqNum || branch.WriteSeqNum > state.WriteSeqNum) {
+                        return TStringBuilder() << "Invalid branch path or WSN for writer " << state.WriterIndex;
+                    }
+                    THashSet<ui64> visited;
+                    for (ui64 shard : branch.ShardsPath) {
+                        if (!shard || !visited.insert(shard).second) {
+                            return TStringBuilder() << "Zero or repeated shard in branch of writer " << state.WriterIndex;
+                        }
+                    }
+                    if (!paths.insert(branch.ShardsPath).second) {
+                        return TStringBuilder() << "Repeated branch path for writer " << state.WriterIndex;
+                    }
+                    maxBranchWriteSeqNum = Max(maxBranchWriteSeqNum, branch.WriteSeqNum);
+                }
+                // Deduplication uses branches. An aggregate without its latest
+                // branch could let a retry execute again with the same WSN.
+                if (state.WriteSeqNum != maxBranchWriteSeqNum) {
+                    return TStringBuilder() << "Aggregate WSN does not match branches for writer " << state.WriterIndex;
+                }
+                if (!ancestor.WriteSeqNumStates.emplace(state.WriterIndex, std::move(state)).second) {
+                    return TStringBuilder() << "Repeated writer " << protoState.GetWriterIndex();
+                }
+            }
+        }
+        for (const auto& path : protoLock.GetWriteTables()) {
+            row.WriteTables.push_back(TPathId::FromProto(path));
+        }
+        return {};
+    }
+
+    void RestoreLocksFromSnapshot(const NKikimrTxDataShard::TEvSplitTransferSnapshot& record,
+            TTransactionContext& txc, const TActorContext& ctx) {
+        // Each retained logical lock has a copy from every already received
+        // source whose range requires it. Both the locks and the received-source
+        // set are persistent, so this check also works after a destination reboot.
+        Y_ENSURE(Self->TableInfos.size() == 1);
+        const auto& tableInfo = *Self->TableInfos.begin()->second;
+        if (tableInfo.IsReplicated() || tableInfo.IsIncrementalRestore()) {
+            // Replication and restore track UpdateTx through offsets, not locks.
+            return;
+        }
+        const ui64 srcTabletId = record.GetSrcTabletId();
+        const NKikimrTxDataShard::TKeyRangeToTablet* sourceRange = nullptr;
+        for (const auto& source : Self->DstSplitDescription->GetSourceRanges()) {
+            if (source.GetTabletID() == srcTabletId) {
+                sourceRange = &source;
+                break;
+            }
+        }
+        Y_ENSURE(sourceRange);
+
+        TDataShardLocksDb locksDb(*Self, txc);
+        THashSet<ui64> invalidLocks;
+        auto reject = [&](ui64 lockId, const TString& reason) {
+            if (invalidLocks.insert(lockId).second) {
+                YDB_LOG_WARN_CTX(ctx, "Rejecting transferred lock",
+                    {"tabletId", Self->TabletID()},
+                    {"srcTabletId", srcTabletId},
+                    {"lockId", lockId},
+                    {"reason", reason});
+            }
+        };
+        THashMap<ui64, ui32> lockOwners;
+        THashMap<ui64, THashSet<TLockKey, TLockKeyHash>> incomingKeys;
+        THashSet<ui64> seenIds;
+        TVector<ILocksDb::TLockRow> rows;
+        TVector<std::pair<ui64, ui64>> pendingConflicts;
+        for (const auto& protoLock : record.GetLocks()) {
+            const ui64 lockId = protoLock.GetLockId();
+            // Preserve the owner before validating logical state: even rejected
+            // ancestors/WSN must leave a broken lock that follows its owner's life.
+            lockOwners.emplace(lockId, protoLock.GetLockNodeId());
+            THashSet<TLockKey, TLockKeyHash> keys;
+            ILocksDb::TLockRow row{};
+            if (!seenIds.insert(lockId).second) {
+                reject(lockId, "Repeated physical lock id");
+                continue;
+            }
+            if (auto error = ParseLockFromSnapshot(protoLock, *sourceRange, keys, row)) {
+                reject(lockId, error);
+                continue;
+            }
+            if (!(ELockFlags(row.Flags) & ELockFlags::TrackingOnly)) {
+                incomingKeys.emplace(lockId, std::move(keys));
+            }
+            for (ui64 conflictId : protoLock.GetConflicts()) {
+                pendingConflicts.emplace_back(lockId, conflictId);
+            }
+            rows.push_back(std::move(row));
+        }
+        // CreatedOnRange determines which sources must supply each logical copy.
+        // A TrackingOnly record carries no logical state and cannot satisfy it.
+        for (const auto& [lockId, lock] : Self->SysLocksTable().GetLocks()) {
+            const auto* keys = incomingKeys.FindPtr(lockId);
+            for (const auto& [key, ancestor] : lock->GetAncestorLocks()) {
+                if (!ancestor.CreatedOnRange || (RequiresLockCopy(ancestor, *sourceRange) && (!keys || !keys->contains(key)))) {
+                    reject(lockId, "Required logical copy is missing or has no creation range");
+                }
+            }
+        }
+        for (auto& row : rows) {
+            const ui64 lockId = row.LockId;
+            TString error;
+            if (!invalidLocks.contains(lockId)
+                    && !Self->SysLocksTable().RestoreLockFromSplitSrc(std::move(row), locksDb, &error)) {
+                reject(lockId, error);
+            }
+        }
+        if (!invalidLocks.empty()) {
+            // LoanTable must finish before any writes to the borrowed user
+            // table, including RemoveTx. The ordinary persistent broken lock
+            // prevents further writes and follows its owner's lifetime.
+            for (ui64 lockId : invalidLocks) {
+                ILocksDb::TLockRow row{};
+                row.LockId = lockId;
+                // A completely missing Locks entry may leave no known owner.
+                // Restore preserves an existing owner's node from other sources;
+                // otherwise keep node 0 and reject writes without a subscription.
+                row.LockNodeId = lockOwners.Value(lockId, 0);
+                row.Counter = Max<ui64>();
+                Y_ENSURE(Self->SysLocksTable().RestoreLockFromSplitSrc(std::move(row), locksDb));
+            }
+        }
+        for (auto [lockId, conflictId] : pendingConflicts) {
+            Self->SysLocksTable().RestoreConflictFromSplitSrc(lockId, conflictId, locksDb);
+        }
+    }
+
 public:
     TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
@@ -141,6 +366,14 @@ public:
      */
     void LegacyInitSchema(TTransactionContext& txc) {
         const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme();
+        TPathId tableId(Self->GetPathOwnerId(), tableScheme.GetId_Deprecated());
+        if (tableScheme.HasPathId()) {
+            Y_ENSURE(Self->GetPathOwnerId() == tableScheme.GetPathId().GetOwnerId()
+                || Self->GetPathOwnerId() == INVALID_TABLET_ID);
+            tableId = TPathId::FromProto(tableScheme.GetPathId());
+        } else if (tableId.OwnerId == INVALID_TABLET_ID) {
+            tableId.OwnerId = Self->CurrentSchemeShardId;
+        }
         TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
         if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created
             NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
@@ -160,8 +393,18 @@ public:
             newTableScheme.SetPartitionRangeBeginIsInclusive(true);
             newTableScheme.SetPartitionRangeEndIsInclusive(false);
 
-            Self->CreateUserTable(txc, newTableScheme);
+            auto info = Self->CreateUserTable(txc, newTableScheme);
+            // Lock restoration in this transaction needs the schema in memory.
+            Self->AddUserTable(tableId, info);
         }
+        // On restart an existing table has already been loaded by TxInit.
+        Y_ENSURE(Self->TableInfos.contains(tableId.LocalPathId));
+        if (Self->GetPathOwnerId() == INVALID_TABLET_ID) {
+            Self->PersistOwnerPathId(tableId.OwnerId, txc);
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        Self->DstSplitSchemaInitialized = true;
+        Self->PersistSys(db, Schema::Sys_DstSplitSchemaInitialized, ui64(1));
     }
 
     void RestoreLocalHnswMetadata(TTransactionContext& txc) {
@@ -283,81 +526,7 @@ public:
             Self->GetSnapshotManager().RemoveRowVersions(txc.DB, TRowVersion::Min(), lowWatermark);
         }
 
-        // Restore ancestor locks transferred from the src shard.
-        // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
-        if (record.LocksSize() > 0) {
-            TDataShardLocksDb locksDb(*Self, txc);
-            TVector<std::pair<ui64, ui64>> pendingConflicts; // (lockId, conflictId)
-            for (const auto& srcLockInfo : record.GetLocks()) {
-                if (!srcLockInfo.GetReadTables().empty()) {
-                    // Skip if someone sent us a read lock.
-                    continue;
-                }
-
-                ILocksDb::TLockRow row;
-                row.LockId = srcLockInfo.GetLockId();
-                row.LockNodeId = srcLockInfo.GetLockNodeId();
-                row.Generation = srcLockInfo.GetGeneration();
-                row.Counter = srcLockInfo.GetCounter();
-                row.CreateTs = srcLockInfo.GetCreateTimestamp();
-                row.Flags = ui64(srcLockInfo.GetFlags());
-
-                auto writeSeqNumStateFromProto = [](const auto& proto) {
-                    TWriteSeqNumState state;
-                    state.WriterIndex = proto.GetWriterIndex();
-                    state.WriteSeqNum = proto.GetWriteSeqNum();
-                    state.SerializedResult = proto.GetSerializedResult();
-                    for (const auto& item : proto.GetBranches()) {
-                        auto& branch = state.Branches.emplace_back();
-                        branch.ShardsPath.assign(item.GetShardsPath().begin(), item.GetShardsPath().end());
-                        branch.WriteSeqNum = item.GetWriteSeqNum();
-                        branch.SerializedResult = item.GetSerializedResult();
-                    }
-                    return state;
-                };
-
-                for (const auto& proto : srcLockInfo.GetWriteSeqNumStates()) {
-                    auto state = writeSeqNumStateFromProto(proto);
-                    if (state.WriteSeqNum) {
-                        row.WriteSeqNumStates.push_back(std::move(state));
-                    }
-                }
-
-                row.AncestorLocks.reserve(srcLockInfo.GetAncestorLocks().size());
-                for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
-                    TAncestorLock ancestorLock;
-                    ancestorLock.TabletId = protoLock.GetTabletId();
-                    ancestorLock.CreatedOn = protoLock.GetCreatedOn();
-                    ancestorLock.Generation = protoLock.GetGeneration();
-                    ancestorLock.Counter = protoLock.GetCounter();
-                    ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
-                    ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
-
-                    for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
-                        auto state = writeSeqNumStateFromProto(proto);
-                        if (state.WriteSeqNum) {
-                            ancestorLock.WriteSeqNumStates[state.WriterIndex] = state;
-                        }
-                    }
-
-                    row.AncestorLocks.push_back(std::move(ancestorLock));
-                }
-
-                for (const auto& pathProto : srcLockInfo.GetWriteTables()) {
-                    row.WriteTables.push_back(TPathId::FromProto(pathProto));
-                }
-
-                for (ui64 conflictId : srcLockInfo.GetConflicts()) {
-                    pendingConflicts.emplace_back(row.LockId, conflictId);
-                }
-
-                Self->SysLocksTable().RestoreLockFromSplitSrc(srcTabletId, std::move(row), locksDb);
-            }
-
-            for (auto [lockId, conflictId] : pendingConflicts) {
-                Self->SysLocksTable().RestoreConflictFromSplitSrc(lockId, conflictId, locksDb);
-            }
-        }
+        RestoreLocksFromSnapshot(record, txc, ctx);
 
         // Persist the fact that the snapshot has been received, so that duplicate event can be ignored
         db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update();
@@ -383,10 +552,6 @@ public:
 
             Self->PromoteFollowerReadEdge(txc);
 
-            // Note: we persist Ready, but keep current state in memory until Complete
-            Self->SetPersistState(TShardState::Ready, txc);
-            Self->State = TShardState::SplitDstReceivingSnapshot;
-
             // We could perform snapshot reads after becoming ready
             // Make sure older versions restore mediator state in that case
             Self->PersistUnprotectedReadsEnabled(db);
@@ -395,7 +560,7 @@ public:
             // and finish initialization. This new transaction is guaranteed to
             // wait until async LoanTable above is complete and new parts are
             // fully merged into the table.
-            Self->Execute(new TTxLastSnapshotReceived(Self));
+            Self->Execute(Self->CreateTxSplitLastSnapshotReceived());
         }
 
         return true;
@@ -412,49 +577,80 @@ public:
         ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
     }
 
-    class TTxLastSnapshotReceived : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-    public:
-        TTxLastSnapshotReceived(TDataShard* self)
-            : TTransactionBase(self)
-        {}
+};
 
-        bool Execute(TTransactionContext&, const TActorContext&) override {
+class TDataShard::TTxSplitLastSnapshotReceived : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    explicit TTxSplitLastSnapshotReceived(TDataShard* self)
+        : TTransactionBase(self)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.empty()) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
-            // Note: we skip init in an unlikely event of state resetting before reaching Complete
-            if (Self->State == TShardState::SplitDstReceivingSnapshot) {
-                // We have received all the data, finish shard initialization
-                // Note: previously we used TxInit, however received system tables
-                // have been empty for years now, and since pipes are still open we
-                // may receive requests between TxInit loading the Ready state and
-                // its Complete method initializing everything properly. Instead
-                // necessary steps are repeated here.
-                Self->State = TShardState::Ready;
-
-                // We are already in StateWork, but we need to repeat many steps now that we are Ready
-                Self->SwitchToWork(ctx);
-
-                // Subscribe to any ancestor locks transferred during split/merge
-                Self->SubscribeNewLocks(ctx);
-
-                // We can send the registration request now that we are ready
-                Self->SendRegistrationRequestTimeCast(ctx);
-
-                // Initialize snapshot expiration queue with current context time
-                Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
-                Self->PlanCleanup(ctx);
-
-                // Initialize change senders
-                Self->KillChangeSender(ctx);
-                Self->CreateChangeSender(ctx);
-                Self->MaybeActivateChangeSender(ctx);
-                Self->EmitHeartbeats();
+        // Imported commit/abort decisions are visible after LoanTable completes.
+        // Remove restored locks contradicted by these decisions before Ready.
+        TDataShardLocksDb locksDb(*Self, txc);
+        TSetupSysLocks guardLocks(*Self, &locksDb);
+        for (const auto& [lockId, lock] : Self->SysLocksTable().GetLocks()) {
+            for (const auto& [_, table] : Self->GetUserTables()) {
+                if (txc.DB.HasRemovedTx(table->LocalTid, lockId)
+                        || (lock->IsTrackingOnly() && txc.DB.HasCommittedTx(table->LocalTid, lockId))) {
+                    Self->SysLocksTable().EraseLock(lockId);
+                    break;
+                }
             }
         }
-    };
+        // Apply erases after traversal to keep the GetLocks() iterator valid.
+        // TODO: Bound erase redo and continue in another transaction. LockLimit
+        // does not bound the number of ancestor branches deleted with each lock.
+        Self->SysLocksTable().ApplyLocks();
+        // SwitchToWork starts the ordinary orphan cleanup after Ready. Leave
+        // unknown localdb ids without a lock so that cleanup can identify them.
+        Self->SetPersistState(TShardState::Ready, txc);
+        Self->State = TShardState::SplitDstReceivingSnapshot;
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (Self->State == TShardState::SplitDstReceivingSnapshot && Self->ReceiveSnapshotsFrom.empty()) {
+            // We have received all the data, finish shard initialization
+            // Note: previously we used TxInit, however received system tables
+            // have been empty for years now, and since pipes are still open we
+            // may receive requests between TxInit loading the Ready state and
+            // its Complete method initializing everything properly. Instead
+            // necessary steps are repeated here.
+            Self->State = TShardState::Ready;
+
+            // We are already in StateWork, but we need to repeat many steps now that we are Ready
+            Self->SwitchToWork(ctx);
+
+            // Start subscriptions deferred by TTxInit and snapshot reception.
+            // Owner notifications may now remove logical, broken and tracking
+            // records after LoanTable and the final transition have committed.
+            Self->SubscribeNewLocks(ctx);
+
+            // We can send the registration request now that we are ready
+            Self->SendRegistrationRequestTimeCast(ctx);
+
+            // Initialize snapshot expiration queue with current context time
+            Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
+            Self->PlanCleanup(ctx);
+
+            // Initialize change senders
+            Self->KillChangeSender(ctx);
+            Self->CreateChangeSender(ctx);
+            Self->MaybeActivateChangeSender(ctx);
+            Self->EmitHeartbeats();
+        }
+    }
 };
+
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitLastSnapshotReceived() {
+    return new TTxSplitLastSnapshotReceived(this);
+}
 
 class TDataShard::TTxSplitReplicationSourceOffsets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:

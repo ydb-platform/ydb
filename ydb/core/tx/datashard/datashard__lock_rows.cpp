@@ -236,9 +236,15 @@ bool TDataShard::CheckLockRowsReject(TLockRowsRequestState& state) {
 }
 
 TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
+    // TEvLockRows uses this for single-row and MultiTxId owners when deciding
+    // whether a conflicting lock requires waiting or prevents a lock upgrade.
     auto lock = SysLocksTable().GetRawLock(lockId);
     if (!lock) {
-        // When lock is removed it implicitly unlocks all locks
+        // When lock is removed it implicitly unlocks all locks.
+        return nullptr;
+    }
+    if (lock->IsTrackingOnly()) {
+        // A tracking record cannot own local row locks.
         return nullptr;
     }
 
@@ -514,8 +520,12 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         auto existingLockId = protoLock.GetLockId();
         auto existingLock = SysLocksTable().GetRawLock(existingLockId);
 
+        // ExistingLocks are previously acquired logical locks. TrackingOnly
+        // only tracks transaction lifetime, so it cannot validate that promise.
+        // Report the missing logical lock without marking the tracker broken.
         bool isBroken = (
             !existingLock ||
+            existingLock->IsTrackingOnly() ||
             existingLock->IsBroken() ||
             existingLock->GetGeneration() != protoLock.GetGeneration() ||
             existingLock->GetCounter() != protoLock.GetCounter());

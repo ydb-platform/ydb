@@ -436,11 +436,13 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             "key = 5, value = 555\n");
     }
 
-    Y_UNIT_TEST_TWIN(SplitMergeChanges, WithReboots) {
+    Y_UNIT_TEST_QUAD(SplitMergeChanges, WithReboots, IncrementalRestore) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
+        serverSettings.FeatureFlags.SetEnableDataShardLocksTransferOnSplit(true);
+        serverSettings.FeatureFlags.SetEnableDataShardUncommittedWriteSeqNum(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -451,10 +453,34 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Replicated(true)
-            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
-        );
+        if (IncrementalRestore) {
+            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto& modify = *request->Record.MutableTransaction()->MutableModifyScheme();
+            modify.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+            modify.SetWorkingDir("/Root");
+            modify.SetInternal(true);
+            auto& desc = *modify.MutableCreateTable();
+            desc.SetName("table-1");
+            for (const TString name : {"key", "value"}) {
+                auto* column = desc.AddColumns();
+                column->SetName(name);
+                column->SetType("Uint32");
+            }
+            desc.AddKeyColumnNames("key");
+            auto* config = desc.MutableIncrementalBackupConfig();
+            config->SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+            config->SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_STRONG);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+            auto result = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+            WaitTxNotification(server, sender, result->Get()->Record.GetTxId());
+        } else {
+            CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+                .Replicated(true)
+                .ReplicationConsistencyLevel(EConsistencyLevel::Global)
+            );
+        }
         CreateShardedTable(server, sender, "/Root", "table-2", TShardedTableOptions()
             .Replicated(true)
             .ReplicationConsistencyLevel(EConsistencyLevel::Global)
@@ -472,6 +498,17 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        auto snapshotObserver = runtime.AddObserver<TEvDataShard::TEvSplitTransferSnapshot>([&](auto& ev) {
+            auto& snapshot = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.LocksSize(), 0);
+            const auto& schema = snapshot.GetUserTableScheme();
+            if (IncrementalRestore) {
+                UNIT_ASSERT(schema.HasIncrementalBackupConfig());
+            } else {
+                UNIT_ASSERT(schema.HasReplicationConfig());
+            }
+        });
 
         auto senderSplit = runtime.AllocateEdgeActor();
         ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1.at(0), 5);

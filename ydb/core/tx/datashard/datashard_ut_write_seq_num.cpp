@@ -34,7 +34,72 @@ TUpdate::TResult Stage(TUpdate& update, const TLockInfo* lock, TVector<ui64> anc
     return update.StageOperation(lock, 40, ancestors, wsn, Table);
 }
 
+TAncestorLock MakeTransferredLock(TVector<TWriteSeqNumBranch> branches) {
+    TAncestorLock lock;
+    lock.TabletId = lock.CreatedOn = 10;
+    lock.Generation = 1;
+    lock.Counter = 123;
+    lock.CreatedOnRange.emplace(TConstArrayRef<TCell>{}, true, TConstArrayRef<TCell>{}, false);
+    auto& state = lock.WriteSeqNumStates[7];
+    state.WriterIndex = 7;
+    state.GcWriteSeqNum = 5;
+    state.Branches = std::move(branches);
+    for (const auto& branch : state.Branches) {
+        state.WriteSeqNum = Max(state.WriteSeqNum, branch.WriteSeqNum);
+    }
+    return lock;
+}
+
 } // namespace
+
+Y_UNIT_TEST_SUITE(DataShardLockTransferState) {
+    Y_UNIT_TEST(MergeRetainsPrefixesSiblingsResultsAndGc) {
+        auto left = MakeTransferredLock({{{10}, 5, "root"}, {{10, 20}, 6, "left"}});
+        // Append a new path before revisiting existing ones: vector growth
+        // must not invalidate the index used for duplicate WSN checks.
+        auto right = MakeTransferredLock({{{10, 30}, 7, "right"}, {{10}, 5, "root"}, {{10, 20}, 6, "left"}});
+        UNIT_ASSERT(left.Merge(right));
+        const auto& state = left.WriteSeqNumStates.at(7);
+        UNIT_ASSERT_VALUES_EQUAL(state.WriteSeqNum, 7);
+        UNIT_ASSERT_VALUES_EQUAL(*state.GcWriteSeqNum, 5);
+        UNIT_ASSERT_VALUES_EQUAL(state.Branches.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(state.Branches[0].SerializedResult, "root");
+        UNIT_ASSERT_VALUES_EQUAL(state.Branches[1].SerializedResult, "left");
+        UNIT_ASSERT_VALUES_EQUAL(state.Branches[2].SerializedResult, "right");
+        UNIT_ASSERT(left.Merge(right));
+        UNIT_ASSERT_VALUES_EQUAL(left.WriteSeqNumStates.at(7).Branches.size(), 3);
+    }
+
+    Y_UNIT_TEST(ConflictingPathDoesNotPublishPartialMerge) {
+        auto left = MakeTransferredLock({{{10}, 5, "root"}});
+        auto right = MakeTransferredLock({{{10, 20}, 7, "new"}, {{10}, 6, "conflict"}});
+        TString error;
+        UNIT_ASSERT(!left.Merge(right, &error));
+        UNIT_ASSERT_C(error.Contains("same branch") && error.Contains("writer 7"), error);
+        UNIT_ASSERT_VALUES_EQUAL(left.WriteSeqNumStates.at(7).WriteSeqNum, 5);
+        UNIT_ASSERT_VALUES_EQUAL(left.WriteSeqNumStates.at(7).Branches.size(), 1);
+    }
+
+    Y_UNIT_TEST(MismatchingIdentityMetadataAndGcAreRejected) {
+        const auto original = MakeTransferredLock({{{10}, 5, "root"}});
+        for (ui32 field = 0; field != 6; ++field) {
+            auto left = original;
+            auto right = original;
+            switch (field) {
+                case 0: ++right.CreatedOn; break;
+                case 1: ++right.Generation; break;
+                case 2: ++right.Counter; break;
+                case 3: right.CreatedOnRange->ToInclusive = true; break;
+                case 4: right.WriteSeqNumStates.at(7).GcWriteSeqNum.reset(); break;
+                case 5: right.CreatedOnRange.reset(); break;
+            }
+            TString error;
+            UNIT_ASSERT_C(!left.Merge(right, &error), field);
+            UNIT_ASSERT_C(!error.empty(), field);
+            UNIT_ASSERT_VALUES_EQUAL(left.WriteSeqNumStates.at(7).WriteSeqNum, 5);
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(DataShardWriteSeqNums) {
     Y_UNIT_TEST(CurrentDuplicatesAndFreshSuffixAreStaged) {

@@ -16,6 +16,9 @@ public:
     void PersistLockCounter(ui64 lockId, ui64 counter) override;
     void PersistRemoveLock(ui64 lockId) override;
     bool MayAddLock(ui64 lockId) override;
+    // Activation adds logical state to an existing TrackingOnly object. Unlike
+    // a new id, it may already have harmless references in borrowed parts.
+    bool MayActivateLock(ui64 lockId) override;
 };
 
 } // namespace NKikimr::NDataShard

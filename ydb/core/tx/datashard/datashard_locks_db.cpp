@@ -48,4 +48,17 @@ bool TDataShardLocksDb::MayAddLock(ui64 lockId) {
     return true;
 }
 
+bool TDataShardLocksDb::MayActivateLock(ui64 lockId) {
+    // Unlike MayAddLock, activation has a known tracker proving there are no
+    // local deltas. HasTxData would also see harmless references elsewhere in
+    // borrowed parts and incorrectly forbid the first local write.
+    for (const auto& [_, table] : Self.GetUserTables()) {
+        // Commit/abort decisions still apply to future writes with this id.
+        if (DB.HasCommittedTx(table->LocalTid, lockId) || DB.HasRemovedTx(table->LocalTid, lockId)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace NKikimr::NDataShard

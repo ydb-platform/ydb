@@ -235,6 +235,8 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                     if (lock) {
                         lock->SetLastOpId(op->GetTxId());
                         if (locksCache.Locks.contains(lockTxId) && lock->IsPersistent() && !lock->IsFrozen()) {
+                            // Trackers have no logical lock to validate or cache.
+                            AFL_ENSURE(!lock->IsTrackingOnly())("lockId", lockTxId);
                             // This lock was cached before, and since we know
                             // it's persistent, we know it was also frozen
                             // during that lock caching. Restore the frozen

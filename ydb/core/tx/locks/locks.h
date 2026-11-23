@@ -76,6 +76,7 @@ enum class ELockFlags : ui64 {
     Persistent = 4,
     Removed = 8,
     Pessimistic = 16,
+    TrackingOnly = 32, // In-memory tracker for a transaction whose borrowed deltas are outside this shard.
     PersistentMask = Frozen,
 };
 
@@ -102,6 +103,10 @@ struct TAncestorLock {
     ELockFlags Flags = ELockFlags::None;
     THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates; // WriterIndex -> state
     std::optional<TSerializedTableRange> CreatedOnRange; // Null means CreatedOn=self.
+
+    // Merge copies without folding sibling paths into their aggregate maximum.
+    // A mismatch leaves this copy unchanged.
+    bool Merge(const TAncestorLock& other, TString* error = nullptr);
 };
 
 class ILocksDb {
@@ -143,11 +148,15 @@ public:
 
     virtual bool Load(TVector<TLockRow>& rows) = 0;
 
-    // Returns true when a new lock may be added with the given lockId
+    // Check whether a new lock may be added with the given lockId.
     // Sometimes new lock cannot be added, e.g. when it had uncommitted changes
     // in the past, and adding anything with the same lockId would conflict
     // with previous decisions.
     virtual bool MayAddLock(ui64 lockId) = 0;
+
+    // A tracked transaction may reference borrowed data outside our slices, but
+    // existing commit/abort decisions still prohibit acquiring a logical lock.
+    virtual bool MayActivateLock(ui64 lockId) { return MayAddLock(lockId); }
 
     // Persist adding/removing a lock info
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
@@ -178,6 +187,8 @@ public:
 
     // Schedules callback when changes are confirmed to be persistent
     virtual void OnPersistent(std::function<void()> callback) = 0;
+    // Undoes in-memory state when the database transaction is rolled back.
+    virtual void OnRollback(std::function<void()> callback) = 0;
 };
 
 class TLocksDataShard {
@@ -395,6 +406,8 @@ public:
         return !(
             IsPersistent() ||
             IsPessimistic() ||
+            // A tracker must survive checks that add no logical lock state.
+            IsTrackingOnly() ||
             !ReadTables.empty() ||
             !WriteTables.empty() ||
             IsBroken());
@@ -434,6 +447,8 @@ public:
     bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
     bool IsWriteLock() const { return !WriteTables.empty(); }
     bool IsPersistent() const { return !!(Flags & ELockFlags::Persistent); }
+    bool IsTrackingOnly() const { return !!(Flags & ELockFlags::TrackingOnly); }
+    void SetTrackingOnly(bool value);
     bool IsRemoved() const { return !!(Flags & ELockFlags::Removed); }
     bool HasUnpersistedRanges() const { return UnpersistedRanges; }
     //ui64 MemorySize() const { return 1; } // TODO
@@ -872,6 +887,7 @@ using TRuntimeLockHolder = TTableLocks::TRuntimeLockHolder;
 /// Owns and manages locks
 class TLockLocker {
     friend class TSysLocks;
+    friend class TLockInfo;
 
 public:
     /// Prevent unlimited locks count growth
@@ -914,6 +930,7 @@ public:
 
     ui64 LocksCount() const { return Locks.size(); }
     ui64 BrokenLocksCount() const { return BrokenLocksCount_; }
+    ui64 TrackingOnlyLocksCount() const { return TrackingOnlyLocksCount_; }
 
     void BreakLocks(TIntrusiveList<TLockInfo, TLockInfoBreakListTag>& locks, const TRowVersion& at);
     void ForceBreakLock(ui64 lockId);
@@ -991,6 +1008,7 @@ public:
             pr.second->Clear();
         }
         Locks.clear();
+        TrackingOnlyLocksCount_ = 0;
         ShardLocks.clear();
         BrokenLocks.Clear();
         CleanupPending.clear();
@@ -1022,6 +1040,7 @@ private:
     TIntrusiveList<TLockInfo, TLockInfoBrokenPersistentListTag> BrokenPersistentLocks;
     TIntrusiveList<TLockInfo, TLockInfoBrokenListTag> BrokenLocks;
     size_t BrokenLocksCount_ = 0;
+    size_t TrackingOnlyLocksCount_ = 0;
     // A queue of locks that need their ranges to be cleaned up
     TVector<ui64> CleanupPending;
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
@@ -1265,6 +1284,9 @@ enum class EEnsureCurrentLock {
 
 /// /sys/locks table logic
 class TSysLocks {
+    // Publish the first logical state together with the database transaction.
+    void ActivateLock(TLockInfo& lock, ILocksDb& db);
+
 public:
     using TLocksTable = TSysTables::TLocksTable;
     using TLock = TLocksTable::TLock;
@@ -1367,6 +1389,7 @@ public:
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
+    ui64 TrackingOnlyLocksCount() const { return Locker.TrackingOnlyLocksCount(); }
 
     TLockInfo::TPtr GetRawLock(ui64 lockTxId) const {
         return Locker.GetLock(lockTxId);
@@ -1440,7 +1463,7 @@ public:
         }
     }
 
-    void RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& db);
+    bool RestoreLockFromSplitSrc(ILocksDb::TLockRow&& row, ILocksDb& db, TString* error = nullptr);
     void RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& db);
 
 private:

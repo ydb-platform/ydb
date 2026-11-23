@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -225,7 +226,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             env.Start(MakeTopics(converters));
 
             const auto* result = env.WaitClose();
-            UNIT_ASSERT_VALUES_EQUAL(result->ErrorCode, Ydb::PersQueue::ErrorCode::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result->ErrorCode),
+                static_cast<int>(Ydb::PersQueue::ErrorCode::ERROR));
             UNIT_ASSERT_VALUES_EQUAL(ConvertPersQueueInternalCodeToStatus(result->ErrorCode), Ydb::StatusIds::UNAVAILABLE);
         }
 

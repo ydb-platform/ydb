@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

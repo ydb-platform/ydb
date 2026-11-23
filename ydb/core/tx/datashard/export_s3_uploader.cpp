@@ -1155,8 +1155,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             Ydb::Table::ChangefeedDescription changefeed;
             const auto& cdcStream = cdcStreams.at(i);
             FillChangefeedDescription(changefeed, cdcStream);
-            if (NBackup::IsChangefeedOmittedFromBackup(changefeed,
-                    cdcStream.GetHeartbeatMode() == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange)) {
+            if (NBackup::IsChangefeedOmittedFromBackup(changefeed)) {
                 continue;
             }
 

@@ -715,7 +715,24 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    NKikimrSchemeOp::TCreateCdcStream ReplicationStream(bool supportsTopicAutopartitioning, bool supportsKeyRangeAutopartitioning = false) {
+    NKikimrSchemeOp::TCreateCdcStream ReplicationStream(bool supportsTopicAutopartitioning) {
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replica";
+        attrs["supports_topic_autopartitioning"] = supportsTopicAutopartitioning;
+
+        NKikimrSchemeOp::TCreateCdcStream op;
+        auto& descr = *op.MutableStreamDescription();
+        descr.SetName("Stream");
+        descr.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        descr.SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        auto* attr = descr.AddUserAttributes();
+        attr->SetKey("__async_replication");
+        attr->SetValue(NJson::WriteJson(attrs, false));
+        return op;
+    }
+
+    NKikimrSchemeOp::TCreateCdcStream GlobalReplicationStream(bool supportsTopicAutopartitioning, bool supportsKeyRangeAutopartitioning) {
         NJson::TJsonValue attrs;
         attrs["id"] = "1";
         attrs["path"] = "/Root/replica";
@@ -739,7 +756,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     // No tablets: the changefeed topic shape is decided before hive creates anything.
     Y_UNIT_TEST(ReplicationTopicFor50000Shards) {
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, maxShardsInPath);
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, maxShardsInPath, TFeatureFlags());
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000 / 16);
         UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
@@ -750,7 +767,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     Y_UNIT_TEST(ReplicationTopicMinIsQuarterOfMax) {
         // 200000 / 16 = 12500, above MaxShardsInPath / 4.
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 200'000, maxShardsInPath);
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 200'000, maxShardsInPath, TFeatureFlags());
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, maxShardsInPath / 4);
         UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
@@ -759,7 +776,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     }
 
     Y_UNIT_TEST(ReplicationTopicForSmallTable) {
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 8, TSchemeLimits{}.MaxShardsInPath);
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 8, TSchemeLimits{}.MaxShardsInPath, TFeatureFlags());
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 128);
@@ -768,7 +785,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     }
 
     Y_UNIT_TEST(ReplicationTopicMaxPartitionCountFollowsPathLimit) {
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, 1'000);
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, 1'000, TFeatureFlags());
         UNIT_ASSERT(params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1'000 / 4);
         UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 1'000);
@@ -779,7 +796,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
         auto small = ReplicationStream(true);
         small.SetTopicPartitions(5);
-        const auto smallParams = NCdc::MakeCdcPqPartParams(small, 50'000, maxShardsInPath);
+        const auto smallParams = NCdc::MakeCdcPqPartParams(small, 50'000, maxShardsInPath, TFeatureFlags());
         UNIT_ASSERT(smallParams.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(smallParams.TotalGroupCount, 5);
         UNIT_ASSERT_VALUES_EQUAL(smallParams.MinPartitionCount, 5);
@@ -788,14 +805,14 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         // Above the formula minimum, the request itself is the strategy minimum.
         auto requested = ReplicationStream(true);
         requested.SetTopicPartitions(10'000);
-        const auto requestedParams = NCdc::MakeCdcPqPartParams(requested, 50'000, maxShardsInPath);
+        const auto requestedParams = NCdc::MakeCdcPqPartParams(requested, 50'000, maxShardsInPath, TFeatureFlags());
         UNIT_ASSERT_VALUES_EQUAL(requestedParams.TotalGroupCount, 10'000);
         UNIT_ASSERT_VALUES_EQUAL(requestedParams.MinPartitionCount, 10'000);
         UNIT_ASSERT_VALUES_EQUAL(requestedParams.MaxPartitionCount, maxShardsInPath);
 
         auto aboveLimit = ReplicationStream(true);
         aboveLimit.SetTopicPartitions(100'000);
-        const auto capped = NCdc::MakeCdcPqPartParams(aboveLimit, 50'000, maxShardsInPath);
+        const auto capped = NCdc::MakeCdcPqPartParams(aboveLimit, 50'000, maxShardsInPath, TFeatureFlags());
         UNIT_ASSERT_VALUES_EQUAL(capped.TotalGroupCount, maxShardsInPath);
         UNIT_ASSERT_VALUES_EQUAL(capped.MinPartitionCount, maxShardsInPath);
         UNIT_ASSERT_VALUES_EQUAL(capped.MaxPartitionCount, maxShardsInPath);
@@ -803,7 +820,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(ReplicationTopicWithoutAutopartitioning) {
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
-        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000, maxShardsInPath);
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000, maxShardsInPath, TFeatureFlags());
         UNIT_ASSERT(!params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
@@ -812,10 +829,25 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenKeyRangeHeartbeats) {
         // given
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
-        const auto stream = ReplicationStream(true, true);
+        const auto stream = GlobalReplicationStream(true, true);
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableCdcKeyRangeHeartbeats(true);
 
         // when
-        const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, true);
+        const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, featureFlags);
+
+        // then
+        UNIT_ASSERT(!params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+    }
+
+    Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenStreamSendsPeriodicResolvedHeartbeats) {
+        // given
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto stream = GlobalReplicationStream(true, true);
+
+        // when
+        const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, TFeatureFlags());
 
         // then
         UNIT_ASSERT(!params.ReplicationAutoPartitioning);
@@ -1919,7 +1951,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -1939,7 +1971,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(true, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(true, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -1960,7 +1992,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // when
@@ -1980,7 +2012,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -1999,7 +2031,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, false).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, false).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
@@ -2016,7 +2048,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        auto stream = ReplicationStream(false, true);
+        auto stream = GlobalReplicationStream(false, true);
         stream.MutableStreamDescription()->ClearResolvedTimestampsIntervalMs();
 
         // when
@@ -2040,12 +2072,32 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         CreateSourceTable(runtime, env, txId);
 
         // when
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, true).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // then
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+            NLs::StreamHasAggregatorTabletId(false),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldNotAggregateHeartbeatsWhenReplicationSupportsKeyRangeAndFlagDisabled) {
+        // given
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+        CreateSourceTable(runtime, env, txId);
+
+        // when
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, true).DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // then
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
             NLs::StreamHasAggregatorTabletId(false),
         });
     }
@@ -2058,7 +2110,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        auto stream = ReplicationStream(false, true);
+        auto stream = GlobalReplicationStream(false, true);
         if (topicAutoPartitioning) {
             stream.SetTopicAutoPartitioning(true);
             stream.SetMaxPartitionCount(10);
@@ -2074,7 +2126,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST(ShouldUseKeyRangeHeartbeatsWhenRotatedStreamSupportsKeyRange) {
+    Y_UNIT_TEST(ShouldKeepDirectHeartbeatsWhenRotatedStreamSupportsKeyRange) {
         // given
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -2082,9 +2134,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             .EnableCdcKeyRangeHeartbeats(true));
         ui64 txId = 100;
         CreateSourceTable(runtime, env, txId);
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", ReplicationStream(false, false).DebugString());
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", GlobalReplicationStream(false, false).DebugString());
         env.TestWaitNotification(runtime, txId);
-        auto rotatedStream = ReplicationStream(false, true);
+        auto rotatedStream = GlobalReplicationStream(false, true);
         rotatedStream.MutableStreamDescription()->SetName("RotatedStream");
 
         // when
@@ -2095,7 +2147,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
         });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream"), {
-            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
         });
     }
 

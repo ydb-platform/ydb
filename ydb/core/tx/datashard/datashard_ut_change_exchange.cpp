@@ -3290,7 +3290,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
             "Waiting for CDC visibility must not busy-loop change-record requests");
 
         if (reboot) {
+            TBlockEvents<TEvTxProxySchemeCache::TEvNavigateKeySet> topicLookups(runtime, [&](const auto& ev) {
+                return runtime.FindActorName(ev->Sender) == "CHANGE_SENDER_CDC_ACTOR_MAIN"
+                    && ev->Get()->Request->ResultSet.at(0).Operation == NSchemeCache::TSchemeCacheNavigate::OpTopic;
+            });
             RebootTablet(runtime, shard, sender);
+            runtime.WaitFor("restarted CDC sender's first topic lookup", [&] { return !topicLookups.empty(); });
+            UNIT_ASSERT(topicLookups.front()->Get()->Request->ResultSet.at(0).SyncVersion);
+            topicLookups.Stop().Unblock();
+
             runtime.SimulateSleep(TDuration::Seconds(1));
             UNIT_ASSERT_VALUES_EQUAL(ReadCdcVisibilityValues(runtime, sender).size(), 1);
         }

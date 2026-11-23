@@ -783,6 +783,15 @@ public:
                     "Managed CDC attachment, mirroring, and trim require a Disabled stream and the current replica table owner");
                 return result;
             }
+
+            const bool partitionHeartbeats = stream->ResolvedTimestamps != TDuration::Zero()
+                && stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
+            // Attachment keeps the bare producer groups, which cannot contribute to the partition quorum.
+            if (attachCdcTopic && (partitionHeartbeats || stream->SchemaChanges)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Managed CDC attachment does not support partition heartbeats or schema changes");
+                return result;
+            }
         }
 
         if (attachCdcTopic && !stopped) {

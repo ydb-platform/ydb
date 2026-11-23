@@ -799,12 +799,6 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     TString dbPath;
     if (settings.Database_.has_value()) {
         dbPath = *settings.Database_;
-        if (!dbPath.StartsWith('/')) {
-            if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
-                return result;
-            }
-            dbPath = Join('/', ClusterRootPath, dbPath);
-        }
     } else {
         // Get database path from dump and adjust it to the cluster
         dbPath = dbDesc.path();
@@ -847,7 +841,7 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         return result;
     }
 
-    if (auto result = RestorePermissionsImpl(dbSchemeClient, fsPath, dbPath); !result.IsSuccess()) {
+    if (auto result = RestorePermissionsImpl(dbSchemeClient, fsPath, dbPath.StartsWith('/') ? dbPath : "."); !result.IsSuccess()) {
         return result;
     }
 

@@ -639,6 +639,25 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         CheckJwkKeyOperations(*this, R"(["verify"])", TEvExternalIdpProvider::EStatus::SUCCESS);
     }
 
+    Y_UNIT_TEST_F(VerifyKeyOpsWithExtensionAllowsSignatures, TSetup) {
+        CheckJwkKeyOperations(*this, R"(["extension", "verify"])", TEvExternalIdpProvider::EStatus::SUCCESS);
+    }
+
+    Y_UNIT_TEST_F(SigningCertificateWithMixedKeyOpsAllowsVerification, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        NJson::TJsonValue jwks;
+        NJson::ReadJsonTree(BuildJwksJson(KID, CertificateWithKeyUsage(keys, "critical,digitalSignature")), &jwks, true);
+        NJson::ReadJsonTree(R"(["verify", "encrypt"])", &jwks["keys"][0]["key_ops"], true);
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto request = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", NJson::WriteJson(jwks, false));
+        SendAuth(id, "k1", CreateJwt(keys, KID, ISS, "user1", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::SUCCESS);
+    }
+
     Y_UNIT_TEST_F(JwkAlgorithmMustMatchToken, TSetup) {
         const auto keys = GenerateRsaKeyPair();
         const auto id = RegProvider(MakeConfig(ISS));

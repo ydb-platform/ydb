@@ -280,9 +280,13 @@ Y_UNIT_TEST_SUITE(TParseJwkTest) {
         UNIT_ASSERT(jwk->KeyOperations->empty());
     }
 
-    Y_UNIT_TEST(KeyOpsUnknownValuesRejected) {
+    Y_UNIT_TEST(KeyOpsIgnoresUnknownValuesAlongsideKnownOperations) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["sign", "unknown", "verify"]})"));
-        UNIT_ASSERT(!jwk.has_value());
+        UNIT_ASSERT(jwk.has_value());
+        UNIT_ASSERT(jwk->KeyOperations.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations->size(), 2);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[0], EJwkKeyOps::SIGN);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[1], EJwkKeyOps::VERIFY);
     }
 
     Y_UNIT_TEST(KeyOpsNonStringValuesRejected) {
@@ -298,6 +302,7 @@ Y_UNIT_TEST_SUITE(TParseJwkTest) {
     Y_UNIT_TEST(KeyOpsDuplicatesRejected) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["verify", "verify"]})"));
         UNIT_ASSERT(!jwk.has_value());
+        UNIT_ASSERT(!ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["extension", "verify", "extension"]})")));
     }
 
     Y_UNIT_TEST(KeyOpsExtensionOnlyRejected) {

@@ -81,21 +81,21 @@ std::optional<std::vector<EJwkKeyOps>> ParseKeyOps(const NJson::TJsonValue& jwk)
     }
 
     std::vector<EJwkKeyOps> keyOps;
-    std::set<EJwkKeyOps> seen;
+    std::set<std::string_view> seen;
 
     for (const auto& op : jwk[KEY_OPS].GetArray()) {
-        if (!op.IsString()) {
+        if (!op.IsString() || !seen.insert(op.GetString()).second) {
             return std::nullopt;
         }
 
         EJwkKeyOps res = EJwkKeyOps::SIGN;
-        if (!TryFromString(op.GetString(), res) || !seen.insert(res).second) {
-            return std::nullopt;
+        if (TryFromString(op.GetString(), res)) {
+            keyOps.push_back(res);
         }
-
-        keyOps.push_back(res);
     }
-
+    if (keyOps.empty() && !seen.empty()) {
+        return std::nullopt;
+    }
     return keyOps;
 }
 

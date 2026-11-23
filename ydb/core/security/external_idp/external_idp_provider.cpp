@@ -36,6 +36,8 @@
 #include <chrono>
 #include <exception>
 #include <functional>
+#include <set>
+#include <stdexcept>
 #include <unordered_map>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXTERNAL_IDP_PROVIDER
@@ -51,31 +53,45 @@ constexpr TStringBuf JWKS_URI = "jwks_uri";
 constexpr TStringBuf ISSUER = "issuer";
 constexpr TStringBuf WELL_KNOWN_DISCOVERY_URI = ".well-known/openid-configuration";
 
+using TJwtVerifier = jwt::verifier<jwt::default_clock>;
+
+template <typename TAlgorithm>
+void AllowAlgorithm(TJwtVerifier& verifier, const std::string& pem) {
+    verifier.allow_algorithm(TAlgorithm(pem));
+}
+
 // Asymmetric algorithms supported for external IdP JWT verification.
 // HMAC (HS*) algorithms are deliberately excluded: they require a shared secret,
 // not a public key. Including them would enable the "algorithm confusion" attack
 // where an attacker signs a token with HS256 using the (public) RSA key.
-template <typename TVerifier>
-const std::unordered_map<NSecurity::EJwkAlg, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGOS = {
-    {NSecurity::EJwkAlg::ES256,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es256(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::ES384,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es384(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::ES512,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es512(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::PS256,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps256(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::PS384,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps384(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::PS512,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps512(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::RS256,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs256(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::RS384,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs384(pubkey.c_str())); }},
-    {NSecurity::EJwkAlg::RS512,
-        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs512(pubkey.c_str())); }},
+const std::unordered_map<NSecurity::EJwkAlg, void (*)(TJwtVerifier&, const std::string&)> SUPPORTED_ALGOS = {
+    {NSecurity::EJwkAlg::ES256, AllowAlgorithm<jwt::algorithm::es256>},
+    {NSecurity::EJwkAlg::ES384, AllowAlgorithm<jwt::algorithm::es384>},
+    {NSecurity::EJwkAlg::ES512, AllowAlgorithm<jwt::algorithm::es512>},
+    {NSecurity::EJwkAlg::PS256, AllowAlgorithm<jwt::algorithm::ps256>},
+    {NSecurity::EJwkAlg::PS384, AllowAlgorithm<jwt::algorithm::ps384>},
+    {NSecurity::EJwkAlg::PS512, AllowAlgorithm<jwt::algorithm::ps512>},
+    {NSecurity::EJwkAlg::RS256, AllowAlgorithm<jwt::algorithm::rs256>},
+    {NSecurity::EJwkAlg::RS384, AllowAlgorithm<jwt::algorithm::rs384>},
+    {NSecurity::EJwkAlg::RS512, AllowAlgorithm<jwt::algorithm::rs512>},
 };
+
+bool AllowKeyAlgorithms(TJwtVerifier& verifier, const NSecurity::TJwk& jwk, const std::string& pem, std::string& error) {
+    bool added = false;
+    for (const auto& [alg, allow] : SUPPORTED_ALGOS) {
+        if ((jwk.Algorithm && *jwk.Algorithm != alg) || NSecurity::GetKeyType(alg) != jwk.Type) {
+            continue;
+        }
+        try {
+            allow(verifier, pem);
+            added = true;
+        } catch (const std::runtime_error& e) {
+            // Without an explicit alg, an EC key can reject other curves' algorithms.
+            error = e.what();
+        }
+    }
+    return added;
+}
 
 TString BuildKey(const TString& kty, const TString& kid) {
     return TStringBuilder() << kty << '-' << kid;
@@ -158,6 +174,7 @@ public:
     struct TKey {
         TString Pem;
         std::optional<NSecurity::EJwkAlg> Algorithm;
+        TJwtVerifier Verifier;
     };
     using TKeysMap = THashMultiMap<TString, TKey>;
     using TKeys = TIteratorRange<TKeysMap::const_iterator>;
@@ -230,7 +247,7 @@ private:
     NKikimrProto::TExternalIdpConfig Config;
     NActors::TActorId HttpProxyId;
 
-    TDuration AllowedClockSkew{TDuration::Zero()};
+    TJwtVerifier VerifierWithClaims = jwt::verify();
     TRecurringPeriod DiscoveryRefresh;
     TRecurringPeriod JwksRefresh;
 
@@ -487,7 +504,11 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
     }
 
     if (const auto skewStr = Config.GetAllowedClockSkew(); !skewStr.empty()) {
-        AllowedClockSkew = TDuration::Parse(skewStr);
+        VerifierWithClaims.leeway(TDuration::Parse(skewStr).Seconds());
+    }
+    VerifierWithClaims.with_issuer(Config.GetIssuer());
+    if (!Config.GetAudience().empty()) {
+        VerifierWithClaims.with_audience(std::set<std::string>{Config.GetAudience()});
     }
 
     DiscoveryRefresh = TRecurringPeriod(
@@ -551,10 +572,8 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         );
     }
 
-    auto verifier = jwt::verify();
-
     NSecurity::EJwkAlg alg;
-    if (!TryFromString(decoded->get_algorithm(), alg) || !SUPPORTED_ALGOS<decltype(verifier)>.contains(alg)) {
+    if (!TryFromString(decoded->get_algorithm(), alg) || !SUPPORTED_ALGOS.contains(alg)) {
         return ReplyError(
             ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
@@ -591,22 +610,6 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         );
     }
 
-    if (AllowedClockSkew != TDuration::Zero()) {
-        verifier.leeway(AllowedClockSkew.Seconds());
-    }
-
-    verifier.with_issuer(Config.GetIssuer());
-
-    {
-        std::set<std::string> audiences;
-        if (Config.HasAudience() && !Config.GetAudience().empty()) {
-            audiences.insert(Config.GetAudience());
-        }
-        if (!audiences.empty()) {
-            verifier.with_audience(std::move(audiences));
-        }
-    }
-
     bool verified = false;
     TString verificationError = "No key matches the token algorithm";
     for (const auto& [keyId, key] : keys) {
@@ -614,9 +617,7 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
             continue;
         }
         try {
-            auto keyVerifier = verifier;
-            SUPPORTED_ALGOS<decltype(verifier)>.at(alg)(keyVerifier, key.Pem);
-            keyVerifier.verify(*decoded);
+            key.Verifier.verify(*decoded);
             verified = true;
             break;
         } catch (const std::exception& e) {
@@ -894,11 +895,8 @@ void TExternalIdpProvider::HandleJwksResponse(
         if (jwk.Usage.has_value() && jwk.Usage.value() == NSecurity::EJwkUsage::ENC) {
             continue;
         }
-        if (jwk.Algorithm.has_value()) {
-            const auto& supportedAlgorithms = SUPPORTED_ALGOS<decltype(jwt::verify())>;
-            if (!supportedAlgorithms.contains(jwk.Algorithm.value())) {
-                continue;
-            }
+        if (jwk.Algorithm.has_value() && !SUPPORTED_ALGOS.contains(jwk.Algorithm.value())) {
+            continue;
         }
         if (jwk.KeyOperations.has_value()) {
             const auto& operations = jwk.KeyOperations.value();
@@ -908,10 +906,13 @@ void TExternalIdpProvider::HandleJwksResponse(
             }
         }
 
-        jwk.Usage = NSecurity::EJwkUsage::SIG;
+        // Check x5c for the operation this cache performs. This also requires digitalSignature
+        // when the issuer omitted both use and key_ops.
+        jwk.KeyOperations = {NSecurity::EJwkKeyOps::VERIFY};
         std::string error;
         auto pubkey = jwk.CalculatePublicKey(error);
-        if (!pubkey.has_value()) {
+        auto verifier = VerifierWithClaims;
+        if (!pubkey.has_value() || !AllowKeyAlgorithms(verifier, jwk, *pubkey, error)) {
             YDB_LOG_WARN("Skipping JWKS key: invalid or unsupported public key",
                 {"jwkKeyId", jwk.KeyId},
                 {"reason", error}
@@ -919,7 +920,7 @@ void TExternalIdpProvider::HandleJwksResponse(
             continue;
         }
         newKeys.emplace(BuildKey(ToString(jwk.Type), TString{jwk.KeyId}),
-            TJwksCache::TKey{std::move(pubkey.value()), jwk.Algorithm});
+            TJwksCache::TKey{std::move(pubkey.value()), jwk.Algorithm, std::move(verifier)});
     }
     if (newKeys.empty()) {
         YDB_LOG_ERROR("No supported keys in JWKS response",

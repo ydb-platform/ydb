@@ -32,8 +32,6 @@ public:
     };
 
     struct TRoom /* Storage unit settings (page collection) */ {
-        bool operator==(const TRoom&) const = default;
-
         TRoom() = default;
 
         TRoom(ui32 channel)
@@ -51,8 +49,6 @@ public:
         tiering policy refers to the family (such a family has no columns)
      */
     struct TFamily {
-        bool operator==(const TFamily&) const = default;
-
         using ECodec = NPage::ECodec;
         using ECacheMode = NPage::ECacheMode;
 

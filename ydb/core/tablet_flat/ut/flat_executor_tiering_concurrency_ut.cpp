@@ -159,6 +159,105 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
+    Y_UNIT_TEST(AddingTiersPreservesTheLegacyFinalLevelAndWakesTheNextFlush) {
+        TEnv env(/*withTiering*/ false);
+        env.Enable();
+        const auto input = env.FlushPart({{1, 0, "written before ALTER"}});
+        auto previous = MakePolicy(/*withTiering*/ false);
+        const ui32 lastLevel = previous->Generations.size();
+        env.SeedLevels({{input->Label, lastLevel}});
+        TBlockEvents<NOps::TEvResult> blocked(env.Env);
+        previous->Generations.back().ForceCountToCompact = 1;
+        env.Policy(*previous);
+        env->WaitFor("held last-generation compaction", [&] { return blocked.size() == 1; }, TDuration::Seconds(10));
+        const auto& legacy = Product(blocked.front());
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), lastLevel);
+        UNIT_ASSERT(!legacy.Params->Tiering);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.Results.size(), 1);
+        const auto legacyLabel = legacy.Results.front().Part->Label;
+
+        const auto policy = MakePolicy();
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetTierForLevel(lastLevel + 1), ColdTier);
+        env.Exec([&](TTransactionContext& txc) {
+            txc.DB.Alter().SetCompactionPolicy(TableId, *policy)
+                .SetTieringPolicy(TableId, MakeTierPolicy());
+            return true;
+        });
+        env.Write({{2, 0, "written after ALTER"}});
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env->WaitFor("flush waiting for the legacy scan", [&] {
+            const auto& mem = env.State->Tables.at(TableId).InMem;
+            return mem.State == ECompactionState::Compaction && mem.CompactionTask.TaskId == 0;
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+        blocked.Unblock(1);
+        env->WaitFor("tier-aware flush after legacy publication", [&] { return blocked.size() == 1; },
+            TDuration::Seconds(10));
+        const auto& flush = Product(blocked.front());
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 0u);
+        CheckAdjacentOutputs(flush, ColdTier);
+        UNIT_ASSERT_VALUES_EQUAL(flush.Results.size(), 1u);
+        const auto cooledLabel = flush.Results.front().Part->Label;
+        UNIT_ASSERT_VALUES_EQUAL(env.Levels().at(legacyLabel), previous->GetFinalLevel(0));
+        blocked.Stop().Unblock();
+        for (ui32 count = 0; count < 2; ++count) {
+            UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvCompacted>(TDuration::Seconds(10)));
+        }
+        const auto levels = env.Levels();
+        UNIT_ASSERT_VALUES_EQUAL(levels.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetTierForLevel(levels.at(cooledLabel)), ColdTier);
+        env.Restart();
+        env.CheckLevels(levels, "after enabling tiering during the last-generation compaction");
+        env.Read(1, "written before ALTER");
+        env.Read(2, "written after ALTER");
+    }
+
+    Y_UNIT_TEST(AlteringTierRulesAndPlacementPreservesTheRunningDiskCompaction) {
+        TEnv env;
+        const ui64 time = env.NowSeconds() - TDuration::Days(30).Seconds();
+        env.FlushPart({{1, time, "old rule"}});
+        env.Enable();
+        TBlockEvents<NOps::TEvResult> blocked(env.Env);
+        env.Tick();
+        env->WaitFor("held disk TAC", [&] { return blocked.size() == 1; }, TDuration::Seconds(10));
+        const auto& disk = Product(blocked.front());
+        UNIT_ASSERT(Generation(blocked.front()) != 0);
+        CheckAdjacentOutputs(disk, ColdTier);
+        UNIT_ASSERT_VALUES_EQUAL(disk.Results.size(), 1);
+        const auto oldLabel = disk.Results.front().Part->Label;
+
+        constexpr ui32 deepTier = 99;
+        auto policy = MakePolicy();
+        auto generation = policy->Generations.back();
+        generation.TierId = deepTier;
+        policy->Generations.push_back(generation);
+        env.Exec([&](TTransactionContext& txc) {
+            auto rules = MakeTierPolicy();
+            rules.Rules.front().TierId = deepTier;
+            rules.Rules.back().Ranges.front().To = NTable::TTierRelativeBound{TDuration::Days(100)};
+            txc.DB.Alter().SetRoom(TableId, ColdTier, 3, {3}, 3)
+                .AddFamily(TableId, deepTier, ArchiveTier)
+                .SetCompactionPolicy(TableId, *policy)
+                .SetTieringPolicy(TableId, rules);
+            return true;
+        });
+        blocked.Stop().Unblock();
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvCompacted>(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetTierForLevel(env.Levels().at(oldLabel)), ColdTier);
+
+        const auto hot = env.FlushPart({{2, time, "new rule"}});
+        const auto cold = env.FlushPart({{3, 0, "new channel"}});
+        const auto levels = env.Levels();
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetTierForLevel(levels.at(hot->Label)), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetTierForLevel(levels.at(cold->Label)), ColdTier);
+        UNIT_ASSERT_VALUES_EQUAL(cold->GetDataChannel({}), 3u);
+        env.Restart();
+        env.CheckLevels(levels, "after changing tier rules and placement");
+        env.Read(1, "old rule");
+        env.Read(2, "new rule");
+        env.Read(3, "new channel");
+    }
+
     Y_UNIT_TEST(AlteringAnotherTablePreservesTheRunningFlushAndDiskCompaction) {
         TEnv env;
         constexpr ui32 otherTable = TableId + 1;

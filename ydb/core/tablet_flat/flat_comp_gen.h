@@ -178,6 +178,7 @@ namespace NCompGen {
 
         struct TCompactionTask {
             TTaskId TaskId = 0;
+            TString Type;
             ui32 Priority = 0;
             TInstant SubmissionTimestamp;
             ui64 CompactionId = 0;
@@ -230,6 +231,9 @@ namespace NCompGen {
         void UpdateTask(TCompactionTask& task, TString type, ui32 priority);
 
         void BeginGenCompaction(TTaskId taskId, ui32 generation);
+        bool HasRunningCompactions() const;
+        void ResumePendingGenerationTasks();
+        void FinishReservationModeChange();
 
         void OnForcedGenCompactionDone();
 
@@ -280,6 +284,7 @@ namespace NCompGen {
         ui32 ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const;
         ui32 UpliftTierLevel(ui32 tierId, TEpoch epoch, const TStats& outputStats,
             ui32 preferredLevel) const;
+        void CancelPendingTierSweep(TTaskId grantedTaskId = 0);
         void ScheduleTierSweep();
 
         void UpdateStats();
@@ -304,6 +309,7 @@ namespace NCompGen {
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
 
         bool TierManaged = false;
+        bool ReservationModeChangePending = false;
         THashMap<ui32, TTierCompaction> TierCompactions;
         // Blocked generations retry after the reservation set changes.
         THashMap<ui32, ui64> TierWaitRevisions;

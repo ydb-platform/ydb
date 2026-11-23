@@ -164,6 +164,29 @@ Y_UNIT_TEST_SUITE(TDeferredMemoryCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(f.Table().InMem.Steps, 0);
     }
 
+    Y_UNIT_TEST(SnapshotQueuedDuringDeferredFlushKeepsItsEdge) {
+        TFixture f;
+        const ui64 forcedId = f.Logic->PrepareForceCompaction(1);
+        UNIT_ASSERT(f.Broker.RunPending());
+        UNIT_ASSERT(!f.Strategy->Params);
+
+        const TSnapEdge edge{TTxStamp(1, 1), TEpoch::FromIndex(5)};
+        TIntrusivePtr<TSnapshot> context = new TSnapshot;
+        f.Logic->PrepareTableSnapshot(1, edge, context.Get());
+        f.Strategy->Accept = true;
+        f.Wake();
+        UNIT_ASSERT(f.Broker.RunPending());
+        UNIT_ASSERT(f.Strategy->Params->Edge == edge);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->ForcedAttempts.back(), 0);
+        const auto result = f.Complete();
+        UNIT_ASSERT_VALUES_EQUAL(result.CompleteSnapshots.size(), 1);
+        UNIT_ASSERT(result.CompleteSnapshots.front().Get() == context.Get());
+
+        UNIT_ASSERT(f.Broker.RunPending());
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->ForcedAttempts.back(), forcedId);
+        f.Complete();
+    }
+
     Y_UNIT_TEST(WakeupDoesNotDuplicateARunningScanOrResurrectADroppedTable) {
         TFixture f;
         f.Strategy->Accept = true;

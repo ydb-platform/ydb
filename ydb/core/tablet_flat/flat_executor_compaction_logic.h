@@ -185,7 +185,7 @@ class TCompactionLogic {
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);
-    void ResubmitCompactions(TCompactionLogicState::TTableInfo &table);
+    void ResubmitMemCompaction(TCompactionLogicState::TTableInfo &table);
 
     TCompactionLogicState::TTableInfo* HandleCompaction(
         ui64 compactionId,

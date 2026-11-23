@@ -72,7 +72,7 @@ struct TRow {
     bool Erase = false;
 };
 
-inline NLocalDb::TCompactionPolicyPtr MakePolicy() {
+inline NLocalDb::TCompactionPolicyPtr MakePolicy(bool withTiering = true) {
     auto policy = NLocalDb::CreateDefaultUserTablePolicy();
     policy->InMemSizeToSnapshot = ui64(1) << 50;
     policy->InMemForceSizeToSnapshot = ui64(1) << 51;
@@ -82,7 +82,7 @@ inline NLocalDb::TCompactionPolicyPtr MakePolicy() {
     policy->LogOverheadCountToSnapshot = 0;
     policy->DroppedRowsPercentToCompact = 101;
     const auto generation = policy->Generations.front();
-    policy->Generations.assign(7, generation);
+    policy->Generations.assign(withTiering ? 7 : 3, generation);
     for (ui32 index = 0; index < policy->Generations.size(); ++index) {
         auto& gen = policy->Generations[index];
         gen.SizeToCompact = ui64(1) << 50;
@@ -130,7 +130,9 @@ private:
 
 class TEnv : public TMyEnvBase {
 public:
-    TEnv() {
+    explicit TEnv(bool withTiering = true)
+        : LevelsPolicy(MakePolicy(withTiering))
+    {
         // TTestActorRuntime installs a mock TimeProvider initially at epoch 0.
         // Relative policies need a positive, deterministic clock before boot.
         Env.UpdateCurrentTime(TInstant::Seconds(2'000'000'000));
@@ -139,8 +141,7 @@ public:
         flags.SetEnableLocalDBBtreeIndex(true);
         flags.SetEnableLocalDBFlatIndex(false);
         FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-        Exec([](TTransactionContext& txc) {
-            auto policy = MakePolicy();
+        Exec([this, withTiering](TTransactionContext& txc) {
             txc.DB.Alter()
                 .AddTable("tiering-integration", TableId)
                 .AddColumn(TableId, "key", KeyTag, NScheme::NTypeIds::Uint64, false, false)
@@ -154,8 +155,10 @@ public:
                 .AddFamily(TableId, ArchiveTier, ArchiveTier)
                 .SetFamilyBlobs(TableId, ColdTier, 64, 128)
                 .SetFamilyBlobs(TableId, ArchiveTier, 64, 128)
-                .SetCompactionPolicy(TableId, *policy)
-                .SetTieringPolicy(TableId, MakeTierPolicy());
+                .SetCompactionPolicy(TableId, *LevelsPolicy);
+            if (withTiering) {
+                txc.DB.Alter().SetTieringPolicy(TableId, MakeTierPolicy());
+            }
             return true;
         });
     }
@@ -341,7 +344,7 @@ public:
     }
 
     TCompactionLogicState* State = nullptr;
-    NLocalDb::TCompactionPolicyPtr LevelsPolicy = MakePolicy();
+    NLocalDb::TCompactionPolicyPtr LevelsPolicy;
 };
 
 }

@@ -106,12 +106,8 @@ namespace {
         }
 
         void Prepare(TCompactionParams& params, TSubset& subset, bool enabled = false) const {
-            PrepareTieringCompaction(params, Table, Layout.RowScheme(), subset,
+            PrepareTieringCompaction(params, Table, subset,
                 Parts, ColdParts, enabled, Now);
-        }
-
-        bool Current(const TCompactionParams& params, bool enabled = false) const {
-            return IsTieringCompactionCurrent(params, Table, Layout.RowScheme(), enabled);
         }
     };
 
@@ -234,7 +230,7 @@ namespace {
                 subset->Frozen.emplace_back(memory, memory->Immediate());
             }
             UNIT_ASSERT(params->Tiering);
-            PrepareTieringCompaction(*params, F.Table, F.Layout.RowScheme(), *subset,
+            PrepareTieringCompaction(*params, F.Table, *subset,
                 F.Parts, F.ColdParts, Enabled, F.Now);
             UNIT_ASSERT(Strategy);
             if (!Strategy->TryReserveCompaction(*params)) {
@@ -273,7 +269,6 @@ namespace {
             UNIT_ASSERT(it != Started.end());
             auto params = std::move(it->second);
             Started.erase(it);
-            UNIT_ASSERT(F.Current(*params, Enabled));
             const TEpoch epoch = params->Context->Epochs
                 ? params->Context->Epochs->Max : TEpoch::Min();
             auto result = MakeHolder<TCompactionResult>(epoch, outputTiers.size());
@@ -398,7 +393,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT(!Contains(subset.Flatten, outside->Label));
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Epochs->Max, TEpoch::FromIndex(30));
         params->Context->ValidateSubset(subset);
-        UNIT_ASSERT(f.Current(*params));
     }
 
     Y_UNIT_TEST(IncludesEqualEpochPeersAcrossTiers) {
@@ -440,7 +434,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Remaining.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Remaining.front().Level, 1);
         params->Context->ValidateSubset(subset);
-        UNIT_ASSERT(f.Current(*params));
     }
 
     Y_UNIT_TEST(SingleColdTierKeepsRegularPlacementWithoutCooling) {
@@ -468,7 +461,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT(params->Mode == TCompactionParams::EMode::TierAware);
         UNIT_ASSERT(params->Tiering->AllowCooling);
         UNIT_ASSERT_VALUES_EQUAL(params->Tiering->Now, f.Now);
-        UNIT_ASSERT(params->Tiering->Schema->TieringPolicy == f.Table.TieringPolicy);
+        UNIT_ASSERT(params->Tiering->TierOrder == f.Policy->GetTierIds());
     }
 
     Y_UNIT_TEST(RegularCompactionDoesNotEnableCoolingWithTheFlagAndPolicy) {
@@ -481,7 +474,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
 
         UNIT_ASSERT(params->Mode == TCompactionParams::EMode::Regular);
         UNIT_ASSERT(!params->Tiering->AllowCooling);
-        UNIT_ASSERT(f.Current(*params, false));
     }
 
     Y_UNIT_TEST(MixedInputsUpgradeRegularToMaintenanceTacWithoutEnablingCooling) {
@@ -497,7 +489,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT(params->Mode == TCompactionParams::EMode::TierAware);
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Inputs.size(), 3);
         UNIT_ASSERT(!params->Tiering->AllowCooling);
-        UNIT_ASSERT(f.Current(*params, false));
     }
 
     Y_UNIT_TEST(AFlagWithoutAPolicyDoesNotEnableCooling) {
@@ -533,63 +524,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Epochs->Max, TEpoch::FromIndex(45));
         UNIT_ASSERT(params->Context->RequiresTierAware());
         params->Context->ValidateSubset(subset);
-    }
-
-    Y_UNIT_TEST(DisablingTheFlagInvalidatesANewCoolingOperation) {
-        TFixture f;
-        auto hot = f.AddPart(10, 1);
-        auto params = f.Params();
-        params->Mode = TCompactionParams::EMode::TierAware;
-        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
-        subset.Flatten = {hot};
-        f.Prepare(*params, subset, true);
-
-        UNIT_ASSERT(f.Current(*params, true));
-        UNIT_ASSERT(!f.Current(*params, false));
-    }
-
-    Y_UNIT_TEST(StorageChangesInvalidateBeforePublication) {
-        TFixture f;
-        auto hot = f.AddPart(10, 1);
-        auto params = f.Params();
-        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
-        subset.Flatten = {hot};
-        f.Prepare(*params, subset);
-
-        f.Table.Rooms[ColdTier].Main = 9;
-        UNIT_ASSERT(!f.Current(*params));
-        f.Table.Rooms[ColdTier].Main = 2;
-        UNIT_ASSERT(f.Current(*params));
-        f.Table.Families[ColdTier].Small = 32;
-        UNIT_ASSERT(!f.Current(*params));
-    }
-
-    Y_UNIT_TEST(PolicyChangesInvalidateBeforePublication) {
-        TFixture f;
-        auto hot = f.AddPart(10, 1);
-        auto params = f.Params();
-        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
-        subset.Flatten = {hot};
-        f.Prepare(*params, subset);
-
-        f.Table.TieringPolicy->Rules[0].Ranges[0].To = TTierRelativeBound{TDuration::Seconds(300)};
-        UNIT_ASSERT(!f.Current(*params));
-    }
-
-    Y_UNIT_TEST(CompactionPolicySnapshotDoesNotFollowMutableSettings) {
-        TFixture f;
-        auto hot = f.AddPart(10, 1);
-        auto params = f.Params();
-        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
-        subset.Flatten = {hot};
-        f.Prepare(*params, subset);
-
-        ++f.Policy->Generations.front().ForceCountToCompact;
-        UNIT_ASSERT(!f.Current(*params));
-        --f.Policy->Generations.front().ForceCountToCompact;
-        UNIT_ASSERT(f.Current(*params));
-        f.Policy->Generations[2].TierId = 0;
-        UNIT_ASSERT(!f.Current(*params));
     }
 
     Y_UNIT_TEST(RegularCompactionOfAnUnloadedPartUsesTheDefaultTier) {
@@ -644,7 +578,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT(params->Context->Remaining.empty());
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Epochs->Max, TEpoch::FromIndex(50));
         params->Context->ValidateSubset(subset);
-        UNIT_ASSERT(f.Current(*params, true));
     }
 
     Y_UNIT_TEST(PolicyTargetsRequireFamiliesAndGenerationBindings) {
@@ -1363,7 +1296,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         }
     }
 
-    Y_UNIT_TEST(StoppingOrReflectingSchemaReleasesConcurrentTacReservations) {
+    Y_UNIT_TEST(ConcurrentTacReservationsSurviveAlterAndAreReleasedOnStop) {
         for (bool reflectSchema : {false, true}) {
             TStrategyFixture f;
             f.Backend.Enabled = true;
@@ -1381,12 +1314,20 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
 
             if (reflectSchema) {
+                auto policy = MakeIntrusive<NLocalDb::TCompactionPolicy>(*f.Policy);
+                policy->Generations.back().ForceCountToCompact += 1;
+                f.Table.CompactionPolicy = policy;
                 f.Strategy->ReflectSchema();
-            } else {
-                const auto state = f.Strategy->SnapshotState();
-                f.Strategy->Stop();
-                f.Strategy->Start(state);
+                UNIT_ASSERT(f.Backend.Cancelled.empty());
+                UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(1), originalId);
+                UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(3), originalColdId);
+                f.Complete(originalColdId, {ColdTier});
+                f.Complete(originalId, {0});
+                continue;
             }
+            const auto state = f.Strategy->SnapshotState();
+            f.Strategy->Stop();
+            f.Strategy->Start(state);
             UNIT_ASSERT(f.Backend.Cancelled.contains(originalId));
             UNIT_ASSERT(f.Backend.Cancelled.contains(originalColdId));
             UNIT_ASSERT(f.Backend.Started.empty());

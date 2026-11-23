@@ -52,7 +52,7 @@ std::optional<ui32> FindTierCompactionLevel(const NLocalDb::TCompactionPolicy& p
 }
 
 void PrepareTieringCompaction(TCompactionParams& params,
-        const TScheme::TTableInfo& table, TIntrusiveConstPtr<TRowScheme> rowScheme,
+        const TScheme::TTableInfo& table,
         TSubset& subset, TConstArrayRef<TPartView> parts,
         TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
         bool enableDataTiering, TInstant now)
@@ -73,12 +73,6 @@ void PrepareTieringCompaction(TCompactionParams& params,
     };
     closeInputs();
 
-    auto schema = std::make_shared<TScheme::TTableInfo>(table);
-    NKikimrCompaction::TCompactionPolicy policy;
-    table.CompactionPolicy->Serialize(policy);
-    schema->CompactionPolicy = new NLocalDb::TCompactionPolicy(policy);
-    settings.Schema = std::move(schema);
-    settings.RowScheme = std::move(rowScheme);
     settings.Now = now;
     settings.TierOrder = table.CompactionPolicy->GetTierIds();
     THashSet<ui32> tiers;
@@ -141,27 +135,6 @@ void PrepareTieringCompaction(TCompactionParams& params,
     } else {
         checkFamily(params.TierId);
     }
-}
-
-bool IsTieringCompactionCurrent(const TCompactionParams& params,
-        const TScheme::TTableInfo& table, TIntrusiveConstPtr<TRowScheme> rowScheme,
-        bool enableDataTiering)
-{
-    if (!params.Tiering) {
-        return true;
-    }
-    const auto& settings = *params.Tiering;
-    if (!params.Context || !settings.Schema || settings.RowScheme.Get() != rowScheme.Get()
-            || (settings.AllowCooling && !enableDataTiering)) {
-        return false;
-    }
-    const auto& before = *settings.Schema;
-    return *before.CompactionPolicy == *table.CompactionPolicy
-        && before.TieringPolicy == table.TieringPolicy
-        && before.Families == table.Families && before.Rooms == table.Rooms
-        && before.ByKeyFilterPrefixes == table.ByKeyFilterPrefixes
-        && before.SpecialTableType == table.SpecialTableType
-        && before.ColdBorrow == table.ColdBorrow;
 }
 
 }

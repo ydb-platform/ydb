@@ -13,16 +13,11 @@ namespace NKikimr::NTable {
         ui32 preferredLevel = Max<ui32>());
 
     // Called after freezing memory and choosing the tx-status sources. Expands
-    // the actual subset, captures schema/time and selects the execution mode.
+    // the actual subset, captures tier order and time, and selects the execution mode.
     void PrepareTieringCompaction(TCompactionParams& params,
-        const TScheme::TTableInfo& table, TIntrusiveConstPtr<TRowScheme> rowScheme,
+        const TScheme::TTableInfo& table,
         TSubset& subset, TConstArrayRef<TPartView> parts,
         TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
         bool enableDataTiering, TInstant now);
-
-    // Check the schema and cooling flag before publishing outputs.
-    bool IsTieringCompactionCurrent(const TCompactionParams& params,
-        const TScheme::TTableInfo& table, TIntrusiveConstPtr<TRowScheme> rowScheme,
-        bool enableDataTiering);
 
 }

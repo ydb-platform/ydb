@@ -9,16 +9,12 @@
 #include "flat_dbase_scheme.h"
 #include <ydb/core/base/memory_controller_iface.h>
 
-#include <memory>
-
 namespace NKikimr {
 namespace NTable {
 
     struct TTieringCompaction {
         // Placement supplied by the strategy to prepare the compaction context.
         THashMap<TLogoBlobID, ui32> PartLevels;
-        std::shared_ptr<const TScheme::TTableInfo> Schema;
-        TIntrusiveConstPtr<TRowScheme> RowScheme;
         TVector<ui32> TierOrder;
         TInstant Now;
         bool AllowCooling = false;

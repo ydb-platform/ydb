@@ -124,7 +124,7 @@ TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
                     && tableInfo->InMem.CompactionTask.CompactionId == 0) {
                 // A reservation conflict retains the request in its scan
                 // state, without owning a broker task. Retry only on a wakeup.
-                ResubmitCompactions(*tableInfo);
+                ResubmitMemCompaction(*tableInfo);
             }
         }
     }
@@ -417,56 +417,26 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
     table.MemCompactionRetryRequested = false;
 
     // Compactions have been cancelled, we may need to resubmit
-    ResubmitCompactions(table);
+    ResubmitMemCompaction(table);
 }
 
-void TCompactionLogic::ResubmitCompactions(TCompactionLogicState::TTableInfo &table)
+void TCompactionLogic::ResubmitMemCompaction(TCompactionLogicState::TTableInfo &table)
 {
     auto &inMem = table.InMem;
-
-    auto resubmit = [&](const TString& type, ui32 priority) {
-        if (table.ForcedCompactionState == EForcedCompactionState::CompactingMem) {
-            table.ForcedCompactionState = EForcedCompactionState::PendingMem;
-        }
-        inMem.CompactionTask.TaskId = 0;
-        inMem.CompactionTask.CompactionId = 0;
-        SubmitCompactionTask(table.TableId, 0, type, priority, inMem.CompactionTask);
-    };
-
-    switch (inMem.State) {
-        case ECompactionState::Pending:
-        case ECompactionState::PendingBackground:
-        case ECompactionState::SnapshotPending:
-            // Keep currently pending tasks
-            break;
-
-        case ECompactionState::Compaction:
-            // Compaction has been cancelled, resubmit
-            resubmit(
-                table.Policy->InMemResourceBrokerTask,
-                table.Policy->DefaultTaskPriority);
-            inMem.State = ECompactionState::Pending;
-            break;
-
-        case ECompactionState::SnapshotCompaction:
-            // Compaction has been cancelled, resubmit
-            resubmit(
-                table.Policy->SnapshotResourceBrokerTask,
-                table.Policy->DefaultTaskPriority);
-            inMem.State = ECompactionState::SnapshotPending;
-            break;
-
-        default:
-            break;
+    if (inMem.State != ECompactionState::Compaction && inMem.State != ECompactionState::SnapshotCompaction) {
+        return;
     }
-
-    if (table.Strategy &&
-        table.ForcedCompactionState == EForcedCompactionState::None &&
-        table.Strategy->GetLastFinishedForcedCompactionId() < table.LastStartedFullCompactionId)
-    {
-        // We need to start a new forced compaction cycle
-        PrepareForceCompaction(table.TableId);
+    if (table.ForcedCompactionState == EForcedCompactionState::CompactingMem) {
+        table.ForcedCompactionState = EForcedCompactionState::PendingMem;
     }
+    inMem.CompactionTask.TaskId = 0;
+    inMem.CompactionTask.CompactionId = 0;
+    // A snapshot may have arrived after the original flush was started or deferred.
+    const bool snapshot = !table.SnapRequests.empty();
+    inMem.State = snapshot ? ECompactionState::SnapshotPending : ECompactionState::Pending;
+    SubmitCompactionTask(table.TableId, 0,
+        snapshot ? table.Policy->SnapshotResourceBrokerTask : table.Policy->InMemResourceBrokerTask,
+        table.Policy->DefaultTaskPriority, inMem.CompactionTask);
 }
 
 void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size, bool compactionComplete) {
@@ -737,7 +707,7 @@ TCompactionLogic::CancelledCompaction(
         // A cancelled memory scan has not consumed its steps or snapshot
         // request. Retain forced ids and resubmit the original request.
         table->Strategy->CompactionCancelled(compactionId, *params);
-        ResubmitCompactions(*table);
+        ResubmitMemCompaction(*table);
         return;
     }
     table = HandleCompaction(compactionId, params.Get(), nullptr);
@@ -767,8 +737,13 @@ TTableCompactionChanges TCompactionLogic::RemovedParts(ui32 tableId, TArrayRef<c
     ret.Table = tableId;
     ret.Changes = tableInfo->Strategy->PartsRemoved(parts);
     ret.Strategy = tableInfo->StrategyType;
-    // A call to PartsRemoved has cancelled all ongoing compactions, resubmit them again
-    ResubmitCompactions(*tableInfo);
+    // PartsRemoved restarted the strategy, including any forced disk compaction.
+    ResubmitMemCompaction(*tableInfo);
+    if (tableInfo->ForcedCompactionState == EForcedCompactionState::None &&
+        tableInfo->Strategy->GetLastFinishedForcedCompactionId() < tableInfo->LastStartedFullCompactionId)
+    {
+        PrepareForceCompaction(tableId);
+    }
     return ret;
 }
 

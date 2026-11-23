@@ -3962,17 +3962,17 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     const ui32 tableId = msg->Params->Table;
     const auto* currentTable = Scheme().GetTableInfo(tableId);
-    const bool stale = currentTable && msg->Params->Tiering
-        && !NTable::IsTieringCompactionCurrent(*msg->Params, *currentTable,
-            RowScheme(tableId), IsDataTieringEnabled());
+    const bool coolingDisabled = currentTable && msg->Params->Tiering
+        && msg->Params->Tiering->AllowCooling && !IsDataTieringEnabled();
+    cancelled |= coolingDisabled;
 
     if (msg->Params->TaskId != 0) {
         // We have taken over this task, mark it as finished in the broker
-        auto status = cancelled || stale ? EResourceStatus::Cancelled : EResourceStatus::Finished;
+        auto status = cancelled ? EResourceStatus::Cancelled : EResourceStatus::Finished;
         Broker->FinishTask(msg->Params->TaskId, status);
     }
 
-    const bool abandoned = cancelled || stale || !currentTable;
+    const bool abandoned = cancelled || !currentTable;
 
     TProdCompact::TResults results = std::move(msg->Results);
     TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> newTxStatus = std::move(msg->TxStatus);
@@ -3987,7 +3987,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             << " epoch " << ops->Subset->Head << "} ";
 
         if (abandoned) {
-            logl << (stale ? "stale tiering context" : "thrown");
+            logl << (coolingDisabled ? "cooling disabled" : "thrown");
         } else if (!msg->Success) {
             logl << "failed";
         } else {
@@ -3996,7 +3996,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     if (abandoned) {
-        if ((cancelled || stale) && currentTable) {
+        if (cancelled && currentTable) {
             CompactionLogic->CancelledCompaction(ops->Serial, std::move(msg->Params));
         }
         return;
@@ -5489,7 +5489,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     if (comp->Params->Tiering) {
         Y_ENSURE(!comp->IsFulltextCompact, "Tier-aware fulltext compaction is not supported");
-        NTable::PrepareTieringCompaction(*comp->Params, *tableInfo, rowScheme,
+        NTable::PrepareTieringCompaction(*comp->Params, *tableInfo,
             *snapshot->Subset, TableParts(table), TableColdParts(table),
             IsDataTieringEnabled(), Time->Now());
         comp->Epoch = snapshot->Subset->Epoch();
@@ -5526,7 +5526,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     if (comp->Params->Mode == NTable::TCompactionParams::EMode::TierAware) {
         const auto& settings = *comp->Params->Tiering;
         router = MakeHolder<TTierCompactionRouter>(*comp,
-            settings.AllowCooling ? settings.Schema->TieringPolicy : std::nullopt,
+            settings.AllowCooling ? tableInfo->TieringPolicy : std::nullopt,
             settings.Now, settings.TierOrder, settings.AllowCooling);
     } else {
         router = MakeHolder<TDefaultCompactionRouter>();

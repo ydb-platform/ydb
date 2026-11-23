@@ -133,6 +133,70 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(DataShardLocksSchema) {
+    Y_UNIT_TEST(BranchUpdatesRetainPrefixesAndResultsAfterRestart) {
+        TDbExec exec;
+        FinishUpgrade(exec);
+        TTestShard shard;
+        exec.Begin();
+        TTestLocksDb db(shard, *exec.operator->());
+        db.PersistAddLock(100, 1, 1, 123, 0);
+        TAncestorLock ancestor;
+        ancestor.TabletId = 10;
+        ancestor.CreatedOn = 10;
+        ancestor.Generation = 1;
+        ancestor.Counter = 123;
+        db.PersistAddAncestorLock(100, ancestor);
+        db.PersistAncestorLockWriteSeqNum(100, ancestor.GetKey(), 7, 10, {});
+        db.PersistAncestorLockBranch(100, ancestor.GetKey(), 7, {{10}, 10, MakeBranchResult(10)});
+        exec.Commit();
+        exec.Replay(EPlay::Boot);
+
+        exec.Begin();
+        TTestLocksDb updateDb(shard, *exec.operator->());
+        TVector<ILocksDb::TLockRow> rows;
+        UNIT_ASSERT(updateDb.Load(rows));
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        rows[0].Flags |= ui64(ELockFlags::Persistent);
+        TLockInfo::TPtr lock = new TLockInfo(nullptr, rows[0]);
+        for (auto& item : rows[0].AncestorLocks) {
+            lock->AddAncestorLock(std::move(item));
+        }
+        TLocksUpdate::TWriteSeqNumUpdate update(7);
+        const TPathId table(1, 2);
+        for (ui64 child : {20, 30}) {
+            UNIT_ASSERT(update.StageOperation(lock.Get(), 40, TVector<ui64>{10, child}, 11, table).Status
+                == TLocksUpdate::TWriteSeqNumUpdate::EStatus::Fresh);
+        }
+        for (const auto& item : update.Branches) {
+            lock->SetAncestorBranch(item.Key, 7, item.Branch, &updateDb);
+            lock->SetAncestorBranchResult(item.Key, 7, item.Branch.ShardsPath, 11, MakeBranchResult(11), &updateDb);
+        }
+        exec.Commit();
+        exec.Replay(EPlay::Boot);
+
+        exec.Begin();
+        TTestLocksDb restoredDb(shard, *exec.operator->());
+        rows.clear();
+        UNIT_ASSERT(restoredDb.Load(rows));
+        TLockInfo::TPtr restored = new TLockInfo(nullptr, rows.at(0));
+        for (auto& item : rows[0].AncestorLocks) {
+            restored->AddAncestorLock(std::move(item));
+        }
+        const auto& state = restored->FindAncestorLock({10, 10})->WriteSeqNumStates.at(7);
+        UNIT_ASSERT_VALUES_EQUAL(state.WriteSeqNum, 11);
+        UNIT_ASSERT_VALUES_EQUAL(state.Branches.size(), 3);
+        TLocksUpdate::TWriteSeqNumUpdate retry(7);
+        for (ui64 child : {20, 30}) {
+            const auto result = retry.StageOperation(restored.Get(), 40, TVector<ui64>{10, child}, 11, table);
+            UNIT_ASSERT(result.Status == TLocksUpdate::TWriteSeqNumUpdate::EStatus::Duplicate);
+            UNIT_ASSERT_VALUES_EQUAL(result.SerializedResult, MakeBranchResult(11));
+        }
+        UNIT_ASSERT(retry.StageOperation(restored.Get(), 40, TVector<ui64>{10, 50}, 10, table).Status
+            == TLocksUpdate::TWriteSeqNumUpdate::EStatus::Duplicate);
+        UNIT_ASSERT(retry.Branches.empty());
+        exec.Commit();
+    }
+
     Y_UNIT_TEST(UpgradeUsesNewTableIdsAndRollsBackAtomically) {
         TDbExec exec;
         exec.Begin();

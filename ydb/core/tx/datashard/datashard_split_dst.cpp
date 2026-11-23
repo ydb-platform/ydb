@@ -307,6 +307,12 @@ public:
                     state.WriterIndex = proto.GetWriterIndex();
                     state.WriteSeqNum = proto.GetWriteSeqNum();
                     state.SerializedResult = proto.GetSerializedResult();
+                    for (const auto& item : proto.GetBranches()) {
+                        auto& branch = state.Branches.emplace_back();
+                        branch.ShardsPath.assign(item.GetShardsPath().begin(), item.GetShardsPath().end());
+                        branch.WriteSeqNum = item.GetWriteSeqNum();
+                        branch.SerializedResult = item.GetSerializedResult();
+                    }
                     return state;
                 };
 
@@ -742,4 +748,3 @@ void TDataShard::Handle(TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev, const
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

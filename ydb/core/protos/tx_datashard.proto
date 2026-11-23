@@ -962,11 +962,18 @@ message TLockShardsPath {
 }
 
 // Info about the state of a writer to a lock.
+message TLockWriteSeqNumBranch {
+    repeated uint64 ShardsPath = 1 [packed = true];
+    optional uint64 WriteSeqNum = 2;
+    optional bytes SerializedResult = 3;
+}
+
 message TWriteSeqNumState {
     optional uint64 WriterIndex = 1;
     optional uint64 WriteSeqNum = 2;
-    // Opaque serialized NKikimrDataEvents.TEvWriteResult
+    // Opaque serialized NKikimrDataEvents.TWriteSeqNumResult
     optional bytes SerializedResult = 3;
+    repeated TLockWriteSeqNumBranch Branches = 4;
 }
 
 // Info about a lock being transferred from src to dst during split/merge.

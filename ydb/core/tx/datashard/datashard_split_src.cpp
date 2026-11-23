@@ -242,6 +242,14 @@ public:
                     if (!state.SerializedResult.empty()) {
                         proto->SetSerializedResult(state.SerializedResult);
                     }
+                    for (const auto& branch : state.Branches) {
+                        auto* item = proto->AddBranches();
+                        for (ui64 shard : branch.ShardsPath) {
+                            item->AddShardsPath(shard);
+                        }
+                        item->SetWriteSeqNum(branch.WriteSeqNum);
+                        item->SetSerializedResult(branch.SerializedResult);
+                    }
                 };
 
                 for (const auto& [_, state] : lock.GetWriteSeqNumStates()) {
@@ -750,4 +758,3 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitPartitioningChanged(
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

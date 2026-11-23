@@ -564,9 +564,9 @@ public:
         return it != AncestorLocks.end() ? &it->second : nullptr;
     }
 
-    const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
-    bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
-    void SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db);
+    void SetAncestorBranch(TLockKey key, ui64 writerIndex, const TWriteSeqNumBranch& branch, ILocksDb* db);
+    void SetAncestorBranchResult(TLockKey key, ui64 writerIndex, const TVector<ui64>& path,
+        ui64 writeSeqNum, const TString& serializedResult, ILocksDb* db);
 
 private:
     void MakeShardLock();
@@ -1063,14 +1063,48 @@ struct TLocksUpdate {
 
     struct TWriteSeqNumUpdate {
         const ui64 WriterIndex;
-        // These uncommitted write position in the writer chains; ApplyLocks persists them on the lock.
-        TMaybe<ui64> SetWriteSeqNum;
-        // Same for operations that touched ancestor shards;
-        THashMap<ui64, ui64> SetAncestorWriteSeqNums;
+        enum class EStatus { Fresh, Duplicate, BadRequest, LocksBroken };
+        struct TResult {
+            EStatus Status;
+            TString Error;
+            TString SerializedResult;
+        };
+        struct TBranchUpdate {
+            TLockKey Key;
+            TWriteSeqNumBranch Branch;
+        };
+
+        // Echoes include duplicates; only fresh operations produce branch updates.
+        THashMap<TLockKey, THashSet<TPathId>, TLockKeyHash> EchoLocks;
+        // Pending updates for both current and ancestor chains.
+        TVector<TBranchUpdate> Branches;
+        THashSet<TLockKey, TLockKeyHash> NewLocks;
+        // ApplyLocks sets this only after publishing all prepared branch updates.
+        bool Applied = false;
+
+        // Validate and classify one operation, staging changes until ApplyLocks.
+        TResult StageOperation(const TLockInfo* lock, ui64 currentShard, TConstArrayRef<ui64> ancestors,
+            ui64 writeSeqNum, const TPathId& table);
 
         explicit TWriteSeqNumUpdate(ui64 writerIndex)
             : WriterIndex(writerIndex)
         {}
+
+    private:
+        struct TSelectedLock {
+            TLockKey Key;
+            const TWriteSeqNumState* Original = nullptr;
+        };
+
+        // Select the first logical lock along the path, or stage its creation at WSN=1.
+        std::optional<TResult> SelectLogicalLock(const TLockInfo* lock, TConstArrayRef<ui64> path,
+            ui64 writeSeqNum, TSelectedLock& selected);
+        // Classify against staged history and collect fresh updates and lock echoes.
+        TResult ClassifyWriteSeqNum(const TLockInfo* lock, const TSelectedLock& selected,
+            TVector<ui64> path, ui64 writeSeqNum, const TPathId& table);
+
+        THashMap<TLockKey, TWriteSeqNumState, TLockKeyHash> StagedStates;
+        bool SeenCurrent = false;
     };
 
     TMaybe<TWriteSeqNumUpdate> WriteSeqNumUpdate;
@@ -1109,7 +1143,8 @@ struct TLocksUpdate {
     ~TLocksUpdate();
 
     bool HasLocks() const {
-        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
+        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks)
+            || HasSeqNumEchoes();
     }
 
     void AddRangeLock(const TRangeKey& range) {
@@ -1191,12 +1226,18 @@ struct TLocksUpdate {
         BreakOwn = true;
     }
 
+    bool HasSeqNumEchoes() const {
+        if (!WriteSeqNumUpdate) {
+            return false;
+        }
+        return !WriteSeqNumUpdate->EchoLocks.empty();
+    }
+
     bool HasSeqNumUpdates() const {
         if (!WriteSeqNumUpdate) {
             return false;
         }
-        return WriteSeqNumUpdate->SetWriteSeqNum
-            || !WriteSeqNumUpdate->SetAncestorWriteSeqNums.empty();
+        return !WriteSeqNumUpdate->Branches.empty();
     }
 };
 

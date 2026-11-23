@@ -103,6 +103,10 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
         ui64 ourCounter = 0;
         bool writeSeqNumMismatch = false;
         if (lockProto.GetDataShard() == selfShardId) {
+            AFL_ENSURE(!lockProto.HasCreatedOn() || lockProto.GetCreatedOn() == selfShardId)
+                ("lockId", lockProto.GetLockId())
+                ("shardId", selfShardId)
+                ("createdOn", lockProto.GetCreatedOn());
             auto lockKey = MakeLockKey(lockProto, selfShardId);
             auto lock = sysLocks.GetLock(lockKey);
             ourGeneration = lock.Generation;
@@ -719,4 +723,3 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

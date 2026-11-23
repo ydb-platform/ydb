@@ -69,6 +69,13 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     Operations.reserve(record.operations().size());
     for (const auto& recordOperation : record.operations()) {
+        const auto& tableId = recordOperation.GetTableId();
+        if (tableId.GetOwnerId() != self->GetPathOwnerId()) {
+            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+            ErrStr = TStringBuilder() << "Table '" << tableId.GetOwnerId() << ":" << tableId.GetTableId()
+                << "' doesn't exist at shard " << TabletId;
+            return;
+        }
         TValidatedWriteTxOperation validatedOperation;
 
         auto [errCode, errStr] = validatedOperation.ParseOperation(ev, recordOperation, self->TableInfos, TabletId, KeyValidator, traceId);

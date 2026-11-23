@@ -28,6 +28,8 @@ using namespace NKikimr::NMiniKQL;
 class TParquetGateway: public IHTTPGateway {
 public:
     TString Body;
+    bool HoldChunks = false;
+    std::vector<std::function<void()>> PendingChunks;
 
     void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
         UNIT_FAIL("unexpected upload");
@@ -40,7 +42,15 @@ public:
     void Download(
         TString, THeaders, size_t offset, size_t size, TOnResult callback, TString, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
         UNIT_ASSERT_C(offset <= Body.size() && size <= Body.size() - offset, "invalid HTTP range " << offset << "+" << size);
-        callback(TResult(TContent(Body.substr(offset, size), 206)));
+        auto reply = [this, offset, size, callback = std::move(callback)] {
+            callback(TResult(TContent(Body.substr(offset, size), 206)));
+        };
+        // Footer reads include the trailer; column chunks end before it.
+        if (HoldChunks && offset + size < Body.size() - 8) {
+            PendingChunks.push_back(std::move(reply));
+        } else {
+            reply();
+        }
     }
 
     TCancelHook Download(TString, THeaders, size_t, size_t, TOnDownloadStart, TOnNewDataPart, TOnDownloadFinish,
@@ -56,9 +66,16 @@ public:
     void UpdatePoolCaps(THashMap<TWorkScope, size_t>) override {
     }
 
+    void ReleaseChunks() {
+        HoldChunks = false;
+        auto pending = std::move(PendingChunks);
+        for (auto& reply : pending) {
+            reply();
+        }
+    }
 };
 
-NS3::TSource ParquetSource(ui64 parallelRowGroups) {
+NS3::TSource ParquetSource(ui64 parallelRowGroups = 0) {
     NS3::TSource source;
     source.SetUrl("http://fake/");
     source.SetFormat("parquet");
@@ -108,6 +125,21 @@ TString AppendFooter(TString body, parquet::FileMetaDataBuilder& builder) {
         body.push_back(static_cast<char>((footer->size() >> (8 * i)) & 0xff));
     }
     return body + "PAR1";
+}
+
+TString MakeEmptyParquet() {
+    auto properties = parquet::WriterProperties::Builder().build();
+    std::shared_ptr<parquet::SchemaDescriptor> schema;
+    UNIT_ASSERT(parquet::arrow::ToParquetSchema(ParquetSchema().get(), *properties, &schema).ok());
+    auto builder = parquet::FileMetaDataBuilder::Make(schema.get(), properties);
+    return AppendFooter("PAR1", *builder);
+}
+
+TString MakeParquetWithInvalidFooter() {
+    TString body = MakeParquet(1);
+    // Footer validation fails after the HTTP read has reacquired CPU quota.
+    body.back() = '0';
+    return body;
 }
 
 // Real data row groups behind a leading row group whose column chunk is zero bytes long.
@@ -377,8 +409,6 @@ void CheckQuotaCleanup(const TString& body, const NS3::TSource& source, ui64 exp
 
 }   // namespace
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
     Y_UNIT_TEST(CpuCountersWithoutCommonCounters) {
         auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -428,7 +458,7 @@ Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
         auto workFactory = std::make_shared<TCountingWorkFactory>();
         TParquetReader reader;
         auto gateway = std::make_shared<TParquetGateway>();
-        gateway->Body = MakeParquetWithCompressedSizes({ -1 });
+        gateway->Body = MakeParquetWithInvalidFooter();
         reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
         reader.ReadToEnd();
         UNIT_ASSERT(!reader.Result.Errors.empty());
@@ -514,7 +544,7 @@ Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
     }
 
     Y_UNIT_TEST(EmptyFile) {
-        CheckQuotaCleanup(MakeParquetWithCompressedSizes({}), ParquetSource(), 0);
+        CheckQuotaCleanup(MakeEmptyParquet(), ParquetSource(), 0);
     }
 
     Y_UNIT_TEST(AllRowGroupsFiltered) {
@@ -535,7 +565,7 @@ Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
     }
 
     Y_UNIT_TEST(InvalidMetadata) {
-        CheckQuotaCleanup(MakeParquetWithCompressedSizes({ -1 }), ParquetSource(), 0, true);
+        CheckQuotaCleanup(MakeParquetWithInvalidFooter(), ParquetSource(), 0, true);
     }
 
     Y_UNIT_TEST(NormalRead) {
@@ -543,81 +573,6 @@ Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
-    Y_UNIT_TEST(ZeroCompressedSize) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            auto result = ReadFooter({ 0 }, parallel);
-            UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
-            UNIT_ASSERT(result.Finished);
-            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
-        }
-    }
-
-    Y_UNIT_TEST(NegativeCompressedSize) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            AssertBadRequest(ReadFooter({ -1 }, parallel));
-        }
-    }
-
-    Y_UNIT_TEST(DoubledCompressedSizeOverflow) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            AssertBadRequest(ReadFooter({ i64(1) << 62, i64(1) << 62 }, parallel));
-        }
-    }
-
-    Y_UNIT_TEST(CompressedSizeSumOverflow) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            const auto result = ReadFooter({ Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4 }, parallel);
-            AssertBadRequest(result);
-            UNIT_ASSERT_STRING_CONTAINS(result.Issues, "total_compressed_size sum overflow");
-        }
-    }
-
-    Y_UNIT_TEST(LargeCompressedSize) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            AssertBadRequest(ReadFooter({ Max<i64>() - 4 }, parallel));
-        }
-    }
-
-    Y_UNIT_TEST(EmptyFile) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            auto result = ReadFooter({}, parallel);
-            UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
-            UNIT_ASSERT(result.Finished);
-            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
-        }
-    }
-
-    Y_UNIT_TEST(NoSelectedColumns) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            TParquetReader reader;
-            auto gateway = std::make_shared<TParquetGateway>();
-            gateway->Body = MakeParquet(10);
-            reader.Start(gateway, ParquetSource(parallel, false));
-            reader.ReadToEnd();
-            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
-            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
-            UNIT_ASSERT(reader.Result.Values.empty());
-        }
-    }
-
-    Y_UNIT_TEST(AutomaticReaderCount) {
-        CheckReaderCount(0, 5);
-        CheckReaderCount(0, 1, 1);
-    }
-
-    Y_UNIT_TEST(ExplicitReaderCount) {
-        for (ui64 parallel : { 1, 2, 5, 20 }) {
-            CheckReaderCount(parallel, std::min(parallel, ui64(10)));
-        }
-    }
-
-    Y_UNIT_TEST(FairShareMultiplicationOverflow) {
-        CheckReaderCount(0, 5, ui64(1) << 63);
-    }
-}
-
->>>>>>> 66cd1770f22 (Fix S3 reader CPU quota leaks on early exit and cancellation while waiting for admission (#59849))
 Y_UNIT_TEST_SUITE(TS3ParquetDecode) {
     Y_UNIT_TEST(LargeRowGroupBatched) {
         for (ui64 parallel : { 0, 1, 2 }) {

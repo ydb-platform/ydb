@@ -102,13 +102,13 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 // A miss is reported once per query lookup, before the request is queued.
 // Recompile and SPLIT requests are not lookups.
 Y_UNIT_TEST(CompilationCacheHitMissCounters) {
-    auto settings = TKikimrSettings().SetWithSampleTables(false).SetDisablePgCompatibility(true);
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false).SetDisablePgCompatibility(true);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableCreateTableAs(true);
     config->SetEnableDataShardCreateTableAs(true);
     TKikimrRunner kikimr(settings);
     // The compile service is registered during the KQP proxy bootstrap; a session is the readiness barrier.
-    UNIT_ASSERT(kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess());
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     const auto counters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
     UNIT_ASSERT(counters);
@@ -165,7 +165,8 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     // Recompile bypasses the cache and is neither a hit nor a miss.
     auto recompile = [&](const TMaybe<TKqpQueryId>& query, bool disablePgCompatibility) {
         runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(token, "", uid, query, false,
-            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context,
+            NLWTrace::TOrbit(), nullptr, false, nullptr, nullptr, false, false, disablePgCompatibility)));
         auto response = receive();
         const auto& result = *response->Get()->CompileResult;
         UNIT_ASSERT(!response->Get()->Stats.FromCache);
@@ -184,8 +185,36 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     UNIT_ASSERT_UNEQUAL(textUid, uid);
     check(0, 1);
 
-    recompile(TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
-                  TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings), false);
+    TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin", text,
+        TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    query->DisablePgCompatibility = true;
+    flags.SetDisablePgCompatibility(true);
+    appData.UpdateRuntimeFlags(flags);
+    auto sendByUid = [&](const TString& cachedUid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    {
+        const auto serviceActor = runtime.GetLocalServiceId(service);
+        const auto forceUncacheable = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+            [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+                const auto& result = ev->Get()->CompileResult;
+                if (ev->Recipient == serviceActor && result->Uid == uid) {
+                    std::const_pointer_cast<TKqpCompileResult>(result)->AllowCache = false;
+                }
+            });
+        recompile(query, false);
+    }
+    sendByUid(uid);
+    const auto oldModeHit = receive();
+    UNIT_ASSERT(oldModeHit->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(oldModeHit->Get()->CompileResult->Uid, uid);
+    check(1, 0);
+
+    recompile(query, false);
+
+    flags.SetDisablePgCompatibility(false);
+    appData.UpdateRuntimeFlags(flags);
     send(text);
     const auto textHit = receive();
     UNIT_ASSERT(textHit->Get()->Stats.FromCache);
@@ -193,8 +222,7 @@ Y_UNIT_TEST(CompilationCacheHitMissCounters) {
     check(1, 0);
 
     for (const auto& cachedUid : { uid, textUid }) {
-        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(token, "", cachedUid, Nothing(), true, false, TInstant::Max(),
-                                                         nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+        sendByUid(cachedUid);
         const auto uidHit = receive();
         UNIT_ASSERT(uidHit->Get()->Stats.FromCache);
         UNIT_ASSERT_VALUES_EQUAL(uidHit->Get()->CompileResult->Uid, cachedUid);

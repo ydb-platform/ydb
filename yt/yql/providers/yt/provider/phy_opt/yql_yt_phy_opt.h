@@ -147,6 +147,8 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> BypassMerge(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> BypassIdentityMapWithSysColumns(NNodes::TExprBase node, TExprContext& ctx) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> BypassMergeBeforePublish(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> MapToMerge(NNodes::TExprBase node, TExprContext& ctx) const;

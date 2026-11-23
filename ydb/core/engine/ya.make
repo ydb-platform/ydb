@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/deprecated/enum_codegen
     library/cpp/random_provider
@@ -31,6 +32,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    benchmark
     minikql
 )
 

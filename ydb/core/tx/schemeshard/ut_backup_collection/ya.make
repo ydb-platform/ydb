@@ -13,6 +13,7 @@ ENDIF()
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/testlib/audit_helpers
     ydb/core/tx/schemeshard/ut_helpers
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg

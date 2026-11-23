@@ -242,14 +242,41 @@ class TestRecursiveRemove:
         driver = ydb_client(database_path)
         session_pool = ydb_client_session(database_path)
         with session_pool.checkout() as session:
-            create_table(session, "table")
-            create_view(session, "views/view")
-            create_secret(session, "secret")
-            create_secret(session, "secrets/nested/secret")
-            create_external_data_source(session, "externals/data_source")
-            create_external_table(session, "externals/table", "externals/data_source")
-            response = ydb_cluster.kv_client.create_tablets(1, f"{database_path}/volume")
+            create_table(session, "workspace/table")
+            create_view(session, "workspace/views/view")
+            create_secret(session, "workspace/secret")
+            create_secret(session, "workspace/secrets/nested/secret")
+            create_external_data_source(session, "workspace/externals/data_source")
+            create_external_table(session, "workspace/externals/table", "workspace/externals/data_source")
+            response = ydb_cluster.kv_client.create_tablets(1, f"{database_path}/workspace/volume")
             assert response.operation.status == StatusIds.SUCCESS, response
+
+            # Inventory the workspace before removing it, including nested objects
+            # and table metadata, without depending on concurrent listing order.
+            inventory = json.loads(execute_ydb_cli_command(
+                ydb_cluster.nodes[1], database_path,
+                ["scheme", "ls", "-R", "-m", "-l", "--format", "json", "workspace"],
+            ))
+            expected_entries = {
+                "table": "table",
+                "views": "dir",
+                "views/view": "view",
+                "secret": "secret",
+                "secrets": "dir",
+                "secrets/nested": "dir",
+                "secrets/nested/secret": "secret",
+                "externals": "dir",
+                "externals/data_source": "external-data-source",
+                "externals/table": "external-table",
+                "volume": "solomon-volume",
+            }
+            assert len(inventory) == len(expected_entries)
+            assert {entry["path"]: entry["type"] for entry in inventory} == expected_entries
+            assert all(isinstance(entry["owner"], str) for entry in inventory)
+            table_entry = next(entry for entry in inventory if entry["path"] == "table")
+            for field in ("size", "created", "modified"):
+                assert isinstance(table_entry[field], int) and table_entry[field] >= 0, table_entry
+
             execute_ydb_cli_command(
                 ydb_cluster.nodes[1], database_path, ["scheme", "rmdir", "--recursive", "--force", "."]
             )

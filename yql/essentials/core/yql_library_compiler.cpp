@@ -101,6 +101,7 @@ bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TStr
     } else if (alias.EndsWith(".sql") || alias.EndsWith(".yql")) {
         NSQLTranslation::TTranslationSettings translationSettings;
         translationSettings.ProjectSettings = projectSettings;
+        translationSettings.LangVer = projectSettings.LangVer.GetOrElse(translationSettings.LangVer);
         translationSettings.SyntaxVersion = 1;
         translationSettings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         res = NSQLTranslation::SqlToYql(translators, script, translationSettings);

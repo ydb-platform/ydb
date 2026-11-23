@@ -163,9 +163,7 @@ void Test(
 {
     TKikimrSettings settings;
     settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-    if (withPgTypes) {
-        settings.SetDisablePgCompatibility(false);
-    }
+    settings.SetDisablePgCompatibility(!withPgTypes);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();

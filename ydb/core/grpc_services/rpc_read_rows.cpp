@@ -132,11 +132,14 @@ public:
             return false;
         }
 
-        if (disablePgCompatibility && AnyOf(RequestedColumnsMeta, [](const auto& column) {
-            return column.Type.GetTypeId() == NScheme::NTypeIds::Pg;
-        })) {
-            errorMessage = "PostgreSQL compatibility is disabled";
-            return false;
+        if (disablePgCompatibility) {
+            const auto* pgColumn = FindIfPtr(RequestedColumnsMeta, [](const auto& column) {
+                return column.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+            });
+            if (pgColumn) {
+                errorMessage = Sprintf("PostgreSQL compatibility is disabled for column '%s'", pgColumn->Name.c_str());
+                return false;
+            }
         }
 
         return true;
@@ -163,7 +166,7 @@ public:
             const auto& colInfo = *colInfoPtr;
 
             if (disablePgCompatibility && (typeInProto.has_pg_type() || colInfo.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
-                errorMessage = "PostgreSQL compatibility is disabled";
+                errorMessage = Sprintf("PostgreSQL compatibility is disabled for column '%s'", name.c_str());
                 return false;
             }
 

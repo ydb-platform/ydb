@@ -19,6 +19,6 @@ bridge_config:
 | Parameter | Default value | Description |
 | --- | --- | --- |
 | `piles` | `[]` | Lists piles configured in the cluster. A listed pile without allocated storage resources is `INACTIVE`. |
-| `enable_non_uniform_storage` | `false` | Allows [bridged and ordinary databases](../../concepts/bridge.md#storage-pools) to coexist in one cluster. This setting cannot be disabled after activation. |
+| `enable_non_uniform_storage` | `false` | Allows [bridged and ordinary databases](../../concepts/bridge.md#storage-pools) to coexist in one cluster. This setting cannot be disabled in an active bridge cluster; when [returning to ordinary mode](../../devops/deployment-options/manual/bridge-management.md#rollback), it is removed together with `bridge_config`. |
 
 During default conversion of a non-bridged cluster, leave `enable_non_uniform_storage` unset until conversion completes. Conversion with `--skip-storage-pool-conversion` requires it to be `true` before conversion starts. For the procedure, see [Converting a cluster](../../devops/deployment-options/manual/bridge-management.md#convert).

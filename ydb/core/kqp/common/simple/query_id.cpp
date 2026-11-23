@@ -92,7 +92,8 @@ TString TKqpQueryId::SerializeToString() const {
         << "DatabaseId: " << DatabaseId << ", "
         << "UserSid: " << UserSid << ", "
         << "Text: " << EscapeC(Text) << ", "
-        << "Settings: " << Settings.SerializeToString() << ", ";
+        << "Settings: " << Settings.SerializeToString() << ", "
+        << "DisablePgCompatibility: " << DisablePgCompatibility << ", ";
     if (QueryParameterTypes) {
         result << "QueryParameterTypes: [";
         for (const auto& param : *QueryParameterTypes) {

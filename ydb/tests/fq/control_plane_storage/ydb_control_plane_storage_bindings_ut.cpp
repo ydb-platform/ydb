@@ -1051,9 +1051,24 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageModifyBinding) {
         }
 
         {
-            const auto [result, issues] =
-                bootstrap.ModifyBinding(TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build());
-            UNIT_ASSERT_C(!issues, issues.ToString());
+            using TRequest = TEvControlPlaneStorage::TEvModifyBindingRequest;
+            using TResponse = TEvControlPlaneStorage::TEvModifyBindingResponse;
+            const auto modify = TModifyBindingBuilder{}.SetConnectionId(connectionId).SetBindingId(bindingId).Build();
+            auto request = std::make_unique<TRequest>("yandexcloud://test_folder_id_1", modify, "test_user@staff", "xxx", "other_cloud",
+                TPermissions{}, Nothing(), std::make_shared<TTenantInfo>(), FederatedQuery::Internal::ComputeDatabaseInternal{});
+            const auto [handle, response] = bootstrap.SendInternalRequest<TRequest, TResponse>(std::move(request));
+            UNIT_ASSERT_C(!response->Issues, response->Issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(response->AuditDetails.CloudId, "mock_cloud");
+        }
+
+        {
+            const auto bindings = bootstrap.GetTable(BINDINGS_TABLE_NAME);
+            UNIT_ASSERT(bindings);
+            NYdb::TResultSetParser parser(*bindings);
+            UNIT_ASSERT(parser.TryNextRow());
+            FederatedQuery::Internal::BindingInternal internal;
+            UNIT_ASSERT(internal.ParseFromString(parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString().value_or("")));
+            UNIT_ASSERT_VALUES_EQUAL(internal.cloud_id(), "mock_cloud");
         }
 
         {

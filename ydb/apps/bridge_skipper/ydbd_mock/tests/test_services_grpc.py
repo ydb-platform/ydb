@@ -552,6 +552,39 @@ class ExpectedGenerationTest(GrpcCase):
         op = await self.update_expecting(c, label, None, ("no_such_pile", DISC))
         self.assertEqual(op.status, model.BAD_REQUEST, operations.issue_texts(op))
 
+    async def test_request_errors_precede_generation_and_missing_bridge_state(self):
+        malformed = [
+            ([], "Updates list cannot be empty"),
+            ([("pile1", SYNC), ("pile1", SYNC)], "duplicate update for pile name# pile1"),
+            ([("pile1", PRIMARY), ("pile2", PRIMARY)],
+             "multiple primary piles are not allowed in a single request"),
+            ([("pile1", PROMOTED), ("pile2", PROMOTED)],
+             "multiple promoted piles are not allowed in a single request"),
+        ]
+        for bridged in (True, False):
+            initial = None if bridged else {"configured_piles": ["pile1"], "bridged": False}
+            c = await self.make(initial=initial)
+            label = c.label("pile1")
+            before = c.inst("pile1").state.copy()
+            for expected in (0, 2):
+                for updates, message in malformed:
+                    with self.subTest(bridged=bridged, expected=expected, updates=updates):
+                        op = await self.update_expecting(c, label, expected, *updates)
+                        self.assertEqual(op.status, model.BAD_REQUEST, operations.issue_texts(op))
+                        self.assertEqual(operations.issue_texts(op), [message])
+                        self.assertEqual(c.inst("pile1").state, before)
+
+    async def test_authorization_precedes_request_validation(self):
+        c = await self.make(policies=Policies(admin_token="secret"))
+        req = update_request()
+        req.expected_generation = 0
+        response = await c.bridge(c.label("pile1")).UpdateClusterState(req)
+        self.assertEqual(response.operation.status, model.UNAUTHORIZED)
+        response = await c.bridge(c.label("pile1")).UpdateClusterState(
+            req, metadata=(("x-ydb-auth-ticket", "secret"),))
+        self.assertEqual(response.operation.status, model.BAD_REQUEST)
+        self.assertEqual(operations.issue_texts(response.operation), ["Updates list cannot be empty"])
+
     async def test_generation_the_node_has_not_seen_is_unavailable(self):
         c = await self.make()
         label = c.label("pile1")

@@ -33,9 +33,9 @@ public:
         : MinSnapshotForNewReads(std::move(minSnapshotForNewReads))
         , TxInFlight(std::move(txInFlight))
     {
-        AFL_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
+        YDB_LOG_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
         if (!TxInFlight.empty()) {
-            AFL_VERIFY(TxInFlight.back() < MinSnapshotForNewReads);
+            YDB_LOG_VERIFY(TxInFlight.back() < MinSnapshotForNewReads);
         }
     }
 

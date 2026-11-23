@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_expr_helpers.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>

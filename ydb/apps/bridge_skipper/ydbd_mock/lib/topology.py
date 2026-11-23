@@ -8,6 +8,7 @@ gRPC port `grpc_base_port + port_stride * p + n`, unless explicit port lists are
 import dataclasses
 import ipaddress
 import math
+import os
 import socket
 import typing
 
@@ -39,6 +40,7 @@ class Timings:
 
     def update(self, values: dict) -> None:
         fields = {f.name for f in dataclasses.fields(self)}
+        pending = {}
         for key, value in values.items():
             if key not in fields:
                 raise TopologyError("unknown timing %r, known: %s" % (key, ", ".join(sorted(fields))))
@@ -52,6 +54,8 @@ class Timings:
                 raise TopologyError("timing %s must not be negative" % key)
             if number == 0 and key in POSITIVE_TIMINGS:
                 raise TopologyError("timing %s must be greater than zero" % key)
+            pending[key] = number
+        for key, number in pending.items():
             setattr(self, key, number)
 
     def to_dict(self) -> dict:
@@ -71,6 +75,7 @@ class Policies:
 
     def update(self, values: dict) -> None:
         fields = {f.name: f for f in dataclasses.fields(self)}
+        pending = {}
         for key, value in values.items():
             if key not in fields:
                 raise TopologyError("unknown policy %r, known: %s" % (key, ", ".join(sorted(fields))))
@@ -85,6 +90,8 @@ class Policies:
                     raise TopologyError("issue_style must be minimal or realistic")
             else:
                 value = _to_bool(key, value)
+            pending[key] = value
+        for key, value in pending.items():
             setattr(self, key, value)
 
     def to_dict(self) -> dict:
@@ -110,6 +117,20 @@ def _to_bool(key: str, value) -> bool:
     raise TopologyError("policy %s must be a boolean, got %r" % (key, value))
 
 
+def _host_family(host: str) -> int:
+    if ":" in host:
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError as error:
+            raise TopologyError("host %r must be an IPv6 literal" % host) from error
+        return socket.AF_INET6
+    return socket.AF_INET
+
+
+def _endpoint(host: str, port: int) -> str:
+    return "%s:%d" % ("[%s]" % host if ":" in host else host, port)
+
+
 @dataclasses.dataclass(frozen=True)
 class Node:
     node_id: int          # 1-based, global, stable, in pile order
@@ -123,7 +144,7 @@ class Node:
 
     @property
     def endpoint(self) -> str:
-        return "%s:%d" % (self.host, self.grpc_port)
+        return _endpoint(self.host, self.grpc_port)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -136,7 +157,7 @@ class PileInfo:
 
     @property
     def control_endpoint(self) -> str:
-        return "%s:%d" % (self.control_host, self.control_port)
+        return _endpoint(self.control_host, self.control_port)
 
 
 _KNOWN_KEYS = {
@@ -197,6 +218,25 @@ class Topology:
         self.warnings: typing.List[str] = []
         self.validate()
         self._piles = self._build()
+        self._pile_files = self._build_pile_files()
+
+    def _build_pile_files(self) -> typing.Dict[str, str]:
+        separators = [s for s in (os.sep, os.altsep, "\0") if s]
+        safe = {name for name in self.pile_names if name not in ("", ".", "..")
+                and not any(separator in name for separator in separators)}
+        used = set(safe)
+        result = {}
+        for index, name in enumerate(self.pile_names):
+            file_name = name if name in safe else "__pile_%d" % index
+            while file_name in used and name not in safe:
+                file_name = "_" + file_name
+            result[name] = file_name
+            used.add(file_name)
+        return result
+
+    def pile_file_name(self, name: str) -> str:
+        """Map logical identity to a local component, preserving existing safe names."""
+        return self._pile_files[name]
 
     # ----- construction -----
 
@@ -283,6 +323,7 @@ class Topology:
     # ----- validation -----
 
     def validate(self) -> None:
+        _host_family(self.host)
         if self.tls is not None:
             if not isinstance(self.tls, dict):
                 raise TopologyError("tls must be a mapping")
@@ -396,19 +437,22 @@ class Topology:
 
     def control_url(self, ref: typing.Union[str, int]) -> str:
         p = self.pile(ref)
-        return "http://%s:%d" % (p.control_host, p.control_port)
+        return "http://" + p.control_endpoint
 
 
 def _free_ports(count: int, host: str) -> typing.List[int]:
     sockets = []
     ports = []
+    family = _host_family(host)
     try:
         for _ in range(count):
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s = socket.socket(family, socket.SOCK_STREAM)
+            sockets.append(s)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, 0))
-            sockets.append(s)
             ports.append(s.getsockname()[1])
+    except OSError as error:
+        raise TopologyError("cannot allocate free ports on %r: %s" % (host, error)) from error
     finally:
         for s in sockets:
             s.close()

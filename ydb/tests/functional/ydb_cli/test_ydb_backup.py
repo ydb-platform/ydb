@@ -5,8 +5,9 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
 
-from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items, equal_to, empty
+from hamcrest import assert_that, is_, contains_inanyorder, has_items, equal_to
 import enum
+import json
 import logging
 import os
 import pytest
@@ -388,6 +389,177 @@ class BaseTestBackupInFiles(BaseCliTestWithDatabase):
         self.create_user("eve")
 
 
+class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
+    @classmethod
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_generated_stored", "enable_generated_virtual"])
+
+    @pytest.mark.parametrize(
+        "generated_kinds",
+        [("STORED",), ("VIRTUAL",), ("STORED", "VIRTUAL")],
+        ids=["stored", "virtual", "stored_and_virtual"],
+    )
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
+        ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
+    )
+    def test_dump_rejects_generated_columns(self, generated_kinds, dump_options):
+        table_name = "_".join(("generated_columns", *generated_kinds, *dump_options)).replace("-", "_").lower()
+        generated_columns = ",\n".join(
+            f"generated_{kind.lower()} Int32 GENERATED ALWAYS AS (value + 1) {kind}"
+            for kind in generated_kinds
+        )
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{table_name}` (
+                key Uint32 NOT NULL,
+                value Int32,
+                {generated_columns},
+                PRIMARY KEY (key)
+            );
+        """])
+        self.execute_ydb_cli_command([
+            "sql", "-s", f"UPSERT INTO `{table_name}` (key, value) VALUES (1, 42);",
+        ])
+        self.execute_ydb_cli_command(["scheme", "describe", f"/Root/{table_name}"])
+
+        backup_files_dir = yatest.common.output_path(table_name + "_dump")
+        result = self.execute_ydb_cli_command([
+            "tools", "dump", "--path", f"/Root/{table_name}", "--output", backup_files_dir,
+        ] + dump_options, check_exit_code=False)
+
+        assert result.exit_code != 0, result.stdout
+        assert "UNSUPPORTED" in result.stderr, result.stderr
+        assert "exporting tables with generated columns is not supported" in result.stderr, result.stderr
+        assert f"/Root/{table_name}" in result.stderr, result.stderr
+        assert not os.path.exists(backup_files_dir)
+
+    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"]],
+        ids=["database_copy", "table_copy"],
+    )
+    def test_dump_validates_directory_before_copying(self, generated_kind, dump_options):
+        folder_name = "_".join(("validate_before_copy", generated_kind, *dump_options)).replace("-", "_").lower()
+        folder_path = f"/Root/{folder_name}"
+        self.driver.scheme_client.make_directory(folder_path)
+        self.driver.scheme_client.make_directory(f"{folder_path}/nested")
+        session = self.driver.table_client.session().create()
+        create_table_with_data(session, f"{folder_name}/regular")
+        # The nested table is visited after the regular table, regardless of
+        # the order in which ListDirectory returns the root's children.
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{folder_path}/nested/generated` (
+                key Uint32 NOT NULL,
+                value Int32,
+                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                PRIMARY KEY (key)
+            );
+        """])
+        root_children_before = {child.name for child in self.driver.scheme_client.list_directory("/Root").children}
+
+        backup_files_dir = yatest.common.output_path(folder_name + "_dump")
+        result = self.execute_ydb_cli_command([
+            "-vv", "tools", "dump", "--path", folder_path, "--output", backup_files_dir,
+        ] + dump_options, check_exit_code=False)
+
+        assert result.exit_code != 0, result.stdout
+        assert "UNSUPPORTED" in result.stderr, result.stderr
+        assert "exporting tables with generated columns is not supported" in result.stderr, result.stderr
+        assert "Copy table" not in result.stderr, result.stderr
+        assert not os.path.exists(backup_files_dir)
+        root_children_after = {child.name for child in self.driver.scheme_client.list_directory("/Root").children}
+        assert root_children_after == root_children_before
+
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
+        ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
+    )
+    def test_dump_accepts_serial_and_literal_defaults(self, dump_options):
+        table_name = "_".join(("default_columns", *dump_options)).replace("-", "_").lower()
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{table_name}` (
+                id Serial,
+                value Int32 DEFAULT 42,
+                payload String,
+                PRIMARY KEY (id)
+            );
+        """])
+        self.execute_ydb_cli_command([
+            "sql", "-s", f"INSERT INTO `{table_name}` (payload) VALUES ('value');",
+        ])
+
+        backup_files_dir = yatest.common.output_path(table_name + "_dump")
+        self.execute_ydb_cli_command([
+            "tools", "dump", "--path", f"/Root/{table_name}", "--output", backup_files_dir,
+        ] + dump_options)
+
+        table_backup_dir = os.path.join(backup_files_dir, table_name)
+        assert os.path.isfile(os.path.join(table_backup_dir, "scheme.pb"))
+        data_file = os.path.join(table_backup_dir, "data_00.csv")
+        if "--scheme-only" in dump_options:
+            assert not os.path.exists(data_file)
+        else:
+            assert os.path.getsize(data_file) > 0
+
+    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
+        ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
+    )
+    def test_dump_skips_omitted_generated_columns(self, generated_kind, dump_options):
+        folder_name = "_".join(("omitted_generated", generated_kind, *dump_options)).replace("-", "_").lower()
+        folder_path = f"/Root/{folder_name}"
+        self.driver.scheme_client.make_directory(folder_path)
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{folder_path}/omitted` (
+                key Uint32 NOT NULL,
+                value Int32,
+                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                PRIMARY KEY (key)
+            );
+        """])
+        session = self.driver.table_client.session().create()
+        session.alter_table(f"{folder_path}/omitted", alter_attributes={"__omit_backup": "true"})
+        create_table_with_data(session, f"{folder_name}/included")
+
+        backup_files_dir = yatest.common.output_path(folder_name + "_dump")
+        self.execute_ydb_cli_command([
+            "tools", "dump", "--path", folder_path, "--output", backup_files_dir,
+        ] + dump_options)
+
+        assert os.listdir(backup_files_dir) == ["included"]
+        assert os.path.isfile(os.path.join(backup_files_dir, "included", "scheme.pb"))
+        if "--scheme-only" not in dump_options:
+            assert os.path.isfile(os.path.join(backup_files_dir, "included", "data_00.csv"))
+
+    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    def test_dump_changefeed_of_generated_table(self, generated_kind):
+        table_path = f"/Root/generated_changefeed_{generated_kind.lower()}"
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{table_path}` (
+                key Uint32 NOT NULL,
+                value Int32,
+                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                PRIMARY KEY (key)
+            );
+        """])
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            ALTER TABLE `{table_path}` ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON');
+        """])
+
+        backup_files_dir = yatest.common.output_path(f"changefeed_{generated_kind.lower()}_dump")
+        self.execute_ydb_cli_command([
+            "tools", "dump", "--path", f"{table_path}/feed", "--output", backup_files_dir,
+        ])
+
+        assert os.listdir(backup_files_dir) == ["feed"]
+        assert sorted(os.listdir(os.path.join(backup_files_dir, "feed"))) == ["create_topic.pb", "permissions.pb"]
+
+
 class TestBackupSingle(BaseTestBackupInFiles):
     def test_single_table_backup(self):
         session = self.driver.table_client.session().create()
@@ -700,101 +872,84 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
 
 class TestTopicBackupRestore(BaseTestBackupInFiles):
     def test_topic_backup_restore(self):
-        topic_name = "cli_backup_topic"
-        src_topic = "/Root/folder/" + topic_name
-
-        self.driver.scheme_client.make_directory("/Root/folder")
-        self.driver.topic_client.create_topic(
-            src_topic,
-            consumers=["consumer_a"],
-            min_active_partitions=2,
-        )
-        shared_consumer_name = "consumer_shared_cli"
-        yatest.common.execute(
-            [
-                backup_bin(),
-                "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
-                "topic",
-                "consumer",
-                "add",
-                src_topic,
-                "--consumer",
-                shared_consumer_name,
-                "--type",
-                "shared",
-                "--starting-message-timestamp",
-                "1000000000",
-                "--availability-period",
-                "48h",
-                "--supported-codecs",
-                "raw",
-                "--default-processing-timeout",
-                "35m",
-                "--receive-message-wait-time",
-                "18s",
-                "--receive-message-delay",
-                "4s",
-                "--max-processing-attempts",
-                "9",
-            ]
-        )
-        src_desc = self.driver.topic_client.describe_topic(src_topic, include_stats=False)
-        assert_that(
-            sorted(c.name for c in src_desc.consumers),
-            is_(sorted(["consumer_a", shared_consumer_name])),
-        )
-
-        backup_files_dir = output_path(self.test_name, "topic_backup_files_dir")
-        yatest.common.execute(
-            [
-                backup_bin(),
-                "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
-                "tools", "dump",
-                "--path", "/Root/folder",
-                "--output", backup_files_dir,
-            ]
-        )
-        assert_that(os.listdir(backup_files_dir), is_([topic_name]))
-        assert_that(
-            sorted(os.listdir(os.path.join(backup_files_dir, topic_name))),
-            is_(sorted(["create_topic.pb", "permissions.pb"])),
-        )
-
+        source = "/Root/folder"
         restored = "/Root/restored_topic"
-        yatest.common.execute(
-            [
-                backup_bin(),
-                "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
-                "tools", "restore",
-                "--path", restored,
-                "--input", backup_files_dir,
-            ]
-        )
-        dst_topic = restored + "/" + topic_name
-        assert_that(
-            self.scheme_listdir("/Root"),
-            contains_inanyorder("folder", "restored_topic"),
-        )
-        assert_that(self.scheme_listdir(restored), is_([topic_name]))
-        assert_that(
-            are_permissions_the_same_for_two_paths(self.driver.scheme_client, src_topic, dst_topic),
-            is_(True),
-        )
-        assert_that(
-            are_topic_descriptions_equivalent(self.driver, src_topic, dst_topic),
-            is_(True),
-        )
+        topic_name = "cli_backup_topic"
+        src_topic = f"{source}/{topic_name}"
+        dst_topic = f"{restored}/{topic_name}"
+        shared_consumer = "consumer_shared_cli"
+        self.driver.scheme_client.make_directory(source)
+        self.driver.topic_client.create_topic(src_topic, consumers=["consumer_a"], min_active_partitions=2)
+        self.execute_ydb_cli_command([
+            "topic", "consumer", "add", src_topic, "--consumer", shared_consumer, "--type", "shared",
+            "--starting-message-timestamp", "1000000000", "--availability-period", "48h", "--supported-codecs", "raw",
+            "--default-processing-timeout", "35m", "--receive-message-wait-time", "18s", "--receive-message-delay", "4s",
+            "--max-processing-attempts", "9",
+        ])
+        src_desc = self.driver.topic_client.describe_topic(src_topic, include_stats=False)
+        assert {consumer.name for consumer in src_desc.consumers} == {"consumer_a", shared_consumer}
 
-        self.driver.topic_client.drop_topic(dst_topic)
-        self.driver.scheme_client.remove_directory(restored)
-        self.driver.topic_client.drop_topic(src_topic)
-        self.driver.scheme_client.remove_directory("/Root/folder")
+        # Orders publish changes to a feed with a streaming consumer and a shared worker.
+        # The shared worker sends poison messages to a persistent topic outside the backup.
+        quarantine = "/Root/orders_quarantine"
+        self.driver.topic_client.create_topic(quarantine, min_active_partitions=1)
+        session = self.driver.table_client.session().create()
+        session.execute_scheme(f"CREATE TABLE `{source}/orders` (id Uint64, status Utf8, PRIMARY KEY (id));")
+        session.transaction().execute(
+            f"UPSERT INTO `{source}/orders` (id, status) VALUES (1, 'pending');", commit_tx=True,
+        )
+        session.execute_scheme(f"""
+            ALTER TABLE `{source}/orders` ADD CHANGEFEED updates WITH (
+                FORMAT = 'JSON', MODE = 'NEW_AND_OLD_IMAGES', RETENTION_PERIOD = Interval('PT2H')
+            );
+        """)
+        src_feed = f"{source}/orders/updates"
+        dst_feed = f"{restored}/orders/updates"
+        self.execute_ydb_cli_command(["topic", "consumer", "add", src_feed, "--consumer", "order_events"])
+        self.execute_ydb_cli_command([
+            "topic", "consumer", "add", src_feed, "--consumer", "order_worker", "--type", "shared",
+            "--max-processing-attempts", "4", "--dlq-queue-name", quarantine,
+        ])
+
+        backup_dir = output_path(self.test_name, "topic_backup_files_dir")
+        self.execute_ydb_cli_command(["tools", "dump", "--path", source, "--output", backup_dir])
+        assert sorted(os.listdir(backup_dir)) == [topic_name, "orders"]
+        assert sorted(os.listdir(os.path.join(backup_dir, topic_name))) == ["create_topic.pb", "permissions.pb"]
+        assert sorted(os.listdir(os.path.join(backup_dir, "orders", "updates"))) == [
+            "changefeed_description.pb", "topic_description.pb",
+        ]
+
+        self.execute_ydb_cli_command(["tools", "restore", "--path", restored, "--input", backup_dir])
+        assert set(self.scheme_listdir("/Root")) == {"folder", "restored_topic", "orders_quarantine"}
+        assert set(self.scheme_listdir(restored)) == {topic_name, "orders"}
+        assert are_permissions_the_same_for_two_paths(self.driver.scheme_client, src_topic, dst_topic)
+        assert are_topic_descriptions_equivalent(self.driver, src_topic, dst_topic)
+        assert are_topic_descriptions_equivalent(self.driver, src_feed, dst_feed)
+
+        worker = self.execute_ydb_cli_command([
+            "topic", "consumer", "describe", dst_feed, "--consumer", "order_worker", "--format", "proto-json-base64",
+        ])
+        consumer = json.loads(worker.stdout)["consumer"]
+        assert consumer["shared_consumer_type"]["dead_letter_policy"] == {
+            "enabled": True,
+            "condition": {"max_processing_attempts": 4},
+            "move_action": {"dead_letter_queue": quarantine},
+        }
+
+        session.transaction().execute(
+            f"UPDATE `{restored}/orders` SET status = 'shipped' WHERE id = 1;", commit_tx=True,
+        )
+        with self.driver.topic_client.reader(dst_feed, consumer="order_events") as reader:
+            event = json.loads(reader.receive_message(timeout=20).data)
+            assert event["key"] == [1]
+            assert event["oldImage"]["status"] == "pending"
+            assert event["newImage"]["status"] == "shipped"
+
+        for folder in (source, restored):
+            session.drop_table(f"{folder}/orders")
+            self.driver.topic_client.drop_topic(f"{folder}/{topic_name}")
+            self.driver.scheme_client.remove_directory(folder)
+        self.driver.topic_client.drop_topic(quarantine)
 
 
 class TestBackupRestoreInRoot(BaseTestBackupInFiles):
@@ -910,91 +1065,45 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
 
 class TestIncompleteBackup(BaseTestBackupInFiles):
     def test_incomplete_backup_will_not_be_restored(self):
-        self.driver.scheme_client.make_directory(
-            '/Root/folder'
-        )
-
+        self.driver.scheme_client.make_directory('/Root/folder')
         session = self.driver.table_client.session().create()
-
         create_table_with_data(session, "folder/table")
 
-        # Backup table
-        backup_files_dir = output_path(self.test_name, "backup_files_dir")
-        yatest.common.execute(
-            [
-                backup_bin(),
-                "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
-                'tools', 'dump',
-                "--path", '/Root/folder',
-                "--output", backup_files_dir
-            ]
-        )
-        assert_that(
-            os.listdir(backup_files_dir),
-            is_(["table"])
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", ".metadata", ".sys")
-        )
+        backup_files_dir = self.create_backup("folder", ["table"], check_data=True)
+        table_backup = os.path.join(backup_files_dir, "table")
+        restore = ["tools", "restore", "--path", "/Root/restored", "--import-data"]
 
-        # Create "incomplete" file in folder with backup files
-        open(os.path.join(backup_files_dir, "incomplete"), "w").close()
-        open(os.path.join(backup_files_dir, "table", "incomplete"), "w").close()
+        # An interrupted dump can leave a marker in either the folder or a table.
+        for incomplete_backup in (backup_files_dir, table_backup):
+            marker = os.path.join(incomplete_backup, "incomplete")
+            open(marker, "w").close()
+            result = self.execute_ydb_cli_command(restore + ["--input", incomplete_backup], check_exit_code=False)
+            assert result.exit_code != 0
+            assert "There is incomplete file in folder" in result.stderr, result.stderr
+            assert self.scheme_listdir("/Root") == ["folder"]
+            os.remove(marker)
 
-        # Restore table and check that it fails without restoring anything
-        execution = yatest.common.execute(
-            [
-                backup_bin(),
-                "--verbose",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
-                'tools', 'restore',
-                "--path", "/Root/restored",
-                "--input", backup_files_dir
-            ],
-            check_exit_code=False
-        )
-        assert_that(
-            execution.exit_code,
-            is_not(0)
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", ".metadata", ".sys")
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root/folder").children],
-            is_(["table"])
-        )
+        # A dump without the marker can still contain a damaged CSV record.
+        data_file = os.path.join(table_backup, "data_00.csv")
+        with open(data_file, "rb+") as data:
+            contents = data.read()
+            if not contents.endswith(b"\n"):
+                data.write(b"\n")
+            data.write(b",truncated-record\n")
+        invalid_record_location = f"{data_file}:{len(contents.splitlines()) + 1}"
 
-        execution = yatest.common.execute(
-            [
-                backup_bin(),
-                "--verbose",
-                "--endpoint", "localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root"
-                'tools', 'restore',
-                "--path", "/Root/restored",
-                "--input", os.path.join(backup_files_dir, "table")
-            ],
-            check_exit_code=False
-        )
+        restore += ["--input", backup_files_dir]
+        result = self.execute_ydb_cli_command(restore, check_exit_code=False)
+        assert result.exit_code != 0
+        assert f"Invalid data: {invalid_record_location}" in result.stderr, result.stderr
+        assert self.scheme_listdir("/Root") == ["folder"]
 
-        assert_that(
-            execution.exit_code,
-            is_not(0)
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("folder", ".metadata", ".sys")
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root/folder").children],
-            is_(["table"])
-        )
+        result = self.execute_ydb_cli_command(restore + ["--save-partial-result"], check_exit_code=False)
+        assert result.exit_code != 0
+        assert f"Invalid data: {invalid_record_location}" in result.stderr, result.stderr
+        assert self.scheme_listdir("/Root/restored") == ["table"]
+        assert are_tables_descriptions_the_same(session, "/Root/folder/table", "/Root/restored/table")
+        assert self.scheme_listdir("/Root/folder") == ["table"]
 
 
 class TestAlterBackupRestore(BaseTestBackupInFiles):
@@ -1082,7 +1191,54 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
 
 
-class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
+class BasePermissionsBackupRestore(BaseTestBackupInFiles):
+    @staticmethod
+    def permissions_by_subject(permissions):
+        result = {}
+        for permission in permissions:
+            result.setdefault(permission.subject, set()).update(permission.permission_names)
+        return result
+
+    @staticmethod
+    def merge_permissions(*permissions):
+        result = {}
+        for entries in permissions:
+            for subject, names in entries.items():
+                result.setdefault(subject, set()).update(names)
+        return result
+
+    def assert_permissions(self, path, permissions, effective_permissions, interrupted=False, check_listing=False):
+        description = self.driver.scheme_client.describe_path(path)
+        assert description.owner == "eve"
+        assert self.permissions_by_subject(description.permissions) == permissions
+        assert self.permissions_by_subject(description.effective_permissions) == effective_permissions
+        assert description.interrupt_permission_inheritance == interrupted
+
+        if check_listing:
+            output = self.execute_ydb_cli_command(["scheme", "permissions", "list", path]).stdout
+            explicit_output, effective_output = output.split("Effective permissions:", 1)
+            owner_output, explicit_output = explicit_output.split("Permissions:", 1)
+            assert owner_output.strip() == "Owner: eve"
+            inheritance_marker = "Is permission inheritance interrupted: true"
+            assert (inheritance_marker in explicit_output) == interrupted
+            explicit_output = explicit_output.replace(inheritance_marker, "")
+
+            def parse_permissions(text):
+                lines = [line.strip() for line in text.splitlines() if line.strip()]
+                assert lines, "Missing permission list"
+                if lines == ["none"]:
+                    return {}
+                result = {}
+                for line in lines:
+                    subject, names = line.split(":", 1)
+                    result.setdefault(subject, set()).update(names.split(","))
+                return result
+
+            assert parse_permissions(explicit_output) == permissions
+            assert parse_permissions(effective_output) == effective_permissions
+
+
+class TestPermissionsBackupRestoreSingleTable(BasePermissionsBackupRestore):
     def test_single_table(self):
         self.driver.scheme_client.make_directory("/Root/folder")
 
@@ -1091,7 +1247,23 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
         # Create table and modify permissions on it
         self.create_users()
         create_table_with_data(session, "folder/table")
-        modify_permissions(self.driver.scheme_client, "folder/table")
+        inherited_permissions = self.permissions_by_subject(
+            self.driver.scheme_client.describe_path("/Root/folder").effective_permissions
+        )
+        permissions = {
+            "alice": {"ydb.generic.read", "ydb.generic.write"},
+            "bob": {"ydb.generic.read"},
+        }
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder/table", "alice",
+            "-p", "ydb.generic.read", "-p", "ydb.generic.write",
+        ])
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "/Root/folder/table", "bob", "-p", "ydb.generic.read",
+        ])
+        self.execute_ydb_cli_command(["scheme", "permissions", "chown", "folder/table", "eve"])
+        effective_permissions = self.merge_permissions(inherited_permissions, permissions)
+        self.assert_permissions("/Root/folder/table", permissions, effective_permissions, check_listing=True)
 
         # Backup table
         backup_files_dir = output_path(self.test_name, "test_single_table", "backup_files_dir")
@@ -1139,20 +1311,77 @@ class TestPermissionsBackupRestoreSingleTable(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/table"),
             is_(True)
         )
+        self.assert_permissions("/Root/restored/table", permissions, effective_permissions, check_listing=True)
 
 
-class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
+class TestPermissionsBackupRestoreFolderWithTable(BasePermissionsBackupRestore):
     def test_folder_with_table(self):
         # Create folder and modify permissions on it
         self.create_users()
         self.driver.scheme_client.make_directory("/Root/folder")
-        modify_permissions(self.driver.scheme_client, "folder")
+        inherited_permissions = self.permissions_by_subject(
+            self.driver.scheme_client.describe_path("/Root").effective_permissions
+        )
+        folder_permissions = {
+            "alice": {"ydb.generic.read", "ydb.generic.write"},
+            "bob": {"ydb.generic.read"},
+        }
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder", "alice",
+            "-p", "ydb.generic.read", "-p", "ydb.generic.write",
+        ])
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder", "bob", "-p", "ydb.generic.read",
+        ])
+        self.execute_ydb_cli_command(["scheme", "permissions", "chown", "folder", "eve"])
+        folder_effective_permissions = self.merge_permissions(inherited_permissions, folder_permissions)
+        self.assert_permissions("/Root/folder", folder_permissions, folder_effective_permissions)
 
         session = self.driver.table_client.session().create()
 
         # Create table and modify permissions on it
         create_table_with_data(session, "folder/table")
-        modify_permissions(self.driver.scheme_client, "folder/table")
+        table_permissions = {"bob": {"ydb.generic.read", "ydb.generic.write"}}
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "grant", "folder/table", "bob",
+            "-p", "ydb.generic.read", "-p", "ydb.generic.write",
+        ])
+        self.execute_ydb_cli_command(["scheme", "permissions", "chown", "folder/table", "eve"])
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+
+        # Bob's import is complete: remove writes, then retain only metadata access.
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "revoke", "folder/table", "bob", "-p", "ydb.generic.write",
+        ])
+        table_permissions = {"bob": {"ydb.generic.read"}}
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+        self.execute_ydb_cli_command([
+            "scheme", "permissions", "set", "folder/table", "bob", "-p", "ydb.generic.list",
+        ])
+        table_permissions = {"bob": {"ydb.generic.list"}}
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions,
+            self.merge_permissions(folder_effective_permissions, table_permissions),
+        )
+
+        # Temporarily isolate the table from the folder's data-access policy.
+        self.execute_ydb_cli_command(["scheme", "permissions", "clear-inheritance", "folder/table"])
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions, table_permissions, interrupted=True, check_listing=True,
+        )
+
+        # Return it to the shared policy before backing up the folder.
+        self.execute_ydb_cli_command(["scheme", "permissions", "set-inheritance", "folder/table"])
+        table_effective_permissions = self.merge_permissions(folder_effective_permissions, table_permissions)
+        self.assert_permissions(
+            "/Root/folder/table", table_permissions, table_effective_permissions, check_listing=True,
+        )
 
         # Backup folder with table
         backup_files_dir = output_path(self.test_name, "test_folder_with_table", "backup_files_dir")
@@ -1196,6 +1425,15 @@ class TestPermissionsBackupRestoreFolderWithTable(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/folder/table", "/Root/restored/folder/table"),
             is_(True)
         )
+        self.assert_permissions("/Root/restored/folder", folder_permissions, folder_effective_permissions)
+        self.assert_permissions(
+            "/Root/restored/folder/table", table_permissions, table_effective_permissions,
+        )
+
+        # Discard the restored table's local exception without changing its source.
+        self.execute_ydb_cli_command(["scheme", "permissions", "clear", "restored/folder/table"])
+        self.assert_permissions("/Root/restored/folder/table", {}, folder_effective_permissions, check_listing=True)
+        self.assert_permissions("/Root/folder/table", table_permissions, table_effective_permissions)
 
 
 class TestPermissionsBackupRestoreDontOverwriteOnAlreadyExisting(BaseTestBackupInFiles):
@@ -1982,139 +2220,148 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
 
 class TestRestoreReplaceOption(BaseTestBackupInFiles):
-    def ydb_cli(self, args):
-        return yatest.common.execute(
-            [
-                backup_bin(),
-                "-vvv",
-                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
-            ]
-            + args
-        )
-
-    def try_ydb_cli(self, args):
-        try:
-            result = self.ydb_cli(args)
-            return True, result.stdout.decode("utf-8")
-
-        except yatest.common.process.ExecutionError as exception:
-            return False, exception.execution_result.std_err.decode("utf-8")
-
-    def delete_some_rows(self, session, table):
-        session.transaction().execute(
-            f"""
-            DELETE FROM `{table}` WHERE id == 2;
-            """,
-            commit_tx=True,
-        )
-
     def test_table_replacement(self):
-        session = self.driver.table_client.session().create()
+        source = "/Root/workspace"
+        destination = "/Root/restoration/point"
+        self.driver.scheme_client.make_directory(source)
+        with ydb.QuerySessionPool(self.driver, size=1) as pool:
+            pool.execute_with_retries(f"""
+                CREATE TABLE `{source}/orders` (
+                    id Uint64,
+                    customer Utf8,
+                    amount Uint64,
+                    INDEX by_customer GLOBAL ON (customer) COVER (amount),
+                    PRIMARY KEY (id)
+                ) WITH (
+                    PARTITION_AT_KEYS = (1000),
+                    AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                    AUTO_PARTITIONING_BY_LOAD = DISABLED
+                );
+            """)
+            pool.execute_with_retries(f"""
+                UPSERT INTO `{source}/orders` (id, customer, amount) VALUES
+                    (2, "Alice", 20), (3, "Alice", 30), (5, "Bob", 50),
+                    (1000, "Alice", 100), (1001, "Alice", 110), (1002, "Bob", 120);
+            """)
+            pool.execute_with_retries(f"""
+                CREATE VIEW `{source}/alice_orders` WITH security_invoker = TRUE AS
+                SELECT id, amount FROM `{source}/orders` WHERE customer = "Alice"u;
+            """)
 
-        create_table_with_data(session, "table")
+            def read_alice_orders(path):
+                result, = pool.execute_with_retries(f"SELECT id, amount FROM `{path}/alice_orders` ORDER BY id;")
+                return [(row.id, row.amount) for row in result.rows]
 
-        # Backup the table
-        backup_files_dir = output_path(self.test_name, "test_table_replacement", "backup_files_dir")
-        self.ydb_cli(["tools", "dump", "--path", ".", "--output", backup_files_dir, "--exclude", ".sys"])
-        assert_that(os.listdir(backup_files_dir), is_(["table"]))
+            backup_dir = output_path(self.test_name, "backup_files_dir")
+            self.execute_ydb_cli_command(["tools", "dump", "--path", source, "--output", backup_dir])
+            assert sorted(os.listdir(backup_dir)) == ["alice_orders", "orders"]
 
-        # Restore the table
-        assert_that(
-            self.try_ydb_cli(
-                ["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--dry-run"]
-            )[0],
-            is_(False),
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            is_not(has_items("restoration")),
-        )
-        self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir])
-        assert_that(
-            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
-            is_(True),
-        )
+            restore = [
+                "tools", "restore", "--path", "./restoration/point", "--input", backup_dir,
+                "--import-data", "--upload-batch-bytes", "32",
+            ]
+            result = self.execute_ydb_cli_command(restore + ["--dry-run"], check_exit_code=False)
+            assert result.exit_code != 0
+            assert self.scheme_listdir("/Root") == ["workspace"]
 
-        # Replace the table
-        self.delete_some_rows(session, "/Root/restoration/point/table")
-        self.ydb_cli(
-            ["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace", "--dry-run"]
-        )
-        assert_that(
-            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
-            is_(False),
-        )
-        self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace"])
-        assert_that(
-            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
-            is_(True),
-        )
+            # Restore data first; a dry run checks that the missing index is reported.
+            self.execute_ydb_cli_command(restore + ["--restore-indexes", "false"])
+            expected_orders = [(2, 20), (3, 30), (1000, 100), (1001, 110)]
+            assert read_alice_orders(destination) == expected_orders
 
-        # Drop the folder
-        self.ydb_cli(["scheme", "rmdir", "--force", "--recursive", "./restoration/point"])
+            # The restored view reads the restored table even when it diverges from the source.
+            pool.execute_with_retries(f"DELETE FROM `{destination}/orders` WHERE id = 2;")
+            result = self.execute_ydb_cli_command(restore + ["--dry-run"], check_exit_code=False)
+            assert result.exit_code != 0
+            assert "Indexes differ" in result.stderr, result.stderr
+            assert read_alice_orders(destination) == expected_orders[1:]
+            assert read_alice_orders(source) == expected_orders
 
-        # Replace a non-existent table with the --verify-existence option turned on
-        assert_that(
-            self.try_ydb_cli(
-                [
-                    "tools",
-                    "restore",
-                    "--path", "./restoration/point",
-                    "--input", backup_files_dir,
-                    "--replace",
-                    "--verify-existence",
-                    "--dry-run",
-                ]
-            )[0],
-            is_(False),
-        )
-        assert_that(
-            self.try_ydb_cli(
-                [
-                    "tools",
-                    "restore",
-                    "--path", "./restoration/point",
-                    "--input", backup_files_dir,
-                    "--replace",
-                    "--verify-existence",
-                ]
-            )[0],
-            is_(False),
+            # Replacing a table also recreates the dependent view and its index.
+            self.execute_ydb_cli_command(restore + ["--replace", "--verify-existence"])
+            session = self.driver.table_client.session().create()
+            assert are_tables_the_same(session, self.driver.scheme_client, f"{source}/orders", f"{destination}/orders")
+            result, = pool.execute_with_retries(f"""
+                SELECT id, amount FROM `{destination}/orders` VIEW by_customer
+                WHERE customer = "Alice"u ORDER BY id;
+            """)
+            assert [(row.id, row.amount) for row in result.rows] == expected_orders
+            assert read_alice_orders(destination) == expected_orders
+
+            # A replacement preview must leave a local deletion in place.
+            pool.execute_with_retries(f"DELETE FROM `{destination}/orders` WHERE id = 2;")
+            self.execute_ydb_cli_command(restore + ["--replace", "--dry-run"])
+            assert read_alice_orders(destination) == expected_orders[1:]
+
+            self.execute_ydb_cli_command(["scheme", "rmdir", "--force", "--recursive", destination])
+            for flags in (["--verify-existence", "--dry-run"], ["--verify-existence"], ["--dry-run"]):
+                result = self.execute_ydb_cli_command(restore + ["--replace"] + flags, check_exit_code=False)
+                assert result.exit_code != 0
+                assert self.scheme_listdir("/Root/restoration") == []
+
+            self.execute_ydb_cli_command(restore + ["--replace"])
+            assert are_tables_the_same(session, self.driver.scheme_client, f"{source}/orders", f"{destination}/orders")
+            assert read_alice_orders(destination) == expected_orders
+
+
+class TestRestoreExternalDataSource(BaseTestBackupInFiles):
+    @classmethod
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(
+            extra_feature_flags=["enable_external_data_sources"],
+            query_service_config={"available_external_data_sources": ["ObjectStorage"]},
         )
 
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
-            contains_inanyorder("table", "restoration", ".metadata", ".sys"),
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root/restoration").children],
-            empty()
-        )
+    def test_replace_preserves_external_table_outside_backup(self):
+        source = "/Root/archive_storage"
+        archive = "/Root/events_archive"
+        preview = "/Root/events_preview"
 
-        # Replace a non-existent table
-        assert_that(
-            self.try_ydb_cli(
-                [
-                    "tools",
-                    "restore",
-                    "--path", "./restoration/point",
-                    "--input", backup_files_dir,
-                    "--replace",
-                    "--dry-run",
-                ]
-            )[0],
-            is_(False),
-        )
-        assert_that(
-            [child.name for child in self.driver.scheme_client.list_directory("/Root/restoration").children],
-            empty()
-        )
-        self.ydb_cli(["tools", "restore", "--path", "./restoration/point", "--input", backup_files_dir, "--replace"])
-        assert_that(
-            are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
-            is_(True),
-        )
+        def describe(path):
+            result = self.execute_ydb_cli_command(["scheme", "describe", "--format", "proto-json-base64", path])
+            return json.loads(result.stdout)
+
+        with ydb.QuerySessionPool(self.driver, size=1) as pool:
+            def create_external_table(path, location):
+                pool.execute_with_retries(f"""
+                    CREATE EXTERNAL TABLE `{path}` (event_id Uint64, payload Utf8) WITH (
+                        DATA_SOURCE = "{source}", LOCATION = "{location}", FORMAT = "csv_with_names"
+                    );
+                """)
+
+            pool.execute_with_retries(f"""
+                CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage", LOCATION = "localhost:1", AUTH_METHOD = "NONE"
+                );
+            """)
+            create_external_table(archive, "exports/2025/")
+            original_archive = describe(archive)
+
+            backup_dir = output_path(self.test_name, "backup_files_dir")
+            self.execute_ydb_cli_command([
+                "tools", "dump", "--path", "/Root", "--output", backup_dir, "--exclude", ".sys", "--scheme-only",
+            ])
+
+            # The archive has moved since the backup, and a new preview uses the same source.
+            pool.execute_with_retries(f"DROP EXTERNAL TABLE `{archive}`;")
+            create_external_table(archive, "exports/2026/")
+            create_external_table(preview, "preview/")
+            current_objects = {path: describe(path) for path in (source, archive, preview)}
+
+            restore = ["tools", "restore", "--path", "/Root", "--input", backup_dir, "--replace"]
+            rejected = self.execute_ydb_cli_command(restore, check_exit_code=False)
+            assert rejected.exit_code != 0
+            assert "referenced by an external table that is not in the backup" in rejected.stderr, rejected.stderr
+            assert {path: describe(path) for path in current_objects} == current_objects
+
+            pool.execute_with_retries(f"DROP EXTERNAL TABLE `{preview}`;")
+            self.execute_ydb_cli_command(restore)
+            restored_archive = describe(archive)
+            for field in ("data_source_path", "source_type", "location", "columns", "content"):
+                assert restored_archive[field] == original_archive[field]
+            restored_source = describe(source)
+            assert restored_source["location"] == "localhost:1"
+            assert json.loads(restored_source["properties"]["REFERENCES"]) == [archive]
 
 
 class BaseTestReplaceSysACLOption(BaseTestBackupInFiles):

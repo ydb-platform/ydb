@@ -149,8 +149,8 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
             const auto& nullTypes = meta->UserTypes.SelectSide(Join.NullSupplying());
             for (int i = 0; i < std::ssize(nullTypes); ++i) {
                 auto* type = nullTypes[i];
-                MKQL_ENSURE(type->IsOptional(),
-                            Sprintf("expected every type of the null-supplying side to be optional when join type is Left, got type #%i: %s",
+                MKQL_ENSURE(type->IsOptional() || type->IsNull(),
+                            Sprintf("expected every type of the null-supplying side to be optional or null when join type is Left, got type #%i: %s",
                                     i + 1, type->GetKindAsStr().data()));
             }
             TMKQLVector<NUdf::TUnboxedValue> nulls(std::ssize(nullTypes));

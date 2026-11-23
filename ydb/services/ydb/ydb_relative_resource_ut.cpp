@@ -12,6 +12,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <algorithm>
 #include <chrono>
 #include <google/protobuf/util/message_differencer.h>
 
@@ -126,6 +127,13 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     AssertSuccess(schemeClient.MakeDirectory("relative_dir").GetValueSync());
     AssertSuccess(schemeClient.DescribePath("relative_dir").GetValueSync());
     AssertSuccess(schemeClient.ListDirectory("relative_dir").GetValueSync());
+    for (const TString& path : {".", "./", "././"}) {
+        const auto listing = schemeClient.ListDirectory(path).GetValueSync();
+        AssertSuccess(listing);
+        UNIT_ASSERT(std::any_of(listing.GetChildren().begin(), listing.GetChildren().end(),
+            [](const auto& child) { return child.Name == "relative_dir"; }));
+    }
+    AssertSuccess(schemeClient.ListDirectory("./relative_dir/.").GetValueSync());
 
     NYdb::NTable::TTableClient tableClient(driver);
     const auto sessionResult = tableClient.CreateSession().GetValueSync();

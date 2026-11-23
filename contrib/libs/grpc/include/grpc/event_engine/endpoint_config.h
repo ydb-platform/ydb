@@ -14,13 +14,13 @@
 #ifndef GRPC_EVENT_ENGINE_ENDPOINT_CONFIG_H
 #define GRPC_EVENT_ENGINE_ENDPOINT_CONFIG_H
 
-#include <grpc/support/port_platform.h>
-
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
+
+#include <grpc/support/port_platform.h>
 
 namespace grpc_event_engine {
 namespace experimental {

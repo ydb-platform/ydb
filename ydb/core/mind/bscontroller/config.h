@@ -156,13 +156,13 @@ namespace NKikimr {
             TConfigFitAction Fit;
 
             THashSet<TGroupId> GroupContentChanged;
-            TVector<ui32> GroupStateUpdates;
+            TSet<ui32> GroupStateUpdates;
             THashSet<TGroupId> GroupFailureModelChanged;
             // Pools whose leading-disk override changed. Their VDisk service-set records are resent
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking);
+            std::expected<void, TString> ValidateMirror3dcGroupStates(const TValidateConfigUpdatesParameters& parameters);
 
             bool PushStaticGroupsToSelfHeal = false;
 

@@ -8,7 +8,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/control.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/tx/program/program.h>

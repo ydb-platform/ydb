@@ -38,6 +38,7 @@ from ._interceptor import StreamStreamClientInterceptor
 from ._interceptor import StreamUnaryClientInterceptor
 from ._interceptor import UnaryStreamClientInterceptor
 from ._interceptor import UnaryUnaryClientInterceptor
+from ._interceptor import _StreamCallResponseIterator
 from ._metadata import Metadata
 from ._typing import ChannelArgumentType
 from ._typing import DeserializingFunction
@@ -419,6 +420,8 @@ class Channel(_base_channel.Channel):
             # Locate ones created by `aio.Call`.
             frame = stack[0]
             candidate = frame.f_locals.get("self")
+            while isinstance(candidate, _StreamCallResponseIterator):
+                candidate = candidate._call
             if candidate:
                 if isinstance(candidate, _base_call.Call):
                     if hasattr(candidate, "_channel"):

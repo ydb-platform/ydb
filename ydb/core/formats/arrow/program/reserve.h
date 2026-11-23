@@ -56,7 +56,7 @@ public:
         , HeaderContext(original.GetHeaderContext())
         , Policy(policy)
     {
-        AFL_VERIFY(policy);
+        YDB_LOG_VERIFY(policy);
     }
 };
 

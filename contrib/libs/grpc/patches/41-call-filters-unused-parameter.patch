@@ -1,0 +1,30 @@
+Mark parameters used only in GPR_DEBUG_ASSERT as [[maybe_unused]]
+to fix -Wunused-parameter in NDEBUG builds of consumers.
+
+--- contrib/libs/grpc/src/core/lib/transport/call_filters.h	(index)
++++ contrib/libs/grpc/src/core/lib/transport/call_filters.h	(working tree)
+@@ -985,13 +985,13 @@ struct StackData {
+   // Finalizer interception adders
+ 
+   template <typename FilterType>
+-  void AddFinalizer(FilterType*, size_t, const NoInterceptor* p) {
++  void AddFinalizer(FilterType*, size_t, [[maybe_unused]] const NoInterceptor* p) {
+     GPR_DEBUG_ASSERT(p == &FilterType::Call::OnFinalize);
+   }
+ 
+   template <typename FilterType>
+   void AddFinalizer(FilterType* channel_data, size_t call_offset,
+-                    void (FilterType::Call::*p)(const grpc_call_final_info*)) {
++                    [[maybe_unused]] void (FilterType::Call::*p)(const grpc_call_final_info*)) {
+     GPR_DEBUG_ASSERT(p == &FilterType::Call::OnFinalize);
+     finalizers.push_back(Finalizer{
+         channel_data,
+@@ -1005,7 +1005,7 @@ struct StackData {
+ 
+   template <typename FilterType>
+   void AddFinalizer(FilterType* channel_data, size_t call_offset,
+-                    void (FilterType::Call::*p)(const grpc_call_final_info*,
++                    [[maybe_unused]] void (FilterType::Call::*p)(const grpc_call_final_info*,
+                                                 FilterType*)) {
+     GPR_DEBUG_ASSERT(p == &FilterType::Call::OnFinalize);
+     finalizers.push_back(Finalizer{

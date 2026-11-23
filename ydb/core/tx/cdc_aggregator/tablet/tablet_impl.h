@@ -35,6 +35,7 @@ class TCdcAggregator
     class TTxInit;
     class TTxConfigureTracking;
     class TTxPartitioningChanged;
+    class TTxWriteHeartbeats;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -44,6 +45,7 @@ public:
     TCdcAggregator(const TActorId& tablet, TTabletStorageInfo* info);
 
 private:
+    void Die(const TActorContext& ctx) override;
     void OnDetach(const TActorContext& ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext& ctx) override;
@@ -52,6 +54,7 @@ private:
     void RunTxInitSchema(const TActorContext& ctx);
     void RunTxInit(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
+    void BroadcastHeartbeat(const NPQ::THeartbeat& heartbeat, const TActorContext& ctx);
 
     void Handle(TEvCdcAggregator::TEvConfigureTracking::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx);
@@ -63,7 +66,9 @@ private:
 
 private:
     std::optional<TCdcAggregatorStream> CdcAggregatorStream;
+    TCdcAggregatorStreamProtoConverter CdcAggregatorStreamProtoConverter;
     TCdcAggregatorStreamRepository CdcAggregatorStreamRepository;
+    TActorId CdcAggregatorHeartbeatBroadcaster;
 };
 
 } // namespace NKikimr::NCdcAggregator

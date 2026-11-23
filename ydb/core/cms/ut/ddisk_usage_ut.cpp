@@ -49,7 +49,7 @@ namespace NKikimr::NCms {
             UNIT_ASSERT(!cluster.FindDDiskState(runtime.GetNodeId(0), 1, 3));
             cluster.ClearNode(runtime.GetNodeId(0));
             UNIT_ASSERT(!cluster.FindDDiskState(runtime.GetNodeId(0), 1, 1));
-            runtime.Send(new IEventHandle(board, oldPublisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1, 1)));
+            runtime.Send(new IEventHandle(board, oldPublisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1, 1, true)));
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 2);
             publish(1, oldPublisher, 0.1);
             auto current = query(true);
@@ -58,7 +58,7 @@ namespace NKikimr::NCms {
                     UNIT_ASSERT_VALUES_EQUAL(info.GetDDiskOccupancy(), 0.8);
                 }
             }
-            runtime.Send(new IEventHandle(board, publisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1, 2)));
+            runtime.Send(new IEventHandle(board, publisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1, 2, true)));
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
             // Delayed updates cannot resurrect a deleted incarnation.
             publish(1, oldPublisher, 0.1);

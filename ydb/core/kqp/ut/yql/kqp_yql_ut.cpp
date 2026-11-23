@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(EvaluateExprPgNull) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -990,6 +990,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     Y_UNIT_TEST(PgIntPrimaryKey) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
+            .SetDisablePgCompatibility(false)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 

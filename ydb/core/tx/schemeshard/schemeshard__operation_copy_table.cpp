@@ -1053,6 +1053,16 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     *operation->MutableVectorIndexKmeansTreeDescription() =
                         std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
                     break;
+                case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                    const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+                        &indexInfo->SpecializedIndexDescription);
+                    if (!description) {
+                        return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+                            "HNSW index type and description do not match")};
+                    }
+                    *operation->MutableHnswIndexDescription() = *description;
+                    break;
+                }
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:

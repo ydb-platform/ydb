@@ -5,7 +5,7 @@
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 
 namespace NKikimr {
 

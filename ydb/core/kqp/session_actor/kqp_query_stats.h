@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/compilation/result.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 namespace NKikimr::NKqp {
 

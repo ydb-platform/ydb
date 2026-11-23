@@ -15,17 +15,18 @@ import re
 from collections import defaultdict
 from typing import List, Dict, Optional, Self
 
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
-from ydb.tests.library.common.types import Erasure
 
 logger = logging.getLogger(__name__)
 
@@ -629,14 +630,47 @@ class Kikimr:
         self.cluster.start(timeout_seconds=timeout_seconds)
 
         token = config.default_clusteradmin
-        logger.info("Sleep")
-        time.sleep(10)
         logger.info(f"Creating tenant {tenant_database} with token={token!r}")
-        self.cluster.create_database(
-            tenant_database,
-            storage_pool_units_count={"hdd": 1},
-            token=token,
-        )
+        create_deadline = time.time() + 30
+        retryable_codes = {
+            StatusIds.UNAVAILABLE,
+            StatusIds.TIMEOUT,
+            StatusIds.UNDETERMINED,
+            StatusIds.OVERLOADED,
+        }
+        while True:
+            remaining = create_deadline - time.time()
+            if remaining <= 0:
+                raise RuntimeError(f"create_database not ready within 30s for {tenant_database}")
+            try:
+                self.cluster.create_database(
+                    tenant_database,
+                    storage_pool_units_count={"hdd": 1},
+                    token=token,
+                    timeout_seconds=max(1, int(remaining)),
+                )
+                break
+            except Exception as e:
+                message = str(e)
+                message_l = message.lower()
+                # create_database raises RuntimeError("... failed: <code>: <reason>")
+                code = None
+                if "create_database failed:" in message_l:
+                    try:
+                        code = int(message.split(":", 2)[1].strip().split(",", 1)[0].strip())
+                    except (IndexError, ValueError):
+                        code = None
+                if code == StatusIds.ALREADY_EXISTS or "already exists" in message_l:
+                    logger.info("create_database already exists, continuing: %r", e)
+                    break
+                if code in retryable_codes or any(
+                    needle in message_l
+                    for needle in ("unavailable", "connection", "timeout", "deadline", "not ready", "transport")
+                ):
+                    logger.info("create_database not ready yet, retrying: %r", e)
+                    time.sleep(0.5)
+                    continue
+                raise
         self.cluster.register_and_start_slots(database=tenant_database, count=2)
         self.cluster.wait_tenant_up(tenant_database, token=token)
 

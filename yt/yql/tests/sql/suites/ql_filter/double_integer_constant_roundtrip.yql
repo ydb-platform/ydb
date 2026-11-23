@@ -1,0 +1,11 @@
+PRAGMA yt.UseQLFilter;
+
+-- 2^63 exceeds Int64 but is exactly representable as Double.
+-- Float(2^27 + 1) rounds to 2^27.
+SELECT
+    x
+FROM
+    plato.Input
+WHERE
+    x == Double('9223372036854775808') AND y == Float('134217729')
+;

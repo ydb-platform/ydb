@@ -15,11 +15,12 @@ class TCdcAggregatorStreamRepository {
 public:
     void InsertCdcAggregatorStream(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const;
     void ApplyCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff) const;
+    void ApplyCdcAggregatorStreamHeartbeatsDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamHeartbeatsDiff& diff) const;
     void InsertCdcAggregatorStreamPartitioningChange(NIceDb::TNiceDb& db, const TCdcAggregatorStreamPartitioningChange& change) const;
     std::pair<bool, std::optional<TCdcAggregatorStream>> LoadCdcAggregatorStream(NIceDb::TNiceDb& db) const;
 
 private:
-    std::optional<THashSet<ui64>> LoadSourceDataShardIds(NIceDb::TNiceDb& db) const;
+    std::optional<TCdcAggregatorStream::TLastHeartbeats> LoadLastHeartbeats(NIceDb::TNiceDb& db) const;
     std::optional<TCdcAggregatorStream::TPartitioningChanges> LoadPartitioningChanges(NIceDb::TNiceDb& db) const;
 
     TCdcAggregatorStreamProtoConverter Converter;

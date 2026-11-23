@@ -78,7 +78,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         filter.Add(true, mainPortion->GetRecordsCount());
         constructor->SetIntervalsCount(1);
         constructor->AddFilter(0, std::move(filter));
-        AFL_VERIFY(constructor->IsDone());
+        YDB_LOG_VERIFY(constructor->IsDone());
         Counters->OnFilterRequest(1);
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
         return;
@@ -117,7 +117,7 @@ TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
             if (auto findCached = FiltersCache.Find(
                     TDuplicateMapInfo(constructor->GetRequest()->Get()->GetMaxVersion(), intervalView, mainPortion->GetPortionId()));
                 findCached != FiltersCache.End()) {
-                AFL_VERIFY(readyFilters.emplace(nextIntervalIdx - 1, findCached.Value()).second);
+                YDB_LOG_VERIFY(readyFilters.emplace(nextIntervalIdx - 1, findCached.Value()).second);
                 Counters->OnFilterCacheHit();
                 return true;
             }
@@ -150,7 +150,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     {
         const auto collector = [&intersectingPortions](
                                    const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& portion) {
-            AFL_VERIFY(intersectingPortions.insert(portion->GetPortionId()).second);
+            YDB_LOG_VERIFY(intersectingPortions.insert(portion->GetPortionId()).second);
             return true;
         };
         Intervals.EachIntersection(
@@ -165,7 +165,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         {"event", "request_filter"},
         {"source", constructor->GetRequest()->Get()->GetPortionId()},
         {"intersectingPortions", intersectingPortions.size()});
-    AFL_VERIFY(intersectingPortions.size());
+    YDB_LOG_VERIFY(intersectingPortions.size());
 
     TIntervalsIterator intervalsIterator = StartIntervalProcessing(intersectingPortions, constructor);
 
@@ -175,7 +175,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
             portionsToFetch.emplace(id, Portions->GetPortionVerified(id));
         }
 
-        AFL_VERIFY(!constructor->IsDone());
+        YDB_LOG_VERIFY(!constructor->IsDone());
         TBuildFilterContext columnFetchingRequest(SelfId(), AbortionFlag, constructor->GetRequest()->Get()->GetMaxVersion(),
             std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
             std::move(requestGuard), memoryGuard);
@@ -183,12 +183,12 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
         for (const auto& interval : intervalsIterator.GetIntervals()) {
             auto findInFlight = IntervalsInFlight.FindPtr(interval.MakeView());
-            AFL_VERIFY(findInFlight);
+            YDB_LOG_VERIFY(findInFlight);
             findInFlight->SetJob(columnFetchingRequest.GetStatus());
         }
 
         std::shared_ptr<TBuildFilterTaskExecutor> executor = std::make_shared<TBuildFilterTaskExecutor>(std::move(intervalsIterator));
-        AFL_VERIFY(executor->ScheduleNext(std::move(columnFetchingRequest)));
+        YDB_LOG_VERIFY(executor->ScheduleNext(std::move(columnFetchingRequest)));
     }
 
     ValidateInFlightProgress();
@@ -209,7 +209,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
         {"self", TActivationContext::AsActorContext().SelfID},
         {"event", "filters_constructed"},
         {"filters", ev->Get()->GetConclusion().GetResult().size()});
-    AFL_VERIFY(ev->Get()->GetConclusion().GetResult().size());
+    YDB_LOG_VERIFY(ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [mapInfo, filter] : ev->Get()->ExtractResult()) {
         if (auto findInterval = IntervalsInFlight.find(mapInfo.GetInterval()); findInterval != IntervalsInFlight.end()) {
             findInterval->second.OnFilterReady(mapInfo.GetPortionId(), filter);

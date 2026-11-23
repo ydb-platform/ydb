@@ -117,9 +117,15 @@ public:
             return result;
         }
 
+        if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "HNSW index support is disabled (EnableHnswIndex)");
+            return result;
+        }
+
         if (tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "HNSW index implementation is not available yet");
+                "HNSW index implementation is not available yet (SQL support)");
             return result;
         }
 

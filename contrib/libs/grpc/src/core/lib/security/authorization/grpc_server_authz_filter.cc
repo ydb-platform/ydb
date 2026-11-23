@@ -47,10 +47,10 @@ const NoInterceptor GrpcServerAuthzFilter::Call::OnServerToClientMessage;
 const NoInterceptor GrpcServerAuthzFilter::Call::OnFinalize;
 
 GrpcServerAuthzFilter::GrpcServerAuthzFilter(
-    RefCountedPtr<grpc_auth_context> auth_context, grpc_endpoint* endpoint,
+    RefCountedPtr<grpc_auth_context> auth_context, const ChannelArgs& args,
     RefCountedPtr<grpc_authorization_policy_provider> provider)
     : auth_context_(std::move(auth_context)),
-      per_channel_evaluate_args_(auth_context_.get(), endpoint),
+      per_channel_evaluate_args_(auth_context_.get(), args),
       provider_(std::move(provider)) {}
 
 y_absl::StatusOr<GrpcServerAuthzFilter> GrpcServerAuthzFilter::Create(
@@ -60,12 +60,9 @@ y_absl::StatusOr<GrpcServerAuthzFilter> GrpcServerAuthzFilter::Create(
   if (provider == nullptr) {
     return y_absl::InvalidArgumentError("Failed to get authorization provider.");
   }
-  // grpc_endpoint isn't needed because the current gRPC authorization policy
-  // does not support any rules that requires looking for source or destination
-  // addresses.
   return GrpcServerAuthzFilter(
-      auth_context != nullptr ? auth_context->Ref() : nullptr,
-      /*endpoint=*/nullptr, provider->Ref());
+      auth_context != nullptr ? auth_context->Ref() : nullptr, args,
+      provider->Ref());
 }
 
 bool GrpcServerAuthzFilter::IsAuthorized(ClientMetadata& initial_metadata) {

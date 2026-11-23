@@ -14,7 +14,7 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MakeSchemasDiff(
     {
         THashMap<ui32, NKikimrSchemeOp::TOlapColumnDescription> nextIds;
         for (auto&& i : next.GetColumns()) {
-            AFL_VERIFY(nextIds.emplace(i.GetId(), i).second);
+            YDB_LOG_VERIFY(nextIds.emplace(i.GetId(), i).second);
         }
         THashSet<ui32> currentIds;
         for (auto&& i : current.GetColumns()) {
@@ -36,7 +36,7 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MakeSchemasDiff(
     {
         THashMap<ui32, NKikimrSchemeOp::TOlapIndexDescription> nextIds;
         for (auto&& i : next.GetIndexes()) {
-            AFL_VERIFY(nextIds.emplace(i.GetId(), i).second);
+            YDB_LOG_VERIFY(nextIds.emplace(i.GetId(), i).second);
         }
         THashSet<ui32> currentIds;
         for (auto&& i : current.GetIndexes()) {
@@ -66,33 +66,33 @@ TConclusionStatus TSchemaDiffView::DeserializeFromProto(const NKikimrSchemeOp::T
         CompressionOptions = &proto.GetDefaultCompression();
     }
     for (auto&& i : proto.GetUpsertColumns()) {
-        AFL_VERIFY(ModifiedColumns.emplace(i.GetId(), &i).second);
+        YDB_LOG_VERIFY(ModifiedColumns.emplace(i.GetId(), &i).second);
     }
     for (auto&& i : proto.GetDropColumns()) {
-        AFL_VERIFY(ModifiedColumns.emplace(i, nullptr).second);
+        YDB_LOG_VERIFY(ModifiedColumns.emplace(i, nullptr).second);
     }
     for (auto&& i : proto.GetUpsertIndexes()) {
-        AFL_VERIFY(ModifiedIndexes.emplace(i.GetId(), &i).second);
+        YDB_LOG_VERIFY(ModifiedIndexes.emplace(i.GetId(), &i).second);
     }
     for (auto&& i : proto.GetDropIndexes()) {
-        AFL_VERIFY(ModifiedIndexes.emplace(i, nullptr).second);
+        YDB_LOG_VERIFY(ModifiedIndexes.emplace(i, nullptr).second);
     }
     return TConclusionStatus::Success();
 }
 
 ui64 TSchemaDiffView::GetVersion() const {
-    AFL_VERIFY(Version);
+    YDB_LOG_VERIFY(Version);
     return Version;
 }
 
 const NKikimrSchemeOp::TColumnTableSchemeOptions& TSchemaDiffView::GetSchemaOptions() const {
-    AFL_VERIFY(SchemaOptions);
+    YDB_LOG_VERIFY(SchemaOptions);
     return *SchemaOptions;
 }
 
 NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
     NKikimrSchemeOp::TColumnTableSchema result = schema;
-    AFL_VERIFY(result.GetVersion() < Version);
+    YDB_LOG_VERIFY(result.GetVersion() < Version);
     result.SetVersion(Version);
     if (SchemaOptions) {
         *result.MutableOptions() = *SchemaOptions;
@@ -159,7 +159,7 @@ NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSche
 
 NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::ApplyDiff(
     const NKikimrSchemeOp::TColumnTableSchemaDiff& diff0, const NKikimrSchemeOp::TColumnTableSchemaDiff& diff1) {
-    AFL_VERIFY(diff0.GetVersion() < diff1.GetVersion());
+    YDB_LOG_VERIFY(diff0.GetVersion() < diff1.GetVersion());
     NKikimrSchemeOp::TColumnTableSchemaDiff result;
     result.SetVersion(diff1.GetVersion());
     if (diff1.HasDefaultCompression()) {
@@ -239,19 +239,19 @@ NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::ApplyDiff(
 
 NKikimrTxColumnShard::TSchemaPresetVersionInfo TSchemaDiffView::Merge(
     const std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>& schemas) {
-    AFL_VERIFY(schemas.size());
+    YDB_LOG_VERIFY(schemas.size());
     std::optional<ui32> lastSchemaIdx;
     for (ui32 idx = 0; idx < schemas.size(); ++idx) {
         if (!schemas[idx].HasDiff()) {
-            AFL_VERIFY(schemas[idx].HasSchema());
+            YDB_LOG_VERIFY(schemas[idx].HasSchema());
             lastSchemaIdx = idx;
         }
     }
     NKikimrTxColumnShard::TSchemaPresetVersionInfo result = schemas.back();
     result.ClearSchema();
     result.ClearDiff();
-    AFL_VERIFY(!result.HasSchema());
-    AFL_VERIFY(!result.HasDiff());
+    YDB_LOG_VERIFY(!result.HasSchema());
+    YDB_LOG_VERIFY(!result.HasDiff());
     if (lastSchemaIdx) {
         NKikimrSchemeOp::TColumnTableSchema schema = schemas[*lastSchemaIdx].GetSchema();
         for (ui32 idx = *lastSchemaIdx + 1; idx < schemas.size(); ++idx) {
@@ -267,11 +267,11 @@ NKikimrTxColumnShard::TSchemaPresetVersionInfo TSchemaDiffView::Merge(
 }
 
 NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MergeDiffs(const std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>& schemas) {
-    AFL_VERIFY(schemas.size());
-    AFL_VERIFY(schemas.front().HasDiff());
+    YDB_LOG_VERIFY(schemas.size());
+    YDB_LOG_VERIFY(schemas.front().HasDiff());
     NKikimrSchemeOp::TColumnTableSchemaDiff result = schemas.front().GetDiff();
     for (ui32 i = 1; i < schemas.size(); ++i) {
-        AFL_VERIFY(schemas[i].HasDiff());
+        YDB_LOG_VERIFY(schemas[i].HasDiff());
         const NKikimrSchemeOp::TColumnTableSchemaDiff& localDiff = schemas[i].GetDiff();
         result = ApplyDiff(result, localDiff);
     }

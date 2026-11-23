@@ -35,7 +35,7 @@ public:
         Result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
         Result->Record.SetOrigin(Self->TabletID());
 
-        const auto [change, error] = TCdcAggregatorStreamProtoConverter().ParsePartitioningChange(record);
+        const auto [change, error] = Self->CdcAggregatorStreamProtoConverter.ParsePartitioningChange(record);
         if (!change) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
             Result->Record.SetError(error);

@@ -139,7 +139,7 @@ struct Schema : NIceDb::Schema {
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
-        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
+        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDataCenterStates; };
         struct BridgeSyncTotalRate : Column<33, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct BridgeSyncMaxSyncers : Column<34, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 64; };
         struct AppliedPileOverrides : Column<35, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TStoragePoolPileOverrides; };

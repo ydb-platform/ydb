@@ -8,7 +8,7 @@
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializationContext& context) {
-    AFL_VERIFY(!GetTableInfoPtrVerified()->IsStandalone());
+    YDB_LOG_VERIFY(!GetTableInfoPtrVerified()->IsStandalone());
     const auto storePathId = GetTableInfoPtrVerified()->GetOlapStorePathIdVerified();
     TPath storePath = TPath::Init(storePathId, context.GetSSOperationContext()->SS);
     {
@@ -70,7 +70,7 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoBuildUpdate(const
 }
 
 NKikimr::TConclusion<NKikimrSchemeOp::TColumnTableSchema> TInStoreTable::GetTableSchemaProto() const {
-    AFL_VERIFY(!!StoreInfo);
+    YDB_LOG_VERIFY(!!StoreInfo);
     if (!StoreInfo->SchemaPresets.count(GetTableInfoPtrVerified()->Description.GetSchemaPresetId())) {
         return TConclusionStatus::Fail("No preset for in-store column table");
     }

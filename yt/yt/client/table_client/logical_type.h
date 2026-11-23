@@ -165,7 +165,7 @@ EValueType GetWireType(const TLogicalTypePtr& logicalType);
 TLogicalTypePtr DenullifyLogicalType(const TLogicalTypePtr& logicalType);
 
 // Returns copy of the logical type with all tagged types replaces with its elements.
-// NB: AggregateStateType is considered as tagged type for this function.
+// AggregateState is treated as a tagged type here.
 TLogicalTypePtr DetagLogicalType(const TLogicalTypePtr& logicalType);
 
 void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logicalType);

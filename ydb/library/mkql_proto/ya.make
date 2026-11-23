@@ -2,10 +2,10 @@ YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/mkql_proto/protos
+    ydb/public/api/protos
     yql/essentials/minikql/computation
     yql/essentials/parser/pg_catalog
-    yql/essentials/providers/common/codec
-    ydb/public/api/protos
+    yql/essentials/parser/pg_wrapper/interface
 )
 
 SRCS(

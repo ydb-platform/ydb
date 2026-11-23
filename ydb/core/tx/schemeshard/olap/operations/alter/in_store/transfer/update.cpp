@@ -28,8 +28,8 @@ void TInStoreShardsTransfer::InitializeTransfers(
         for (auto&& i : alter.GetSourceTabletIds()) {
             destinationSession.MutableTransferContext()->AddSourceTabletIds(i);
         }
-        AFL_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
-        AFL_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
+        YDB_LOG_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
+        YDB_LOG_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
     }
 }
 

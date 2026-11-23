@@ -5,11 +5,14 @@
 #include "ydb/core/viewer/json_local_rpc.h"
 
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/common/events/stream.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 namespace NKikimr::NViewer {
 
@@ -490,8 +493,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvScriptResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            hFunc(NKqp::TEvKqpExecuterProgress, HandleReply);
+            hFunc(NKqp::TEvKqpExecuterStreamData, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
@@ -1020,7 +1023,7 @@ private:
         ReplyWithJsonAndPassAway("Aborted", std::move(jsonResponse));
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void HandleReply(NKqp::TEvKqpExecuterProgress::TPtr& ev) {
         if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
             auto& progress(ev->Get()->Record);
@@ -1038,7 +1041,7 @@ private:
         Y_UNUSED(ev);
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void HandleReply(NKqp::TEvKqpExecuterStreamData::TPtr& ev) {
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
         if (QueryResponse.Span) {
             QueryResponse.Span.Event("StreamData", {
@@ -1065,7 +1068,7 @@ private:
             }
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        THolder<NKqp::TEvKqpExecuterStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuterStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             if (QueryResponse.Span) {
                 QueryResponse.Span.Event("LimitReached", {

@@ -99,7 +99,7 @@ public:
             hFunc(TEvAddInsertedDataToBuffer, Handle);
             hFunc(TEvFlushBuffer, Handle);
             default:
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
         }
     }
 };

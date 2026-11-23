@@ -513,30 +513,47 @@ private:
     const std::shared_ptr<std::atomic<ui32>> Starts;
 };
 
-template <typename TMakeGate>
-TActorId InstallControllerGate(TTestEnv& env, ui64 controllerId, TMakeGate makeGate) {
-    auto& runtime = env.GetRuntime();
-    const auto controller = ResolveTablet(runtime, controllerId);
-    TMailbox* mailbox = nullptr;
-    for (auto* pool : runtime.GetActorSystem(0)->GetBasicExecutorPools()) {
-        if (pool->PoolId == controller.PoolID()) {
-            mailbox = pool->GetMailboxTable()->Get(controller.Hint());
-            break;
+class TRegisterGateInstaller : public TActorRunnableItem::TImpl<TRegisterGateInstaller> {
+public:
+    explicit TRegisterGateInstaller(THolder<IActor> installer)
+        : Installer(std::move(installer))
+    {}
+
+    void DoRun(IActor* controller) noexcept {
+        // The event invokes the runnable with nullptr if it is discarded.
+        const std::unique_ptr<TRegisterGateInstaller> self(this);
+        if (controller) {
+            TActivationContext::RegisterWithSameMailbox(Installer.Release(), controller->SelfId());
         }
     }
-    UNIT_ASSERT(mailbox);
-    // Install on the controller's own mailbox so no event can concurrently
-    // execute on the actor while it is wrapped. Runtime observers cannot hold
-    // controller-to-controller events with TTestEnv's real actor threads.
-    runtime.Register(new TFunctorActor([=, notify = env.GetSender()] {
-        const auto& ctx = TActivationContext::AsActorContext();
-        THolder<IActor> actor(mailbox->DetachActor(controller.LocalId()));
-        UNIT_ASSERT(actor);
-        auto* gate = makeGate(std::move(actor), notify);
-        DoActorInit(ctx.ActorSystem(), gate, controller, {});
-        mailbox->AttachActor(controller.LocalId(), gate);
-    }, env.GetSender()), 0, controller.PoolID(), mailbox);
-    runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+
+private:
+    THolder<IActor> Installer;
+};
+
+template <typename TMakeGate>
+TActorId InstallControllerGate(TTestEnv& env, ui64 controllerId, TMakeGate makeGate) {
+    TTestActorRuntime& runtime = env.GetRuntime();
+    const TActorId controller = ResolveTablet(runtime, controllerId);
+    const TActorId installed = runtime.AllocateEdgeActor();
+    THolder<IActor> installer(new TFunctorActor([controller, makeGate, notify = env.GetSender()] {
+        const TActorContext& ctx = TActivationContext::AsActorContext();
+        TMailbox& mailbox = ctx.Mailbox;
+        THolder<IActor> actor(mailbox.DetachActor(controller.LocalId()));
+        THolder<IActor> gate(makeGate(std::move(actor), notify));
+        DoActorInit(TActivationContext::ActorSystem(), gate.Get(), controller, {});
+        mailbox.AttachActor(controller.LocalId(), gate.Release());
+    }, installed));
+
+    // Both registering the installer and replacing the controller must run
+    // on the controller's mailbox. Runtime observers cannot intercept its
+    // self-sent events when the test uses real actor threads.
+    using TInstallEvent = TEvents::TEvResumeRunnable;
+    THolder<TInstallEvent> request = MakeHolder<TInstallEvent>(nullptr);
+    request->Item = new TRegisterGateInstaller(std::move(installer));
+    runtime.Send(new IEventHandle(controller, installed, request.Release(), TInstallEvent::EventFlags));
+    UNIT_ASSERT_C(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(installed, TDuration::Seconds(30)),
+        "Timed out installing the gate on controller " << controller);
     return controller;
 }
 

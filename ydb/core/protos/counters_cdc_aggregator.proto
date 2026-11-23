@@ -11,4 +11,5 @@ enum ETxTypes {
     TXTYPE_INIT = 1 [(TxTypeOpts) = {Name: "TxInit"}];
     TXTYPE_CONFIGURE_TRACKING = 2 [(TxTypeOpts) = {Name: "TxConfigureTracking"}];
     TXTYPE_PARTITIONING_CHANGED = 3 [(TxTypeOpts) = {Name: "TxPartitioningChanged"}];
+    TXTYPE_WRITE_HEARTBEATS = 4 [(TxTypeOpts) = {Name: "TxWriteHeartbeats"}];
 }

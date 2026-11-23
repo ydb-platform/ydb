@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 
 #include "kqp_query_stats.h"
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -16,7 +16,7 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>

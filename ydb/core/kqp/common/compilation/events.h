@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 

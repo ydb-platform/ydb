@@ -920,6 +920,14 @@ config:
                     TBlobStorageGroupType::ErasureSpeciesByName(group.GetErasureSpecies())),
                     numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain);
                 TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TBaseConfig::TGroup::GetGroupId), group.GetGroupGeneration());
+                if (group.HasMirror3dcState()) {
+                    dyn.Mirror3dcState.State = group.GetMirror3dcState();
+                }
+                auto& realmStates = dyn.Mirror3dcState.FailRealmStates;
+                const auto numRealmStates = std::min<size_t>(group.FailRealmsSize(), realmStates.size());
+                for (ui32 realm = 0; realm < numRealmStates; ++realm) {
+                    realmStates[realm] = group.GetFailRealms(realm).GetState();
+                }
                 for (const auto& [vdiskId, vdiskActorId] : vdisks) {
                     dyn.PushBackActorId(vdiskActorId);
                 }

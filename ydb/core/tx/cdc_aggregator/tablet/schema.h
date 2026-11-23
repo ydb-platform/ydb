@@ -22,18 +22,10 @@ struct TCdcAggregatorSchema : NIceDb::Schema {
         struct DataShardId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct LastHeartbeatStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct LastHeartbeatTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct LastHeartbeatData : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<DataShardId>;
-        using TColumns = TableColumns<DataShardId, LastHeartbeatStep, LastHeartbeatTxId>;
-    };
-
-    struct Heartbeats : Table<3> {
-        struct VersionStep : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct VersionTxId : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Data : Column<3, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<VersionStep, VersionTxId>;
-        using TColumns = TableColumns<VersionStep, VersionTxId, Data>;
+        using TColumns = TableColumns<DataShardId, LastHeartbeatStep, LastHeartbeatTxId, LastHeartbeatData>;
     };
 
     struct PartitioningChanges : Table<4> {
@@ -45,7 +37,7 @@ struct TCdcAggregatorSchema : NIceDb::Schema {
         using TColumns = TableColumns<ParentDataShardId, OperationId, ChildDataShardIds>;
     };
 
-    using TTables = SchemaTables<State, Sources, Heartbeats, PartitioningChanges>;
+    using TTables = SchemaTables<State, Sources, PartitioningChanges>;
 
     using TSettings = SchemaSettings<
         ExecutorLogBatching<true>,

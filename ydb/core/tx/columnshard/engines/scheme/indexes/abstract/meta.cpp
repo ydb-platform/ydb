@@ -29,9 +29,9 @@ bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescripti
 }
 
 void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
-    AFL_VERIFY(IndexId);
+    YDB_LOG_VERIFY(IndexId);
     proto.SetId(IndexId);
-    AFL_VERIFY(IndexName);
+    YDB_LOG_VERIFY(IndexName);
     proto.SetName(IndexName);
     if (DefaultStorageId) {
         proto.SetStorageId(DefaultStorageId);
@@ -65,7 +65,7 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> IIndexMet
     for (auto&& i : *conclusion) {
         checkRecordsCount += i->GetRecordsCountVerified();
     }
-    AFL_VERIFY(checkRecordsCount == recordsCount);
+    YDB_LOG_VERIFY(checkRecordsCount == recordsCount);
     return conclusion;
 }
 

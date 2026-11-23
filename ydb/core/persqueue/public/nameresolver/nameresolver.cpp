@@ -475,6 +475,30 @@ std::expected<TResolvedName, TString> ResolveName(
     return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
 }
 
+TResolvedName ResolveSchemePath(TStringBuf database, TStringBuf path) {
+    TString canonPath;
+    if (path.StartsWith('/') && !path.EndsWith('/') && !path.Contains("//")) {
+        canonPath = TString{path};
+    } else {
+        canonPath = CanonizePath(TString{path});
+    }
+
+    const auto& pqConfig = AppData()->PQConfig;
+    if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
+        const TString& lbRoot = pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+        if (auto target = TryFederationAccountTarget(canonPath, lbRoot)) {
+            return TResolvedName{
+                .Path = std::move(target->Path),
+                .NavigateDatabase = std::move(target->AccountDatabase),
+            };
+        }
+    }
+    return TResolvedName{
+        .Path = std::move(canonPath),
+        .NavigateDatabase = TString{database},
+    };
+}
+
 std::optional<TFederationAccountTarget> TryFederationAccountTarget(
     TStringBuf path,
     TStringBuf federationRoot

@@ -51,6 +51,19 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
 
         const auto &config = pqDescr.GetPQTabletConfig();
+        if (config.HasWriteMode()) {
+            switch (config.GetWriteMode()) {
+                case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+                    (*settings->mutable_attributes())["_write_mode"] = "available";
+                    break;
+                case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+                    (*settings->mutable_attributes())["_write_mode"] = "unavailable";
+                    break;
+                case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+                    (*settings->mutable_attributes())["_write_mode"] = "prohibited";
+                    break;
+            }
+        }
         if (!config.GetRequireAuthWrite()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_write"] = "true";
         }
@@ -139,6 +152,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
             rr->set_important(consumer.GetImportant());
+            rr->set_replicate_offsets(consumer.GetReplicateOffsets());
             if (consumer.HasAvailabilityPeriodMs()) {
                 TDuration availabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
                 rr->mutable_availability_period()->set_seconds(availabilityPeriod.Seconds());

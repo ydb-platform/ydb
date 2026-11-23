@@ -1,6 +1,6 @@
 #include "kqp_rm_service.h"
 
-#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/common/warmup/warmup.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/domain.h>

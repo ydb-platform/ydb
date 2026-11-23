@@ -97,6 +97,11 @@ public:
         return &LastPortion;
     }
 
+    TInsertWriteId BuildNextInsertWriteId(IDbWrapper& db) {
+        db.WriteCounter(LAST_INSERT_WRITE_ID, ++LastInsertWriteId);
+        return TInsertWriteId(LastInsertWriteId);
+    }
+
     enum ETableIdx {
         GRANULES = 0,
     };
@@ -106,6 +111,7 @@ public:
         LAST_GRANULE,
         LAST_PLAN_STEP,
         LAST_TX_ID,
+        LAST_INSERT_WRITE_ID,
     };
 
     enum class EStatsUpdateType {
@@ -143,7 +149,8 @@ public:
     bool LoadCounters(IDbWrapper& db);
 
 public:
-    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
+    virtual std::shared_ptr<ITxReader> BuildLoader(
+        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) override;
     bool FinishLoading();
     void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);
@@ -221,7 +228,8 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
         auto result = GetGranuleOptional(pathId);
-        AFL_VERIFY(result)("path_id", pathId);
+        YDB_LOG_VERIFY(result,
+            {"pathId", pathId});
         return result;
     }
 
@@ -242,7 +250,7 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
-        AFL_VERIFY(info->HasRemoveSnapshot());
+        YDB_LOG_VERIFY(info->HasRemoveSnapshot());
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
 
@@ -255,7 +263,7 @@ public:
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         auto exPortion = portion->MakeCopy();
-        AFL_VERIFY(portion);
+        YDB_LOG_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
         Counters->AddPortion(*portion);
@@ -271,6 +279,7 @@ private:
     std::shared_ptr<NColumnShard::TPortionIndexStats> Counters;
     ui64 LastPortion;
     ui64 LastGranule;
+    ui64 LastInsertWriteId = 0;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
 

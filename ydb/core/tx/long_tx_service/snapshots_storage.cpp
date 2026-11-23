@@ -111,7 +111,7 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::ViewPromotedUpToStep(ui64 
 }
 
 void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime) {
-    AFL_ENSURE(NodeIdToState.empty());
+    YDB_LOG_ENSURE(NodeIdToState.empty());
     // Seed collection times from the peer first, so freshness (GetOldestCollectionTime) is meaningful
     // right after prefill instead of collapsing to Zero (which disables age-based cleanup).
     for (const auto& [nodeId, collectionTime] : nodeIdToCollectionTime) {

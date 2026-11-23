@@ -2103,9 +2103,21 @@ public:
     void ProcessWhiteboardGroups() {
         if (GroupData.empty()) {
             std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
+            std::unordered_set<ui32> ddiskGroups;
+            if (GetGroupsResponse && GetGroupsResponse->IsOk()) {
+                for (const auto& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
+                    if (entry.GetInfo().GetDDisk()) {
+                        ddiskGroups.insert(entry.GetKey().GetGroupId());
+                    }
+                }
+            }
             for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
                 if (bsGroupStateResponse.IsOk()) {
                     for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
+                        if (info.GetDDisk()) {
+                            ddiskGroups.insert(info.GetGroupID());
+                            continue;
+                        }
                         TString storagePoolName = info.GetStoragePoolName();
                         if (storagePoolName.empty()) {
                             continue;
@@ -2125,6 +2137,10 @@ public:
                 }
             }
             for (const auto& [groupId, info] : latestGroupInfo) {
+                // A legacy Whiteboard report can omit the DDisk flag for a group identified by the controller or another node.
+                if (ddiskGroups.contains(groupId)) {
+                    continue;
+                }
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();

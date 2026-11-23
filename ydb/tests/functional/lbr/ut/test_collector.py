@@ -218,15 +218,35 @@ def test_windowed_perf_is_checked_before_start(tmp_path, executable):
     if executable:
         perf.write_text("#!/bin/sh\nexit 0\n")
         perf.chmod(0o644)
-    collector = LbrCollector([os.getpid()], tmp_path / "workload", 1800, perf=str(perf), start_delay_seconds=600)
+    calls = []
+
+    class Conversion:
+        def finish_phase(self, phase, valid):
+            calls.append((phase, valid))
+
+    collector = LbrCollector(
+        [os.getpid()],
+        tmp_path / "workload",
+        1800,
+        perf=str(perf),
+        start_delay_seconds=600,
+        phase="workload",
+        conversion=Conversion(),
+    )
     with pytest.raises(FileNotFoundError, match="perf executable is missing or not executable"):
         with collector:
             pytest.fail("Invalid perf must fail before the workload starts")
     assert collector._thread is None
+    assert calls == [("workload", False)]
 
 
 def test_startup_timeout_uses_bounded_join(tmp_path, fake_perf, monkeypatch):
     joins = []
+    calls = []
+
+    class Conversion:
+        def finish_phase(self, phase, valid):
+            calls.append((phase, valid))
 
     class StuckThread:
         def __init__(self, **kwargs):
@@ -241,12 +261,15 @@ def test_startup_timeout_uses_bounded_join(tmp_path, fake_perf, monkeypatch):
         def is_alive(self):
             return False
 
-    collector = LbrCollector([os.getpid()], tmp_path / "import", None, perf=fake_perf)
+    collector = LbrCollector(
+        [os.getpid()], tmp_path / "import", None, perf=fake_perf, phase="import", conversion=Conversion()
+    )
     monkeypatch.setattr(threading, "Thread", StuckThread)
     monkeypatch.setattr(collector._first_attempt, "wait", lambda timeout: False)
     with pytest.raises(RuntimeError, match="Timed out starting LBR"):
         with collector:
             pytest.fail("Startup timeout must prevent the phase from starting")
+    assert calls == [("import", False)]
     assert joins == [75]
     assert collector._stop.is_set()
     assert "Timed out starting" in manifest(tmp_path / "import")["error"]

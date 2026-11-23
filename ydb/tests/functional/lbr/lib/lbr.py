@@ -102,6 +102,9 @@ class LbrCollector:
         executable = shutil.which(self.perf)
         if executable is None:
             self.error = FileNotFoundError(f"perf executable is missing or not executable: {self.perf}")
+            self._phase_failed = True
+            if self.conversion is not None:
+                self.conversion.finish_phase(self.phase, False)
             self._write_manifest()
             raise self.error
         self.perf = executable
@@ -115,6 +118,8 @@ class LbrCollector:
             if self.error or self.startup_error:
                 self._entry_failed.set()
                 self._phase_failed = True
+                if self.conversion is not None:
+                    self.conversion.finish_phase(self.phase, False)
                 self._stop.set()
                 self._thread.join(timeout=75)
                 if not self._thread.is_alive():

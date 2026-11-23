@@ -44,9 +44,9 @@ enum class EValidateFormat {
 // Checksums of metadata.json (backup root, SchemaMapping, and each exported object).
 // Scheme and data-file checksums are selected separately.
 enum class EMetadataChecksumMode {
-    // Require a sidecar for every metadata.json. Default.
+    // Require a sidecar for every metadata.json.
     Always = 0,
-    // Full backup: require them when metadata.json says checksum sha256.
+    // Default. Full backup: require them when metadata.json says checksum sha256.
     // Item export: require an object's metadata checksum when version > 0,
     // or when scheme.pb.sha256 or create_view.sql.sha256 is present.
     Auto,
@@ -75,8 +75,8 @@ struct TValidateSettings {
     // full: require a full backup. item: scan schema objects, skip SchemaMapping completeness.
     EValidateFormat Format = EValidateFormat::Auto;
     // always: every metadata.json needs a checksum sidecar.
-    // auto: follow the backup's checksum declaration. ignore: skip metadata checksums.
-    EMetadataChecksumMode MetadataChecksums = EMetadataChecksumMode::Always;
+    // auto (default): follow the backup's checksum declaration. ignore: skip metadata checksums.
+    EMetadataChecksumMode MetadataChecksums = EMetadataChecksumMode::Auto;
     // 0: phase changes, including the worker thread count. Data-file bytes are checked after
     // metadata, with checked/remaining counts about every 30 seconds. 1 (-v): each object's metadata, then its data.
     // 2 (-vv): reads, listings, and checksum files. 3+ (-vvv): exists probes, sizes, and I/O retries.

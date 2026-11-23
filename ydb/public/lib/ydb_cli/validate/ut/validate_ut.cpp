@@ -394,6 +394,22 @@ Y_UNIT_TEST(CompressedDataIsHashedUncompressed) {
     UNIT_ASSERT(HasIssue(Run(storage, "t"), "t/data_00.csv.zst", "checksum mismatch"));
 }
 
+Y_UNIT_TEST(EmptyCompressedDataFileIsAnEmptyPartition) {
+    // Export stores a shard with no rows as a zero-length .csv.zst. Import does
+    // not decompress it. The checksum sidecar is the hash of the empty plaintext.
+    TMemoryStorage storage;
+    AddTable(storage, "t", 2, "row\n", true, true);
+    storage.Put("t/data_00.csv.zst", "");
+    storage.Put("t/data_00.csv.sha256", MakeChecksumSidecar("", "data_00.csv"));
+    UNIT_ASSERT_C(Run(storage, "t").Ok(), Issues(Run(storage, "t")));
+
+    TString broken = storage.Files["t/data_01.csv.zst"];
+    UNIT_ASSERT(!broken.empty());
+    broken.pop_back();
+    storage.Put("t/data_01.csv.zst", broken);
+    UNIT_ASSERT(HasIssue(Run(storage, "t"), "t/data_01.csv.zst", "truncated zstd frame"));
+}
+
 Y_UNIT_TEST(FullBackupMappingAndUnexpectedObject) {
     TMemoryStorage storage;
     storage.PutChecked("metadata.json", "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
@@ -1080,7 +1096,7 @@ Y_UNIT_TEST(MetadataChecksumAlwaysRequiresFullBackupSidecars) {
     storage.Files.erase("metadata.json.sha256");
     storage.Files.erase("SchemaMapping/metadata.json.sha256");
 
-    const TValidationReport always = Run(storage, "");
+    const TValidationReport always = RunMetadataChecksums(storage, "", EMetadataChecksumMode::Always);
     bool rootSidecar = false;
     for (const TValidationIssue& issue : always.Issues) {
         if (issue.Path == "metadata.json.sha256" && issue.Message.Contains("checksum sidecar is missing")) {

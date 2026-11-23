@@ -340,12 +340,12 @@ void TCommandValidateBase::Config(TConfig& config) {
 
     config.Opts->AddLongOption("metadata-checksums",
             "Metadata checksums validation mode")
-        .RequiredArgument("always|auto|ignore")
+        .RequiredArgument("auto|always|ignore")
         .DefaultValue(MetadataChecksums)
         .StoreResult(&MetadataChecksums)
         .ChoicesWithCompletion({
-            {"always", "Require a checksum sidecar for every metadata file"},
             {"auto", "Follow the backup's own checksum declaration"},
+            {"always", "Require a checksum sidecar for every metadata file"},
             {"ignore", "Do not check metadata checksum sidecars"},
         });
 

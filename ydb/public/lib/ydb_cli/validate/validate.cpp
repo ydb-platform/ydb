@@ -231,14 +231,22 @@ TString FinishSha256(SHA256_CTX* ctx) {
 // Compressed objects are decompressed in the same pass, because export checksums
 // are computed from uncompressed plaintext. Neither form is buffered whole.
 // onStoredBytes receives the size of each stored chunk, including compressed bytes.
+// An empty compressed object is an empty partition: export writes no zstd frame
+// for a shard with no rows, and import finishes that object without decompressing it.
+// The same read path serves S3 and NFS.
 TString HashStoredFile(
     const IBackupStorage& storage,
     const TString& key,
     bool compressed,
     const std::function<void(ui64)>& onStoredBytes)
 {
+    ui64 storedBytes = 0;
     auto note = [&](TStringBuf chunk) {
-        if (chunk && onStoredBytes) {
+        if (!chunk) {
+            return;
+        }
+        storedBytes += chunk.size();
+        if (onStoredBytes) {
             onStoredBytes(chunk.size());
         }
     };
@@ -246,7 +254,10 @@ TString HashStoredFile(
     if (!compressed) {
         storage.ReadChunks(
             key,
-            [&] { SHA256_Init(&ctx); },
+            [&] {
+                SHA256_Init(&ctx);
+                storedBytes = 0;
+            },
             [&](TStringBuf chunk) {
                 note(chunk);
                 if (chunk) {
@@ -266,6 +277,7 @@ TString HashStoredFile(
         key,
         [&] {
             SHA256_Init(&ctx);
+            storedBytes = 0;
             const size_t reset = ZSTD_DCtx_reset(dctx.get(), ZSTD_reset_session_only);
             if (ZSTD_isError(reset)) {
                 ythrow yexception() << "zstd: " << ZSTD_getErrorName(reset);
@@ -289,6 +301,9 @@ TString HashStoredFile(
                 }
             }
         });
+    if (storedBytes == 0) {
+        return FinishSha256(&ctx);
+    }
     if (lastRet != 0) {
         ythrow yexception() << "truncated zstd frame";
     }

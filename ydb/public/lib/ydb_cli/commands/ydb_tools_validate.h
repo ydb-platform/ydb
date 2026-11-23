@@ -39,7 +39,7 @@ protected:
     TString EncryptionKeyFile;
     TString ExpectedObjectsFile;
     TString Format = "auto";
-    TString MetadataChecksums = "always";
+    TString MetadataChecksums = "auto";
 };
 
 class TCommandValidateFromS3 : public TCommandValidateBase,

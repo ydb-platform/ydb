@@ -77,7 +77,7 @@ feature_flags:
 | `enable_online_add_unique_index` | [Построение уникального вторичного индекса](../../concepts/query_execution/secondary_indexes.md#index-add) в существующей таблице без блокировки записи на время построения |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
-| `enable_checksum_table` | Вычисление контрольных сумм с помощью [`CHECKSUM TABLE`](../../yql/reference/syntax/checksum-table.md) и [`DigestAggregate`](../../yql/reference/udf/list/digest-aggregate.md). По умолчанию выключен. |
+| `enable_checksum_table` | Вычисление контрольных сумм с помощью [`CHECKSUM TABLE`](../../yql/reference/syntax/checksum-table.md) и [`DigestAggregate`](../../yql/reference/udf/list/digest-aggregate.md). |
 | `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |
 | `enable_export_auto_dropping`                            | Автоудаление временных директорий и таблиц при экспорте в S3 |
 | `enable_followers_stats`                                 | Системные представления с информацией об [истории перегруженных партиций](../../dev/system-views.md#top-overload-partitions) |

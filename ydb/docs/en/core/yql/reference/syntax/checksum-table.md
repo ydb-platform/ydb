@@ -1,12 +1,14 @@
 # CHECKSUM TABLE
 
-`CHECKSUM TABLE` calculates a checksum: a short string that represents the data in a table. Use it to check whether a copy or restored table has the same contents as the original.
+{% if feature_flags.enable_checksum_table == false %}
+{% note warning "Experimental feature" %}
 
-{% note info %}
-
-Queries using `CHECKSUM TABLE` require the `enable_checksum_table` flag to be enabled. The flag is disabled by default. Before running a query, [check feature availability](../../../reference/configuration/feature_flags.md#check-availability) in the cluster configuration for your database.
+This feature is under development and is disabled by default by the [`enable_checksum_table`](../../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../../reference/configuration/feature_flags.md#experimental).
 
 {% endnote %}
+{% endif %}
+
+`CHECKSUM TABLE` calculates a checksum: a short string that represents the data in a table. Use it to check whether a copy or restored table has the same contents as the original.
 
 To calculate the checksum of `my_table`, run:
 

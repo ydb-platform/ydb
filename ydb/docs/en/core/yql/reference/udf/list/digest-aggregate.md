@@ -1,16 +1,18 @@
 # DigestAggregate
 
+{% if feature_flags.enable_checksum_table == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_checksum_table`](../../../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../../../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 After copying or restoring data, you may need to check selected rows or columns, such as the data for one customer.
 
 To do this, calculate checksums for the required data in the original table and its copy using the same query, then compare the results.
 
 `DigestAggregate` calculates a checksum for rows selected by a SQL query. The query can filter rows, choose columns, or calculate a separate checksum for each group. For an entire table, use [`CHECKSUM TABLE`](../../syntax/checksum-table.md).
-
-{% note info %}
-
-Queries using `DigestAggregate` require the `enable_checksum_table` flag to be enabled. The flag is disabled by default. Before running a query, [check feature availability](../../../../reference/configuration/feature_flags.md#check-availability) in the cluster configuration for your database.
-
-{% endnote %}
 
 ## Prepare the query {#factory}
 

@@ -666,7 +666,7 @@ SELECT
 
 ```yql
 $setting_type = Variant<Int32, String>;
-$setting = Variant("auto", "1", $setting_type);
+$setting = Variant("auto", 1, $setting_type);
 ```
 
 Первая строка задаёт только тип, но ещё не сохраняет настройку. Вторая создаёт значение. Аргументы `Variant()` идут в следующем порядке:

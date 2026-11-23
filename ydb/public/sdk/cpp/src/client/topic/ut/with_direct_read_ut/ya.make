@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/coverage.inc)
+
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

@@ -3,12 +3,16 @@
 #include "diff.h"
 #include "table_merger.h"
 
-#include <library/cpp/protobuf/util/walk.h>
-
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/unknown_field_set.h>
+
+#include <vector>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 
@@ -1532,6 +1536,31 @@ namespace NKikimr::NBsController {
             }
         }
 
+        static bool HasUnknownFieldsRecursive(const NProtoBuf::Message& msg) {
+            const auto* reflection = msg.GetReflection();
+            if (!reflection->GetUnknownFields(msg).empty()) {
+                return true;
+            }
+
+            std::vector<const NProtoBuf::FieldDescriptor*> fields;
+            reflection->ListFields(msg, &fields);
+            for (const auto* field : fields) {
+                if (field->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                    continue;
+                }
+                if (field->is_repeated()) {
+                    for (int i = 0; i < reflection->FieldSize(msg, field); ++i) {
+                        if (HasUnknownFieldsRecursive(reflection->GetRepeatedMessage(msg, field, i))) {
+                            return true;
+                        }
+                    }
+                } else if (HasUnknownFieldsRecursive(reflection->GetMessage(msg, field))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
                 const NKikimrBlobStorage::TPDiskFilter& proto, const TString* serialized) {
@@ -1541,7 +1570,7 @@ namespace NKikimr::NBsController {
             bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
-                if (NProtoBuf::HasUnknownFieldsRecursive(property)) {
+                if (HasUnknownFieldsRecursive(property)) {
                     // Preserve the whole constraint if any part of it is not understood.
                     filter.HasUnknownRequiredProperty = true;
                     continue;

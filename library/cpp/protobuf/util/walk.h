@@ -25,9 +25,6 @@ namespace NProtoBuf {
         WalkReflection(msg, std::function<bool(const Message&, const FieldDescriptor*)>(std::ref(onField)));
     }
 
-    // Check the message and all present nested messages, including repeated fields and extensions.
-    bool HasUnknownFieldsRecursive(const Message& msg);
-
     // Apply @onField processor to each descriptor of a field
     // Walk every field including nested messages. Avoid cyclic fields pointing to themselves
     // Returned bool defines if we should walk down deeper to current node children (true), or not (false)

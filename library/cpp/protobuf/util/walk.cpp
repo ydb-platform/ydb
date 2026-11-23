@@ -1,10 +1,6 @@
 #include "walk.h"
 
-#include <google/protobuf/unknown_field_set.h>
-
 #include <util/generic/hash_set.h>
-
-#include <vector>
 
 namespace {
     using namespace NProtoBuf;
@@ -64,31 +60,6 @@ namespace NProtoBuf {
                         std::function<bool(const Message&, const FieldDescriptor*)> onField)
     {
         DoWalkReflection(msg, onField);
-    }
-
-    bool HasUnknownFieldsRecursive(const Message& msg) {
-        const Reflection* reflection = msg.GetReflection();
-        if (!reflection->GetUnknownFields(msg).empty()) {
-            return true;
-        }
-
-        std::vector<const FieldDescriptor*> fields;
-        reflection->ListFields(msg, &fields);
-        for (const FieldDescriptor* field : fields) {
-            if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) {
-                continue;
-            }
-            if (field->is_repeated()) {
-                for (int i = 0; i < reflection->FieldSize(msg, field); ++i) {
-                    if (HasUnknownFieldsRecursive(reflection->GetRepeatedMessage(msg, field, i))) {
-                        return true;
-                    }
-                }
-            } else if (HasUnknownFieldsRecursive(reflection->GetMessage(msg, field))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     void WalkSchema(const Descriptor* descriptor,

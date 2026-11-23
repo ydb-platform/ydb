@@ -133,33 +133,6 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         UNIT_ASSERT(testStruct.Ok);
     }
 
-    Y_UNIT_TEST(TestHasUnknownFieldsRecursive) {
-        for (ui32 variant = 0; variant < 4; ++variant) {
-            NProtobufUtilUt::TWalkTest proto;
-            // An absent field with a recursive message type must not be traversed.
-            UNIT_ASSERT(!HasUnknownFieldsRecursive(proto));
-            InitProto(proto);
-            UNIT_ASSERT(!HasUnknownFieldsRecursive(proto));
-
-            Message* target = &proto;
-            if (variant == 1) {
-                target = proto.MutableOptSub();
-            } else if (variant == 2) {
-                target = proto.AddRepSub(); // After the two known repeated messages.
-            } else if (variant == 3) {
-                target = proto.MutableOptSub()->AddRepSub()->MutableOptSub();
-            }
-            const Reflection* reflection = target->GetReflection();
-            reflection->MutableUnknownFields(target)->AddVarint(100, 7);
-            const auto serialized = proto.SerializeAsString();
-            UNIT_ASSERT(HasUnknownFieldsRecursive(proto));
-            UNIT_ASSERT_VALUES_EQUAL(proto.SerializeAsString(), serialized);
-
-            reflection->MutableUnknownFields(target)->Clear();
-            UNIT_ASSERT(!HasUnknownFieldsRecursive(proto));
-        }
-    }
-
     Y_UNIT_TEST(TestWalkDescr) {
         NProtobufUtilUt::TWalkTestCyclic p;
 

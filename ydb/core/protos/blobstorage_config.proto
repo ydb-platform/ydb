@@ -144,7 +144,10 @@ message TPDiskFilter {
             NActorsInterconnect.TNodeLocation Location = 5;
         }
     }
-    repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
+    // Conjunction of required properties; the same known properties must not repeat. Readers that do not understand
+    // a required property retain it, but must not match disks with that filter. Unknown top-level fields are metadata
+    // and may be ignored for matching; do not put new selection constraints outside Property.
+    repeated TRequiredProperty Property = 1;
 }
 
 // Allocation overrides shared by BSC and distconf. Selectors are independent: an empty Kind list selects no

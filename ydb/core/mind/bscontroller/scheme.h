@@ -529,8 +529,8 @@ struct Schema : NIceDb::Schema {
     struct BoxStoragePoolPDiskFilterV2 : Table<136> {
         using BoxId = BoxStoragePoolPDiskFilter::BoxId;
         using StoragePoolId = BoxStoragePoolPDiskFilter::StoragePoolId;
-        // A protobuf key allows adding filter properties without extending the table key.
-        struct Filter : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TPDiskFilter; };
+        // Keep the exact protobuf bytes: parsing and serializing can change a key, including unknown fields.
+        struct Filter : Column<3, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<BoxId, StoragePoolId, Filter>;
         using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;

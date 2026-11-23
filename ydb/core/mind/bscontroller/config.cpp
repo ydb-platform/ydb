@@ -1492,8 +1492,12 @@ namespace NKikimr::NBsController {
                     if constexpr (std::is_same_v<T, Schema::BoxStoragePoolPDiskFilter>) {
                         PDiskFilters.insert(TPDiskFilter::CreateFromRowset(rows));
                     } else {
-                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id),
-                            rows.template GetValue<typename T::Filter>()));
+                        const auto key = rows.template GetValue<typename T::Filter>();
+                        NKikimrBlobStorage::TPDiskFilter proto;
+                        Y_ABORT_UNLESS(proto.ParseFromString(key));
+                        auto filter = TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), proto);
+                        filter.SerializedFilter = key;
+                        PDiskFilters.insert(std::move(filter));
                     }
                     if (!rows.Next()) {
                         return false;
@@ -1519,7 +1523,10 @@ namespace NKikimr::NBsController {
                     NTableAdapter::MapKey<T>(&keyTuple, rawKey);
                     db.Update(T::TableId, op, rawKey, {});
                 };
-                if (filter.Location) {
+                if (filter.SerializedFilter) {
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
+                        std::make_tuple(filter.BoxId, filter.StoragePoolId, *filter.SerializedFilter));
+                } else if (filter.Location) {
                     // Serialize the parsed filter in a fixed property order: request ordering
                     // must not change its persistent identity, including when deleting a row.
                     NKikimrBlobStorage::TPDiskFilter proto;
@@ -1541,6 +1548,11 @@ namespace NKikimr::NBsController {
             bool hasLocation = false;
 
             for (const auto &property : proto.GetProperty()) {
+                const bool hasUnknownFields = !property.GetReflection()->GetUnknownFields(property).empty();
+                if (hasUnknownFields) {
+                    // This may be a new oneof alternative, even if an older field is also present on the wire.
+                    filter.HasUnknownRequiredProperty = true;
+                }
                 switch (property.GetPropertyCase()) {
 #define PROPERTY(NAME) \
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
@@ -1562,6 +1574,10 @@ namespace NKikimr::NBsController {
                         if (std::exchange(hasLocation, true)) {
                             throw TExError() << "Location already set";
                         }
+                        if (!property.GetLocation().unknown_fields().empty()) {
+                            filter.HasUnknownRequiredProperty = true;
+                            continue;
+                        }
                         if (!IsValidPDiskFilterLocation(property.GetLocation())) {
                             throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
                         }
@@ -1572,20 +1588,55 @@ namespace NKikimr::NBsController {
                         continue;
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
+                        if (hasUnknownFields) {
+                            continue; // Keep the opaque constraint, but do not match any disks with this filter.
+                        }
                         throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
                 }
 
                 throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
             }
 
-            if (!filter.Type) {
+            if (!filter.Type && !filter.HasUnknownRequiredProperty) {
                 throw TExError() << "TPDiskFilter did not specify Type property";
+            }
+
+            if (filter.Location || filter.HasUnknownRequiredProperty
+                    || !proto.GetReflection()->GetUnknownFields(proto).empty()) {
+                // Normalize new writes without dropping unknown fields. Persisted keys are retained separately
+                // by LoadPDiskFilters, since even protobuf parsing can change their original encoding.
+                auto preserved = proto;
+                if (!filter.HasUnknownRequiredProperty) {
+                    for (size_t i = 0; i < preserved.PropertySize(); ++i) {
+                        auto* property = preserved.MutableProperty(i);
+                        if (property->HasLocation()) {
+                            if (filter.Location) {
+                                *property->MutableLocation() = TNodeLocation::ParseLocation(*filter.Location);
+                            } else {
+                                preserved.MutableProperty()->DeleteSubrange(i, 1);
+                            }
+                            break; // Duplicate Location properties have already been rejected.
+                        }
+                    }
+                }
+                auto* properties = preserved.MutableProperty();
+                std::sort(properties->begin(), properties->end(), [](const auto& x, const auto& y) {
+                    if (x.GetPropertyCase() != y.GetPropertyCase()) {
+                        return x.GetPropertyCase() < y.GetPropertyCase();
+                    }
+                    return x.SerializeAsString() < y.SerializeAsString();
+                });
+                filter.SerializedFilter = preserved.SerializeAsString();
             }
 
             return filter;
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter) {
+            if (filter.SerializedFilter) {
+                Y_ABORT_UNLESS(pb->ParseFromString(*filter.SerializedFilter));
+                return;
+            }
 #define SERIALIZE_VARIABLE(NAME) (filter.NAME && (pb->AddProperty()->Set##NAME(*filter.NAME), true))
             SERIALIZE_VARIABLE(Type);
             SERIALIZE_VARIABLE(SharedWithOs);

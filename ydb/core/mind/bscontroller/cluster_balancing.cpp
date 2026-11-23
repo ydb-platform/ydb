@@ -120,6 +120,10 @@ namespace NKikimr::NBsController {
             const TNodeLocation* location
         ) {
             for (const auto& property : filter.GetProperty()) {
+                if (!property.GetReflection()->GetUnknownFields(property).empty()
+                        || (property.HasLocation() && !property.GetLocation().unknown_fields().empty())) {
+                    return false;
+                }
                 switch (property.GetPropertyCase()) {
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kType:
                         if (property.GetType() != pdisk.GetType()) {

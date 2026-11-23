@@ -526,7 +526,10 @@ void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageControll
     info->SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(poolInfo.PDiskFilters));
 
     TStringStream pdiskFilterData;
-    Save(&pdiskFilterData, poolInfo.PDiskFilters);
+    // The legacy statistics encoding has no opaque constraints. An unsupported OR branch matches no disks.
+    auto supportedFilters = poolInfo.PDiskFilters;
+    std::erase_if(supportedFilters, [](const auto& filter) { return filter.HasUnknownRequiredProperty; });
+    Save(&pdiskFilterData, supportedFilters);
     info->SetPDiskFilterData(pdiskFilterData.Str());
     info->SetDefaultGroupSizeInUnits(poolInfo.DefaultGroupSizeInUnits);
 }

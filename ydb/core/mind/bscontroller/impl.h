@@ -1298,6 +1298,10 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
             TMaybe<TString> Location; // set only through SetLocation
             std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
+            // Authoritative protobuf for V2 filters; the fields above are its matching cache. On load, this is
+            // the exact stored key, not a reserialization. Only BoxId/StoragePoolId may change without reparsing.
+            TMaybe<TString> SerializedFilter;
+            bool HasUnknownRequiredProperty = false;
 
             void SetLocation(const TString& serialized) {
                 Location = serialized;
@@ -1337,7 +1341,8 @@ public:
                 // obtain disk kind
                 Schema::BoxStoragePoolPDiskFilter::Kind::Type kind = c.Kind();
 
-                return (!Type || *Type == type)
+                return !HasUnknownRequiredProperty
+                    && (!Type || *Type == type)
                     && (!SharedWithOs || *SharedWithOs == sharedWithOs)
                     && (!ReadCentric || *ReadCentric == readCentric)
                     && (!Kind || *Kind == kind)
@@ -1366,6 +1371,9 @@ public:
                 if (Location) {
                     s << comma() << "Location:" << TNodeLocation::ParseLocation(*Location).ShortDebugString();
                 }
+                if (HasUnknownRequiredProperty) {
+                    s << comma() << "UnknownRequiredProperty";
+                }
             }
 
             static TString ToString(const TSet<TPDiskFilter>& filters) {
@@ -1384,7 +1392,7 @@ public:
             }
 
             auto GetKey() const {
-                return std::tuple_cat(GetLegacyKey(), std::tie(Location));
+                return std::tuple_cat(GetLegacyKey(), std::tie(Location, SerializedFilter));
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
@@ -1392,12 +1400,15 @@ public:
             }
 
             void Save(IOutputStream* s) const {
+                // Legacy sysview statistics format; unsupported filters are omitted by the producer.
                 ::SaveMany(s, Type, SharedWithOs, ReadCentric, Kind, Location);
             }
 
             void Load(IInputStream* s) {
                 TMaybe<TString> location;
                 ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
+                SerializedFilter.Clear();
+                HasUnknownRequiredProperty = false;
                 Location.Clear();
                 RequiredLocation.reset();
                 if (location) {

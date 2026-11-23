@@ -26,6 +26,18 @@ struct TLegacySchema : NIceDb::Schema {
     using TTables = SchemaTables<BoxStoragePoolPDiskFilter>;
 };
 
+// Released V2 readers decode the key directly into a protobuf and reserialize it when deleting.
+struct TReleasedV2Schema : NIceDb::Schema {
+    struct BoxStoragePoolPDiskFilterV2 : Table<136> {
+        struct BoxId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct StoragePoolId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Filter : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TPDiskFilter; };
+        using TKey = TableKey<BoxId, StoragePoolId, Filter>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
+    };
+    using TTables = SchemaTables<BoxStoragePoolPDiskFilterV2>;
+};
+
 using TPool = TBlobStorageController::TStoragePoolInfo;
 using TFilter = TPool::TPDiskFilter;
 using TFilters = TPool::TPDiskFilters;
@@ -56,6 +68,26 @@ struct TFixture {
         Transaction([&] {
             TPool::UpdatePDiskFilters(Database, &previous, &current);
         });
+    }
+
+    void InsertV2(const TString& key) {
+        Transaction([&] {
+            Db.Table<Schema::BoxStoragePoolPDiskFilterV2>().Key(7, 11, key).Update();
+        });
+    }
+
+    TSet<TString> V2Keys(ui64 boxId = 7, ui64 poolId = 11) {
+        TSet<TString> keys;
+        Transaction([&] {
+            using T = Schema::BoxStoragePoolPDiskFilterV2;
+            auto rows = Db.Table<T>().Range(boxId, poolId).Select();
+            UNIT_ASSERT(rows.IsReady());
+            while (rows.IsValid()) {
+                keys.insert(rows.GetValue<T::Filter>());
+                UNIT_ASSERT(rows.Next());
+            }
+        });
+        return keys;
     }
 
     template<typename T>
@@ -95,6 +127,131 @@ void CheckFilters(const TFilters& actual, const TFilters& expected) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(BsControllerPDiskFilterCompatibility) {
+    Y_UNIT_TEST(KnownV2FiltersCanStillBeReadAndDeletedByReleasedCode) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        f.Update({}, {MakeFilter(NKikimrBlobStorage::SSD, TString("dc1"))});
+        f.Transaction([&] {
+            f.Db.Materialize<TReleasedV2Schema>();
+            using T = TReleasedV2Schema::BoxStoragePoolPDiskFilterV2;
+            auto rows = f.Db.Table<T>().Range(7, 11).Select();
+            UNIT_ASSERT(rows.IsReady() && rows.IsValid());
+            const auto proto = rows.GetValue<T::Filter>();
+            // Reconstruct only the fields known to the released reader.
+            NKikimrBlobStorage::TPDiskFilter key;
+            key.AddProperty()->SetType(proto.GetProperty(0).GetType());
+            *key.AddProperty()->MutableLocation() = proto.GetProperty(1).GetLocation();
+            const auto values = std::make_tuple(ui64(7), ui64(11), key.SerializeAsString());
+            auto keyTuple = NTableAdapter::PrepareKeyTuple<T>(&values);
+            TStackVec<TRawTypeValue, std::tuple_size_v<decltype(keyTuple)>> rawKey;
+            NTableAdapter::MapKey<T>(&keyTuple, rawKey);
+            f.Database.Update(T::TableId, NTable::ERowOp::Erase, rawKey, {});
+        });
+        UNIT_ASSERT(f.V2Keys().empty());
+    }
+
+    Y_UNIT_TEST(UnknownMetadataKeepsExactKeysThroughRewriteMoveAndDelete) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter known;
+        known.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        TSet<TString> originals;
+        for (const char* name : {"first", "second"}) {
+            NKikimrBlobStorage::TPDiskFilter metadata;
+            metadata.GetReflection()->MutableUnknownFields(&metadata)->AddLengthDelimited(100, name);
+            // Unknown fields precede known ones on the wire. Protobuf reserialization changes these bytes.
+            const TString raw = metadata.SerializeAsString() + known.SerializeAsString();
+            NKikimrBlobStorage::TPDiskFilter parsed;
+            UNIT_ASSERT(parsed.ParseFromString(raw));
+            UNIT_ASSERT(parsed.SerializeAsString() != raw);
+            originals.insert(raw);
+            f.InsertV2(raw);
+        }
+        auto loaded = f.Load(7, 11);
+        UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 2); // Equal known fields must not hide different future metadata.
+        UNIT_ASSERT(f.V2Keys() == originals);
+        TFilters rewritten;
+        for (const auto& filter : loaded) {
+            UNIT_ASSERT(filter.SerializedFilter);
+            UNIT_ASSERT(originals.contains(*filter.SerializedFilter));
+            UNIT_ASSERT(filter.MatchPDisk(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw(), {}, {}, {}));
+            NKikimrBlobStorage::TPDiskFilter proto;
+            TBlobStorageController::Serialize(&proto, filter);
+            UNIT_ASSERT_VALUES_EQUAL(proto.GetReflection()->GetUnknownFields(proto).field_count(), 1);
+            rewritten.insert(TFilter::Parse(7, 11, proto));
+        }
+        f.Update(loaded, rewritten);
+        UNIT_ASSERT_VALUES_EQUAL(f.V2Keys().size(), 2);
+        for (const auto& key : f.V2Keys()) {
+            UNIT_ASSERT(!originals.contains(key)); // The old keys must actually be erased.
+        }
+        CheckFilters(f.Load(7, 11), rewritten);
+
+        TFilters moved;
+        for (auto filter : f.Load(7, 11)) {
+            filter.BoxId = 8;
+            filter.StoragePoolId = 12;
+            moved.insert(std::move(filter));
+        }
+        f.Update(f.Load(7, 11), moved);
+        UNIT_ASSERT(f.V2Keys().empty());
+        CheckFilters(f.Load(8, 12), moved);
+        f.Update(f.Load(8, 12), {});
+        UNIT_ASSERT(f.V2Keys(8, 12).empty());
+    }
+
+    Y_UNIT_TEST(UnknownConstraintsSurviveWithoutMatchingDisks) {
+        for (ui32 variant = 0; variant < 4; ++variant) {
+            TFixture f;
+            f.Transaction([&] { f.Db.Materialize<Schema>(); });
+            NKikimrBlobStorage::TPDiskFilter proto;
+            if (variant != 3) {
+                proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+            }
+            if (variant == 0 || variant == 3) {
+                auto* property = proto.AddProperty();
+                property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+            } else if (variant == 1) {
+                // A future oneof alternative can override a known field in the same nested message.
+                auto* property = proto.MutableProperty(0);
+                property->GetReflection()->MutableUnknownFields(property)->AddVarint(100, 7);
+            } else {
+                auto* location = proto.AddProperty()->MutableLocation();
+                location->SetDataCenter("dc1");
+                location->mutable_unknown_fields()->AddVarint(100, 7);
+            }
+            const auto bytes = proto.SerializeAsString();
+            f.InsertV2(bytes);
+            const auto loaded = f.Load(7, 11);
+            UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 1);
+            const auto& filter = *loaded.begin();
+            UNIT_ASSERT(filter.HasUnknownRequiredProperty);
+            UNIT_ASSERT(!filter.MatchPDisk(TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw(), {}, {}, {}));
+            NKikimrBlobStorage::TPDiskFilter returned;
+            TBlobStorageController::Serialize(&returned, filter);
+            UNIT_ASSERT_VALUES_EQUAL(returned.SerializeAsString(), bytes);
+            f.Update(loaded, {});
+            UNIT_ASSERT(f.V2Keys().empty());
+        }
+    }
+
+    Y_UNIT_TEST(AllEncodingsOfTheSameKnownFilterAreDeleted) {
+        TFixture f;
+        f.Transaction([&] { f.Db.Materialize<Schema>(); });
+        NKikimrBlobStorage::TPDiskFilter proto;
+        proto.AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        proto.AddProperty()->SetKind(7);
+        f.Update({}, {TFilter::Parse(7, 11, proto)}); // Legacy table.
+        f.InsertV2(proto.SerializeAsString()); // V2 without Location still has to be deleted from V2.
+        proto.MutableProperty()->SwapElements(0, 1);
+        f.InsertV2(proto.SerializeAsString());
+        const auto loaded = f.Load(7, 11);
+        UNIT_ASSERT_VALUES_EQUAL(loaded.size(), 3);
+        f.Update(loaded, {});
+        UNIT_ASSERT_VALUES_EQUAL(f.Count<TLegacyTable>(7, 11), 0);
+        UNIT_ASSERT(f.V2Keys().empty());
+    }
+
     Y_UNIT_TEST(LegacyReadAndWriteAfterUpgrade) {
         TFixture f;
         f.Transaction([&] {

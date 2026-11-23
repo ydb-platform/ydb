@@ -1049,6 +1049,7 @@ namespace NKikimr {
                         if (filter.Location) {
                             identifier << " Location# " << filter.Location->size() << ":" << *filter.Location;
                         }
+                        identifier << " UnknownRequiredProperty# " << filter.HasUnknownRequiredProperty;
                     }
                     auto& [numGroups, id] = filterMap[identifier];
                     numGroups += storagePool.NumGroups;

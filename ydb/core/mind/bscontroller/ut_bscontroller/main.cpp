@@ -1685,7 +1685,92 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "legacy numeric");
         required->Clear();
         required->mutable_unknown_fields()->AddVarint(999, 1);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TFilter::Parse(1, 1, proto), yexception, "unknown fields");
+        UNIT_ASSERT(!matches(actual));
+    }
+
+    Y_UNIT_TEST(PDiskFilterUnknownPropertiesSurviveControllerRestart) {
+        TEnvironmentSetup env(1, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupReserve(true);
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}},
+            env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "future filter", 1, NKikimrBlobStorage::ROT, {}, request, "none");
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto initialConfig = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(initialConfig.GroupSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(initialConfig.VSlotSize(), 1);
+
+        auto readPool = [&] {
+            NKikimrBlobStorage::TConfigRequest read;
+            auto* cmd = read.AddCommand()->MutableReadStoragePool();
+            cmd->SetBoxId(1);
+            cmd->AddStoragePoolId(1);
+            const auto result = env.Invoke(read);
+            UNIT_ASSERT_C(result.GetSuccess(), result.DebugString());
+            return result.GetStatus(0).GetStoragePool(0);
+        };
+
+        // Model a future writer adding a constraint after the group has already been placed.
+        auto futurePool = readPool();
+        auto* filter = futurePool.MutablePDiskFilter(0);
+        filter->GetReflection()->MutableUnknownFields(filter)->AddLengthDelimited(100, "future metadata");
+        auto* property = filter->AddProperty();
+        property->GetReflection()->MutableUnknownFields(property)->AddLengthDelimited(100, "future constraint");
+        const auto expected = TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(1, 1, *filter);
+        request.Clear();
+        *request.AddCommand()->MutableDefineStoragePool() = futurePool;
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        for (bool edit : {true, false}) {
+            RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+            auto pool = readPool();
+            UNIT_ASSERT_VALUES_EQUAL(pool.PDiskFilterSize(), 1);
+            const auto restored = TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(1, 1, pool.GetPDiskFilter(0));
+            UNIT_ASSERT(restored.GetKey() == expected.GetKey());
+            UNIT_ASSERT(restored.HasUnknownRequiredProperty);
+            const auto config = FetchBaseConfig(&env);
+            UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).GetGroupId(), initialConfig.GetGroup(0).GetGroupId());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).GetGroupGeneration(), initialConfig.GetGroup(0).GetGroupGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(config.VSlotSize(), 1);
+            UNIT_ASSERT(SameVSlotId(config.GetVSlot(0).GetVSlotId(), initialConfig.GetVSlot(0).GetVSlotId()));
+            request.Clear();
+            request.SetIgnoreGroupReserve(true);
+            if (edit) {
+                pool.SetName("edited without losing future fields");
+            } else {
+                pool.SetNumGroups(2); // The old reader cannot safely evaluate the future constraint.
+            }
+            *request.AddCommand()->MutableDefineStoragePool() = pool;
+            response = env.Invoke(request);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetSuccess(), edit, response.DebugString());
+        }
+        const auto pool = readPool();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetNumGroups(), 1);
+        request.Clear();
+        auto* remove = request.AddCommand()->MutableDeleteStoragePool();
+        remove->SetBoxId(1);
+        remove->SetStoragePoolId(1);
+        remove->SetItemConfigGeneration(pool.GetItemConfigGeneration());
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        // Reusing the pool ID must not resurrect an undeleted V2 filter.
+        request.Clear();
+        env.DefineStoragePool(1, 1, "plain filter", 0, NKikimrBlobStorage::ROT, {}, request, "none");
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        const auto recreated = readPool();
+        UNIT_ASSERT_VALUES_EQUAL(recreated.PDiskFilterSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(recreated.GetPDiskFilter(0).PropertySize(), 1);
+        const auto& plainFilter = recreated.GetPDiskFilter(0);
+        UNIT_ASSERT(plainFilter.GetReflection()->GetUnknownFields(plainFilter).empty());
     }
 
     Y_UNIT_TEST(PDiskLocationFilterPlacementAndRestart) {

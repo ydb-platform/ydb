@@ -368,8 +368,8 @@ IGraphTransformer::TStatus CompileDefaultExpressionLambdas(const TKikimrTableDes
     TTypeAnnotationContext& typeCtx, TExprContext& ctx)
 {
     for (const auto& name : columnsToCompile) {
-        auto* col = table.Metadata->Columns.FindPtr(name);
-        if (!col || !col->DefaultExpression || col->DefaultExpression->Expr || col->DefaultExpression->IsGenerated()) {
+        const auto* col = table.Metadata->Columns.FindPtr(name);
+        if (!col || !col->DefaultExpression || col->DefaultExpression->IsGenerated() || table.DefaultExpressionLambdas.contains(name)) {
             continue;
         }
         const auto* columnType = table.GetColumnType(name);
@@ -380,7 +380,7 @@ IGraphTransformer::TStatus CompileDefaultExpressionLambdas(const TKikimrTableDes
         {
             return status;
         }
-        col->DefaultExpression->Expr = std::move(lambda);
+        table.DefaultExpressionLambdas.emplace(name, std::move(lambda));
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -899,7 +899,6 @@ namespace {
                 {
                     return status;
                 }
-                columnMeta.DefaultExpression->Expr = std::move(lambda);
                 continue;
             }
 

@@ -328,6 +328,7 @@ std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& tab
 
 bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     ColumnTypes.clear();
+    DefaultExpressionLambdas.clear();
 
     TVector<const TItemExprType*> items;
     for (auto pair : Metadata->Columns) {

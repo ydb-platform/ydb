@@ -197,6 +197,9 @@ public:
     const TStructExprType* SchemeNode = nullptr;
     TMaybe<TString> RelativePath;
 
+    // These lambdas belong to the current query's expression context.
+    mutable THashMap<TString, TExprNode::TPtr> DefaultExpressionLambdas;
+
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
     void ToYson(NYson::TYsonWriter& writer) const;
 

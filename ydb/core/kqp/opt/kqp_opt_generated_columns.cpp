@@ -639,12 +639,13 @@ TVector<TExprBase> BuildDefaultExpressionMembers(const TCoAtomList& defaultExprC
     for (const auto& col : defaultExprColumns) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(col.Value());
         YQL_ENSURE(colMeta && colMeta->IsDefaultFromExpression(), "Column " << col.Value() << " has no DEFAULT expression");
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "DEFAULT expression of column " << col.Value() << " is not compiled");
+        const auto* lambda = table.DefaultExpressionLambdas.FindPtr(col.Value());
+        YQL_ENSURE(lambda, "DEFAULT expression of column " << col.Value() << " is not compiled");
         members.push_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name(col)
                 .Value<TExprApplier>()
-                    .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+                    .Apply(TCoLambda(*lambda))
                     .With(0, emptyRow)
                     .Build()
                 .Done());

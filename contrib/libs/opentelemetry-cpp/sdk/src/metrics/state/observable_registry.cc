@@ -89,7 +89,7 @@ void ObservableRegistry::RemoveCallback(opentelemetry::metrics::ObservableCallba
   for (auto it = callbacks_.begin(); it != callbacks_.end();)
   {
     const auto &record = it->second;
-    // Remove the callback if it's registered with the the single-instrument signature
+    // Remove the callback if it's registered with the single-instrument signature
     auto observable_callback_ptr =
         nostd::get_if<opentelemetry::metrics::ObservableCallbackPtr>(&record->callback);
     if (observable_callback_ptr && *observable_callback_ptr == callback && record->state == state &&

@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -24,7 +25,7 @@ TEST(DataCenterStates, ParseValidateAndRoundTrip) {
     auto* recovering = command.AddDataCenter();
     recovering->SetName("recovering");
     recovering->SetState(TDataCenterState::RECOVERING);
-    const auto states = ParseDataCenterStates(command);
+    const auto states = ParseDataCenterStates(command.GetDataCenter());
     ASSERT_TRUE(states.has_value()) << states.error();
     EXPECT_EQ(states->size(), 3);
     EXPECT_EQ(states->at("included"), TDataCenterState::INCLUDED);
@@ -38,15 +39,29 @@ TEST(DataCenterStates, ParseValidateAndRoundTrip) {
 
     // Duplicate names must be rejected even when their first definition is INCLUDED.
     command.AddDataCenter()->CopyFrom(*included);
-    EXPECT_FALSE(ParseDataCenterStates(command).has_value());
+    EXPECT_FALSE(ParseDataCenterStates(command.GetDataCenter()).has_value());
     command.MutableDataCenter()->RemoveLast();
     command.MutableDataCenter(0)->ClearState();
-    EXPECT_FALSE(ParseDataCenterStates(command).has_value());
-    command.MutableDataCenter(0)->SetState(static_cast<TDataCenterState::EState>(77));
-    EXPECT_FALSE(ParseDataCenterStates(command).has_value());
+    EXPECT_FALSE(ParseDataCenterStates(command.GetDataCenter()).has_value());
     command.MutableDataCenter(0)->SetState(TDataCenterState::INCLUDED);
     command.MutableDataCenter(0)->SetName("");
-    EXPECT_FALSE(ParseDataCenterStates(command).has_value());
+    EXPECT_FALSE(ParseDataCenterStates(command.GetDataCenter()).has_value());
+}
+
+TEST(DataCenterStates, RejectsUnknownStateOnWire) {
+    // DataCenter { Name: "dc" State: 77 }
+    NKikimrBlobStorage::TDataCenterStates snapshot;
+    ASSERT_TRUE(snapshot.ParseFromString(TString("\x0a\x06\x0a\x02" "dc" "\x10\x4d", 8)));
+    EXPECT_FALSE(ParseDataCenterStates(snapshot).has_value());
+}
+
+TEST(DataCenterStates, ReadsPreviouslyStoredBscCommand) {
+    // Wire format of the old BSC value: DataCenter { Name: "dc" State: EXCLUDED }.
+    NKikimrBlobStorage::TDataCenterStates snapshot;
+    ASSERT_TRUE(snapshot.ParseFromString(TString("\x0a\x06\x0a\x02" "dc" "\x10\x02", 8)));
+    const auto states = ParseDataCenterStates(snapshot);
+    ASSERT_TRUE(states.has_value());
+    EXPECT_EQ(states->at("dc"), TDataCenterState::EXCLUDED);
 }
 
 TEST(FailRealmStates, RoleNamesRoundTrip) {

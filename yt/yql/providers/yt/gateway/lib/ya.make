@@ -50,6 +50,7 @@ PEERDIR(
     yt/yql/providers/yt/provider
     yt/yql/providers/yt/common
     yt/yql/providers/yt/lib/hash
+    yt/yql/providers/yt/lib/qlfilter
     yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers

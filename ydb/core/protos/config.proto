@@ -2875,6 +2875,11 @@ message THiveConfig {
         COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
     }
 
+    enum EBridgeTabletPlacement {
+        PRIMARY_PILE_ONLY = 0 [(EnumDescription) = "tablets run only in the primary pile (followers that must be present in all data centers still run in all synchronized piles)"];
+        ALL_SYNCHRONIZED_PILES = 1 [(EnumDescription) = "tablets run in any synchronized pile"];
+    }
+
     message TBootPriority {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
         optional double Priority = 2;
@@ -3003,6 +3008,8 @@ message THiveConfig {
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
 
     optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
+    optional EBridgeTabletPlacement BridgeTabletPlacement = 99 [default = PRIMARY_PILE_ONLY, (ParamDescription) = "In bridge mode, which piles tablets may run in. Tablets in piles no longer allowed are moved away."];
+    optional bool TrackResourceBrokerUsage = 100 [default = true, (ParamDescription) = "Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported."];
 }
 
 message THealthCheckConfig {

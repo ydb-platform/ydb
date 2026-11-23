@@ -63,8 +63,20 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
         check(std::make_shared<TTargetTable::TTableConfig>("Root//Table/", "/Root/Replica"),
             "/Root/Table/Stream");
-        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root//Table/Index/", "/Root/Replica"),
+        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+            "/Root//Table/Index/indexImplTable/", "/Root/Replica/Index/indexImplTable", true),
             "/Root/Table/Index/indexImplTable/Stream");
+
+        // An index built after the replication was created refers to the source index, while its
+        // stream lives on the source impl table taken from the destination path.
+        const auto indexBuildConfig = std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+            "/Root//Table/Index/", "/Root/Replica/Index/indexImplTable", false);
+        const auto indexBuildTargetId = replication.AddTarget(indexBuildConfig->GetKind(), indexBuildConfig);
+        auto* indexBuildTarget = replication.FindTarget(indexBuildTargetId);
+        indexBuildTarget->SetStreamName("Stream");
+        indexBuildTarget->SetIndexBuild(true);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuildTarget->GetStreamPath(), "/Root/Table/Index/indexImplTable/Stream");
+
         check(std::make_shared<TTargetTransfer::TTransferConfig>("/Root//Topic/", "/Root/Replica", config),
             "/Root/Topic");
     }
@@ -724,7 +736,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 config = std::make_shared<TTargetTransfer::TTransferConfig>("/Root/Topic", "/Root/Replica",
                     NKikimrReplication::TReplicationConfig{});
             } else {
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica");
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica", false);
             }
             if (streamPath.empty()) {
                 streamPath = transfer ? "/Root/Topic" : "/Root/Table/Index/indexImplTable/Stream";

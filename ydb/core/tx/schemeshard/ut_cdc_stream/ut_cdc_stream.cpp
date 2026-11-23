@@ -2400,6 +2400,90 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", {NKikimrScheme::StatusPreconditionFailed});
     }
 
+    Y_UNIT_TEST(ClientModificationsAsyncReplicationFeed) {
+        // A fenced database still has to let the replication engine build and remove its own
+        // changefeeds: the controller does that over the public API with the replication's own
+        // credentials, which are least-privilege, not administrator. A refusal is not retryable,
+        // so it would not wait for the fence to lift -- it would leave the replication in Error.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin"};
+        const auto replication = NACLib::TUserToken("replication@builtin", {}).SerializeAsString();
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // An ordinary changefeed of a non-administrator stays refused.
+        auto* request = CreateCdcStreamRequest(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Plain"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+            }
+        )");
+        request->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed,
+            "Client schema modifications are disabled for non-administrators"}});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Plain"), {NLs::PathNotExist});
+
+        // The replication's own feed, marked as such, is the engine's work and goes through.
+        request = CreateCdcStreamRequest(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+              UserAttributes { Key: "__async_replication" Value: "{}" }
+            }
+        )");
+        request->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathExist});
+
+        // Addressing an alter by PathId must not borrow the exemption from the working dir:
+        // TAlterPQ::Propose lets the PathId decide the target, so an ordinary topic would be
+        // altered under a marked feed's name.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig: { PartitionConfig { LifetimeSeconds: 10 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const ui64 foreignTopic = DescribePath(runtime, "/MyRoot/Topic").GetPathId();
+
+        auto* borrowed = AlterPQGroupRequest(++txId, "/MyRoot/Table/Stream", Sprintf(R"(
+            PathId: %lu
+            PQTabletConfig: { PartitionConfig { LifetimeSeconds: 20 } }
+        )", foreignTopic));
+        borrowed->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, borrowed);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed,
+            "Client schema modifications are disabled for non-administrators"}});
+
+        // And so does removing it, which the controller does when the replication is dropped.
+        auto* drop = DropCdcStreamRequest(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        drop->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, drop);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+    }
+
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {

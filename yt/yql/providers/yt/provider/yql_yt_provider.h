@@ -110,6 +110,7 @@ struct TYtState {
     TString SessionId;
     IYtGateway::TPtr Gateway;
     TTypeAnnotationContext* Types = nullptr;
+    TMaybe<THashSet<TString>> NileAllowedClusters;
     TMaybe<std::pair<ui32, size_t>> LoadEpochMetadata; // Epoch being committed, settings versions
     THashMap<ui32, TSet<std::pair<TString, TString>>> EpochDependencies; // List of tables, which have to be updated after committing specific epoch
     TYtVersionedConfiguration::TPtr Configuration;

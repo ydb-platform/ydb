@@ -74,6 +74,8 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kqp
+    ydb/core/kqp/common/dynamic_function_registry
+    ydb/core/kqp/common/warmup
     ydb/core/kqp/event_log
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/rm_service

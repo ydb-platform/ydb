@@ -2,6 +2,8 @@
 #include "config.h"
 #include "select_groups.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
@@ -485,6 +487,7 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
+                *Ev->Record.MutableResponse()->MutableAppliedDataCenterStates() = SerializeDataCenterStates(Self->DataCenterStates);
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();
             }

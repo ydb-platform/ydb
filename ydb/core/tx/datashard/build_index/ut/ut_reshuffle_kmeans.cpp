@@ -77,7 +77,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
         const std::vector<TString>& level, NKikimrTxDataShard::EKMeansState upload,
         VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, ui32 overlapClusters = 0,
-        ui32 maxBatchRows = 50000, std::optional<TSerializedTableRange> keyRange = {})
+        ui32 maxBatchRows = 50000, std::optional<TSerializedTableRange> keyRange = {},
+        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -118,6 +119,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
+                rec.SetIndexType(indexType);
 
                 rec.SetDatabaseName(kDatabaseName);
 
@@ -299,6 +301,27 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             request.ClearClusters();
             request.SetEmbeddingColumn("some");
         }, "[ { <main>: Error: Unknown embedding column: some } { <main>: Error: Should be requested for at least one cluster } ]");
+    }
+
+    Y_UNIT_TEST(HnswRetainsEmbeddingWithoutCover) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root");
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+        CreateBuildTable(server, sender, options, "table-posting");
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-main` (key, embedding, data)
+            VALUES (1, "ab\x02", "one");
+        )");
+        const auto posting = DoReshuffleKMeans(server, sender, 0, {"ab\2"},
+            NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING, VectorIndexSettings::VECTOR_TYPE_UINT8,
+            VectorIndexSettings::DISTANCE_EUCLIDEAN, 0, 1, {}, NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        UNIT_ASSERT_STRING_CONTAINS(posting, "key = 1, embedding = ab\2, data = one\n");
     }
 
     Y_UNIT_TEST(MainToPosting) {

@@ -209,6 +209,8 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/common/stats
     ydb/core/kqp/query_plan
     ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
@@ -236,6 +238,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/services
     ydb/library/yaml_config
+    ydb/library/yaml_json
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq

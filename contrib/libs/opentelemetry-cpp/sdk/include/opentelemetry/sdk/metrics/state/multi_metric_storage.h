@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -29,9 +30,14 @@ namespace metrics
 class SyncMultiMetricStorage : public SyncWritableMetricStorage
 {
 public:
-  void AddStorage(const std::shared_ptr<SyncWritableMetricStorage> &storage)
+  bool AddStorage(const std::shared_ptr<SyncWritableMetricStorage> &storage)
   {
+    if (!storage || HasStorage(storage))
+    {
+      return false;
+    }
     storages_.push_back(storage);
+    return true;
   }
 
   void RecordLong(int64_t value, const opentelemetry::context::Context &context) noexcept override
@@ -76,15 +82,25 @@ public:
 #endif
 
 private:
+  bool HasStorage(const std::shared_ptr<SyncWritableMetricStorage> &storage) const
+  {
+    return std::find(storages_.begin(), storages_.end(), storage) != storages_.end();
+  }
+
   std::vector<std::shared_ptr<SyncWritableMetricStorage>> storages_;
 };
 
 class AsyncMultiMetricStorage : public AsyncWritableMetricStorage
 {
 public:
-  void AddStorage(const std::shared_ptr<AsyncWritableMetricStorage> &storage)
+  bool AddStorage(const std::shared_ptr<AsyncWritableMetricStorage> &storage)
   {
+    if (!storage || HasStorage(storage))
+    {
+      return false;
+    }
     storages_.push_back(storage);
+    return true;
   }
 
   void RecordLong(
@@ -108,6 +124,11 @@ public:
   }
 
 private:
+  bool HasStorage(const std::shared_ptr<AsyncWritableMetricStorage> &storage) const
+  {
+    return std::find(storages_.begin(), storages_.end(), storage) != storages_.end();
+  }
+
   std::vector<std::shared_ptr<AsyncWritableMetricStorage>> storages_;
 };
 

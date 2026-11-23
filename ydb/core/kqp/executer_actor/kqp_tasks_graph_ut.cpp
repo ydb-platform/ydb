@@ -47,7 +47,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/simple/settings.h>

@@ -114,7 +114,7 @@ class Latch {
 
  private:
   TString DebugTag() {
-    return y_absl::StrCat(Activity::current()->DebugTag(), " LATCH[0x",
+    return y_absl::StrCat(GetContext<Activity>()->DebugTag(), " LATCH[0x",
                         reinterpret_cast<uintptr_t>(this), "]: ");
   }
 
@@ -190,7 +190,7 @@ class Latch<void> {
 
  private:
   TString DebugTag() {
-    return y_absl::StrCat(Activity::current()->DebugTag(), " LATCH(void)[0x",
+    return y_absl::StrCat(GetContext<Activity>()->DebugTag(), " LATCH(void)[0x",
                         reinterpret_cast<uintptr_t>(this), "]: ");
   }
 
@@ -260,7 +260,7 @@ class ExternallyObservableLatch<void> {
 
  private:
   TString DebugTag() {
-    return y_absl::StrCat(Activity::current()->DebugTag(), " LATCH(void)[0x",
+    return y_absl::StrCat(GetContext<Activity>()->DebugTag(), " LATCH(void)[0x",
                         reinterpret_cast<uintptr_t>(this), "]: ");
   }
 

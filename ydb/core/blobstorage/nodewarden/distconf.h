@@ -1062,6 +1062,10 @@ namespace NKikimr::NStorage {
     void ResetStaticGroupPileParts(NKikimrBlobStorage::TStorageConfig *config, const std::vector<TBridgePileId>& pileIds,
         ui64 becameUnsyncedGeneration);
 
+    // Applies DC availability to ordinary static mirror-3-dc groups on a private config copy.
+    bool ApplyStaticDataCenterStates(NKikimrBlobStorage::TStorageConfig *config,
+        const NKikimrBlobStorage::TDataCenterStates& command);
+
 } // NKikimr::NStorage
 
 template<>

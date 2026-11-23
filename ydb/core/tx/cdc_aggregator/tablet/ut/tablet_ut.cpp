@@ -1,4 +1,5 @@
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/cdc_aggregator_heartbeat_broadcaster.h>
 #include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -74,6 +75,14 @@ public:
         WaitTabletBoot();
 
         Edge = Runtime->AllocateEdgeActor();
+        BroadcastHeartbeatObserver = Runtime->AddObserver([this](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() != TEvCdcAggregatorHeartbeatBroadcaster::EvBroadcastHeartbeat || !ev->HasEvent()) {
+                return;
+            }
+            if (const auto* broadcastHeartbeat = dynamic_cast<TEvCdcAggregatorHeartbeatBroadcaster::TEvBroadcastHeartbeat*>(ev->GetBase())) {
+                BroadcastHeartbeatSteps.push_back(broadcastHeartbeat->Heartbeat.Version.Step);
+            }
+        });
     }
 
     void RebootTablet() {
@@ -138,6 +147,13 @@ public:
         return sources;
     }
 
+    TVector<ui64> WaitBroadcastHeartbeatSteps() {
+        Runtime->WaitFor("broadcast heartbeat", [this] {
+            return !BroadcastHeartbeatSteps.empty();
+        });
+        return std::exchange(BroadcastHeartbeatSteps, {});
+    }
+
 private:
     void WaitTabletBoot() {
         TDispatchOptions options;
@@ -148,6 +164,8 @@ private:
 private:
     THolder<TTestBasicRuntime> Runtime;
     TActorId Edge;
+    TVector<ui64> BroadcastHeartbeatSteps;
+    TTestActorRuntime::TEventObserverHolder BroadcastHeartbeatObserver;
 };
 
 } // namespace
@@ -717,6 +735,33 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetCurrentHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(0).GetLastHeartbeat().GetStep(), 100, describeResult.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetSources(1).GetLastHeartbeat().GetStep(), 200, describeResult.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(ShouldBroadcastCurrentHeartbeatWhenItAdvances) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 200}});
+
+        // when
+        env.WriteHeartbeats({{2, 100}});
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitBroadcastHeartbeatSteps(), TVector<ui64>({100}));
+    }
+
+    Y_UNIT_TEST(ShouldBroadcastCurrentHeartbeatWhenTabletRestarted) {
+        // given
+        TTestEnv env;
+        env.ConfigureTracking({1, 2});
+        env.WriteHeartbeats({{1, 100}, {2, 200}});
+        env.WaitBroadcastHeartbeatSteps();
+
+        // when
+        env.RebootTablet();
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitBroadcastHeartbeatSteps(), TVector<ui64>({100}));
     }
 }
 

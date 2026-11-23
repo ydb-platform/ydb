@@ -422,15 +422,17 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
 TIntrusivePtr<IOperator> ConvertOptimizedTree(
     std::shared_ptr<IBaseOptimizerNode> tree,
     const TVector<TCBOLeaf>& leaves,
-    TPositionHandle pos)
+    TPositionHandle pos,
+    TExprContext& ctx,
+    TPlanProps& props)
 {
     if (tree->Kind == RelNodeType) {
         auto rel = std::static_pointer_cast<NOpt::TRBORelOptimizerNode>(tree);
         return rel->Op;
     } else {
         auto join = std::static_pointer_cast<TJoinOptimizerNode>(tree);
-        auto leftArg = ConvertOptimizedTree(join->LeftArg, leaves, pos);
-        auto rightArg = ConvertOptimizedTree(join->RightArg, leaves, pos);
+        auto leftArg = ConvertOptimizedTree(join->LeftArg, leaves, pos, ctx, props);
+        auto rightArg = ConvertOptimizedTree(join->RightArg, leaves, pos, ctx, props);
 
         Y_ENSURE(join->LeftJoinKeys.size() == join->RightJoinKeys.size());
 
@@ -455,6 +457,16 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(
         if (join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
             res->Props.LeftShuffleBy = ConvertCBOColumnsToRBO(join->ShuffleLeftSideBy);
             res->Props.RightShuffleBy = ConvertCBOColumnsToRBO(join->ShuffleRightSideBy);
+        }
+        if (!join->PostJoinConditions.empty()) {
+            TVector<TExpression> predicates;
+            for (const auto& [left, right] : join->PostJoinConditions) {
+                Y_ENSURE(left.EqualNulls == right.EqualNulls);
+                predicates.push_back(MakeBinaryPredicate(left.EqualNulls ? "IsNotDistinctFrom" : "==",
+                    MakeColumnAccess(GetCBOColumnId(left), pos, &ctx, &props),
+                    MakeColumnAccess(GetCBOColumnId(right), pos, &ctx, &props)));
+            }
+            return MakeIntrusive<TOpFilter>(res, pos, MakeConjunction(predicates));
         }
         return res;
     }

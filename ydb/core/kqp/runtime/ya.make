@@ -58,6 +58,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/common/result_set_format/settings
     ydb/core/kqp/runtime/common
     ydb/core/kqp/runtime/streaming
     ydb/core/kqp/tracing
@@ -83,6 +84,7 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/params
+    ydb/services/workload_manager/common
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation/llvm16
     yql/essentials/utils

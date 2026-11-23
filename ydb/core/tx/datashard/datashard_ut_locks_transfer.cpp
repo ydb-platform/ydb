@@ -412,7 +412,7 @@ Y_UNIT_TEST(WriteSeqNumsAncestorAfterCurrentShardRejected) {
         // own chain, the second stays on the transferred ancestor chain as its
         // already applied position 2: the ancestor op comes after the
         // current-shard op and must be rejected.
-        req->Record.MutableOperations(0)->SetOriginalShard(0);
+        req->Record.MutableOperations(0)->ClearAncestors();
 
         auto reqSender = runtime.AllocateEdgeActor();
         ui32 nodeIndex = reqSender.NodeId() - runtime.GetNodeId(0);
@@ -536,7 +536,7 @@ Y_UNIT_TEST(WriteSeqNumsAncestorOpsBeforeCurrentShardOps) {
             // chain: a duplicate whose row must be skipped. The second op continues
             // the transferred chain. The third op is re-labeled as a fresh position
             // of the current shard's own chain and comes last.
-            req->Record.MutableOperations(2)->SetOriginalShard(0);
+            req->Record.MutableOperations(2)->ClearAncestors();
             req->Record.MutableOperations(2)->MutableWriteSeqNum()->SetWriteSeqNum(1);
 
             auto reqSender = runtime.AllocateEdgeActor();
@@ -630,7 +630,7 @@ Y_UNIT_TEST(WriteSeqNumsAncestorOpsBeforeCurrentShardOpsInsertReplay) {
         // chain: a duplicate whose row must be skipped. The second op continues
         // the transferred chain. The third op is re-labeled as a fresh position
         // of the current shard's own chain and comes last.
-        req->Record.MutableOperations(2)->SetOriginalShard(0);
+        req->Record.MutableOperations(2)->ClearAncestors();
         req->Record.MutableOperations(2)->MutableWriteSeqNum()->SetWriteSeqNum(1);
 
         auto reqSender = runtime.AllocateEdgeActor();
@@ -744,7 +744,7 @@ Y_UNIT_TEST(WriteSeqNumsMergedAncestorChainsInterleaved) {
         // fresh. The third op is re-labeled to the second transferred chain as
         // its already applied position 1 and comes after the fresh operation of
         // the first chain, which the shard must accept.
-        req->Record.MutableOperations(2)->SetOriginalShard(oldShards.at(1));
+        req->Record.MutableOperations(2)->SetAncestors(0, oldShards.at(1));
         req->Record.MutableOperations(2)->MutableWriteSeqNum()->SetWriteSeqNum(1);
 
         auto reqSender = runtime.AllocateEdgeActor();

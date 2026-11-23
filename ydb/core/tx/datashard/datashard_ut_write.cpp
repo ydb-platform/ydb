@@ -6328,6 +6328,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
+        // Ancestors require an explicit position in the writer's chain.
+        {
+            auto req = MakeWriteRequestOneKeyValue(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 1, 11);
+            req->SetLockId(lockTxId, lockNodeId);
+            req->Record.MutableOperations(0)->AddAncestors(shard + 1);
+            req->Record.MutableOperations(0)->AddAncestors(shard + 2);
+            Write(runtime, sender, shard, std::move(req), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
+
         // WriteSeqNum without LockTxId
         {
             auto req = MakeWriteRequestOneKeyValue(std::nullopt,

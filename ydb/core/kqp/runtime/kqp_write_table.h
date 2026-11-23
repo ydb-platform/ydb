@@ -188,17 +188,13 @@ public:
     // re-routed to the shards now covering their key ranges.
     virtual TVector<ui64> GetDeletedShards() const = 0;
 
-    // Re-route the pending batches of shards removed by a split/merge to the shards
-    // now covering their key ranges, preserving the original WriteSeqNum and setting
-    // OriginalShard on the batches. coveringTargets maps every deleted shard to the
-    // shards now covering its key range (computed by the write actor from the removed
-    // shard's metadata): under the WriteSeqNum protocol a covering target that
-    // receives no rows still gets an empty batch carrying the chain position, so the
-    // datashard validates/advances the transferred ancestor chain on it and its
-    // commit-time prepare carries fresh echo locks. Only row-table (DataShard)
-    // controllers with EnableWriteSeqNum or Inconsistent; the caller must gate this.
-    virtual void ReRouteShards(TVector<ui64>&& deletedShards,
-        const TVector<std::pair<ui64, TVector<ui64>>>& coveringTargets) = 0;
+    // Re-route complete queues of removed shards, preserving each source's FIFO.
+    // With EnableWriteSeqNum, also preserve WSN and fragment ranges, append the
+    // previous destination to Ancestors, and place ancestors before current writes.
+    // Empty fragments go to every partition intersecting the fragment range.
+    // Without EnableWriteSeqNum, only non-empty row fragments are re-routed.
+    // Only row-table controllers with EnableWriteSeqNum or Inconsistent.
+    virtual void ReRouteShards(TVector<ui64>&& deletedShards) = 0;
 
     // Register empty shard records for the given shards so they receive covering
     // messages (prepare) at commit time. Used for split/merge covering shards that

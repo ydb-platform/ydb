@@ -288,11 +288,10 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         WriteSeqNum.WriteSeqNum = recordOperation.GetWriteSeqNum().GetWriteSeqNum();
     }
 
-    OriginalShard = recordOperation.GetOriginalShard();
-    if (OriginalShard && !recordOperation.HasWriteSeqNum()) {
+    Ancestors.assign(recordOperation.GetAncestors().begin(), recordOperation.GetAncestors().end());
+    if (!Ancestors.empty() && !recordOperation.HasWriteSeqNum()) {
         return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
-            << "Retrying operation performed on OriginalShard " << OriginalShard
-            << " requires WriteSeqNum"};
+            << "Retrying operation with Ancestors requires WriteSeqNum"};
     }
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
@@ -389,6 +388,7 @@ ui64 TValidatedWriteTxOperation::ComputeTxSize() const {
     ui64 txSize = sizeof(TValidatedWriteTxOperation);
     txSize += Matrix.GetBuffer().size();
     txSize += ColumnIds.size() * sizeof(ui32);
+    txSize += Ancestors.size() * sizeof(ui64);
     return txSize;
 }
 
@@ -913,4 +913,3 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TWriteOperation, stream, tx) {
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

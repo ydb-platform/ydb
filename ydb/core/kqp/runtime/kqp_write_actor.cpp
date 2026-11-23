@@ -1898,7 +1898,7 @@ public:
             if (!deletedShards.empty() && (InconsistentTx || AttachWriteSeqNum)) {
                 // A split/merge removed shards while this table had pending writes:
                 // re-route their batches to the shards now covering their key ranges
-                // (preserving WriteSeqNum / OriginalShard) and transfer the removed shards'
+                // (preserving WriteSeqNum and extending Ancestors) and transfer the removed shards'
                 // TxManager participant state (locks, flags) to those shards so the
                 // commit survives. Row tables only: column tables can't change sharding.
                 YDB_LOG_ENSURE(!IsOlap);
@@ -1944,7 +1944,7 @@ public:
                         }
                     }
                 }
-                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards), transferTargets);
+                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
                 UpdateShards();
                 bool locksConsistent = true;
                 for (const auto& [shardId, targets] : transferTargets) {

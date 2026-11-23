@@ -967,6 +967,7 @@ public:
     std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&& batch) override {
         auto datashardBatch = dynamic_cast<TRowBatch*>(batch.Get());
         YDB_LOG_ENSURE(datashardBatch);
+        const i64 originalSerializedSize = datashardBatch->GetSerializedMemory();
         auto rows = datashardBatch->Extract();
 
         THashMap<ui64, TRowsBatcher> shardBatchers;
@@ -977,7 +978,10 @@ public:
             if (batcherIter == std::end(shardBatchers)) {
                 batcherIter = shardBatchers.emplace(
                     partition.ShardId,
-                    TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc)).first;
+                    // One immutable fragment per destination and chain position.
+                    // Each fragment is no larger than the original operation, which
+                    // may exceed the batching target for a single oversized row.
+                    TRowsBatcher(Columns.size(), std::nullopt, Alloc)).first;
             }
             batcherIter->second.AddRow(row);
         }
@@ -985,13 +989,11 @@ public:
         std::vector<std::pair<ui64, IDataBatchPtr>> result;
         result.reserve(shardBatchers.size());
         for (auto& [shardId, batcher] : shardBatchers) {
-            while (true) {
-                auto fragment = batcher.Flush(true);
-                if (fragment->IsEmpty()) {
-                    break;
-                }
-                result.emplace_back(shardId, std::move(fragment));
-            }
+            auto fragment = batcher.Flush(true);
+            YDB_LOG_ENSURE(!fragment->IsEmpty());
+            YDB_LOG_ENSURE(batcher.IsEmpty());
+            YDB_LOG_ENSURE(fragment->GetSerializedMemory() <= originalSerializedSize);
+            result.emplace_back(shardId, std::move(fragment));
         }
         return result;
     }
@@ -1641,10 +1643,11 @@ struct TBatchWithMetadata {
     // (empty) batches have no snapshot.
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     ui64 WriteSeqNum = 0;
-    // Shard that first received this batch (its uncommitted write chain lives there).
-    // 0 = the batch is being sent to its original shard (current). Set on split/merge
-    // re-route so the destination validates against the transferred ancestor chain.
-    ui64 OriginalShard = 0;
+    // Previous routing destinations, including ones the batch was never sent to.
+    TVector<ui64> Ancestors;
+    // Responsibility range of this fragment; reroute can only narrow it.
+    // TODO: Consider sharing this range per branch instead of storing it in every batch.
+    std::optional<TOwnedTableRange> FragmentRange;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1740,6 +1743,26 @@ public:
             Memory += Batches.back().GetMemory();
             PendingBatches++;
             HasReadInBatch |= Batches.back().HasRead;
+        }
+
+        void PushReroutedBatches(std::vector<TBatchWithMetadata>&& batches) {
+            // All incoming batches are ancestor operations. Preserve each source's
+            // FIFO while placing them before the destination's current operations.
+            auto pos = std::find_if(Batches.begin(), Batches.end(), [](const auto& batch) {
+                return batch.Ancestors.empty();
+            });
+            for (const auto& batch : batches) {
+                Memory += batch.GetMemory();
+                ++PendingBatches;
+                HasReadInBatch |= batch.HasRead;
+            }
+            // TODO: check if we really need it? Maybe order is already guaranteed?
+            Batches.insert(pos, std::make_move_iterator(batches.begin()), std::make_move_iterator(batches.end()));
+            // Any prepared message is superseded. The next send must include the
+            // complete transferred tail, and old replies must not acknowledge it.
+            BatchesInFlight = 0;
+            SendAttempts = 0;
+            AdvanceCookie();
         }
 
         ui64 GetCookie() const {
@@ -1928,8 +1951,8 @@ public:
     void OnPartitioningChanged(
         const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
-        Partitioning = TShardPartitionIndex(partitioning);
         BeforePartitioningChanged();
+        Partitioning = TShardPartitionIndex(partitioning);
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
                 Partitioning.GetPartitioning()->GetTablePartitioning(),
@@ -1997,84 +2020,82 @@ public:
         }
     }
 
-    void ReRouteShards(TVector<ui64>&& deletedShards,
-            const TVector<std::pair<ui64, TVector<ui64>>>& coveringTargets) override {
-        // Batches must be pushed even if the sink finished producing (the controller
-        // may already be closed): temporarily re-open, push, then close back.
+    void ReRouteShards(TVector<ui64>&& deletedShards) override {
+        // Transfer every source's complete queue before making any destination ready.
         const auto wasClosed = ShardsInfo.Reopen();
-        THashMap<ui64, const TVector<ui64>*> targetsByShard;
-        targetsByShard.reserve(coveringTargets.size());
-        for (const auto& [shardId, targets] : coveringTargets) {
-            targetsByShard.emplace(shardId, &targets);
-        }
+        THashMap<ui64, std::vector<TBatchWithMetadata>> reroutedBatches;
         for (const ui64 shardId : deletedShards) {
             auto batches = ShardsInfo.ExtractShard(shardId);
-            const TVector<ui64>* targets = nullptr;
-            if (auto it = targetsByShard.find(shardId); it != targetsByShard.end()) {
-                targets = it->second;
-            }
             for (auto& batch : batches) {
                 YDB_LOG_ENSURE(batch.Data);
-                YDB_LOG_ENSURE(batch.OriginalShard != 0);
-                const ui64 originalShard = batch.OriginalShard;
-                auto fragments = WriteInfos.at(batch.Token).Serializer->SplitBatchByShards(std::move(batch.Data));
+                auto& writeInfo = WriteInfos.at(batch.Token);
+                auto fragments = writeInfo.Serializer->SplitBatchByShards(std::move(batch.Data));
+                batch.Ancestors.push_back(shardId);
 
-                auto pushReroutedBatch = [&](const ui64 destShardId, IDataBatchPtr&& data) {
+                auto pushReroutedBatch = [&](const ui64 destShardId, IDataBatchPtr&& data,
+                        std::optional<TOwnedTableRange> range) {
                     auto& destShardInfo = ShardsInfo.GetShard(destShardId);
-                    destShardInfo.PushBatch(TBatchWithMetadata{
+                    TBatchWithMetadata fragment{
                         .Token = batch.Token,
                         .OperationType = batch.OperationType,
                         .Data = std::move(data),
                         .HasRead = batch.HasRead,
                         .QuerySpanId = batch.QuerySpanId,
                         .MvccSnapshot = batch.MvccSnapshot,
-                        // The chain position allocated by the original shard is
-                        // preserved; the destination's own counter does not move so
-                        // fresh current batches of the destination start at 1.
+                        // A destination's current counter is independent of rerouted chains.
                         .WriteSeqNum = Settings.EnableWriteSeqNum ? batch.WriteSeqNum : destShardInfo.AllocateWriteSeqNum(),
-                        .OriginalShard = originalShard,
-                    });
-                    ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                        .Ancestors = batch.Ancestors,
+                        .FragmentRange = std::move(range),
+                    };
+                    if (Settings.EnableWriteSeqNum) {
+                        reroutedBatches[destShardId].push_back(std::move(fragment));
+                    } else {
+                        destShardInfo.PushBatch(std::move(fragment));
+                    }
+                    ShardUpdates.push_back(TPendingShardInfo{
                         .ShardId = destShardId,
                         .HasRead = batch.HasRead,
                         .QuerySpanId = batch.QuerySpanId,
                     });
                 };
 
-                if (Settings.EnableWriteSeqNum && targets) {
-                    // Every covering shard must receive the batch's chain position: a
-                    // target whose key range holds none of the batch's rows gets an
-                    // empty 0-row batch, so the datashard still validates/advances the
-                    // transferred ancestor chain for this position and the commit-time
-                    // prepare carries fresh echo locks from it.
-                    THashSet<ui64> routedTargets;
+                if (Settings.EnableWriteSeqNum) {
+                    YDB_LOG_ENSURE(batch.FragmentRange);
+                    const auto keyColumnTypes = BuildKeyColumnTypes(writeInfo.Metadata.KeyColumnsMetadata);
+                    auto intersections = Partitioning.GetPartitioning()->GetIntersectionWithRange(
+                        keyColumnTypes, *batch.FragmentRange);
+                    YDB_LOG_ENSURE(!intersections.empty());
+                    THashMap<ui64, IDataBatchPtr> dataByShard;
                     for (auto& [destShardId, fragment] : fragments) {
-                        // SplitBatchByShards only ever returns non-empty fragments (its
-                        // flush loop breaks on an empty batcher flush); the deliberate
-                        // empty batches are manufactured below.
                         YDB_LOG_ENSURE(fragment && !fragment->IsEmpty());
-                        routedTargets.insert(destShardId);
-                        pushReroutedBatch(destShardId, std::move(fragment));
+                        YDB_LOG_ENSURE(dataByShard.emplace(destShardId, std::move(fragment)).second);
                     }
-                    for (const ui64 destShardId : *targets) {
-                        if (routedTargets.contains(destShardId)) {
-                            continue;
+                    for (auto& intersection : intersections) {
+                        IDataBatchPtr data;
+                        if (auto it = dataByShard.find(intersection.ShardId); it != dataByShard.end()) {
+                            // Non-empty fragment -> use it's data.
+                            data = std::move(it->second);
+                            dataByShard.erase(it);
+                        } else {
+                            // Empty fragments advance this branch on every covering shard.
+                            auto poolAlloc = CreateOffloadedPoolAllocator(Alloc);
+                            data = MakeIntrusive<TRowBatch>(
+                                TOwnedCellVecBatch(poolAlloc->CreateMemoryPool()), poolAlloc);
                         }
-                        auto poolAlloc = CreateOffloadedPoolAllocator(Alloc);
-                        pushReroutedBatch(destShardId,
-                            MakeIntrusive<TRowBatch>(TOwnedCellVecBatch(poolAlloc->CreateMemoryPool()), std::move(poolAlloc)));
+                        pushReroutedBatch(intersection.ShardId, std::move(data), std::move(intersection.TableRange));
                     }
+                    YDB_LOG_ENSURE(dataByShard.empty());
                 } else {
                     for (auto& [destShardId, fragment] : fragments) {
-                        // SplitBatchByShards only ever returns non-empty fragments (its
-                        // flush loop breaks on an empty batcher flush); the deliberate
-                        // empty batches are manufactured separately in the
-                        // EnableWriteSeqNum branch above.
                         YDB_LOG_ENSURE(fragment && !fragment->IsEmpty());
-                        pushReroutedBatch(destShardId, std::move(fragment));
+                        pushReroutedBatch(destShardId, std::move(fragment), std::nullopt);
                     }
                 }
             }
+        }
+        for (auto& [destShardId, batches] : reroutedBatches) {
+            YDB_LOG_ENSURE(Settings.EnableWriteSeqNum);
+            ShardsInfo.GetShard(destShardId).PushReroutedBatches(std::move(batches));
         }
         if (wasClosed) {
             ShardsInfo.Close();
@@ -2285,7 +2306,7 @@ public:
                 const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
                 // A re-routed batch may carry no rows for this shard (an empty fragment
                 // for a covering target that received no data): it still must produce
-                // an operation carrying the write chain (WriteSeqNum + OriginalShard),
+                // an operation carrying the write chain (WriteSeqNum + Ancestors),
                 // so the datashard validates/advances the transferred ancestor chain.
                 TString payload;
                 if (inFlightBatch.Data->IsEmpty()) {
@@ -2311,7 +2332,9 @@ public:
                     writeSeqNum->SetWriterIndex(Settings.WriterIndex);
                     writeSeqNum->SetWriteSeqNum(inFlightBatch.WriteSeqNum);
 
-                    operation.SetOriginalShard(inFlightBatch.OriginalShard);
+                    for (const ui64 ancestor : inFlightBatch.Ancestors) {
+                        operation.AddAncestors(ancestor);
+                    }
                 }
             } else {
                 YDB_LOG_ENSURE(index + 1 == shardInfo->GetBatchesInFlight());
@@ -2434,8 +2457,14 @@ private:
                         // Every non-empty batch gets a write seq num; whether it is attached
                         // to the resulting operations is decided at serialization.
                         .WriteSeqNum = shardInfo.AllocateWriteSeqNum(),
-                        .OriginalShard = shardId,
                     };
+                    if (Settings.EnableWriteSeqNum) {
+                        YDB_LOG_ENSURE(!*IsOlap);
+                        batchWithMetadata.FragmentRange = GetShardKeyRange(
+                            *Partitioning.GetPartitioning(), Partitioning.FindPartitionIndex(shardId),
+                            writeInfo.Metadata.KeyColumnsMetadata.size());
+                        YDB_LOG_ENSURE(!batchWithMetadata.FragmentRange->From.empty());
+                    }
                     shardInfo.PushBatch(std::move(batchWithMetadata));
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
                         .ShardId = shardId,

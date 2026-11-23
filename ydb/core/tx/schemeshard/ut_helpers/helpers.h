@@ -327,6 +327,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(BackupBackupCollection);
     GENERIC_HELPERS(BackupIncrementalBackupCollection);
     GENERIC_HELPERS(RestoreBackupCollection);
+    GENERIC_HELPERS(CreateLongIncrementalRestoreOp);
 
     // sysview
     GENERIC_HELPERS(CreateSysView);

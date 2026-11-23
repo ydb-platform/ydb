@@ -41,8 +41,7 @@ static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type
     if (Y_UNLIKELY(error))
 
 // fragile:
-// on fast-path, returned `name` points to temporary simdjson storage, and may be invalidated by following simdjson:: calls;
-// on slow-path, `consume` key in terms of simdjson (and hence should not be called twice)
+// on slow-path, `consume` key in terms of simdjson (and hence should not be called twice); and returned `name` points to temporary simdjson storage, and may be invalidated by following simdjson:: calls
 static simdjson::error_code ExtractJsonKey(simdjson::simdjson_result<simdjson::builtin::ondemand::field>& item, std::string_view& name) {
     {
         CHECK_JSON_ERROR(item.escaped_key().get(name)) {
@@ -1229,8 +1228,8 @@ private:
                 bool skipRow = false;
                 bool unrecoverableColumnError = false;
                 for (auto item : object) {
-		    std::string_view name;   // fragile; don't use after any other simdjson call
-		    CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
+                    std::string_view name;   // fragile; don't use after any other simdjson call
+                    CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                         ClearRowBuffer(rowId);
                         stopMessage = true;
                         return handleError(parsingError(TStringBuilder() << "json item was corrupted: " << simdjson::error_message(error)));

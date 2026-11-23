@@ -158,6 +158,45 @@ void CheckPut(const TMirror3dcGroupState& realms, const TCounts& failures, NKiki
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDSProxyIndexRestoreGet) {
+    Y_UNIT_TEST(RestartPreservesForceBlockTabletData) {
+        TTestBasicRuntime runtime(1, false);
+        runtime.SetDispatchTimeout(TDuration::Seconds(10));
+        SetupRuntime(runtime);
+        TDSProxyEnv env;
+        env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureNone), 0, 0,
+            TBlobStorageGroupInfo::EEM_NONE);
+        TTestState state(runtime, env.Info);
+        const TActorId warden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(runtime.GetNodeId()), warden);
+
+        const ui64 tabletId = 72075186224047637;
+        const ui32 blockedGeneration = 7;
+        const TLogoBlobID id(tabletId, 3, 1, 0, 1, 0);
+        auto request = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
+            NKikimrBlobStorage::FastRead, true /*mustRestoreFirst*/, true /*isIndexOnly*/,
+            TEvBlobStorage::TEvGet::TForceBlockTabletData(tabletId, blockedGeneration));
+        runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, request.release()));
+
+        auto vget = state.GrabEventPtr<TEvBlobStorage::TEvVGet>();
+        const auto& record = vget->Get()->Record;
+        UNIT_ASSERT(record.HasForceBlockTabletData());
+        UNIT_ASSERT_VALUES_EQUAL(record.GetForceBlockTabletData().GetId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetForceBlockTabletData().GetGeneration(), blockedGeneration);
+
+        auto race = state.CreateEventResultPtr(vget, NKikimrProto::RACE);
+        race->Get()->Record.MutableVDiskID()->SetGroupGeneration(record.GetVDiskID().GetGroupGeneration() + 1);
+        race->Get()->Record.SetCookie(record.GetCookie());
+        runtime.Send(race.Release());
+
+        const auto retry = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGet>(warden);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->RestartCounter, 1);
+        UNIT_ASSERT(retry->Get()->ForceBlockTabletData);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->ForceBlockTabletData->Id, tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->ForceBlockTabletData->Generation, blockedGeneration);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
     Y_UNIT_TEST(NormalAndSoloWriteQuorumsReturnOk) {
         for (bool range : {false, true}) {

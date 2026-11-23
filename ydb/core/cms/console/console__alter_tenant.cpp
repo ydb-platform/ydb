@@ -76,7 +76,7 @@ public:
         }
         if (Tenant->FreezeEpoch) {
             const auto& freeze = Self->DatabaseFreezeOperations.at(Tenant->FreezeEpoch);
-            if (freeze.GetFreeze() || freeze.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            if (freeze.GetFreezeSchema() || freeze.GetFreezeDataShards() || freeze.GetStatus() != Ydb::StatusIds::SUCCESS) {
                 return Error(Ydb::StatusIds::PRECONDITION_FAILED, "Unfreeze the database before altering it", ctx);
             }
         }

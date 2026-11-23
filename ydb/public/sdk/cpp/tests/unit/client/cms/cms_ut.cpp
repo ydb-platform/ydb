@@ -29,6 +29,8 @@ namespace {
         std::atomic<ui32> Requests = 0;
         std::atomic<bool> HasFreeze = false;
         std::atomic<bool> Freeze = false;
+        std::atomic<bool> HasData = false;
+        std::atomic<bool> Data = false;
         std::atomic<int> OperationMode = Ydb::Operations::OperationParams::OPERATION_MODE_UNSPECIFIED;
         std::atomic<i64> OperationTimeoutSeconds = 0;
 
@@ -40,8 +42,10 @@ namespace {
         grpc::Status AlterDatabase(grpc::ServerContext*, const Ydb::Cms::AlterDatabaseRequest* request,
                                    Ydb::Cms::AlterDatabaseResponse* response) override {
             ++Requests;
-            HasFreeze = request->has_freeze();
-            Freeze = request->freeze();
+            HasFreeze = request->has_freeze_schema();
+            Freeze = request->freeze_schema();
+            HasData = request->has_freeze_datashards();
+            Data = request->freeze_datashards();
             OperationMode = request->operation_params().operation_mode();
             OperationTimeoutSeconds = request->operation_params().operation_timeout().seconds();
             if (Reply.TransportFailure) {
@@ -127,25 +131,25 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         Ydb::Cms::AlterDatabaseRequest request;
         NYdb::NCms::TAlterDatabaseSettings settings;
         settings.SerializeTo(request);
-        UNIT_ASSERT(!request.has_freeze());
+        UNIT_ASSERT(!request.has_freeze_schema());
         for (const bool freeze : {false, true}) {
-            settings.Freeze(freeze);
+            settings.FreezeSchema(freeze);
             const auto copy = settings;
             request.Clear();
             copy.SerializeTo(request);
-            UNIT_ASSERT(request.has_freeze());
-            UNIT_ASSERT_VALUES_EQUAL(request.freeze(), freeze);
+            UNIT_ASSERT(request.has_freeze_schema());
+            UNIT_ASSERT_VALUES_EQUAL(request.freeze_schema(), freeze);
         }
-        settings.Freeze(std::nullopt);
+        settings.FreezeSchema(std::nullopt);
         request.Clear();
         settings.SerializeTo(request);
-        UNIT_ASSERT(!request.has_freeze());
+        UNIT_ASSERT(!request.has_freeze_schema());
     }
 
     Y_UNIT_TEST(LegacyServerCannotAcknowledgeFreezeOrThaw) {
         for (const bool freeze : {false, true}) {
             TServer server({.HasOperationId = false});
-            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze));
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(freeze));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::UNSUPPORTED);
             UNIT_ASSERT(server.Cms.HasFreeze);
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
@@ -165,7 +169,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
     Y_UNIT_TEST(FreezeAndThawWithOperationIdSucceed) {
         for (const bool freeze : {false, true}) {
             TServer server;
-            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze));
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(freeze));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT(server.Cms.HasFreeze);
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.Freeze.load(), freeze);
@@ -176,7 +180,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
     Y_UNIT_TEST(OperationTimeoutIsForwardedInSyncMode) {
         for (const bool freeze : {false, true}) {
             TServer server;
-            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze).OperationTimeout(TDuration::Seconds(1)));
+            const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(freeze).OperationTimeout(TDuration::Seconds(1)));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationMode.load(), static_cast<int>(Ydb::Operations::OperationParams::SYNC));
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.OperationTimeoutSeconds.load(), 1);
@@ -185,21 +189,21 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
 
     Y_UNIT_TEST(AsyncOperationIsPolledUntilCompletion) {
         TServer server({.Pending = true});
-        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
+        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(true));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT(server.Operations.Polls > 0);
     }
 
     Y_UNIT_TEST(ServerErrorWithoutOperationIdIsPreserved) {
         TServer server({.Status = Ydb::StatusIds::UNAUTHORIZED, .HasOperationId = false});
-        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
+        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(true));
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::UNAUTHORIZED);
         UNIT_ASSERT(result.GetIssues().ToString().find("Injected server error") != std::string::npos);
     }
 
     Y_UNIT_TEST(TransportFailureCompletesFuture) {
         TServer server({.TransportFailure = true});
-        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().Freeze(true));
+        const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(true));
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT(result.IsTransportError());
     }
@@ -210,7 +214,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             for (const auto* value : {"value", ""}) {
                 TServer server({.HasOperationId = false});
                 const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings()
-                    .Freeze(freeze).AlterAttributes({{"test", value}}));
+                    .FreezeSchema(freeze).AlterAttributes({{"test", value}}));
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
                 UNIT_ASSERT(result.GetIssues().ToString().find("freeze cannot be combined") != std::string::npos);
                 UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 0);
@@ -224,7 +228,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             for (const bool cancel : {false, true}) {
                 TServer server;
                 NYdb::NCms::TAlterDatabaseSettings settings;
-                settings.Freeze(freeze);
+                settings.FreezeSchema(freeze);
                 if (cancel) {
                     settings.CancelAfter(TDuration::Seconds(1));
                 } else {
@@ -243,7 +247,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
         for (const bool freeze : {false, true}) {
             TServer server;
             const auto result = server.Alter(NYdb::NCms::TAlterDatabaseSettings()
-                .Freeze(freeze).AlterAttributes({}));
+                .FreezeSchema(freeze).AlterAttributes({}));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(server.Cms.Requests.load(), 1);
             UNIT_ASSERT(server.Cms.HasFreeze);
@@ -259,7 +263,7 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             NYdb::NCms::TCmsClient client(driver, NYdb::TCommonClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off));
             // Do not use TServer::Alter: its ClientTimeout would mask the bug.
             const auto result = client.AlterDatabase("/Root/Database",
-                NYdb::NCms::TAlterDatabaseSettings().Freeze(freeze).OperationTimeout(TDuration::Seconds(1)));
+                NYdb::NCms::TAlterDatabaseSettings().FreezeSchema(freeze).OperationTimeout(TDuration::Seconds(1)));
             const bool completed = result.Wait(TDuration::Seconds(5));
             // Stop pending polls before asserting so a regression cannot leave
             // an unbounded request running during test teardown.
@@ -275,5 +279,75 @@ Y_UNIT_TEST_SUITE(CmsFreezeClient) {
             UNIT_ASSERT(!server.Operations.Ready.load());
             UNIT_ASSERT_VALUES_EQUAL(server.Operations.Cancellations.load(), 0);
         }
+    }
+
+    Y_UNIT_TEST(IndependentFieldsPreservePresenceCopyAndReset) {
+        for (ui32 mask = 1; mask <= 3; ++mask) {
+            for (const bool schema : {false, true}) {
+                for (const bool data : {false, true}) {
+                    NYdb::NCms::TAlterDatabaseSettings settings;
+                    if (mask & 1) {
+                        settings.FreezeSchema(schema);
+                    }
+                    if (mask & 2) {
+                        settings.FreezeDataShards(data);
+                    }
+                    const auto copy = settings;
+                    Ydb::Cms::AlterDatabaseRequest request;
+                    copy.SerializeTo(request);
+                    UNIT_ASSERT_VALUES_EQUAL(request.has_freeze_schema(), bool(mask & 1));
+                    UNIT_ASSERT_VALUES_EQUAL(request.has_freeze_datashards(), bool(mask & 2));
+                    if (mask & 1) {
+                        UNIT_ASSERT_VALUES_EQUAL(request.freeze_schema(), schema);
+                    }
+                    if (mask & 2) {
+                        UNIT_ASSERT_VALUES_EQUAL(request.freeze_datashards(), data);
+                    }
+                    settings.FreezeSchema(std::nullopt).FreezeDataShards(std::nullopt);
+                    request.Clear();
+                    settings.SerializeTo(request);
+                    UNIT_ASSERT(!request.has_freeze_schema() && !request.has_freeze_datashards());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DataOnlyUsesExistingOperationWaitAndValidation) {
+        for (const bool data : {false, true}) {
+            TServer server({.Pending = true});
+            const auto status = server.Alter(NYdb::NCms::TAlterDatabaseSettings().FreezeDataShards(data));
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            UNIT_ASSERT(!server.Cms.HasFreeze.load());
+            UNIT_ASSERT(server.Cms.HasData.load());
+            UNIT_ASSERT_VALUES_EQUAL(server.Cms.Data.load(), data);
+            UNIT_ASSERT(server.Operations.Polls.load() > 0);
+            TServer rejected;
+            const auto bad = rejected.Alter(NYdb::NCms::TAlterDatabaseSettings()
+                .FreezeDataShards(data).AlterAttributes({{"key", "value"}}));
+            UNIT_ASSERT_VALUES_EQUAL(bad.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(rejected.Cms.Requests.load(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(FreezeStatusDistinguishesTargetFromApplicationAndOldServer) {
+        Ydb::Cms::GetDatabaseStatusResult proto;
+        auto* freeze = proto.mutable_freeze_status();
+        freeze->set_desired_schema(false);
+        freeze->set_desired_datashards(true);
+        freeze->set_operation_id("pending");
+        freeze->set_ready(false);
+        NYdb::NCms::TGetDatabaseStatusResult pending(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), proto);
+        UNIT_ASSERT(pending.GetFreezeStatus().has_value());
+        UNIT_ASSERT(!pending.GetFreezeStatus()->DesiredSchema);
+        UNIT_ASSERT(pending.GetFreezeStatus()->DesiredDataShards);
+        UNIT_ASSERT(!pending.GetFreezeStatus()->Ready);
+        UNIT_ASSERT(!pending.GetFreezeStatus()->Status.has_value());
+        freeze->set_ready(true);
+        freeze->set_status(Ydb::StatusIds::PRECONDITION_FAILED);
+        NYdb::NCms::TGetDatabaseStatusResult failed(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), proto);
+        UNIT_ASSERT_VALUES_EQUAL(*failed.GetFreezeStatus()->Status, NYdb::EStatus::PRECONDITION_FAILED);
+        proto.clear_freeze_status();
+        NYdb::NCms::TGetDatabaseStatusResult legacy(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), proto);
+        UNIT_ASSERT(!legacy.GetFreezeStatus().has_value());
     }
 } // Y_UNIT_TEST_SUITE(CmsFreezeClient)

@@ -841,7 +841,7 @@ public:
         TPath path = pathId
             ? TPath::Init(pathId, context.SS)
             : TPath::Resolve(info.GetTablePath(), context.SS);
-        if (path.IsResolved() && context.SS->IsDatabaseFreezeBlocking(path.Base()->PathId)) {
+        if (path.IsResolved() && context.SS->IsDatabaseTopologyBlocked(path.Base()->PathId)) {
             setResultError(NKikimrScheme::StatusPreconditionFailed, "Database is frozen for partitioning changes");
             return result;
         }

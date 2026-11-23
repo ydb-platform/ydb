@@ -415,7 +415,11 @@ private:
             return false;
         }
         const auto freeze = Self->DatabaseFreezeStates.find(domainId);
-        if (freeze == Self->DatabaseFreezeStates.end() || freeze->second.GetParticipantsFixed()) {
+        using TFreeze = NKikimrScheme::TDatabaseFreezeState;
+        if (freeze == Self->DatabaseFreezeStates.end()
+            || !(freeze->second.GetDataPhase() == TFreeze::DATA_PREPARING
+                || (freeze->second.GetSchemaPhase() == TFreeze::SCHEMA_DRAINING
+                    && freeze->second.GetDataPhase() == TFreeze::DATA_OPEN))) {
             return false;
         }
         const auto importTx = Self->TxIdToImport.find(TTxId(request.GetTxId()));

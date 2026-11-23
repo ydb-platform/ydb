@@ -2462,6 +2462,22 @@ void TTenantsManager::RetryResourcesRequests(const TActorContext &ctx)
 void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status)
 {
     status.set_path(tenant->Path);
+    auto* freeze = status.mutable_freeze_status();
+    freeze->set_ready(true);
+    freeze->set_status(Ydb::StatusIds::SUCCESS);
+    if (tenant->FreezeEpoch) {
+        const auto& latest = DatabaseFreezeOperations.at(tenant->FreezeEpoch);
+        freeze->set_desired_schema(latest.GetFreezeSchema());
+        freeze->set_desired_datashards(latest.GetFreezeDataShards());
+        freeze->set_ready(latest.GetReady());
+        if (latest.GetReady()) {
+            freeze->set_status(static_cast<Ydb::StatusIds::StatusCode>(latest.GetStatus()));
+        } else {
+            freeze->clear_status();
+        }
+        freeze->set_operation_id(NOperationId::ProtoToString(
+            MakeOperationId(latest.GetPath(), latest.GetEpoch(), TTenant::SET_FREEZE)));
+    }
     if (tenant->IsRunning() && tenant->SubdomainVersion != tenant->ConfirmedSubdomain)
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::CONFIGURING);
     else if (tenant->IsRunning())
@@ -3648,7 +3664,8 @@ void TTenantsManager::DbUpdateScaleRecommenderPolicies(TTenant::TPtr tenant,
 void TTenantsManager::Handle(TEvConsole::TEvAlterTenantRequest::TPtr &ev, const TActorContext &ctx)
 {
     Counters.Inc(COUNTER_ALTER_REQUESTS);
-    if (ev->Get()->Record.GetRequest().has_freeze()) {
+    const auto& request = ev->Get()->Record.GetRequest();
+    if (request.has_freeze_schema() || request.has_freeze_datashards()) {
         TxProcessor->ProcessTx(CreateTxFreezeTenant(ev), ctx);
     } else {
         ProcessOrDelayTx(CreateTxAlterTenant(ev), ctx);

@@ -20,6 +20,8 @@ public:
 
 private:
     const bool Freeze;
+    bool Schema = false;
+    bool DataShards = false;
 };
 
 class TCommandDatabaseDump : public TYdbReadOnlyCommand {

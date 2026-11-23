@@ -82,7 +82,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     }
 
     void DoExecuteOnTable(TTableInfo::TPtr tableInfo, const TPathId tablePathId, const TActorContext& ctx) {
-        if (Self->IsDatabaseFreezeBlocking(tablePathId)) {
+        if (Self->IsDatabaseBackgroundWriteBlocked(tablePathId)) {
             return;
         }
         if (!tableInfo->IsTTLEnabled()) {

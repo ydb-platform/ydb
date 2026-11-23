@@ -1,5 +1,5 @@
 
-* Added `TAlterDatabaseSettings::Freeze(bool)` to fence database row-table writes and wait for CDC delivery, or resume writes. `OperationTimeout` limits the wait without cancelling the accepted operation.
+* Replaced `TAlterDatabaseSettings::Freeze(bool)` with independent `FreezeSchema(bool)` and `FreezeDataShards(bool)`, including data-only freeze. Added the desired targets and latest operation to `TGetDatabaseStatusResult::GetFreezeStatus()`; pending/failed targets do not prove application. `OperationTimeout` still limits waiting without cancelling the accepted operation.
 
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 

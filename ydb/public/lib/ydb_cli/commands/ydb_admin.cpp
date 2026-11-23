@@ -55,12 +55,22 @@ TCommandDatabaseFreeze::TCommandDatabaseFreeze(bool freeze)
 void TCommandDatabaseFreeze::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("schema", "Change only the schema target; combine with --datashards for both")
+        .NoArgument().StoreTrue(&Schema);
+    config.Opts->AddLongOption("datashards", "Change only the data target; combine with --schema for both")
+        .NoArgument().StoreTrue(&DataShards);
 }
 
 int TCommandDatabaseFreeze::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     NCms::TCmsClient client(driver);
-    auto settings = NCms::TAlterDatabaseSettings().Freeze(Freeze);
+    auto settings = NCms::TAlterDatabaseSettings();
+    if (Schema || !DataShards) {
+        settings.FreezeSchema(Freeze);
+    }
+    if (DataShards || !Schema) {
+        settings.FreezeDataShards(Freeze);
+    }
     auto status = client.AlterDatabase(config.Database, FillSettings(settings)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
     return EXIT_SUCCESS;

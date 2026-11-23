@@ -220,6 +220,8 @@ message GetDatabaseStatusResult {
     repeated Ydb.Issue.IssueMessage issues = 12;
     // Current database attributes
     map<string, string> attributes = 13;
+    // Desired state and latest operation; pending/failed targets are not proof of application.
+    DatabaseFreezeStatus freeze_status = 14;
 }
 
 // Change resources allocated for database.
@@ -253,9 +255,9 @@ message AlterDatabaseRequest {
     // Storage units to deallocate
     repeated StorageUnits storage_units_to_remove = 14;
 
-    // Freeze row-table writes and wait for outstanding writes and CDC delivery.
-    // false removes the database freeze. Must not be combined with other changes.
-    // ASYNC returns an operation id; SUCCESS means all participating shards applied it.
+    // Independently freeze user schema changes or row-table writes with CDC drain.
+    // false removes only the corresponding control. Do not combine with other changes.
+    // ASYNC returns an operation id; SUCCESS confirms both requested targets.
     // Confirm cluster support before freeze or thaw; the SDK version is insufficient.
     // Do not probe support with this call: an old Console may increment generation
     // before UNSUPPORTED is returned.
@@ -263,21 +265,36 @@ message AlterDatabaseRequest {
     // GetDatabaseStatus reports RUNNING after all prior quota changes.
     // Prevent concurrent administrative changes during this check and freeze.
     // With a dedicated SchemeShard, RUNNING does not confirm quota propagation.
-    optional bool freeze = 15;
+    // Independent controls. Missing fields preserve the last accepted target.
+    // false/true (data-only) is supported; incompatible DDL and topology changes
+    // remain fenced while DataShards are frozen. Do not combine with other changes.
+    optional bool freeze_schema = 15;
+    optional bool freeze_datashards = 16;
 }
 
 message AlterDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-// Operation.metadata for an unfinished database freeze or thaw.
-// Diagnostics are best-effort and become available again after Console recovery.
+// Latest desired state; only ready SUCCESS confirms its application.
+message DatabaseFreezeStatus {
+    bool desired_schema = 1;
+    bool desired_datashards = 2;
+    string operation_id = 3;
+    bool ready = 4;
+    Ydb.StatusIds.StatusCode status = 5;
+}
+
+// Operation.metadata: durable targets and best-effort progress, rebuilt after recovery.
 message DatabaseFreezeMetadata {
     // Latest diagnostic from SchemeShard: current stage and reasons for waiting.
     // This is informational text, not the final operation status or an error.
     string progress = 1;
     // Time Console last received this diagnostic. Progress is not persisted.
     google.protobuf.Timestamp update_time = 2;
+    bool desired_schema = 3;
+    bool desired_datashards = 4;
+    string phase = 5;
 }
 
 // List all databases known by CMS.

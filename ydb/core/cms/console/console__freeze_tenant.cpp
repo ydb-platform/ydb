@@ -49,7 +49,8 @@ namespace NKikimr::NConsole {
                 auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDatabaseFreeze>();
                 request->Record.SetPathId(PathId);
                 request->Record.SetEpoch(Operation.GetEpoch());
-                request->Record.SetFreeze(Operation.GetFreeze());
+                request->Record.SetFreezeSchema(Operation.GetFreezeSchema());
+                request->Record.SetFreezeDataShards(Operation.GetFreezeDataShards());
                 NTabletPipe::SendData(SelfId(), Pipe, request.Release());
             }
 
@@ -168,9 +169,19 @@ namespace NKikimr::NConsole {
                 issue->set_message(operation.GetIssue());
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
             }
-        } else if (const auto progress = DatabaseFreezeProgress.find(epoch); progress != DatabaseFreezeProgress.end()) {
-            result.mutable_metadata()->PackFrom(progress->second);
         }
+        Ydb::Cms::DatabaseFreezeMetadata metadata;
+        if (const auto progress = DatabaseFreezeProgress.find(epoch); progress != DatabaseFreezeProgress.end()) {
+            metadata.CopyFrom(progress->second);
+        }
+        metadata.set_desired_schema(operation.GetFreezeSchema());
+        metadata.set_desired_datashards(operation.GetFreezeDataShards());
+        if (operation.GetReady() && operation.GetStatus() == Ydb::StatusIds::SUCCESS) {
+            metadata.set_phase(operation.GetFreezeDataShards()
+                ? (operation.GetFreezeSchema() ? "FULLY_FROZEN" : "DATA_FROZEN")
+                : (operation.GetFreezeSchema() ? "SCHEMA_FROZEN" : "OPEN"));
+        }
+        result.mutable_metadata()->PackFrom(metadata);
     }
 
     void TTenantsManager::NotifyDatabaseFreeze(ui64 epoch, const TActorContext& ctx) {
@@ -237,6 +248,7 @@ namespace NKikimr::NConsole {
                     case 8:
                     case 10:
                     case 15:
+                    case 16:
                         break;
                     default:
                         return fail(Ydb::StatusIds::BAD_REQUEST, "freeze cannot be combined with other database changes");
@@ -252,12 +264,17 @@ namespace NKikimr::NConsole {
             if (!tenant->IsRunning() || !tenant->HasSubDomainKey()) {
                 return fail(Ydb::StatusIds::UNAVAILABLE, "Database is not running");
             }
+            const ui32 requestFields = (request.has_freeze_schema() ? 1u : 0u)
+                | (request.has_freeze_datashards() ? 2u : 0u);
             if (request.idempotency_key()) {
                 const auto key = std::make_pair(tenant->DomainId, TString(request.idempotency_key()));
                 if (const auto found = Self->DatabaseFreezeIdempotencyKeys.find(key); found != Self->DatabaseFreezeIdempotencyKeys.end()) {
                     const auto& operation = Self->DatabaseFreezeOperations.at(found->second);
-                    if (operation.GetFreeze() != request.freeze()) {
-                        return fail(Ydb::StatusIds::BAD_REQUEST, "Idempotency key has a different freeze value");
+                    if (operation.GetRequestFields() != requestFields
+                        || (request.has_freeze_schema() && operation.GetFreezeSchema() != request.freeze_schema())
+                        || (request.has_freeze_datashards() && operation.GetFreezeDataShards() != request.freeze_datashards()))
+                    {
+                        return fail(Ydb::StatusIds::BAD_REQUEST, "Idempotency key has a different freeze patch");
                     }
                     Self->FillDatabaseFreezeOperation(found->second, result);
                     return true;
@@ -266,8 +283,22 @@ namespace NKikimr::NConsole {
             if (request.generation() && request.generation() != tenant->Generation) {
                 return fail(Ydb::StatusIds::BAD_REQUEST, "Tenant generation does not match requested generation");
             }
+            bool schema = false;
+            bool datashards = false;
+            if (tenant->FreezeEpoch) {
+                const auto& previous = Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch);
+                schema = previous.GetFreezeSchema();
+                datashards = previous.GetFreezeDataShards();
+            }
+            if (request.has_freeze_schema()) {
+                schema = request.freeze_schema();
+            }
+            if (request.has_freeze_datashards()) {
+                datashards = request.freeze_datashards();
+            }
             if (Self->IsDatabaseFreezePending(tenant)
-                && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreeze() == request.freeze())
+                && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreezeSchema() == schema
+                && Self->DatabaseFreezeOperations.at(tenant->FreezeEpoch).GetFreezeDataShards() == datashards)
             {
                 if (request.idempotency_key()) {
                     return fail(Ydb::StatusIds::UNAVAILABLE,
@@ -293,7 +324,9 @@ namespace NKikimr::NConsole {
             operation.SetDomainOwnerId(tenant->DomainId.OwnerId);
             operation.SetDomainLocalPathId(tenant->DomainId.LocalPathId);
             operation.SetEpoch(Epoch);
-            operation.SetFreeze(request.freeze());
+            operation.SetFreezeSchema(schema);
+            operation.SetFreezeDataShards(datashards);
+            operation.SetRequestFields(requestFields);
             operation.SetIdempotencyKey(request.idempotency_key());
             db.Table<Schema::DatabaseFreezeOperations>().Key(Epoch).Update<Schema::DatabaseFreezeOperations::State>(operation.SerializeAsString());
             tenant->FreezeEpoch = Epoch;
@@ -392,6 +425,7 @@ namespace NKikimr::NConsole {
             // diagnostics from SchemeShard after a Console restart.
             auto& progress = DatabaseFreezeProgress[epoch];
             progress.set_progress(result.GetIssue());
+            progress.set_phase(result.GetPhase());
             const auto now = ctx.Now();
             progress.mutable_update_time()->set_seconds(now.Seconds());
             progress.mutable_update_time()->set_nanos((now.MicroSeconds() % 1000000) * 1000);

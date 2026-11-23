@@ -476,19 +476,39 @@ message TEvShredManualStartupRequest {
 }
 
 message TDatabaseFreezeState {
+    enum ESchemaPhase {
+        SCHEMA_UNKNOWN = 0;
+        SCHEMA_OPEN = 1;
+        SCHEMA_DRAINING = 2;
+        SCHEMA_FROZEN = 3;
+    }
+    enum EDataPhase {
+        DATA_UNKNOWN = 0;
+        DATA_OPEN = 1;
+        DATA_PREPARING = 2;
+        DATA_DRAINING = 3;
+        DATA_FROZEN = 4;
+        DATA_OPENING = 5;
+    }
     optional uint64 Epoch = 1;
-    optional bool Freeze = 2;
+    optional bool FreezeSchema = 2;
     optional bool Ready = 3;
     optional uint32 Status = 4; // Ydb.StatusIds.StatusCode
     optional string Issue = 5;
     repeated uint64 Shards = 6;
     optional bool ParticipantsFixed = 7;
+    optional bool FreezeDataShards = 8;
+    // Targets describe the latest request; phases and participants retain physical
+    // obligations across superseding requests, including a partially applied thaw.
+    optional ESchemaPhase SchemaPhase = 9;
+    optional EDataPhase DataPhase = 10;
 }
 
 message TEvDatabaseFreeze {
     optional uint64 PathId = 1;
     optional uint64 Epoch = 2;
-    optional bool Freeze = 3;
+    optional bool FreezeSchema = 3;
+    optional bool FreezeDataShards = 4;
 }
 
 message TEvDatabaseFreezeResult {
@@ -497,4 +517,5 @@ message TEvDatabaseFreezeResult {
     optional bool Ready = 3;
     optional uint32 Status = 4; // Ydb.StatusIds.StatusCode
     optional string Issue = 5;
+    optional string Phase = 6;
 }

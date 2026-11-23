@@ -3,6 +3,7 @@
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet_flat/defs.h>
@@ -24,6 +25,8 @@
 #include <util/generic/maybe.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
+
+#include <google/protobuf/text_format.h>
 
 #include <cstring>
 #include <utility>
@@ -87,19 +90,25 @@ struct TFreezeEnv {
         return result;
     }
 
-    NKikimrScheme::TEvDatabaseFreezeResult Request(ui64 epoch, bool freeze, ui64 pathId = 0) {
+    NKikimrScheme::TEvDatabaseFreezeResult RequestMode(ui64 epoch, bool schema, bool data, ui64 pathId = 0) {
         const auto sender = Runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSchemeShard::TEvDatabaseFreeze>();
         request->Record.SetPathId(pathId ? pathId : PathId);
         request->Record.SetEpoch(epoch);
-        request->Record.SetFreeze(freeze);
+        request->Record.SetFreezeSchema(schema);
+        request->Record.SetFreezeDataShards(data);
         ForwardToTablet(Runtime, Owner, sender, request.Release());
         return Runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDatabaseFreezeResult>(sender)->Get()->Record;
     }
 
-    void Wait(ui64 epoch, bool freeze, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+    NKikimrScheme::TEvDatabaseFreezeResult Request(ui64 epoch, bool freeze, ui64 pathId = 0) {
+        return RequestMode(epoch, freeze, freeze, pathId);
+    }
+
+    void WaitMode(ui64 epoch, bool schema, bool data,
+                  Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
         for (ui32 attempt = 0; attempt < 300; ++attempt) {
-            const auto result = Request(epoch, freeze);
+            const auto result = RequestMode(epoch, schema, data);
             if (result.GetReady()) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ui32(status), result.ShortDebugString());
                 return;
@@ -107,7 +116,22 @@ struct TFreezeEnv {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ui32(Ydb::StatusIds::SUCCESS), result.ShortDebugString());
             Runtime.SimulateSleep(TDuration::MilliSeconds(100));
         }
-        UNIT_FAIL("Timed out waiting for SchemeShard freeze: epoch=" << epoch << " freeze=" << freeze);
+        UNIT_FAIL("Timed out waiting for SchemeShard freeze: epoch=" << epoch
+                  << " schema=" << schema << " data=" << data);
+    }
+
+    void Wait(ui64 epoch, bool freeze, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        WaitMode(epoch, freeze, freeze, status);
+    }
+
+    auto Modify(NKikimrSchemeOp::TModifyScheme tx, const TString& token = {}) {
+        const auto sender = Runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        request->Record.SetTxId(++TxId);
+        request->Record.SetUserToken(token);
+        *request->Record.AddTransaction() = std::move(tx);
+        ForwardToTablet(Runtime, Owner, sender, request.Release());
+        return Runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender)->Get()->Record;
     }
 
     void CheckPending(ui64 epoch = 1, bool freeze = true) {
@@ -1783,4 +1807,298 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Wait(2, false);
         env.Write("Table", true, 2);
     }
+    Y_UNIT_TEST(AllFourModesAndTwelveDirectedTransitions) {
+        const TVector<std::pair<bool, bool>> modes{{false, false}, {true, false}, {false, true}, {true, true}};
+        for (const auto& from : modes) {
+            for (const auto& to : modes) {
+                if (from == to) {
+                    continue;
+                }
+                TFreezeEnv env;
+                env.CreateTable();
+                env.WaitMode(1, from.first, from.second);
+                TVector<TStage::EStage> commands;
+                auto observer = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto& ev) {
+                    if (ev->Get()->Record.GetEpoch() == 2) {
+                        commands.push_back(ev->Get()->Record.GetStage());
+                    }
+                });
+                env.WaitMode(2, to.first, to.second);
+                if (from.second == to.second) {
+                    UNIT_ASSERT_C(commands.empty(), "A schema-only change must not contact DataShards");
+                } else {
+                    UNIT_ASSERT(!commands.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(commands.front(), to.second ? TStage::FENCE_WRITES : TStage::OPEN);
+                }
+                if (to.first) {
+                    env.CheckSchemaBlocked();
+                } else {
+                    env.CheckSchemaAvailable();
+                }
+                if (!to.second) {
+                    env.AdvancePlanStep();
+                }
+                env.Write("Table", !to.second);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DataOnlyRejectsNewParticipantsAndDecoratedSafeDdl) {
+        TFreezeEnv env;
+        env.WaitMode(1, false, true);
+        env.CheckSchemaAvailable();
+        NKikimrSchemeOp::TModifyScheme tx;
+        tx.SetWorkingDir(env.Root);
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+        auto* table = tx.MutableCreateTable();
+        table->SetName("Unexpected");
+        table->AddColumns()->SetName("key");
+        table->MutableColumns(0)->SetType("Uint32");
+        table->AddKeyColumnNames("key");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        tx.MutableMkDir()->SetName("Decorated");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        tx.ClearCreateTable();
+        const auto accepted = env.Modify(tx);
+        UNIT_ASSERT_VALUES_EQUAL(accepted.GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+        tx.ClearMkDir();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
+        tx.MutableDrop()->SetName("Decorated");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+        tx.ClearDrop();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        tx.MutableMkDir()->SetName("ById");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+        const auto directoryId = DescribePath(env.Runtime, env.Owner, env.Path("ById")).GetPathId();
+        tx.ClearMkDir();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
+        tx.MutableDrop()->SetId(directoryId);
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+        env.WaitMode(2, false, false);
+        env.CreateTable();
+        env.Write();
+    }
+
+    Y_UNIT_TEST(SchemaOnlyAndDataOnlySurviveSchemeShardRestart) {
+        for (const bool schema : {false, true}) {
+            TFreezeEnv env;
+            env.CreateTable();
+            const bool data = !schema;
+            env.WaitMode(1, schema, data);
+            RebootTablet(env.Runtime, env.Owner, env.Runtime.AllocateEdgeActor());
+            env.WaitMode(1, schema, data);
+            if (schema) {
+                env.CheckSchemaBlocked();
+            } else {
+                env.CheckSchemaAvailable();
+            }
+            env.Write("Table", !data);
+            env.WaitMode(2, false, false);
+            env.AdvancePlanStep();
+            env.Write();
+        }
+    }
+
+    Y_UNIT_TEST(TrustedReplicationExceptionIsLimitedToSchemaOnly) {
+        TFreezeEnv env;
+        env.CreateTable();
+        env.WaitMode(1, true, false);
+        auto* shard = dynamic_cast<TSchemeShard*>(env.Runtime.FindActor(ResolveTablet(env.Runtime, env.Owner)));
+        UNIT_ASSERT(shard);
+        NKikimrSchemeOp::TModifyScheme tx;
+        tx.SetWorkingDir(env.Root);
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
+        tx.MutableCreateCdcStream()->SetTableName("Table");
+        auto* stream = tx.MutableCreateCdcStream()->MutableStreamDescription();
+        stream->SetName("Trusted");
+        stream->SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        stream->SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        stream->SetState(NKikimrSchemeOp::ECdcStreamStateReady);
+        auto* marker = stream->AddUserAttributes();
+        marker->SetKey("__async_replication");
+        marker->SetValue(R"({"id":"1","path":"/Root/Target"})");
+        const auto token = NACLib::TUserToken("controller@builtin", {"replication-service"}).SerializeAsString();
+        // Empty configuration and a marker alone never grant an exception.
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        NKikimrConfig::TSchemeShardConfig config;
+        config.AddDatabaseFreezeReplicationAllowedSIDs("replication-service");
+        shard->ConfigureDatabaseFreeze(config);
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, NACLib::TUserToken("user@builtin", {}).SerializeAsString()).GetStatus(),
+                                 NKikimrScheme::StatusPreconditionFailed);
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId, env.Owner);
+        shard->ConfigureDatabaseFreeze(NKikimrConfig::TSchemeShardConfig());
+        tx.MutableCreateCdcStream()->MutableStreamDescription()->SetName("Revoked");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        shard->ConfigureDatabaseFreeze(config);
+        env.WaitMode(2, true, true);
+        env.WaitMode(3, false, true);
+        tx.MutableCreateCdcStream()->MutableStreamDescription()->SetName("Blocked");
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(tx, token).GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+        env.WaitMode(4, false, false);
+    }
+
+    Y_UNIT_TEST(SchemaOnlyThenDataFreezeWaitsForCurrentSplitAndSuccessors) {
+        TFreezeEnv env;
+        env.CreateTable();
+        env.CreateStream();
+        env.WaitMode(1, true, false);
+        TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteRequest> delivery(env.Runtime);
+        env.Write();
+        env.Runtime.WaitFor("CDC delivery before split", [&] { return !delivery.empty(); });
+        const auto source = env.Shards().front();
+        TBlockEvents<TEvDataShard::TEvInitSplitMergeDestination> split(env.Runtime);
+        const auto splitTx = env.TxId + 1;
+        NKikimrSchemeOp::TModifyScheme request;
+        request.SetWorkingDir(env.Root);
+        request.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+        request.SetInternal(true);
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(Sprintf(R"(
+            TablePath: "%s"
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 100 } } } }
+        )", env.Path("Table").c_str(), source), request.MutableSplitMergeTablePartitions()));
+        UNIT_ASSERT_VALUES_EQUAL(env.Modify(request).GetStatus(), NKikimrScheme::StatusAccepted);
+        env.Runtime.WaitFor("accepted split proposal", [&] { return !split.empty(); });
+        THashSet<ui64> participants;
+        auto observer = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([&](auto& ev) {
+            participants.insert(ev->Get()->Record.GetTabletId());
+        });
+        UNIT_ASSERT(!env.RequestMode(2, true, true).GetReady());
+        UNIT_ASSERT(participants.empty());
+        split.Stop().Unblock();
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT(!env.RequestMode(2, true, true).GetReady());
+        UNIT_ASSERT_C(participants.empty(), "Split must drain its source CDC before fixing freeze participants");
+        delivery.Stop().Unblock();
+        env.Env.TestWaitNotification(env.Runtime, splitTx);
+        const auto successors = env.Shards();
+        UNIT_ASSERT_VALUES_EQUAL(successors.size(), 2);
+        env.WaitMode(2, true, true);
+        UNIT_ASSERT(!participants.contains(source));
+        for (const auto shard : successors) {
+            UNIT_ASSERT(participants.contains(shard));
+        }
+        env.Write("Table", false, 1, 0);
+        env.Write("Table", false, 101, 1);
+        env.WaitMode(3, true, false);
+        env.AdvancePlanStep();
+        env.Write("Table", true, 1, 0);
+        env.Write("Table", true, 101, 1);
+    }
+
+    Y_UNIT_TEST(TtlContinuesUnderSchemaOnlyAndResumesAfterPartialDataThaw) {
+        TFreezeEnv env;
+        TestCreateTable(env.Runtime, ++env.TxId, env.Root, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings { Enabled { ColumnName: "ts" } }
+        )");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+
+        ui32 requests = 0;
+        ui32 completed = 0;
+        ui32 ticks = 0;
+        auto eraseRequests = env.Runtime.AddObserver<TEvDataShard::TEvConditionalEraseRowsRequest>([&](auto&) {
+            ++requests;
+        });
+        auto eraseReplies = env.Runtime.AddObserver<TEvDataShard::TEvConditionalEraseRowsResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvConditionalEraseRowsResponse::OK) {
+                ++completed;
+            }
+        });
+        auto timer = env.Runtime.AddObserver<NSchemeShard::TEvPrivate::TEvRunConditionalErase>([&](auto&) {
+            ++ticks;
+        });
+        env.Runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        env.Runtime.WaitFor("initial TTL round completed", [&] { return completed != 0; });
+
+        env.WaitMode(1, true, false);
+        const auto schemaCompleted = completed;
+        env.Runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        env.Runtime.WaitFor("TTL under schema-only", [&] { return completed > schemaCompleted; });
+        env.WaitMode(2, true, true);
+        const auto frozenRequests = requests;
+        const auto frozenTicks = ticks;
+        env.Runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_C(ticks > frozenTicks, "TTL timer must run while the database is frozen");
+        UNIT_ASSERT_VALUES_EQUAL(requests, frozenRequests);
+
+        env.WaitMode(3, true, false);
+        env.CheckSchemaBlocked();
+        const auto previousCompleted = completed;
+        env.Runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        env.Runtime.WaitFor("TTL round after thaw completed", [&] { return completed > previousCompleted; });
+        UNIT_ASSERT(requests > frozenRequests);
+    }
+
+    Y_UNIT_TEST(SchemaOnlySupportsColumnTablesAndDataFreezeRejectsThem) {
+        TFreezeEnv env;
+        env.CreateTable();
+        CreateTestTable(env.Runtime, ++env.TxId, env.Root, true);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        ui32 commands = 0;
+        auto observer = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto&) { ++commands; });
+        env.WaitMode(1, true, false);
+        env.CheckSchemaBlocked();
+        env.Write();
+        env.WaitMode(2, true, true, Ydb::StatusIds::UNSUPPORTED);
+        UNIT_ASSERT_VALUES_EQUAL(commands, 0);
+        env.WaitMode(3, false, false);
+        env.CheckSchemaAvailable();
+        env.WaitMode(4, false, true, Ydb::StatusIds::UNSUPPORTED);
+        UNIT_ASSERT_VALUES_EQUAL(commands, 0);
+        env.CheckSchemaAvailable();
+    }
+
+    Y_UNIT_TEST(FailedDataOnlyFreezeKeepsItsTargetAndThawsWithANewEpoch) {
+        TFreezeEnv env;
+        env.CreateTable();
+        auto failure = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([](auto& ev) {
+            if (ev->Get()->Record.GetStage() == TStage::DRAIN_CDC) {
+                ev->Get()->Record.SetReady(true);
+                ev->Get()->Record.SetStatus(Ydb::StatusIds::PRECONDITION_FAILED);
+                ev->Get()->Record.SetIssue("Injected data-only delivery failure");
+            }
+        });
+        env.WaitMode(1, false, true, Ydb::StatusIds::PRECONDITION_FAILED);
+        auto* shard = dynamic_cast<TSchemeShard*>(env.Runtime.FindActor(ResolveTablet(env.Runtime, env.Owner)));
+        UNIT_ASSERT(shard);
+        const auto* state = shard->FindDatabaseFreeze(TPathId(env.Owner, env.PathId));
+        UNIT_ASSERT(state);
+        UNIT_ASSERT(!state->GetFreezeSchema());
+        UNIT_ASSERT(state->GetFreezeDataShards());
+        env.Write("Table", false);
+        failure.Remove();
+        RebootTablet(env.Runtime, env.Owner, env.Runtime.AllocateEdgeActor());
+        env.WaitMode(1, false, true, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.WaitMode(2, false, false);
+        env.AdvancePlanStep();
+        env.CheckSchemaAvailable();
+        env.Write();
+    }
+
+    Y_UNIT_TEST(UnknownPhaseIsRejectedWithoutRemovingItsFence) {
+        TFreezeEnv env;
+        env.CreateTable();
+        env.WaitMode(1, false, true);
+        auto* shard = dynamic_cast<TSchemeShard*>(env.Runtime.FindActor(ResolveTablet(env.Runtime, env.Owner)));
+        UNIT_ASSERT(shard);
+        using TFreeze = NKikimrScheme::TDatabaseFreezeState;
+        auto& state = shard->DatabaseFreezeStates.at(TPathId(env.Owner, env.PathId));
+        state.SetDataPhase(TFreeze::DATA_UNKNOWN);
+        env.WaitMode(2, false, false, Ydb::StatusIds::UNSUPPORTED);
+        UNIT_ASSERT(state.GetParticipantsFixed());
+        UNIT_ASSERT(!state.GetShards().empty());
+        env.Write("Table", false);
+    }
+
 }

@@ -5980,6 +5980,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
+    ConfigureDatabaseFreeze(appData->SchemeShardConfig);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
@@ -9061,6 +9062,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureShredManager(shredConfig);
     }
 
+    // A removed config revokes the dedicated replication identities as well.
+    ConfigureDatabaseFreeze(appConfig.GetSchemeShardConfig());
     if (appConfig.HasSchemeShardConfig()) {
         const auto& schemeShardConfig = appConfig.GetSchemeShardConfig();
         ConfigureStatsBatching(schemeShardConfig, ctx);

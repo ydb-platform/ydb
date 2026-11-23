@@ -42,13 +42,16 @@ message TAlterTenantResponse {
 message TDatabaseFreezeOperation {
     optional string Path = 1;
     optional uint64 Epoch = 2;
-    optional bool Freeze = 3;
+    optional bool FreezeSchema = 3;
     optional bool Ready = 4;
     optional uint32 Status = 5;
     optional string Issue = 6;
     optional string IdempotencyKey = 7;
     optional uint64 DomainOwnerId = 8;
     optional uint64 DomainLocalPathId = 9;
+    optional bool FreezeDataShards = 10;
+    // Bit 0: schema was supplied; bit 1: datashards was supplied.
+    optional uint32 RequestFields = 11;
 }
 
 message TListTenantsRequest {

@@ -3108,7 +3108,8 @@ message TDatabaseFreezeState {
     optional bool FinalHeartbeatsEmitted = 4;
 }
 
-// The caller must fence schema changes and split/merge in SchemeShard, wait for
+// The caller must fence changes to participating table/index/CDC schemas and split/merge
+// in SchemeShard (unrelated safe directory DDL need not be frozen), wait for
 // already accepted scheme operations, and fix the participating shard set before
 // FENCE_WRITES. Keep this fence until OPEN. Freeze is not inherited by split/merge
 // destinations. CDC scan finalization and a pure legacy table Unfreeze remain

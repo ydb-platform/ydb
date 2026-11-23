@@ -282,6 +282,15 @@ bool IsAsyncReplicationOperation(const NKikimrSchemeOp::TModifyScheme& tx, TSche
 
 } // anonymous namespace
 
+bool TSchemeShard::IsDatabaseFreezeReplicationOperation(
+    const NKikimrSchemeOp::TModifyScheme& transaction, const NACLib::TUserToken* userToken)
+{
+    // Neither the marker nor administrator status is proof of controller identity.
+    return userToken && AnyOf(DatabaseFreezeReplicationAllowedSIDs, [userToken](const auto& sid) {
+        return userToken->IsExist(sid);
+    }) && IsAsyncReplicationOperation(transaction, this);
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context) {
     using namespace NGenerated;
     THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> response = nullptr;
@@ -312,7 +321,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {
-        if (IsDatabaseFreezeBlocking(transaction)) {
+        if (IsDatabaseFreezeBlocking(transaction, context.UserToken.Get())) {
             return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
                 NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "Database is frozen for schema changes");
         }

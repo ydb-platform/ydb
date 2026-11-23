@@ -28,6 +28,7 @@ namespace NYdb::NConsoleClient {
 
         class TCmsService: public Ydb::Cms::V1::CmsService::Service {
         public:
+            std::atomic<ui32> Requests = 0;
             TReply Reply;
             NThreading::TPromise<Ydb::Cms::AlterDatabaseRequest> Request =
                 NThreading::NewPromise<Ydb::Cms::AlterDatabaseRequest>();
@@ -36,6 +37,7 @@ namespace NYdb::NConsoleClient {
                 grpc::ServerContext*,
                 const Ydb::Cms::AlterDatabaseRequest* request,
                 Ydb::Cms::AlterDatabaseResponse* response) override {
+                ++Requests;
                 Request.SetValue(*request);
                 auto* operation = response->mutable_operation();
                 if (Reply.HasOperationId) {
@@ -128,13 +130,20 @@ namespace NYdb::NConsoleClient {
                 return command.ValidateAndRun(config);
             }
 
-            void CheckRequest(bool freeze) {
+            void CheckRequest(bool freeze, bool schema = true, bool data = true) {
                 const auto received = Cms.Request.GetFuture();
                 UNIT_ASSERT_C(received.Wait(TDuration::Seconds(5)), "CLI did not call AlterDatabase");
                 const auto& request = received.GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(Cms.Requests.load(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(request.path(), "/Root/Database");
-                UNIT_ASSERT(request.has_freeze());
-                UNIT_ASSERT_VALUES_EQUAL(request.freeze(), freeze);
+                UNIT_ASSERT_VALUES_EQUAL(request.has_freeze_schema(), schema);
+                UNIT_ASSERT_VALUES_EQUAL(request.has_freeze_datashards(), data);
+                if (schema) {
+                    UNIT_ASSERT_VALUES_EQUAL(request.freeze_schema(), freeze);
+                }
+                if (data) {
+                    UNIT_ASSERT_VALUES_EQUAL(request.freeze_datashards(), freeze);
+                }
                 UNIT_ASSERT(request.operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC);
             }
         };
@@ -206,6 +215,20 @@ namespace NYdb::NConsoleClient {
                 UNIT_ASSERT_EXCEPTION_CONTAINS(server.Run(freeze, {"unexpected"}), TMisuseException,
                                                "requires exactly 0 free arg(s)");
                 UNIT_ASSERT(!server.Cms.Request.GetFuture().HasValue());
+            }
+        }
+
+        Y_UNIT_TEST(ExplicitScopesAreIndependentAndUseOneRpc) {
+            for (const bool freeze : {false, true}) {
+                TServer schema;
+                UNIT_ASSERT_VALUES_EQUAL(schema.Run(freeze, {"--schema"}), EXIT_SUCCESS);
+                schema.CheckRequest(freeze, true, false);
+                TServer data;
+                UNIT_ASSERT_VALUES_EQUAL(data.Run(freeze, {"--datashards"}), EXIT_SUCCESS);
+                data.CheckRequest(freeze, false, true);
+                TServer both;
+                UNIT_ASSERT_VALUES_EQUAL(both.Run(freeze, {"--schema", "--datashards"}), EXIT_SUCCESS);
+                both.CheckRequest(freeze);
             }
         }
     } // Y_UNIT_TEST_SUITE(DatabaseFreezeCommand)

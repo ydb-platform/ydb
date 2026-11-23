@@ -157,6 +157,14 @@ struct TScaleRecommenderPolicies {
 using TResourcesKind = std::variant<std::monostate, TResources, TSharedResources, TServerlessResources>;
 using TAttributes = std::map<std::string, std::string>;
 
+struct TDatabaseFreezeStatus {
+    bool DesiredSchema = false;
+    bool DesiredDataShards = false;
+    std::string OperationId;
+    bool Ready = false;
+    std::optional<EStatus> Status;
+};
+
 class TGetDatabaseStatusResult : public TStatus {
 public:
     TGetDatabaseStatusResult(TStatus&& status, const Ydb::Cms::GetDatabaseStatusResult& proto);
@@ -171,6 +179,7 @@ public:
     const TDatabaseQuotas& GetDatabaseQuotas() const;
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
     const TAttributes& GetAttributes() const;
+    const std::optional<TDatabaseFreezeStatus>& GetFreezeStatus() const;
 
     // Fills CreateDatabaseRequest proto from this database status
     void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
@@ -186,6 +195,7 @@ private:
     TDatabaseQuotas DatabaseQuotas_;
     TScaleRecommenderPolicies ScaleRecommenderPolicies_;
     TAttributes Attributes_;
+    std::optional<TDatabaseFreezeStatus> FreezeStatus_;
 };
 
 using TAsyncGetDatabaseStatusResult = NThreading::TFuture<TGetDatabaseStatusResult>;
@@ -212,7 +222,7 @@ struct TAlterDatabaseSettings : public TOperationRequestSettings<TAlterDatabaseS
     // Empty value drops the attribute.
     FLUENT_SETTING(TAttributes, AlterAttributes);
 
-    // Wait for a database row-table write fence and CDC delivery, or remove it.
+    // Independently change schema/data freeze targets and wait for their application.
     // Cannot be combined with AlterAttributes or other database changes.
     // Confirm cluster support before freeze or thaw; the SDK version is insufficient.
     // Do not probe support with this call: an old Console may increment generation
@@ -221,7 +231,10 @@ struct TAlterDatabaseSettings : public TOperationRequestSettings<TAlterDatabaseS
     // GetDatabaseStatus reports RUNNING after all prior quota changes.
     // Prevent concurrent administrative changes during this check and freeze.
     // With a dedicated SchemeShard, RUNNING does not confirm quota propagation.
-    FLUENT_SETTING_OPTIONAL(bool, Freeze);
+    // Independent targets: absence preserves the last accepted value.
+    // Schema-only keeps data writes enabled; data-only still protects participants/CDC.
+    FLUENT_SETTING_OPTIONAL(bool, FreezeSchema);
+    FLUENT_SETTING_OPTIONAL(bool, FreezeDataShards);
 };
 
 class TCmsClient {

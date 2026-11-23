@@ -280,7 +280,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         : Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
     // The histogram may have been requested before the schema fence was installed.
-    if (Self->IsDatabaseFreezeBlocking(tableId)) {
+    if (Self->IsDatabaseTopologyBlocked(tableId)) {
         return true;
     }
 

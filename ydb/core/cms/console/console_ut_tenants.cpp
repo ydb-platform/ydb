@@ -1930,7 +1930,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         for (const bool freeze : {false, true}) {
             auto request = MakeHolder<TEvConsole::TEvAlterTenantRequest>();
             request->Record.MutableRequest()->set_path(TENANT1_2_NAME);
-            request->Record.MutableRequest()->set_freeze(freeze);
+            request->Record.MutableRequest()->set_freeze_schema(freeze);
+            request->Record.MutableRequest()->set_freeze_datashards(freeze);
             request->Record.SetUserToken(NACLib::TUserToken("user1@builtin", {}).SerializeAsString());
             runtime.SendToConsole(request.Release());
             auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAlterTenantResponse>(runtime.Sender);

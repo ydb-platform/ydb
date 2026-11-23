@@ -159,6 +159,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
             // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
             if (node->IsList()) {
                 TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> roots;
+                THashSet<const TExprNode*> unorderedRoots;
                 for (const auto& child : node->Children()) {
                     if (!child->IsList() || child->ChildrenSize()==0) {
                         continue;
@@ -170,6 +171,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
                     if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
                         roots.push_back(std::make_pair(child->ChildPtr(0)->ChildPtr(0), queryColumns));
+                        unorderedRoots.insert(child->ChildPtr(0)->ChildPtr(0).Get());
                     }
                     else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
                         roots.push_back(std::make_pair(child->ChildPtr(0), queryColumns));
@@ -182,6 +184,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
                 for (const auto& root: roots) {
                     auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root.first, root.second);
+                    opRoot->PlanProps.UnorderedResult = unorderedRoots.contains(root.first.Get());
                     opRoot->ComputeParents();
                     Roots.push_back(std::move(opRoot));
                 }
@@ -479,58 +482,56 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
     return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
 }
 
-IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) try {
     output = input;
     TOptimizeExprSettings settings(nullptr);
     if (!ResetTypes) {
         settings = TOptimizeExprSettings(&TypeCtx);
     }
-    settings.VisitTuples = true;
     Y_ENSURE(Roots.size(), "NEW RBO OpRoot is not initialized.");
 
-    // Apply optimizations.
-    auto status = OptimizeExpr(
-        output, output,
-        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-
-            // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
-            if (node->IsList()) {
-                bool emptyPreamble = false;
-                TVector<TExprNode::TPtr> roots;
-                for (const auto& child : node->Children()) {
-                    if (!child->IsList()) {
-                        continue;
-                    }
-                    if(child->ChildrenSize()==0) {
-                        emptyPreamble = true;
-                        continue;
-                    }
-                    if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
-                        roots.push_back(child->ChildPtr(0));
-                    }
-                    else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
-                        roots.push_back(child->ChildPtr(0));
-                    }
-                }
-
-                if (roots.empty()) {
-                    return node;
-                }
-
-                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-                rboCtx.EmptyPreamble = emptyPreamble;
-                TRBOTraceOutput traceOutput(rboCtx);
-                auto output = RBO.Optimize(Roots, rboCtx);
-                traceOutput.Flush();
-                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
-                return output;
-            } else {
-                return node;
+    // Match containers of (KqpOpRoot, columns) or (Unordered(KqpOpRoot), columns).
+    const auto containers = FindNodes(input, [](const TExprNode::TPtr& node) {
+        return node->IsList() && AnyOf(node->Children(), [](const auto& child) {
+            if (!child->IsList() || child->ChildrenSize() == 0) {
+                return false;
             }
-        },
-        ctx, settings);
+            auto root = child->ChildPtr(0);
+            if (TCoUnordered::Match(root.Get())) {
+                root = root->ChildPtr(0);
+            }
+            return TKqpOpRoot::Match(root.Get());
+        });
+    });
+    if (containers.empty()) {
+        return TStatus::Ok;
+    }
 
-    return status;
+    // Optimize all roots once, then replace every result container.
+    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+    TRBOTraceOutput traceOutput(rboCtx);
+    auto optimizedPlan = RBO.Optimize(Roots, rboCtx);
+    traceOutput.Flush();
+    AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+
+    TNodeOnNodeOwnedMap replacements;
+    for (const auto& container : containers) {
+        // An effects-only KqlQuery is (() (KqpOpRoot ...)): keep its empty Results slot.
+        auto replacement = optimizedPlan;
+        for (const auto& child : container->Children()) {
+            if (child->IsList() && child->ChildrenSize() == 0) {
+                auto children = optimizedPlan->ChildrenList();
+                children.insert(children.begin(), child);
+                replacement = ctx.NewList(container->Pos(), std::move(children));
+                break;
+            }
+        }
+        replacements.emplace(container.Get(), std::move(replacement));
+    }
+    return RemapExpr(input, output, replacements, ctx, settings);
+} catch (const std::exception& e) {
+    ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
+    return TStatus::Error;
 }
 
 void TKqpNewRBOTransformer::ApplyColumnStatistics() {
@@ -611,7 +612,14 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     const bool allowChannelSpilling = KqpCtx.Config->GetEnableQueryServiceSpilling()
         && (KqpCtx.IsGenericQuery() || KqpCtx.IsScanQuery()) && KqpCtx.Config->SpillingEnabled();
 
-    // Prune unused outputs before any rules that require type information.
+    // Full joins have no native filter implementation. Expand them while both
+    // input keys are still available, before pruning and read pushdown. Their
+    // shared inputs then go through the usual expansion when spilling is off.
+    TVector<std::unique_ptr<IRule>> fullJoinFilterRules;
+    fullJoinFilterRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>(/*fullJoinsOnly=*/true));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline full join filters", std::move(fullJoinFilterRules)));
+
+    // Other plans can prune unused outputs before requiring type information.
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Early pruning"));
 
     // Expand aggregation.
@@ -642,6 +650,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TConstantFoldingStage>());
 
     TVector<std::unique_ptr<IRule>> inlineSimpleSubPlanStageRules;
+    // At first try to pull correlated predicates up. The rules below create a dependent join for the rest.
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TPullUpCorrelatedPredicateRule>());
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineGenericInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));
@@ -673,6 +683,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));
+    RBO.AddStage(std::make_unique<TRemoveRedundantSortsStage>("Remove redundant sorts"));
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
@@ -683,6 +694,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughUnionAllRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TEliminateDuplicateAggregationsRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
@@ -692,8 +705,10 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterThroughUnionAllRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushTopSortThroughUnionAllRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));
 
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Pruning I", pruneKeyColumns));
@@ -762,6 +777,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Optimize physical stages.
     TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateAggregateThroughStageRule>());
+    // Matches an intermediate aggregate once it shares the stage of a column table read.
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPushOlapAggregateRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));

@@ -98,6 +98,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "consistency_level",
         "commit_interval",
         "initial_scan",
+        "bootstrap",
         "availability_period",
     };
 

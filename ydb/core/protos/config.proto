@@ -143,7 +143,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18 [default = true];
-    optional bool UseUnitedPool = 22 [default = true];
+    optional bool UseUnitedPool = 22 [default = false];
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
@@ -2928,6 +2928,21 @@ message THiveConfig {
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
     optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
     optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
+
+    message TNamedResourceSettings {
+        enum EBalanceMode {
+            NO_BALANCE = 0; // observe only: values are stored and shown, but never trigger tablet moves
+            SATURATION = 1; // balance when some node exceeds its maximum while another one has spare capacity
+            SCATTER = 2; // balance by spread of normalized usage between nodes, like the built-in resources
+        }
+
+        optional string Name = 1 [(ParamDescription) = "Resource name, or a prefix ending with '*'. Exact match wins over prefix, longer prefix wins over shorter."];
+        optional EBalanceMode BalanceMode = 2 [(ParamDescription) = "How the resource is balanced."];
+        optional double MinScatterToBalance = 3 [default = 0.5, (ParamDescription) = "Scatter threshold for SCATTER balance mode, as a normalized fraction."];
+        optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
+    }
+    repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
+    optional bool TrackResourceBrokerUsage = 100 [default = true, (ParamDescription) = "Whether Locals track resource broker queue usage and report it as rb/* named resources. When turned off, Locals stop polling the resource broker and reset the usage and queue limits they have reported."];
 }
 
 message THealthCheckConfig {

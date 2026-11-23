@@ -211,7 +211,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/kqp/opt
+    ydb/core/kqp/query_plan
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
@@ -235,6 +235,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer
     ydb/library/yaml_config
+    ydb/library/yaml_json
     ydb/library/cloud_permissions
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types

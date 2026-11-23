@@ -1,8 +1,12 @@
+* Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+
 * Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 
 * Added availability-period reporting to draft async replication descriptions, including finite, unlimited, unknown, and invalid policies.
+
+* Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
 
 * Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
 

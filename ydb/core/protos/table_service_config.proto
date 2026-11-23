@@ -634,4 +634,9 @@ message TTableServiceConfig {
     // Overridable per query via PRAGMA ydb.UseScalarHashJoinForMap.
     // Only the legacy optimizer honors it, NewRBO ignores it for now.
     optional bool UseScalarHashJoinForMap = 153 [default = false, (InvalidateCompileCache) = true];
+
+    // Share of compilations that use the new RBO, in [0, 1]. Used only when EnableNewRBO is true.
+    // Each compilation draws p from [0, 1) and uses the new RBO if p < NewRBORolloutRatio, otherwise the YQL optimizer.
+    // 1 (default) always uses the new RBO; 0 never does.
+    optional double NewRBORolloutRatio = 156 [default = 1.0, (InvalidateCompileCache) = true];
 };

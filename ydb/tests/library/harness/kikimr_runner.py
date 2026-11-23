@@ -252,6 +252,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append(
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
             )
+            command.append(
+                "--grpc-ca=%s" % self.__configurator.grpc_tls_ca_path
+            )
 
         if self.__configurator.protected_mode:
             command.append(
@@ -259,6 +262,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             )
             command.append(
                 "--key=%s" % self.__configurator.grpc_tls_key_path
+            )
+            command.append(
+                "--grpc-cert=%s" % self.__configurator.grpc_tls_cert_path
+            )
+            command.append(
+                "--grpc-key=%s" % self.__configurator.grpc_tls_key_path
             )
 
         if self.__configurator.domain_name:

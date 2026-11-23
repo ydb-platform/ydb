@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(RelativePaths) {
         }
         for (const TString path : {"/", "/./"}) {
             ExpectFail();
-            RunCli({"-e", GetEndpoint(), "-d", "tenant", "scheme", "rmdir", path});
+            RunCli({"-e", GetEndpoint(), "-d", "tenant", "scheme", "rmdir", "--force", path});
         }
     }
 }

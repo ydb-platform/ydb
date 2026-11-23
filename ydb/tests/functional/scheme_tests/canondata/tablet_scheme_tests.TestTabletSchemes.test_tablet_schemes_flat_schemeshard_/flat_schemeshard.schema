@@ -3315,6 +3315,11 @@
                 "ColumnId": 21,
                 "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "CancelRequestedBy",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -3341,7 +3346,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,

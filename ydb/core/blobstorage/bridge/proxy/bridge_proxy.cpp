@@ -1609,12 +1609,12 @@ namespace NKikimr {
             const ui64 cookie = ++LastRequestCookie;
             YDB_LOG_DEBUG("New background write",
                 {"marker", "BPB12"},
-                {"groupId, GroupId},
-                {"bridgePileId, write.BridgePileId},
-                {"request, ev->ToString()},
-                {"cookie, cookie},
-                {"restarts, write.Restarts},
-                {"groupPileInfo, *part});
+                {"groupId", GroupId},
+                {"bridgePileId", write.BridgePileId},
+                {"request", ev->ToString()},
+                {"cookie", cookie},
+                {"restarts", write.Restarts},
+                {"groupPileInfo", *part});
             const auto [it, inserted] = BackgroundWritesInFlight.emplace(cookie, std::move(write));
             Y_DEBUG_ABORT_UNLESS(inserted);
             DispatchSubrequest(groupId, std::move(ev), cookie, std::move(traceId));

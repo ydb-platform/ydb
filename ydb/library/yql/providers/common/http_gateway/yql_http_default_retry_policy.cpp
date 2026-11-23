@@ -8,9 +8,11 @@ constexpr TDuration DEFAULT_MAX_TIME = TDuration::Minutes(5);
 constexpr TDuration DNS_ERROR_MAX_TIME = TDuration::Seconds(10);
 
 std::unordered_set<CURLcode> FqRetriedCurlCodes() {
+    // A connection failure during upload can surface as CURLE_SEND_FAIL_REWIND.
+    // The gateway recreates the input from its saved body when retrying.
     return { CURLE_COULDNT_CONNECT, CURLE_WEIRD_SERVER_REPLY, CURLE_WRITE_ERROR, CURLE_READ_ERROR, CURLE_OPERATION_TIMEDOUT,
         CURLE_SSL_CONNECT_ERROR, CURLE_BAD_DOWNLOAD_RESUME, CURLE_SEND_ERROR, CURLE_RECV_ERROR, CURLE_PARTIAL_FILE,
-        CURLE_NO_CONNECTION_AVAILABLE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST };
+        CURLE_NO_CONNECTION_AVAILABLE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST, CURLE_SEND_FAIL_REWIND };
 }
 
 }   // namespace

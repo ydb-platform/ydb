@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(THttpDefaultRetryPolicyTest) {
 
     Y_UNIT_TEST(FqPolicyUsesFqRetriedCurlCodes) {
         // These codes are retried by the Fq policy only
-        for (CURLcode curlCode : { CURLE_PARTIAL_FILE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST }) {
+        for (CURLcode curlCode : { CURLE_PARTIAL_FILE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST, CURLE_SEND_FAIL_REWIND }) {
             auto fqState = GetFqHTTPRetryPolicy()->CreateRetryState();
             UNIT_ASSERT_C(fqState->GetNextRetryDelay(curlCode, 0).Defined(), int(curlCode));
 

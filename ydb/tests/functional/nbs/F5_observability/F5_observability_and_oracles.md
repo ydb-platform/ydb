@@ -54,7 +54,7 @@ These exist in code. They are not asserted by any functional test.
 
 | # | Sensor | Path | Used by |
 | --- | --- | --- | --- |
-| F5.3 | `TVChunkCounters`: `Pending`, `MinLsn`, `ReplyOk` / `ReplyErr` for `Flush` / `Erase` / `EraseBelated` | volume / partition mon or Solomon dump | F2.9–F2.10 (phase detection), F4.5–F4.6 |
+| F5.3 | `TVChunkCounters`: `Pending`, `MinLsn`, `ReplyOk` / `ReplyErr` for `Flush` / `Erase` | volume / partition mon or Solomon dump | F2.9–F2.10 (phase detection), F4.5–F4.6 |
 | F5.4 | `TVolumeRequestCounters`: `Requests`, `ReplyOk`, `ReplyErr`, `Bytes`, `Inflight`, `RequestTimeMs` for Read/Write/Zero | same | F1 load-actor cross-check; F2.5 (no silent SUCCESS) |
 | F5.5 | DDisk `DirectIO.QueueSize`, `RunningCount`, `QueueTime`; `PersistentBuffer.PendingEventsQueueSize`; `DiskOperationsInflight` on `TEvGetPersistentBufferInfo` | `/actors` on the storage node | F4.8–F4.9 (approaching OVERFILL / OVERLOADED) |
 

@@ -50,11 +50,8 @@ public:
     TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
     TReplyStatusE DeleteTabletChunksStatus = TReplyStatus::OK;
 
-    // When set, WriteToManyPBuffers replies only for the first (coordinator)
-    // DDisk in the request with the given status, emulating the node
-    // disconnection / undelivery path where the actor answers only for the
-    // coordinator.
-    std::optional<TReplyStatusE> WriteToManyPBufferCoordinatorOnlyStatus;
+    // When set, WriteToManyPBuffers replies Undelivered for every DDisk.
+    std::optional<TReplyStatusE> WriteToManyPBuffersUndeliveredStatus;
 
     // Every barrier erase sent: (pbuffer node id, barrier lsn).
     TVector<std::pair<ui32, ui64>> BarrierErases;

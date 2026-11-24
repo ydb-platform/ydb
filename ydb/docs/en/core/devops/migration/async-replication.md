@@ -169,7 +169,7 @@ Stop source writes from applications, background jobs, loaders, and retry delive
 
 ### Check Applied Changes {#check-replication}
 
-After stopping writes, wait for fresh reports showing `running.stats.lag = 0s` and `items[].stats.lag = 0s` for every replicated object. If a value is unavailable, wait for reporting to resume; an absent value does not mean zero lag. Do not proceed to `DONE/FORCE` before then. A fresh zero is required by this cutover procedure but does not by itself prove completeness: continue with the changefeed and data checks below.
+Use `running.stats.lag` and `items[].stats.lag` to monitor the transfer. The response provides neither a measurement time nor a report number: a repeated `0s` does not establish that a new report arrived after source writes stopped. A missing value does not mean zero lag. Determine readiness using [full data comparison](#check-data), rather than a lag value alone.
 
 Use `source_path` and `source_changefeed_name` from each entry in `items`:
 
@@ -193,13 +193,39 @@ Where:
 
 `Start offset` is the start of the range of messages still available; `End offset` is the end of the written range, excluding the boundary itself; `Committed offset` is the boundary whose processing the consumer has acknowledged.
 
-Record the `End offset` of every partition after the final changes arrive. Wait until its `Committed offset` reaches that boundary. For example, `115` has not reached a boundary of `120`, while `120` confirms processing up to it. Check all changefeeds and partitions.
+Record the current `End offset` of every partition. Wait until its `Committed offset` reaches that boundary. For example, `115` has not reached a boundary of `120`, while `120` confirms processing up to it. Check all changefeeds and partitions.
 
 This only checks messages already in the changefeeds. It does not prove that all changes have left internal source queues. Zero lag, completed scanning, or `running` alone cannot establish transfer completeness.
 
-### Check Application Data {#check-data}
+### Compare All Data and Check the Application {#check-data}
 
-Using application credentials, read the target by known keys and compare results with expected values. You may additionally compare row counts:
+The CDC checks above do not establish when the final changes have left internal source queues. For this single-table example, confirm readiness by comparing every key and value. Include the time to read both tables and space for both exports in the downtime plan.
+
+Data in both tables must remain unchanged during verification. Source writes have already stopped; also prevent background changes, including TTL deletion. To keep the target unchanged between comparison and completion, [pause replication](../../yql/reference/syntax/alter-async-replication.md) on the target:
+
+```yql
+ALTER ASYNC REPLICATION my_replication SET (STATE = 'PAUSED');
+```
+
+Wait until the description contains `paused` without `error`:
+
+```bash
+{{ ydb-cli }} -p target scheme describe my_replication --format proto-json-base64
+```
+
+Check that both table descriptions have the same column names and types and the same primary key columns in the same order. Then [stream-read the full tables](../../reference/ydb-cli/commands/readtable.md), ordered by primary key, and compare the exports:
+
+```bash
+{{ ydb-cli }} -p source table read original_table --ordered --format json-base64 > source.rows.jsonl &&
+{{ ydb-cli }} -p target table read replica_table --ordered --format json-base64 > target.rows.jsonl &&
+cmp source.rows.jsonl target.rows.jsonl
+```
+
+Use the same CLI version and output format. Do not specify `--limit`, `--columns`, `--from`, or `--to`: verification must include every row and column. Both exports must finish completely, without errors or an `<INTERRUPTED>` message. Partial files are invalid even if they match. `cmp` must return exit code `0` with no output, indicating byte-for-byte equality. For multiple tables, repeat the full comparison for every source and target pair.
+
+If the files differ, investigate the differences. If the target has not applied all changes, resume with `STATE = 'STANDBY'`, wait for progress, and repeat pausing and both full exports. Keep source writes stopped throughout. Do not run `DONE/FORCE` until full comparison succeeds and the data remains unchanged. If verification cannot fit the agreed window, stop the procedure and agree on further actions with your installation's support team.
+
+After successful comparison, use application credentials to read the target by known keys. You may additionally compare row counts:
 
 ```yql
 -- On the source:
@@ -209,7 +235,9 @@ SELECT COUNT(*) FROM original_table;
 SELECT COUNT(*) FROM replica_table;
 ```
 
-On large tables, `COUNT(*)` can take a long time. Equal counts do not prove equal contents. Proceed only after fresh reports following the write stop show zero lag for all objects, every partition has reached its recorded boundary, replication has no errors, and the agreed data checks confirm transfer completeness. If completeness cannot be confirmed, do not run `DONE/FORCE`: keep source writes stopped, investigate the cause, and agree on further actions with your installation's support team.
+On large tables, `COUNT(*)` can take a long time. Equal counts and sampled queries do not replace comparing every key and value.
+
+Proceed to [completion and cutover](#cutover) only after full comparison and application checks succeed. Keep replication `PAUSED` and both tables unchanged until `DONE/FORCE`; do not resume applying changes between comparison and completion.
 
 ## 5. Complete Replication and Switch the Application {#cutover}
 
@@ -230,7 +258,7 @@ SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');
 {{ ydb-cli }} -p target scheme describe my_replication --format proto-json-base64
 ```
 
-Wait until `done` replaces `running`. Using application credentials, perform an agreed test write, read it, and remove the test data on the target. Verify that all required tables are writable.
+Wait until `done` appears; neither `paused` nor `running` should remain. Using application credentials, perform an agreed test write, read it, and remove the test data on the target. Verify that all required tables are writable.
 
 Switch application endpoints, database paths, TLS/CA settings, and authentication to the target. In this example, the source table is `original_table` and the target is `replica_table`: update the name in relative application SQL queries as well. Also check absolute SQL paths, `PRAGMA TablePathPrefix`, migration tools, and background jobs. Prepare missing objects and indexes before running dependent queries, then recreate connections using the application's deployment procedure.
 

@@ -10,7 +10,7 @@ Before the transfer:
 1. Define acceptable read and write downtime and assign the people responsible.
 1. Prepare the target, application permissions, network access, and resources for both databases.
 1. Test application reconnection and retries during temporary write unavailability.
-1. Choose verification queries, conditions for starting cutover, and actions on failure. Run a test migration and test returning to the source before new writes appear on the target.
+1. Choose verification queries, conditions for starting cutover, and actions on failure. Include the time for [full data comparison](async-replication.md#check-data) in the downtime window and reserve space for the exports. Run a test migration and test returning to the source before new writes appear on the target.
 1. Agree on a migration window and notify users.
 
 ## Choosing a Method {#approach-to-downtime}
@@ -48,7 +48,9 @@ Compare duration and load in a test transfer. Account for data volume, applicati
 
 ## Grouping Tables into Replication Instances {#replication-scope}
 
-Use separate replication instances for tables belonging to different applications. Consider transferring large tables of one application separately as well. List tables transferred together in one `FOR` clause when [creating replication](async-replication.md#create). Record the selected set before starting, and separately check the application's data consistency requirements.
+First determine the application's [data consistency requirements](../../concepts/async-replication.md#consistency-levels). If reads on the target require atomic visibility of transactions that change related tables, include those tables in one instance with `CONSISTENCY_LEVEL = 'GLOBAL'`. Separate instances can apply changes at different times and do not provide this guarantee across instances.
+
+When independent application of changes is acceptable, tables from different applications and large tables of one application can use separate instances. List the tables of one instance together in its `FOR` clause when [creating replication](async-replication.md#create). Record the selected set before starting.
 
 ## Stopping Writes {#stopping-traffic}
 

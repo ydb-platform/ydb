@@ -156,14 +156,14 @@ The set of source objects is fixed when the replication instance is created. See
 
     {{ ydb-short-name }} will replicate all row-based tables that are located in the given directories and subdirectories at the time the asynchronous replication instance is created.
 
-* During asynchronous replication, you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
+* With the default configuration, during asynchronous replication you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
 * During asynchronous replication, replicas are available only for reading.
 
 Row-table replication does not transfer column-oriented tables and their stores, coordination nodes, secrets, views, external data sources and tables, transfers, streaming queries, backup collections, resource pools and their classifiers, or other schema objects, including empty directories. Support for index types and sequences depends on the versions of both databases.
 
 The initial scan does not transfer definitions of user topics or changefeeds. Restoring a backup may restore their definitions, but row-table replication does not transfer their messages or subsequent changes in these streams. This restriction does not refer to the service CDC changefeeds that replication itself creates to transfer tables.
 
-Initial permissions and ownership depend on [how replica objects are created](#init). Schema, permission, and ownership changes made after replication starts are not automatically transferred to the target.
+Initial permissions and ownership depend on [how replica objects are created](#init). Permission and ownership changes made after replication starts are not automatically transferred to the target. With the default configuration, schema changes are not transferred automatically either; support for transferring schema changes when additional capabilities are enabled depends on the version and cluster settings.
 
 ## Error Handling During Asynchronous Replication {#error-handling}
 

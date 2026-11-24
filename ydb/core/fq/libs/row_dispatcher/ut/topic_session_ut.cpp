@@ -852,13 +852,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init("mixed_formats", std::numeric_limits<ui64>::max(), 0, {}, 60000);
         auto jsonSource = BuildSource(true);
         StartSession(ReadActorId1, jsonSource);
-<<<<<<< HEAD
-        PQWrite({Json1, Json2, Json3});
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "JSON input buffered", [&] {
-=======
         PQWrite({ Json1, Json2, Json3 });
         NTests::WaitFor(WAIT_TIMEOUT, "JSON input buffered", [&] {
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
             auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
             return event && event->Get()->Stat.Common.LastReadedOffset == 2;
         });
@@ -1110,11 +1105,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         test("}");
         test("{");
         writeRead({ "{\"dt\":100}", "{}\x80", Json3 }, { JsonMessage(3) });
-<<<<<<< HEAD
-        writeRead({Json1 + Json1 }, { JsonMessage(1) });  // not checked 
-=======
         writeRead({ Json1 + Json1 }, { JsonMessage(1), JsonMessage(1) });   // two JSON rows in one topic message
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
         PassAway();
     }
 

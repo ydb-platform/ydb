@@ -3,13 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
-<<<<<<< HEAD
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/library/testlib/common/test_with_actor_system.h>
-=======
 
 #include <ydb/library/actors/testlib/test_runtime.h>
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
@@ -19,14 +14,9 @@ namespace NFq::NRowDispatcher::NTests {
 
 static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(20);
 
-<<<<<<< HEAD
-class TBaseFixture : public NTestUtils::TTestWithActorSystemFixture, public TTypeParser {
-    using TBase = NTestUtils::TTestWithActorSystemFixture;
-=======
 class TFormatHandlerTestRuntime: public NActors::TTestActorRuntimeBase {
 public:
     TFormatHandlerTestRuntime();
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
 
 protected:
     void InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) override;

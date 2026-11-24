@@ -223,9 +223,6 @@ public:
 using TJsonParserFixture = TJsonParserBaseFixture<false>;
 using TJsonParserFixtureSkipErrors = TJsonParserBaseFixture<true>;
 
-<<<<<<< HEAD
-class TRawParserFixture : public TBaseParserFixture {
-=======
 // Exercise parser output through the format handler with topic-session offset semantics.
 class TJsonParserDeliveryFixture: public TBaseFixture {
 public:
@@ -337,7 +334,6 @@ public:
 };
 
 class TRawParserFixture: public TBaseParserFixture {
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
 public:
     NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
 
@@ -1624,13 +1620,6 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     }
 
     Y_UNIT_TEST_F(JsonStructureValidation, TJsonParserFixture) {
-<<<<<<< HEAD
-        CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; String]]"}}));
-        CheckColumnError(R"({"a1": Yelse})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; String]] subissue: { <main>: Error: Failed to extract json string, current token: 'Yelse', error: INCORRECT_TYPE: The JSON element does not have the requested type.");
-        CheckBatchError(R"({"a1": "st""r"})", EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1 << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure");
-        CheckBatchError(R"({"a1": "x"} {"a1": "y"})", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 2 << " but got 2 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {\"a1\": \"x\"} {\"a1\": \"y\"}");
-        CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3 << " but got 0 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {");
-=======
         CheckSuccess(MakeParser({ { "a1", "[OptionalType; [DataType; String]]" } }));
         CheckColumnError(R"({"a1": Yelse})", 0, EStatusId::BAD_REQUEST,
             TStringBuilder()
@@ -1641,7 +1630,6 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1
                              << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure");
         CheckBatchError(R"({)", EStatusId::BAD_REQUEST, "json batch truncated bytes");
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
     }
 
     Y_UNIT_TEST_F(SkipErrorsNotOptional, TJsonParserFixtureSkipErrors) {
@@ -1825,10 +1813,6 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
     Y_UNIT_TEST_F(SkipErrors1JsonIn2Messages, TJsonParserFixtureSkipErrors) {
         ExpectedBatches = 1;
-<<<<<<< HEAD
-        CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> /*result*/) {
-            UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
-=======
         CheckSuccess(MakeParser({ "a1", "a2" }, "[DataType; String]", [&](ui64 numberRows, auto result) {
             UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(TString(result[0][0].AsStringRef()), "hello1");
@@ -1837,7 +1821,6 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(TString(result[1][1].AsStringRef()), "102");
             UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 2);
             UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[1], FIRST_OFFSET + 3);
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
         }, false));
 
         Parser->ParseRecords({
@@ -1940,9 +1923,6 @@ Y_UNIT_TEST_SUITE(TestRawParser) {
     }
 }
 
-<<<<<<< HEAD
-}  // namespace NFq::NRowDispatcher::NTests
-=======
 }   // namespace NFq::NRowDispatcher::NTests
 
 namespace NFq::NRowDispatcher::NTests {
@@ -2093,4 +2073,3 @@ Y_UNIT_TEST_SUITE(TestJsonParserDelivery) {
     }
 }
 }   // namespace NFq::NRowDispatcher::NTests
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))

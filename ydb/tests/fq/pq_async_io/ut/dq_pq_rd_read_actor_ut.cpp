@@ -194,18 +194,10 @@ public:
         });
     }
 
-<<<<<<< HEAD
-    TRope SerializeItem(NKikimr::NMiniKQL::TProgramBuilder& builder, const TMaybe<TMessage>& item) const {
-        NKikimr::NMiniKQL::TType* typeMkql = builder.NewMultiType({
-            NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; Uint64]"), builder, Cerr),
-            NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; String]"), builder, Cerr)
-        });
-=======
     TRope SerializeItems(NKikimr::NMiniKQL::TProgramBuilder& builder, const std::vector<TMessage>& items) const {
         NKikimr::NMiniKQL::TType* typeMkql =
             builder.NewMultiType({ NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; Uint64]"), builder, Cerr),
                 NYql::NCommon::ParseTypeFromYson(TStringBuf("[DataType; String]"), builder, Cerr) });
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
         UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
 
         NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);

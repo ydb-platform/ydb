@@ -63,13 +63,8 @@ struct TJsonParserBuffer : public TNonCopyable {
     ui16 NumberValues = 0;
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
-<<<<<<< HEAD
-    TParserVector<ui64> Offsets = {};             // Offsets in topics (seqno).
-    TParserVector<ui32> MessageOffsets = {};      // Message positions in Values.
-=======
     TParserVector<ui64> Offsets = {};   // Offsets in topics (seqno).
     TParserVector<ui32> MessageOffsets = {};   // Message boundaries in Values; Finish() appends the final boundary.
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
 
     bool IsReady() const {
         return !Finished && NumberValues > 0;
@@ -148,12 +143,8 @@ public:
     TParserString TypeYson;
 
 public:
-<<<<<<< HEAD
-    TStatus InitParser(const TString& name, const TString& typeYson, std::span<ui16> parsedRows, const NKikimr::NMiniKQL::TType* typeMkql, bool skipErrors, NKikimr::NMiniKQL::THolderFactory* holderFactory) {
-=======
     TStatus InitParser(const TString& name, const TString& typeYson, std::span<size_t> parsedRows, const NKikimr::NMiniKQL::TType* typeMkql,
         bool skipErrors, NKikimr::NMiniKQL::THolderFactory* holderFactory) {
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
         ClearParsedRows();
         StructMembers = TStructMembers();
         Name = TParserString(name.data(), name.size());
@@ -934,13 +925,9 @@ public:
                 return TStatus(typeStatus).AddParentIssue(TStringBuilder() << "Failed to parse column '" << name << "' type " << typeYson);
             }
 
-<<<<<<< HEAD
-            if (auto status = Columns[i].InitParser(name, typeYson, parsedRowsIdxSpan.subspan(i * MaxNumberRows, MaxNumberRows), typeStatus.DetachResult(), Config.SkipErrors, Config.StructuredParsing ? HolderFactory.get() : nullptr); status.IsFail()) {
-=======
             if (auto status = Columns[i].InitParser(name, typeYson, parsedRowsIdxSpan.subspan(i * RowCapacity, RowCapacity),
                     typeStatus.DetachResult(), Config.SkipErrors, Config.StructuredParsing ? HolderFactory.get() : nullptr);
                 status.IsFail()) {
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
                 return status.AddParentIssue(TStringBuilder() << "Failed to create parser for column '" << name << "' with type " << typeYson);
             }
             if (!Columns[i].GetIsOptional()) {
@@ -1039,34 +1026,6 @@ protected:
         OutputOffsets.clear();
         ParsingFailedRowCount = 0;
 
-<<<<<<< HEAD
-         if (Config.SkipErrors) {
-            OutputOffsets = Buffer.Offsets;
-        }
-        TParsingState state{.InitialBufferPtr = values, .CurrentBufferPtr = values, .Size = size, .SkipErrors = Config.SkipErrors, .Status = TStatus::Success()};
-
-        while (true) {
-            auto status = ParseRows(state);
-            if (status == EParsingStatus::Finish) {
-                break;
-            }
-            size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-            if (inputRowId < Buffer.MessageOffsets.size()) {
-                auto nextJsonOffset = Buffer.MessageOffsets[inputRowId];
-                state.CurrentBufferPtr = values + nextJsonOffset;
-                state.Size = size - nextJsonOffset;
-            } else {
-                break;
-            }
-        };
-        if (!state.Status.IsSuccess()) {
-            return state.Status;
-        }
-
-        ParsingFailedRowCount = state.ErrorsCount;
-        if (Y_UNLIKELY(!Config.SkipErrors && state.OutputRowId != Buffer.NumberValues)) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << state.OutputRowId << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-=======
         if (Buffer.NumberValues == 1 || ParseDocuments(values, size, Buffer.Offsets.front(), true).IsFail()) {
             ClearParsedData();
             for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
@@ -1076,7 +1035,6 @@ protected:
                     return status;
                 }
             }
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
         }
 
         if (ParsingFailedRowCount) {
@@ -1133,52 +1091,6 @@ private:
             return status;
         };
 
-<<<<<<< HEAD
-    enum class EParsingStatus {
-        Finish,
-        RepeatFromNextJson,
-    };
-
-private:
-
-    bool TryParseOneJson(TParsingState& state) {
-        size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-
-        if (inputRowId >= Buffer.MessageOffsets.size() - 1) {
-            return false;
-        }
-
-        auto currentJsonOffset = Buffer.MessageOffsets[inputRowId];
-        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];
-        ui16 parsedNonOptional = 0;
-        auto len = nextJsonOffset - currentJsonOffset;
-
-        simdjson::padded_string_view view{state.InitialBufferPtr + currentJsonOffset, len, len + simdjson::SIMDJSON_PADDING}; // SIMDJSON_PADDING already was added to Buffer
-        simdjson::ondemand::document document;
-        CHECK_JSON_ERROR(Parser.iterate(view).get(document)) {
-            return false;
-        }
-        for (auto item : document.get_object()) {
-            CHECK_JSON_ERROR(item.error()) {
-                return false;
-            }
-            const auto it = ColumnsIndex.find(item.escaped_key().value());
-            if (it == ColumnsIndex.end()) {
-                continue;
-            }
-
-            const size_t columnId = it->second;
-            auto& column = Columns[columnId];
-            const ui64 offset = Buffer.Offsets[inputRowId];
-            auto& value = ParsedValues[columnId][state.OutputRowId];
-            bool valueWasSet = bool(value);
-            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
-            if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
-                ++parsedNonOptional;
-            }
-            if (!success) {
-                return false;
-=======
         const auto isJsonWhitespace = [](char c) {
             return c == ' ' || c == '\t' || c == '\r' || c == '\n';
         };
@@ -1196,61 +1108,10 @@ private:
                 if (!std::all_of(values + begin, values + end, isJsonWhitespace)) {
                     ++expectedMessages;
                 }
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
             }
         }
 
         simdjson::ondemand::document_stream documents;
-<<<<<<< HEAD
-        CHECK_JSON_ERROR(Parser.iterate_many(state.CurrentBufferPtr, state.Size, state.Size).get(documents)) {
-            auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-            return TryToParseOneJson(state, status);
-        }
-
-        for (auto document : documents) {
-            size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-            if (Y_UNLIKELY(inputRowId >= Buffer.NumberValues)) {
-                auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << inputRowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                if (!state.SkipErrors) {
-                    state.Status = status;
-                }
-                return EParsingStatus::Finish;
-            }
-
-            if (state.SkipErrors) {
-                OutputOffsets[state.OutputRowId] = Buffer.Offsets[inputRowId];
-            }
-
-            const ui64 offset = Buffer.Offsets[inputRowId];
-            CHECK_JSON_ERROR(document.error()) {
-                auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                return TryToParseOneJson(state, status);
-            }
-
-            ui16 parsedNonOptional = 0;
-            for (auto item : document.get_object()) {
-                CHECK_JSON_ERROR(item.error()) {
-                    auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                    return TryToParseOneJson(state, status);
-                }
-
-                const auto it = ColumnsIndex.find(item.escaped_key().value());
-                if (it == ColumnsIndex.end()) {
-                    continue;
-                }
-
-                const size_t columnId = it->second;
-                auto& column = Columns[columnId];
-                auto& value = ParsedValues[columnId][state.OutputRowId];
-                bool valueWasSet = bool(value);
-                bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
-                if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
-                    ++parsedNonOptional;
-                }
-                if (Config.SkipErrors && !success) {
-                    auto status = column.GetStatus();
-                    return TryToParseOneJson(state, status);
-=======
         CHECK_JSON_ERROR(Parser.iterate_many(values, size, std::max(size, simdjson::ondemand::MINIMAL_BATCH_SIZE)).get(documents)) {
             return handleError(parsingError(TStringBuilder() << "json documents was corrupted: " << simdjson::error_message(error)));
         }
@@ -1268,7 +1129,6 @@ private:
             {
                 CHECK_JSON_ERROR(document.type().get(type)) {
                     return handleError(parsingError(simdjson::error_message(error)));
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
                 }
             }
             if (batch && type != simdjson::ondemand::json_type::object && type != simdjson::ondemand::json_type::array) {
@@ -1356,14 +1216,6 @@ private:
                 return TStatus::Success();
             };
 
-<<<<<<< HEAD
-        if (state.SkipErrors && (state.OutputRowId + state.ErrorsCount < Buffer.NumberValues)) {
-            if (documents.truncated_bytes()) {
-                size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-                const ui64 offset = Buffer.Offsets[inputRowId];
-                auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json batch truncated bytes, size " << documents.truncated_bytes() << ". Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                return TryToParseOneJson(state, status);
-=======
             if (type == simdjson::ondemand::json_type::array) {
                 for (auto element : document.get_array()) {
                     CHECK_JSON_ERROR(element.error()) {
@@ -1377,7 +1229,6 @@ private:
                         return status;
                     }
                 }
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
             } else {
                 auto status = parseObject(document.get_object());
                 if (status.IsFail() || stopMessage) {

@@ -417,13 +417,9 @@ private:
         ui64 Offset;
         ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
-<<<<<<< HEAD
-        TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
-=======
         ui64 MessageRows = 0;
         ui64 MessageSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;   // Temporary value holder for DataPacket
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
         TMemoryLimitedDataPacker DataPacker;
         TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
         TMaybe<TInstant> Watermark;

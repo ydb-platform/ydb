@@ -16,11 +16,7 @@ struct TJsonParserConfig {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     ui64 BatchSize = 1_MB;
     TDuration LatencyLimit;
-<<<<<<< HEAD
-    ui64 BufferCellCount = 1000000;  // (number rows) * (number columns) limit
-=======
     ui64 BufferCellCount = 1000000;   // Target cells per batch; all rows of a message are delivered together.
->>>>>>> 1aa9afb7fa9 (YDBFEATURE-225 json_each_row with shared_reading (#55907))
     bool SkipErrors = false;
     bool StructuredParsing = true;
     std::shared_ptr<NYql::NDq::IMemoryQuotaManager> MemoryQuotaManager;

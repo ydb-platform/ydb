@@ -404,6 +404,13 @@ public:
                     for (const auto& indexTable : fullText.GetIndexTables()) {
                         addTable(indexTable.GetTable());
                     }
+                    // In rowid mode the plan also pins the schema version of the unique secondary
+                    // index impl table used to resolve __ydb_row_id -> PK (see TUniqueIndexReader).
+                    // It is not part of the fulltext index's own impl tables, and it advances
+                    // independently, so track it as well.
+                    if (fullText.HasUniqueIndexImplTable()) {
+                        addTable(fullText.GetUniqueIndexImplTable().GetTable());
+                    }
                 }
             }
 

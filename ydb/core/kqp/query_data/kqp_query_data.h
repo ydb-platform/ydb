@@ -252,6 +252,7 @@ public:
         NMiniKQL::TTypeEnvironment& txTypeEnv);
     void CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx);
 
+    static void ValidateNoPgParameters(const NProtoBuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
     void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params);
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);

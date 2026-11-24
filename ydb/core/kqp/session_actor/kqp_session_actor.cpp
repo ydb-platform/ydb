@@ -582,6 +582,14 @@ public:
                 return AddOffsetsToTransaction();
         }
 
+        if (QueryState->GetDisablePgCompatibility()) {
+            try {
+                TQueryData::ValidateNoPgParameters(QueryState->GetYdbParameters());
+            } catch (const yexception& e) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << e.what();
+            }
+        }
+
         QueryState->UpdateTempTablesState(TempTablesState);
 
         QueryClassifier = TryCreateQueryClassifier();

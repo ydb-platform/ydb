@@ -1,5 +1,6 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -227,6 +228,102 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTopicWriteMode) {
+    Y_UNIT_TEST(ReadRestrictionsCloseSession) {
+        for (const auto size : {16u, 600u * 1024}) {
+            TWriteModeEnv env;
+            env.Create(false);
+            const TString data(size, 'x');
+            auto writer = env.Client.CreateSimpleBlockingWriteSession(env.WriteSettings());
+            UNIT_ASSERT(writer->Write(data, 1, std::nullopt, TDuration::Seconds(10)));
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+
+            auto checkRead = [&](const TString& mode) {
+                auto reader = env.Client.CreateReadSession(TReadSessionSettings().ConsumerName(CONSUMER)
+                    .AppendTopics(TTopicReadSettings(TOPIC)).RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
+                const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+                while (TInstant::Now() < deadline) {
+                    UNIT_ASSERT_C(reader->WaitEvent().Wait(deadline - TInstant::Now()), "Read session did not respond");
+                    auto event = reader->GetEvent(false);
+                    UNIT_ASSERT(event);
+                    if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                        start->Confirm();
+                    } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                        stop->Confirm();
+                    } else if (auto* received = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                        UNIT_ASSERT_VALUES_EQUAL(mode, AVAILABLE);
+                        UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().front().GetOffset(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(received->GetMessages().front().GetData(), data);
+                        UNIT_ASSERT(reader->Close(TDuration::Seconds(10)));
+                        return;
+                    } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                        UNIT_ASSERT_C(mode != AVAILABLE, closed->DebugString());
+                        const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
+                        const auto reason = mode == UNAVAILABLE
+                            ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
+                        UNIT_ASSERT_VALUES_EQUAL_C(closed->GetStatus(), expected, closed->DebugString());
+                        UNIT_ASSERT_STRING_CONTAINS(closed->GetIssues().ToString(), reason);
+                        return;
+                    }
+                }
+                UNIT_FAIL("Read session neither returned data nor closed");
+            };
+
+            checkRead(AVAILABLE);
+            for (const auto& mode : {UNAVAILABLE, PROHIBITED}) {
+                env.Alter(false, {{WRITE_MODE, mode}});
+                checkRead(mode);
+                env.Alter(false, {{WRITE_MODE, AVAILABLE}});
+                checkRead(AVAILABLE);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AbortTransactionAfterChangingWriteMode) {
+        for (const auto size : {16u, 600u * 1024}) {
+            TWriteModeEnv env;
+            env.Create(false);
+            NYdb::NQuery::TQueryClient queryClient(env.Driver);
+            const auto sessionResult = queryClient.GetSession().GetValueSync();
+            env.AssertSuccess(sessionResult);
+            auto session = sessionResult.GetSession();
+            const TString data(size, 'x');
+            ui64 seqNo = 0;
+            ui64 endOffset = 0;
+            auto writeInTx = [&] {
+                const auto result = session.BeginTransaction(NYdb::NQuery::TTxSettings()).GetValueSync();
+                env.AssertSuccess(result);
+                auto tx = result.GetTransaction();
+                auto writer = env.Client.CreateSimpleBlockingWriteSession(env.WriteSettings());
+                TWriteMessage message(data);
+                message.SeqNo(++seqNo);
+                UNIT_ASSERT(writer->Write(std::move(message), &tx, TDuration::Seconds(10)));
+                UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+                return tx;
+            };
+
+            auto tx = writeInTx();
+            env.AssertSuccess(tx.Commit().GetValueSync());
+            env.AssertOffsets(0, ++endOffset);
+
+            for (const auto& mode : {UNAVAILABLE, PROHIBITED}) {
+                auto abortedTx = writeInTx();
+                env.Alter(false, {{WRITE_MODE, mode}});
+                const auto aborted = abortedTx.Commit().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(aborted.GetStatus(), NYdb::EStatus::ABORTED, aborted.GetIssues().ToString());
+                const auto reason = mode == UNAVAILABLE
+                    ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
+                UNIT_ASSERT_STRING_CONTAINS(aborted.GetIssues().ToString(), reason);
+                env.AssertOffsets(0, endOffset);
+
+                env.Alter(false, {{WRITE_MODE, AVAILABLE}});
+                auto committedTx = writeInTx();
+                env.AssertSuccess(committedTx.Commit().GetValueSync());
+                env.AssertOffsets(0, ++endOffset);
+            }
+        }
+    }
+
     Y_UNIT_TEST_TWIN(CreateWithWriteMode, pqv1) {
         for (const auto& mode : {AVAILABLE, UNAVAILABLE, PROHIBITED}) {
             TWriteModeEnv env;
@@ -261,11 +358,14 @@ Y_UNIT_TEST_SUITE(TTopicWriteMode) {
                 TAlterTopicSettings().SetRetentionPeriod(TDuration::Hours(12))).GetValueSync());
             env.AssertAttribute(mode);
             env.RejectWrites(pqv1, mode);
-            env.AssertSuccess(env.Client.CommitOffset(TOPIC, 0, CONSUMER, seqNo).GetValueSync());
-            env.AssertOffsets(seqNo, seqNo);
+            const auto commit = env.Client.CommitOffset(TOPIC, 0, CONSUMER, seqNo).GetValueSync();
+            const auto expected = mode == UNAVAILABLE ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::BAD_REQUEST;
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), expected, commit.GetIssues().ToString());
+            env.AssertOffsets(seqNo - 1, seqNo);
 
             env.Alter(pqv1, {{WRITE_MODE, AVAILABLE}});
             env.AssertAttribute(AVAILABLE);
+            env.AssertSuccess(env.Client.CommitOffset(TOPIC, 0, CONSUMER, seqNo).GetValueSync());
             env.Write(++seqNo);
         }
         env.AssertOffsets(seqNo - 1, seqNo);

@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/map.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -72,15 +73,15 @@ public:
         }
     }
 
-    TEventsList CaptureStatusRound() {
-        TEventsList requests;
+    TMap<TVDiskIdShort, IEventHandle::TPtr> CaptureStatusRound() {
+        TMap<TVDiskIdShort, IEventHandle::TPtr> requests;
         for (const auto& disk : Info.VDisks) {
             auto events = Runtime.CaptureMailboxEvents(disk.ActorId.Hint(), disk.ActorId.NodeId());
             const bool excluded = IsExcluded(Info.States[disk.Id.FailRealm]);
             UNIT_ASSERT_VALUES_EQUAL(events.size(), excluded ? 0u : 1u);
             if (!excluded) {
                 UNIT_ASSERT_VALUES_EQUAL(events.front()->GetTypeRewrite(), TEvBlobStorage::TEvVStatus::EventType);
-                requests.push_back(std::move(events.front()));
+                requests.emplace(TVDiskIdShort(disk.Id), std::move(events.front()));
             }
         }
         return requests;
@@ -238,39 +239,53 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
 
     Y_UNIT_TEST(SoloRecoveryPendingWaitsForRecoveringVDiskStartup) {
         using S = NKikimrBlobStorage::TGroupState;
+        const TVDiskIdShort included3(0, 2, 0);
+        const TVDiskIdShort recovering1(1, 0, 0);
+        const TVDiskIdShort recovering2(1, 1, 0);
+        const TVDiskIdShort recovering3(1, 2, 0);
         for (auto [pending, ready] : {std::pair{S::DC_SOLO_RECOVERY_INV1_PENDING, S::DC_SOLO_RECOVERY_INV1},
                 std::pair{S::DC_SOLO_RECOVERY_INV2_PENDING, S::DC_SOLO_RECOVERY_INV2}}) {
             TGroupStateFixture fixture;
             fixture.Update(3, pending, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED});
             fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
             auto first = fixture.CaptureStatusRound();
-            // Included replies, along with R1 and R2 in Recovering. R3 is down.
-            for (ui32 disk : {0, 1, 2, 3, 4}) {
-                fixture.ReplyStatus(*first[disk]);
+            // Every disk replies, but R3 has not finished replicating.
+            for (const auto& [disk, request] : first) {
+                TVDiskReplicationStatus status;
+                status.Replicated = disk != recovering3;
+                status.DurabilityReplicated = status.Replicated;
+                fixture.ReplyStatus(*request, status);
             }
 
             fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
             fixture.AssertNoProposal();
             auto second = fixture.CaptureStatusRound();
             // R1 and R2 stop, and only R3 replies in Recovering.
-            for (ui32 disk : {0, 1, 2, 5}) {
-                fixture.ReplyStatus(*second[disk]);
+            for (const auto& [disk, request] : second) {
+                if (disk != recovering1 && disk != recovering2) {
+                    fixture.ReplyStatus(*request);
+                }
             }
 
             fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
             fixture.AssertNoProposal();
             auto third = fixture.CaptureStatusRound();
             // R1's reply to the previous round arrives after this round starts.
-            fixture.ReplyStatus(*second[3]);
-            for (ui32 disk : {0, 1, 2, 4, 5}) {
-                fixture.ReplyStatus(*third[disk]);
+            fixture.ReplyStatus(*second.at(recovering1));
+            for (const auto& [disk, request] : third) {
+                if (disk != recovering1) {
+                    fixture.ReplyStatus(*request);
+                }
             }
 
             fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
             fixture.AssertNoProposal();
             auto healthy = fixture.CaptureStatusRound();
-            for (const auto& request : healthy) {
-                fixture.ReplyStatus(*request);
+            for (const auto& [disk, request] : healthy) {
+                // INV2 can finish the round with two Included replies.
+                if (pending != S::DC_SOLO_RECOVERY_INV2_PENDING || disk != included3) {
+                    fixture.ReplyStatus(*request);
+                }
             }
             auto proposal = fixture.GetProposal();
             UNIT_ASSERT(proposal.State == ready);
@@ -281,6 +296,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
 
     Y_UNIT_TEST(SoloRecoveryPendingRepollsBeforeRetryingProposal) {
         using S = NKikimrBlobStorage::TGroupState;
+        const TVDiskIdShort included1(0, 0, 0);
         for (auto [pending, ready] : {std::pair{S::DC_SOLO_RECOVERY_INV1_PENDING, S::DC_SOLO_RECOVERY_INV1},
                 std::pair{S::DC_SOLO_RECOVERY_INV2_PENDING, S::DC_SOLO_RECOVERY_INV2}}) {
             TGroupStateFixture fixture;
@@ -296,15 +312,17 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
             fixture.AssertNoProposal();
             auto retry = fixture.CaptureStatusRound();
             // Recovering is ready, but Included has lost quorum since the first attempt.
-            for (ui32 disk : {0, 3, 4, 5}) {
-                fixture.ReplyStatus(*retry[disk]);
+            for (const auto& [disk, request] : retry) {
+                if (disk == included1 || IsRecovering(fixture.Info.States[disk.FailRealm])) {
+                    fixture.ReplyStatus(*request);
+                }
             }
 
             fixture.Runtime.SimulateSleep(TDuration::Seconds(5));
             fixture.AssertNoProposal();
             auto healthy = fixture.CaptureStatusRound();
             for (const auto& request : healthy) {
-                fixture.ReplyStatus(*request);
+                fixture.ReplyStatus(*request.second);
             }
             ui64 retryCookie = 0;
             UNIT_ASSERT(fixture.GetProposal(42, &retryCookie).State == ready);

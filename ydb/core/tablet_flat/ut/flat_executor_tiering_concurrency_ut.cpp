@@ -58,9 +58,9 @@ namespace {
         }
     }
 
-    NLocalDb::TCompactionPolicy PrepareTwoGenerations(TEnv& env) {
+    NLocalDb::TCompactionPolicy PrepareTwoGenerations(TEnv& env, ui64 newestRowTime = 0) {
         for (ui64 key : {10, 11, 20, 21}) {
-            env.Write({TRow{.Key = key, .Time = 0, .Value = ToString(key)}});
+            env.Write({TRow{.Key = key, .Time = key == 21 ? newestRowTime : 0, .Value = ToString(key)}});
             env.Flush();
         }
         auto parts = env.Parts();
@@ -451,89 +451,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
         CheckEmptyAdjacentTierIsNotSkipped(true);
     }
 
-    Y_UNIT_TEST(DisablingTieringRejectsAHeldTacAndPublishesItsRegularRetryAtomically) {
+    Y_UNIT_TEST(DisablingTieringPublishesThePreparedTacAndPreventsCoolingOnTheNextCompaction) {
         TEnv env;
-        auto policy = PrepareTwoGenerations(env);
+        auto policy = PrepareTwoGenerations(env, env.NowSeconds());
         policy.Generations[4].ForceCountToCompact = 1000;
         const auto originalLevels = env.Levels();
         env.Enable(true);
         TBlockEvents<NOps::TEvResult> blocked(env.Env);
         env.Policy(policy);
-        env->WaitFor("one held cooling result", [&] { return blocked.size() == 1; });
+        env->WaitFor("prepared cooling result", [&] { return blocked.size() == 1; }, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 1);
         const auto& tac = Product(blocked.front());
         UNIT_ASSERT(tac.Params->Mode == NTable::TCompactionParams::EMode::TierAware);
         UNIT_ASSERT(tac.Params->Tiering->AllowCooling);
-        CheckAdjacentOutputs(tac, ColdTier);
-        TVector<TLogoBlobID> discardedOutputs;
-        TVector<TLogoBlobID> originalInputs;
-        for (const auto& output : tac.Results) {
-            discardedOutputs.push_back(output.Part->Label);
-        }
+        auto afterTac = originalLevels;
+        UNIT_ASSERT_VALUES_EQUAL(tac.Params->Context->Inputs.size(), 2);
         for (const auto& input : tac.Params->Context->Inputs) {
-            originalInputs.push_back(input.Label());
+            UNIT_ASSERT_VALUES_EQUAL(originalLevels.at(input.Label()), 1);
+            UNIT_ASSERT_VALUES_EQUAL(afterTac.erase(input.Label()), 1);
         }
-        UNIT_ASSERT(!discardedOutputs.empty());
-        UNIT_ASSERT_VALUES_EQUAL(originalInputs.size(), 2);
+        THashSet<ui32> outputTiers;
+        for (const auto& output : tac.Results) {
+            const ui32 tier = tac.Params->Tiering->OutputTiers.at(output.OutputId);
+            UNIT_ASSERT(outputTiers.insert(tier).second);
+            UNIT_ASSERT_VALUES_EQUAL(output.Part->GetDataChannel({}), tier == ColdTier ? 2 : 1);
+            // The hot row advances from generation 1 to 2; the old row enters the first cold generation.
+            UNIT_ASSERT(afterTac.emplace(output.Part->Label, tier == ColdTier ? 4 : 2).second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(outputTiers.size(), 2);
+        UNIT_ASSERT(outputTiers.contains(0));
+        UNIT_ASSERT(outputTiers.contains(ColdTier));
 
         env.Enable(false);
-        // Keep the observer active: only the stale cooling result is released.
-        // Its replacement must be held before the executor can publish it.
+        CheckInventory(env, originalLevels, "before publishing the prepared TAC");
+        CheckRows(env);
         blocked.Unblock(1);
-        env->WaitFor("held regular replacement", [&] {
-            return blocked.size() == 1
-                && Product(blocked.front()).Params->Mode == NTable::TCompactionParams::EMode::Regular;
-        });
-        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 1);
-        const auto& regular = Product(blocked.front());
-        UNIT_ASSERT(!regular.Params->Tiering->AllowCooling);
-        TVector<TLogoBlobID> regularOutputs;
-        for (const auto& output : regular.Results) {
-            UNIT_ASSERT_VALUES_EQUAL(regular.Params->Tiering->OutputTiers.at(output.OutputId), 0);
-            UNIT_ASSERT_VALUES_EQUAL(output.Part->GetDataChannel({}), 1);
-            UNIT_ASSERT_VALUES_EQUAL(output.Part->GetSlotChannel(output.Part->DescriptorSlot()), 1);
-            regularOutputs.push_back(output.Part->Label);
-        }
-        UNIT_ASSERT(!regularOutputs.empty());
-
-        // Neither the abandoned TAC nor the replacement awaiting publication
-        // may make even one output visible; the complete old inventory remains.
-        env.CheckLevels(originalLevels, "before regular retry publication");
-        const auto staged = env.Parts();
-        UNIT_ASSERT_VALUES_EQUAL(staged.size(), originalLevels.size());
-        for (const auto& part : staged) {
-            UNIT_ASSERT(originalLevels.contains(part->Label));
-        }
-        for (const auto& label : discardedOutputs) {
-            UNIT_ASSERT(!originalLevels.contains(label));
-        }
-        for (const auto& label : regularOutputs) {
-            UNIT_ASSERT(!originalLevels.contains(label));
-        }
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvCompacted>(TDuration::Seconds(10)));
+        CheckInventory(env, afterTac, "after publishing both prepared TAC outputs");
         CheckRows(env);
 
-        auto* state = env.State;
-        UNIT_ASSERT(state);
+        // These two older cold parts qualify for the archive tier when cooling is enabled.
+        policy.Generations[4].ForceCountToCompact = 2;
+        env.Policy(policy);
+        env->WaitFor("prepared compaction with tiering disabled", [&] { return blocked.size() == 1; },
+            TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), 5);
+        const auto& regular = Product(blocked.front());
+        UNIT_ASSERT(regular.Params->Mode == NTable::TCompactionParams::EMode::Regular);
+        UNIT_ASSERT(!regular.Params->Tiering->AllowCooling);
+        CheckAdjacentOutputs(regular, ColdTier);
+        auto afterRegular = afterTac;
+        UNIT_ASSERT_VALUES_EQUAL(regular.Params->Context->Inputs.size(), 2);
+        for (const auto& input : regular.Params->Context->Inputs) {
+            UNIT_ASSERT_VALUES_EQUAL(originalLevels.at(input.Label()), 5);
+            UNIT_ASSERT_VALUES_EQUAL(afterRegular.erase(input.Label()), 1);
+        }
+        for (const auto& output : regular.Results) {
+            UNIT_ASSERT(afterRegular.emplace(output.Part->Label, policy.GetFinalLevel(ColdTier)).second);
+        }
+        CheckInventory(env, afterTac, "before publishing the regular compaction");
         blocked.Stop().Unblock();
-        env->WaitFor("regular retry publication", [&] {
-            const auto levels = state->Tables.at(TableId).Strategy->SnapshotState().PartLevels;
-            return std::all_of(regularOutputs.begin(), regularOutputs.end(), [&](const auto& label) {
-                return levels.contains(label);
-            });
-        });
-        const auto levels = env.Levels();
-        for (const auto& label : discardedOutputs) {
-            UNIT_ASSERT(!levels.contains(label));
-        }
-        for (const auto& label : originalInputs) {
-            UNIT_ASSERT(!levels.contains(label));
-        }
-        for (const auto& label : regularOutputs) {
-            UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(label)), 0);
-        }
+        UNIT_ASSERT(env.GrabEdgeEvent<NFake::TEvCompacted>(TDuration::Seconds(10)));
+        CheckInventory(env, afterRegular, "after publishing the regular compaction");
         CheckRows(env);
         env.Restart();
-        env.CheckLevels(levels, "after restart");
+        env.CheckLevels(afterRegular, "after restart");
         CheckRows(env);
     }
 

@@ -205,6 +205,7 @@ namespace NCompGen {
             TPartInfo& PushBack(TPartView partView);
             void PopFront();
             void PopBack();
+            void RebuildStats();
         };
 
         struct TFinalState {
@@ -266,8 +267,8 @@ namespace NCompGen {
         const TFinalState& GetFinalState(ui32 level) const;
         bool IsLastTierGeneration(ui32 generation) const;
         size_t UnloadedPartsAtLevel(ui32 level) const;
+        void InitializeLevelStats();
         void ValidateTierEpochs() const;
-        void RebuildTierStats();
         void CheckTierGenerations();
         bool CanStartTierCompaction(ui32 generation) const;
         bool OverlapsReservedEpochs(const TCompactionEpochRange& epochs) const;

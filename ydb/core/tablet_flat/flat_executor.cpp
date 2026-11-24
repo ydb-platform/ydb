@@ -3952,9 +3952,6 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     const ui32 tableId = msg->Params->Table;
     const auto* currentTable = Scheme().GetTableInfo(tableId);
-    const bool coolingDisabled = currentTable && msg->Params->Tiering
-        && msg->Params->Tiering->AllowCooling && !IsDataTieringEnabled();
-    cancelled |= coolingDisabled;
 
     if (msg->Params->TaskId != 0) {
         // We have taken over this task, mark it as finished in the broker
@@ -3977,7 +3974,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             << " epoch " << ops->Subset->Head << "} ";
 
         if (abandoned) {
-            logl << (coolingDisabled ? "cooling disabled" : "thrown");
+            logl << "thrown";
         } else if (!msg->Success) {
             logl << "failed";
         } else {

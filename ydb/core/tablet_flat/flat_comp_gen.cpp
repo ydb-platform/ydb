@@ -75,6 +75,14 @@ private:
     TEpoch LastEpoch = TEpoch::Max();
 };
 
+void TGenCompactionStrategy::TGeneration::RebuildStats() {
+    TPartAggregator agg;
+    agg.Add(Parts);
+    Stats = agg.Stats;
+    StatsPerTablet = std::move(agg.StatsPerTablet);
+    PartEpochCount = agg.PartEpochCount;
+}
+
 struct TGenCompactionStrategy::TExtraState {
     ui64 CurrentSize = 0;
     ui32 ExtraPercent = 0;
@@ -254,37 +262,7 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
         KnownParts[label] = level;
     }
 
-    THashMap<ui32, TEpoch> lastEpochs;
-    for (size_t index = 0; index < Generations.size(); ++index) {
-        auto& gen = Generations[index];
-        TPartAggregator agg;
-        if (gen.Parts) {
-            gen.Parts.sort();
-
-            // Epochs from different storage tiers may interleave.
-            const ui32 tier = TierManaged ? TierForLevel(index + 1) : 0;
-            const auto [it, inserted] = lastEpochs.emplace(tier, TEpoch::Max());
-            Y_UNUSED(inserted);
-            Y_ENSURE(gen.Parts.front().Epoch <= it->second);
-            it->second = gen.Parts.back().Epoch;
-
-            agg.Add(gen.Parts);
-        }
-        gen.Stats = agg.Stats;
-        gen.StatsPerTablet = agg.StatsPerTablet;
-        gen.PartEpochCount = agg.PartEpochCount;
-    }
-
-    // Sorting FinalParts is not required, but let's be nice
-    FinalParts.sort();
-    for (auto& [level, final] : TierFinals) {
-        Y_UNUSED(level);
-        final.Parts.sort();
-    }
-    if (TierManaged) {
-        ValidateTierEpochs();
-    }
-
+    InitializeLevelStats();
     UpdateStats();
 
     MaybeAutoStartForceCompaction();
@@ -409,6 +387,13 @@ void TGenCompactionStrategy::ReflectSchema() {
     }
     Y_ENSURE(Generations.size() <= Policy->Generations.size(), "Cannot currently shrink the number of generations");
     Generations.resize(Policy->Generations.size());
+
+    if (changeMode && TierManaged) {
+        // Legacy compactions maintain generation counters incrementally and may
+        // append borrowed final parts in arrival order. Normalize the levels once.
+        InitializeLevelStats();
+        UpdateStats();
+    }
 
     if (changeMode || resume) {
         if (TierWaitRevisions.contains(0)) {
@@ -978,12 +963,14 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
     Stats += back.Stats;
     StatsPerTablet[back.Label.TabletID()] += back.Stats;
     if (TierManaged) {
-        RebuildTierStats();
+        finalParts.sort();
+        ValidateTierEpochs();
+        UpdateStats();
         CheckTierGenerations();
     }
     FinishReservationModeChange();
 
-    // WARNING: we don't call UpdateStats here, so GarbageStatsAgg is not
+    // The legacy path doesn't call UpdateStats here, so GarbageStatsAgg is not
     // recalculated properly. This is not a problem, because this method is
     // usually called when parts are borrowed, and we are not supposed to
     // have any of our own data at that stage. We would wait for the first
@@ -1629,37 +1616,30 @@ void TGenCompactionStrategy::ValidateTierEpochs() const {
     }
 }
 
-void TGenCompactionStrategy::RebuildTierStats() {
+void TGenCompactionStrategy::InitializeLevelStats() {
     THashMap<ui32, TEpoch> lastEpochs;
     for (size_t index = 0; index < Generations.size(); ++index) {
         auto& gen = Generations[index];
         gen.Parts.sort();
-        TPartAggregator agg;
-        agg.Add(gen.Parts);
-        gen.Stats = agg.Stats;
-        gen.StatsPerTablet = std::move(agg.StatsPerTablet);
-        gen.PartEpochCount = agg.PartEpochCount;
-        gen.CompactingTailParts = 0;
-        gen.TakenHeadParts = 0;
-        gen.TakenHeadBackingSize = 0;
-        gen.TakenHeadPartEpochCount = 0;
+        gen.RebuildStats();
         if (!gen.Parts.empty()) {
-            const auto [it, inserted] = lastEpochs.emplace(TierForLevel(index + 1), TEpoch::Max());
+            // Epochs from different storage tiers may interleave.
+            const ui32 tier = TierManaged ? TierForLevel(index + 1) : 0;
+            const auto [it, inserted] = lastEpochs.emplace(tier, TEpoch::Max());
             Y_UNUSED(inserted);
             Y_ENSURE(gen.Parts.front().Epoch <= it->second,
                 "Compaction epochs are not ordered within a tier");
             it->second = gen.Parts.back().Epoch;
         }
-        CheckOverload(index + 1);
     }
     FinalParts.sort();
     for (auto& [level, final] : TierFinals) {
         Y_UNUSED(level);
         final.Parts.sort();
     }
-    ValidateTierEpochs();
-    UpdateStats();
-    UpdateOverload();
+    if (TierManaged) {
+        ValidateTierEpochs();
+    }
 }
 
 bool TGenCompactionStrategy::CanStartTierCompaction(ui32 generation) const {
@@ -2088,12 +2068,8 @@ ui32 TGenCompactionStrategy::UpliftTierLevel(ui32 tierId, TEpoch epoch,
         if (outputStats.BackingSize > policy.UpliftPartSize) {
             break;
         }
-        // Inputs have been removed, but generation statistics are rebuilt only
-        // after placement. Inspect the remaining parts of this candidate.
-        TPartAggregator remaining;
-        remaining.Add(gen.Parts);
-        const ui64 size = remaining.Stats.BackingSize + outputStats.BackingSize;
-        ui64 epochs = remaining.PartEpochCount;
+        const ui64 size = gen.Stats.BackingSize + outputStats.BackingSize;
+        ui64 epochs = gen.PartEpochCount;
         if (gen.Parts.empty() || gen.Parts.back().Epoch != epoch) {
             ++epochs;
         }
@@ -2128,7 +2104,9 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
         KnownParts.erase(it);
     }
     size_t removed = 0;
-    for (auto& gen : Generations) {
+    for (ui32 level = 1; level <= Generations.size(); ++level) {
+        auto& gen = Generations[level - 1];
+        const size_t previousSize = gen.Parts.size();
         for (auto it = gen.Parts.begin(); it != gen.Parts.end();) {
             if (leaving.contains(it->Label)) {
                 it = gen.Parts.erase(it);
@@ -2136,6 +2114,11 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
             } else {
                 ++it;
             }
+        }
+        if (gen.Parts.size() != previousSize) {
+            // Placement below uses statistics for the surviving, still ordered parts.
+            gen.RebuildStats();
+            CheckOverload(level);
         }
     }
     for (const ui32 tier : Policy->GetTierIds()) {
@@ -2198,7 +2181,19 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
             Generations[level - 1].Parts.emplace_back(part);
         }
     }
-    RebuildTierStats();
+    for (const auto& [tier, level] : levelsByTier) {
+        Y_UNUSED(tier);
+        if (Policy->IsFinalLevel(level)) {
+            GetFinalParts(level).sort();
+        } else {
+            auto& gen = Generations[level - 1];
+            gen.Parts.sort();
+            gen.RebuildStats();
+            CheckOverload(level);
+        }
+    }
+    UpdateStats();
+    UpdateOverload();
 
     Y_ENSURE(!params.Context->Epochs || !OverlapsReservedEpochs(*params.Context->Epochs),
         "Concurrent compactions have overlapping epoch intervals");

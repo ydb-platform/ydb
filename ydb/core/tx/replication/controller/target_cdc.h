@@ -35,6 +35,5 @@ private:
 void FinishCdcChildren(const TReplication& replication, ui64 parentId, NIceDb::TNiceDb& db);
 TTargetCdc* GetCdcTarget(TReplication::ITarget* target);
 const TTargetCdc* GetCdcTarget(const TReplication::ITarget* target);
-TVector<TTargetCdc*> GetCdcChildren(const TReplication& replication, ui64 parentId);
 
 }

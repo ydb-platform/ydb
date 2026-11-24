@@ -18,6 +18,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
@@ -173,6 +174,15 @@ public:
         const auto previousLag = GetLag();
         const auto it = Targets.find(id);
         if (it != Targets.end()) {
+            if (auto* cdc = GetCdcTarget(it->second.Ptr.Get())) {
+                const auto parent = CdcChildren.find(cdc->GetCdc().GetParentTargetId());
+                Y_ABORT_UNLESS(parent != CdcChildren.end());
+                Erase(parent->second, cdc);
+                if (parent->second.empty()) {
+                    CdcChildren.erase(parent);
+                }
+            }
+
             TLagProvider::RemoveLag(it->second, id);
             Targets.erase(it);
             NotifyLagChanged(previousLag);
@@ -400,6 +410,7 @@ private:
     EState DesiredState = EState::Ready;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
+    THashMap<ui64, TVector<TTargetCdc*>> CdcChildren;
     THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
@@ -481,8 +492,20 @@ TVector<TString> TReplication::GetTargetTablePaths() const {
     return Impl->GetTargetTablePaths();
 }
 
+void TReplication::RegisterCdcChild(ui64 parentId, TTargetCdc& child) {
+    child.GetCdc().SetParentTargetId(parentId);
+    Impl->CdcChildren[parentId].push_back(&child);
+}
+
+TConstArrayRef<TTargetCdc*> TReplication::GetCdcChildren(ui64 parentId) const {
+    if (const auto* children = Impl->CdcChildren.FindPtr(parentId)) {
+        return *children;
+    }
+    return {};
+}
+
 bool TReplication::AreCdcChildrenPrepared(ui64 parentId) const {
-    for (const auto* child : GetCdcChildren(*this, parentId)) {
+    for (const auto* child : GetCdcChildren(parentId)) {
         if (child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::PREPARED
             && child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::FINISHED)
         {

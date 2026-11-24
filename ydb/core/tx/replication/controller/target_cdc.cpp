@@ -99,18 +99,8 @@ const TTargetCdc* GetCdcTarget(const TReplication::ITarget* target) {
         ? static_cast<const TTargetCdc*>(target) : nullptr;
 }
 
-TVector<TTargetCdc*> GetCdcChildren(const TReplication& replication, ui64 parentId) {
-    TVector<TTargetCdc*> result;
-    for (auto* target : replication.GetTargets()) {
-        if (auto* cdc = GetCdcTarget(target); cdc && cdc->GetCdc().GetParentTargetId() == parentId) {
-            result.push_back(cdc);
-        }
-    }
-    return result;
-}
-
 void FinishCdcChildren(const TReplication& replication, ui64 parentId, NIceDb::TNiceDb& db) {
-    for (auto* child : GetCdcChildren(replication, parentId)) {
+    for (auto* child : replication.GetCdcChildren(parentId)) {
         if (child->GetCdc().GetPhase() == TCdc::FINISHED) {
             continue;
         }

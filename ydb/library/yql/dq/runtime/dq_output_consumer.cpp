@@ -461,7 +461,8 @@ public:
 
     EDqFillLevel GetFillLevel() const override {
         auto result = Aggregator->GetFillLevel();
-        if (result == HardLimit) {
+        // A soft limit stops the run too: the channels must register the output wait.
+        if (result != NoLimit) {
             for (auto output : Outputs) {
                 output->UpdateFillLevel();
             }
@@ -589,7 +590,8 @@ public:
 private:
     EDqFillLevel GetFillLevel() const override {
         auto result = Aggregator->GetFillLevel();
-        if (result == HardLimit) {
+        // A soft limit stops the run too: the channels must register the output wait.
+        if (result != NoLimit) {
             for (auto output : Outputs_) {
                 output->UpdateFillLevel();
             }
@@ -726,7 +728,8 @@ public:
 private:
     EDqFillLevel GetFillLevel() const override {
         auto result = Aggregator->GetFillLevel();
-        if (result == HardLimit) {
+        // A soft limit stops the run too: the channels must register the output wait.
+        if (result != NoLimit) {
             for (auto output : Outputs_) {
                 output->UpdateFillLevel();
             }
@@ -930,7 +933,8 @@ public:
 
     EDqFillLevel GetFillLevel() const override {
         auto result = Aggregator->GetFillLevel();
-        if (result == HardLimit) {
+        // A soft limit stops the run too: the channels must register the output wait.
+        if (result != NoLimit) {
             for (auto output : Outputs) {
                 output->UpdateFillLevel();
             }

@@ -120,6 +120,7 @@ private:
         enum EEv : ui32 {
             EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvCheckIdleness,
+            EvDeferredTerminate,
             EvEnd
         };
 
@@ -141,6 +142,16 @@ private:
             {}
 
             TInstant CheckTime;
+        };
+
+        struct TEvDeferredTerminate : public NActors::TEventLocal<TEvDeferredTerminate, EvDeferredTerminate> {
+            TEvDeferredTerminate(bool success, TIssues issues)
+                : Success(success)
+                , Issues(std::move(issues))
+            {}
+
+            bool Success;
+            TIssues Issues;
         };
     };
 
@@ -387,6 +398,7 @@ protected:
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
             hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
             hFunc(TEvPrivate::TEvCheckIdleness, HandleCheckIdleness);
+            hFunc(TEvPrivate::TEvDeferredTerminate, HandleDeferredTerminate);
             hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -510,9 +522,10 @@ protected:
     void DoExecute() {
         Y_ASSERT(!Terminated);
         if (TaskScheduling && !TaskScheduling->ObserveOnly && !ExecutingScheduledTask) {
-            if (!TryWaitForFirstChannelInput()) {
-                TaskScheduling->RequestExecution();
-            }
+            // Source rows live in the read actor until the endpoint polls them.
+            // QueueScheduledExecution does that under the task allocator, then
+            // queues a run only when a read-only task actually has rows.
+            QueueScheduledExecution(EResumeSource::Default);
             return;
         }
         const bool observing = TaskScheduling && TaskScheduling->ObserveOnly;
@@ -800,12 +813,34 @@ protected:
         NActors::TActorBootstrapped<TDerived>::PassAway();
     }
 
+    void HandleDeferredTerminate(const TEvPrivate::TEvDeferredTerminate::TPtr& ev) {
+        Terminate(ev->Get()->Success, ev->Get()->Issues);
+    }
+
     void Terminate(bool success, const TIssues& issues) {
         // This method is exception-unsafe - prevent calling it twice
         if (Terminated) {
             CA_LOG_W("Compute Actor " << this->SelfId() << " for task " << Task.GetId() << " tried to call Terminate twice: "
                 << " success: " << success
                 << " issues: " << issues.ToOneLineString());
+            return;
+        }
+        // PassAway must run on the endpoint mailbox. A worker holds the lease
+        // and only queues the destruction.
+        if (DqSliceCompletionOnWorker()) {
+            if (!DeferredTermination) {
+                DeferredTermination = true;
+                auto* event = new TEvPrivate::TEvDeferredTerminate(success, issues);
+                // Destruction has to happen on the endpoint mailbox, but on this
+                // same thread and before any other mailbox, or the session waits
+                // behind a normal queue.
+                if (NActors::TlsActivationContext) {
+                    NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
+                        new NActors::IEventHandle(this->SelfId(), NActors::TActorId{}, event));
+                } else {
+                    this->Send(this->SelfId(), event);
+                }
+            }
             return;
         }
 
@@ -998,11 +1033,60 @@ protected:
         return std::move(log);
     }
 
-    void ContinueExecute(EResumeSource source = EResumeSource::Default) {
-        if (TaskScheduling && !TaskScheduling->ObserveOnly) {
-            if ((Running || Checkpoints) && !TryWaitForFirstChannelInput()) {
+    // True when the task has to run: rows arrived, or a source finished. An empty
+    // last batch returns no resume, yet only Run can observe the finish.
+    bool PollSourcesForScheduledRun(ERunStatus lastRunStatus) {
+        const auto finishedSources = [this] {
+            ui32 count = 0;
+            for (const auto& [_, source] : SourcesMap) {
+                count += source.Finished;
+            }
+            return count;
+        };
+        const ui32 finishedBefore = finishedSources();
+        const auto result = PollAsyncInput();
+        SourcesMayHaveMore = result.Defined();
+        // A full buffer needs a run only if the last one waited for input, as in
+        // DoExecuteImpl. A run blocked on output resumes on the output wake.
+        const bool polled = result
+            && (*result != EResumeSource::CAPollAsyncNoSpace || lastRunStatus == ERunStatus::PendingInput);
+        return polled || finishedSources() != finishedBefore;
+    }
+
+    // Pull source rows into the runner before the worker is queued. ContinueExecute
+    // used to queue the task immediately, so the worker ran before the batch existed.
+    void QueueScheduledExecution(EResumeSource source) {
+        bool polled = false;
+        // The worker completion calls back into here while the read actor can
+        // still be pushing the next batch. Leave that poll to the endpoint.
+        if (!SourcesMap.empty() && !DqSliceCompletionOnWorker()) {
+            auto guard = BindAllocator();
+            TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
+            polled = PollSourcesForScheduledRun(ProcessOutputsState.LastRunStatus);
+        }
+        if (!SourcesMap.empty() && InputChannelsMap.empty()) {
+            // A read task has nothing to execute until rows arrive. Output wakes
+            // still run: the program may have a pending result to send.
+            // After sending, a run that already drained its source until PendingInput
+            // has nothing to do until the next batch arrives.
+            const bool outputWake = source == EResumeSource::CAPendingOutput
+                || (source == EResumeSource::CADataSent && ProcessOutputsState.LastRunStatus != ERunStatus::PendingInput)
+                || source == EResumeSource::CAWakeupCallback
+                || source == EResumeSource::CAFinish
+                || source == EResumeSource::AsyncPopFinished;
+            if ((Running || Checkpoints) && (polled || outputWake)) {
                 TaskScheduling->RequestExecution();
             }
+            return;
+        }
+        if ((Running || Checkpoints) && !TryWaitForFirstChannelInput()) {
+            TaskScheduling->RequestExecution();
+        }
+    }
+
+    void ContinueExecute(EResumeSource source = EResumeSource::Default) {
+        if (TaskScheduling && !TaskScheduling->ObserveOnly) {
+            QueueScheduledExecution(source);
             return;
         }
         if (!ResumeEventScheduled && (Running ||
@@ -3161,7 +3245,11 @@ private:
     std::optional<TMonotonic> LastSendStatsTime;
     bool PassExceptions = false;
     bool Terminated = false;
+    bool DeferredTermination = false;
 protected:
+    // The last source poll returned rows or hit back pressure. A read actor does not
+    // notify again for rows it already holds, so the endpoint has to poll once more.
+    bool SourcesMayHaveMore = false;
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;

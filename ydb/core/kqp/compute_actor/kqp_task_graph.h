@@ -8,6 +8,7 @@
 namespace NKikimr::NKqp {
 
 void SerializeSchedulingGraph(const NYql::NDq::TQueryTaskGraph& graph, NKikimrKqp::TTaskSchedulingGraph& result);
-std::shared_ptr<const NYql::NDq::TQueryTaskGraph> DeserializeSchedulingGraph(const NKikimrKqp::TTaskSchedulingGraph& graph);
+std::shared_ptr<const NYql::NDq::TQueryTaskGraph> DeserializeSchedulingGraph(const NKikimrKqp::TTaskSchedulingGraph& graph,
+    ui64 queryOrder = 0);
 
 } // namespace NKikimr::NKqp

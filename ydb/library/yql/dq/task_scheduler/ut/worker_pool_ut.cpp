@@ -50,12 +50,13 @@ struct TQueues {
     TVector<bool> KnownReadyWakeups;
     std::shared_ptr<TTaskWorkPool> Pool;
     TVector<std::shared_ptr<TExecution>> Executions;
-    explicit TQueues(bool preferConsumers = false, bool preferReadyQueries = false)
+    explicit TQueues(bool preferConsumers = false, bool preferReadyQueries = false, bool fifo = false,
+        bool queryOrder = false)
         : Pool(std::make_shared<TTaskWorkPool>(2, [this](auto wakeup) {
             Wakeups.push_back(wakeup.Actor);
             KnownReadyWakeups.push_back(wakeup.KnownReady);
         },
-            NMonitoring::TDynamicCounterPtr{}, preferConsumers, preferReadyQueries)) {}
+            NMonitoring::TDynamicCounterPtr{}, preferConsumers, preferReadyQueries, fifo, queryOrder)) {}
     ~TQueues() {
         for (const auto& execution : Executions) {
             execution->Task->Cancel();
@@ -601,6 +602,47 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
         auto next = t.Pool->Take({}, 100, hint);
         UNIT_ASSERT(next && next->Task == other->Task);
         t.Run(std::move(*next), false);
+    }
+
+    Y_UNIT_TEST(FreshLocalInputOnFifoRunsTheConsumerAheadOfEarlierQueries) {
+        TQueues t(false, false, true, true);
+        const auto early = Id(100);
+        const auto later = Id(200);
+        t.Pool->RegisterGraph(early, 1, std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 0, 0}}, TVector<TTaskGraphChannel>{}, 1), {1});
+        t.Pool->RegisterGraph(later, 1, std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{2, 1, 1, 1, 0}}, TVector<TTaskGraphChannel>{}, 5), {2});
+        auto consumer = t.Add(later, 2, 2);
+        BlockOnLocalInput(t, consumer, {42});
+        t.Add(early, 1, 1);
+        TLocalConsumerHint hint;
+        {
+            TLocalConsumerScope locality(hint, later, 9);
+            consumer->Task->Signal(InputDependency(42), ETaskPriority::Normal, true);
+        }
+        UNIT_ASSERT(hint.Consumer == consumer->Task->Actor);
+        auto next = t.Pool->Take({}, 100, hint);
+        UNIT_ASSERT(next && next->Task == consumer->Task);
+        t.Run(std::move(*next), false);
+
+        TQueues plain(false, false, true, true);
+        plain.Pool->RegisterGraph(early, 1, std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{1, 1, 1, 0, 0}}, TVector<TTaskGraphChannel>{}, 1), {1});
+        plain.Pool->RegisterGraph(later, 1, std::make_shared<const TQueryTaskGraph>(
+            TVector<TTaskGraphNode>{{2, 1, 1, 1, 0}}, TVector<TTaskGraphChannel>{}, 5), {2});
+        auto waiting = plain.Add(later, 2, 2);
+        BlockOnLocalInput(plain, waiting, {42});
+        auto ahead = plain.Add(early, 1, 1);
+        {
+            TLocalConsumerScope locality(hint, later, 9);
+            waiting->Task->Signal(InputDependency(42), ETaskPriority::Normal, true);
+        }
+        TLocalConsumerHint stale;
+        stale.Query = later;
+        stale.Consumer = waiting->Task->Actor;
+        auto kept = plain.Pool->Take({}, 100, stale);
+        UNIT_ASSERT(kept && kept->Task == ahead->Task);
+        plain.Run(std::move(*kept), false);
     }
 
     Y_UNIT_TEST(LocalInputHintExpiresWhenAnotherWorkerRunsTheConsumer) {

@@ -161,7 +161,7 @@ public:
     void AckFetchersEarly();
 
     // Worker execution: after a slice consumed scan data, ack the fetchers like DoExecuteImpl does.
-    void OnWorkerSliceInputsConsumed() {
+    void OnWorkerSliceInputsConsumed(NYql::NDq::ERunStatus) {
         PollSources(WorkerSlicePrevFreeSpace);
     }
 

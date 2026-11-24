@@ -30,6 +30,11 @@ public:
 protected:
 
     bool TryWaitForFirstChannelInput() override {
+        // A read source has no input channel. Waiting for the first channel
+        // message would leave the task queued forever.
+        if (!this->SourcesMap.empty()) {
+            return false;
+        }
         return TaskRunner && this->RuntimeSettings.TaskScheduler->GetSettings().UseWorkerPool
             && !this->Checkpoints && TaskRunner->TryWaitForFirstChannelInput();
     }
@@ -37,11 +42,20 @@ protected:
     void InitializeWorkerExecution() override {
         if (this->TaskScheduling && !this->TaskScheduling->ObserveOnly
             && this->RuntimeSettings.TaskScheduler->GetSettings().UseWorkerPool) {
-            Y_ENSURE(this->SourcesMap.empty() && this->InputTransformsMap.empty()
+            // KqpReadRangesSource is allowed: its rows are polled on the endpoint
+            // before the worker runs. Transforms, sinks and checkpoints are not.
+            Y_ENSURE(this->InputTransformsMap.empty()
                 && this->SinksMap.empty() && this->OutputTransformsMap.empty() && !this->Checkpoints);
             this->WorkerExecution = std::make_shared<TDqTaskExecution>(TaskRunner, this->MemoryQuota.Get(),
                 this->RuntimeSettings.TaskScheduler, this->TaskScheduling, this->GetSchedulableWorkFactory(),
                 NActors::TActivationContext::ActorSystem(), this->SelfId());
+            if (!this->SourcesMap.empty() && this->InputChannelsMap.empty()) {
+                // A point read has no downstream channel task. Send its result from
+                // this same activation instead of posting a slice-finished event.
+                this->WorkerExecution->SetWorkerCompletion([this](TTaskSliceResult result) {
+                    this->CompleteWorkerSlice(std::move(result));
+                });
+            }
             Y_ABORT_UNLESS(this->WorkerExecution->TryAcquireEndpoint());
             this->WorkerBootstrapLease = true;
             this->RuntimeSettings.TaskScheduler->BindExecution(this->ExecuterId, this->SelfId(), this->WorkerExecution);
@@ -60,7 +74,7 @@ protected:
         auto guard = TBase::BindAllocator();
         TDqOperatorMemoryQuotaScope quotaScope(this->MemoryQuota ? this->MemoryQuota->GetOperatorQuota() : nullptr);
         if (static_cast<ERunStatus>(result.Status) != ERunStatus::Finished) {
-            static_cast<TDerived*>(this)->OnWorkerSliceInputsConsumed();
+            static_cast<TDerived*>(this)->OnWorkerSliceInputsConsumed(static_cast<ERunStatus>(result.Status));
         }
         TBase::ProcessOutputsImpl(static_cast<ERunStatus>(result.Status));
         if (this->MemoryQuota) {
@@ -72,7 +86,7 @@ protected:
 
     // Worker execution: called on the endpoint after a non-final slice, like the source polling
     // DoExecuteImpl does after a direct run.
-    void OnWorkerSliceInputsConsumed() {}
+    void OnWorkerSliceInputsConsumed(ERunStatus) {}
 
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();

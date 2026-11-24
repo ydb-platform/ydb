@@ -3133,6 +3133,9 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     Serializer->Buffer = buffer;
     if (Scheduling) {
         buffer->BindTaskScheduling(Scheduling, false);
+        // The stub's HardLimit is gone with it, and the new buffer does not
+        // notify anyone. A run that already parked on that limit would not resume.
+        Scheduling->RequestExecution();
     }
     if (FinishEpoch) {
         // the stub never finishes: the bound buffer may have already

@@ -800,7 +800,8 @@ public:
         if (!Settings.ObserveOnly && Settings.UseWorkerPool) {
             WorkPool = std::make_shared<TTaskWorkPool>(Settings.MaxInFlightPerShard,
                 [actorSystem](auto wakeup) { WakeDqComputeWorker(actorSystem, wakeup); }, counters,
-                GetEnv("YDB_DQ_TASK_PREFER_CONSUMERS") == "1", GetEnv("YDB_DQ_TASK_PREFER_READY_QUERIES") == "1");
+                GetEnv("YDB_DQ_TASK_PREFER_CONSUMERS") == "1", GetEnv("YDB_DQ_TASK_PREFER_READY_QUERIES") == "1",
+                GetEnv("YDB_DQ_TASK_FIFO") == "1", GetEnv("YDB_DQ_TASK_QUERY_ORDER") != "0");
             StartDqComputeWorkers(actorSystem, poolId, WorkPool, Settings);
         }
         for (ui32 i = 0; !Settings.ObserveOnly && !Settings.UseWorkerPool && i < Settings.Shards; ++i) {

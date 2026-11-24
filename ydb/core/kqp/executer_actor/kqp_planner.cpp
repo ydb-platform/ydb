@@ -286,7 +286,7 @@ std::shared_ptr<const NDq::TQueryTaskGraph> TKqpPlanner::GetSchedulingGraph() {
             channels.push_back({channel.Id, channel.SrcTask, channel.DstTask, channel.SrcOutputIndex,
                                 channel.DstInputIndex, source.Outputs[channel.SrcOutputIndex].Type});
         }
-        SchedulingGraph = std::make_shared<const NDq::TQueryTaskGraph>(std::move(tasks), std::move(channels));
+        SchedulingGraph = std::make_shared<const NDq::TQueryTaskGraph>(std::move(tasks), std::move(channels), TxId);
     }
     return SchedulingGraph;
 }

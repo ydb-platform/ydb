@@ -4,6 +4,8 @@
 #include "dq_schedulable.h"
 #include <ydb/library/yql/dq/task_scheduler/worker_pool.h>
 
+#include <functional>
+
 namespace NYql::NDq {
 
 // Shared by the task endpoint and workers. Compute context and channel adapters
@@ -21,7 +23,10 @@ public:
     bool TryAcquireEndpoint();
     void Retire(bool completed); // endpoint lease must be held
     TTaskSliceResult RunSlice(const TTaskSliceBudget& budget) override;
+    bool CompleteOnWorker(TTaskSliceResult& result) override;
     void OnSliceFinished(TTaskSliceResult result) override;
+    // Source reads drain channel output on the worker. The callback runs under the lease.
+    void SetWorkerCompletion(std::function<void(TTaskSliceResult)> completion);
     // Endpoint lease must be held. Allows workers to complete the following slices
     // without the endpoint while the output finish epoch stays at `checkedEpoch`.
     void AllowInlineCompletion(std::shared_ptr<const std::atomic<ui64>> epoch, ui64 checkedEpoch);
@@ -39,6 +44,7 @@ private:
     const NActors::TActorId Endpoint;
     const std::shared_ptr<TTaskExecutionLease> Available = std::make_shared<TTaskExecutionLease>();
     std::atomic<bool> EndpointWaiting = false;
+    std::function<void(TTaskSliceResult)> WorkerCompletion;
     std::atomic<bool> InlineAllowed = false;
     std::shared_ptr<const std::atomic<ui64>> InlineEpoch; // written by the endpoint under the lease
     ui64 InlineCheckedEpoch = 0;

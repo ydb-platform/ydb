@@ -24,6 +24,10 @@ struct TTaskSliceResult {
     bool CompleteInline = false;
 };
 
+// True while a worker is finishing a slice under the lease. Source polling stays
+// on the endpoint: the read actor publishes rows, then the endpoint queues the task.
+bool DqSliceCompletionOnWorker() noexcept;
+
 // A queue scanning a ready task arms a notification if its lease is busy.
 // The same atomic records availability and interest, so a release either
 // sees the interest or the scan sees the newly available lease.
@@ -68,6 +72,9 @@ public:
     virtual bool TryAcquire() = 0;
     virtual void Release() = 0;
     virtual TTaskSliceResult RunSlice(const TTaskSliceBudget& budget) = 0;
+    // Called while the worker still holds the lease. True means outputs were
+    // drained here and OnSliceFinished must not run.
+    virtual bool CompleteOnWorker(TTaskSliceResult&) { return false; }
     // Called after releasing the lease. May complete the handle immediately, or
     // deliver the result to the endpoint for output/control processing first.
     virtual void OnSliceFinished(TTaskSliceResult result) = 0;
@@ -112,7 +119,11 @@ public:
     using TWakeup = std::function<void(TWorkerWakeup)>;
 
     TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup,
-        NMonitoring::TDynamicCounterPtr counters = {}, bool preferConsumers = false, bool preferReadyQueries = false);
+        NMonitoring::TDynamicCounterPtr counters = {}, bool preferConsumers = false, bool preferReadyQueries = false,
+        bool fifo = false, bool queryOrder = false);
+    // FIFO claim skips the full ready-set scan. The worker yields after a
+    // handoff so the endpoint can finish the slice on this thread.
+    bool UsesFifo() const noexcept { return Fifo; }
     void RegisterGraph(NActors::TActorId query, ui64 registration,
         std::shared_ptr<const TQueryTaskGraph> graph, const TVector<ui64>& localTasks);
     void ForgetGraph(NActors::TActorId query, ui64 registration);
@@ -144,9 +155,17 @@ private:
         TTaskSchedulingSnapshot State;
         ui64 Sequence = 0;
         ui64 SelectionAt = 0;
+        // Non-zero while this task occupies one FIFO slot. Bumped to drop a stale slot.
+        ui64 ReadyEpoch = 0;
+    };
+    struct TReadySlot {
+        NActors::TActorId Query;
+        NActors::TActorId Actor;
+        ui64 Epoch = 0;
     };
     struct TQuery {
         ui64 Registration = 0;
+        ui64 Order = Max<ui64>();
         std::shared_ptr<const TQueryTaskGraph> Graph;
         THashSet<ui64> LocalTasks;
         THashMap<NActors::TActorId, TTask> Tasks;
@@ -159,15 +178,24 @@ private:
     };
     ui32 CountWorkLocked(ui32 limit, ui32& knownReady) const;
     TVector<TWorkerWakeup> WakeLocked(NActors::TActorId preferred = {});
+    TVector<TWorkerWakeup> WakeFifoLocked(NActors::TActorId preferred);
     void Wake(TVector<TWorkerWakeup> workers);
+    void PushFifoLocked(NActors::TActorId query, NActors::TActorId actor, TTask& task);
+    void InvalidateFifoLocked(TTask& task);
+    std::optional<TClaim> TakeFifo(NActors::TActorId worker, ui64 reserveCpuUs, const TLocalConsumerHint& hint);
 
     const ui32 MaxQueryConcurrency;
     const TWakeup Wakeup;
     const bool PreferConsumers;
     const bool PreferReadyQueries;
+    const bool Fifo;
+    // FIFO within a query, but the query with the smallest graph order goes first.
+    const bool QueryOrder;
     mutable std::mutex Mutex;
     THashMap<NActors::TActorId, TQuery> Queries;
     THashSet<NActors::TActorId> ReadyQueries;
+    std::deque<TReadySlot> ReadyOrder;
+    ui32 LiveReady = 0;
     THashSet<NActors::TActorId> IdleWorkers;
     THashSet<NActors::TActorId> PendingWorkers;
     ui64 Sequence = 0;

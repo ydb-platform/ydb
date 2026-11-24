@@ -74,9 +74,9 @@ void TLocalConsumerScope::Record(NActors::TActorId actor, ui64 readyRevision, ui
 }
 
 TTaskWorkPool::TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup,
-    NMonitoring::TDynamicCounterPtr counters, bool preferConsumers, bool preferReadyQueries)
+    NMonitoring::TDynamicCounterPtr counters, bool preferConsumers, bool preferReadyQueries, bool fifo, bool queryOrder)
     : MaxQueryConcurrency(maxQueryConcurrency), Wakeup(std::move(wakeup))
-    , PreferConsumers(preferConsumers), PreferReadyQueries(preferReadyQueries)
+    , PreferConsumers(preferConsumers), PreferReadyQueries(preferReadyQueries), Fifo(fifo), QueryOrder(queryOrder)
 {
     Y_ENSURE(MaxQueryConcurrency);
     if (counters) {
@@ -142,7 +142,55 @@ ui32 TTaskWorkPool::CountWorkLocked(ui32 limit, ui32& knownReady) const {
     return count;
 }
 
+void TTaskWorkPool::PushFifoLocked(NActors::TActorId query, NActors::TActorId actor, TTask& task) {
+    ++task.ReadyEpoch;
+    ++LiveReady;
+    ReadyOrder.push_back({query, actor, task.ReadyEpoch});
+}
+
+void TTaskWorkPool::InvalidateFifoLocked(TTask& task) {
+    if (!task.ReadyEpoch) {
+        return;
+    }
+    ++task.ReadyEpoch;
+    if (LiveReady) {
+        --LiveReady;
+    }
+}
+
+TVector<TTaskWorkPool::TWorkerWakeup> TTaskWorkPool::WakeFifoLocked(NActors::TActorId preferred) {
+    TVector<TWorkerWakeup> workers;
+    if (IdleWorkers.empty()) {
+        return workers;
+    }
+    const ui32 pending = PendingWorkers.size();
+    const ui32 covered = pending + TWorkerContinuationScope::IsActive(*this);
+    if (LiveReady <= covered) {
+        return workers;
+    }
+    const ui32 count = Min<ui32>(LiveReady - covered, IdleWorkers.size());
+    const auto wake = [&](auto it) {
+        workers.push_back({*it, true});
+        PendingWorkers.insert(*it);
+        IdleWorkers.erase(it);
+    };
+    if (auto it = IdleWorkers.find(preferred); it != IdleWorkers.end()) {
+        wake(it);
+    }
+    while (workers.size() < count) {
+        wake(IdleWorkers.begin());
+    }
+    if (Wakeups) {
+        *Wakeups += workers.size();
+        *KnownReadyWakeups += workers.size();
+    }
+    return workers;
+}
+
 TVector<TTaskWorkPool::TWorkerWakeup> TTaskWorkPool::WakeLocked(NActors::TActorId preferred) {
+    if (Fifo) {
+        return WakeFifoLocked(preferred);
+    }
     TVector<TWorkerWakeup> workers;
     if (IdleWorkers.empty()) {
         return workers;
@@ -208,6 +256,9 @@ void TTaskWorkPool::RegisterGraph(NActors::TActorId id, ui64 registration,
         return;
     }
     query.Registration = registration;
+    if (graph && graph->QueryOrder) {
+        query.Order = graph->QueryOrder;
+    }
     query.Graph = std::move(graph);
     query.LocalTasks.insert(localTasks.begin(), localTasks.end());
 }
@@ -263,6 +314,9 @@ void TTaskWorkPool::Report(ui64 registration, TTaskSchedulingSnapshot state) {
         }
         task->second.State = std::move(state);
         if (IsTerminal(task->second.State.State)) {
+            if (Fifo && task->second.Ready) {
+                InvalidateFifoLocked(task->second);
+            }
             retired = std::move(task->second.Ready);
             query->second.ReadyTasks.erase(task->first);
             if (query->second.ReadyTasks.empty()) {
@@ -293,7 +347,8 @@ void TTaskWorkPool::Enqueue(std::shared_ptr<TTaskSchedulingHandle> handle) {
         if (task == query->second.Tasks.end() || IsTerminal(task->second.State.State) || IsTerminal(state.State)) {
             return;
         }
-        if (!task->second.Ready) {
+        const bool becameReady = !task->second.Ready;
+        if (becameReady) {
             task->second.Sequence = ++Sequence;
             task->second.SelectionAt = Selections;
         }
@@ -303,6 +358,9 @@ void TTaskWorkPool::Enqueue(std::shared_ptr<TTaskSchedulingHandle> handle) {
         query->second.ReadyTasks.insert(handle->Actor);
         ReadyQueries.insert(handle->Query);
         task->second.Ready = handle;
+        if (Fifo && becameReady) {
+            PushFifoLocked(handle->Query, handle->Actor, task->second);
+        }
         if (state.Revision >= task->second.State.Revision) {
             task->second.State = state;
         }
@@ -320,9 +378,134 @@ void TTaskWorkPool::NotifyAvailable() {
     Wake(std::move(wake));
 }
 
+std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::TakeFifo(NActors::TActorId worker, ui64 reserveCpuUs,
+    const TLocalConsumerHint& hint)
+{
+    std::unique_lock lock(Mutex);
+    if (worker && !PendingWorkers.empty()) {
+        PendingWorkers.erase(worker);
+    }
+    const auto now = TMonotonic::Now();
+    const auto live = [&](const TReadySlot& slot) -> std::pair<TQuery*, TTask*> {
+        auto queryIt = Queries.find(slot.Query);
+        if (queryIt == Queries.end()) {
+            return {};
+        }
+        auto taskIt = queryIt->second.Tasks.find(slot.Actor);
+        if (taskIt == queryIt->second.Tasks.end() || taskIt->second.ReadyEpoch != slot.Epoch) {
+            return {};
+        }
+        return {&queryIt->second, &taskIt->second};
+    };
+    // Subscribes to a busy lease, so a parked worker learns when it is released.
+    const auto claimable = [&](const TQuery& query, const TTask& task) {
+        const bool blocked = !task.Ready || query.Running >= MaxQueryConcurrency || query.NotBefore > now;
+        return !blocked && task.Available && !task.Execution.expired() && task.Available->IsAvailableOrSubscribe();
+    };
+    std::optional<TReadySlot> selected;
+    // A consumer unblocked by data this worker just pushed goes first. Queue
+    // order and query order apply only when that consumer cannot be claimed.
+    if (hint.Consumer) {
+        if (LocalConsumerHints) {
+            ++*LocalConsumerHints;
+        }
+        for (size_t i = 0; i < ReadyOrder.size();) {
+            const auto [query, task] = live(ReadyOrder[i]);
+            if (!task) {
+                ReadyOrder.erase(ReadyOrder.begin() + i);
+                continue;
+            }
+            if (ReadyOrder[i].Query == hint.Query && ReadyOrder[i].Actor == hint.Consumer
+                && task->State.Revision == hint.ReadyRevision && claimable(*query, *task))
+            {
+                selected = ReadyOrder[i];
+                ReadyOrder.erase(ReadyOrder.begin() + i);
+                if (LocalConsumerSelections) {
+                    ++*LocalConsumerSelections;
+                }
+                break;
+            }
+            ++i;
+        }
+    }
+    if (!selected && QueryOrder) {
+        std::optional<size_t> best;
+        ui64 bestOrder = 0;
+        for (size_t i = 0; i < ReadyOrder.size();) {
+            const auto [query, task] = live(ReadyOrder[i]);
+            if (!task) {
+                ReadyOrder.erase(ReadyOrder.begin() + i);
+                continue;
+            }
+            // A later slot of an equally ordered query keeps the FIFO order.
+            if ((!best || query->Order < bestOrder) && claimable(*query, *task)) {
+                best = i;
+                bestOrder = query->Order;
+            }
+            ++i;
+        }
+        if (best) {
+            selected = ReadyOrder[*best];
+            ReadyOrder.erase(ReadyOrder.begin() + *best);
+        }
+    } else if (!selected) {
+        const ui32 limit = ReadyOrder.size();
+        ui32 deferred = 0;
+        while (deferred < limit && !ReadyOrder.empty()) {
+            const auto slot = ReadyOrder.front();
+            ReadyOrder.pop_front();
+            const auto [query, task] = live(slot);
+            if (!task) {
+                continue;
+            }
+            if (!claimable(*query, *task)) {
+                ReadyOrder.push_back(slot);
+                ++deferred;
+                continue;
+            }
+            selected = slot;
+            break;
+        }
+    }
+    if (selected) {
+        const auto slot = *selected;
+        auto& query = Queries.at(slot.Query);
+        auto& task = query.Tasks.at(slot.Actor);
+        ++query.Running;
+        query.ReservedCpuUs += reserveCpuUs;
+        auto handle = std::move(task.Ready);
+        auto execution = task.Execution.lock();
+        query.ReadyTasks.erase(slot.Actor);
+        if (query.ReadyTasks.empty()) {
+            ReadyQueries.erase(slot.Query);
+        }
+        ++task.ReadyEpoch;
+        if (LiveReady) {
+            --LiveReady;
+        }
+        ++Selections;
+        if (SelectionsCount) {
+            ++*SelectionsCount;
+            ++*(KnownReady(task.State) ? RunnableSelections : RecheckSelections);
+        }
+        lock.unlock();
+        return TClaim{std::move(handle), std::move(execution), reserveCpuUs};
+    }
+    if (EmptyTakes) {
+        ++*EmptyTakes;
+    }
+    if (worker) {
+        IdleWorkers.insert(worker);
+    }
+    return {};
+}
+
 std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worker, ui64 reserveCpuUs,
     const TLocalConsumerHint& hint)
 {
+    if (Fifo) {
+        return TakeFifo(worker, reserveCpuUs, hint);
+    }
     const auto cpuStart = SelectionCpuUs ? ThreadCPUTime() : 0;
     const auto lockStart = SelectionLockWaitUs ? TMonotonic::Now() : TMonotonic();
     Y_DEFER { if (SelectionCpuUs) { *SelectionCpuUs += ThreadCPUTime() - cpuStart; } };
@@ -642,8 +825,9 @@ private:
                 continue;
             }
             TTaskSliceResult result;
+            bool completedOnWorker = false;
             std::optional<TWorkerContinuationScope> continuation;
-            const auto cpuStart = ThreadCPUTime();
+            const auto cpuStart = Pool->UsesFifo() ? 0 : ThreadCPUTime();
             const auto sliceStart = claim->Task->Trace ? TMonotonic::Now() : TMonotonic();
             {
                 Y_DEFER { claim->Execution->Release(); };
@@ -668,8 +852,18 @@ private:
                 if (TMonotonic::Now() < deadline) {
                     continuation.emplace(*Pool);
                 }
+                // Drain outputs before releasing the lease, so the next Take sees
+                // work produced by this slice without a trip back to the endpoint.
+                if (!result.Error && !result.RetryAfter && !result.Progress.QuotaRejected) {
+                    try {
+                        completedOnWorker = claim->Execution->CompleteOnWorker(result);
+                    } catch (...) {
+                        result.Error = std::current_exception();
+                        hint = {};
+                    }
+                }
             }
-            const auto cpuUs = Max<ui64>(1, ThreadCPUTime() - cpuStart);
+            const auto cpuUs = Pool->UsesFifo() ? 1 : Max<ui64>(1, ThreadCPUTime() - cpuStart);
             if (claim->Task->Trace) {
                 NJson::TJsonValue args(NJson::JSON_MAP);
                 args["worker"] = ToString(SelfId());
@@ -691,10 +885,12 @@ private:
             if (result.RetryAfter) {
                 Schedule(*result.RetryAfter, new TEvWorkerRetry(claim->Task, claim->Task->Query));
             }
-            if (result.CompleteInline) {
-                Pool->RecordInlineCompletion();
+            if (!completedOnWorker) {
+                if (result.CompleteInline) {
+                    Pool->RecordInlineCompletion();
+                }
+                claim->Execution->OnSliceFinished(std::move(result));
             }
-            claim->Execution->OnSliceFinished(std::move(result));
         } while (TMonotonic::Now() < deadline);
         Pool->Reschedule(SelfId());
     }
@@ -722,9 +918,11 @@ void StartDqComputeWorkers(NActors::TActorSystem* actorSystem, ui32 poolId,
 // Kept here so callers do not depend on the worker's private event type.
 void WakeDqComputeWorker(NActors::TActorSystem* actorSystem, TTaskWorkPool::TWorkerWakeup wakeup) {
     static const auto policy = GetEnv("YDB_DQ_TASK_TAIL_WAKE");
-    static const bool all = policy == "1";
+    // Default is a same-thread handoff. "0" keeps a normal cross-thread wakeup,
+    // "ready" tails only a wakeup that already knows its task is runnable.
+    static const bool disabled = policy == "0";
     static const bool selective = policy == "ready";
-    const bool tailWake = all || (selective && wakeup.KnownReady);
+    const bool tailWake = !disabled && (!selective || wakeup.KnownReady);
     // Only the initial handoff may cut ahead of other mailboxes. A worker
     // yielding at its deadline or waking a peer uses regular delivery.
     if (tailWake && !InsideWorkerActivation && NActors::TlsActivationContext

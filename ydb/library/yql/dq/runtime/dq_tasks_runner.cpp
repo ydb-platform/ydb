@@ -1111,33 +1111,39 @@ public:
         const auto trace = Scheduling ? Scheduling->Trace : nullptr;
         auto channelsBefore = trace ? TraceChannels() : NJson::TJsonValue();
         const int exceptionsBefore = std::uncaught_exceptions();
-        const ui64 cpuStart = Scheduling ? ThreadCPUTime() : 0;
+        static const bool cheapRun = GetEnv("YDB_DQ_TASK_CHEAP_RUN") == "1";
+        const bool measureRun = Scheduling && !cheapRun;
+        const ui64 cpuStart = measureRun ? ThreadCPUTime() : 0;
         SliceCpuStart = cpuStart;
-        const auto wallStart = Scheduling ? TMonotonic::Now() : TMonotonic();
+        const auto wallStart = measureRun ? TMonotonic::Now() : TMonotonic();
         ui64 inputRowsBefore = 0;
         if (Scheduling) {
             WaitObserver->BeginRun();
             LastRunProgress = {};
             LastRunProgress.RunnerInvoked = true;
-            for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
-                for (const auto& input : stats->Inputs) {
-                    inputRowsBefore += input->RowsConsumed;
+            if (measureRun) {
+                for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
+                    for (const auto& input : stats->Inputs) {
+                        inputRowsBefore += input->RowsConsumed;
+                    }
                 }
             }
         }
         Y_DEFER {
             if (Scheduling) {
                 WaitObserver->EndRun();
-                ui64 inputRowsAfter = 0;
-                for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
-                    for (const auto& input : stats->Inputs) {
-                        inputRowsAfter += input->RowsConsumed;
+                if (measureRun) {
+                    ui64 inputRowsAfter = 0;
+                    for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
+                        for (const auto& input : stats->Inputs) {
+                            inputRowsAfter += input->RowsConsumed;
+                        }
                     }
+                    LastRunProgress.InputRows = inputRowsAfter - inputRowsBefore;
+                    LastRunProgress.CpuTimeUs = ThreadCPUTime() - cpuStart;
+                    LastRunProgress.ElapsedTimeUs = (TMonotonic::Now() - wallStart).MicroSeconds();
                 }
-                LastRunProgress.InputRows = inputRowsAfter - inputRowsBefore;
                 LastRunProgress.InputItems = InputsConsumed;
-                LastRunProgress.CpuTimeUs = ThreadCPUTime() - cpuStart;
-                LastRunProgress.ElapsedTimeUs = (TMonotonic::Now() - wallStart).MicroSeconds();
                 if (trace) {
                     trace->Run(TaskId, Scheduling->Actor, wallStart, Scheduling->GetRunProgressForTrace(LastRunProgress),
                         std::move(channelsBefore), TraceChannels(), std::uncaught_exceptions() > exceptionsBefore,

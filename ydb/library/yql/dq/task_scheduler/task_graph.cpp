@@ -6,8 +6,8 @@
 
 namespace NYql::NDq {
 
-TQueryTaskGraph::TQueryTaskGraph(TVector<TTaskGraphNode> tasks, TVector<TTaskGraphChannel> channels)
-    : Tasks(std::move(tasks)), Channels(std::move(channels))
+TQueryTaskGraph::TQueryTaskGraph(TVector<TTaskGraphNode> tasks, TVector<TTaskGraphChannel> channels, ui64 queryOrder)
+    : Tasks(std::move(tasks)), Channels(std::move(channels)), QueryOrder(queryOrder)
 {
     for (size_t i = 0; i < Tasks.size(); ++i) {
         Y_ENSURE(Tasks[i].TaskId && TaskIndex.emplace(Tasks[i].TaskId, i).second, "Duplicate or zero task ID");

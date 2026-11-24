@@ -26,7 +26,9 @@ void SerializeSchedulingGraph(const NYql::NDq::TQueryTaskGraph& graph, NKikimrKq
     }
 }
 
-std::shared_ptr<const NYql::NDq::TQueryTaskGraph> DeserializeSchedulingGraph(const NKikimrKqp::TTaskSchedulingGraph& graph) {
+std::shared_ptr<const NYql::NDq::TQueryTaskGraph> DeserializeSchedulingGraph(const NKikimrKqp::TTaskSchedulingGraph& graph,
+    ui64 queryOrder)
+{
     TVector<NYql::NDq::TTaskGraphNode> tasks;
     TVector<NYql::NDq::TTaskGraphChannel> channels;
     tasks.reserve(graph.TasksSize());
@@ -39,7 +41,7 @@ std::shared_ptr<const NYql::NDq::TQueryTaskGraph> DeserializeSchedulingGraph(con
         channels.push_back({channel.GetChannelId(), channel.GetSrcTaskId(), channel.GetDstTaskId(),
                             channel.GetSrcOutputIndex(), channel.GetDstInputIndex(), channel.GetRoutingKind()});
     }
-    return std::make_shared<const NYql::NDq::TQueryTaskGraph>(std::move(tasks), std::move(channels));
+    return std::make_shared<const NYql::NDq::TQueryTaskGraph>(std::move(tasks), std::move(channels), queryOrder);
 }
 
 } // namespace NKikimr::NKqp

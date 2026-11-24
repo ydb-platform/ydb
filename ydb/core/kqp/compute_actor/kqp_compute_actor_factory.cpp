@@ -3,11 +3,14 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
+
+#include <util/system/env.h>
 
 #include <atomic>
 
@@ -205,18 +208,27 @@ public:
             runtimeSettings.TaskGraphRegistration = std::move(args.SchedulingGraphRegistration);
             if (runtimeSettings.TaskScheduler && runtimeSettings.TaskScheduler->GetSettings().UseWorkerPool
                 && !runtimeSettings.TaskScheduler->GetSettings().ObserveOnly) {
-                // The initial detached-runner path supports pure channel tasks.
-                // Source/sink actors, scan contexts and WASM TLS retain the
-                // original task-bound execution envelope until adapted.
-                // Column-shard scans run on workers too: scan data arrives as endpoint events
-                // (handled under the lease) that request execution, see TKqpScanComputeActor.
-                const bool workerScan = tableKind == ETableKind::Olap && !runtimeSettings.RlPath;
+                // Pure channel tasks and datashard range reads run on workers. The read
+                // actor keeps its own mailbox and reports readiness; the endpoint polls
+                // rows into the runner under the lease before the worker calls Run.
+                // Sysview and rate-limited scans stay on the task actor.
+                const bool workerScan = (tableKind == ETableKind::Olap || tableKind == ETableKind::Datashard)
+                    && !runtimeSettings.RlPath;
                 bool eligible = ((tableKind == ETableKind::Unknown && !args.Task->HasMeta()) || workerScan) && !args.Task->GetCreateSuspended()
                     && (!args.UseBatchPool || AppData()->BatchPoolId == AppData()->UserPoolId)
                     && !args.Task->GetProgram().GetSettings().GetHasWatermarkGenerator()
                     && args.Task->GetTaskParams().find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)) == args.Task->GetTaskParams().end();
+                static const bool s3Sources = GetEnv("YDB_DQ_TASK_S3_SOURCES") == "1";
                 for (const auto& input : args.Task->GetInputs()) {
-                    eligible &= !input.HasSource() && !input.HasTransform();
+                    if (input.HasSource()) {
+                        const auto& source = input.GetSource();
+                        // Scan actors already ingest rows from their own fetchers.
+                        // Only the pure compute actor polls KqpReadRangesSource.
+                        eligible &= !workerScan
+                            && (source.GetType() == NYql::KqpReadRangesSourceName || (s3Sources && source.GetType() == "S3Source"))
+                            && source.GetWatermarksMode() == NYql::NDqProto::WATERMARKS_MODE_DISABLED;
+                    }
+                    eligible &= !input.HasTransform();
                     for (const auto& channel : input.GetChannels()) {
                         eligible &= channel.GetWatermarksMode() == NYql::NDqProto::WATERMARKS_MODE_DISABLED;
                     }

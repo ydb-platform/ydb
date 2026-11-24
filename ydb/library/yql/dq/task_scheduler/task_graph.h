@@ -34,7 +34,7 @@ struct TTaskGraphChannel {
 // hints (which can change when a task start is retried on another node).
 class TQueryTaskGraph {
 public:
-    TQueryTaskGraph(TVector<TTaskGraphNode> tasks, TVector<TTaskGraphChannel> channels);
+    TQueryTaskGraph(TVector<TTaskGraphNode> tasks, TVector<TTaskGraphChannel> channels, ui64 queryOrder = 0);
     const TTaskGraphNode* FindTask(ui64 taskId) const;
     const TVector<ui64>& GetInputs(ui64 taskId) const;
     const TVector<ui64>& GetOutputs(ui64 taskId) const;
@@ -43,6 +43,9 @@ public:
 
     const TVector<TTaskGraphNode> Tasks;
     const TVector<TTaskGraphChannel> Channels;
+    // Identical on every node of the query, so nodes agree on which query to serve
+    // first. Zero means unknown.
+    const ui64 QueryOrder;
 
 private:
     THashMap<ui64, size_t> TaskIndex;

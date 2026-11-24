@@ -830,7 +830,7 @@ public:
             TActorId actorId;
             try {
                 if (!schedulingGraphRegistered && msg.HasSchedulingGraph() && CaFactory_->IsTaskSchedulingEnabled()) {
-                    auto graph = DeserializeSchedulingGraph(msg.GetSchedulingGraph());
+                    auto graph = DeserializeSchedulingGraph(msg.GetSchedulingGraph(), msg.GetTxId());
                     TVector<ui64> localTasks;
                     for (const auto& task : msg.GetTasks()) {
                         localTasks.push_back(task.GetId());

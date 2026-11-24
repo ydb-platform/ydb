@@ -5,6 +5,14 @@
 
 namespace NYql::NDq {
 
+namespace {
+thread_local bool SliceCompletionOnWorker = false;
+}
+
+bool DqSliceCompletionOnWorker() noexcept {
+    return SliceCompletionOnWorker;
+}
+
 TDqTaskExecution::TDqTaskExecution(TIntrusivePtr<IDqTaskRunner> runner, TDqMemoryQuota* memoryQuota,
     std::shared_ptr<IDqTaskScheduler> scheduler, std::shared_ptr<TTaskSchedulingHandle> task,
     IDqSchedulableWorkFactoryPtr workFactory, NActors::TActorSystem* actorSystem, NActors::TActorId endpoint)
@@ -36,6 +44,7 @@ void TDqTaskExecution::Release() {
 }
 
 void TDqTaskExecution::Retire(bool completed) {
+    WorkerCompletion = nullptr;
     Task->Cancel(completed);
     Runner.Reset();
     if (WaitingForQuota) {
@@ -110,6 +119,20 @@ void TDqTaskExecution::AllowInlineCompletion(std::shared_ptr<const std::atomic<u
     InlineAllowed.store(true, std::memory_order_release);
 }
 
+void TDqTaskExecution::SetWorkerCompletion(std::function<void(TTaskSliceResult)> completion) {
+    WorkerCompletion = std::move(completion);
+}
+
+bool TDqTaskExecution::CompleteOnWorker(TTaskSliceResult& result) {
+    if (!WorkerCompletion || result.Error || result.RetryAfter || result.Progress.QuotaRejected) {
+        return false;
+    }
+    SliceCompletionOnWorker = true;
+    Y_DEFER { SliceCompletionOnWorker = false; };
+    WorkerCompletion(result);
+    return true;
+}
+
 void TDqTaskExecution::OnSliceFinished(TTaskSliceResult result) {
     if (result.CompleteInline) {
         // Same as the endpoint's CompleteWorkerSlice for a non-final slice with nothing
@@ -118,7 +141,15 @@ void TDqTaskExecution::OnSliceFinished(TTaskSliceResult result) {
         Task->Complete(result.Progress);
         return;
     }
-    ActorSystem->Send(Endpoint, new TEvTaskSliceFinished(shared_from_this(), std::move(result)));
+    auto* event = new TEvTaskSliceFinished(shared_from_this(), std::move(result));
+    // Same-thread continuation: the endpoint drains outputs before this thread
+    // takes another mailbox. A worker outside an activation uses normal delivery.
+    if (NActors::TlsActivationContext && NActors::TActivationContext::ActorSystem() == ActorSystem) {
+        NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
+            new NActors::IEventHandle(Endpoint, NActors::TActorId{}, event));
+        return;
+    }
+    ActorSystem->Send(Endpoint, event);
 }
 
 } // namespace NYql::NDq

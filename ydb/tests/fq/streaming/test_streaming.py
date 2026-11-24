@@ -2374,7 +2374,7 @@ FROM `{table_name}`"""
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
             '{"foo":{"bar":"before lunch", "bat":[0], "but":null}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"полдник":null},,"but":[123,456]},"test":"xy{longstr}z"}',
+            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"полдник":null},"but":[123,456]},"test":"xy{longstr}z"}',
             '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false},"but":[789,"foo"]},"test":"x{longstr}yz"}',
             '{"foo":{"bar":"is lunch over", "bat":[3],"but":true},"test":"x{longstr}yz"}',
             '{"foo":{"bar":"lunch was yummy", "bat":[4,null,"that"],"but":1234},"test":"x{longstr}yz"}',

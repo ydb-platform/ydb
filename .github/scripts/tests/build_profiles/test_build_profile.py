@@ -70,6 +70,23 @@ class BuildProfilesTest(unittest.TestCase):
         with self.assertLogs(level='WARNING'):
             self.assertEqual(build_profile.reproduction_args('release'), '')
 
+    def test_invalid_field_types_rejected(self):
+        cases = [
+            ('definition_flags: [one]', 'definition_flags'),
+            ('definition_flags: null', 'definition_flags'),
+            ('definition_flags: {HARDENING: yes}', 'string definition_flags'),
+            ('definition_flags: {1: "yes"}', 'string definition_flags'),
+            ('sanitize: yes', 'string sanitize'),
+            ('thinlto: "no"', 'boolean thinlto'),
+        ]
+        for field, message in cases:
+            with self.subTest(field=field):
+                self.path.write_text('release:\n  build_type: release\n  ' + field + '\n')
+                with self.assertRaisesRegex(ValueError, message):
+                    build_profile.resolve_profile('release')
+                with self.assertLogs(level='WARNING'):
+                    self.assertEqual(build_profile.reproduction_args('release'), '')
+
     def test_summary_command_quotes_flags(self):
         self.path.write_text('release:\n  build_type: release\n  definition_flags:\n    CFLAGS: "-one -two"\n')
         self.assertIn('-DCFLAGS=-one -two', shlex.split(build_profile.reproduction_args('release')))

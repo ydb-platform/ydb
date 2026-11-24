@@ -783,7 +783,9 @@
         }
         
         // Run command
-        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        if (testRunCommand) {
+            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        }
         
         // Owner
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";

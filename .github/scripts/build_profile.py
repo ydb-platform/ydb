@@ -31,12 +31,22 @@ def resolve_profile(name, fallback=None):
     if not isinstance(profile, dict) or not isinstance(profile.get("build_type"), str) or not profile["build_type"]:
         raise ValueError(f"Build profile {name!r} requires a nonempty build_type")
     args = [f"--build={profile['build_type']}"]
-    if profile.get("thinlto", False):
+    thinlto = profile.get("thinlto", False)
+    if not isinstance(thinlto, bool):
+        raise ValueError(f"Build profile {name!r} requires boolean thinlto")
+    if thinlto:
         args += ["--thinlto"]
     sanitizer = profile.get("sanitize", "")
+    if not isinstance(sanitizer, str):
+        raise ValueError(f"Build profile {name!r} requires string sanitize")
     if sanitizer:
         args += [f"--sanitize={sanitizer}"]
-    for key, value in profile.get("definition_flags", {}).items():
+    definitions = profile.get("definition_flags", {})
+    if not isinstance(definitions, dict):
+        raise ValueError(f"Build profile {name!r} requires a definition_flags mapping")
+    for key, value in definitions.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise ValueError(f"Build profile {name!r} requires string definition_flags keys and values")
         args.append(f"-D{key}={value}")
     return {"args": args, "sanitize": sanitizer}
 

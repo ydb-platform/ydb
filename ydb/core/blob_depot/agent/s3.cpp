@@ -7,6 +7,8 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
+#include <util/generic/scope.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
@@ -152,25 +154,25 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandleS3ReadResult(ui64 id, IEventHandle& result) {
+        bool success = false;
+        Y_DEFER { OnS3GetCompleted(success); };
         auto it = OtherRequestInFlight.find(id);
         if (it == OtherRequestInFlight.end()) {
-            OnS3GetCompleted(false);
             return;
         }
         auto read = std::static_pointer_cast<TS3Read>(it->Context);
         if (TActivationContext::Monotonic() >= read->Deadline) {
             ExtractRequest(id, OtherRequestInFlight);
-            OnS3GetCompleted(false);
             return;
         }
         auto* msg = result.Type == TEvents::TSystem::Undelivered ? nullptr
             : result.Get<NWrappers::TEvExternalStorage::TEvGetObjectResponse>();
         if (msg && msg->IsSuccess() && msg->Body.size() == read->Len) {
+            success = true;
             ++*S3GetsOk;
             *S3GetBytesOk += msg->Body.size();
             ExtractRequest(id, OtherRequestInFlight);
             read->Complete(NKikimrProto::OK, std::move(msg->Body), "");
-            OnS3GetCompleted(true);
             return;
         }
 
@@ -190,7 +192,6 @@ namespace NKikimr::NBlobDepot {
                 if (read->SlowDownRetries < MaxS3GetSlowDownRetries) {
                     ++read->SlowDownRetries;
                     IssueOrEnqueueS3Read(*read);
-                    OnS3GetCompleted(false);
                     return;
                 }
                 reason = TStringBuilder() << "too many S3 SlowDown retries: " << error.GetMessage();
@@ -203,7 +204,6 @@ namespace NKikimr::NBlobDepot {
         }
         ExtractRequest(id, OtherRequestInFlight);
         read->Complete(status, {}, reason.c_str());
-        OnS3GetCompleted(false);
     }
 
     void TBlobDepotAgent::NotifyS3GetSlowDown() {

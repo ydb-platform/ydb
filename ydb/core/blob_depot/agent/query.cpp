@@ -6,9 +6,8 @@
 namespace NKikimr::NBlobDepot {
 
     namespace {
-        TInstant GetQueryDeadline(IEventHandle& ev, bool includePut) {
+        TInstant GetActiveQueryDeadline(IEventHandle& ev) {
             switch (ev.GetTypeRewrite()) {
-                case TEvBlobStorage::EvPut: return includePut ? ev.Get<TEvBlobStorage::TEvPut>()->Deadline : TInstant::Max();
                 case TEvBlobStorage::EvGet: return ev.Get<TEvBlobStorage::TEvGet>()->Deadline;
                 case TEvBlobStorage::EvRange: return ev.Get<TEvBlobStorage::TEvRange>()->Deadline;
                 case TEvBlobStorage::EvDiscover: return ev.Get<TEvBlobStorage::TEvDiscover>()->Deadline;
@@ -16,6 +15,18 @@ namespace NKikimr::NBlobDepot {
                 default: return TInstant::Max();
             }
         }
+
+        bool PendingEventBudgetUsed(const THPTimer& timer, size_t processed) {
+            return processed >= 256 || TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1);
+        }
+    }
+
+    TPendingEventExpiration TPendingEventExpiration::Calculate(TMonotonic queueLimit, TInstant requestDeadline,
+            TInstant wallNow, TMonotonic monotonicNow) {
+        const TMonotonic deadline = requestDeadline >= wallNow
+            ? monotonicNow + (requestDeadline - wallNow)
+            : monotonicNow - (wallNow - requestDeadline);
+        return {Min(queueLimit, deadline), deadline <= queueLimit};
     }
 
     template<>
@@ -77,11 +88,20 @@ namespace NKikimr::NBlobDepot {
         std::unique_ptr<IEventHandle> p(ev.Release());
 
         if (!IsConnected || !PendingEventQ.empty()) {
-            size_t size = 0;
+            size_t size;
+            TInstant deadline;
             switch (type) {
-#define XX(TYPE) case TEvBlobStorage::TYPE: size = p->Get<TEvBlobStorage::T##TYPE>()->CalculateSize(); break;
+#define XX(TYPE) \
+                case TEvBlobStorage::TYPE: { \
+                    const auto* request = p->Get<TEvBlobStorage::T##TYPE>(); \
+                    size = request->CalculateSize(); \
+                    deadline = request->Deadline; \
+                    break; \
+                }
                 ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
+                default:
+                    Y_ABORT();
             }
 
             if (size > MaxPendingEventBytes - PendingEventBytes) {
@@ -89,12 +109,12 @@ namespace NKikimr::NBlobDepot {
                 CreateQuery<0>(std::move(p), received)->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
                 return;
             }
-            const TInstant deadline = GetQueryDeadline(*p, true);
-            const TDuration timeLeft = deadline - TActivationContext::Now();
-            const TMonotonic expiration = received + Min(timeLeft, EventExpirationTime);
+            const TInstant wallNow = TActivationContext::Now();
+            const TMonotonic monotonicNow = TActivationContext::Monotonic();
+            const auto expiration = TPendingEventExpiration::Calculate(received + EventExpirationTime, deadline, wallNow, monotonicNow);
             auto item = PendingEventQ.insert(PendingEventQ.end(), TPendingEvent{
-                std::move(p), size, received, timeLeft <= EventExpirationTime, {}});
-            item->ExpirationIt = PendingEventExpirations.emplace(expiration, item);
+                std::move(p), size, received, expiration.AtRequestDeadline, {}});
+            item->ExpirationIt = PendingEventExpirations.emplace(expiration.Time, item);
             PendingEventBytes += size;
 
             ++*PendingEventQueueItems;
@@ -119,6 +139,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandlePendingEvent() {
+        size_t processed = 0;
         for (THPTimer timer; !PendingEventQ.empty(); ) {
             if (PendingEventQ.front().ExpirationIt->first <= TActivationContext::Monotonic()) {
                 ExpirePendingEvent(PendingEventQ.begin());
@@ -126,7 +147,7 @@ namespace NKikimr::NBlobDepot {
                 auto item = ExtractPendingEvent(PendingEventQ.begin());
                 ProcessStorageEvent(std::move(item.Event), item.Received);
             }
-            if (!PendingEventQ.empty() && TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
+            if (!PendingEventQ.empty() && PendingEventBudgetUsed(timer, ++processed)) {
                 if (!ProcessPendingEventInFlight) {
                     TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
                     ProcessPendingEventInFlight = true;
@@ -197,8 +218,13 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandlePendingEventQueueWatchdog(const TAutoPtr<IEventHandle>& ev) {
         if (PendingEventQueueTimer.Consume(ev->Cookie)) {
             const TMonotonic now = TActivationContext::Monotonic();
+            THPTimer timer;
+            size_t processed = 0;
             while (!PendingEventExpirations.empty() && PendingEventExpirations.begin()->first <= now) {
                 ExpirePendingEvent(PendingEventExpirations.begin()->second);
+                if (PendingEventBudgetUsed(timer, ++processed)) {
+                    break;
+                }
             }
             SchedulePendingEventQueueWatchdog();
         }
@@ -223,7 +249,7 @@ namespace NKikimr::NBlobDepot {
         , Received(received)
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
-        , Deadline(GetQueryDeadline(*Event, false))
+        , Deadline(GetActiveQueryDeadline(*Event))
         , DeadlineMonotonic(Deadline == TInstant::Max() ? TMonotonic::Max()
             : StartTime + (Deadline - TActivationContext::Now()))
         , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(Min(StartTime + WatchdogDuration, DeadlineMonotonic), this))

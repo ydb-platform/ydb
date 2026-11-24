@@ -207,6 +207,14 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    struct TPendingEventExpiration {
+        TMonotonic Time;
+        bool AtRequestDeadline;
+
+        static TPendingEventExpiration Calculate(TMonotonic queueLimit, TInstant requestDeadline,
+            TInstant wallNow, TMonotonic monotonicNow);
+    };
+
     class TBlobDepotAgent
         : public TActorBootstrapped<TBlobDepotAgent>
         , public TRequestSender

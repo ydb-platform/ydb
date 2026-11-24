@@ -2702,7 +2702,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     // Enforce the topic mode for reads and writes, including late writes and
     // protocols without an earlier check (e.g. kafka_proxy).
-    if (req.CmdWriteSize() > 0 || req.HasCmdRead()) {
+    // MLP consumer operations fetch and enrich messages through CmdRead.
+    // Those reads do not write and stay allowed in unavailable/prohibited mode.
+    const bool mlpRead = req.HasCmdRead() && [&] {
+        const auto* consumer = GetConsumer(Config, req.GetCmdRead().GetClientId());
+        return consumer && consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+    }();
+    if (req.CmdWriteSize() > 0 || (req.HasCmdRead() && !mlpRead)) {
         if (const auto error = GetWriteModeError(Config)) {
             ReplyError(ctx, responseCookie, error->Code, error->Reason, /*closeSession=*/true);
             return;

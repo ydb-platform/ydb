@@ -345,6 +345,7 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
 
         const TString inQuery = R"(
             PRAGMA TablePathPrefix='/Root';
+            PRAGMA ydb.OptimizerHints='JoinType(PgL PgR Broadcast)';
             PRAGMA ydb.UseScalarHashJoinForMap='true';
             SELECT name
             FROM PgL
@@ -358,7 +359,52 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         UNIT_ASSERT_C(inExplain.IsSuccess(), inExplain.GetIssues().ToString());
         const TString inAst(*inExplain.GetStats()->GetAst());
         UNIT_ASSERT_C(!inAst.Contains("ScalarHashJoin"), inAst);
+        UNIT_ASSERT_C(inAst.Contains("MapJoin"), inAst);
         UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, inQuery), "[\"hello\"];");
+
+        result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/NestedL` (
+                id Int32 NOT NULL,
+                name pgtext,
+                PRIMARY KEY (id)
+            );
+            CREATE TABLE `/Root/NestedR` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/NestedL` (id, name) VALUES
+                (1, pgtext('hello')),
+                (2, pgtext('goodbye'));
+            UPSERT INTO `/Root/NestedR` (id) VALUES
+                (1);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // The key is a native type. Pg is only inside the tuple payload, so skipping
+        // the walk into Tuple/Optional would plan a scalar hash join again.
+        const TString nestedQuery = R"(
+            PRAGMA TablePathPrefix='/Root';
+            PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
+            PRAGMA ydb.UseScalarHashJoinForMap='true';
+            $l = SELECT id, AsTuple(name) AS payload FROM NestedL;
+            $r = SELECT id FROM NestedR;
+            SELECT L.payload AS payload
+            FROM $l AS L
+            INNER JOIN $r AS R ON L.id = R.id;
+        )";
+        auto nestedExplain = client.ExecuteQuery(nestedQuery, TTxControl::NoTx(),
+            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+        UNIT_ASSERT_C(nestedExplain.IsSuccess(), nestedExplain.GetIssues().ToString());
+        const TString nestedAst(*nestedExplain.GetStats()->GetAst());
+        UNIT_ASSERT_C(!nestedAst.Contains("ScalarHashJoin"), nestedAst);
+        UNIT_ASSERT_C(nestedAst.Contains("MapJoin"), nestedAst);
+
+        const TString nestedRows = RunQuerySortedRows(client, nestedQuery);
+        UNIT_ASSERT_C(nestedRows.Contains("hello"), nestedRows);
     }
 }
 

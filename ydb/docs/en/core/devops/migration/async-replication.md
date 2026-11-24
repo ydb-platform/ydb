@@ -221,16 +221,41 @@ Wait until the description contains `paused` without `error`:
 
 Check that both table descriptions have the same column names and types and the same primary key columns in the same order. Build a complete column list from the schema, including every primary key column, and pass it through `--columns` in the same order to both exports. Replace `id,value` below with the complete column list for your table. Then [stream-read the full tables](../../reference/ydb-cli/commands/readtable.md), ordered by primary key, and compare the exports:
 
+Use the same CLI version and output format. `--ordered` orders rows; the shared complete `--columns` list orders fields. Do not specify `--limit`, `--from`, or `--to`: verification must include every row and column. Run the following steps individually in the same Bash session, checking each result before continuing.
+
+First export the source and immediately inspect its exit code and diagnostics:
+
 ```bash
 columns='id,value'
-{{ ydb-cli }} -p source table read original_table --ordered --columns "$columns" --format json-base64 > source.rows.jsonl 2> source.read.stderr &&
-{{ ydb-cli }} -p target table read replica_table --ordered --columns "$columns" --format json-base64 > target.rows.jsonl 2> target.read.stderr &&
-test ! -s source.read.stderr &&
-test ! -s target.read.stderr &&
+{{ ydb-cli }} -p source table read original_table --ordered --columns "$columns" --format json-base64 > source.rows.jsonl 2> source.read.stderr
+source_status=$?
+printf 'Source exit code: %s\n' "$source_status"
+cat source.read.stderr
+```
+
+Continue only with exit code `0`, no read errors, and no `<INTERRUPTED>` marker. The CLI can return exit code `0` after a handled interruption. If stderr contains only a CLI update notification, preserve the log and reuse the completed export; there is no need to read the table again. On an error, interruption, or unclear diagnostics, stop and investigate before reading the target; partial exports are invalid.
+
+Then export the target and immediately check its result in the same way:
+
+```bash
+{{ ydb-cli }} -p target table read replica_table --ordered --columns "$columns" --format json-base64 > target.rows.jsonl 2> target.read.stderr
+target_status=$?
+printf 'Target exit code: %s\n' "$target_status"
+cat target.read.stderr
+```
+
+Apply the same conditions to the target: exit code `0`, no read errors or `<INTERRUPTED>`; an update notification alone does not require another export. Preserve the original logs; do not delete messages to pass verification. After checking both complete exports, compare the files:
+
+```bash
+grep -Fq '<INTERRUPTED>' source.read.stderr target.read.stderr
+interruption_status=$?
+test "$source_status" -eq 0 &&
+test "$target_status" -eq 0 &&
+test "$interruption_status" -eq 1 &&
 cmp source.rows.jsonl target.rows.jsonl
 ```
 
-Use the same CLI version and output format. `--ordered` orders rows; the shared complete `--columns` list orders fields. Do not specify `--limit`, `--from`, or `--to`: verification must include every row and column. The example runs `cmp` only after both commands succeed and both stderr files are empty. This also rejects a handled interruption: the CLI can write `<INTERRUPTED>` to stderr and return exit code `0`. If the chain stops, inspect `source.read.stderr` and `target.read.stderr`, fix the cause, and repeat both full exports. Do not delete messages from the files to continue the chain. Partial files are invalid even if they match. `cmp` must return exit code `0` with no output, indicating byte-for-byte equality of the complete exports. For multiple tables without secondary indexes, repeat the full comparison for every source and target pair.
+For `grep`, exit code `1` means no interruption marker was found, `0` means a marker was found, and any other code indicates a check failure. `cmp` must return exit code `0` with no output, indicating byte-for-byte equality of the complete exports. Do not compare partial or failed exports, even if the files match. If an export needs repeating after an error, both tables must remain unchanged. For multiple tables without secondary indexes, repeat the full comparison for every source and target pair.
 
 If the files differ, investigate the differences. If the target has not applied all changes, resume with `STATE = 'STANDBY'`, wait for progress, and repeat pausing and both full exports. Keep source writes stopped throughout. Do not run `DONE/FORCE` until full comparison succeeds and the data remains unchanged. If verification cannot fit the agreed window, stop the procedure and agree on further actions with your installation's support team.
 

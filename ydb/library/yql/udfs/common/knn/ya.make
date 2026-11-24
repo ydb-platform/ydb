@@ -10,6 +10,7 @@ SRCS(
     knn.cpp
     remote_embedder.cpp
     remote_embedder_host_policy.cpp
+    remote_embedder_http.cpp
 )
 
 PEERDIR(
@@ -19,6 +20,7 @@ PEERDIR(
     library/cpp/l1_distance
     library/cpp/l2_distance
     library/cpp/regex/pcre
+    library/cpp/threading/future
     library/cpp/time_provider
     library/cpp/uri
     ydb/core/base

@@ -1,4 +1,5 @@
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
+#include <ydb/library/yql/udfs/common/knn/remote_embedder_http.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
@@ -12,6 +13,8 @@
 #include <library/cpp/testing/mock_server/server.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/time_provider/monotonic.h>
+
+#include <util/system/event.h>
 
 #include <mutex>
 
@@ -258,6 +261,43 @@ ui32 EmbeddingSize(const NUdf::TUnboxedValue& row) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
+    Y_UNIT_TEST(HttpAndTimersRunIndependentlyOfTheCaller) {
+        class TSlowReply : public TRequestReplier {
+        public:
+            TSlowReply(TManualEvent& entered, TManualEvent& release)
+                : Entered_(entered)
+                , Release_(release)
+            {}
+
+            bool DoReply(const TReplyParams& params) override {
+                Entered_.Signal();
+                Release_.WaitT(TDuration::Seconds(5));
+                THttpResponse(HTTP_NO_CONTENT).OutTo(params.Output);
+                return true;
+            }
+
+        private:
+            TManualEvent& Entered_;
+            TManualEvent& Release_;
+        };
+
+        TManualEvent entered;
+        TManualEvent release;
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        NMock::TMockServer server(port, [&] { return new TSlowReply(entered, release); });
+        auto request = NKnn::PostRemoteEmbedderRequest("localhost", port, false,
+            "POST /embeddings HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT(entered.WaitT(TDuration::Seconds(5)));
+        UNIT_ASSERT(!request.HasValue());
+        const auto timer = NKnn::WaitBeforeRemoteEmbedderRequest(TDuration::MilliSeconds(10));
+        UNIT_ASSERT(timer.Wait(TDuration::Seconds(2)));
+        timer.GetValueSync();
+        UNIT_ASSERT(!request.HasValue());
+        release.Signal();
+        UNIT_ASSERT_VALUES_EQUAL(request.ExtractValueSync().Status, HTTP_NO_CONTENT);
+    }
+
     Y_UNIT_TEST(ScalarRequestAndBinaryEmbedding) {
         TServer server;
         TSetup setup;

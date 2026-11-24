@@ -54,7 +54,9 @@ budget for text and estimated retained values. A row above that budget fails
 the query. A pass-through value whose size cannot be estimated is processed on
 its own. The stream forwards upstream yields without losing buffered rows and
 flushes the final partial batch. An empty stream sends no request.
-HTTP calls, retry backoff, and throttling are synchronous.
+HTTP calls use a bounded background worker pool. Retry and rate-limit delays
+use a separate timer queue. Scalar and streaming UDFs wait for these results
+on the calling thread. A full worker or timer queue fails the query.
 
 `MaxTokensPerSecond` applies independently to each stream invocation; omitted,
 NULL or zero disables throttling. As no model-specific tokenizer is available,

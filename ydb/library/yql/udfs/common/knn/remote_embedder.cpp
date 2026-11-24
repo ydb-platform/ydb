@@ -1,10 +1,10 @@
 #include "remote_embedder.h"
+#include "remote_embedder_http.h"
 
 #include "knn-serializer-shared.h"
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
-#include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/time_provider/monotonic.h>
@@ -28,26 +28,6 @@ constexpr ui32 TransportError = 0;
 constexpr ui32 InvalidResponse = 502;
 constexpr size_t MaxBatchRows = 1024;
 constexpr size_t MaxBatchBytes = 1024 * 1024;
-constexpr size_t MaxResponseBytes = 16 * 1024 * 1024;
-
-class TResponseTooLarge : public yexception {};
-
-class TBoundedResponse final : public IOutputStream {
-public:
-    const TString& Body() const {
-        return Body_;
-    }
-
-private:
-    void DoWrite(const void* data, size_t size) override {
-        if (size > MaxResponseBytes - Body_.size()) {
-            ythrow TResponseTooLarge();
-        }
-        Body_.append(static_cast<const char*>(data), size);
-    }
-
-    TString Body_;
-};
 
 bool IsSafeHttpRequestPart(TStringBuf part) {
     return std::ranges::none_of(part, [](unsigned char c) {
@@ -127,42 +107,18 @@ private:
         for (ui64 attempt = 0; ; ++attempt) {
             Throttle(estimatedTokens);
             NKnn::ValidateRemoteEmbedderHost(DialHost_);
-            TBoundedResponse response;
-            ui32 status = TransportError;
-            try {
-                status = PostOnce(httpRequest, response);
-            } catch (const TResponseTooLarge&) {
-                return {InvalidResponse, {}};
-            } catch (const std::exception&) {
-                // HTTP diagnostics may contain credentials or input text.
-                status = TransportError;
-            }
+            const auto response = NKnn::PostRemoteEmbedderRequest(DialHost_, Port_, UseTls_, httpRequest).ExtractValueSync();
+            const auto status = response.Status;
             if (status >= 200 && status < 300) {
-                return ParseResponse(response.Body(), count, status, estimatedTokens);
+                return ParseResponse(response.Body, count, status, estimatedTokens);
             }
-            if (attempt >= MaxRetries_ || !(status == TransportError || status == 408 || status == 429 || status >= 500)) {
+            if (response.TooLarge || attempt >= MaxRetries_
+                || !(status == TransportError || status == 408 || status == 429 || status >= 500)) {
                 return {status, {}};
             }
-            Sleep(TDuration::MilliSeconds(Min<ui64>(10000, 100ULL << Min<ui64>(attempt, 7))));
+            NKnn::WaitBeforeRemoteEmbedderRequest(
+                TDuration::MilliSeconds(Min<ui64>(10000, 100ULL << Min<ui64>(attempt, 7)))).GetValueSync();
         }
-    }
-
-    ui32 PostOnce(const TString& request, IOutputStream& response) const {
-        // A fresh connection makes each POST exactly one transport attempt.
-        using TVerifyCert = TOpenSslClientIO::TOptions::TVerifyCert;
-        NPrivate::THttpConnection connection(DialHost_, Port_, TDuration::Seconds(60), TDuration::Seconds(10),
-            UseTls_, Nothing(), TVerifyCert{DialHost_}, false, true);
-        connection.Write(request);
-        auto& input = *connection.GetHttpInput();
-        const auto status = ParseHttpRetCode(input.FirstLine());
-        if (status >= 200 && status < 300 && status != HTTP_NO_CONTENT) {
-            ui64 contentLength = 0;
-            if (input.GetContentLength(contentLength) && contentLength > MaxResponseBytes) {
-                ythrow TResponseTooLarge();
-            }
-            TransferData(&input, &response);
-        }
-        return status;
     }
 
     void Throttle(ui64 tokens) {
@@ -171,7 +127,7 @@ private:
         }
         auto now = TMonotonic::Now();
         if (NextRequest_ > now) {
-            Sleep(NextRequest_ - now);
+            NKnn::WaitBeforeRemoteEmbedderRequest(NextRequest_ - now).GetValueSync();
             now = TMonotonic::Now();
         }
         NextRequest_ = now + TokenDuration(tokens);

@@ -15,6 +15,37 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_NO_CONNECTION_AVAILABLE, CURLE_GOT_NOTHING, CURLE_COULDNT_RESOLVE_HOST, CURLE_SEND_FAIL_REWIND };
 }
 
+class TNoRewindRetryPolicy final: public IHTTPGateway::TRetryPolicy {
+public:
+    explicit TNoRewindRetryPolicy(IHTTPGateway::TRetryPolicy::TPtr policy)
+        : Policy(std::move(policy))
+    {
+    }
+
+    IRetryState::TPtr CreateRetryState() const override {
+        return std::make_unique<TState>(Policy->CreateRetryState());
+    }
+
+private:
+    struct TState final: IRetryState {
+        explicit TState(IRetryState::TPtr state)
+            : State(std::move(state))
+        {
+        }
+
+        TMaybe<TDuration> GetNextRetryDelay(CURLcode curlCode, long httpCode) override {
+            if (curlCode == CURLE_SEND_FAIL_REWIND) {
+                return Nothing();
+            }
+            return State->GetNextRetryDelay(curlCode, httpCode);
+        }
+
+        const IRetryState::TPtr State;
+    };
+
+    const IHTTPGateway::TRetryPolicy::TPtr Policy;
+};
+
 }   // namespace
 
 std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
@@ -71,6 +102,12 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
     auto maxRetries = options.MaxRetries;
     return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
         [options = std::move(options)](CURLcode curlCode, long httpCode) {
+            // Recreating the handle loses curl's HTTP negotiation state (e.g.
+            // disabling Expect after 417). Only replay a rewind failure when
+            // no HTTP response was received.
+            if (curlCode == CURLE_SEND_FAIL_REWIND && httpCode != 0) {
+                return ERetryErrorClass::NoRetry;
+            }
             if (curlCode == CURLE_OK) {
                 // pass
             } else if (options.RetriedCurlCodes.contains(curlCode)) {
@@ -112,6 +149,10 @@ IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy() {
     return std::make_shared<TFqRetryPolicy>(GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{
         .RetriedCurlCodes = FqRetriedCurlCodes(),
     }));
+}
+
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPRetryPolicyWithoutRewind(IHTTPGateway::TRetryPolicy::TPtr policy) {
+    return policy ? std::make_shared<TNoRewindRetryPolicy>(std::move(policy)) : nullptr;
 }
 
 }   // namespace NYql

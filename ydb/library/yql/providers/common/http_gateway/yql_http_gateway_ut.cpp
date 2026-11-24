@@ -17,10 +17,21 @@ namespace {
 
 class TResetUploadServer: public THttpServer::ICallBack {
 public:
+    enum class EFailure {
+        ConnectionReset,
+        ExpectationFailed,
+    };
+
     struct TRequestData {
         TString FirstLine;
         TString Body;
+        bool ExpectContinue;
     };
+
+    explicit TResetUploadServer(EFailure failure = EFailure::ConnectionReset)
+        : Failure(failure)
+    {
+    }
 
     TClientRequest* CreateClient() override {
         return new TRequest(*this);
@@ -40,7 +51,17 @@ private:
         }
 
         bool Reply(void*) override {
-            TRequestData request{ Input().FirstLine(), Input().ReadAll() };
+            const bool rejectExpectation = Owner.Failure == EFailure::ExpectationFailed && Owner.GetRequests().size() == 1;
+            TRequestData request{ Input().FirstLine(), {}, Input().HasExpect100Continue() };
+            if (rejectExpectation) {
+                // Reject after curl has started reading the body, so its internal
+                // retry without Expect needs to rewind the gateway's reader.
+                char prefix[4096];
+                const auto size = Input().Load(prefix, sizeof(prefix));
+                request.Body.assign(prefix, size);
+            } else {
+                request.Body = Input().ReadAll();
+            }
             size_t count;
             {
                 const std::lock_guard lock(Owner.Mutex);
@@ -48,7 +69,14 @@ private:
                 count = Owner.Requests.size();
             }
 
-            if (count == 2) {
+            if (rejectExpectation) {
+                Output() << "HTTP/1.1 417 Expectation Failed\r\nContent-Length: 0\r\n\r\n";
+                Output().Finish();
+                // Let curl consume the response and close the connection before
+                // resetting it; an immediate reset can hide the HTTP response.
+                Input().ReadAll();
+                ResetConnection();
+            } else if (count == 2) {
                 // The first request primes a keep-alive connection. Reset it after
                 // consuming the upload, before sending any response: libcurl then
                 // tries to rewind the body to retry on a fresh connection.
@@ -66,9 +94,10 @@ private:
 
     mutable std::mutex Mutex;
     std::vector<TRequestData> Requests;
+    const EFailure Failure;
 };
 
-void CheckUploadRetry(bool put) {
+void CheckUploadRetry(bool put, bool allowRewind = true) {
     NLog::YqlLoggerScope logger(&Cerr);
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     const auto gateway = IHTTPGateway::Make(nullptr, counters);
@@ -90,6 +119,9 @@ void CheckUploadRetry(bool put) {
     for (size_t i = 0; i < body.size(); ++i) {
         body[i] = static_cast<char>(i % 251);
     }
+    if (!allowRewind) {
+        body = "<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>test-etag</ETag></Part></CompleteMultipartUpload>";
+    }
     IHTTPGateway::THeaders headers;
     // An interim 100 response would prevent libcurl's reused-connection retry.
     headers.Fields.push_back("Expect:");
@@ -97,19 +129,27 @@ void CheckUploadRetry(bool put) {
     auto upload = NThreading::NewPromise<IHTTPGateway::TResult>();
     gateway->Upload(url, headers, body, [upload](IHTTPGateway::TResult&& result) mutable {
         upload.SetValue(std::move(result));
-    }, put, GetFqHTTPRetryPolicy());
+    }, put, allowRewind ? GetFqHTTPRetryPolicy() : GetHTTPRetryPolicyWithoutRewind(GetFqHTTPRetryPolicy()));
     UNIT_ASSERT(upload.GetFuture().Wait(TDuration::Seconds(10)));
     const auto& result = upload.GetFuture().GetValue();
-    UNIT_ASSERT_C(result.Issues.Empty(), result.Issues.ToOneLineString());
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.CurlResponseCode), static_cast<int>(CURLE_OK));
-    UNIT_ASSERT_VALUES_EQUAL(result.Content.HttpResponseCode, 200);
+    if (allowRewind) {
+        UNIT_ASSERT_C(result.Issues.Empty(), result.Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.CurlResponseCode), static_cast<int>(CURLE_OK));
+        UNIT_ASSERT_VALUES_EQUAL(result.Content.HttpResponseCode, 200);
+    } else {
+        UNIT_ASSERT(!result.Issues.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.CurlResponseCode), static_cast<int>(CURLE_SEND_FAIL_REWIND));
+        UNIT_ASSERT_VALUES_EQUAL(result.Content.HttpResponseCode, 0);
+    }
 
     server.Stop();
     const auto requests = serverImpl.GetRequests();
-    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(requests[1].FirstLine, requests[2].FirstLine);
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), allowRewind ? 3 : 2);
     UNIT_ASSERT_VALUES_EQUAL(requests[1].Body, body);
-    UNIT_ASSERT_VALUES_EQUAL(requests[2].Body, body);
+    if (allowRewind) {
+        UNIT_ASSERT_VALUES_EQUAL(requests[1].FirstLine, requests[2].FirstLine);
+        UNIT_ASSERT_VALUES_EQUAL(requests[2].Body, body);
+    }
     const auto rewindErrors = counters->GetSubgroup("method", put ? "PUT" : "POST")
                                   ->GetSubgroup("curl_code", ToString(static_cast<int>(CURLE_SEND_FAIL_REWIND)))
                                   ->GetCounter("count", true);
@@ -125,6 +165,48 @@ Y_UNIT_TEST_SUITE(THttpGatewayRetryTest) {
 
     Y_UNIT_TEST(PostRetriesRewindFailureWithFullBody) {
         CheckUploadRetry(false);
+    }
+
+    Y_UNIT_TEST(PostWithRewindDisabledDoesNotReplay) {
+        CheckUploadRetry(false, false);
+    }
+
+    Y_UNIT_TEST(LateExpectationFailureIsNotRetried) {
+        NLog::YqlLoggerScope logger(&Cerr);
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto gateway = IHTTPGateway::Make(nullptr, counters);
+        const auto port = NTesting::GetFreePort();
+        TResetUploadServer serverImpl(TResetUploadServer::EFailure::ExpectationFailed);
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true));
+        UNIT_ASSERT(server.Start());
+        const TString url = TStringBuilder() << "http://localhost:" << port << "/object";
+
+        auto warmup = NThreading::NewPromise<IHTTPGateway::TResult>();
+        gateway->Download(url, {}, 0, 0, [warmup](IHTTPGateway::TResult&& result) mutable {
+            warmup.SetValue(std::move(result));
+        });
+        UNIT_ASSERT(warmup.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(warmup.GetFuture().GetValue().Content.HttpResponseCode, 200);
+
+        auto upload = NThreading::NewPromise<IHTTPGateway::TResult>();
+        gateway->Upload(url, {}, TString(8_MB, 'x'), [upload](IHTTPGateway::TResult&& result) mutable {
+            upload.SetValue(std::move(result));
+        }, true, GetFqHTTPRetryPolicy());
+        UNIT_ASSERT(upload.GetFuture().Wait(TDuration::Seconds(10)));
+        const auto& result = upload.GetFuture().GetValue();
+        UNIT_ASSERT(!result.Issues.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.CurlResponseCode), static_cast<int>(CURLE_SEND_FAIL_REWIND));
+        UNIT_ASSERT_VALUES_EQUAL(result.Content.HttpResponseCode, 417);
+        // An outer retry layer must also see the permanent HTTP failure.
+        UNIT_ASSERT(
+            !GetFqHTTPRetryPolicy()->CreateRetryState()->GetNextRetryDelay(result.CurlResponseCode, result.Content.HttpResponseCode).Defined());
+
+        server.Stop();
+        const auto requests = serverImpl.GetRequests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+        UNIT_ASSERT(requests[1].ExpectContinue);
+        UNIT_ASSERT_VALUES_EQUAL(requests[1].Body.size(), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetSubgroup("method", "PUT")->GetSubgroup("curl_code", "65")->GetCounter("count", true)->Val(), 1);
     }
 }
 

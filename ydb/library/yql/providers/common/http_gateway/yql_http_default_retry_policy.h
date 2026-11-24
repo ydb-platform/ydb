@@ -24,4 +24,8 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(
 
 IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy();
 
+// Preserve the supplied policy except for upload rewind failures, whose outcome
+// may be ambiguous for operations such as S3 CompleteMultipartUpload.
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPRetryPolicyWithoutRewind(IHTTPGateway::TRetryPolicy::TPtr policy);
+
 }   // namespace NYql

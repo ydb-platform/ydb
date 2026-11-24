@@ -458,10 +458,12 @@ private:
         }
         xml << "</CompleteMultipartUpload>" << Endl;
         auto authInfo = Credentials.GetAuthInfo();
+        // A lost completion response is ambiguous; NoSuchUpload on replay does
+        // not distinguish a completed upload from an aborted one.
         Gateway->Upload(Url + "?uploadId=" + UploadId,
             IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize,
-                     std::placeholders::_1), false, RetryPolicy);
+                     std::placeholders::_1), false, GetHTTPRetryPolicyWithoutRewind(RetryPolicy));
     }
 
     void SafeAbortMultipartUpload() {

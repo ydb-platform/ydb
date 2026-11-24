@@ -994,15 +994,15 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->IsExternalTable()) {
-                    if (!ValidateExternalTablePgCompatibility(*tableDesc.Metadata,
-                            SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, node->Pos())) {
-                        return nullptr;
-                    }
                     YQL_ENSURE(ExternalSourceFactory);
                     const auto& databaseType = tableDesc.Metadata->GetExternalSourceDatabaseType();
                     if (!databaseType) {
                         ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
                             << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    if (!ValidateExternalTablePgCompatibility(*tableDesc.Metadata,
+                            SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, read->Child(2)->Pos())) {
                         return nullptr;
                     }
                     const auto& source = ExternalSourceFactory->GetOrCreate(*databaseType);

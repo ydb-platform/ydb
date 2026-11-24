@@ -578,7 +578,12 @@ TSensorSet* TSolomonRegistry::FindSet(TStringBuf name, const TSensorOptions& opt
             gridFactor = GridFactor_(name);
         }
 
-        it = Sensors_.emplace(name, TSensorSet{options, Iteration_ / gridFactor, GetWindowSize(), gridFactor}).first;
+        it = Sensors_.try_emplace(
+            std::string(name),
+            options,
+            Iteration_ / gridFactor,
+            GetWindowSize(),
+            gridFactor).first;
         it->second.Profile(SelfProfiler_.WithTag("metric_name", name));
         SensorCount_.Update(Sensors_.size());
         return &it->second;

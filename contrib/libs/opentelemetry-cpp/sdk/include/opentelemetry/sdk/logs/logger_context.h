@@ -45,7 +45,7 @@ public:
               instrumentationscope::ScopeConfigurator<LoggerConfig>::Builder(
                   LoggerConfig::Default())
                   .Build()),
-      LogRecordLimits log_record_limits = LogRecordLimits()) noexcept;
+      LogRecordLimits log_record_limits = LogRecordLimits());
 
   /**
    * Attaches a log processor to list of configured processors to this logger context.

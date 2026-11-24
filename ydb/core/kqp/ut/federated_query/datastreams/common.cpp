@@ -193,6 +193,10 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         }
 
         auto& featureFlags = *AppConfig->MutableFeatureFlags();
+        if (!featureFlags.HasEnableSecureScriptExecutions()) {
+            featureFlags.SetEnableSecureScriptExecutions(false);
+        }
+
         featureFlags.SetDisableOldSecretCreation(false);
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
@@ -355,7 +359,7 @@ std::shared_ptr<NYdb::NTopic::TTopicClient> TStreamingTestFixture::GetTopicClien
         LocalTopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(*GetInternalDriver(), TopicClientSettings);
     }
 
-    if (!TopicClient) {
+    if (!local && !TopicClient) {
         TopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(
             *GetExternalDriver(), NYdb::NTopic::TTopicClientSettings().DiscoveryEndpoint(YDB_ENDPOINT).Database(YDB_DATABASE));
     }

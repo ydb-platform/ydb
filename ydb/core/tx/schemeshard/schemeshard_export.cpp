@@ -6,6 +6,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -20,7 +21,9 @@ namespace {
     }
 
     void FillIssues(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo) {
-        if (exportInfo.Issue) {
+        if (exportInfo.Issue && !AnyOf(exportInfo.Items, [&](const auto& item) {
+            return item.Issue == exportInfo.Issue;
+        })) {
             AddIssue(exprt, exportInfo.Issue);
         }
 
@@ -88,6 +91,9 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
 
     if (exportInfo.UserSID) {
         exprt.SetUserSID(*exportInfo.UserSID);
+    }
+    if (exportInfo.CancelRequestedBy) {
+        exprt.SetCancelRequestedBy(*exportInfo.CancelRequestedBy);
     }
 
     switch (exportInfo.State) {
@@ -219,6 +225,12 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& ex
         NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo.EndTime.Seconds())
     );
+
+    if (exportInfo.CancelRequestedBy) {
+        db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+            NIceDb::TUpdate<Schema::Exports::CancelRequestedBy>(*exportInfo.CancelRequestedBy)
+        );
+    }
 }
 
 void TSchemeShard::PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {

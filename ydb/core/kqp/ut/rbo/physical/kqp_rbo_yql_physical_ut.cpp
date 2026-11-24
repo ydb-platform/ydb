@@ -21,7 +21,7 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
@@ -1466,7 +1466,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"select a, a + 1 as c from `/Root/olap` limit 3 offset 2", 3, "5"},
             // An inner offset is not moved past by an outer limit.
             {"select * from (select a from `/Root/olap` limit 5 offset 1) limit 2", 2, "6"},
-            {"select a from `/Root/row` limit 3 offset 2", 3, ""},
+            // A row table read takes the limit with the offset too.
+            {"select a from `/Root/row` limit 3 offset 2", 3, "5"},
+            {"select a from `/Root/row` limit 3 offset 8", 2, "11"},
         };
 
         for (const auto& testCase : unsortedCases) {

@@ -48,8 +48,8 @@ public:
     [[nodiscard]] bool DrainTasks();
 
     TProcessCategory& MutableCategoryVerified(const ESpecialTaskCategory category) {
-        AFL_VERIFY((ui64)category < Categories.size());
-        AFL_VERIFY(!!Categories[(ui64)category]);
+        YDB_LOG_VERIFY((ui64)category < Categories.size());
+        YDB_LOG_VERIFY(!!Categories[(ui64)category]);
         return *Categories[(ui64)category];
     }
 

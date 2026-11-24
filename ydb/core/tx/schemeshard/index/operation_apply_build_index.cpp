@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -147,7 +148,11 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
 
         if (config.HasVectorIndexKmeansTreeDescription()) {
-            *alterIndex->MutableVectorIndexKmeansTreeDescription() = config.GetVectorIndexKmeansTreeDescription();
+            if (context.SS->Indexes.at(index.Base()->PathId)->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                *alterIndex->MutableHnswIndexDescription()->MutableSettings() = config.GetVectorIndexKmeansTreeDescription().GetSettings();
+            } else {
+                *alterIndex->MutableVectorIndexKmeansTreeDescription() = config.GetVectorIndexKmeansTreeDescription();
+            }
         }
 
         result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
@@ -182,7 +187,8 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 op->SetBuildIndexId(config.GetBuildIndexId());
                 result.push_back(CreateFinalizeBuildIndexMainTable(partId, finalize));
             } else {
-                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(), tx.GetInternal()));
+                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName,
+                    indexChildItems.second, tx.GetLockGuard(), tx.GetInternal()));
             }
         }
     }

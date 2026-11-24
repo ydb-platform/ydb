@@ -8,9 +8,11 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/util
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/kqp/common/result_set_format
+    ydb/core/kqp/common/result_set_format/settings
     ydb/core/kqp/common/simple
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/predictor

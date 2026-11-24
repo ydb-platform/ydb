@@ -28,6 +28,7 @@ THolder<TEvCdcAggregator::TEvWriteHeartbeatsResult> MakeSuccessResult(ui64 table
 class TCdcAggregator::TTxWriteHeartbeats : public TTxBase {
     TEvCdcAggregator::TEvWriteHeartbeats::TPtr Ev;
     THolder<TEvCdcAggregator::TEvWriteHeartbeatsResult> Result;
+    std::optional<NPQ::THeartbeat> HeartbeatToBroadcast;
 
 public:
     explicit TTxWriteHeartbeats(TCdcAggregator* self, TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev)
@@ -55,8 +56,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamHeartbeatsDiff(db, diff);
         Result = MakeSuccessResult(Self->TabletID(), Self->CdcAggregatorStreamProtoConverter.SerializeWriteHeartbeatsResult(batch, diff));
+        HeartbeatToBroadcast = diff.UpdatedCurrentHeartbeat;
 
-        if (const auto& currentHeartbeat = diff.CurrentHeartbeat) {
+        if (const auto& currentHeartbeat = diff.UpdatedCurrentHeartbeat) {
             YDB_LOG_DEBUG("Current heartbeat advanced",
                 {"version", currentHeartbeat->Version});
         }
@@ -70,6 +72,9 @@ public:
             {"result", Result->ToString()});
 
         ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
+        if (HeartbeatToBroadcast) {
+            Self->BroadcastHeartbeat(*HeartbeatToBroadcast, ctx);
+        }
     }
 };
 

@@ -492,7 +492,8 @@ class _Channel(grpc.Channel):
     def unary_unary(self,
                     method,
                     request_serializer=None,
-                    response_deserializer=None):
+                    response_deserializer=None,
+                    _registered_method=False):
         thunk = lambda m: self._channel.unary_unary(m, request_serializer,
                                                     response_deserializer)
         if isinstance(self._interceptor, grpc.UnaryUnaryClientInterceptor):
@@ -503,7 +504,8 @@ class _Channel(grpc.Channel):
     def unary_stream(self,
                      method,
                      request_serializer=None,
-                     response_deserializer=None):
+                     response_deserializer=None,
+                     _registered_method=False):
         thunk = lambda m: self._channel.unary_stream(m, request_serializer,
                                                      response_deserializer)
         if isinstance(self._interceptor, grpc.UnaryStreamClientInterceptor):
@@ -514,7 +516,8 @@ class _Channel(grpc.Channel):
     def stream_unary(self,
                      method,
                      request_serializer=None,
-                     response_deserializer=None):
+                     response_deserializer=None,
+                     _registered_method=False):
         thunk = lambda m: self._channel.stream_unary(m, request_serializer,
                                                      response_deserializer)
         if isinstance(self._interceptor, grpc.StreamUnaryClientInterceptor):
@@ -525,7 +528,8 @@ class _Channel(grpc.Channel):
     def stream_stream(self,
                       method,
                       request_serializer=None,
-                      response_deserializer=None):
+                      response_deserializer=None,
+                      _registered_method=False):
         thunk = lambda m: self._channel.stream_stream(m, request_serializer,
                                                       response_deserializer)
         if isinstance(self._interceptor, grpc.StreamStreamClientInterceptor):

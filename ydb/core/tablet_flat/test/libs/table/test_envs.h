@@ -229,6 +229,12 @@ namespace NTest {
                 return { got.Need, got.Page };
             }
 
+            void ReleaseRowHistory()
+            {
+                static_cast<NFwd::TBlobs&>(*PageLoadingLogic).ReleaseRowHistory();
+                RowActive = false;
+            }
+
         private:
             ui64 AddToQueue(TPageOffset offset, EPage type, ui64 size, ui32 crc32) override
             {
@@ -243,6 +249,7 @@ namespace NTest {
         public:
             const TIntrusiveConstPtr<NPageCollection::IPageCollection> IndexPageCollection;
             const TIntrusiveConstPtr<NPageCollection::IPageCollection> GroupPageCollection;
+            bool RowActive = false;
 
         private:
             const ui32 IndexRoom = Max<ui32>();
@@ -281,6 +288,14 @@ namespace NTest {
                     : MemTableRefLookup(memTable, ref, tag);
         }
 
+        void ReleaseRowHistory() override
+        {
+            for (auto* queue : RowBlobQueues) {
+                queue->ReleaseRowHistory();
+            }
+            RowBlobQueues.clear();
+        }
+
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             InitPart(part);
@@ -292,7 +307,11 @@ namespace NTest {
             // Queues are: groups, outer, extern, historic groups
             const ui32 queueIndex = part->GroupsCount + (lob == ELargeObj::Extern ? 1 : 0);
 
-            return Get(part, queueIndex).DoLoad(TPageOffset::FromPageIndex(ref), EPage::Opaque, AheadLo, AheadHi);
+            auto& queue = Get(part, queueIndex);
+            if (!std::exchange(queue.RowActive, true)) {
+                RowBlobQueues.push_back(&queue);
+            }
+            return queue.DoLoad(TPageOffset::FromPageIndex(ref), EPage::Opaque, AheadLo, AheadHi);
         }
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
@@ -418,6 +437,7 @@ namespace NTest {
         const ui64 AheadHi = 0;
         const ui32 Edge = Max<ui32>();
         TDeque<TPartGroupLoadingQueue> GroupQueues;
+        TVector<TPartGroupLoadingQueue*> RowBlobQueues;
         TMap<const TPart*, TVector<TPartGroupLoadingQueue*>> PartGroupQueues;
         THashMap<const TPart*, TMap<TGroupId, NFwd::TIndexPageLocator>> PartIndexPageLocators;
         TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memtable blobs    */

@@ -160,6 +160,10 @@ namespace {
             UNIT_ASSERT(!HasSource);
             Events.push_back({EEvent::EndKey, Key, {}});
             KeyActive = false;
+            if (std::exchange(PauseAfterFirstKey, false)) {
+                Paused = true;
+                return EScan::Sleep;
+            }
             return EScan::Feed;
         }
 
@@ -180,6 +184,7 @@ namespace {
         ui32 Sources = 0;
         ui32 PageFaults = 0;
         bool PauseAfterFirstRow = false;
+        bool PauseAfterFirstKey = false;
         bool Paused = false;
         std::optional<TRowVersion> LowerFirstVersion;
 
@@ -597,6 +602,111 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
         UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == newer.Part.Get());
         UNIT_ASSERT(std::get<const TPart*>(rows[1]->Source) == base.Part.Get());
+    }
+
+    Y_UNIT_TEST(ReleasesRowHistoryAfterKeyAndResume) {
+        struct TEnv : NTest::TTestEnv {
+            ui32 Keys = 0;
+            ui32 HistoryFaults = 0;
+
+            void ReleaseRowHistory() override {
+                ++Keys;
+            }
+
+            const TSharedData* TryGetPage(const TPart* part, const NPage::TPageLocation& location,
+                    TGroupId group) override {
+                if (group.Historic && HistoryFaults < 2) {
+                    UNIT_ASSERT_VALUES_EQUAL(Keys, 0u);
+                    ++HistoryFaults;
+                    return nullptr;
+                }
+                return TTestEnv::TryGetPage(part, location, group);
+            }
+        } env;
+
+        TFixture f;
+        auto part = f.Cook(20).Ver({20, 1}).AddN(ui32(1), ui32(20), ui32(200))
+            .Ver({10, 1}).AddN(ui32(1), ui32(10), ui32(100))
+            .AddN(ui32(2), ui32(30), ui32(300)).Finish().ToPartView();
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {part};
+        TRecordingScan scan(*subset.Scheme);
+        scan.PauseAfterFirstRow = true;
+        scan.PauseAfterFirstKey = true;
+        TTestFeed driver(&scan, subset, &env);
+
+        while (!scan.Paused) {
+            const auto ready = driver.Process();
+            UNIT_ASSERT_EQUAL(ready, scan.Paused ? EReady::Page : EReady::Data);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scan.Sources, 1u);
+        UNIT_ASSERT_EQUAL(driver.Process(), EReady::Page);
+        UNIT_ASSERT_VALUES_EQUAL(env.Keys, 0u);
+
+        scan.Paused = false;
+        driver.Resume(EScan::Feed);
+        for (ui32 fault = 1; fault <= 2; ++fault) {
+            UNIT_ASSERT_EQUAL(driver.Process(), EReady::Page);
+            UNIT_ASSERT_VALUES_EQUAL(scan.PageFaults, fault);
+            UNIT_ASSERT_VALUES_EQUAL(scan.Sources, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(env.Keys, 0u);
+        }
+        UNIT_ASSERT_EQUAL(driver.Process(), EReady::Data);
+        const auto rows = Events(scan, EEvent::Row);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0]->Version, TRowVersion(20, 1));
+        UNIT_ASSERT_VALUES_EQUAL(rows[1]->Version, TRowVersion(10, 1));
+        UNIT_ASSERT_VALUES_EQUAL(env.Keys, 0u);
+
+        while (!scan.Paused) {
+            const auto ready = driver.Process();
+            UNIT_ASSERT_EQUAL(ready, scan.Paused ? EReady::Page : EReady::Data);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 1u);
+        UNIT_ASSERT_EQUAL(driver.Process(), EReady::Page);
+        UNIT_ASSERT_VALUES_EQUAL(env.Keys, 0u);
+
+        scan.Paused = false;
+        driver.Resume(EScan::Feed);
+        Run(scan, driver);
+        UNIT_ASSERT_VALUES_EQUAL(env.Keys, 2u);
+    }
+
+    Y_UNIT_TEST(RegularScanReleasesRowHistoryAfterResume) {
+        struct TEnv : NTest::TTestEnv {
+            ui32 Keys = 0;
+
+            void ReleaseRowHistory() override {
+                ++Keys;
+            }
+        } env;
+
+        struct TScan : IScan {
+            TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override { return {EScan::Feed, {}}; }
+            EScan Seek(TLead& lead, ui64 seq) override {
+                lead.To({2}, {}, ESeek::Lower);
+                return seq == 0 ? EScan::Feed : EScan::Final;
+            }
+            EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Sleep; }
+            TAutoPtr<IDestructable> Finish(EStatus) override { return nullptr; }
+            void Describe(IOutputStream& out) const override { out << "SleepingScan"; }
+        } scan;
+
+        TFixture f;
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {f.Cook(10).AddN(ui32(1), ui32(10), ui32(100))
+            .AddN(ui32(2), ui32(20), ui32(200)).Finish().ToPartView()};
+        TTestFeed driver(&scan, subset, &env);
+        UNIT_ASSERT_EQUAL(driver.Process(), EReady::Data); // seek
+        for (ui32 row = 0; row != 2; ++row) {
+            UNIT_ASSERT_EQUAL(driver.Process(), EReady::Page); // Feed sleeps
+            UNIT_ASSERT_EQUAL(driver.Process(), EReady::Page);
+            UNIT_ASSERT_VALUES_EQUAL(env.Keys, row);
+            driver.Resume(EScan::Feed);
+        }
+        UNIT_ASSERT_EQUAL(driver.Process(), EReady::Data); // exhausted
+        UNIT_ASSERT_EQUAL(driver.Process(), EReady::Gone);
+        UNIT_ASSERT_VALUES_EQUAL(env.Keys, 2u);
     }
 
     Y_UNIT_TEST(ConsumerCanLowerTheVersionWithoutReorderingLaterRows) {

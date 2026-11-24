@@ -3,7 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -92,9 +92,13 @@ public:
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
     bool CompletedCA(ui64 taskId, TActorId computeActor);
     void TaskNotStarted(ui64 taskId);
+    void RequestNotStarted(ui64 requestId);
     TProgressStat::TEntry CalculateConsumptionUpdate();
     void ShiftConsumption();
     void Submit();
+    void BeginShutdown() {
+        ShuttingDown = true;
+    }
     ui32 GetCurrentRetryDelay(ui32 requestId);
     void Unsubscribe();
 
@@ -169,6 +173,7 @@ private:
     const bool EnableWatermarks;
     IKqpStreamingQueryController* const StreamingQuery;
     bool ReadyStateSent = false;
+    bool ShuttingDown = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
     THashMap<ui32, TActorId> ResultChannels;

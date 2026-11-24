@@ -305,10 +305,16 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
+    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
     const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
+    }
+    // re-targets (or stops) the scheme actualizer and makes the tiering actualizer pick up its option; a schema change
+    // without either keeps the target of ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue
+    if (isCriticalScheme || switchTieringActualization ||
+        (ActualizationStarted && vIndex.GetSchemeActualizationThreshold() != thresholdBefore)) {
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }
@@ -413,10 +419,13 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     vIndex.AddIndex(snapshot, SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*indexInfoOptional)));
 }
 
-std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
+std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(
+    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) {
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineUncommittedPortionsReader>(
+        "uncommitted_portions", this, dsGroupSelector, std::move(uncommittedPortions)));
     if (GranulesStorage->GetTables().size()) {
         auto granules = std::make_shared<TTxCompositeReader>("granules");
         for (auto&& i : GranulesStorage->GetTables()) {
@@ -437,10 +446,21 @@ bool TColumnEngineForLogs::FinishLoading() {
             }
         }
         spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
+
+        for (const auto& [_, portion] : spg->GetPortions()) {
+            if (portion->GetPortionType() == EPortionType::Written) {
+                LastInsertWriteId =
+                    std::max(LastInsertWriteId, (ui64)std::static_pointer_cast<TWrittenPortionInfo>(portion)->GetInsertWriteId());
+            }
+        }
+        for (const auto& [insertWriteId, _] : spg->GetInsertedPortions()) {
+            LastInsertWriteId = std::max(LastInsertWriteId, (ui64)insertWriteId);
+        }
     }
 
     Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
     Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
+    Y_ABORT_UNLESS(!(LastInsertWriteId >> 63), "near to int overflow");
     return true;
 }
 
@@ -855,6 +875,15 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
     return true;
 }
 
+void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
+    // off is off, whatever the SchemeNeedActualization option of the current schema says
+    MutableVersionedIndex().SetSchemeNeedActualization(value);
+    StartActualization({});
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->RefreshScheme();
+    }
+}
+
 void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "OnTieringModified"},
@@ -925,6 +954,9 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
                 break;
             case LAST_TX_ID:
                 LastSnapshot = TSnapshot(LastSnapshot.GetPlanStep(), value);
+                break;
+            case LAST_INSERT_WRITE_ID:
+                LastInsertWriteId = value;
                 break;
         }
     };

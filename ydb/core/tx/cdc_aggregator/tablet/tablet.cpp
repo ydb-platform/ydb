@@ -1,3 +1,4 @@
+#include "cdc_aggregator_heartbeat_broadcaster.h"
 #include "tablet.h"
 #include "tablet_impl.h"
 
@@ -14,6 +15,13 @@ TCdcAggregator::TCdcAggregator(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
+}
+
+void TCdcAggregator::Die(const TActorContext& ctx) {
+    if (CdcAggregatorHeartbeatBroadcaster) {
+        ctx.Send(CdcAggregatorHeartbeatBroadcaster, new TEvents::TEvPoison);
+    }
+    IActor::Die(ctx);
 }
 
 void TCdcAggregator::OnDetach(const TActorContext& ctx) {
@@ -55,6 +63,13 @@ STFUNC(TCdcAggregator::StateWork) {
 void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     SignalTabletActive(ctx);
     Become(&TThis::StateWork);
+}
+
+void TCdcAggregator::BroadcastHeartbeat(const NPQ::THeartbeat& heartbeat, const TActorContext& ctx) {
+    if (!CdcAggregatorHeartbeatBroadcaster) {
+        CdcAggregatorHeartbeatBroadcaster = ctx.Register(CreateCdcAggregatorHeartbeatBroadcaster(CdcAggregatorStream->GetTopic()));
+    }
+    ctx.Send(CdcAggregatorHeartbeatBroadcaster, new TEvCdcAggregatorHeartbeatBroadcaster::TEvBroadcastHeartbeat(heartbeat));
 }
 
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, const TActorContext& ctx) {

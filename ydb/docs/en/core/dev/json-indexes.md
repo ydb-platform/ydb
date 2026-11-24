@@ -8,31 +8,29 @@ For a general description of JSON search and the structure of an inverted index 
 
 JSON indexes in {{ ydb-short-name }} allow:
 
-* Quickly filter rows by [JSON_EXISTS](#json-exists) and [JSON_VALUE](#json-value) with [JsonPath](../yql/reference/builtins/json.md#jsonpath) expressions
-* combine indexed conditions with `AND` and `OR` operators
-* use query parameter values passed by the application when processing checked predicates.
+* quickly filtering rows by [JSON_EXISTS](#json-exists) and [JSON_VALUE](#json-value) with [JsonPath](../yql/reference/builtins/json.md#jsonpath) expressions;
+* combining indexed conditions with `AND` and `OR` operators;
+* using query parameter values passed by the application when processing checked predicates.
 
 A JSON index is a [global synchronous](../concepts/glossary.md#secondary-index) index — its data is always consistent with the base table.
 
 When executing a query, a JSON index can be applied:
 
-- explicitly — via the `<table_name> VIEW <index_name>` operator
+- explicitly — via the `<table_name> VIEW <index_name>` operator;
 - automatically by the [optimizer](../concepts/glossary.md#optimizer), if the predicate matches the formal rules.
 
 ## Syntax of JSON indexes {#syntax}
 
 Creating a JSON index:
 
-* when creating a table: [INDEX (CREATE TABLE)](../yql/reference/syntax/create_table/json_index.md)
-* Adding to an existing table: [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#add-index).
+* when creating a table: [INDEX (CREATE TABLE)](../yql/reference/syntax/create_table/json_index.md);
+* adding to an existing table: [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#add-index).
 
 Deleting JSON indexes is done via [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#drop-index):
-
 
 ```yql
 ALTER TABLE documents DROP INDEX json_idx
 ```
-
 
 Query syntax with explicit JSON index specification:
 
@@ -40,14 +38,20 @@ Query syntax with explicit JSON index specification:
 
 Functions and expressions for working with JSON in predicates:
 
-* [JSON functions](../yql/reference/builtins/json.md) — `JSON_EXISTS` and `JSON_VALUE`
+* [JSON functions](../yql/reference/builtins/json.md) — `JSON_EXISTS` and `JSON_VALUE`;
 * [JsonPath](../yql/reference/builtins/json.md#jsonpath) — a query language for accessing values inside JSON.
 
 Ready-made use cases are collected in the [JSON document search recipes](../recipes/json-search/index.md) section.
 
+## Filtered JSON indexes {#filtered}
+
+A filtered JSON index limits search to rows with specific values in filter columns, for example documents belonging to one customer. To create one, list the filter columns before the JSON column in `ON`. See the [creation example](../yql/reference/syntax/create_table/json_index.md#filtered).
+
+Queries must include an equality condition for every filter column, together with a JSON search condition. See the [query example](../yql/reference/syntax/select/json_index.md#filtered).
+
 ## Updating JSON indexes {#update}
 
-JSON indexes are automatically maintained when data is modified and are updated synchronously together with the main table. Tables with JSON indexes support:
+JSON indexes are automatically maintained when data is modified and are updated synchronously together with the main table. A query through a JSON index sees rows inserted earlier in the same transaction, before commit. Tables with JSON indexes support:
 
 * `INSERT`
 * `UPSERT`
@@ -59,19 +63,22 @@ Batch operations (`BATCH UPDATE` and `BATCH DELETE`) are not supported for table
 
 Additionally, tables with JSON indexes do not support:
 
-* Bulk data loading via a `BulkUpsert` call — the requested operation will be rejected with a corresponding error message.
+* bulk data loading via a `BulkUpsert` call — the requested operation will be rejected with a corresponding error message;
 * automatic deletion of rows by [TTL](../concepts/ttl.md) — errors are returned when attempting to create a table with both a TTL policy and a JSON index, as well as when trying to retrieve such a combination of properties using the `ALTER TABLE` commands.
 
 ## Supported predicates {#predicates}
 
 For execution via JSON indexes, only expressions based on the `JSON_EXISTS` and `JSON_VALUE` functions in the `WHERE` block, combined by the `AND` / `OR` operators according to the rules below, are supported.
 
+Predicates with `ERROR ON ERROR` in `JSON_EXISTS`, as well as with `ERROR ON EMPTY` or `ERROR ON ERROR` in `JSON_VALUE`, are not used for searching via a JSON index, because when searching via the index some table rows are not read, and an error on such a row may go unnoticed. If another condition in `AND` allows the index to be used, the condition with the `ERROR` handler is checked by post-filter.
+
+The `PASSING` clause also supports parameters of type `Json`, including arrays of values to match. See the [query example](../yql/reference/syntax/select/json_index.md#json-parameters).
+
 ### JSON_EXISTS {#json-exists}
 
 Checking the existence of a path or value inside a JsonPath filter.
 
 **Allowed:**
-
 
 ```yql
 -- Document root (value not NULL)
@@ -97,8 +104,7 @@ WHERE JSON_EXISTS(doc, '$.a') OR JSON_EXISTS(doc, '$.b')
 ```
 
 
-**Prohibited** (error when using the `VIEW` statement or index auto-selection failure):
-
+**Examples of predicates that cannot be used for index lookup:**
 
 ```yql
 -- Comparison predicates at the top level of the path (outside ? (...))
@@ -112,10 +118,12 @@ WHERE JSON_EXISTS(doc, '!($.key == 10)')
 -- ON ERROR TRUE
 WHERE JSON_EXISTS(doc, '$.key' TRUE ON ERROR)
 
+-- ERROR ON ERROR
+WHERE JSON_EXISTS(doc, 'strict $.key' ERROR ON ERROR)
+
 -- Path without context operator ($) — the passed document is not used
 WHERE JSON_EXISTS(doc, '1')
 ```
-
 
 {% note info %}
 
@@ -123,12 +131,19 @@ The `JSON_EXISTS` function returns `true` for any non-empty JsonPath result. The
 
 {% endnote %}
 
+A parameter of type `Json` from the `PASSING` section can be used in an equality condition:
+
+```yql
+WHERE JSON_EXISTS(doc, '$.tags[*] ? (@ == $values)' PASSING $values AS values)
+```
+
+When an array is passed in `$values`, the equality comparison `@ == $values` in `lax` mode (the default) looks for a match with any element of the array. For such a condition, the JSON index at runtime searches for rows by the individual values of the parameter and combines the results via `OR`. This allows a single query to search for an intersection with an array of any length. Duplicate values do not create duplicate rows, and an empty array returns an empty result. The original JsonPath condition is checked by post-filter.
+
 ### JSON_VALUE {#json-value}
 
 Extracting a scalar value with a required `RETURNING <type>`.
 
 To compare a value using `JSON_VALUE`, you must always specify `RETURNING` with the required type. By default, `JSON_VALUE` returns type `Utf8`, which leads to incorrect comparison during query execution — values of different types are compared as strings:
-
 
 ```yql
 $tmp = Json(@@["1", 1]@@);
@@ -136,11 +151,9 @@ SELECT JSON_VALUE($tmp, '$[0]') == "1"; -- true: correct, string compared with s
 SELECT JSON_VALUE($tmp, '$[1]') == "1"; -- true: incorrect, number compared with string
 ```
 
-
 Supported types for the `RETURNING` section: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`.
 
 **Examples of predicates applied via a JSON index:**
-
 
 ```yql
 -- Equality (path + value are included in the index)
@@ -182,9 +195,7 @@ WHERE JSON_VALUE(doc, '$.a' RETURNING Int32) = 1
 WHERE JSON_EXISTS(doc, '$.a') AND JSON_VALUE(doc, '$.a' RETURNING Int32) = 10
 ```
 
-
 **Examples of predicates that cannot be applied via a JSON index:**
-
 
 ```yql
 -- JSON_VALUE call without RETURNING
@@ -192,6 +203,10 @@ WHERE JSON_VALUE(doc, '$.key') = "x"
 
 -- DEFAULT with ON EMPTY / ON ERROR (except NULL)
 WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 DEFAULT "x" ON ERROR) = "y"
+
+-- ERROR ON EMPTY / ERROR ON ERROR
+WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 ERROR ON EMPTY) = "x"u
+WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 ERROR ON ERROR) = "x"u
 
 -- Unsupported data type in RETURNING
 WHERE JSON_VALUE(doc, '$.ts' RETURNING Timestamp) = ...
@@ -209,7 +224,6 @@ WHERE JSON_VALUE(doc1, '$.k' RETURNING Utf8) = JSON_VALUE(doc2, '$.k' RETURNING 
 WHERE JSON_VALUE(JSON_QUERY(doc, '$.a'), '$.b' RETURNING Utf8) = "x"
 ```
 
-
 {% note info %}
 
 To check 'value equals `false`' or 'value equals `null`', use a JsonPath filter inside `JSON_EXISTS`, for example `JSON_EXISTS(doc, '$.k ? (@ == false)')` or `JSON_EXISTS(doc, '$.k ? (@ == null)')`, not `JSON_VALUE(...) IS NULL`.
@@ -219,7 +233,6 @@ To check 'value equals `false`' or 'value equals `null`', use a JsonPath filter 
 ## Limitations {#limitations}
 
 * JSON indexes are supported only for [row tables](../concepts/datamodel/table.md#row-oriented-tables).
-* The table's primary key must consist of a single column of an integer type (`Uint64`, `Uint32`, `Int64`, or `Int32`). This is a temporary limitation that will be removed in future development.
 * A single JSON index indexes exactly one column of type `Json` or `JsonDocument`.
 * The `COVER` expression is not supported for JSON indexes.
 * A number of data modification operations and mechanisms are [not supported](#update) for tables with JSON indexes.

@@ -563,11 +563,20 @@ public:
             // Make sure older versions restore mediator state in that case
             Self->PersistUnprotectedReadsEnabled(db);
 
-            // Schedule a new transaction that will move shard to the Ready state
-            // and finish initialization. This new transaction is guaranteed to
-            // wait until async LoanTable above is complete and new parts are
-            // fully merged into the table.
-            Self->Execute(Self->CreateTxSplitLastSnapshotReceived());
+            const bool readyPersisted = Self->SysLocksTable().GetLocks().empty();
+            if (readyPersisted) {
+                // Persist Ready here only for compatibility with older binaries.
+                // If we deferred it to the final transaction, an older binary
+                // restarting between the two commits would see all snapshots
+                // received but still be in SplitDstReceivingSnapshot. It has no
+                // recovery step for this state and acknowledges a retry of the
+                // last snapshot as a duplicate without finishing activation.
+                Self->PersistSys(db, Schema::Sys_State, ui32(TShardState::Ready));
+            }
+
+            // The final transaction waits for async LoanTable. Activate only
+            // in Complete, after the parts are merged and Ready has committed.
+            Self->Execute(Self->CreateTxSplitLastSnapshotReceived(readyPersisted));
         }
 
         return true;
@@ -587,13 +596,16 @@ public:
 };
 
 class TDataShard::TTxSplitLastSnapshotReceived : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    const bool ReadyPersisted;
+
 public:
-    explicit TTxSplitLastSnapshotReceived(TDataShard* self)
+    TTxSplitLastSnapshotReceived(TDataShard* self, bool readyPersisted)
         : TTransactionBase(self)
+        , ReadyPersisted(readyPersisted)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.empty()) {
+        if (ReadyPersisted || Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.empty()) {
             return true;
         }
 
@@ -654,8 +666,8 @@ public:
     }
 };
 
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitLastSnapshotReceived() {
-    return new TTxSplitLastSnapshotReceived(this);
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitLastSnapshotReceived(bool readyPersisted) {
+    return new TTxSplitLastSnapshotReceived(this, readyPersisted);
 }
 
 class TDataShard::TTxSplitReplicationSourceOffsets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

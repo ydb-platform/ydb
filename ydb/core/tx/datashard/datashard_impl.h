@@ -1705,7 +1705,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxSyncSchemeOnFollower();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
-    NTabletFlatExecutor::ITransaction* CreateTxSplitLastSnapshotReceived();
+    NTabletFlatExecutor::ITransaction* CreateTxSplitLastSnapshotReceived(bool readyPersisted = false);
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
     NTabletFlatExecutor::ITransaction* CreateTxSplitPartitioningChanged(THashMap<TActorId, THashSet<ui64>>&& waiters);
     NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();

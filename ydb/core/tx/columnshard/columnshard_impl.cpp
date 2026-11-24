@@ -1186,13 +1186,6 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-<<<<<<< HEAD
-    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-    if (noIntersections.IsFail()) {
-        // The optimizer does not support forced compaction (i.e. it is not tiling++).
-        LOG_S_WARN("Forced compaction is not supported: tablet# " << TabletID() << ", pathId# " << pathId << ", reason# "
-                                                                  << noIntersections.GetErrorMessage() << ", requested from# " << ev->Sender);
-=======
     if (ForcedCompactionTxId != record.GetTxId()) {
         // a new operation, not a retry (the schemeshard repeats the request until answered; a retry must not touch the
         // rewrite): CASCADE targets the current schema, a plain operation turns off the rewrite of a cancelled CASCADE
@@ -1215,30 +1208,16 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
             {"pathId", pathId},
             {"requestedFrom", ev->Sender});
         FinishForcedCompactionActualization();
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
-<<<<<<< HEAD
-    if (*noIntersections) {
-        LOG_S_DEBUG("Forced compaction already done: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
-        reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
-        return;
-    }
-
-    // Portions still intersect: hold the request and reply once the table settles. Background
-    // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
-    LOG_S_DEBUG("Forced compaction registered: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
-    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
-=======
     // work left: hold the request, RecheckForcedCompactions() answers OK once it is done
     YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
         {"requestedFrom", ev->Sender});
     ForcedCompactionWaiter = TForcedCompactionWaiter{ *internalPathId, ev->Sender, ev->Cookie, pathId };
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     SetupCompaction({ *internalPathId });
 }
 
@@ -1251,33 +1230,6 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     }
     const auto& waiter = *ForcedCompactionWaiter;
     auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-<<<<<<< HEAD
-    std::vector<TInternalPathId> finished;
-    for (const auto& [internalPathId, waiters] : ForcedCompactionWaiters) {
-        auto granule = engine.GetGranuleOptional(internalPathId);
-        std::optional<NKikimrTxDataShard::TEvCompactTableResult::EStatus> status;
-        if (!granule) {
-            // The table has gone away (e.g. dropped): fail the pending requests.
-            status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
-        } else {
-            const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
-            if (noIntersections.IsFail()) {
-                status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
-            } else if (*noIntersections) {
-                status = NKikimrTxDataShard::TEvCompactTableResult::OK;
-            }
-        }
-        if (!status) {
-            continue;
-        }
-        for (const auto& waiter : waiters) {
-            LOG_S_DEBUG("Forced compaction finished: tablet# " << TabletID() << ", pathId# " << waiter.SchemePathId << ", status# "
-                                                               << (int)*status << ", reply to# " << waiter.Sender);
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
-            ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
-        }
-        finished.push_back(internalPathId);
-=======
     auto granule = engine.GetGranuleOptional(waiter.InternalPathId);
     std::optional<NKikimrTxDataShard::TEvCompactTableResult::EStatus> status;
     if (!granule) {
@@ -1286,7 +1238,6 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     } else if (!granule->GetOptimizerPlanner().NeedCompaction() &&
                (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
         status = NKikimrTxDataShard::TEvCompactTableResult::OK;
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     }
     if (!status) {
         return;

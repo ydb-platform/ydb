@@ -12,49 +12,6 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-<<<<<<< HEAD
-std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(
-    const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
-    if (!TargetCriticalSchema) {
-        return portionSchema;
-    }
-    if (portionSchema->GetVersion() < TargetCriticalSchema->GetVersion()) {
-        return TargetCriticalSchema;
-    }
-    return portionSchema;
-}
-
-=======
-namespace {
-
-bool NeedsTierChange(const TString& current, const TString& target, const TTiering& tiering, const bool tieringNeedActualization) {
-    if (current == target) {
-        return false;
-    }
-
-    if (tieringNeedActualization || current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
-        target == NTiering::NCommon::DeleteTierName) {
-        return true;
-    }
-
-    using NColumnShard::NTiers::TExternalStorageId;
-    const auto currentStorage = TExternalStorageId::FromString(current);
-    if (currentStorage.GetConfigPath() != TExternalStorageId::FromString(target).GetConfigPath()) {
-        return true;
-    }
-
-    for (auto&& tier : tiering.GetOrderedTiers()) {
-        if (tier.Get().GetExternalStorageId() == currentStorage) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-}   // namespace
-
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(
     const TPortionInfo& portion, const TInstant now) const {
     std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);

@@ -13,19 +13,8 @@ namespace NKikimr::NOlap::NActualizer {
 
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
     const TPortionInfo& portion) const {
-<<<<<<< HEAD
-    AFL_VERIFY(TargetSchema);
-    const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto portionSchema = portion.GetSchema(VersionedIndex);
-    if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
-        auto storagesWrite = TargetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
-        auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
-        TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
-        return TFullActualizationInfo(std::move(address), TargetSchema);
-=======
     if (!portion.NeedSchemeActualization(VersionedIndex)) {
         return {};
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     }
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
     const auto writeSchema = portion.GetRewriteSchema(VersionedIndex);   // the latest schema at the time of the rewrite
@@ -159,10 +148,6 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     if (!VersionedIndex.GetSchemeActualizationThreshold()) {
         // SchemeNeedActualization set back to false: the actualization stops
         TSchemeGlobalCounters::OnRefreshEmpty();
-<<<<<<< HEAD
-        AFL_VERIFY(PortionsInfo.empty());
-=======
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     } else {
         TSchemeGlobalCounters::OnRefreshValue();
         for (auto&& i : externalContext.GetPortions()) {

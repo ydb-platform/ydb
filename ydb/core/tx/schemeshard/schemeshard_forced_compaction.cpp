@@ -330,10 +330,9 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
         // id is reserved for pre-upgrade schemeshards (the shard answers it NOT_NEEDED), so none is sent here.
         auto* info = InProgressForcedCompactionsByShard.FindPtr(shardIdx);
         if (!info) {
-            YDB_LOG_ERROR_CTX(ctx, "[ForcedCompaction] [Start] No operation in progress for the column shard",
-                {"shardIdx", shardIdx},
-                {"schemeshard", TabletID()},
-            );
+            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Start] No operation in progress "
+                "for the column shard# " << shardIdx
+                << " at schemeshard# " << TabletID());
             CompleteForcedCompactionForShard(shardIdx, ctx);
             return NOperationQueue::EStartStatus::EOperationRemove;
         }

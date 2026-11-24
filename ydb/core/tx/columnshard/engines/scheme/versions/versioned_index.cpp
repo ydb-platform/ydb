@@ -18,19 +18,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     auto newVersion = indexInfo->GetVersion();
     auto itVersion =
         SnapshotByVersion.emplace(newVersion, TSchemaInfoByVersion(std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot)));
-<<<<<<< HEAD
     AFL_VERIFY(itVersion.second)("message", "duplication for registered version")("version", LastSchemaVersion);
-    if (needActualization) {
-        if (!SchemeVersionForActualization || *SchemeVersionForActualization < newVersion) {
-            SchemeVersionForActualization = newVersion;
-            SchemeForActualization = itVersion.first->second.GetSchema();
-        }
-    }
-=======
-    YDB_LOG_VERIFY(itVersion.second,
-        {"message", "duplication for registered version"},
-        {"version", LastSchemaVersion});
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second.GetSchema());
     Y_ABORT_UNLESS(itSnap.second);
     if (newVersion >= LastSchemaVersion) {

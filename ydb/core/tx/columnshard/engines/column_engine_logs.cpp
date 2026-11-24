@@ -298,22 +298,15 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
-<<<<<<< HEAD
+    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(indexInfo)));
     if (isCriticalScheme) {
-=======
-    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
-    const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
-    auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
-    if (isCriticalScheme || switchTieringActualization) {
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
         StartActualization({});
     }
     // re-targets (or stops) the scheme actualizer and makes the tiering actualizer pick up its option; a schema change
     // without either keeps the target of ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue
-    if (isCriticalScheme || switchTieringActualization ||
-        (ActualizationStarted && vIndex.GetSchemeActualizationThreshold() != thresholdBefore)) {
+    if (isCriticalScheme || (ActualizationStarted && vIndex.GetSchemeActualizationThreshold() != thresholdBefore)) {
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }

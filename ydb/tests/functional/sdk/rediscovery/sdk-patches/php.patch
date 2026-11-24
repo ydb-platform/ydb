@@ -1487,10 +1487,10 @@ index 34c6cee3b3695364d191a45ba6c4aa0fe8c5b628..8714649fa75de7c8d06a0e341ce6032f
  
 diff --git a/src/Internal/Eds.php b/src/Internal/Eds.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..79fbb5e17699025f1c7f4fed2a3bb5f24f065690
+index 0000000000000000000000000000000000000000..545de707e2dc7a29f2c21465ba16718ee28b8819
 --- /dev/null
 +++ b/src/Internal/Eds.php
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,347 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Internal;
@@ -1818,6 +1818,13 @@ index 0000000000000000000000000000000000000000..79fbb5e17699025f1c7f4fed2a3bb5f2
 +        throw new \RuntimeException('Timed out waiting for current endpoint discovery');
 +    }
 +
++    /** Identify compatible native channels, including across drivers on the same assignment. */
++    public function channelPoolKey(): ?string
++    {
++        return $this->floor === null ? null : hash('sha256',
++            serialize([$this->base, $this->ydb->database(), $this->floor]));
++    }
++
 +    public function epoch(): int
 +    {
 +        return $this->epoch;
@@ -1958,7 +1965,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f09271bc8243 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..64474323548ee7124f690be976cf8349bf62c271 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
 @@ -115,6 +115,11 @@ class Ydb
@@ -1988,7 +1995,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f092
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +244,61 @@ class Ydb
+@@ -233,7 +244,69 @@ class Ydb
       */
      public function discover()
      {
@@ -2036,7 +2043,15 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f092
 +            throw new \RuntimeException('No current EDS assignment');
 +        }
 +        if (!$this->edsDataChannel) {
++            // force_new creates a PHP channel wrapper. The native subchannel pool
++            // can still reuse an established transport when two replicas advertise the same address.
 +            $opts['force_new'] = true;
++            $route = $this->eds->channelPoolKey();
++            if ($route === null) {
++                $opts['grpc.use_local_subchannel_pool'] = 1;
++            } else {
++                $opts['ydb.discovery_route'] = $route;
++            }
 +            $this->edsDataChannel = \Grpc\BaseStub::getDefaultChannel($this->endpoint, $opts);
 +        }
 +        return new $class($this->endpoint, $opts, $this->edsDataChannel);
@@ -2053,10 +2068,10 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f092
      /**
 diff --git a/tests/Internal/EdsTest.php b/tests/Internal/EdsTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..ea7ecdaf4af84d44ab940601bb80f280a2d1c2fa
+index 0000000000000000000000000000000000000000..4d918256c3c82a49d8aaf36007eabb0ab93ab569
 --- /dev/null
 +++ b/tests/Internal/EdsTest.php
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,129 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -2077,6 +2092,49 @@ index 0000000000000000000000000000000000000000..ea7ecdaf4af84d44ab940601bb80f280
 +
 +class EdsTest extends TestCase
 +{
++    public function testNativeChannelsSeparateGenerationsAtTheSameAddress()
++    {
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        $endpoint = stream_socket_get_name($listener, false);
++        $set = static function ($object, $property, $value) {
++            $field = new \ReflectionProperty($object, $property);
++            $field->setAccessible(true);
++            $field->setValue($object, $value);
++        };
++        $client = static function ($generation) use ($endpoint, $set) {
++            $driver = new \YdbPlatform\Ydb\Ydb([
++                'endpoint' => $endpoint, 'database' => '/db',
++                'iam_config' => ['anonymous' => true, 'insecure' => true],
++            ]);
++            $eds = new Eds($driver, $endpoint, []);
++            $set($eds, 'floor', $generation);
++            $set($driver, 'eds', $eds);
++            $set($driver, 'edsSnapshot', [0, []]);
++            return $driver->serviceClient(\Ydb\Table\V1\TableServiceClient::class);
++        };
++        $accept = function ($client) use ($listener) {
++            $client->getConnectivityState(true);
++            $peer = @stream_socket_accept($listener, 2);
++            self::assertTrue(is_resource($peer), 'A new route must dial a new socket even at the same address');
++            fwrite($peer, "\x00\x00\x00\x04\x00\x00\x00\x00\x00");
++            self::assertTrue($client->waitForReady(2000000));
++            return $peer;
++        };
++        try {
++            $held = $client('1');
++            $a = $accept($held);
++            $fresh = $client('2');
++            $b = $accept($fresh);
++            // A separate driver on the same authoritative assignment can reuse its data socket.
++            self::assertTrue($client('2')->waitForReady(2000000));
++            self::assertSame(\Grpc\CHANNEL_READY, $held->getConnectivityState());
++        } finally {
++            if (isset($a)) { fclose($a); }
++            if (isset($b)) { fclose($b); }
++            fclose($listener);
++        }
++    }
++
 +    private function response($port)
 +    {
 +        $result = new ListEndpointsResult(['endpoints' => [new EndpointInfo([

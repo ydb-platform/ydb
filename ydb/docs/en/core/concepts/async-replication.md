@@ -153,7 +153,7 @@ See [Restrictions](#restrictions) for supported objects and rules governing chan
 
   | Object type | Replication support |
   | --- | --- |
-  | [Row-based tables](datamodel/table.md#row-oriented-tables) | Supported, including synchronous secondary indexes and unique indexes. Vector indexes are not supported; availability of other index types and sequences depends on both database versions |
+  | [Row-based tables](datamodel/table.md#row-oriented-tables) | Supported, including synchronous secondary indexes and unique indexes. In main starting with [change #59486](https://github.com/ydb-platform/ydb/pull/59486), vector indexes are transferred by an initial scan; indexes restored from a backup are preserved when switching to `STANDBY` and continue replicating. Restore index data from the backup rather than rebuilding indexes independently. Do not rely on this behavior in earlier versions. Availability of other index types and sequences depends on both database versions |
   | [Directories](datamodel/dir.md) | Replicates row-based tables in the directory and its subdirectories that existed when the instance was created. Empty directories are not transferred |
   | Other schema objects | Not transferred by row-table replication: column-oriented tables and their stores, coordination nodes, secrets, views, external data sources and tables, transfers, streaming queries, backup collections, resource pools and their classifiers |
   | User topics and changefeeds | The initial scan does not transfer their definitions. Restoring a backup may restore definitions, but row-table replication does not transfer their messages or subsequent changes |

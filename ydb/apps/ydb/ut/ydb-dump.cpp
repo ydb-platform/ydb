@@ -20,6 +20,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <atomic>
+
 namespace {
 
 class TDatabaseRestoreScheme : public TSchemeImpl {
@@ -54,9 +56,9 @@ public:
     }
 
     TString Target = TEST_DATABASE + "/tenant";
-    size_t RootLookups = 0;
-    size_t PermissionsCalls = 0;
-    size_t ContentCalls = 0;
+    std::atomic<size_t> RootLookups{0};
+    std::atomic<size_t> PermissionsCalls{0};
+    std::atomic<size_t> ContentCalls{0};
 };
 
 class TDatabaseRestoreCms : public TMockGrpcServiceBase<Ydb::Cms::V1::CmsService::Service> {
@@ -102,7 +104,7 @@ Y_UNIT_TEST_F(RelativeDestinationUsesTheConfiguredDatabase, TDatabaseRestoreFixt
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(GetAddress()).SetDatabase(database));
         NYdb::NDump::TClient client(driver);
         UNIT_ASSERT_VALUES_EQUAL(client.Restore("unused", "dest").GetStatus(), NYdb::EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(scheme.RootLookups, relative ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(scheme.RootLookups.load(), relative ? 1 : 0);
         CheckExpectations();
     }
 }
@@ -130,9 +132,9 @@ Y_UNIT_TEST_F(DatabaseRestoreUsesOneTarget, TDatabaseRestoreFixture) {
             TClient client(driver);
             const auto result = client.RestoreDatabase(path.GetPath(), TRestoreDatabaseSettings().Database(database).WithContent(withContent));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(scheme.RootLookups, relative ? 1 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(scheme.PermissionsCalls, 1);
-            UNIT_ASSERT_VALUES_EQUAL(scheme.ContentCalls, withContent ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(scheme.RootLookups.load(), relative ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(scheme.PermissionsCalls.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(scheme.ContentCalls.load(), withContent ? 1 : 0);
             CheckExpectations();
         }
     }

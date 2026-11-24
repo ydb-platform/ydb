@@ -162,11 +162,10 @@ public:
         return CheckFailModelForGroup({state.State, state.FailRealmStates}, failedDisks);
     }
 
+    // The caller selects a mirror-3-dc topology with exactly three fail realms.
     static bool CheckFailModelForGroup(const TMirror3dcGroupConfiguration& config,
             const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
-        const TBlobStorageGroupInfo::TTopology& topology = *failedDisks.GetTopology();
-        if (topology.GType.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
-                || topology.GetTotalFailRealmsNum() != config.Realms.size() || !IsValidMirror3dcGroupConfiguration(config)) {
+        if (!IsValidMirror3dcGroupConfiguration(config)) {
             return false;
         }
         TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(config.State);

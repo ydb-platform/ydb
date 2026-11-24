@@ -560,8 +560,7 @@ namespace NKikimr::NBsController {
                             disintegrated.push_back(groupId);
                             errors = true;
                         } else {
-                            TBlobStorageGroupInfo::TGroupVDisks failedWithSkip =
-                                failed - allowedNonReady - GetExcludedVDisks(config, topology);
+                            TBlobStorageGroupInfo::TGroupVDisks failedWithSkip = failed - allowedNonReady - GetExcludedVDisks(config, topology);
                             if (!parameters.SuppressDegradedGroupsChecking && topology.GetQuorumChecker().IsDegraded(failedWithSkip)) {
                                 degraded.push_back(groupId);
                                 errors = true;

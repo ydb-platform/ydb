@@ -690,8 +690,7 @@ namespace NKikimr {
                     }
                     if (!CheckGroupReassignmentFailModel(config, failed)) {
                         throw TExMayLoseData(groupInfo.ID.GetRawId());
-                    } else if (!IgnoreDegradedGroupsChecks && topology.GetQuorumChecker().IsDegraded(
-                            failed - GetExcludedVDisks(config, topology))) {
+                    } else if (!IgnoreDegradedGroupsChecks && topology.GetQuorumChecker().IsDegraded(failed - GetExcludedVDisks(config, topology))) {
                         throw TExMayGetDegraded(groupInfo.ID.GetRawId());
                     }
                 }

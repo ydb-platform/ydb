@@ -735,12 +735,6 @@ public:
         // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
         std::optional<EMirror3dcGroupState> Mirror3dcState;
-
-        TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
-            return {Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
-                FailRealmStates.value_or(TMirror3dcFailRealmStates{})};
-        }
-
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -775,6 +769,13 @@ public:
 
             friend std::strong_ordering operator <=>(const TGroupStatus&, const TGroupStatus&) = default;
         } Status;
+
+        TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
+            TMirror3dcGroupConfiguration config;
+            config.State = Mirror3dcState.value_or(config.State);
+            config.Realms = FailRealmStates.value_or(config.Realms);
+            return config;
+        }
 
         // group status depends on the IsReady value for every VDisk; so it has to be updated every time there is possible
         // change; source of this change include:

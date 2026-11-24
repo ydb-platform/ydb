@@ -64,8 +64,12 @@ namespace NKikimr::NBsController {
 
     bool CheckGroupReassignmentFailModel(const TMirror3dcGroupConfiguration& config,
             const TBlobStorageGroupInfo::TGroupVDisks& failed) {
+        const TBlobStorageGroupInfo::TTopology& topology = *failed.GetTopology();
         if (config == TMirror3dcGroupConfiguration{}) {
-            return failed.GetTopology()->GetQuorumChecker().CheckFailModelForGroup(failed);
+            return topology.GetQuorumChecker().CheckFailModelForGroup(failed);
+        }
+        if (topology.GType.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc || topology.GetTotalFailRealmsNum() != 3) {
+            return false;
         }
         return TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(config, failed);
     }

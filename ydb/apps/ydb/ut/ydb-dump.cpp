@@ -111,9 +111,10 @@ Y_UNIT_TEST_F(DatabaseRestoreUsesOneTarget, TDatabaseRestoreFixture) {
     using namespace NYdb::NDump;
     TTempDir dump;
     const TFsPath path(dump.Name());
-    for (const auto* file : {&NFiles::Database(), &NFiles::CreateUser(), &NFiles::CreateGroup(), &NFiles::AlterGroup(), &NFiles::Permissions()}) {
+    for (const auto* file : {&NFiles::CreateUser(), &NFiles::CreateGroup(), &NFiles::AlterGroup(), &NFiles::Permissions()}) {
         TFileOutput(path.Child(file->FileName)).Write("");
     }
+    TFileOutput(path.Child(NFiles::Database().FileName)).Write(Sprintf("path: \"%s/tenant\" resources {}", TEST_DATABASE.c_str()));
     path.Child("orders").MkDirs();
     TFileOutput(path.Child("orders").Child(NFiles::Empty().FileName)).Write("");
 

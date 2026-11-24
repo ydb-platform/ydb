@@ -287,8 +287,8 @@ def fetch_test_runs_for_window(
     ts_from = _ts_literal(window_start)
     ts_to   = _ts_literal(window_end)
 
-    batches = [all_sfs[i:i + _SF_BATCH_SIZE] for i in range(0, len(all_sfs), _SF_BATCH_SIZE)]
-    for sf_batch in batches:
+    for start in range(0, len(all_sfs) - 1, _SF_BATCH_SIZE):
+        sf_batch = all_sfs[start:start + _SF_BATCH_SIZE]
         quoted = ', '.join(f"'{_sql_escape(sf)}'" for sf in sf_batch)
 
         # Branch runs (for criteria calculation) — scheduled/postcommit jobs only, no PR-check or manual

@@ -235,6 +235,13 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
                 continue;
             }
 
+            if (topicInfo.CdcStream && topicInfo.Status == NPQ::NDescriber::EStatus::UnknownError) {
+                return CloseSession(
+                    TStringBuilder() << "CDC stream '" << original
+                        << "' describe error, reason: could not retrieve child topic description",
+                    PersQueue::ErrorCode::ERROR, ctx);
+            }
+
             // Metacache looks up the legacy primary path first and, on a miss,
             // retries the modern path under LbUserDatabaseRoot/account.
             if (!secondaryPass && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {

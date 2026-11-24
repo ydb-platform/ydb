@@ -1,6 +1,7 @@
 #include "agent_impl.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/s3_put_timeout.h>
 #include <ydb/core/blob_depot/s3_error.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -330,7 +331,10 @@ namespace NKikimr::NBlobDepot {
                     .WithBucket(std::move(Agent.S3BackendSettings->GetSettings().GetBucket()))
                     .WithKey(std::move(key))
                     .AddMetadata("key", id.ToString()),
-                buffer.ExtractUnderlyingContainerOrCopy<TString>()),
+                buffer.ExtractUnderlyingContainerOrCopy<TString>(),
+                std::make_shared<TS3PutContext>(TActivationContext::Monotonic() +
+                    GetS3PutTimeout(Agent.S3BackendSettings->GetSettings(), AppData()->AwsClientConfig),
+                    TS3PutContext::ESource::Agent)),
             IEventHandle::FlagTrackDelivery));
 
     }

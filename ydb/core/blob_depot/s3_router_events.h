@@ -2,7 +2,23 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/library/actors/core/event_local.h>
+
+namespace NKikimr::NBlobDepot {
+
+    struct TS3PutContext : NWrappers::NExternalStorage::IRequestContext {
+        enum class ESource { Agent, Cooling };
+        const TMonotonic Deadline;
+        const ESource Source;
+
+        TS3PutContext(TMonotonic deadline, ESource source)
+            : Deadline(deadline)
+            , Source(source)
+        {}
+    };
+
+} // NKikimr::NBlobDepot
 
 namespace NKikimr::NStorage {
 

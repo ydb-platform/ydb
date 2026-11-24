@@ -16,6 +16,7 @@
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <atomic>
 #include <future>
 
 namespace NYdb::NFederatedTopic::NTests {
@@ -567,7 +568,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         struct TReadState {
             TVector<TString> SentMessages;
             size_t TotalReceived = 0;
-            TAtomic Check = 1;
+            std::atomic<bool> Check = true;
         };
         auto state = std::make_shared<TReadState>();
 
@@ -588,7 +589,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         readSettings.FederatedEventHandlers_.SimpleDataHandlers([state, checkedPromise](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
-            Y_VERIFY_S(AtomicGet(state->Check) != 0, "check is false");
+            Y_VERIFY_S(state->Check.load(), "check is false");
             auto& messages = ev.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
@@ -627,7 +628,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         f.GetValueSync();
         ReadSession->Close();
-        AtomicSet(state->Check, 0);
+        state->Check.store(false);
     }
 
     Y_UNIT_TEST(ReadMirrored) {
@@ -664,7 +665,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             TVector<TString> SentMessages;
             std::unordered_set<TString> SentSet;
             size_t TotalReceived = 0;
-            TAtomic Check = 1;
+            std::atomic<bool> Check = true;
         };
         auto state = std::make_shared<TReadState>();
 
@@ -692,7 +693,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const TString expectedTopicPath = "/" + setup->GetTestTopic();
         readSettings.FederatedEventHandlers_.SimpleDataHandlers([state, checkedPromise, expectedTopicPath](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             Cerr << ">>> event from dataHandler: " << DebugString(ev) << Endl;
-            Y_VERIFY_S(AtomicGet(state->Check) != 0, "check is false");
+            Y_VERIFY_S(state->Check.load(), "check is false");
             auto& messages = ev.GetMessages();
             Cerr << ">>> get " << messages.size() << " messages in this event" << Endl;
             for (size_t i = 0u; i < messages.size(); ++i) {
@@ -785,7 +786,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         f.GetValueSync();
         ReadSession->Close();
-        AtomicSet(state->Check, 0);
+        state->Check.store(false);
     }
 
     Y_UNIT_TEST(BasicWriteSession) {

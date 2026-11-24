@@ -14,6 +14,8 @@
 #include <util/system/progname.h>
 #include <util/system/thread.h>
 
+#include <atomic>
+
 namespace NYdb::NBS {
 
 namespace {
@@ -96,19 +98,19 @@ public:
 class TInputTasks
 {
 private:
-    TTask* Head = nullptr;
+    std::atomic<TTask*> Head = nullptr;
 
 public:
     ~TInputTasks()
     {
-        DeleteList(Head);
+        DeleteList(Head.load());
     }
 
     void Enqueue(std::unique_ptr<TTask> task)
     {
-        do {
-            task->Next = AtomicGet(Head);
-        } while (!AtomicCas(&Head, task.get(), task->Next));
+        task->Next = Head.load();
+        while (!Head.compare_exchange_weak(task->Next, task.get())) {
+        }
 
         // ownership transferred
         Y_UNUSED(task.release());
@@ -116,7 +118,7 @@ public:
 
     TTaskList DequeueAll()
     {
-        return {AtomicSwap(&Head, nullptr)};
+        return {Head.exchange(nullptr)};
     }
 };
 
@@ -190,7 +192,7 @@ private:
 
     Y_DECLARE_UNUSED char Padding[64];
 
-    TAtomic ShouldStop = 0;
+    std::atomic<bool> ShouldStop = false;
     TPendingTasks PendingTasks;
 
 public:
@@ -226,7 +228,7 @@ void TScheduler::Start()
 
 void TScheduler::Stop()
 {
-    AtomicSet(ShouldStop, 1);
+    ShouldStop.store(true);
     ThreadPark.Signal();
 
     ISimpleThread::Join();
@@ -246,14 +248,14 @@ void TScheduler::Schedule(
 
 void* TScheduler::ThreadProc()
 {
-    if (AtomicGet(ShouldStop) == 1 || ExitStarted()) {
+    if (ShouldStop.load() || ExitStarted()) {
         return nullptr;
     }
 
     ::NYdb::NBS::SetCurrentThreadName("Timer");
     NProfiling::TMemoryTagScope tagScope("STORAGE_THREAD_TIMER");
 
-    while (AtomicGet(ShouldStop) == 0) {
+    while (!ShouldStop.load()) {
         std::unique_ptr<TTask> task;
 
         auto inputTasks = InputTasks.DequeueAll();

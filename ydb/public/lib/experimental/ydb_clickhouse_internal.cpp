@@ -11,6 +11,8 @@
 // TODO: Bad dependency???
 #include <ydb/core/scheme/scheme_tablecell.h>
 
+#include <atomic>
+
 namespace NYdb {
 namespace NClickhouseInternal {
 
@@ -593,11 +595,11 @@ public:
 
 private:
     bool IsAlive() const {
-        return AtomicGet(IsAliveFlag);
+        return IsAliveFlag.load();
     }
 
     void MarkAsDead() {
-        AtomicSet(IsAliveFlag, 0);
+        IsAliveFlag.store(false);
     }
 
     void OnCreated(const Ydb::ClickhouseInternal::CreateSnapshotResult& result) {
@@ -801,7 +803,7 @@ private:
 
 private:
     // Set to 0 if snapshot cannot be refreshed
-    TAtomic IsAliveFlag = 1;
+    std::atomic<bool> IsAliveFlag = true;
 
 private:
     // Refresh loop state

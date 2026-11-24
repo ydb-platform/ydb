@@ -14,6 +14,8 @@
 
 #include <util/string/printf.h>
 
+#include <atomic>
+
 namespace NYdb::NTpch {
 
 namespace {
@@ -80,7 +82,7 @@ NKikimrClient::TConsoleResponse DoGrpcRequest(const TString& endpoint, NKikimrCl
     NYdbGrpc::TGRpcClientConfig grpcConfig{endpoint};
     auto grpc = grpcClient.CreateGRpcServiceConnection<NKikimrClient::TGRpcServer>(grpcConfig);
 
-    TAtomic done = 0;
+    std::atomic<bool> done = false;
     NYdbGrpc::TGrpcStatus status;
     NKikimrClient::TConsoleResponse response;
     grpc->DoRequest<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>(
@@ -88,19 +90,19 @@ NKikimrClient::TConsoleResponse DoGrpcRequest(const TString& endpoint, NKikimrCl
         [&](NYdbGrpc::TGrpcStatus&& _status, NKikimrClient::TConsoleResponse&& _response) {
             status = std::move(_status);
             response = std::move(_response);
-            AtomicSet(done, 1);
+            done.store(true);
         },
         &NKikimrClient::TGRpcServer::Stub::AsyncConsoleRequest,
         {},
         grpcContext.get());
 
-    while (AtomicGet(done) == 0) {
+    while (!done.load()) {
         ::Sleep(TDuration::Seconds(1));
     }
     grpcContext.reset();
     grpcClient.Stop(true);
 
-    while (!AtomicGet(done)) {
+    while (!done.load()) {
         ::Sleep(TDuration::MilliSeconds(100));
     }
 

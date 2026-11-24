@@ -222,7 +222,7 @@ private:
 
 int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGenerator& /*workloadGen*/, TConfig& /*config*/) {
     auto dataGeneratorList = Initializer->GetBulkInitialData();
-    AtomicSet(ErrorsCount, 0);
+    ErrorsCount.store(0);
     InFlightSemaphore = MakeHolder<TFastSemaphore>(UploadParams.MaxInFlight);
     if (UploadParams.FileOutputPath.IsDefined()) {
         Writer = MakeHolder<TFileWriter>(*this);
@@ -243,7 +243,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
             });
         }
         pool.Stop();
-        const bool wereErrors = AtomicGet(ErrorsCount);
+        const bool wereErrors = ErrorsCount.load();
         with_lock(Lock) {
             Cout << "Fill table " << dataGen->GetName()  << " "<< (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
         }
@@ -254,21 +254,21 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
 
     // File-only exports do not populate database tables. Skip post-import database
     // actions such as ANALYZE and index creation, which could fail if those tables do not exist.
-    if (!UploadParams.FileOutputPath.IsDefined() && AtomicGet(ErrorsCount) == 0 && Initializer->PostImport() != EXIT_SUCCESS) {
-        AtomicIncrement(ErrorsCount);
+    if (!UploadParams.FileOutputPath.IsDefined() && ErrorsCount.load() == 0 && Initializer->PostImport() != EXIT_SUCCESS) {
+        ++ErrorsCount;
     }
-    return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
+    return ErrorsCount.load() ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept {
-    TAtomic counter = 0;
+    std::atomic<size_t> counter = 0;
     try {
-        for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(ErrorsCount); portions = dataGen->GenerateDataPortion()) {
+        for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !ErrorsCount.load(); portions = dataGen->GenerateDataPortion()) {
             TVector<TAsyncStatus> sendingResults;
             for (const auto& data: portions) {
-                AtomicIncrement(counter);
+                ++counter;
                 sendingResults.emplace_back(Writer->WriteDataPortion(data).Apply([&counter, g = MakeAtomicShared<TGuard<TFastSemaphore>>(*InFlightSemaphore)](const TAsyncStatus& result) {
-                    AtomicDecrement(counter);
+                    --counter;
                     return result.GetValueSync();
                 }));
             }
@@ -280,7 +280,7 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
                     auto guard = Guard(Lock);
                     if (!res.IsSuccess()) {
                         Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
-                        AtomicIncrement(ErrorsCount);
+                        ++ErrorsCount;
                         success = false;
                     } else if (data->GetSize()) {
                         Bar->AddProgress(data->GetSize());
@@ -292,7 +292,7 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
                     }
                 }
             });
-            if (AtomicGet(ErrorsCount)) {
+            if (ErrorsCount.load()) {
                 break;
             }
         }
@@ -300,9 +300,9 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
         auto g = Guard(Lock);
         Cerr << "Fill table " << dataGen->GetName() << " failed: " << CurrentExceptionMessage() << ", backtrace: ";
         PrintBackTrace();
-        AtomicSet(ErrorsCount, 1);
+        ErrorsCount.store(1);
     }
-    while(AtomicGet(counter) > 0) {
+    while(counter.load() > 0) {
         Sleep(TDuration::MilliSeconds(100));
     }
 }

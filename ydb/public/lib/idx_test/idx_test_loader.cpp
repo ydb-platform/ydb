@@ -11,6 +11,8 @@
 #include <util/generic/list.h>
 #include <util/system/mutex.h>
 
+#include <atomic>
+
 using namespace NYdb;
 using namespace NYdb::NTable;
 
@@ -1155,18 +1157,18 @@ public:
         WeightPrecalc(tasks);
 
         TVector<TAsyncStatus> results;
-        TAtomic curAtomicRunLimit = runLimit - settings.Infly; //infly already "counted" by initiall call
+        std::atomic<i64> curAtomicRunLimit = runLimit - settings.Infly; //infly already "counted" by initiall call
         auto pt = ProgressTracker_.get();
 
         std::function<TAsyncStatus(TTimingTracker*)> runAsync;
         runAsync = [&tasks, &curAtomicRunLimit, &runAsync, pt, runLimit] (TTimingTracker* tt) -> TAsyncStatus {
             auto task = GetRandomTask(tasks);
             if (pt) {
-                pt->Update(runLimit - AtomicGet(curAtomicRunLimit));
+                pt->Update(runLimit - curAtomicRunLimit.load());
             }
             tt->Start(task->GetTaskId());
             return task->Run().Apply([&curAtomicRunLimit, &runAsync, tt](TAsyncStatus status) {
-                int newValue = AtomicDecrement(curAtomicRunLimit);
+                int newValue = --curAtomicRunLimit;
                 if (!status.HasException() && status.GetValue().IsSuccess()) {
                     tt->Finish(true);
                 } else {

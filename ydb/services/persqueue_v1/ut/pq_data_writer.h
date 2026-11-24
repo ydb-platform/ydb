@@ -9,6 +9,8 @@
 
 #include <util/generic/string.h>
 
+#include <atomic>
+
 namespace NKikimr::NPersQueueTests {
 
 class TPQDataWriter {
@@ -321,7 +323,7 @@ private:
         auto* mutableData = request.mutable_write_request();
         ui32 offset = 0;
         for (const TString& d : data) {
-            ui64 seqNo = AtomicIncrement(SeqNo_);
+            ui64 seqNo = ++SeqNo_;
             allSeqNo.push_back(seqNo);
             mutableData->add_sequence_numbers(seqNo);
             mutableData->add_message_sizes(d.size());
@@ -373,7 +375,7 @@ private:
     TFlatMsgBusPQClient& Client;
     TTestActorRuntime *Runtime;
 
-    TAtomic SeqNo_ = 1;
+    std::atomic<ui64> SeqNo_ = 1;
 
     //! Сетевой канал взаимодействия с proxy-сервером.
     std::shared_ptr<grpc::Channel> Channel_;

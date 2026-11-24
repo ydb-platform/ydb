@@ -3,6 +3,8 @@
 #include "ydb_workload.h"
 #include <library/cpp/threading/future/async_semaphore.h>
 
+#include <atomic>
+
 namespace NYdb::NConsoleClient {
 
 class TWorkloadCommandImport final: public TClientCommandTree {
@@ -52,7 +54,7 @@ private:
     THolder<TProgressBar> Bar;
     TAdaptiveLock Lock;
     THolder<TFastSemaphore> InFlightSemaphore;
-    TAtomic ErrorsCount;
+    std::atomic<size_t> ErrorsCount = 0;
     THolder<IWriter> Writer;
 };
 

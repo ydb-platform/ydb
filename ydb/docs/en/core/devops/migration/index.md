@@ -29,7 +29,13 @@ For replication-based migration, choose one method **before creating replication
 - **An initial CDC scan** does not require separate S3 storage. Initial data and subsequent changes pass through CDC changefeeds.
 - **[Backup and restore](../async-replication-initial-sync.md)** transfers initial data through S3; CDC carries changes accumulated during the copy. S3 must be accessible to the servers of both databases, and changefeeds must be ready before export starts.
 
+For tables larger than 1 TB, consider backup and restore as the initial option. This is an operational guideline rather than a limit on initial scanning: validate the choice by comparing load and duration in a test transfer on your installation.
+
 Compare duration and load in a test transfer. Account for data volume, application write rate, disk and network throughput, CPU and memory headroom, export and import duration, and the [availability of accumulated changes](../../concepts/async-replication.md#availability-period). Table size alone does not determine transfer duration.
+
+## Grouping Tables into Replication Instances {#replication-scope}
+
+Use separate replication instances for tables belonging to different applications. Consider transferring large tables of one application separately as well. List tables transferred together in one `FOR` clause when [creating replication](async-replication.md#create). Record the selected set before starting, and separately check the application's data consistency requirements.
 
 ## Stopping Writes {#stopping-traffic}
 

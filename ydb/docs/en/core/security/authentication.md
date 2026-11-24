@@ -81,6 +81,13 @@ Examples of supported LDAP implementations include [OpenLDAP](https://openldap.o
 * **Service Account Key**: Service account attributes and a signature key set as parameters for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
 * **Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
 * **OAuth 2.0 token exchange** - The client (SDK or CLI) exchanges a token of another type for an access token using the [OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693), then it uses the access token in {{ ydb-short-name }} API requests.
+{% note info %}
+
+When using **Service Account Key** authentication, the client (SDK or CLI) builds a [JWT](https://www.rfc-editor.org/rfc/rfc7519) using the host system clock. If the system clock is ahead or behind, IAM may reject the token request. For diagnostics and recommendations, see [{#T}](../troubleshooting/client-clock-skew.md).
+
+{% endnote %}
+
+
 
 Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
 

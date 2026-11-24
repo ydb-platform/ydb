@@ -237,6 +237,23 @@ bool IsFromBoundLess(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rh
     return CompareBounds(*lhs.FromBound, *rhs.FromBound, keyTypes) < 0;
 }
 
+bool IsToBoundLess(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!lhs.ToBound || !rhs.ToBound) {
+        return lhs.ToBound && !rhs.ToBound;
+    }
+    return CompareBounds(*lhs.ToBound, *rhs.ToBound, keyTypes) < 0;
+}
+
+bool IsKeyRangeLess(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (IsFromBoundLess(lhs, rhs, keyTypes)) {
+        return true;
+    }
+    if (IsFromBoundLess(rhs, lhs, keyTypes)) {
+        return false;
+    }
+    return IsToBoundLess(lhs, rhs, keyTypes);
+}
+
 bool IsStrictlyInside(const TSerializedCellVec& boundary, const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
     return (!range.FromBound || CompareBounds(boundary, *range.FromBound, keyTypes) > 0)
         && (!range.ToBound || CompareBounds(boundary, *range.ToBound, keyTypes) < 0);
@@ -260,32 +277,40 @@ std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKeyRange> sou
     TVector<const TWeightedKeyRange*> partitionSources;
     ui64 total = 0;
     for (const auto& source : sources) {
-        if (IsValidKeyRange(source.KeyRange, keyTypes) && Intersects(source.KeyRange, partition, keyTypes)) {
+        if (source.Weight > 0 && IsValidKeyRange(source.KeyRange, keyTypes) && Intersects(source.KeyRange, partition, keyTypes)) {
             partitionSources.push_back(&source);
             total += source.Weight;
         }
     }
 
-    StableSort(partitionSources.begin(), partitionSources.end(), [&](const TWeightedKeyRange* lhs, const TWeightedKeyRange* rhs) {
-        return IsFromBoundLess(lhs->KeyRange, rhs->KeyRange, keyTypes);
+    Sort(partitionSources.begin(), partitionSources.end(), [&](const TWeightedKeyRange* lhs, const TWeightedKeyRange* rhs) {
+        return IsKeyRangeLess(lhs->KeyRange, rhs->KeyRange, keyTypes);
     });
 
     std::optional<TString> boundary;
     ui64 bestImbalance = Max<ui64>();
     ui64 left = 0;
-    for (size_t i = 1; i < partitionSources.size(); ++i) {
-        left += partitionSources[i - 1]->Weight;
-        const auto& lower = partitionSources[i - 1]->KeyRange;
-        const auto& upper = partitionSources[i]->KeyRange;
-        if (!upper.FromBound || Intersects(lower, upper, keyTypes) || !IsStrictlyInside(*upper.FromBound, partition, keyTypes)) {
-            continue;
+    TMaybe<TSerializedCellVec> leftEnd;
+    bool leftUnbounded = false;
+    for (size_t i = 0; i < partitionSources.size(); ++i) {
+        const auto& range = partitionSources[i]->KeyRange;
+        if (i > 0 && !leftUnbounded && range.FromBound
+            && CompareBounds(*leftEnd, *range.FromBound, keyTypes) <= 0
+            && IsStrictlyInside(*range.FromBound, partition, keyTypes))
+        {
+            const ui64 right = total - left;
+            const ui64 imbalance = left > right ? left - right : right - left;
+            if (imbalance < bestImbalance) {
+                bestImbalance = imbalance;
+                boundary = MakeFullKey(*range.FromBound, keyTypes.size());
+            }
         }
 
-        const ui64 right = total - left;
-        const ui64 imbalance = left > right ? left - right : right - left;
-        if (imbalance < bestImbalance) {
-            bestImbalance = imbalance;
-            boundary = MakeFullKey(*upper.FromBound, keyTypes.size());
+        left += partitionSources[i]->Weight;
+        if (!range.ToBound) {
+            leftUnbounded = true;
+        } else if (!leftEnd || CompareBounds(*range.ToBound, *leftEnd, keyTypes) > 0) {
+            leftEnd = range.ToBound;
         }
     }
 

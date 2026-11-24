@@ -310,4 +310,51 @@ Y_UNIT_TEST_SUITE(TPartitionKeyRangeChooseSplitBoundaryTest) {
         UNIT_ASSERT(boundary);
         UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeNullPaddedBound(5)->GetBuffer());
     }
+
+    Y_UNIT_TEST(ShouldChooseChildBoundaryWhenIdleParentIsListedBeforeChildren) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), Nothing(), 0),
+            MakeSource(Nothing(), MakeBound({50}), 100),
+            MakeSource(MakeBound({50}), Nothing(), 100),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeBound({50})->GetBuffer());
+    }
+
+    Y_UNIT_TEST(ShouldChooseChildBoundaryWhenIdleParentIsListedAfterFirstChild) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), MakeBound({50}), 100),
+            MakeSource(Nothing(), Nothing(), 0),
+            MakeSource(MakeBound({50}), Nothing(), 100),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeBound({50})->GetBuffer());
+    }
+
+    Y_UNIT_TEST(ShouldNotChooseBoundaryWhenActiveSourceCoversIt) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(MakeBound({50}), Nothing(), 100),
+            MakeSource(Nothing(), Nothing(), 100),
+            MakeSource(Nothing(), MakeBound({50}), 100),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(!boundary);
+    }
 }

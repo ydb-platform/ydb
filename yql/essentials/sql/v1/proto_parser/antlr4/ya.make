@@ -11,4 +11,9 @@ SRCS(
     proto_parser.cpp
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    cml/util/yql_validate_metric/lib
+)
+
 END()

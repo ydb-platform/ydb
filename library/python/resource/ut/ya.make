@@ -14,4 +14,9 @@ RESOURCE(
     qw.txt /prefix/2.txt
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    contrib
+)
+
 END()

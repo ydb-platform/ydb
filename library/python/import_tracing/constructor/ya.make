@@ -12,4 +12,6 @@ PEERDIR(
     library/python/import_tracing/lib
 )
 
+PEERDIR_FROM_POLICY(DENY .*)
+
 END()

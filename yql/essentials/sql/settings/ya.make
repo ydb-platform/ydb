@@ -23,6 +23,12 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(translation_settings.h)
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    cml/util/yql_split_code/lib
+    classifieds/vsdwh/tools/ci/jobs/yql_udf/parser
+)
+
 END()
 
 RECURSE(

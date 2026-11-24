@@ -1,8 +1,8 @@
 diff --git a/README.md b/README.md
-index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..b72d4356aa0c5a459ae72b4b3d2e3c4b61e7eee8 100644
+index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..df1b5eb5a29f2ecb7f754609e609cb5b2f3a3d73 100644
 --- a/README.md
 +++ b/README.md
-@@ -651,3 +651,14 @@ $config = [
+@@ -651,3 +651,16 @@ $config = [
  ];
  $ydb = new \YdbPlatform\Ydb\Ydb($config);
  ```
@@ -12,7 +12,9 @@ index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..b72d4356aa0c5a459ae72b4b3d2e3c4b
 +Set both `discovery` and `eds` to `true` when connecting through a managed
 +discovery route. The PHP SDK retains one HTTP/2 connection to the bootstrap
 +address. Before starting each service request it checks the subscription and
-+rebinds existing service clients to the latest assignment. The PHP process
++rebinds existing service clients to the latest assignment. Applying a switch
++cancels streams on the previous data channel, including paused response
++iterators. The PHP process
 +processes a route change on its next request when it has been idle. A server
 +that returns gRPC UNIMPLEMENTED uses unary discovery on the bootstrap
 +connection. The transport supports the configured CA file and requires
@@ -1891,7 +1893,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..42788061a9fb703e51ebadade7364521
          $this->meta = $ydb->meta();
  
 diff --git a/src/Traits/RequestTrait.php b/src/Traits/RequestTrait.php
-index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b3381ef02 100644
+index 500b3c3e6d3c9938eced88caeac997ba00376db8..e6c25e2a32d8c46819e8bcb397b93b6a994a6ee8 100644
 --- a/src/Traits/RequestTrait.php
 +++ b/src/Traits/RequestTrait.php
 @@ -49,6 +49,7 @@ trait RequestTrait
@@ -1902,7 +1904,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
  
  
  
-@@ -165,18 +166,27 @@ trait RequestTrait
+@@ -165,18 +166,29 @@ trait RequestTrait
          $options = $this->buildGrpcOptions();
          $call = $this->client->$method($request, $this->meta, $options);
  
@@ -1916,7 +1918,9 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
 +        $epoch = $this->edsEpoch;
 +        try {
 +            if (method_exists($call, 'responses')) {
-+                foreach ($call->responses() as $response) {
++                $responses = $epoch === null ? $call->responses() : $this->ydb->edsResponses($call);
++                unset($call);
++                foreach ($responses as $response) {
 +                    $this->checkStreamRoute($epoch);
 +                    $result = $this->processResponse($service, $method, $response, $resultClass);
 +                    yield $result ? new QueryResult($result) : true;
@@ -1939,7 +1943,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
          }
      }
  
-@@ -204,7 +214,7 @@ trait RequestTrait
+@@ -204,7 +216,7 @@ trait RequestTrait
              if ($this->ydb->needDiscovery() && count($this->ydb->cluster()->all()) > 0){
                  $endpoint = $this->ydb->cluster()->all()[array_rand($this->ydb->cluster()->all())]->endpoint();
              }
@@ -1948,7 +1952,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
              if (isset(self::$grpcExceptions[$status->code])) {
                  throw new self::$grpcExceptions[$status->code]($message);
              } else {
-@@ -327,6 +337,15 @@ trait RequestTrait
+@@ -327,6 +339,15 @@ trait RequestTrait
          if (!$this->ydb->needDiscovery()) {
              return;
          }
@@ -1965,10 +1969,10 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..64474323548ee7124f690be976cf8349bf62c271 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..34a71ad04a414d374b2859a0c5d20aa77f5e302d 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
-@@ -115,6 +115,11 @@ class Ydb
+@@ -115,6 +115,12 @@ class Ydb
       * @var \YdbPlatform\Ydb\Internal\Discovery
       */
      protected $internalDiscovery;
@@ -1977,10 +1981,11 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..64474323548ee7124f690be976cf8349
 +    private $edsSnapshot;
 +    private $edsTimeoutMs;
 +    private $edsDataChannel;
++    private $edsStreams = [];
  
      /**
       * @param array $config
-@@ -165,7 +170,13 @@ class Ydb
+@@ -165,7 +171,13 @@ class Ydb
                  $this->discoveryInterval = $config['discoveryInterval'];
              }
  
@@ -1995,7 +2000,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..64474323548ee7124f690be976cf8349
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +244,69 @@ class Ydb
+@@ -233,7 +245,97 @@ class Ydb
       */
      public function discover()
      {
@@ -2057,8 +2062,36 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..64474323548ee7124f690be976cf8349
 +        return new $class($this->endpoint, $opts, $this->edsDataChannel);
 +    }
 +
++    /** @internal Own the native call while the application may pause its response iterator. */
++    public function edsResponses($call)
++    {
++        $stream = (object)['call' => $call, 'responses' => $call->responses()];
++        unset($call);
++        $id = spl_object_id($stream);
++        $this->edsStreams[$id] = $stream;
++        try {
++            while ($stream->responses && $stream->responses->valid()) {
++                yield $stream->responses->current();
++                if ($stream->responses) {
++                    $stream->responses->next();
++                }
++            }
++            if (!$stream->responses) {
++                throw new \YdbPlatform\Ydb\Exceptions\Grpc\UnavailableException('The endpoint serving the stream was removed by discovery');
++            }
++        } finally {
++            unset($this->edsStreams[$id]);
++        }
++    }
++
 +    private function closeEdsChannel()
 +    {
++        foreach ($this->edsStreams as $stream) {
++            $stream->call->cancel();
++            // Both the PHP call wrapper and its native response iterator retain the data transport.
++            $stream->call = $stream->responses = null;
++        }
++        $this->edsStreams = [];
 +        if ($this->edsDataChannel) {
 +            $this->edsDataChannel->close();
 +            $this->edsDataChannel = null;
@@ -2068,10 +2101,10 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..64474323548ee7124f690be976cf8349
      /**
 diff --git a/tests/Internal/EdsTest.php b/tests/Internal/EdsTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..4d918256c3c82a49d8aaf36007eabb0ab93ab569
+index 0000000000000000000000000000000000000000..aa8a7f21aa5a968a31f0e799062c75b8393fa486
 --- /dev/null
 +++ b/tests/Internal/EdsTest.php
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,155 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -2180,6 +2213,7 @@ index 0000000000000000000000000000000000000000..4d918256c3c82a49d8aaf36007eabb0a
 +        $driver->method('needDiscovery')->willReturn(true);
 +        $driver->method('refreshEds')->willReturnCallback(function () use (&$epoch) { return $epoch; });
 +        $driver->method('serviceClient')->willReturn($rpc);
++        $driver->method('edsResponses')->willReturnCallback(static function ($call) { return $call->responses(); });
 +        $driver->method('iam')->willReturn($this->createMock(\YdbPlatform\Ydb\Contracts\IamTokenContract::class));
 +        $logger = new \Psr\Log\NullLogger();
 +        $retry = new \YdbPlatform\Ydb\Retry\Retry($logger);
@@ -2193,6 +2227,31 @@ index 0000000000000000000000000000000000000000..4d918256c3c82a49d8aaf36007eabb0a
 +        } catch (\YdbPlatform\Ydb\Exceptions\Grpc\UnavailableException $expected) {
 +            self::assertSame(1, $rpc->reads);
 +        }
++    }
++
++    public function testRetirementCancelsOnlyOpenStreamsBeforeTheIteratorResumes()
++    {
++        $driver = new class extends \YdbPlatform\Ydb\Ydb {
++            public function __construct() {}
++        };
++        $call = new class {
++            public $cancels = 0;
++            public function responses() { yield 1; yield 2; }
++            public function cancel() { ++$this->cancels; }
++        };
++        $finished = clone $call;
++        self::assertSame([1, 2], iterator_to_array($driver->edsResponses($finished)));
++        $held = $driver->edsResponses($call);
++        self::assertSame(1, $held->current());
++
++        $retire = new \ReflectionMethod(\YdbPlatform\Ydb\Ydb::class, 'closeEdsChannel');
++        $retire->setAccessible(true);
++        $retire->invoke($driver);
++        $retire->invoke($driver);
++        self::assertSame(1, $call->cancels);
++        self::assertSame(0, $finished->cancels);
++        $this->expectException(\YdbPlatform\Ydb\Exceptions\Grpc\UnavailableException::class);
++        $held->next();
 +    }
 +
 +    public function testRejectsInconsistentStandardAddress()

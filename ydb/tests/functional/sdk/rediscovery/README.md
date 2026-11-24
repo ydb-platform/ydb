@@ -4,7 +4,7 @@
 
 The EDS fixture switches the bootstrap route while the old data nodes stay healthy. It ends only the database's `StreamEndpoints` RPC. A new watch receives a complete assignment from the selected replica. The C++ functional test checks both a generation-stamped close and a fixed gRPC `UNAVAILABLE` close. The latter makes the driver request a current-route check from the balancer.
 
-In synchronous PHP, an application can suspend a native streaming iterator across a switch. A fresh call uses the destination. The retired iterator rejects its next read and releases the source RPC when the application resumes it.
+When the PHP driver processes a switch it cancels outstanding native calls, including suspended iterators. A fresh call uses the destination even when the advertised data address is reused. A synchronous PHP process that is idle must enter the SDK again to process discovery.
 
 Run the native server and C++ tests from the repository root.
 

@@ -230,7 +230,6 @@ class TClusters: public IClusters {
 
     const ui32 Dimensions = 0;
     const ui32 MaxRounds = 0;
-    const ui8 FormatByte = 0;
     const EClustersMode Mode;
 
     TVector<TString> Clusters;
@@ -241,10 +240,9 @@ class TClusters: public IClusters {
     ui32 Round = 0;
 
 public:
-    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte, EClustersMode mode)
+    TClusters(ui32 dimensions, ui32 maxRounds, EClustersMode mode)
         : Dimensions(dimensions)
         , MaxRounds(maxRounds)
-        , FormatByte(formatByte)
         , Mode(mode)
     {
     }
@@ -480,55 +478,20 @@ public:
     }
 
     bool IsExpectedFormat(const TArrayRef<const char>& data) override {
-        if (!data.size() || FormatByte != data.back()) {
-            return false;
-        }
-
-        if (IsBitQuantized()) {
-            return data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
-        }
-
-        if constexpr (NVectorDistance::IsInt4<TCoord>) {
-            size_t count = 0;
-            return NKnnVectorSerialization::TryGetInt4ElementCount(TStringBuf(data.data(), data.size()), count)
-                && count == Dimensions;
-        }
-        return data.size() == 1 + sizeof(TCoord) * Dimensions;
+        return NKnnVectorSerialization::IsExpectedFormat({data.data(), data.size()},
+            Format<TCoord>, Dimensions, sizeof(TCoord));
     }
 
     TString FormatError(const TArrayRef<const char>& data) override {
-        if (!data.size()) {
-            return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
-        }
-        if (FormatByte != data.back()) {
-            return Sprintf("Invalid vector format byte, got %02x, expected %02x", static_cast<ui8>(data.back()), FormatByte);
-        }
-        if (IsBitQuantized()) {
-            auto actualDim = 0;
-            if (data.size() >= 2) {
-                actualDim = (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]);
-            }
-            return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
-                << " expected " << Dimensions;
-        }
-        if constexpr (NVectorDistance::IsInt4<TCoord>) {
-            size_t count = 0;
-            if (!NKnnVectorSerialization::TryGetInt4ElementCount(TStringBuf(data.data(), data.size()), count)) {
-                return "Invalid packed 4-bit vector payload or padding";
-            }
-            return TStringBuilder() << "Vector dimension mismatch: got " << count << " expected " << Dimensions;
-        }
-        auto actualDim = (data.size() - 1) / sizeof(TCoord);
-        return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
-            << " (size " << data.size() << " bytes) expected " << Dimensions
-            << " (size " << (1 + sizeof(TCoord) * Dimensions) << " bytes)";
+        return NKnnVectorSerialization::FormatError({data.data(), data.size()},
+            Format<TCoord>, Dimensions, sizeof(TCoord));
     }
 
     TString GetEmptyRow() const override {
         TString str;
         const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
         str.resize(bufferSize, '\0');
-        str[bufferSize - HeaderLen] = FormatByte;
+        str[bufferSize - HeaderLen] = Format<TCoord>;
         if constexpr (NVectorDistance::IsInt4<TCoord>) {
             str[bufferSize - HeaderLen - 1] = Dimensions % 2;
         }
@@ -693,6 +656,44 @@ Ydb::Table::VectorIndexSettings MakeDistanceSettings(Ydb::Table::VectorIndexSett
     return settings;
 }
 
+namespace {
+
+template <class TCallback>
+auto WithVectorType(Ydb::Table::VectorIndexSettings::VectorType type, TCallback callback)
+    -> decltype(callback.template operator()<float>())
+{
+    switch (type) {
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+            return callback.template operator()<float>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+            return callback.template operator()<TFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+            return callback.template operator()<TBFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return callback.template operator()<TFloat8E4M3>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return callback.template operator()<TFloat8E5M2>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+            return callback.template operator()<TUint4>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+            return callback.template operator()<TInt4>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+            return callback.template operator()<ui8>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+            return callback.template operator()<i8>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+            return callback.template operator()<bool>();
+        default:
+            return {};
+    }
+}
+
+} // namespace
+
+ui8 GetVectorFormat(const Ydb::Table::VectorIndexSettings& settings) {
+    return WithVectorType(settings.vector_type(), []<typename T>() -> ui8 { return Format<T>; });
+}
+
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error, EClustersMode mode) {
     if (!ValidateSettings(settings, error)) {
         return nullptr;
@@ -701,50 +702,29 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
     const ui32 dim = settings.vector_dimension();
 
     auto handleMetric = [&]<typename T>() -> std::unique_ptr<IClusters> {
-        constexpr ui8 formatByte = Format<T>;
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte, mode);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, mode);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte, mode);
+                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, mode);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte, mode);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, mode);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte, mode);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, mode);
             default:
                 error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
                 return nullptr;
         }
     };
 
-    switch (settings.vector_type()) {
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
-            return handleMetric.template operator()<float>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
-            return handleMetric.template operator()<TFloat16>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
-            return handleMetric.template operator()<TBFloat16>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
-            return handleMetric.template operator()<TFloat8E4M3>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
-            return handleMetric.template operator()<TFloat8E5M2>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
-            return handleMetric.template operator()<TUint4>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
-            return handleMetric.template operator()<TInt4>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
-            return handleMetric.template operator()<ui8>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
-            return handleMetric.template operator()<i8>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-            return handleMetric.template operator()<bool>();
-        default:
-            error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
-            return nullptr;
+    auto clusters = WithVectorType(settings.vector_type(), handleMetric);
+    if (!clusters && error.empty()) {
+        error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
     }
+    return clusters;
 }
 
 std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSettings settings, const TStringBuf& targetVector, ui32 maxRounds, TString& error) {

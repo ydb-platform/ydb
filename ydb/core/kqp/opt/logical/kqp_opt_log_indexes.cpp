@@ -671,6 +671,13 @@ auto LevelLambdaFrom(
                     ctx.DeepCopyLambda(it->Lambda().Ref(), std::move(levelBody)));
             }
         }
+        // The distance operands still carry their original types here. Normalize
+        // the standalone target before its reconstructed maps are reannotated.
+        if (const auto* type = RemoveOptionalType(target.Ref().GetTypeAnn());
+            type->GetKind() == ETypeAnnotationKind::Tagged)
+        {
+            targetExpr = ctx.NewCallable(pos, "Untag", {targetExpr, ctx.NewAtom(pos, type->Cast<TTaggedExprType>()->GetTag())});
+        }
         targetVectorExpr = std::move(targetExpr);
         return NewLambdaFrom(ctx, pos, replaces, fromArgs.Ref(), TExprBase(levelBody)).Ptr();
     }
@@ -1297,12 +1304,30 @@ TExprBase ValidateHnswTarget(const TIndexDescription& index, const TCoTopBase& t
     const TExprNode::TPtr& target, TExprContext& ctx, TPositionHandle pos)
 {
     const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(
-        index.SpecializedIndexDescription).GetSettings();
-    return Build<TKqpVectorSearchLimit>(ctx, pos)
-        .Count(top.Count())
-        .TargetVector(TExprBase(target))
-        .Settings().Build(NKMeans::MakeDistanceSettings(settings.settings()).SerializeAsString())
+        index.SpecializedIndexDescription).GetSettings().settings();
+
+    const auto empty = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "")});
+    const auto bytes = ctx.NewCallable(pos, "Coalesce", {target, empty});
+
+    const auto format = ctx.NewCallable(pos, "Uint8", {ctx.NewAtom(pos, ToString(static_cast<ui32>(NKMeans::GetVectorFormat(settings))))});
+    const auto dimension = ctx.NewCallable(pos, "Uint32", {ctx.NewAtom(pos, ToString(settings.vector_dimension()))});
+    const auto udf = ctx.NewCallable(pos, "Udf", {ctx.NewAtom(pos, "Knn.VectorFormatError")});
+    const auto diagnostic = ctx.NewCallable(pos, "Apply", {udf, bytes, format, dimension});
+    const auto messagePrefix = ctx.NewCallable(pos, "Utf8", {ctx.NewAtom(pos, "Target vector has invalid format: ")});
+    const auto emptyMessage = ctx.NewCallable(pos, "Utf8", {ctx.NewAtom(pos, "")});
+    const auto diagnosticText = ctx.NewCallable(pos, "Coalesce", {diagnostic, emptyMessage});
+    const auto validLimit = Build<TKqpEnsure>(ctx, pos)
+        .Value(top.Count())
+        .Predicate(ctx.NewCallable(pos, "Not", {ctx.NewCallable(pos, "Exists", {diagnostic})}))
+        .IssueCode().Build(ToString(static_cast<ui32>(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST)))
+        .Message(ctx.NewCallable(pos, "Concat", {messagePrefix, diagnosticText}))
         .Done();
+
+    const auto zero = ctx.NewCallable(pos, "Uint64", {ctx.NewAtom(pos, "0")});
+    const auto emptyLimit = ctx.NewCallable(pos, "==", {top.Count().Ptr(), zero});
+    const auto emptyTarget = ctx.NewCallable(pos, "==", {bytes, empty});
+    return TExprBase(ctx.NewCallable(pos, "If", {emptyLimit, zero,
+        ctx.NewCallable(pos, "If", {emptyTarget, zero, validLimit.Ptr()})}));
 }
 
 TExprBase ReadWithHnswTarget(const TReadMatch& match, const TKikimrTableDescription& table,

@@ -1232,13 +1232,22 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         auto params = kikimr.GetTableClient().GetParamsBuilder();
         params.AddParam("$coords").BeginOptional().BeginList()
             .AddListItem().Float(0.0f).AddListItem().Float(0.0f).EndList().EndOptional().Build();
+        const auto queryParams = params.Build();
         const auto mapped = session.ExecuteDataQuery(R"(
             DECLARE $coords AS List<Float>?;
             SELECT id FROM Projected VIEW idx
             ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat($coords)) LIMIT 1;
-        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), queryParams).ExtractValueSync();
         UNIT_ASSERT_C(mapped.IsSuccess(), mapped.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(mapped.GetResultSet(0)), "[[1u]]");
+
+        const auto filtered = session.ExecuteDataQuery(R"(
+            DECLARE $coords AS List<Float>?;
+            SELECT id FROM Projected VIEW idx WHERE tag IS NOT NULL
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat($coords)) LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), queryParams).ExtractValueSync();
+        UNIT_ASSERT_C(filtered.IsSuccess(), filtered.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(filtered.GetResultSet(0)), "[[1u]]");
     }
 
     Y_UNIT_TEST(HnswTopKAfterFlatten) {
@@ -1515,6 +1524,40 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT_C(deleted.IsSuccess(), deleted.GetIssues().ToString());
         const auto emptyInvalid = read(3, "active");
         UNIT_ASSERT_VALUES_EQUAL_C(emptyInvalid.GetStatus(), EStatus::BAD_REQUEST, emptyInvalid.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(HnswFilteredSearchRejectsMalformedPackedTargets) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE PackedTarget (
+                id Uint64 NOT NULL, emb String, active Bool, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb) COVER (active)
+                    WITH (distance=euclidean, vector_type=uint4, vector_dimension=1, levels=1, clusters=1));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        const auto read = [&](const std::string& target, ui64 limit) {
+            auto params = db.GetParamsBuilder();
+            params.AddParam("$target").String(target).Build();
+            params.AddParam("$limit").Uint64(limit).Build();
+            return session.ExecuteDataQuery(R"(
+                DECLARE $target AS String;
+                DECLARE $limit AS Uint64;
+                SELECT id FROM PackedTarget VIEW idx WHERE active
+                ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT $limit;
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
+        };
+        // A single UINT4 coordinate has one padding nibble followed by the format byte.
+        const auto valid = read(std::string("\x01\x01\x08", 3), 1);
+        UNIT_ASSERT_C(valid.IsSuccess(), valid.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(valid.GetResultSet(0)), "[]");
+        for (const auto& malformed : {std::string("\x11\x01\x08", 3), std::string("\x01\x02\x08", 3)}) {
+            const auto invalid = read(malformed, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(invalid.GetStatus(), EStatus::BAD_REQUEST, invalid.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "Invalid packed 4-bit vector payload or padding");
+        }
     }
 
     Y_UNIT_TEST_TWIN(HnswShowCreatePreservesAdaptiveClusters, Adaptive) {

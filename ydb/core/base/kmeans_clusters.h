@@ -66,6 +66,8 @@ public:
     virtual TString GetEmptyRow() const = 0;
 };
 
+ui8 GetVectorFormat(const Ydb::Table::VectorIndexSettings& settings);
+
 // Return geometry settings for routing/ranking without changing graph construction settings.
 Ydb::Table::VectorIndexSettings MakeDistanceSettings(Ydb::Table::VectorIndexSettings settings);
 

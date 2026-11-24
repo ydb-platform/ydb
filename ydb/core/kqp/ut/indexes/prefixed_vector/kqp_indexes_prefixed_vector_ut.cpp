@@ -488,18 +488,27 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 (2u, "a", Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const TString query = R"(
+            DECLARE $q AS String?;
+            DECLARE $tenant AS String;
+            DECLARE $limit AS Uint64;
+            SELECT id FROM PrefixTarget VIEW idx WHERE tenant = $tenant
+            ORDER BY Knn::EuclideanDistance($q, emb) LIMIT $limit;
+        )";
+        if (!EnableVectorSearchActor) {
+            const auto explain = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(explain.GetPlan(), "indexImplPrefixTable");
+            UNIT_ASSERT_STRING_CONTAINS(explain.GetPlan(), "ReadRangesKeys");
+        }
+
         const auto read = [&](const TString& prefix, const std::optional<std::string>& target, ui64 limit) {
             auto params = db.GetParamsBuilder();
             params.AddParam("$q").OptionalString(target).Build();
             params.AddParam("$tenant").String(prefix).Build();
             params.AddParam("$limit").Uint64(limit).Build();
-            return session.ExecuteDataQuery(R"(
-                DECLARE $q AS String?;
-                DECLARE $tenant AS String;
-                DECLARE $limit AS Uint64;
-                SELECT id FROM PrefixTarget VIEW idx WHERE tenant = $tenant
-                ORDER BY Knn::EuclideanDistance($q, emb) LIMIT $limit;
-            )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
+            return session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), params.Build()).ExtractValueSync();
         };
         const auto vector = session.ExecuteDataQuery(R"(
             SELECT Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector") AS target;
@@ -518,6 +527,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[]");
         }
+        const auto zero = read("missing", std::string("invalid"), 0);
+        UNIT_ASSERT_C(zero.IsSuccess(), zero.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(zero.GetResultSet(0)), "[]");
         const auto invalid = read("missing", std::string("invalid"), 1);
         UNIT_ASSERT_VALUES_EQUAL_C(invalid.GetStatus(), EStatus::BAD_REQUEST, invalid.GetIssues().ToString());
     }

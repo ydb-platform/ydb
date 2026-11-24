@@ -748,7 +748,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             Topic = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
         }
 
-        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected) {
+        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected, ui64 trimId = 0) {
             const auto desc = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
             auto* request = AlterPQGroupRequest(++TxId, "/MyRoot/Table/Feed", R"(Name: "streamImpl")");
             auto& tx = *request->Record.MutableTransaction(0);
@@ -762,6 +762,9 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             config = desc.GetPersQueueGroup().GetPQTabletConfig();
             config.ClearPartitionKeySchema();
             edit(config);
+            if (trimId) {
+                tx.MutableAlterPersQueueGroup()->SetTrimCdcReplicationTxId(trimId);
+            }
 
             AsyncSend(Runtime, SchemeShard, request);
             TestModificationResult(Runtime, TxId, expected);
@@ -856,6 +859,18 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST_TWIN(CdcTopicAttachmentRejectsPartitionQuorum, SchemaChanges) {
         TCdcAttachmentFixture test(SchemaChanges ? "SchemaChanges: true" : "ResolvedTimestampsIntervalMs: 1000");
         test.Attach(NKikimrScheme::StatusPreconditionFailed);
+    }
+
+    Y_UNIT_TEST_TWIN(CdcTrimRejectsKeyCompaction, AlreadyEnabled) {
+        TCdcAttachmentFixture test;
+        test.AlterTopic([&](auto& config) {
+            config.SetReplicationSourceConsumer(test.Consumer);
+            config.SetEnableCompactification(AlreadyEnabled);
+        }, &test.Owner, NKikimrScheme::StatusAccepted);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+
+        test.AlterTopic([](auto& config) { config.SetEnableCompactification(!AlreadyEnabled); },
+            &test.Owner, NKikimrScheme::StatusPreconditionFailed, test.TxId + 1);
     }
 
     Y_UNIT_TEST(ConsumerAlterOnRunningCdcMirror) {

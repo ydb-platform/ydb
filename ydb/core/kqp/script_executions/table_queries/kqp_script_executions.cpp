@@ -3834,9 +3834,9 @@ private:
                 {"logPrefix", LogPrefix()},
                 {"rowCount", ResultSet.rows_size()},
                 {"hasMoreResults", HasMoreResults});
-            auto* response = new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues));
+            auto response = std::make_unique<TEvFetchScriptResultsResponse>(status, std::move(ResultSet), HasMoreResults, std::move(issues));
             response->HasNextResultSet = HasNextResultSet;
-            Send(Owner, response);
+            Send(Owner, std::move(response));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
         }

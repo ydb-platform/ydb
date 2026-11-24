@@ -1,6 +1,7 @@
 #include "statestorage_impl.h"
 #include "tablet.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -144,6 +145,51 @@ void CheckGuardianRegistration(ERegistrationFailure failure) {
     }, TDuration::Seconds(10));
 }
 
+void CheckDeleteWithCoLocatedReplicas(ui32 unavailableInSecondGroup, NKikimrProto::EReplyStatus expectedStatus) {
+    constexpr ui32 nodeCount = 3;
+    constexpr ui64 tabletId = 72075186224037888ull;
+    TTestBasicRuntime runtime(nodeCount);
+
+    NKikimrConfig::TStateStorageConfig config;
+    for (ui32 groupIndex : {0u, 1u}) {
+        auto* group = config.AddRingGroups();
+        group->SetNToSelect(nodeCount);
+        group->SetRingGroupActorIdOffset(groupIndex * 100);
+        for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            group->AddRing()->AddNode(runtime.GetNodeId(nodeIndex));
+        }
+    }
+    auto info = BuildStateStorageInfo(config);
+    for (ui32 groupIndex : {0u, 1u}) {
+        const auto& group = info->RingGroups[groupIndex];
+        for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            if (groupIndex == 1 && nodeIndex < unavailableInSecondGroup) {
+                continue;
+            }
+            runtime.AddLocalService(group.Rings[nodeIndex].Replicas.front(),
+                TActorSetupCmd(CreateStateStorageReplica(info, groupIndex * nodeCount + nodeIndex),
+                    TMailboxType::Revolving, 0), nodeIndex);
+        }
+    }
+    runtime.AddLocalService(MakeStateStorageProxyID(),
+        TActorSetupCmd(CreateStateStorageProxy(info, nullptr, nullptr), TMailboxType::Revolving, 0));
+    runtime.Initialize(TAppPrepare().Unwrap());
+
+    ui32 replies = 0;
+    auto observer = runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([&](auto& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletID(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 0);
+        UNIT_ASSERT(!ev->Sender.IsService());
+        ++replies;
+    });
+    const TActorId edge = runtime.AllocateEdgeActor();
+    runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvDelete(tabletId)));
+    auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(70));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(replies, 2 * nodeCount - unavailableInSecondGroup);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expectedStatus);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
@@ -277,9 +323,7 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
         UNIT_ASSERT_C(followerList.empty(), "the follower of the removed child is kept: " << JoinSeq(", ", followerList));
     }
 
-    // Two ring groups of three replicas each, and two replicas of the second one are gone. The delete reaches four
-    // replicas of six, more than half, but only one of three in the second group, which still has the record on the
-    // majority of its replicas when they get back. The delete must not report success.
+    // Four of the six replicas reply, but only one of those replies comes from the second ring group.
     Y_UNIT_TEST(DeleteNeedsMajorityOfEachRingGroup) {
         TTestBasicRuntime runtime(6);
         SetupCustomStateStorage(runtime, 3, 3, 1, 2);
@@ -304,44 +348,15 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
             "the delete reached one replica of three in the second ring group");
     }
 
-    // The same, but one replica of the first ring group is of an older version and replies without the cookie telling
-    // its group. That reply must not make the delete count all replies together as one group.
-    Y_UNIT_TEST(DeleteReplyWithoutCookieKeepsQuorumOfEachRingGroup) {
-        TTestBasicRuntime runtime(6);
-        SetupCustomStateStorage(runtime, 3, 3, 1, 2);
-        runtime.Initialize(TAppPrepare().Unwrap());
-
-        constexpr ui64 tabletId = 72075186224037888ull;
-        const TActorId edge = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
-        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
-        const auto& groups = resolved->Get()->ReplicaGroups;
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(groups[1].Replicas.size(), 3);
-        for (ui32 i : {1, 2}) {
-            runtime.Send(new IEventHandle(groups[1].Replicas[i], edge, new TEvents::TEvPoisonPill()));
-        }
-        runtime.SimulateSleep(TDuration::MilliSeconds(10));
-
-        bool cleared = false;
-        auto legacyReply = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
-            if (!cleared && ev->GetTypeRewrite() == TEvStateStorage::EvReplicaInfo && ev->Cookie == 1) {
-                cleared = true;
-                ev = new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, 0);
-            }
-        });
-        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvDelete(tabletId)));
-        auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(70));
-        UNIT_ASSERT(result);
-        UNIT_ASSERT(cleared);
-        UNIT_ASSERT_VALUES_UNEQUAL_C(result->Get()->Status, NKikimrProto::OK,
-            "the delete reached one replica of three in the second ring group");
+    Y_UNIT_TEST(DeleteAcceptsCookieLessRepliesFromCoLocatedReplicas) {
+        CheckDeleteWithCoLocatedReplicas(0, NKikimrProto::OK);
     }
 
-    // One ring group of four rings with two replicas each, and three rings are selected for the tablet, one replica in
-    // each. Two of the three selected replicas are gone. The other replicas don't hold the record of the tablet and
-    // reply ALREADY, which must not make up for the selected ones: the record is still on two of them when they get
-    // back, so the delete must not report success.
+    Y_UNIT_TEST(DeleteRequiresBothQuorumsOnSharedNodes) {
+        CheckDeleteWithCoLocatedReplicas(2, NKikimrProto::ERROR);
+    }
+
+    // One of the three selected replicas replies. The five unselected replicas also reply ALREADY.
     Y_UNIT_TEST(DeleteQuorumCountsSelectedReplicasOnly) {
         TTestBasicRuntime runtime(8);
         SetupCustomStateStorage(runtime, 3, 4, 2, 1);

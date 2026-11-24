@@ -1132,9 +1132,6 @@ protected:
     const TActorId Sender;
     const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
-    ui32 Sent = 0;
-    ui32 Count;
-    ui32 UndeliveredCount;
     ui64 TabletID;
     // the delete goes to every replica of each ring group but the disconnected ones, so that no copy of the record is
     // left; it succeeds with the majority of the replicas selected for the tablet in each group taking part in quorums,
@@ -1143,12 +1140,9 @@ protected:
         ui32 GroupIdx;
         bool Selected;
     };
-    TVector<TTarget> Targets; // the index of the target plus one is the cookie of its delete
-    TVector<ui32> GroupSelected;
+    // Each delete has its own reply address, including for replicas that do not echo a cookie.
+    THashMap<TActorId, TTarget> PendingTargets;
     TVector<ui32> GroupAcks;
-    // the target of each node, or Max when the node has several; a replica of an older version replies without the
-    // cookie, and its node tells the target then, if it can
-    THashMap<ui32, ui32> NodeTarget;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1159,8 +1153,6 @@ public:
         : Sender(sender)
         , Cookie(cookie)
         , Info(info)
-        , Count(0)
-        , UndeliveredCount(0)
         , TabletID(tabletId)
     {}
 
@@ -1172,7 +1164,7 @@ public:
                 continue;
             }
             anyGroup = true;
-            if (GroupAcks[idx] <= GroupSelected[idx] / 2) {
+            if (GroupAcks[idx] <= ringGroup.NToSelect / 2) {
                 return false;
             }
         }
@@ -1185,7 +1177,6 @@ public:
     }
 
     void Bootstrap() {
-        GroupSelected.assign(Info->RingGroups.size(), 0);
         GroupAcks.assign(Info->RingGroups.size(), 0);
         for (ui32 idx : xrange(Info->RingGroups.size())) {
             const auto& ringGroup = Info->RingGroups[idx];
@@ -1194,23 +1185,19 @@ public:
             }
             TStateStorageInfo::TSelection selection;
             Info->SelectReplicas(TabletID, &selection, idx);
-            GroupSelected[idx] = selection.Sz;
             const TActorId* selectedBegin = selection.SelectedReplicas.Get();
             const TActorId* selectedEnd = selectedBegin + selection.Sz;
             for (const auto& ring : ringGroup.Rings) {
                 for (const TActorId& replica : ring.Replicas) {
-                    const ui32 target = Targets.size();
-                    Targets.push_back({idx, std::find(selectedBegin, selectedEnd, replica) != selectedEnd});
-                    Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid), IEventHandle::FlagTrackDelivery, target + 1);
-                    ++Sent;
-                    auto [it, inserted] = NodeTarget.emplace(replica.NodeId(), target);
-                    if (!inserted) {
-                        it->second = Max<ui32>();
-                    }
+                    const TActorId replyTo = RegisterAlias();
+                    PendingTargets.emplace(replyTo, TTarget{idx, std::find(selectedBegin, selectedEnd, replica) != selectedEnd});
+                    TActivationContext::Send(new IEventHandle(replica, replyTo,
+                        new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid),
+                        IEventHandle::FlagTrackDelivery));
                 }
             }
         }
-        if (Sent) {
+        if (!PendingTargets.empty()) {
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
             Become(&TThis::StateRequestedDelete);
         } else {
@@ -1227,26 +1214,25 @@ public:
     }
 
     void OnResponseReceived() {
-        if (Count + UndeliveredCount >= Sent)
+        if (PendingTargets.empty())
             SendResponse();
     }
 
-    void Undelivered(TEvents::TEvUndelivered::TPtr &) {
-        ++UndeliveredCount;
-        OnResponseReceived();
+    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
+        if (PendingTargets.erase(ev->Recipient)) {
+            OnResponseReceived();
+        }
     }
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        ++Count;
-        ui32 target = Max<ui32>();
-        if (ev->Cookie && ev->Cookie <= Targets.size()) {
-            target = ev->Cookie - 1;
-        } else if (const auto it = NodeTarget.find(ev->Sender.NodeId()); it != NodeTarget.end()) {
-            target = it->second;
-        } // else the reply counts for no group: a quorum of a group can't be established with it
-        if (target != Max<ui32>() && Targets[target].Selected) {
-            ++GroupAcks[Targets[target].GroupIdx];
+        const auto target = PendingTargets.find(ev->Recipient);
+        if (target == PendingTargets.end()) {
+            return;
         }
+        if (target->second.Selected) {
+            ++GroupAcks[target->second.GroupIdx];
+        }
+        PendingTargets.erase(target);
 
         auto &record = ev->Get()->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();

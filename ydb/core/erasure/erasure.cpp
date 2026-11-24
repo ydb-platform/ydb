@@ -315,9 +315,12 @@ public:
 
 
     template <bool isStripe, bool isFromDataParts>
-    void EoSplitWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &outPartSet, ui64 writePosition, ui64 firstBlock, ui64 lastBlock) {
+    void EoSplitWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &outPartSet,
+            ui64 writePosition, ui64 firstBlock, ui64 lastBlock, ui32 parityOutputMask) {
         const ui32 lastPartIdx = DataParts + 1;
         const ui32 m = Prime;
+        const bool writeFirstParity = parityOutputMask & (1u << DataParts);
+        const bool writeSecondParity = parityOutputMask & (1u << lastPartIdx);
         for (ui64 blockIdx = firstBlock; blockIdx != lastBlock; ++blockIdx) {
 
 #define IN_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column))
@@ -344,32 +347,42 @@ public:
             }
             for (ui32 l = 0; l < LineCount; ++l) {
                 ui64 sourceData = IN_EL(l, 0);
-                OUT_M1(l) = adj ^ sourceData;
-                OUT_M(l) = sourceData;
+                if (writeSecondParity) {
+                    OUT_M1(l) = adj ^ sourceData;
+                }
+                if (writeFirstParity) {
+                    OUT_M(l) = sourceData;
+                }
                 if (!isFromDataParts) {
                     OUT_EL(l, 0) = sourceData;
                 }
             }
-            for (ui32 t = 1; t < DataParts; ++t) {
-                for (ui32 l = 0; l < LineCount; ++l) {
-                    ui64 sourceData = IN_EL(l, t);
-                    OUT_M(l) ^= sourceData;
-                    if (!isFromDataParts) {
-                        OUT_EL(l, t) = sourceData;
+            if (writeFirstParity || !isFromDataParts) {
+                for (ui32 t = 1; t < DataParts; ++t) {
+                    for (ui32 l = 0; l < LineCount; ++l) {
+                        ui64 sourceData = IN_EL(l, t);
+                        if (writeFirstParity) {
+                            OUT_M(l) ^= sourceData;
+                            VERBOSE_COUT("OUT_M(" << l << ") = " << DebugFormatBits(OUT_M(l)) << Endl);
+                        }
+                        if (!isFromDataParts) {
+                            OUT_EL(l, t) = sourceData;
+                        }
                     }
-                    VERBOSE_COUT("OUT_M(" << l << ") = " << DebugFormatBits(OUT_M(l)) << Endl);
                 }
             }
-            for (ui32 t = 1; t < DataParts; ++t) {
-                for (ui32 l = 0; l < LineCount - t; ++l) {
-                    ui32 row = l + t;
-                    OUT_M1(row) ^= IN_EL(l, t);
-                    VERBOSE_COUT(DebugFormatBits(IN_EL(row, t)) << Endl);
-                }
-                for (ui32 l = LineCount - t + 1; l < LineCount; ++l) {
-                    ui32 row = l + t - m;
-                    OUT_M1(row) ^= IN_EL(l, t);
-                    VERBOSE_COUT(DebugFormatBits(IN_EL(row, t)) << Endl);
+            if (writeSecondParity) {
+                for (ui32 t = 1; t < DataParts; ++t) {
+                    for (ui32 l = 0; l < LineCount - t; ++l) {
+                        ui32 row = l + t;
+                        OUT_M1(row) ^= IN_EL(l, t);
+                        VERBOSE_COUT(DebugFormatBits(IN_EL(row, t)) << Endl);
+                    }
+                    for (ui32 l = LineCount - t + 1; l < LineCount; ++l) {
+                        ui32 row = l + t - m;
+                        OUT_M1(row) ^= IN_EL(l, t);
+                        VERBOSE_COUT(DebugFormatBits(IN_EL(row, t)) << Endl);
+                    }
                 }
             }
             VERBOSE_COUT_BLOCK(true, OUT_EL, OUT_EL, OUT_M, OUT_M1);
@@ -530,7 +543,7 @@ public:
     }
 
     template <bool isStripe, bool isFromDataParts, bool isIncremental = false>
-    void EoSplit(TDataPartSet &outPartSet) {
+    void EoSplit(TDataPartSet &outPartSet, ui32 parityOutputMask) {
         ui64 readPosition = isIncremental? ColumnSize * outPartSet.CurBlockIdx: 0;
         ui64 firstBlock = isIncremental? outPartSet.CurBlockIdx: 0;
         ui64 lastBlock = isIncremental? Min(WholeBlocks, firstBlock + IncrementalSplitMaxBlocks): WholeBlocks;
@@ -549,7 +562,8 @@ public:
                 << " fullDataSize# " << outPartSet.FullDataSize
                 << Endl);
         // Use all whole columns of all the parts
-        EoSplitWhole<isStripe, isFromDataParts>(Data, BufferDataPart, outPartSet, readPosition, firstBlock, lastBlock);
+        EoSplitWhole<isStripe, isFromDataParts>(Data, BufferDataPart, outPartSet,
+                readPosition, firstBlock, lastBlock, parityOutputMask);
 
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
@@ -561,7 +575,7 @@ public:
             }
 
             EoSplitWhole<isStripe, isFromDataParts>(lastBlockSource, bufferDataPart, outPartSet,
-                    WholeBlocks * ColumnSize, 0, 1);
+                    WholeBlocks * ColumnSize, 0, 1, parityOutputMask);
         }
     }
 
@@ -1383,7 +1397,7 @@ void EoBlockSplit(const TLogoBlobID& id, const TErasureType &type, TRope &buffer
         outPartSet.MemoryConsumed = p.TotalParts * outPartSet.Parts[0].MemoryConsumed();
     }
 
-    p.EoSplit<isStripe, false, true>(outPartSet);
+    p.EoSplit<isStripe, false, true>(outPartSet, 0b11u << p.DataParts);
 
     // Finalize if split has been done to completion
     if (outPartSet.IsSplitDone()) {
@@ -1517,7 +1531,7 @@ void EoBlockRestore(const TLogoBlobID& id, const TErasureType &type, TDataPartSe
             }
             p.XorRestorePart<isStripe, true, false, false>(id, partSet, missingDataPartIdxA);
             TRACE("case# f1 split" << Endl);
-            p.EoSplit<isStripe, true>(partSet);
+            p.EoSplit<isStripe, true>(partSet, 1u << missingDataPartIdxB);
             p.PadAndCrcPart(id, partSet, missingDataPartIdxA);
             p.PadAndCrcPart(id, partSet, missingDataPartIdxB);
         } else {
@@ -1529,7 +1543,7 @@ void EoBlockRestore(const TLogoBlobID& id, const TErasureType &type, TDataPartSe
                 // The (d2a) or (f2a) case with full data and parts needed
                 TRACE("case# d2a f2a" << Endl);
                 VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-                p.EoSplit<isStripe, true>(partSet);
+                p.EoSplit<isStripe, true>(partSet, 1u << missingDataPartIdxB);
                 p.PadAndCrcPart(id, partSet, missingDataPartIdxB);
             }
             if (restoreParts) {
@@ -1570,10 +1584,10 @@ void EoBlockRestore(const TLogoBlobID& id, const TErasureType &type, TDataPartSe
                 p.GlueBlockParts(buffer.GetContiguousSpanMut().data(), partSet);
             }
         }
-        if (restoreParts) {
+        if (restoreParts && restoreParityParts) {
             TRACE(__LINE__ << Endl);
             VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-            p.EoSplit<isStripe, true>(partSet);
+            p.EoSplit<isStripe, true>(partSet, 1u << missingDataPartIdxA);
             p.PadAndCrcPart(id, partSet, missingDataPartIdxA);
         }
         return;

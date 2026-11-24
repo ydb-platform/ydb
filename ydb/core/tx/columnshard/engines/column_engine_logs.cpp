@@ -304,14 +304,9 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
-<<<<<<< HEAD
+    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(indexInfo)));
-=======
-    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
-    const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
-    auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
     }

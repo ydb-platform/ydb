@@ -68,11 +68,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             "f", it->first.DebugString());
     } else {
         if (!dWait) {
-<<<<<<< HEAD
-            AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
-=======
-            YDB_LOG_VERIFY(features.GetPortionSchemaVersion() < features.GetTargetScheme()->GetVersion());
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
+            AFL_VERIFY(features.GetPortionSchemaVersion() < features.GetTargetScheme()->GetVersion());
         } else {
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }

@@ -90,15 +90,9 @@ public:
 
     NActualizer::TRWAddress GetRWAddress() {
         if (!RWAddress) {
-<<<<<<< HEAD
             AFL_VERIFY(TargetTierName);
-            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName),
-                TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
-=======
-            YDB_LOG_VERIFY(TargetTierName);
             RWAddress = NActualizer::TRWAddress(
                 ReadScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
->>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
         }
         return *RWAddress;
     }

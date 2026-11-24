@@ -1123,7 +1123,8 @@ def _NOTS_TOOL_CONFIGURE(unit: ymake.Unit):
         # Build commands use the shared host resource. Recipes retain the bundled
         # fallback so released yatest can run them without new DART fields.
         unit.onpeerdir(["devtools/frontend_build_platform/nots/bsdtar"])
-        suffix += ' ${env:"NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"}'
+        unit.set(["_NOTS_BSDTAR_ENV", "NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"])
+        suffix += " ${env:_NOTS_BSDTAR_ENV}"
         suffix += ' ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/settings.schema.json"}'
     unit.set(["NOTS_TOOL", '${tool:"' + tool_path + '"} ${hide:TS_FAKEID} ${hide;input:T0_SETTINGS_PATH}' + suffix])
     unit.set(["_NOTS_RECIPE_DEPENDS", tool_path])

@@ -358,7 +358,8 @@ void TBlocksDirtyMap::WriteFinished(
     TPBufferKey pBufferKey,
     TBlockRange16 range,
     THostMask requested,
-    THostMask confirmed)
+    THostMask confirmed,
+    THostMask allWritesAnswered)
 {
     // Every write is pre-registered as pending at generation time (see
     // RegisterInflightWrite), so the entry always exists here.
@@ -378,7 +379,7 @@ void TBlocksDirtyMap::WriteFinished(
         return;
     }
 
-    inflightItem.OnWritten(requested, confirmed);
+    inflightItem.OnWritten(requested, confirmed, allWritesAnswered);
 }
 
 void TBlocksDirtyMap::FlushFinished(
@@ -462,18 +463,19 @@ void TBlocksDirtyMap::EraseFinished(
     MaybeAdvanceRestoreBarrier();
 }
 
-void TBlocksDirtyMap::UpdateBelatedEraseQueue(
+void TBlocksDirtyMap::OnBelatedWrite(
+    TPBufferKey pBufferKey,
     THostMask completedWrites,
-    TPBufferKey pBufferKey)
+    THostMask allWritesAnswered)
 {
-    const auto item = Inflight.GetValue(pBufferKey);
-    const bool unknownLsn = item == std::nullopt;
-    const bool erasingInProgress =
-        item &&
-        (item->Value.GetState() == TInflightInfo::EState::PBufferErasing ||
-         item->Value.GetState() == TInflightInfo::EState::PBufferErased);
+    Y_ABORT_UNLESS(completedWrites.Exclude(allWritesAnswered).Empty());
 
-    if (unknownLsn || erasingInProgress) {
+    if (auto item = Inflight.GetValue(pBufferKey)) {
+        item->Value.OnAllWritesAnswered(allWritesAnswered);
+        return;
+    }
+
+    if (!completedWrites.Empty()) {
         ReadyToEraseBelated.emplace(TInfoEraseBelated{
             .PBufferKey = pBufferKey,
             .Hosts = completedWrites});

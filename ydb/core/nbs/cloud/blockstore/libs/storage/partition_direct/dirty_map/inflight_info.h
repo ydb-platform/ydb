@@ -149,7 +149,13 @@ public:
 
     // Transitions a pending write (see the byteCount-only constructor) to the
     // written state once a quorum of PBuffers confirmed it.
-    void OnWritten(THostMask writeRequested, THostMask writeConfirmed);
+    void OnWritten(
+        THostMask writeRequested,
+        THostMask writeConfirmed,
+        THostMask allWritesAnswered);
+
+    // Records hosts whose last outstanding write request has answered.
+    void OnAllWritesAnswered(THostMask allWritesAnswered);
 
     [[nodiscard]] EState GetState() const;
 
@@ -171,8 +177,7 @@ public:
     void RequestErase(THostIndex host);
     void ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
-    // Enabled hosts where a write was requested but erase is not yet
-    // requested/confirmed.
+    // Enabled hosts with all writes answered and no erase in flight or done.
     [[nodiscard]] THostMask GetEraseNeeded() const;
     [[nodiscard]] bool IsDataOnlyInPBuffers() const;
     [[nodiscard]] bool CanBeCoveredByRestoreBarrier() const;
@@ -233,6 +238,8 @@ private:
     THostMask Disabled;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
+    // Hosts whose direct and indirect write requests have all answered.
+    THostMask AllWritesAnswered;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

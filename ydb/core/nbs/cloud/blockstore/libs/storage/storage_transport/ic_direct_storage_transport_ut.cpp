@@ -714,6 +714,64 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     }
 
     Y_UNIT_TEST_F(
+        ShouldAnswerAllPBuffersOnUndelivery,
+        TStorageTransportTestFixture)
+    {
+        for (const bool direct: {false, true}) {
+            auto executor = MakeExecutor();
+            auto transport =
+                std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
+            if (direct) {
+                transport->EnableFakeDirectSession();
+            }
+
+            const NBsController::TDDiskId missingId(
+                transport->GetNodeId(),
+                999,
+                999);
+            auto connection = MakePBufferConnection(missingId, 1);
+            auto ids = transport->GetPBufferIds();
+            ids[0] = missingId;
+            const auto protoIds = ToProto(ids);
+            TString writeBuf(DefaultBlockSize, 'u');
+            auto done = NewPromise<
+                IStorageTransport::TEvWriteToManyPersistentBuffersResult>();
+
+            transport->WriteToManyPBuffers(
+                connection,
+                NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
+                8,
+                NDDisk::TWriteInstruction(0),
+                protoIds,
+                TDuration::Seconds(1),
+                MakeSgList(writeBuf),
+                {},
+                nullptr,
+                [done](const auto& result, auto) mutable
+                { done.SetValue(result); });
+            WaitFuture(executor, done.GetFuture(), WaitTimeout);
+
+            const auto& response = done.GetFuture().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(protoIds.size(), response.ResultSize());
+            THashSet<TString> answered;
+            for (const auto& single: response.GetResult()) {
+                UNIT_ASSERT(
+                    single.GetResult().GetStatus() ==
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+                UNIT_ASSERT_STRINGS_EQUAL(
+                    UndeliveryErrorMessage,
+                    single.GetResult().GetErrorReason());
+                answered.insert(
+                    single.GetPersistentBufferId().ShortDebugString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(protoIds.size(), answered.size());
+            for (const auto& id: protoIds) {
+                UNIT_ASSERT(answered.contains(id.ShortDebugString()));
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(
         DirectPathUndeliveredCompletesWithError,
         TStorageTransportTestFixture)
     {

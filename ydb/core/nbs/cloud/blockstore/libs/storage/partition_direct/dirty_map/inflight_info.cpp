@@ -36,6 +36,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , Disabled(other.Disabled)
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
+    , AllWritesAnswered(other.AllWritesAnswered)
     , FlushRequested(other.FlushRequested)
     , FlushConfirmed(other.FlushConfirmed)
     , EraseRequested(other.EraseRequested)
@@ -71,6 +72,7 @@ void TInflightInfo::RestorePBuffer(THostIndex host)
 
     WriteRequested.Set(host);
     WriteConfirmed.Set(host);
+    AllWritesAnswered.Set(host);
 
     ApplyBytes(host, IReadyQueue::EPBufferCounter::Total, true);
 
@@ -89,18 +91,33 @@ void TInflightInfo::RestorePBuffer(THostIndex host)
 
 void TInflightInfo::OnWritten(
     THostMask writeRequested,
-    THostMask writeConfirmed)
+    THostMask writeConfirmed,
+    THostMask allWritesAnswered)
 {
     Y_ABORT_UNLESS(State == EState::PBufferPendingWrite);
     Y_ABORT_UNLESS(WriteConfirmed.Count() == 0);
     Y_ABORT_UNLESS(writeConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
 
+    Y_ABORT_UNLESS(writeConfirmed.Exclude(writeRequested).Empty());
+    Y_ABORT_UNLESS(allWritesAnswered.Exclude(writeRequested).Empty());
+
     WriteRequested = writeRequested;
     WriteConfirmed = writeConfirmed;
+    AllWritesAnswered = allWritesAnswered;
     SetState(EState::PBufferWritten);
 
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, true);
     ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
+}
+
+void TInflightInfo::OnAllWritesAnswered(THostMask allWritesAnswered)
+{
+    Y_ABORT_UNLESS(allWritesAnswered.Exclude(WriteRequested).Empty());
+
+    AllWritesAnswered = AllWritesAnswered.Include(allWritesAnswered);
+    if (State == EState::PBufferFlushed || State == EState::PBufferErasing) {
+        MaybeQueryErase();
+    }
 }
 
 TInflightInfo::EState TInflightInfo::GetState() const
@@ -224,6 +241,7 @@ void TInflightInfo::RequestErase(THostIndex host)
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
     Y_ABORT_UNLESS(WriteRequested.Get(host));
+    Y_ABORT_UNLESS(AllWritesAnswered.Get(host));
     Y_ABORT_UNLESS(!EraseRequested.Get(host));
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
     Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
@@ -263,7 +281,8 @@ void TInflightInfo::EraseFailed(THostIndex host)
 
 THostMask TInflightInfo::GetEraseNeeded() const
 {
-    return WriteRequested.Exclude(Disabled)
+    return WriteRequested.LogicalAnd(AllWritesAnswered)
+        .Exclude(Disabled)
         .Exclude(EraseRequested)
         .Exclude(EraseConfirmed);
 }
@@ -406,6 +425,7 @@ TString TInflightInfo::DebugPrint(TInstant now) const
            << ", dd:" << DesiredDDisks.Print() << ", d:" << Disabled.Print()
            << ", wr:" << WriteRequested.Print()
            << ", wc:" << WriteConfirmed.Print()
+           << ", wa:" << AllWritesAnswered.Print()
            << ", fr:" << FlushRequested.Print()
            << ", fc:" << FlushConfirmed.Print()
            << ", er:" << EraseRequested.Print()
@@ -495,10 +515,13 @@ void TInflightInfo::CheckInvariants() const
         FlushRequested.Exclude(Disabled).Exclude(DesiredDDisks).Empty());
     Y_ABORT_UNLESS(EraseConfirmed.Exclude(EraseRequested).Empty());
     Y_ABORT_UNLESS(EraseRequested.Exclude(WriteRequested).Empty());
+    Y_ABORT_UNLESS(AllWritesAnswered.Exclude(WriteRequested).Empty());
+    Y_ABORT_UNLESS(EraseRequested.Exclude(AllWritesAnswered).Empty());
 
     switch (State) {
         case EState::PBufferPendingWrite:
             Y_ABORT_UNLESS(WriteRequested.Empty());
+            Y_ABORT_UNLESS(AllWritesAnswered.Empty());
             Y_ABORT_UNLESS(WriteConfirmed.Empty());
             Y_ABORT_UNLESS(FlushRequested.Empty());
             Y_ABORT_UNLESS(FlushConfirmed.Empty());
@@ -577,9 +600,7 @@ void TInflightInfo::MaybeQueryErase()
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
-    const auto hostsToErase =
-        WriteRequested.Exclude(Disabled).Exclude(EraseRequested);
-    if (!hostsToErase.Empty()) {
+    if (!GetEraseNeeded().Empty()) {
         ReadyQueue->Register(*this, IReadyQueue::EQueueType::Erase);
     }
 }

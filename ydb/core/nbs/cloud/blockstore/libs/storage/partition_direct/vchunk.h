@@ -120,7 +120,8 @@ public:
         const TWriteRequestResponse& response) override;
     void OnBelatedWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
-        THostMask completedWrites) override;
+        THostMask completedWrites,
+        THostMask allWritesAnswered) override;
 
     // IRangeSyncClient implementation
     [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(

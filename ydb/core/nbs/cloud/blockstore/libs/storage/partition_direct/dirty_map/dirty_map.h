@@ -72,7 +72,8 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         THostMask requested,
-        THostMask confirmed);
+        THostMask confirmed,
+        THostMask allWritesAnswered);
     void FlushFinished(
         THostRoute route,
         const TVector<TPBufferKey>& flushOk,
@@ -82,9 +83,11 @@ public:
         const TVector<TPBufferKey>& eraseOk,
         const TVector<TPBufferKey>& eraseFailed);
 
-    void UpdateBelatedEraseQueue(
+    // Completes outstanding writes or queues cleanup for an untracked record.
+    void OnBelatedWrite(
+        TPBufferKey pBufferKey,
         THostMask completedWrites,
-        TPBufferKey pBufferKey);
+        THostMask allWritesAnswered);
 
     // Sets the readable prefix of one DDisk for tests.
     void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);

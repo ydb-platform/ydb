@@ -2,6 +2,7 @@
 #include "config.h"
 #include "diff.h"
 #include "table_merger.h"
+#include "util.h"
 
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/utility.h>
@@ -554,13 +555,13 @@ namespace NKikimr::NBsController {
                             }
                         }
                         // check the failure model
-                        auto& checker = *topology.QuorumChecker;
-                        if (!checker.CheckFailModelForGroup(failed)) {
+                        const auto config = group->GetMirror3dcConfiguration();
+                        if (!CheckGroupReassignmentFailModel(config, failed)) {
                             disintegrated.push_back(groupId);
                             errors = true;
                         } else {
-                            TBlobStorageGroupInfo::TGroupVDisks failedWithSkip = failed - allowedNonReady;
-                            if (!parameters.SuppressDegradedGroupsChecking && checker.IsDegraded(failedWithSkip)) {
+                            const auto failedWithSkip = failed - allowedNonReady - GetExcludedVDisks(config, topology);
+                            if (!parameters.SuppressDegradedGroupsChecking && topology.GetQuorumChecker().IsDegraded(failedWithSkip)) {
                                 degraded.push_back(groupId);
                                 errors = true;
                             }

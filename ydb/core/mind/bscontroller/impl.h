@@ -735,6 +735,12 @@ public:
         // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
         std::optional<EMirror3dcGroupState> Mirror3dcState;
+
+        TMirror3dcGroupConfiguration GetMirror3dcConfiguration() const {
+            return {Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
+                FailRealmStates.value_or(TMirror3dcFailRealmStates{})};
+        }
+
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 

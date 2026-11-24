@@ -4,6 +4,7 @@
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
 #include "layout_helpers.h"
+#include "util.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/debug_tools/operation_log.h>
@@ -84,10 +85,13 @@ namespace NKikimr::NBsController {
                 {"marker", "BSSH01"},
                 {"groupId", GroupId});
 
+            const auto excluded = GetExcludedVDisks(Group.Mirror3dcConfiguration, *Topology);
             for (const auto& [vdiskId, vdisk] : Group.VDisks) {
-                if (VDiskToReplace && vdiskId == *VDiskToReplace) {
-                    FailedGroupDisks |= {Topology.get(), vdiskId};
-                    continue; // skip disk we are going to replcate -- it will be wiped out anyway
+                const TBlobStorageGroupInfo::TGroupVDisks disk(Topology.get(), vdiskId);
+                if (VDiskToReplace && (vdiskId == *VDiskToReplace || (excluded & disk))) {
+                    // The replacement starts empty, and Excluded realms cannot supply recovery data or a write quorum.
+                    FailedGroupDisks |= disk;
+                    continue;
                 }
 
                 // send TEvVStatus message to disk
@@ -164,8 +168,7 @@ namespace NKikimr::NBsController {
         }
 
         void ProcessResult() {
-            auto& checker = Topology->GetQuorumChecker();
-            if (!checker.CheckFailModelForGroup(FailedGroupDisks)) {
+            if (!CheckGroupReassignmentFailModel(Group.Mirror3dcConfiguration, FailedGroupDisks)) {
                 YDB_LOG_DEBUG("Reassigner ProcessResult quorum checker failed",
                     {"marker", "BSSH06"},
                     {"groupId", GroupId});
@@ -616,11 +619,15 @@ namespace NKikimr::NBsController {
             //    VDisks with PhantomsOnly status are not considered actively replicating,
             //    exactly one such VDisk is allowed
 
+            const auto excluded = GetExcludedVDisks(content.Mirror3dcConfiguration, *topology);
             TGroupVDisks nonReady(topology);
             TGroupVDisks withUnavailabilityRisk(topology);
             TGroupVDisks replicatingWithPhantomsOnly(topology);
 
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                if (excluded & TGroupVDisks(topology, vdiskId)) {
+                    continue;
+                }
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
                         if (vdisk.OnlyPhantomsRemain && !replicatingWithPhantomsOnly) {
@@ -650,7 +657,7 @@ namespace NKikimr::NBsController {
                 std::greater<ESelfHealReassignmentPriority>> candidates;
 
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
-                if (vdisk.RequiresReassignment()) {
+                if (vdisk.RequiresReassignment() && !(excluded & TGroupVDisks(topology, vdiskId))) {
                     candidates.emplace(vdisk.ReassignmentPriority, vdiskId);
                 }
             }
@@ -666,7 +673,7 @@ namespace NKikimr::NBsController {
                     continue;
                 }
 
-                if (!checker.CheckFailModelForGroup(newNonReady | withUnavailabilityRisk)) {
+                if (!CheckGroupReassignmentFailModel(content.Mirror3dcConfiguration, newNonReady | withUnavailabilityRisk)) {
                     // risk of disintegration
                     continue;
                 }
@@ -1141,6 +1148,7 @@ namespace NKikimr::NBsController {
 
             group->Generation = groupInfo->Generation;
             group->Type = TBlobStorageGroupType(groupInfo->ErasureSpecies);
+            group->Mirror3dcConfiguration = groupInfo->GetMirror3dcConfiguration();
 
             const auto geometryKey = std::make_pair(groupInfo->StoragePoolId, groupInfo->BridgePileId);
             if (auto it = geomCache.find(geometryKey); it != geomCache.end()) {

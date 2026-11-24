@@ -3,6 +3,7 @@
 #include "group_mapper.h"
 #include "group_geometry_info.h"
 #include "layout_helpers.h"
+#include "util.h"
 
 namespace NKikimr {
     namespace NBsController {
@@ -660,7 +661,7 @@ namespace NKikimr {
                 State.GroupContentChanged.insert(groupInfo->ID);
                 State.GroupFailureModelChanged.insert(groupInfo->ID);
                 if (!reassignment.ReplacedSlots.empty()) {
-                    CheckGroupReassignment(*groupInfo, reassignment.NonOperationalVDisks);
+                    CheckGroupReassignment(*groupInfo, reassignment);
                     CheckAndReportReassignment(groupInfo, reassignment.ReplacedSlots, group);
                 }
 
@@ -673,16 +674,24 @@ namespace NKikimr {
                 }
             }
 
-            void CheckGroupReassignment(const TGroupInfo& groupInfo,
-                                        const TBlobStorageGroupInfo::TGroupVDisks& nonOperationalVDisks) const {
+            void CheckGroupReassignment(const TGroupInfo& groupInfo, const TGroupReassignment& reassignment) const {
                 if (!LayoutPolicy.Accepts(groupInfo.LayoutCorrect)) {
                     throw TExGroupLayoutIncorrect(groupInfo.ID.GetRawId());
                 }
                 if (!IgnoreGroupFailModelChecks) {
-                    const auto& checker = *groupInfo.Topology->QuorumChecker;
-                    if (!checker.CheckFailModelForGroup(nonOperationalVDisks)) {
+                    const auto config = groupInfo.GetMirror3dcConfiguration();
+                    const auto& topology = *groupInfo.Topology;
+                    auto failed = reassignment.NonOperationalVDisks;
+                    if (config != TMirror3dcGroupConfiguration{}) {
+                        // Replacement slots are empty until replicated, even when the source was operational.
+                        for (const auto& [vdiskId, _] : reassignment.ReplacedSlots) {
+                            failed |= {&topology, vdiskId};
+                        }
+                    }
+                    if (!CheckGroupReassignmentFailModel(config, failed)) {
                         throw TExMayLoseData(groupInfo.ID.GetRawId());
-                    } else if (!IgnoreDegradedGroupsChecks && checker.IsDegraded(nonOperationalVDisks)) {
+                    } else if (!IgnoreDegradedGroupsChecks && topology.GetQuorumChecker().IsDegraded(
+                            failed - GetExcludedVDisks(config, topology))) {
                         throw TExMayGetDegraded(groupInfo.ID.GetRawId());
                     }
                 }

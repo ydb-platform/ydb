@@ -21,7 +21,7 @@ Use your own values consistently throughout the procedure. Replication managemen
 
 - Configure the `source` and `target` [CLI profiles](../../reference/ydb-cli/profile/index.md), including endpoints, database paths, and authentication.
 - Record the tables to transfer. New tables are not automatically added to an existing replication instance. The target paths must be unused.
-- Prepare application permissions and objects outside the [scope of replication](../../concepts/async-replication.md#restrictions) separately.
+- Prepare application permissions and all objects outside the [scope of replication](../../concepts/async-replication.md#restrictions) separately. Distinguish restoring topic definitions from transferring their messages. Check support for the required indexes and sequences in both databases.
 - Check resource headroom on both databases and space for CDC on the source. Choose the [availability period for accumulated changes](../../concepts/async-replication.md#availability-period), data verification queries, and an acceptable write downtime window.
 
 ### Permissions {#replication-permissions}
@@ -89,14 +89,26 @@ WITH (
 );
 ```
 
+Choose the table grouping using the [planning recommendations](index.md#replication-scope). For multiple tables, list all source and target pairs in one `FOR` clause.
+
 Replace the example endpoint and database path with the source connection settings. This example uses row-level consistency; see [consistency guarantees](../../concepts/async-replication.md#consistency-levels). Choose the [availability period](../../concepts/async-replication.md#availability-period) before creation.
 
 ```bash
 {{ ydb-cli }} -p target sql -f create-replication.sql
-{{ ydb-cli }} -p target scheme describe my_replication --format proto-json-base64
+{{ ydb-cli }} -p target scheme describe my_replication --stats --format proto-json-base64
 ```
 
-Proceed when the instance exists without an `error` field. If creation fails, inspect its state and already created objects before retrying.
+Check the result:
+
+| Field | Expected result |
+| --- | --- |
+| `items` | All selected objects with the expected `source_path` and `destination_path` |
+| `items[].source_changefeed_name` | The generated changefeed name for every object; wait until populated |
+| `running` | Present for an initial CDC scan |
+| `paused` | Present with `INITIAL_SCAN = FALSE`; replication awaits restored data |
+| `error` | Absent |
+
+Resolve any reported error before proceeding. On `UNIMPLEMENTED`, agree with your installation's support team on an available way to inspect the object: an interface error does not prove that the object is absent. Do not repeat `CREATE` to diagnose it.
 
 ## 3. Transfer the Initial Data {#initial-sync}
 
@@ -115,7 +127,7 @@ A completed scan does not prove that accumulated changes have been applied. Cont
 
 ### 3.2. Synchronization Using a Backup {#export-import-sync}
 
-For the backup method, **do not run section 2 above**. Complete steps 1–5 of the [initial synchronization guide](../async-replication-initial-sync.md): create replication with `INITIAL_SCAN = FALSE`, verify CDC readiness, export, import, and start change replication.
+For the backup method, **do not run section 2 above**. First complete the [initial synchronization prerequisites](../async-replication-initial-sync.md#prerequisites): prepare S3 storage, access credentials, an unused prefix, and the change availability period. The `source_token` secret was already created in section 1; reuse it instead of creating a second secret. Then complete steps 1–5 of the same guide: create replication with `INITIAL_SCAN = FALSE`, verify CDC readiness, export, import, and start change replication.
 
 Use the same names: `my_replication`, `replica_table`, `source_token`, `original_table`, and the `source` and `target` profiles. After the instance enters `running`, return to [lag assessment](#replication-lag) below.
 
@@ -150,7 +162,16 @@ Stop source writes from applications, background jobs, loaders, and retry delive
 
 ### Check Applied Changes {#check-replication}
 
-Get each `items[].source_changefeed_name` from the replication description. A table's changefeed topic path consists of its source path followed by that name. Inspect every topic and its replication consumer:
+After stopping writes, wait for fresh reports showing `running.stats.lag = 0s` and `items[].stats.lag = 0s` for every replicated object. If a value is unavailable, wait for reporting to resume; an absent value does not mean zero lag. Do not proceed to `DONE/FORCE` before then. A fresh zero is required by this cutover procedure but does not by itself prove completeness: continue with the changefeed and data checks below.
+
+Use `source_path` and `source_changefeed_name` from each entry in `items`:
+
+| Object | CDC topic path |
+| --- | --- |
+| Table | `source_path/source_changefeed_name` |
+| Index implementation table | `source_path/indexImplTable/source_changefeed_name` |
+
+For an index, inspect the table and its changefeed state at `source_path/indexImplTable`, as described in the [changefeed readiness checks](../async-replication-initial-sync.md#wait-for-changefeeds). Inspect every topic and its replication consumer:
 
 ```bash
 {{ ydb-cli }} -p target scheme describe my_replication --stats --format proto-json-base64
@@ -162,6 +183,8 @@ Where:
 
 - `<changefeed-path>` is the source topic path, for example `/Root/source/original_table/stream-name`; use the generated stream name.
 - `<replication-consumer>` is the consumer name from the topic description.
+
+`Start offset` is the start of the range of messages still available; `End offset` is the end of the written range, excluding the boundary itself; `Committed offset` is the boundary whose processing the consumer has acknowledged.
 
 Record the `End offset` of every partition after the final changes arrive. Wait until its `Committed offset` reaches that boundary. For example, `115` has not reached a boundary of `120`, while `120` confirms processing up to it. Check all changefeeds and partitions.
 
@@ -179,7 +202,7 @@ SELECT COUNT(*) FROM original_table;
 SELECT COUNT(*) FROM replica_table;
 ```
 
-On large tables, `COUNT(*)` can take a long time. Equal counts do not prove equal contents. Proceed only after changes have been applied, replication has no errors, and the planned data checks succeed.
+On large tables, `COUNT(*)` can take a long time. Equal counts do not prove equal contents. Proceed only after fresh reports following the write stop show zero lag for all objects, every partition has reached its recorded boundary, replication has no errors, and the agreed data checks confirm transfer completeness. If completeness cannot be confirmed, do not run `DONE/FORCE`: keep source writes stopped, investigate the cause, and agree on further actions with your installation's support team.
 
 ## 5. Complete Replication and Switch the Application {#cutover}
 
@@ -202,7 +225,7 @@ SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');
 
 Wait until `done` replaces `running`. Using application credentials, perform an agreed test write, read it, and remove the test data on the target. Verify that all required tables are writable.
 
-Switch application endpoints, database paths, TLS/CA settings, and authentication to the target. Check absolute SQL paths, `PRAGMA TablePathPrefix`, migration tools, and background jobs. Prepare missing objects and indexes before running dependent queries, then recreate connections using the application's deployment procedure.
+Switch application endpoints, database paths, TLS/CA settings, and authentication to the target. In this example, the source table is `original_table` and the target is `replica_table`: update the name in relative application SQL queries as well. Also check absolute SQL paths, `PRAGMA TablePathPrefix`, migration tools, and background jobs. Prepare missing objects and indexes before running dependent queries, then recreate connections using the application's deployment procedure.
 
 Enable writes **only on the target** and verify real application scenarios. **Write downtime ends here.** Keep source writes disabled. After new target writes, returning to the source requires reconciling new changes; changing the endpoint back is insufficient.
 

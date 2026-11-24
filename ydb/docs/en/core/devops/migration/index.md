@@ -22,6 +22,19 @@ Before the transfer:
 
 Backup and restore is suitable when writes can stop for the entire transfer. Replication transfers most data while the source remains in use, but requires monitoring changes and a separate completion step before writes can start on the target.
 
+## Standalone Migration Using Backup and Restore {#backup-restore}
+
+Use this procedure without a replication instance or CDC when writes can stop for the entire transfer:
+
+1. Prepare the target, [backup and restore operations](../backup-and-recovery/index.md), application permissions, the full set of objects to transfer, and data checks. Agree on the downtime window.
+1. Stop all source writers, wait for active queries and transactions to finish, and prevent writers from restarting automatically. **Write downtime begins before backup creation.**
+1. Create a new backup of the selected objects after writes have stopped. Wait for successful completion and verify that it belongs to the source.
+1. Restore the backup into unused paths on the prepared target. Wait for successful completion and verify the objects and application permissions. Preserve object names unless you planned to change them. This procedure does not require creating replication, starting it with `STANDBY`, or completing it with `DONE/FORCE`.
+1. Run the agreed data checks and read using application credentials. On errors, do not switch the application or enable target writes.
+1. Update the endpoint, database path, TLS/CA, authentication, and object paths in all clients and background jobs. Recreate connections, verify reads, and perform an agreed test write. After successful checks, enable production writes **only on the target**. **Write downtime ends here.** Keep source writes disabled.
+
+After new target writes, switching back to the source alone is insufficient: returning requires reconciling and transferring the new changes.
+
 ## Choosing Initial Synchronization {#initial-sync}
 
 For replication-based migration, choose one method **before creating replication**:
@@ -39,6 +52,6 @@ Use separate replication instances for tables belonging to different application
 
 ## Stopping Writes {#stopping-traffic}
 
-Before final cutover, stop writes to the source from all applications, background jobs, and loaders. Stop the processes, switch the application to a read-only mode, or change [permissions](../../security/authorization.md). Wait for active transactions to complete and prevent old application instances from automatically resuming writes.
+For a standalone backup migration, stop writes [before creating the backup](#backup-restore). For replication-based migration, before final cutover stop writes to the source from all applications, background jobs, and loaders. Stop the processes, switch the application to a read-only mode, or change [permissions](../../security/authorization.md). Wait for active transactions to complete and prevent old application instances from automatically resuming writes.
 
 For checking changes and data, completing replication, and switching the application, see the [step-by-step procedure](async-replication.md#readiness). After writes start on the target, returning to the source requires accounting for new changes.

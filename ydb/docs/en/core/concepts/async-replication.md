@@ -70,7 +70,7 @@ The user account that is used to connect to the source database must have the fo
 
 Replica objects are created or attached using the account that created the asynchronous replication instance.
 
-When replica objects are created automatically (`INITIAL_SCAN = TRUE`), access rights are not copied from the source to the target. When initial synchronization uses backup and restore, access rights may be restored from the backup, depending on its contents and the import settings. For more information about access rights, see the [reference](../security/short-access-control-notation.md#access-rights).
+When replica objects are created automatically (`INITIAL_SCAN = TRUE`), access rights are not copied from the source to the target. When initial synchronization uses backup and restore, access rights and table ownership may be restored from the backup, depending on its contents and the import settings. For more information about access rights, see the [reference](../security/short-access-control-notation.md#access-rights).
 
 {% endnote %}
 
@@ -123,6 +123,8 @@ You can also get the replication lag from the [description](../reference/ydb-cli
 
 ## Storing Changes in the Source {#availability-period}
 
+Accumulated CDC changefeeds consume storage in the source database. Their volume can grow substantially during initial scanning or replication lag; storage usage depends on processing acknowledgments and the message availability period. {#changefeed-storage}
+
 The [AVAILABILITY_PERIOD](../yql/reference/syntax/create-async-replication.md#params) parameter determines how long changefeeds retain messages whose processing has not yet been acknowledged by replication. It is set when replication is created and cannot be changed using `ALTER ASYNC REPLICATION`.
 
 The default value is `'UNLIMITED'`: unacknowledged messages are retained until their processing is acknowledged. To limit the availability period, specify a positive interval, for example, `Interval('PT48H')`.
@@ -140,6 +142,10 @@ The availability period applies to the age of messages, not the duration of the 
 
 With `'UNLIMITED'`, replication uses an [important consumer](datamodel/topic.md#important-consumer). With a finite period, it uses a consumer with a specified [message availability period](datamodel/topic.md#availability-period-consumer). This allows unacknowledged messages to be retained longer than the [topic message retention period](datamodel/topic.md#retention-time).
 
+## Replication Scope {#replication-scope}
+
+The set of source objects is fixed when the replication instance is created. See the [planning guide](../devops/migration/index.md#replication-scope) for grouping tables from different applications and large tables.
+
 ## Restrictions {#restrictions}
 
 * The set of replicated objects is immutable and is generated when {{ ydb-short-name }} creates an asynchronous replication instance.
@@ -152,6 +158,12 @@ With `'UNLIMITED'`, replication uses an [important consumer](datamodel/topic.md#
 
 * During asynchronous replication, you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
 * During asynchronous replication, replicas are available only for reading.
+
+Row-table replication does not transfer column-oriented tables and their stores, coordination nodes, secrets, views, external data sources and tables, transfers, streaming queries, backup collections, resource pools and their classifiers, or other schema objects, including empty directories. Support for index types and sequences depends on the versions of both databases.
+
+The initial scan does not transfer definitions of user topics or changefeeds. Restoring a backup may restore their definitions, but row-table replication does not transfer their messages or subsequent changes in these streams. This restriction does not refer to the service CDC changefeeds that replication itself creates to transfer tables.
+
+Initial permissions and ownership depend on [how replica objects are created](#init). Schema, permission, and ownership changes made after replication starts are not automatically transferred to the target.
 
 ## Error Handling During Asynchronous Replication {#error-handling}
 

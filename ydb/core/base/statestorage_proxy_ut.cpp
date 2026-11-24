@@ -806,6 +806,66 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupProxyMutation) {
     }
 }
 
+namespace {
+
+void CheckDeleteConfigMismatch(bool newerGeneration) {
+    constexpr ui64 tabletId = 100;
+    constexpr ui64 generation = 7;
+    constexpr ui64 guid = 42;
+    TTestActorRuntimeBase runtime{1};
+    runtime.Initialize();
+    runtime.SetDispatchTimeout(TDuration::Seconds(5));
+    const TActorId edge = runtime.AllocateEdgeActor();
+
+    auto info = MakeIntrusive<TStateStorageInfo>();
+    info->ClusterStateGeneration = generation;
+    info->ClusterStateGuid = guid;
+    info->RingGroups.resize(1);
+    auto& group = info->RingGroups.front();
+    group.State = ERingGroupState::PRIMARY;
+    group.NToSelect = 3;
+    group.Rings.resize(3);
+    for (auto& ring : group.Rings) {
+        ring.Replicas.push_back(runtime.AllocateEdgeActor());
+    }
+
+    const TActorId proxy = runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
+    runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvDelete(tabletId)));
+    auto reply = [&](ui32 index, ui64 replyGeneration, ui64 replyGuid) {
+        const TActorId replica = group.Rings[index].Replicas.front();
+        auto request = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaDelete>(replica);
+        UNIT_ASSERT(request);
+        runtime.SendAsync(new IEventHandle(request->Sender, replica,
+            new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::OK, replyGeneration, replyGuid),
+            0, request->Cookie));
+    };
+
+    reply(0, generation, guid);
+    if (newerGeneration) {
+        reply(1, generation + 1, guid);
+    } else {
+        // A plain quorum-based response would already report OK before this reply is counted.
+        reply(1, generation, guid);
+        reply(2, generation, guid + 1);
+    }
+    auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(1));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->TabletID, tabletId);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TStateStorageProxyDelete) {
+    Y_UNIT_TEST(DeleteFailsOnNewerGeneration) {
+        CheckDeleteConfigMismatch(true);
+    }
+
+    Y_UNIT_TEST(DeleteFailsOnDifferentGuidAfterQuorum) {
+        CheckDeleteConfigMismatch(false);
+    }
+}
+
 // a tablet running when the pile is out has its leader in the ring groups of the other piles only; once the ring group
 // of the pile is back in the configuration, the guardian of the tablet, subscribed to the proxy, writes the leader there
 // too, so the tablet is found through that ring group after a failover to the pile

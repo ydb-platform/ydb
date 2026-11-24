@@ -164,13 +164,13 @@ public:
 
     static bool CheckFailModelForGroup(const TMirror3dcGroupConfiguration& config,
             const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
-        const auto& topology = *failedDisks.GetTopology();
+        const TBlobStorageGroupInfo::TTopology& topology = *failedDisks.GetTopology();
         if (topology.GType.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
                 || topology.GetTotalFailRealmsNum() != config.Realms.size() || !IsValidMirror3dcGroupConfiguration(config)) {
             return false;
         }
-        const auto layouts = *GetMirror3dcGroupLayouts(config.State);
-        const TMirror3dcWriteQuorumChecker checker(config.Realms, layouts.Write, GetMirror3dcReadLayout(config.State), config.State);
+        TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(config.State);
+        TMirror3dcWriteQuorumChecker checker(config.Realms, layouts.Write, GetMirror3dcReadLayout(config.State), config.State);
         return checker.HasStartupQuorum(CountFailedDomainsByRealm(failedDisks));
     }
 

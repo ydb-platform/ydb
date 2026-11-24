@@ -85,9 +85,9 @@ namespace NKikimr::NBsController {
                 {"marker", "BSSH01"},
                 {"groupId", GroupId});
 
-            const auto excluded = GetExcludedVDisks(Group.Mirror3dcConfiguration, *Topology);
+            TBlobStorageGroupInfo::TGroupVDisks excluded = GetExcludedVDisks(Group.Mirror3dcConfiguration, *Topology);
             for (const auto& [vdiskId, vdisk] : Group.VDisks) {
-                const TBlobStorageGroupInfo::TGroupVDisks disk(Topology.get(), vdiskId);
+                TBlobStorageGroupInfo::TGroupVDisks disk(Topology.get(), vdiskId);
                 if (VDiskToReplace && (vdiskId == *VDiskToReplace || (excluded & disk))) {
                     // The replacement starts empty, and Excluded realms cannot supply recovery data or a write quorum.
                     FailedGroupDisks |= disk;
@@ -619,7 +619,7 @@ namespace NKikimr::NBsController {
             //    VDisks with PhantomsOnly status are not considered actively replicating,
             //    exactly one such VDisk is allowed
 
-            const auto excluded = GetExcludedVDisks(content.Mirror3dcConfiguration, *topology);
+            TGroupVDisks excluded = GetExcludedVDisks(content.Mirror3dcConfiguration, *topology);
             TGroupVDisks nonReady(topology);
             TGroupVDisks withUnavailabilityRisk(topology);
             TGroupVDisks replicatingWithPhantomsOnly(topology);

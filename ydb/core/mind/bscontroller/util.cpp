@@ -75,7 +75,7 @@ namespace NKikimr::NBsController {
         TBlobStorageGroupInfo::TGroupVDisks excluded(&topology);
         if (config != TMirror3dcGroupConfiguration{} && topology.GetTotalFailRealmsNum() == config.Realms.size()) {
             for (ui32 order = 0; order < topology.GetTotalVDisksNum(); ++order) {
-                const TVDiskIdShort id = topology.GetVDiskId(order);
+                TVDiskIdShort id = topology.GetVDiskId(order);
                 if (IsExcluded(config.Realms[id.FailRealm])) {
                     excluded |= {&topology, id};
                 }

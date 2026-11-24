@@ -679,9 +679,9 @@ namespace NKikimr {
                     throw TExGroupLayoutIncorrect(groupInfo.ID.GetRawId());
                 }
                 if (!IgnoreGroupFailModelChecks) {
-                    const auto config = groupInfo.GetMirror3dcConfiguration();
-                    const auto& topology = *groupInfo.Topology;
-                    auto failed = reassignment.NonOperationalVDisks;
+                    TMirror3dcGroupConfiguration config = groupInfo.GetMirror3dcConfiguration();
+                    const TBlobStorageGroupInfo::TTopology& topology = *groupInfo.Topology;
+                    TBlobStorageGroupInfo::TGroupVDisks failed = reassignment.NonOperationalVDisks;
                     if (config != TMirror3dcGroupConfiguration{}) {
                         // Replacement slots are empty until replicated, even when the source was operational.
                         for (const auto& [vdiskId, _] : reassignment.ReplacedSlots) {

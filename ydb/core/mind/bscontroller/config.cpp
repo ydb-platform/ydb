@@ -555,12 +555,13 @@ namespace NKikimr::NBsController {
                             }
                         }
                         // check the failure model
-                        const auto config = group->GetMirror3dcConfiguration();
+                        TMirror3dcGroupConfiguration config = group->GetMirror3dcConfiguration();
                         if (!CheckGroupReassignmentFailModel(config, failed)) {
                             disintegrated.push_back(groupId);
                             errors = true;
                         } else {
-                            const auto failedWithSkip = failed - allowedNonReady - GetExcludedVDisks(config, topology);
+                            TBlobStorageGroupInfo::TGroupVDisks failedWithSkip =
+                                failed - allowedNonReady - GetExcludedVDisks(config, topology);
                             if (!parameters.SuppressDegradedGroupsChecking && topology.GetQuorumChecker().IsDegraded(failedWithSkip)) {
                                 degraded.push_back(groupId);
                                 errors = true;

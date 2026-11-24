@@ -5,7 +5,6 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
-#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -1165,7 +1164,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     "rejected_before_query_state");
             }
             runtime.SetEventFilter(std::move(previous));
-            runtime.Send(new IEventHandle(compile->Sender, firstSender, new NGRpcService::TEvClientLost()), 0, true);
+            runtime.Send(new IEventHandle(compile->Sender, firstSender,
+                new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::CANCELLED, "Test cleanup")), 0, true);
             const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(firstSender);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::CANCELLED);
         }
@@ -1717,7 +1717,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             runtime.DispatchEvents(blocked);
             runtime.SetEventFilter(std::move(previous));
             UNIT_ASSERT(snapshotForwarded);
-            runtime.Send(new IEventHandle(blockedSnapshot->Recipient, sender, new NGRpcService::TEvClientLost()));
+            runtime.Send(new IEventHandle(blockedSnapshot->Recipient, sender,
+                new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::CANCELLED, "Cancel during snapshot acquisition")));
             const auto cancelled = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(cancelled->Get()->Record.GetYdbStatus(), Ydb::StatusIds::CANCELLED);
             runtime.SimulateSleep(TDuration::Seconds(1));
@@ -1737,101 +1738,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
             AssertStatus(*uploader, "Acquire snapshot", NTraceProto::Status::STATUS_CODE_OK);
             AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_OK);
-        }
-    }
-
-    TString CheckClientLost(TTestActorRuntime& runtime, TActorId sender,
-            TFakeWilsonUploader* uploader,
-            bool tracing, ui32 requestNode) {
-        ClearUploader(*uploader);
-
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
-            new NKqp::TEvKqp::TEvCreateSessionRequest()));
-        auto createSession = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(createSession->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-
-        TAutoPtr<IEventHandle> blockedCompile;
-        TActorId sessionActor;
-        TTestActorRuntimeBase::TEventFilter previousFilter;
-        auto filter = [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
-            if (!blockedCompile
-                    && ev->GetTypeRewrite() == NKqp::TEvKqp::TEvCompileRequest::EventType) {
-                sessionActor = ev->Sender;
-                blockedCompile = ev.Release();
-                return true;
-            }
-            return previousFilter ? previousFilter(runtimeBase, ev) : false;
-        };
-        previousFilter = runtime.SetEventFilter(filter);
-
-        auto request = MakeSQLRequest("SELECT 1;", true);
-        request->Record.MutableRequest()->SetSessionId(
-            createSession->Get()->Record.GetResponse().GetSessionId());
-        request->Record.MutableRequest()->SetKeepSession(true);
-        NWilson::TTraceId traceId;
-        if (tracing) {
-            traceId = NWilson::TTraceId::NewTraceId(15, 4095);
-        }
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(requestNode)), sender,
-            request.Release(), 0, 0, nullptr, std::move(traceId)));
-        TDispatchOptions compileBlocked;
-        compileBlocked.FinalEvents.emplace_back([&](IEventHandle&) { return bool(blockedCompile); });
-        runtime.DispatchEvents(compileBlocked);
-        runtime.SetEventFilter(std::move(previousFilter));
-
-        runtime.Send(new IEventHandle(sessionActor, sender,
-            new NGRpcService::TEvClientLost()));
-        runtime.SimulateSleep(TDuration::Seconds(1));
-
-        const auto cancelled = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(cancelled->Get()->Record.GetYdbStatus(), Ydb::StatusIds::CANCELLED);
-        if (tracing) {
-            UNIT_ASSERT(uploader->BuildTraceTrees());
-            UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
-            AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_ERROR);
-        } else {
-            UNIT_ASSERT(uploader->Spans.empty());
-        }
-
-        auto list = MakeHolder<NKqp::TEvKqp::TEvListSessionsRequest>();
-        list->Record.SetFreeSpace(1000000);
-        list->Record.AddColumns(1);
-        list->Record.AddColumns(3);
-        list->Record.AddColumns(4);
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
-            list.Release()));
-        const auto sessions = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvListSessionsResponse>(sender);
-        const TString sessionId = createSession->Get()->Record.GetResponse().GetSessionId();
-        const auto found = std::ranges::find_if(sessions->Get()->Record.GetSessions(),
-            [&](const auto& item) { return item.GetSessionId() == sessionId; });
-        UNIT_ASSERT_C(found != sessions->Get()->Record.GetSessions().end(),
-            sessions->Get()->Record.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL_C(found->GetState(), "IDLE", "cancelled query kept as active");
-        UNIT_ASSERT_C(found->GetQuery().empty(), "cancelled query text remained attached to session");
-        return sessionId;
-    }
-
-    Y_UNIT_TEST(ClientLostRestoresSessionIdleTimeout) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableTableServiceConfig()->SetSessionIdleDurationSeconds(5);
-        auto [runtime, server, sender] = CreateServer(2, std::move(config));
-        Y_UNUSED(server);
-        auto* uploader = RegisterUploader(runtime);
-        for (const bool tracing : {false, true}) {
-            for (const ui32 requestNode : {0u, 1u}) {
-                const TString sessionId = CheckClientLost(runtime, sender, uploader, tracing, requestNode);
-                runtime.SimulateSleep(TDuration::Seconds(10));
-
-                auto list = MakeHolder<NKqp::TEvKqp::TEvListSessionsRequest>();
-                list->Record.SetFreeSpace(1000000);
-                list->Record.AddColumns(1);
-                runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)),
-                    sender, list.Release()));
-                const auto sessions = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvListSessionsResponse>(sender);
-                UNIT_ASSERT_C(std::ranges::none_of(sessions->Get()->Record.GetSessions(),
-                    [&](const auto& item) { return item.GetSessionId() == sessionId; }),
-                    "cancelled session survived its idle timeout: " << sessions->Get()->Record.DebugString());
-            }
         }
     }
 

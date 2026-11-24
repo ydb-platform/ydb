@@ -3846,13 +3846,8 @@ public:
             {"isFinal", isFinal},
             {"traceId", TraceId()});
 
-        if (QueryState && !QueryResponse) {
-            QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
-            QueryResponse->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
-        }
-        if (QueryResponse) {
+        if (QueryResponse)
             Reply();
-        }
 
         if (CleanupCtx)
             Counters->ReportSessionActorCleanupLatency(Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);

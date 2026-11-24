@@ -1487,13 +1487,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             statServiceId,
             event.Release(),
             [result](TPromise<TResult> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response){
-                result.Metadata->StatsLoaded = false;
-                if (response.Success && !response.StatResponses.empty()) {
-                    const auto& resp = response.StatResponses.front();
-                    result.Metadata->RecordsCount = resp.Simple.RowCount;
-                    result.Metadata->DataSize = resp.Simple.BytesSize;
-                    result.Metadata->StatsLoaded = resp.Success;
+                if (!response.StatResponses.size()){
+                    return;
                 }
+                auto resp = response.StatResponses[0];
+                auto s = resp.Simple;
+                result.Metadata->RecordsCount = s.RowCount;
+                result.Metadata->DataSize = s.BytesSize;
+                result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
         }, loader->TraceId, EMetadataTraceOperation::LoadStatistics, table, purpose,
         [](const TResult& result) {

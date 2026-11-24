@@ -150,6 +150,7 @@ enum class EGracePeriodScenario {
     ContinuousFailure,
     Recovery,
     DisconnectDuringRetry,
+    DisconnectFromFirstAttempt,
 };
 
 void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
@@ -182,8 +183,9 @@ void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
             const ui32 attempt = ++failures[ev->Recipient];
             // The child's 250 ms retry wakeup is dropped unless scheduling is enabled.
             runtime.EnableScheduleForActor(ev->Sender);
-            const bool disconnected = scenario == EGracePeriodScenario::DisconnectDuringRetry
-                && ev->Recipient == unavailableReplicas.back() && attempt > 1;
+            const bool disconnected = scenario == EGracePeriodScenario::DisconnectFromFirstAttempt
+                || (scenario == EGracePeriodScenario::DisconnectDuringRetry
+                    && ev->Recipient == unavailableReplicas.back() && attempt > 1);
             if (disconnected) {
                 // Interconnect reports the disconnect before the undelivered request.
                 const ui32 nodeId = ev->Recipient.NodeId();
@@ -215,7 +217,7 @@ void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
 
     auto checkRetries = [&] {
         for (const TActorId& replica : unavailableReplicas) {
-            UNIT_ASSERT_GT(failures.at(replica), 1u);
+            UNIT_ASSERT_GT_C(failures[replica], 1u, "Missing retries for replica " << replica);
         }
     };
     if (scenario == EGracePeriodScenario::Recovery) {
@@ -393,6 +395,10 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
 
     Y_UNIT_TEST(DisconnectDuringRetryKeepsMissingReplicaGracePeriod) {
         CheckGuardianGracePeriod(EGracePeriodScenario::DisconnectDuringRetry);
+    }
+
+    Y_UNIT_TEST(DisconnectOnFirstAttemptStartsMissingReplicaGracePeriod) {
+        CheckGuardianGracePeriod(EGracePeriodScenario::DisconnectFromFirstAttempt);
     }
 }
 

@@ -6,6 +6,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/array_ref.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
@@ -21,6 +22,8 @@ namespace NKikimrReplication {
 }
 
 namespace NKikimr::NReplication::NController {
+
+class TTargetCdc;
 
 class TReplication: public TSimpleRefCount<TReplication> {
 public:
@@ -164,6 +167,8 @@ public:
     const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
     TVector<ITarget*> GetTargets() const;
+    void RegisterCdcChild(ui64 parentId, TTargetCdc& child);
+    TConstArrayRef<TTargetCdc*> GetCdcChildren(ui64 parentId) const;
     bool AreCdcChildrenPrepared(ui64 parentId) const;
     TVector<TString> GetTargetTablePaths() const;
 

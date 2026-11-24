@@ -87,6 +87,13 @@ Examples of supported LDAP implementations include [OpenLDAP](https://openldap.o
 * **Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
 * **OAuth 2.0 token exchange** - The client (SDK or CLI) exchanges a token of another type for an access token using the [OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693), then it uses the access token in {{ ydb-short-name }} API requests.
 
+{% note info %}
+
+When using **Service Account Key** authentication, the client (SDK or CLI) builds a [JWT](https://www.rfc-editor.org/rfc/rfc7519) using the host system clock. If the system clock is ahead or behind, IAM may reject the token request. For diagnostics and recommendations, see [{#T}](../troubleshooting/client-clock-skew.md).
+
+{% endnote %}
+
+
 Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
 
 Authentication modes with token rotation, such as **Refresh Token** and **Service Account Key**, provide a higher level of security compared to the **Access Token** mode that uses a fixed token, since only secrets with a short validity period are transmitted to the {{ ydb-short-name }} server over the network.

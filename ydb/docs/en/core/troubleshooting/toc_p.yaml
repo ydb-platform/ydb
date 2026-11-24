@@ -4,3 +4,5 @@ items:
   include:
     mode: link
     path: performance/toc_p.yaml
+- name: Clock skew between client hosts and the cluster
+  href: client-clock-skew.md

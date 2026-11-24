@@ -9,7 +9,7 @@ struct TTestStreamingQueryController : IKqpStreamingQueryController {
         return false;
     }
 
-    void StartPrepare(TVector<std::shared_ptr<const TKqpPhyTxHolder>>, THashMap<TString, TString>) override {}
+    void StartPrepare(TVector<TPqTopicResolverSource>, THashMap<TString, TString>) override {}
 
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
         const TVector<NKikimrKqp::TKqpNodeResources>&, ui32) override {
@@ -24,12 +24,6 @@ struct TTestStreamingQueryController : IKqpStreamingQueryController {
         ReadyTasks = std::move(tasks);
         ++ReadyCalls;
     }
-
-    bool NeedsCountersUpdate(TInstant) override {
-        return false;
-    }
-
-    void UpdateCounters(const TAggExecStat&, TInstant) override {}
 
     bool IsOwnEvent(const NActors::IEventHandle&) const override {
         return false;

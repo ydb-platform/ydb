@@ -52,9 +52,6 @@ namespace NYdb::inline Dev::NTopic::NTests {
             description.SerializeTo(request);
 
             UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), 0);
-
-            description.SerializeToWithLegacyReadQuota(request);
-            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), WithExplicitReadQuotaMarker ? 0 : 300);
         }
 
         Y_UNIT_TEST(SerializeToCreateTopicRequestWithUnambiguousLegacyReadQuota) {

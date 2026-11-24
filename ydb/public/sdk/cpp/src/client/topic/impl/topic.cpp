@@ -235,14 +235,6 @@ const std::vector<TConsumer>& TTopicDescription::GetConsumers() const {
 }
 
 void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
-    SerializeCreateRequest(request, /*copyLegacyReadQuota=*/false);
-}
-
-void TTopicDescription::SerializeToWithLegacyReadQuota(Ydb::Topic::CreateTopicRequest& request) const {
-    SerializeCreateRequest(request, /*copyLegacyReadQuota=*/true);
-}
-
-void TTopicDescription::SerializeCreateRequest(Ydb::Topic::CreateTopicRequest& request, bool copyLegacyReadQuota) const {
     *request.mutable_partitioning_settings() = Proto_.partitioning_settings();
     *request.mutable_retention_period() = Proto_.retention_period();
     request.set_retention_storage_mb(Proto_.retention_storage_mb());
@@ -256,9 +248,7 @@ void TTopicDescription::SerializeCreateRequest(Ydb::Topic::CreateTopicRequest& r
     // A legacy derived total rate is a multiple of the reported per-consumer rate.
     const bool copyTotalReadSpeed = Proto_.has_partition_total_read_speed_bytes_per_second_is_explicit()
         ? Proto_.partition_total_read_speed_bytes_per_second_is_explicit()
-        : copyLegacyReadQuota
-            || consumerReadSpeed <= 0
-            || totalReadSpeed % consumerReadSpeed != 0;
+        : consumerReadSpeed <= 0 || totalReadSpeed % consumerReadSpeed != 0;
     request.set_partition_total_read_speed_bytes_per_second(copyTotalReadSpeed ? totalReadSpeed : 0);
     request.set_partition_total_read_speed_messages_per_second(Proto_.partition_total_read_speed_messages_per_second());
     request.set_partition_read_without_consumer_speed_bytes_per_second(Proto_.partition_read_without_consumer_speed_bytes_per_second());

@@ -3,6 +3,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/string_utils/url/url.h>
@@ -81,7 +82,13 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
         const TString& consumer)
 {
     Ydb::Topic::CreateTopicRequest request;
-    description.SerializeToWithLegacyReadQuota(request);
+    description.SerializeTo(request);
+
+    // Preserve mirroring behavior for source servers that do not report whether the quota is explicit.
+    const auto& source = NYdb::TProtoAccessor::GetProto(description);
+    if (!source.has_partition_total_read_speed_bytes_per_second_is_explicit()) {
+        request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
+    }
 
     request.mutable_attributes()->erase("_ydb_replication_consumer");
     // Source write restrictions must not block writes by the destination mirrorer.

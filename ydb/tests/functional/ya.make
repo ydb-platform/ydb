@@ -32,9 +32,9 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/path_aliasing
+    sdk/cpp/rediscovery
     sdk/cpp/relative_database
     sdk/cpp/sdk_credprovider
-    sdk/rediscovery
     secrets
     security
     serializable

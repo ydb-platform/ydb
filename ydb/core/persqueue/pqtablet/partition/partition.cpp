@@ -2341,8 +2341,15 @@ void TPartition::OnReadComplete(TReadInfo& info,
     // The blob read may have started before the trim. Finish at the new cursor
     // without returning a cached head or body gathered for the old range.
     if (info.Offset < CdcReplicationTrimOffset) {
+        if (info.PartNo > 0) {
+            if (userInfo && info.Destination != 0) {
+                userInfo->ReadDone(ctx, ctx.Now(), 0, 0, info.ClientDC, TabletActorId,
+                                   info.IsExternalRead, GetEndOffset());
+            }
+            FinishLostMultipartRead(info, ctx);
+            return;
+        }
         info.Offset = CdcReplicationTrimOffset;
-        info.PartNo = 0;
         info.Cached.clear();
         info.CachedOffset = 0;
         info.Blobs.clear();

@@ -880,6 +880,8 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                                                   lastOffset);
 }
 
+static constexpr char LostMessagePartError[] = "client requested not from first part, and this part is lost";
+
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
@@ -891,7 +893,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                    read->ReplyTo);
         return;
     }
-    const ui64 firstReadableOffset = read->IsInternal() ? CdcReplicationTrimOffset : GetStartOffset();
+    const ui64 firstReadableOffset = read->IsInternal() ? CdcReplicationTrimOffset : Max(CdcReplicationTrimOffset, GetStartOffset());
     if (read->Offset < firstReadableOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
         read->Offset = firstReadableOffset;
@@ -909,7 +911,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(
             ctx, read->Cookie,
             NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
-            "client requested not from first part, and this part is lost",
+            LostMessagePartError,
             read->ReplyTo);
         return;
       }
@@ -1233,6 +1235,18 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
     PQ_ENSURE(ReadingTimestamp || UpdateUserInfoTimestamp.empty());
 }
 
+void TPartition::FinishLostMultipartRead(const TReadInfo& info, const TActorContext& ctx) {
+    if (info.IsSubscription) {
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_ERROR].Increment(1);
+    }
+    TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
+    const auto latency = info.WaitQuotaTime + (ctx.Now() - info.Timestamp);
+    TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(latency.MilliSeconds());
+    ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
+               LostMessagePartError, info.ReplyTo);
+    OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);
+}
+
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
@@ -1246,8 +1260,11 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     // A read can wait for quota or new data while a trim commits.
     if (info.Offset < CdcReplicationTrimOffset) {
+        if (info.PartNo > 0) {
+            FinishLostMultipartRead(info, ctx);
+            return;
+        }
         info.Offset = CdcReplicationTrimOffset;
-        info.PartNo = 0;
     }
 
     TVector<TRequestedBlob> blobs;

@@ -100,7 +100,7 @@ TVector<TNativeYqlCase> NativeYqlCases() {
 
 Y_UNIT_TEST_SUITE(DigestNativeParity) {
   Y_UNIT_TEST(AllScalarTypesAndNulls) {
-    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+    TKikimrRunner kikimr(ChecksumTableSettings());
     auto session =
         kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto cases = NativeYqlCases();
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(DigestNativeParity) {
       UNIT_ASSERT_VALUES_EQUAL(NBinaryJson::SerializeToJson(document), text);
     }
 
-    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+    TKikimrRunner kikimr(ChecksumTableSettings());
     auto session =
         kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto schema = session
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(DigestNativeParity) {
         HexDecode("81010000220000000402000000000000010000000000f03f"),
     };
     const TStringBuf texts[] = {"1", "1.0000000000000002"};
-    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+    TKikimrRunner kikimr(ChecksumTableSettings());
     auto session =
         kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto schema = session
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(DigestNativeParity) {
   }
 
   Y_UNIT_TEST(JsonDocumentInfinityRemainsDistinctFromStrings) {
-    TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+    TKikimrRunner kikimr(ChecksumTableSettings());
     auto session =
         kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto schema = session.ExecuteSchemeQuery(R"(

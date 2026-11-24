@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
@@ -20,7 +21,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    ut_auditsettings.cpp
+    ut_audit.cpp
 )
 
 END()

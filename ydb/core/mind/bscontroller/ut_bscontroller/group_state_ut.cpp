@@ -274,6 +274,26 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         fixture.AssertNoRequests();
     }
 
+    Y_UNIT_TEST(FailedRepairsDoNotStarveWaitingGroup) {
+        TGroupStateFixture fixture;
+        const TFailRealmStates realms{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED};
+        TVector<NGroupSyncer::TEvRunMirror3dcRepair::TPtr> repairs;
+        for (ui32 groupId = 42; groupId < 58; ++groupId) {
+            fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, realms, groupId);
+            fixture.ReplyRound(3);
+            repairs.push_back(fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden));
+            UNIT_ASSERT_VALUES_EQUAL(repairs.back()->Get()->Record.GetGroupId(), groupId);
+        }
+        fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, realms, 58);
+        fixture.ReplyRound(3);
+        fixture.AssertNoRepair();
+        for (const auto& repair : repairs) {
+            fixture.ReplyRepair(repair, NKikimrProto::ERROR);
+        }
+        auto next = fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden);
+        UNIT_ASSERT_VALUES_EQUAL(next->Get()->Record.GetGroupId(), 58);
+    }
+
     Y_UNIT_TEST(GroupUpdateCancelsRepairAndIgnoresOldSuccess) {
         TGroupStateFixture fixture;
         TFailRealmStates realms{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};

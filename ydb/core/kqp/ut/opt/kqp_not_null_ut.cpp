@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(UpsertNotNullPkPg) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(ReplaceNotNullPkPg) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(UpdateNotNullPkPg) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(InsertNotNullPg) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(settings.SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
 
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(settings.SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -717,7 +717,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
 
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(settings.SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1003,7 +1003,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
 
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(settings.SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1103,7 +1103,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(settings.SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1170,7 +1170,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(AlterAddNotNullColumnPg) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1518,7 +1518,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(settings.SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1795,7 +1795,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(Describe) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1843,7 +1843,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(CreateTableWithNotNullColumns) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
@@ -1885,7 +1885,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(AlterAddIndex) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         auto server = &kikimr.GetTestServer();

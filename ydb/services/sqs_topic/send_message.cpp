@@ -191,6 +191,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 this->ReplyWithError(*describerStatus.Error);
                 return;
             }
+            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                this->ReplyWithError(MapWriteModeError(ev->Get()->Status, ev->Get()->ErrorDescription));
+                return;
+            }
 
             ssize_t successCount = 0;
             ssize_t failedCount = 0;

@@ -1067,6 +1067,44 @@ TEST_F(DirectReadWithControlSession, Init) {
     SuccessfulInitImpl(false);
 }
 
+TEST_F(DirectReadWithControlSession, LateStartConfirmationDoesNotUpdateStoppedPartitionOffset) {
+    TDirectReadSessionImplTestSetup setup;
+    setup.ReadSessionSettings.DirectRead(false);
+    EXPECT_CALL(*setup.MockReadProcessor, OnReadRequest(_));
+    EXPECT_CALL(*setup.MockReadProcessor, OnStopPartitionSessionResponse(_));
+    EXPECT_CALL(*setup.MockReadProcessor, OnStartPartitionSessionResponse(_)).Times(0);
+    setup.SuccessfulInit();
+
+    constexpr ui64 partitionSessionId = 2;
+    setup.AddControlResponse(TMockReadSessionProcessor::TServerReadInfo().StartPartitionSessionRequest({
+        .PartitionId = 1,
+        .PartitionSessionId = partitionSessionId,
+        .NodeId = 3,
+        .Generation = 4,
+    }));
+
+    auto startEvent = setup.EventsQueue->GetEvent(true);
+    ASSERT_TRUE(startEvent);
+    ASSERT_EVENT_TYPE(*startEvent, TReadSessionEvent::TStartPartitionSessionEvent);
+    auto& start = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*startEvent);
+    const auto& stream = static_cast<const TPartitionStreamImpl<false>&>(*start.GetPartitionSession());
+    const auto offsetBeforeStop = stream.GetFirstNotReadOffset();
+
+    setup.AddControlResponse(TMockReadSessionProcessor::TServerReadInfo().StopPartitionSession({
+        .PartitionSessionId = partitionSessionId,
+        .Graceful = false,
+        .CommittedOffset = 0,
+        .LastDirectReadId = 0,
+    }));
+
+    auto closedEvent = setup.EventsQueue->GetEvent(true);
+    ASSERT_TRUE(closedEvent);
+    ASSERT_EVENT_TYPE(*closedEvent, TReadSessionEvent::TPartitionSessionClosedEvent);
+
+    start.Confirm(/*readOffset=*/ 1, /*commitOffset=*/ 1);
+    EXPECT_EQ(stream.GetFirstNotReadOffset(), offsetBeforeStop);
+}
+
 TEST_F(DirectReadWithControlSession, StopPartitionSessionGracefully) {
 #ifdef __GNUC__
     GTEST_SKIP() << "Skip for gcc";

@@ -22,6 +22,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/test_tablet/test_tablet.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
@@ -635,6 +636,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , SchemeShardLogPriority(opts.SchemeShardLogPriority_)
 {
     EnableYDBBacktraceFormat();
+    // S3 mocks answer inside the actor system: their replies would otherwise come from real HTTP threads, which the
+    // runtime can't see, and fast simulated time would run the timers of the tablets ahead of them
+    NWrappers::NTestHelpers::TS3Mock::ServeInActorSystem();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;

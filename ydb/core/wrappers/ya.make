@@ -24,6 +24,7 @@ ELSE()
         ydb/library/actors/core
         ydb/core/base
         ydb/core/protos
+        ydb/core/util
         ydb/core/wrappers/events
     )
 ENDIF()

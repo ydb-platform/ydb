@@ -2872,6 +2872,27 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), denied.GetStatus().GetReason());
     }
 
+    Y_UNIT_TEST(StateStorageSameRequestRingDiagnostics)
+    {
+        TTestEnvOpts opts(5, 0);
+        opts.NRings = 5;
+        opts.RingSize = 1;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithEnableCmsSmartAvailabilityMode());
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
+
+        const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        const TString expected = TStringBuilder() << "Too many unavailable state storage rings. Restarting rings: 1"
+            << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 0"
+            << ". Maximum allowed number of unavailable rings for this mode: 1"
+            << ". Ring group: 0. Requested ring: 1 (nodes: [" << env.GetNodeId(1)
+            << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0)
+            << "], state: Restart by this request)]";
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expected);
+    }
+
     Y_UNIT_TEST(StateStorageDisabledRingsDiagnostics)
     {
         TTestEnvOpts opts(10, 0);

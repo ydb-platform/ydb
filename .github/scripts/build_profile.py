@@ -1,4 +1,7 @@
-"""Translate a named build profile to an argument vector for ya make."""
+"""Translate a named build profile to an argument vector for ya make.
+
+The CLI writes one argument per line to ``args`` and the sanitizer to ``sanitize``.
+"""
 
 import argparse
 from pathlib import Path

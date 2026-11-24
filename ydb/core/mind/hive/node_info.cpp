@@ -469,6 +469,7 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
 }
 
 void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
+    const bool becameUp = Down && !down;
     if (Down != down) {
         Hive.RecordNodeEvent(*this, down ? EHiveEventType::Down : EHiveEventType::Up, reason, std::move(details));
     }
@@ -479,8 +480,14 @@ void TNodeInfo::SetDown(bool down, EHiveEventReason reason, TString details) {
     } else {
         Hive.ObjectDistributions.AddNode(*this);
         Hive.ProcessWaitQueue();
-        // a pile drain may have been waiting for a node to move the tablets to
-        Hive.ProcessPileDrains();
+        if (becameUp && Hive.BridgeInfo) {
+            // a pile drain may have been waiting for a node in an allowed pile to move the tablets to; the nodes
+            // of a draining pile are left out, as a pile drain brings its own nodes back up when it ends
+            const auto* pile = Hive.FindPile(BridgePileId);
+            if (!(pile && pile->Drain) && TNodeFilter(Hive).IsAllowedPile(BridgePileId)) {
+                Hive.ProcessPileDrains();
+            }
+        }
     }
 }
 

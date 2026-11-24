@@ -13272,7 +13272,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, test.HiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
     }
 
-    Y_UNIT_TEST(TestBridgePileDrainResumesOnPileUpdateAfterNodeBecomesUp) {
+    Y_UNIT_TEST(TestBridgePileDrainResumesWhenNodeBecomesUp) {
         TBridgeDrainTest test;
         const ui64 tabletId = test.CreateTablet();
         TBlockEvents<TEvLocal::TEvStatus> blockNodeStatus(test.Runtime);
@@ -13283,14 +13283,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(test.IsRunningInPile(tabletId, 0));
         UNIT_ASSERT(test.DrainPending());
 
+        // node statuses stay blocked: bringing the target Up is enough for the drain to resume
         test.SetDown(1, false);
-        test.Runtime.SimulateSleep(TDuration::Seconds(10));
-        UNIT_ASSERT_C(test.IsRunningInPile(tabletId, 0), "pile drain resumed without a new node status or pile update");
-        UNIT_ASSERT(test.DrainPending());
-
-        test.Bridge.SetPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] { return test.IsRunningInPile(tabletId, 1) && !test.DrainPending(); }),
-            "pile drain did not resume on a pile update after its target became Up");
+            "pile drain did not resume after its target became Up");
     }
 
     Y_UNIT_TEST(TestBridgePileDrainResumesOnPileUpdateAfterResourcesBecomeAvailable) {

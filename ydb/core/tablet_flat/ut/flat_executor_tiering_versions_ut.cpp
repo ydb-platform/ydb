@@ -1,5 +1,8 @@
 #include "flat_executor_tiering_ut_common.h"
 
+#include <ydb/core/tablet_flat/flat_boot_cookie.h>
+#include <ydb/core/tablet_flat/flat_sausage_slicer.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <algorithm>
@@ -447,6 +450,100 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
             return true;
         }, true);
         CheckRows(env, rows, TRowVersion::Max(), true);
+    }
+
+    Y_UNIT_TEST(StatusOnlyFlushPreservesDataAtTheStatusEpoch) {
+        TEnv env;
+        env.FireDummyFollower(1);
+        constexpr ui64 txId = 123;
+        env.Exec([](TTransactionContext& txc) {
+            const auto key = NScheme::TUint64::TInstance(1);
+            const auto value = NScheme::TString::TInstance("delta");
+            const NTable::TUpdateOp op{ValueTag, NTable::ECellOp::Set, value};
+            txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, {key}, {op}, txId);
+            return true;
+        });
+        env.Flush();
+        auto parts = env.Parts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 1);
+        const auto delta = parts.front()->Label;
+
+        // The commit status and an unrelated row share a flush and an epoch.
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.CommitTx(TableId, txId, TRowVersion(10, 1));
+            return true;
+        });
+        const auto peer = env.FlushPart({{2, 0, "peer"}});
+        env.FlushPart({{3, 0, "later"}});
+
+        // Resolve only the original delta on disk. Its commit status is now
+        // garbage, while the row written at the status epoch remains live.
+        auto levels = env.Levels();
+        levels.at(delta) = 2;
+        env.SeedLevels(levels);
+        const auto resolved = CompactGeneration(env, 2, NTable::TCompactionParams::EMode::Regular);
+        UNIT_ASSERT_VALUES_EQUAL(resolved.Context->Inputs.size(), 1);
+        UNIT_ASSERT(Includes(resolved, delta));
+        const auto before = env.Levels();
+        TLogoBlobID status;
+        NTable::TEpoch head = NTable::TEpoch::Zero();
+        env.Exec([&](TTransactionContext& txc) {
+            const auto subset = txc.DB.Subset(TableId, NTable::TEpoch::Max(), {}, {});
+            UNIT_ASSERT(subset->Frozen.empty());
+            UNIT_ASSERT(subset->GarbageTransactions.Contains(txId));
+            UNIT_ASSERT_VALUES_EQUAL(subset->TxStatus.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(subset->TxStatus.front()->Epoch, peer->Epoch);
+            status = subset->TxStatus.front()->Label;
+            head = subset->Head;
+            UNIT_ASSERT(head > peer->Epoch + 1);
+            return true;
+        });
+
+        std::optional<TTxStamp> published;
+        auto commit = env.Env.AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+            const auto* msg = ev->Get();
+            if (msg->TabletID != env.Tablet || !msg->WaitFollowerGcAck) {
+                return;
+            }
+            for (const auto& ref : msg->References) {
+                if (NBoot::TCookie(ref.Id.Cookie()).Index() != NBoot::TCookie::EIdx::TurnLz4) {
+                    continue;
+                }
+                NKikimrExecutorFlat::TTablePartSwitch change;
+                UNIT_ASSERT(change.ParseFromString(NPageCollection::TSlicer::Lz4()->Decode(ref.Buffer)));
+                if (change.GetTableId() != TableId || change.LeavingTxStatusSize() == 0) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(change.LeavingTxStatusSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(change.GetLeavingTxStatus(0)), status);
+                UNIT_ASSERT_VALUES_EQUAL(change.GetTableSnapshoted().GetHead(), head.ToProto());
+                UNIT_ASSERT_VALUES_EQUAL(change.LeavingBundlesSize(), 0);
+                UNIT_ASSERT(!change.HasIntroducedParts());
+                published.emplace(msg->Generation, msg->Step);
+            }
+        });
+        bool acknowledged = false;
+        auto ack = env.Env.AddObserver<TEvTablet::TEvFGcAck>([&](auto& ev) {
+            const auto* msg = ev->Get();
+            if (published && msg->TabletID == env.Tablet &&
+                    msg->Generation == published->Gen() && msg->Step == published->Step()) {
+                acknowledged = true;
+            }
+        });
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env->WaitFor("follower acknowledgement of status-only flush",
+            [&] { return acknowledged; }, TDuration::Seconds(10));
+        env.CheckLevels(before);
+        for (bool follower : {false, true}) {
+            env.Exec([&](TTransactionContext& txc) {
+                const auto subset = txc.DB.Subset(TableId, NTable::TEpoch::Max(), {}, {});
+                UNIT_ASSERT(subset->TxStatus.empty());
+                UNIT_ASSERT(std::any_of(subset->Flatten.begin(), subset->Flatten.end(),
+                    [&](const auto& part) { return part->Label == peer->Label; }));
+                return true;
+            }, follower);
+        }
+        env.Read(1, "delta");
     }
 
     Y_UNIT_TEST(EqualEpochPeersAtTheUpperBoundAreCompactedTogether) {

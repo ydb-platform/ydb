@@ -447,16 +447,21 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
     Y_UNIT_TEST(TxStatusDoesNotIntroduceADefaultDataTier) {
         TFixture f;
         auto cold = f.Part(10);
+        auto peer = f.Part(20);
         TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
         subset.Flatten = {cold};
         subset.TxStatus.emplace_back(new TTxStatusPart(TLogoBlobID(3, 1, 1, 1, 0, 0),
             TEpoch::FromIndex(20), nullptr));
-        auto context = TCompactionContext::Build({{cold, 4, 42}}, subset);
+        auto context = TCompactionContext::Build({{cold, 4, 42}, {peer, 3, 42}}, subset);
 
         UNIT_ASSERT(!context->RequiresTierAware());
         UNIT_ASSERT_VALUES_EQUAL(context->InputTiers.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(context->InputTiers.front(), 42);
         UNIT_ASSERT_VALUES_EQUAL(context->Epochs->Max, TEpoch::FromIndex(20));
+        UNIT_ASSERT(Contains(context->Inputs, peer->Label));
+        TCompactionParams params;
+        context->CopyInputs(params);
+        subset.Flatten = params.Parts;
         context->ValidateSubset(subset);
     }
 

@@ -95,11 +95,12 @@ namespace {
         return result;
     }
 
-    TCompactionContext::TCompactionContext(std::optional<TCompactionEpochRange> epochs,
+    TCompactionContext::TCompactionContext(TEpoch outputEpoch, std::optional<TCompactionEpochRange> epochs,
             TVector<TCompactionPartInfo> inputs, TVector<TCompactionPartInfo> remaining,
             TVector<ui32> inputTiers, TVector<TEpoch> extraEpochs,
             TVector<ui32> extraInputTiers, const TSubset* initialSubset)
-        : Epochs(std::move(epochs))
+        : OutputEpoch(outputEpoch)
+        , Epochs(std::move(epochs))
         , Inputs(std::move(inputs))
         , Remaining(std::move(remaining))
         , InputTiers(std::move(inputTiers))
@@ -165,6 +166,12 @@ namespace {
         }
         std::sort(extra.begin(), extra.end());
 
+        const TEpoch outputEpoch = epochs ? epochs->Max : TEpoch::Min();
+        if (initialSubset && !*initialSubset) {
+            // A flush of tx statuses alone preserves their epoch and rewrites no rows.
+            epochs.reset();
+        }
+
         TVector<TCompactionPartInfo> inputs;
         TVector<TCompactionPartInfo> remaining;
         TVector<ui32> inputTiers;
@@ -188,7 +195,7 @@ namespace {
                 remaining.push_back(std::move(part));
             }
         }
-        return new TCompactionContext(std::move(epochs), std::move(inputs),
+        return new TCompactionContext(outputEpoch, std::move(epochs), std::move(inputs),
             std::move(remaining), std::move(inputTiers), std::move(extra), std::move(extraTiers),
             initialSubset);
     }
@@ -286,8 +293,7 @@ namespace {
                 Y_ENSURE(status.erase(part.Get()), "Compaction transaction-status source has changed");
             }
         }
-        Y_ENSURE(subset.Epoch() == (Epochs ? Epochs->Max : TEpoch::Min()),
-            "Compaction output epoch differs from the closed interval");
+        Y_ENSURE(subset.Epoch() == OutputEpoch, "Compaction output epoch differs from its prepared inputs");
     }
 
     bool TCompactionContext::IsCurrent(TConstArrayRef<TCompactionPartInfo> parts) const {

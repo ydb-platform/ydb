@@ -269,8 +269,7 @@ namespace {
             UNIT_ASSERT(it != Started.end());
             auto params = std::move(it->second);
             Started.erase(it);
-            const TEpoch epoch = params->Context->Epochs
-                ? params->Context->Epochs->Max : TEpoch::Min();
+            const TEpoch epoch = params->Context->OutputEpoch;
             auto result = MakeHolder<TCompactionResult>(epoch, outputTiers.size());
             ui32 key = 100;
             for (ui32 tier : outputTiers) {
@@ -523,6 +522,34 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT(Contains(subset.Flatten, archive->Label));
         UNIT_ASSERT_VALUES_EQUAL(params->Context->Epochs->Max, TEpoch::FromIndex(45));
         UNIT_ASSERT(params->Context->RequiresTierAware());
+        params->Context->ValidateSubset(subset);
+    }
+
+    Y_UNIT_TEST(StatusOnlyFlushKeepsDiskPartsWithTheSameEpochOutOfItsInputs) {
+        TFixture f;
+        f.AddPart(20, 3);
+        f.AddColdPart(20, 1);
+        // No default generation can accept a row part between these two epochs.
+        f.AddPart(10, 2);
+        f.AddPart(30, 255);
+        const auto epoch = TEpoch::FromIndex(20);
+        const TIntrusiveConstPtr<TTxStatusPart> status =
+            new TTxStatusPart(TLogoBlobID(123, 1, 99, 1, 0, 0), epoch, nullptr);
+        TSubset subset(TEpoch::FromIndex(50), f.Layout.RowScheme());
+        subset.TxStatus.push_back(status);
+        auto params = f.Params();
+        params->Edge.Head = subset.Head;
+        f.Prepare(*params, subset);
+
+        UNIT_ASSERT(!params->Context->Epochs);
+        UNIT_ASSERT(params->Context->Inputs.empty());
+        UNIT_ASSERT_VALUES_EQUAL(params->Context->Remaining.size(), f.Parts.size() + f.ColdParts.size());
+        UNIT_ASSERT_VALUES_EQUAL(params->Context->OutputEpoch, epoch);
+        UNIT_ASSERT(params->Parts.empty() && params->ColdParts.empty());
+        UNIT_ASSERT(subset.Flatten.empty() && subset.ColdParts.empty());
+        UNIT_ASSERT_VALUES_EQUAL(subset.TxStatus.size(), 1u);
+        UNIT_ASSERT(subset.TxStatus.front() == status);
+        UNIT_ASSERT_VALUES_EQUAL(subset.Epoch(), epoch);
         params->Context->ValidateSubset(subset);
     }
 

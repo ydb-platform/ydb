@@ -67,9 +67,8 @@ namespace NKikimr::NTable {
             TConstArrayRef<TEpoch> extraEpochs = {},
             TConstArrayRef<ui32> extraInputTiers = {});
 
-        // Frozen memtables and tx-status parts contribute to the output epoch,
-        // and therefore to both bounds of the interval that must be closed.
-        // This overload also pins and checks the identity of those sources.
+        // Pins frozen memtables and tx-status parts. Both contribute to the
+        // output epoch. Closing a range of disk parts requires a row input.
         static TIntrusiveConstPtr<TCompactionContext> Build(
             TVector<TCompactionPartInfo> parts, const TSubset& initialSubset);
 
@@ -83,7 +82,8 @@ namespace NKikimr::NTable {
         // schema, channel configuration and the frozen memory snapshots.
         bool IsCurrent(TConstArrayRef<TCompactionPartInfo> parts) const;
 
-        const std::optional<TCompactionEpochRange> Epochs;
+        const TEpoch OutputEpoch;
+        const std::optional<TCompactionEpochRange> Epochs; // Row epochs reserved by the strategy.
         const TVector<TCompactionPartInfo> Inputs;
         const TVector<TCompactionPartInfo> Remaining;
         const TVector<ui32> InputTiers;
@@ -94,7 +94,7 @@ namespace NKikimr::NTable {
             TConstArrayRef<TEpoch> extraEpochs, TConstArrayRef<ui32> extraInputTiers,
             const TSubset* initialSubset);
 
-        TCompactionContext(std::optional<TCompactionEpochRange> epochs,
+        TCompactionContext(TEpoch outputEpoch, std::optional<TCompactionEpochRange> epochs,
             TVector<TCompactionPartInfo> inputs, TVector<TCompactionPartInfo> remaining,
             TVector<ui32> inputTiers, TVector<TEpoch> extraEpochs,
             TVector<ui32> extraInputTiers, const TSubset* initialSubset);

@@ -36,8 +36,10 @@ namespace NKikimr::NTabletFlatExecutor {
                 "Closed compaction inputs span multiple tiers");
             Y_ENSURE(!params.UnderlayMask,
                 "Prepared compaction context supplies independent underlay cursors");
-            Y_ENSURE(!params.Context->Epochs || conf.Epoch == params.Context->Epochs->Max,
-                "Compaction writer epoch differs from its prepared interval");
+            if (params.Context->Epochs || !subset.TxStatus.empty()) {
+                Y_ENSURE(conf.Epoch == params.Context->OutputEpoch,
+                    "Compaction writer epoch differs from its prepared inputs");
+            }
         }
         TVector<ui32> tiers;
         switch (params.Mode) {

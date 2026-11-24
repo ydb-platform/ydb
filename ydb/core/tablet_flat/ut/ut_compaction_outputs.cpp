@@ -978,7 +978,7 @@ Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
             "does not cover the closed epoch interval");
         conf.Epoch = TEpoch::FromIndex(11);
         UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf, &subset), yexception,
-            "writer epoch differs from its prepared interval");
+            "writer epoch differs from its prepared inputs");
     }
 
     Y_UNIT_TEST(PreparedContextFulltextIsRejected) {

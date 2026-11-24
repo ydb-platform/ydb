@@ -145,11 +145,6 @@ static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* o
     return TActorActivityType();
 }
 
-static bool IsDiskOnlyCompactionBehindHead(const NTable::TSubset& subset) {
-    return subset.Head > NTable::TEpoch::Zero() && subset.Frozen.empty()
-        && (subset.Flatten || subset.ColdParts) && subset.Epoch() < subset.Head - 1;
-}
-
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -1367,7 +1362,6 @@ void TExecutor::AddFollowerPartSwitch(
     partSwitch.FollowerUpdateStep = updateStep;
     partSwitch.TableId = switchProto.GetTableId();
     partSwitch.Step = step;
-    partSwitch.DiskOnlyCompaction = switchProto.GetDiskOnlyCompaction();
 
     if (switchProto.HasIntroducedParts() && switchProto.GetIntroducedParts().BundlesSize()) {
         Y_ENSURE(aux && aux->HotBundlesSize() == switchProto.GetIntroducedParts().BundlesSize());
@@ -1810,10 +1804,6 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
 
         if (partSwitch.Head != subset->Head) {
             Y_TABLET_ERROR("Follower table epoch head has diverged from leader");
-        } else if (partSwitch.DiskOnlyCompaction) {
-            if (!IsDiskOnlyCompactionBehindHead(*subset)) {
-                Y_TABLET_ERROR("Follower table replace subset does not match a disk-only compaction behind head");
-            }
         } else if (*subset && !subset->IsStickedToHead()) {
             Y_TABLET_ERROR("Follower table replace subset isn't sticked to head");
         }
@@ -4042,9 +4032,6 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         sx->SetGeneration(ExpandGenStepPair(snapStamp).first);
         sx->SetStep(ExpandGenStepPair(snapStamp).second);
         sx->SetHead(ops->Subset->Head.ToProto());
-        if (msg->Params->Tiering && IsDiskOnlyCompactionBehindHead(*ops->Subset)) {
-            proto.SetDiskOnlyCompaction(true);
-        }
     } else {
         Y_ENSURE(!hadFrozen, "Compacted frozen parts without correct head epoch");
     }
@@ -5492,7 +5479,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         NTable::PrepareTieringCompaction(*comp->Params, *tableInfo,
             *snapshot->Subset, TableParts(table), TableColdParts(table),
             IsDataTieringEnabled(), Time->Now());
-        comp->Epoch = snapshot->Subset->Epoch();
+        comp->Epoch = comp->Params->Context->OutputEpoch;
         if (!CompactionLogic->TryReserveCompaction(*comp->Params)) {
             // Preparation may have frozen memory, but no data was replaced
             // and no blobs were written. The caller still owns its broker task.

@@ -33,6 +33,12 @@ struct TRunConfig {
 
     TRunConfig() = default;
     void SetFullPath(const NConsoleClient::TClientCommand::TConfig& connectionConfig) {
+        if (!connectionConfig.Database.empty() && !connectionConfig.Database.StartsWith('/')) {
+            if (Path.empty()) {
+                Path = ".";
+            }
+            return;
+        }
         if (Path.empty()) {
             Path = connectionConfig.Database;
             return;

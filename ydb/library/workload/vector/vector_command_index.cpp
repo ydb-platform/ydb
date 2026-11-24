@@ -18,7 +18,7 @@ void TWorkloadCommandIndexBase::Config(TConfig& config) {
 }
 
 int TWorkloadCommandIndexBase::Run(TConfig& config) {
-    Params.DbPath = config.Database;
+    Params.DbPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database : TString(".");
 
     Driver = MakeHolder<NYdb::NConsoleClient::TScopedDriver>(CreateDriver(config));
     QueryClient = MakeHolder<NYdb::NQuery::TQueryClient>(*Driver);

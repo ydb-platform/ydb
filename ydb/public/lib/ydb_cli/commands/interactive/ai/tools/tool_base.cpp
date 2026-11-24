@@ -59,7 +59,7 @@ TDatabaseToolBase::TDatabaseToolBase(const TString& database, const NJson::TJson
 
 TString TDatabaseToolBase::CanonizePath(const TString& path) const {
     auto result = Strip(path);
-    if (!Database.StartsWith('/')) {
+    if (!Database.empty() && !Database.StartsWith('/')) {
         return result.empty() ? "." : TString(result);
     }
     auto canonical = CanonizeYdbPath(result);

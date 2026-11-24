@@ -30,7 +30,7 @@ NYdb::NTopic::TConsumerDescription TCommandWorkloadTopicDescribe::DescribeConsum
 
 TString TCommandWorkloadTopicDescribe::GenerateFullTopicName(const TString& database, const TString& topicName)
 {
-    if (!database.StartsWith('/')) {
+    if (!database.empty() && !database.StartsWith('/')) {
         return topicName;
     }
     TString fullTopicName = TStringBuilder() << database << "/" << topicName;

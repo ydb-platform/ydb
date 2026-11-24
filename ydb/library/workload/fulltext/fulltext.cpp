@@ -35,7 +35,7 @@ namespace NYdb::NConsoleClient {
     int TFulltextRunCommand::Run(TConfig& config) {
         PrepareForRun(config);
         Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
-        Params.DbPath = config.Database;
+        Params.DbPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database : TString(".");
         Params.Verbose = config.IsVerbose();
         auto workloadGen = Params.CreateGenerator();
         Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);

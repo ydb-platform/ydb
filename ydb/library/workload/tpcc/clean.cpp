@@ -4,6 +4,7 @@
 #include "log.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -51,8 +52,13 @@ void CleanSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, 
     // note, we must forget ops before dropping tables to have proper path
     // when list operations
 
-    const std::string customerPath = runConfig.Path + "/" + TABLE_CUSTOMER;
-    const std::string oorderPath = runConfig.Path + "/" + TABLE_OORDER;
+    const bool relativeDatabase = !connectionConfig.Database.empty() && !connectionConfig.Database.StartsWith('/');
+    const bool relativePath = relativeDatabase && !runConfig.Path.StartsWith('/');
+    const TString path = relativeDatabase
+        ? NConsoleClient::NormalizePath(relativePath ? "/" + connectionConfig.Database + "/" + runConfig.Path : runConfig.Path)
+        : runConfig.Path;
+    const std::string customerPath = path + "/" + TABLE_CUSTOMER;
+    const std::string oorderPath = path + "/" + TABLE_OORDER;
 
     NOperation::TOperationClient operationClient(driver);
 
@@ -67,7 +73,16 @@ void CleanSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, 
                 break;
             }
             const auto& metadata = op.Metadata();
-            if (metadata.Path == customerPath || metadata.Path == oorderPath) {
+            TStringBuf metadataPath(metadata.Path);
+            if (relativePath) {
+                // Operation metadata includes the domain before the relative database.
+                metadataPath.SkipPrefix("/");
+                metadataPath.NextTok('/');
+            }
+            const TString comparisonPath = relativeDatabase
+                ? NConsoleClient::NormalizePath((relativePath ? "/" : "") + TString(metadataPath))
+                : TString(metadataPath);
+            if (comparisonPath == customerPath || comparisonPath == oorderPath) {
                 const auto& id = op.Id();
                 auto forgetResult = operationClient.Forget(id).GetValueSync();
                 if (!forgetResult.IsSuccess()) {

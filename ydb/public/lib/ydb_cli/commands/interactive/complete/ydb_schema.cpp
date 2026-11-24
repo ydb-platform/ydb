@@ -54,7 +54,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString Qualified(TString folder) const {
-            if (!Database_.StartsWith('/')) {
+            if (!Database_.empty() && !Database_.StartsWith('/')) {
                 return folder.empty() ? "." : folder;
             }
             if (!folder.StartsWith('/')) {

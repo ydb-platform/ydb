@@ -44,7 +44,7 @@ void CheckTablesExist(TDriver& driver, const TString& path, const char* what) {
 }
 
 void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TString& path) {
-    if (path.empty() || path == database) {
+    if (path.empty() || path == database || path == ".") {
         return;
     }
 
@@ -54,16 +54,23 @@ void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TStr
         return;
     }
 
-    // path is full path, we must ignore database part
-    TString relativePath = path.substr(database.size() + 1); // skip /DB/
+    const bool relativeDatabase = !database.empty() && !database.StartsWith('/');
+    TString relativePath = relativeDatabase ? path : path.substr(database.size() + 1);
+    TString subPath = relativeDatabase ? TString{} : database;
+    if (relativeDatabase && relativePath.StartsWith('/')) {
+        subPath = "/";
+        relativePath.erase(0, 1);
+    }
     if (relativePath.empty()) {
         return;
     }
 
     TVector<TString> pathComponents = SplitString(relativePath, "/");
-    TString subPath = database;
     for (const auto& component: pathComponents) {
-        subPath = subPath + "/" + component;
+        if ((!relativeDatabase || !subPath.empty()) && !subPath.EndsWith('/')) {
+            subPath += '/';
+        }
+        subPath += component;
 
         listResult = schemeClient.ListDirectory(subPath, {}).GetValueSync();
         if (listResult.IsSuccess()) {

@@ -383,7 +383,7 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
     Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
-    Params.DbPath = config.Database;
+    Params.DbPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database : TString(".");
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
@@ -427,7 +427,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
         Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
-    Params.DbPath = config.Database;
+    Params.DbPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database : TString(".");
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
@@ -453,7 +453,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
             throw TMisuseException() << "Cannot remove the database root";
         }
         Cout << "Remove path " << path << "..."  << Endl;
-        auto fullPath = config.Database.StartsWith('/') ? config.Database + "/" + path.c_str() : TString(path);
+        auto fullPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database + "/" + path.c_str() : TString(path);
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
@@ -469,7 +469,7 @@ void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
     if (!path || NormalizePath("/" + TString(path)).empty()) {
         return;
     }
-    auto fullPath = config.Database.StartsWith('/')
+    auto fullPath = config.Database.empty() || config.Database.StartsWith('/')
         ? std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend())
         : std::string(path.cbegin(), path.cend());
     auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
@@ -540,7 +540,7 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
         } else {
             TVector<TString> existPaths;
             for (const auto& path: workloadGen.GetCleanPaths()) {
-                const auto fullPath = config.Database + "/" + path.c_str();
+                const auto fullPath = config.Database.empty() || config.Database.StartsWith('/') ? config.Database + "/" + path.c_str() : TString(path);
                 if (SchemeClient->DescribePath(fullPath).GetValueSync().IsSuccess()) {
                     existPaths.emplace_back(path);
                 }

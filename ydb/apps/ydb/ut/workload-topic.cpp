@@ -5,6 +5,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_describe.h>
 
 #include <util/string/cast.h>
 #include <util/string/split.h>
@@ -12,6 +13,16 @@
 #include <util/system/shellcommand.h>
 
 namespace {
+Y_UNIT_TEST_SUITE(TopicPathCompatibility) {
+    Y_UNIT_TEST(PreservesDatabaseModes) {
+        using NYdb::NConsoleClient::TCommandWorkloadTopicDescribe;
+        UNIT_ASSERT_VALUES_EQUAL(TCommandWorkloadTopicDescribe::GenerateFullTopicName("/Root/db", "events"), "/Root/db/events");
+        UNIT_ASSERT_VALUES_EQUAL(TCommandWorkloadTopicDescribe::GenerateFullTopicName("", "events"), "/events");
+        UNIT_ASSERT_VALUES_EQUAL(TCommandWorkloadTopicDescribe::GenerateFullTopicName("tenant", "events"), "events");
+        UNIT_ASSERT_VALUES_EQUAL(TCommandWorkloadTopicDescribe::GenerateFullTopicName("tenant", "/Root/other/events"), "/Root/other/events");
+    }
+}
+
 class TFixture : public NUnitTest::TBaseFixture {
 
     public:

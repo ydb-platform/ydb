@@ -3666,7 +3666,7 @@ private:
 
         if (!serializedMetas) {
             if (!operationStatus) {
-                return FinishResultSetNotReady();
+                return FinishResultSetNotReady("Result is not ready");
             }
 
             const auto operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
@@ -3688,11 +3688,9 @@ private:
         const NJson::TJsonValue* metaValue = nullptr;
         if (!value.GetValuePointer(ResultSetIndex, &metaValue)) {
             if (!operationStatus) {
-                return FinishResultSetNotReady();
+                return FinishResultSetNotReady("Result set index is invalid");
             }
-
-            Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
-            return;
+            return Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
         }
         Y_ENSURE(metaValue, "Result set index is invalid");
 
@@ -3701,7 +3699,7 @@ private:
 
         if (!operationStatus) {
             if (!meta.enabled_runtime_results()) {
-                return FinishResultSetNotReady();
+                return FinishResultSetNotReady("Results are not ready");
             }
             HasMoreResults = !meta.finished();
             NumberOfSavedRows = meta.number_rows();
@@ -3839,9 +3837,9 @@ private:
         }
     }
 
-    void FinishResultSetNotReady() {
+    void FinishResultSetNotReady(const TString& message) {
         ResultSetNotReady = true;
-        Finish(Ydb::StatusIds::BAD_REQUEST, "Result is not ready");
+        Finish(Ydb::StatusIds::BAD_REQUEST, message);
     }
 
     void CancelFetchQuery() {

@@ -65,7 +65,7 @@ class TJsonQuery : public TViewerPipeClient {
     TString ExecutionId;
     std::optional<TRequestResponse<NKqp::TEvGetScriptExecutionOperationResponse>> GetOperationResponse;
     ui32 FetchResultSetIndex = 0;
-    ui32 FetchResultSets = 0;
+    google::protobuf::RepeatedPtrField<Ydb::Query::ResultSetMeta> PublishedResultSets;
     ui64 FetchResultRowsLimit = 1000;
     ui64 FetchResultRowsOffset = 0;
     ui64 FetchResultSeqNum = 0;
@@ -400,6 +400,12 @@ public:
         if (Action == "fetch-long-query") {
             if (!OperationId && ExecutionId.empty()) {
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
+            }
+            if (!ExecutionId.empty() && !Params.Get("operation_id").empty()) {
+                TString error;
+                if (!OperationId || NKqp::ScriptExecutionIdFromOperation(*OperationId, error) != ExecutionId) {
+                    return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id and execution_id must identify the same script execution"), "BadRequest");
+                }
             }
         } else if (Action != "cancel-query" && Syntax == "pg") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
@@ -1071,52 +1077,61 @@ private:
     }
 
     void HandleReply(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev) {
+        const bool lookupSucceeded = ev->Get()->RequestStatus == Ydb::StatusIds::SUCCESS;
         GetOperationResponse->Set(std::move(ev));
         RequestDone();
 
-        // Check if we have a valid response or an error
-        if (!GetOperationResponse->IsOk()) {
+        const auto& operation = *GetOperationResponse;
+        if (operation.IsError()) {
+            if (!OperationId) {
+                return ReplyWithError(lookupSucceeded ? operation.GetError() : "Failed to fetch script results");
+            }
+
             NJson::TJsonValue json;
             InitJsonResponse(json);
             AddOperationInfo(json);
             json["ready"] = false;
-
-            if (GetOperationResponse->IsError()) {
-                CreateStandardErrorResponse(json, GetOperationResponse->GetError());
-            } else {
-                CreateStandardErrorResponse(json, "Failed to get operation status");
-            }
-
+            CreateStandardErrorResponse(json, operation.GetError());
             return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
         }
 
         Ydb::Query::ExecuteScriptMetadata metadata;
-        if (!GetOperationResponse->Get()->Metadata || !GetOperationResponse->Get()->Metadata->UnpackTo(&metadata)) {
+        if (!operation->Metadata || !operation->Metadata->UnpackTo(&metadata)) {
             return ReplyWithError("Failed to read script execution metadata");
         }
 
-        FetchResultSets = metadata.result_sets_meta_size();
-
         if (ExecutionId.empty()) {
             ExecutionId = metadata.execution_id();
+        }
+        if (!OperationId && operation->Ready && metadata.result_sets_meta().empty()) {
+            return ReplyWithError("Failed to fetch script results");
         }
 
         if (Streaming != EStreamingType::None && OperationId) {
             NJson::TJsonValue json;
             json["id"] = OperationId->ToString();
-            json["ready"] = GetOperationResponse->Get()->Ready;
-            if (GetOperationResponse->Get()->Issues) {
+            json["ready"] = operation->Ready;
+            if (operation->Issues) {
                 Ydb::Issue::IssueMessage issueMessage;
-                NYql::IssuesToMessage(GetOperationResponse->Get()->Issues, issueMessage.mutable_issues());
+                NYql::IssuesToMessage(operation->Issues, issueMessage.mutable_issues());
                 Proto2Json(issueMessage, json["issues"]);
             }
             Proto2Json(metadata, json["metadata"]);
             StreamJsonResponse("OperationResponse", std::move(json));
         }
 
+        PublishedResultSets.Swap(metadata.mutable_result_sets_meta());
+        ContinueFetchResults();
+    }
+
+    void ContinueFetchResults() {
+        if (TotalRows >= LimitRows) {
+            return FinishFetchResults();
+        }
+
         const bool ready = GetOperationResponse->Get()->Ready;
-        if (FetchResultSetIndex < FetchResultSets) {
-            const auto& set = metadata.result_sets_meta(FetchResultSetIndex);
+        if (FetchResultSetIndex < static_cast<ui32>(PublishedResultSets.size())) {
+            const auto& set = PublishedResultSets.Get(FetchResultSetIndex);
             if (ready || (!OperationId && (set.number_rows() > FetchResultRowsOffset || set.finished()))) {
                 if (ExecutionId.empty()) {
                     return ReplyWithError("Failed to extract execution_id from operation metadata");
@@ -1152,7 +1167,8 @@ private:
 
         const int pageRows = ev->Get()->ResultSet ? ev->Get()->ResultSet->rows_size() : 0;
         const int rows = std::min(pageRows, LimitRows - TotalRows);
-        if (ev->Get()->ResultSet && TotalRows < LimitRows && (rows > 0 || (!ev->Get()->HasMoreResults && FetchResultRowsOffset == 0))) {
+        // A final page can publish truncation even after all its rows have been read.
+        if (ev->Get()->ResultSet && TotalRows < LimitRows && (rows > 0 || !ev->Get()->HasMoreResults)) {
             if (rows < pageRows) {
                 ev->Get()->ResultSet->mutable_rows()->Truncate(rows);
                 ev->Get()->ResultSet->set_truncated(true);
@@ -1171,32 +1187,14 @@ private:
             }
         }
 
-        if (TotalRows < LimitRows) {
-            if (ev->Get()->HasMoreResults) {
-                if (rows == 0) {
-                    return ScheduleResultMetadataRefresh();
-                }
-
-                return FetchScriptResults();
-            }
-
+        if (!ev->Get()->HasMoreResults) {
             ++FetchResultSetIndex;
             FetchResultRowsOffset = 0;
-
-            if (FetchResultSetIndex < FetchResultSets) {
-                if (GetOperationResponse->Get()->Ready) {
-                    return FetchScriptResults();
-                }
-
-                return CheckOperationStatus();
-            }
-
-            if (!GetOperationResponse->Get()->Ready) {
-                return ScheduleResultMetadataRefresh();
-            }
+        } else if (rows == 0) {
+            return ScheduleResultMetadataRefresh();
         }
 
-        FinishFetchResults();
+        ContinueFetchResults();
     }
 
     void FinishFetchResults() {
@@ -1491,7 +1489,7 @@ public:
                       * `execute-scan` - execute scan query (ScanQuery)
                       * `execute-script` - execute script query (ScriptingService)
                       * `execute-long-query` - execute long running script query (returns operation_id and execution_id for later fetching results)
-                      * `fetch-long-query` - fetch results from previously executed long query (requires operation_id or execution_id)
+                      * `fetch-long-query` - fetch results using operation_id or execution_id. If both are supplied, they must identify the same script execution.
                       * `explain-query` - explain query (QueryService)
                       * `explain-data` - explain data query (DataQuery)
                       * `explain-scan` - explain scan query (ScanQuery)

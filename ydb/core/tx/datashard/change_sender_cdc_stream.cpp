@@ -44,7 +44,6 @@ static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTab
         .TraceIds = stream.TraceIds,
         .Compression = stream.Compression,
         .CompressionLevel = stream.CompressionLevel,
-        .ChoosePartitionByKey = stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange,
     }));
 }
 

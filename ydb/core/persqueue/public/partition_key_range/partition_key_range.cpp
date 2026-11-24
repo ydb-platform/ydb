@@ -2,7 +2,6 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
-#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -198,78 +197,6 @@ TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConf
         keyTypes.push_back(typeInfoMod.TypeInfo);
     }
     return keyTypes;
-}
-
-std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKey> keys, const TPartitionKeyRange& range,
-    TConstArrayRef<NScheme::TTypeInfo> keyTypes)
-{
-    struct TParsedKey {
-        TMaybe<TSerializedCellVec> Cells;
-        ui64 Weight = 0;
-    };
-
-    TVector<TParsedKey> parsed;
-    parsed.reserve(keys.size());
-    ui64 total = 0;
-    for (const auto& key : keys) {
-        TSerializedCellVec cells;
-        if (!TSerializedCellVec::TryParse(key.Key, cells) || cells.GetCells().size() != keyTypes.size()) {
-            continue;
-        }
-        bool validSizes = true;
-        for (size_t i = 0; i < keyTypes.size() && validSizes; ++i) {
-            validSizes = !NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i]);
-        }
-        if (!validSizes) {
-            continue;
-        }
-
-        TMaybe<TSerializedCellVec> bound = std::move(cells);
-        if ((range.FromBound && IsBefore(bound, range.FromBound, keyTypes)) || !IsBefore(bound, range.ToBound, keyTypes)) {
-            continue;
-        }
-
-        total += key.Weight;
-        parsed.push_back({std::move(bound), key.Weight});
-    }
-
-    auto compare = [&](const TParsedKey& lhs, const TParsedKey& rhs) {
-        return CompareTypedCellVectors(lhs.Cells->GetCells().data(), rhs.Cells->GetCells().data(), keyTypes.data(), keyTypes.size());
-    };
-
-    Sort(parsed.begin(), parsed.end(), [&](const TParsedKey& lhs, const TParsedKey& rhs) {
-        return compare(lhs, rhs) < 0;
-    });
-
-    std::optional<size_t> boundary;
-    ui64 left = 0;
-    for (size_t i = 1; i < parsed.size(); ++i) {
-        left += parsed[i - 1].Weight;
-        if (compare(parsed[i - 1], parsed[i]) == 0) {
-            continue;
-        }
-
-        boundary = i;
-        if (2 * left >= total) {
-            break;
-        }
-    }
-
-    if (!boundary) {
-        return std::nullopt;
-    }
-
-    const auto lower = parsed[*boundary - 1].Cells->GetCells();
-    const auto upper = parsed[*boundary].Cells->GetCells();
-    for (size_t prefixSize = 1; prefixSize < keyTypes.size(); ++prefixSize) {
-        TVector<TCell> prefix(upper.begin(), upper.begin() + prefixSize);
-        prefix.resize(keyTypes.size());
-        if (CompareTypedCellVectors(prefix.data(), lower.data(), keyTypes.data(), keyTypes.size()) > 0) {
-            return TSerializedCellVec::Serialize(prefix);
-        }
-    }
-
-    return parsed[*boundary].Cells->GetBuffer();
 }
 
 } // namespace NKikimr::NPQ

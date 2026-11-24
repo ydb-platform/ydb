@@ -53,6 +53,7 @@ public:
 
     // Whether every row the ranges select lies in a portion that is in memory.
     bool Covers(const TPKRangesFilter& ranges) const;
+    bool Covers(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
 
     // Whether every row >= key lies in a portion that is in memory.
     bool CoversFrom(const NArrow::TSimpleRow& key) const;

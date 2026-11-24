@@ -60,14 +60,13 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
         // A deletion marker has to be kept only while some portion outside of this task may still hold an older record with the
         // same key. Elsewhere the marker (together with the records it shadows inside the task) is dropped from the result.
         YDB_LOG_VERIFY(HasDeletions && PortionsIndexSnapshot);
-        const std::vector<TKeyInterval> olderIntervals =
-            NGranule::NPortionsIndex::TPortionsIndex::GetOlderIntervals(*PortionsIndexSnapshot, pInfo, portionsInUsage);
+        const auto overlappingKeyRanges = PortionsIndexSnapshot->FindOverlappingKeyRanges(pInfo, portionsInUsage);
         const NArrow::TSimpleRow keyStart = pInfo.IndexKeyStart();
         const NArrow::TSimpleRow keyEnd = pInfo.IndexKeyEnd();
-        const bool coveredByOlder = std::any_of(olderIntervals.begin(), olderIntervals.end(), [&](const TKeyInterval& interval) {
+        const bool fullyCovered = std::any_of(overlappingKeyRanges.begin(), overlappingKeyRanges.end(), [&](const TKeyInterval& interval) {
             return interval.first <= keyStart && keyEnd <= interval.second;
         });
-        if (!coveredByOlder) {
+        if (!fullyCovered) {
             if (pInfo.GetPortionType() == EPortionType::Written) {
                 YDB_LOG_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
                 filterDeleted = NArrow::TColumnFilter::BuildDenyFilter();
@@ -84,8 +83,8 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
                     }
                 }
             }
-            if (olderIntervals.size()) {
-                filterDeleted = filterDeleted.Or(BuildKeyIntervalsFilter(batch, olderIntervals));
+            if (overlappingKeyRanges.size()) {
+                filterDeleted = filterDeleted.Or(BuildKeyIntervalsFilter(batch, overlappingKeyRanges));
             }
         }
     }
@@ -134,7 +133,7 @@ ui64 TWritePortionsToMerge::GetColumnMaxChunkMemory() const {
 
 TWritePortionsToMerge::TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions,
     const std::shared_ptr<TGranuleMeta>& granuleMeta, const bool hasDeletions,
-    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
+    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot::TConstPtr& portionsIndexSnapshot)
     : TBase(granuleMeta, hasDeletions, portionsIndexSnapshot)
     , WritePortions(std::move(portions))
 {

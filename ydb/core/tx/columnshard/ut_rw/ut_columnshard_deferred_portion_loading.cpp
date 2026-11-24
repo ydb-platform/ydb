@@ -82,9 +82,11 @@ public:
         Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), 10));
     }
 
-    void WriteAndCommit(const ui64 tableId, const std::pair<ui64, ui64> rows) {
+    void WriteAndCommit(const ui64 tableId, const std::pair<ui64, ui64> rows,
+        const NEvWrite::EModificationType modificationType = NEvWrite::EModificationType::Upsert) {
         std::vector<ui64> writeIds;
-        UNIT_ASSERT(WriteData(Runtime, Sender, TxId, tableId, MakeTestBlob(rows, Table.Schema), Table.Schema, true, &writeIds));
+        UNIT_ASSERT(
+            WriteData(Runtime, Sender, TxId, tableId, MakeTestBlob(rows, Table.Schema), Table.Schema, true, &writeIds, modificationType));
         const TPlanStep planStep = ProposeCommit(Runtime, Sender, TxId, writeIds);
         PlanCommit(Runtime, Sender, planStep, TxId);
         Snapshot = NOlap::TSnapshot(planStep, Max<ui64>());
@@ -435,6 +437,30 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         ForwardToTablet(shard.Runtime, TTestTxConfig::TxTablet0, shard.Sender, new TEvents::TEvWakeup(1));
         UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         UNIT_ASSERT_VALUES_EQUAL(shard.Controller->GetPortionBatchesLoaded(), 1);
+    }
+
+    // the delete of 50..449 is loaded in the second batch, the rows it deletes below 400 only later
+    Y_UNIT_TEST(CompactionWhileLoadingKeepsDeletesOfNotLoadedRows) {
+        TShardWithPortions shard;
+        shard.WriteAndCommit(TableId, { 50, 450 }, NEvWrite::EModificationType::Delete);
+        shard.AllowBatches(2);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(2);
+
+        shard.Controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        shard.SendPeriodicWakeup();
+        shard.Runtime.WaitFor("compaction finished", [&] {
+            return shard.Controller->GetCompactionFinishedCounter().Val() > 0;
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(shard.Controller->GetPortionBatchesLoaded(), 2);
+
+        shard.AllowBatches(std::nullopt);
+        shard.WaitBatchesLoaded(4);
+        // a scan at the snapshot of the delete would still read the portions the compaction replaced
+        shard.WriteAndCommit(TableId, { 600, 601 });
+        auto reader = shard.StartScan({ 0, 499 });
+        UNIT_ASSERT(reader->WaitScannerAnswer());
+        UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 100);
     }
 
     Y_UNIT_TEST(WriteWaitingForLoadedPortionsIsCounted) {

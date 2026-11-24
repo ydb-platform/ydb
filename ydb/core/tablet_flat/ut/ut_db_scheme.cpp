@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
     Y_UNIT_TEST(PolicyProtoRoundTrip) {
         for (auto policy : {RelativePolicy(), AbsolutePolicy()}) {
             policy.Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
-            NTabletFlatScheme::TTieringPolicySettings proto;
+            NKikimrSchemeOp::TTieringPolicySettings proto;
             TieringPolicyToProto(policy, proto);
             UNIT_ASSERT(TieringPolicyFromProto(proto) == policy);
         }
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
 
     Y_UNIT_TEST(PolicyProtoReplace) {
         // Serialization replaces the previous content of the proto
-        NTabletFlatScheme::TTieringPolicySettings proto;
+        NKikimrSchemeOp::TTieringPolicySettings proto;
         TieringPolicyToProto(RelativePolicy(), proto);
         TieringPolicyToProto(RelativePolicy(), proto);
         UNIT_ASSERT(TieringPolicyFromProto(proto) == RelativePolicy());

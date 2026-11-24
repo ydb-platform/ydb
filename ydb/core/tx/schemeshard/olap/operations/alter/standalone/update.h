@@ -14,9 +14,11 @@ private:
     bool UpdateSchema = false;
     bool UpdateTTL = false;
     std::shared_ptr<TStandaloneTable> TargetStandalone;
+    bool SetsNotNull = false;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
     virtual TConclusionStatus DoRestoreImpl(
         const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) override;
+    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& context) override;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetStandalone->GetTableInfoPtrVerified();

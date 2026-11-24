@@ -10,8 +10,9 @@ bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSc
     return true;
 }
 
-bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-    if (!Columns.Parse(alterRequest, errors)) {
+bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors,
+    bool allowConstraintChanges) {
+    if (!Columns.Parse(alterRequest, errors, allowConstraintChanges)) {
         return false;
     }
 

@@ -68,13 +68,7 @@ public:
         }
 
         if (operationInfo.ValidationFailed) {
-            TPath tablePath = TPath::Init(operationInfo.TablePathId, Self);
-            auto* issue = respRecord.AddIssues();
-            issue->set_message(TStringBuilder()
-                << "Validation failed for SET NOT NULL on table `" << tablePath.PathString()
-                << "`: one or more columns contain NULL values");
-            issue->set_issue_code(0);
-            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            respRecord.MutableIssues()->MergeFrom(proto->GetIssues());
         }
 
         return Reply();

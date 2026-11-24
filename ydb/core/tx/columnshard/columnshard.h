@@ -103,6 +103,9 @@ enum EEv {
 
     EvFindEmptyHistoryIntervalsScanFinished,
 
+    EvValidateRowConditionRequest,
+    EvValidateRowConditionResponse,
+
     EvEnd
 };
 
@@ -256,6 +259,13 @@ struct TEvOverloadUnsubscribe: public TEventPB<TEvOverloadUnsubscribe, NKikimrTx
         Record.SetSeqNo(seqNo);
     }
 };
+
+struct TEvValidateRowConditionRequest
+    : public TEventPB<TEvValidateRowConditionRequest, NKikimrTxColumnShard::TEvValidateRowConditionRequest, EvValidateRowConditionRequest> {};
+
+struct TEvValidateRowConditionResponse
+    : public TEventPB<TEvValidateRowConditionResponse, NKikimrTxColumnShard::TEvValidateRowConditionResponse, EvValidateRowConditionResponse> {};
+
 };   // namespace TEvColumnShard
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

@@ -1390,8 +1390,9 @@ public:
 
         if (state == Ydb::Table::SetNotNullState::STATE_DONE) {
             return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, record.MutableIssues());
-        } else if (state == Ydb::Table::SetNotNullState::STATE_CANCELLED ||
-                   state == Ydb::Table::SetNotNullState::STATE_REJECTED) {
+        } else if (state == Ydb::Table::SetNotNullState::STATE_REJECTED) {
+            return ReplyErrorAndDie(constraintResult.GetFailureStatus(), record.MutableIssues());
+        } else if (state == Ydb::Table::SetNotNullState::STATE_CANCELLED) {
             return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, record.MutableIssues());
         } else {
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, record.MutableIssues());

@@ -329,7 +329,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString, TString, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -349,7 +349,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::DetailedMetricsSettings>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::MultiColumnStatistics>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::MultiColumnStatistics>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::NotNullSince>()
         );
     }
 
@@ -2020,6 +2021,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     );
 
                     Y_ABORT_UNLESS(parseOk);
+                }
+
+                if (const auto& notNullSince = std::get<16>(rec); !notNullSince.empty()) {
+                    Y_ABORT_UNLESS(tableInfo->TableDescription.MutableNotNullSince()->ParseFromString(notNullSince));
                 }
 
                 if (const auto statistics = std::get<15>(rec)) {

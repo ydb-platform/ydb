@@ -131,10 +131,7 @@ public:
         , Schema(schema) {
     }
 
-    std::partial_ordering operator<=>(const TSimpleRowRef& item) const {
-        AFL_VERIFY_DEBUG(Schema.Equals(item.Schema));
-        return Row.Compare(item.Row, Schema).GetResult();
-    }
+    std::partial_ordering operator<=>(const TSimpleRowRef& item) const;
 
     bool operator==(const TSimpleRowRef& item) const {
         return (*this <=> item) == std::partial_ordering::equivalent;

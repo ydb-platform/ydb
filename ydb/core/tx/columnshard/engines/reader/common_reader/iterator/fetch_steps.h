@@ -139,6 +139,16 @@ public:
     }
 };
 
+class TReadNotNullFilter: public IFetchingStep {
+    TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
+
+public:
+    TReadNotNullFilter()
+        : IFetchingStep("NOT_NULL_FILTER")
+    {
+    }
+};
+
 class TBuildStageResultStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

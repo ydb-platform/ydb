@@ -1544,6 +1544,10 @@ void TSchemeShard::DescribeTable(
     Y_UNUSED(typeRegistry);
 
     entry->SetTableSchemaVersion(tableInfo.AlterVersion);
+    if (tableInfo.TableDescription.HasNotNullSince()) {
+        entry->MutableNotNullSince()->CopyFrom(tableInfo.TableDescription.GetNotNullSince());
+    }
+
     FillColumns(tableInfo, *entry->MutableColumns());
     FillKeyColumns(tableInfo, *entry->MutableKeyColumnNames(), *entry->MutableKeyColumnIds());
 

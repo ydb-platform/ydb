@@ -44,6 +44,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/row_version.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -1246,8 +1247,7 @@ public:
             co_return;
         }
 
-        // Can reply inside (in case of deferred-only transactions) and become ReadyState
-        ExecuteOrDefer();
+        ExecuteWithSnapshot();
     }
 
     void AcquirePersistentSnapshot() {
@@ -1365,7 +1365,24 @@ public:
             QueryState->TxCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         }
 
-        // Can reply inside (in case of deferred-only transactions) and become ReadyState
+        ExecuteWithSnapshot();
+    }
+
+    void ExecuteWithSnapshot() {
+        const auto& snapshot = QueryState->TxCtx->GetSnapshot();
+        if (snapshot.IsValid() && QueryState->PreparedQuery) {
+            const TRowVersion version(snapshot.Step, snapshot.TxId);
+            for (const auto& table : QueryState->PreparedQuery->GetPhysicalQuery().GetTableInfos()) {
+                if (table.HasNotNullSince() && version < TRowVersion::FromProto(table.GetNotNullSince())) {
+                    std::vector<TIssue> issues{YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                        TStringBuilder() << "Scheme changed for '" << table.GetTableName()
+                            << "': SET NOT NULL took effect after the transaction snapshot.")};
+                    ReplyQueryError(Ydb::StatusIds::ABORTED, "", MessageFromIssues(issues));
+                    return;
+                }
+            }
+        }
+
         ExecuteOrDefer();
     }
 

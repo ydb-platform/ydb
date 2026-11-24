@@ -138,11 +138,15 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .NotUnderOperation()
-                .IsTable();
+                .NotUnderOperation();
 
-            if (checks && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
-                checks.NotAsyncReplicaTable();
+            if (checks && tablePath->IsColumnTable()) {
+                checks.NotReadOnlyColumnTable();
+            } else {
+                checks.IsTable();
+                if (checks && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
+                    checks.NotAsyncReplicaTable();
+                }
             }
 
             if (checks && !parentPath.IsTableIndex()) {
@@ -190,11 +194,11 @@ public:
         tablePath.Base()->LastTxId = OperationId.GetTxId();
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
-        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
-
-        for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
-            context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
+        if (tablePath->IsTable()) {
+            auto table = context.SS->Tables.at(pathId);
+            for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
+                context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
+            }
         }
 
         context.SS->LockedPaths[pathId] = lockTxId;

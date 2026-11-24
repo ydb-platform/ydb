@@ -44,6 +44,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         YDB_LOG_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         auto accessors = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
+        Context->ApplyReadNotNullFilter(*accessors);
         auto conclusion = Context->GetReadMetadata()->GetProgram().ApplyProgram(std::move(accessors));
         if (conclusion.IsFail()) {
             return conclusion;

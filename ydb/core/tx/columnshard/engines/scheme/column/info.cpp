@@ -24,6 +24,8 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
         YDB_LOG_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }
     IsNullable = columnInfo.HasNotNull() ? !columnInfo.GetNotNull() : true;
+    IsSetNotNullInProgress = columnInfo.GetSetNotNullInProgress();
+    FilterNullsOnRead = columnInfo.GetFilterNullsOnRead();
     YDB_LOG_VERIFY(Serializer);
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
     return TConclusionStatus::Success();

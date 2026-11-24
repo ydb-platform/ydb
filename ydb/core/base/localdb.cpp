@@ -253,7 +253,7 @@ bool TCompactionPolicy::IsFinalLevel(ui32 level) const {
 }
 
 ui32 TCompactionPolicy::GetTierForLevel(ui32 level) const {
-    if (level == 0) {
+    if (level == 0 || level == DefaultFinalLevel) {
         return 0;
     }
     if (level <= Generations.size()) {

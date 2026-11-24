@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_boot_cookie.h>
 #include <ydb/core/tablet_flat/flat_sausage_slicer.h>
 #include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <algorithm>
@@ -249,6 +250,90 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
+
+    Y_UNIT_TEST(PageCollectionCacheModeFollowsTheDestinationTier) {
+        using NTable::NPage::ECacheMode;
+        TEnv env;
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter()
+                .SetFamilyCacheMode(TableId, 0, ECacheMode::TryKeepInMemory)
+                .AddFamily(TableId, 1, 0)
+                .AddColumnToFamily(TableId, ValueTag, 1);
+            return true;
+        });
+
+        THashMap<TLogoBlobID, THashMap<TActorId, ECacheMode>> attachments;
+        auto observer = env.Env.AddObserver<NSharedCache::TEvAttach>([&](auto& event) {
+            const auto* attach = event->Get();
+            attachments[attach->PageCollection->Label()][event->Sender] = attach->CacheMode;
+        });
+        const auto check = [&](const NTable::TPartView& part, ECacheMode mainMode, ECacheMode valueMode, size_t owners) {
+            UNIT_ASSERT_VALUES_EQUAL(part->GroupsCount, 2);
+            const auto checkSlot = [&](ui32 slot, ECacheMode mode) {
+                const auto& label = part->GetPageCollection(slot)->Label();
+                env.Env.WaitFor(TStringBuilder() << "cache mode " << ui32(mode) << " for collection " << label,
+                    [&] {
+                        const auto* modes = attachments.FindPtr(label);
+                        return modes && modes->size() == owners && std::all_of(modes->begin(), modes->end(),
+                            [&](const auto& owner) { return owner.second == mode; });
+                    }, TDuration::Seconds(10));
+            };
+            checkSlot(part->DescriptorSlot(), mainMode);
+            checkSlot(part->DataSlot({}), mainMode);
+            checkSlot(part->DataSlot(NTable::NPage::TGroupId(1)), valueMode);
+        };
+
+        env.Enable();
+        const ui64 now = env.NowSeconds();
+        env.Write({{1, now, "hot"}, {2, now - TDuration::Days(30).Seconds(), "will warm"},
+            {3, now - TDuration::Days(180).Seconds(), "stays cold"}});
+        env.Flush();
+        auto parts = env.Parts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 2);
+        const auto levels = env.Levels();
+        if (env.Tier(levels.at(parts[0]->Label)) != 0) {
+            std::swap(parts[0], parts[1]);
+        }
+        const auto& hot = parts[0];
+        const auto& cold = parts[1];
+        const ui32 coldLevel = levels.at(cold->Label);
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(hot->Label)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(coldLevel), ColdTier);
+        const auto checkBoth = [&](size_t owners) {
+            check(hot, ECacheMode::TryKeepInMemory, ECacheMode::Regular, owners);
+            check(cold, ECacheMode::Regular, ECacheMode::Regular, owners);
+        };
+        checkBoth(1);
+        attachments.clear();
+        env.Restart();
+        checkBoth(1);
+        env.FireDummyFollower(1);
+        checkBoth(2);
+
+        env.Exec([](TTransactionContext& txc) {
+            txc.DB.Alter().SetFamilyCacheMode(TableId, ColdTier, ECacheMode::TryKeepInMemory);
+            return true;
+        });
+        check(cold, ECacheMode::TryKeepInMemory, ECacheMode::TryKeepInMemory, 2);
+        check(hot, ECacheMode::TryKeepInMemory, ECacheMode::Regular, 2);
+
+        env.Exec([](TTransactionContext& txc) {
+            auto rules = MakeTierPolicy();
+            rules.Rules.back().Ranges.front().To = NTable::TTierRelativeBound{TDuration::Days(100)};
+            txc.DB.Alter().SetTieringPolicy(TableId, rules);
+            return true;
+        });
+        const auto compacted = CompactGeneration(env, coldLevel);
+        THashSet<ui32> outputTiers;
+        for (const auto& output : compacted.Outputs) {
+            const ui32 tier = compacted.OutputTiers.at(output->Label);
+            UNIT_ASSERT(tier == 0 || tier == ColdTier);
+            outputTiers.insert(tier);
+            check(output, ECacheMode::TryKeepInMemory,
+                tier == 0 ? ECacheMode::Regular : ECacheMode::TryKeepInMemory, 2);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(outputTiers.size(), 2);
+    }
 
     Y_UNIT_TEST(ColdTierIndexPlacementSurvivesDisablingBTree) {
         TEnv env;

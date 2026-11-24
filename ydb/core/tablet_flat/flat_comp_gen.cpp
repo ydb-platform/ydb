@@ -16,22 +16,6 @@ namespace {
 static constexpr ui32 BAD_PRIORITY = Max<ui32>();
 static constexpr ui32 PRIORITY_UPDATE_FACTOR = 20;
 
-bool UsesTiering(const TScheme::TTableInfo& scheme) {
-    if (scheme.SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact
-            || scheme.SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
-        return false;
-    }
-    if (scheme.TieringPolicy) {
-        return true;
-    }
-    for (const auto& generation : scheme.CompactionPolicy->Generations) {
-        if (generation.TierId.value_or(0) != 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
 }
 
 void TGenCompactionParams::Describe(IOutputStream& out) const {
@@ -230,7 +214,7 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     const auto* scheme = Backend->TableScheme(Table);
 
     Policy = scheme->CompactionPolicy;
-    TierManaged = UsesTiering(*scheme);
+    TierManaged = scheme->UsesTiering();
     Generations.resize(Policy->Generations.size());
     for (const ui32 tier : Policy->GetTierIds()) {
         if (tier != 0) {
@@ -366,7 +350,7 @@ void TGenCompactionStrategy::ReflectSchema() {
     bool ok = NLocalDb::ValidateCompactionPolicyChange(*Policy, *scheme->CompactionPolicy, err);
     Y_ENSURE(ok, "Cannot change compaction policy for table " << scheme->Name << " id " << scheme->Id << ": " << err);
 
-    const bool tierManaged = UsesTiering(*scheme);
+    const bool tierManaged = scheme->UsesTiering();
     if (!tierManaged || !scheme->TieringPolicy || !Backend->IsDataTieringEnabled()) {
         CancelPendingTierSweep();
     }

@@ -138,9 +138,11 @@ struct TPendingPartSwitch {
 
     struct TNewBundle {
         std::variant<TMetaStage, TLoaderStage, TResultStage> Stage;
+        ui32 TierId;
 
-        explicit TNewBundle(NTable::TPartComponents pc)
+        TNewBundle(NTable::TPartComponents pc, ui32 tierId)
             : Stage(std::in_place_type<TMetaStage>, std::move(pc))
+            , TierId(tierId)
         { }
 
         template<class T>
@@ -455,6 +457,8 @@ class TExecutor
     ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
+    // Non-default tier of each registered part that takes its cache mode from a tier family.
+    THashMap<TLogoBlobID, ui32> PartCacheTiers;
 
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
@@ -540,7 +544,7 @@ class TExecutor
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
     void UtilizeSubset(const NTable::TSubset&, TLogCommit *commit);
-    bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc);
+    bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc, ui32 level);
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPartSwitch::TNewBundle &bundle);
     bool PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, const NPageCollection::TLargeGlobId &dataId, NTable::TEpoch epoch, const TString &data);
     bool PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, TPendingPartSwitch::TNewTxStatus &txStatus);
@@ -567,7 +571,7 @@ class TExecutor
     void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TPageCollection* collectionInfo);
     void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
     void LogWaitingTransaction(const TTransactionWaitPad& transaction);
-    void AddPartStorePageCollections(const NTable::TPartView& partView,
+    void AddPartStorePageCollections(ui32 tableId, const NTable::TPartView& partView,
         const THashMap<NTable::TTag, ECacheMode>& cacheModes, const THashSet<NTable::TTag>& stickyColumns,
         bool replayStickyWalks = false);
     void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection>& pageCollection,
@@ -580,14 +584,17 @@ class TExecutor
 
     NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const;
 
-    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+    void UpdateCacheModesForPartStore(ui32 tableId, const NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
         const THashSet<NTable::TTag>& stickyColumns);
+    void ResetMovedPartCacheModes(ui32 destinationTable, const TVector<NTable::TPartView>& parts);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
 
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
-    ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    std::optional<ECacheMode> GetTierCacheMode(ui32 tableId, const TLogoBlobID& label) const;
+    static ECacheMode GetCacheMode(std::optional<ECacheMode> tierMode, const TVector<NTable::TPartScheme::TColumn>& columns,
+        const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

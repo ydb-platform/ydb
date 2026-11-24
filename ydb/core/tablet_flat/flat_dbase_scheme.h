@@ -107,6 +107,7 @@ public:
         ui32 SpecialTableType = 0; // maps to NKikimrSchemeOp::ESpecialTableType
 
         std::optional<TTieringPolicy> TieringPolicy; // refers to families as tiers
+        bool UsesTiering() const;
 
         // When true this table has an in-memory caching enabled that has not been processed yet
         mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change

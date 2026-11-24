@@ -193,9 +193,10 @@ namespace NBoot {
                         snapshot.State.PartLevels.erase(move.Label);
                     }
 
-                    // Make a copy of the source bundle state, changing epoch
+                    // The destination assigns moved bundles its own compaction level.
                     auto &bundle = front.MovedBundles[index];
                     bundle = std::move(*source);
+                    bundle.Level = front.Level;
                     if (move.RebasedEpoch != NTable::TEpoch::Max()) {
                         bundle.Epoch = move.RebasedEpoch;
                     }

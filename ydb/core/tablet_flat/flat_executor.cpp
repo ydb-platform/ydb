@@ -284,7 +284,7 @@ void TExecutor::RecreatePrivateCache()
         const auto& cacheModes = GetCacheModes(it.first);
         const auto stickyColumns = GetStickyColumns(it.first);
         for (auto &partView : subset->Flatten) {
-            AddPartStorePageCollections(partView, cacheModes, stickyColumns, replayStickyWalks);
+            AddPartStorePageCollections(it.first, partView, cacheModes, stickyColumns, replayStickyWalks);
         }
     }
 
@@ -465,6 +465,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     Y_ENSURE(!LogicAlter);
 
     Database = loadedState->Database;
+    PartCacheTiers = std::move(loadedState->PartCacheTiers);
     BorrowLogic = loadedState->Loans;
 
     Y_ENSURE(!CompactionLogic);
@@ -505,6 +506,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager = loadedState->CommitManager;
     Database = loadedState->Database;
+    PartCacheTiers = std::move(loadedState->PartCacheTiers);
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
     LogicRedo = loadedState->Redo;
@@ -827,7 +829,7 @@ TVector<bool> MakeStickyGroups(const NTable::TPartView& partView, const THashSet
 
 } // namespace
 
-void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+void TExecutor::AddPartStorePageCollections(ui32 tableId, const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
     const THashSet<NTable::TTag>& stickyColumns, bool replayStickyWalks)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
@@ -840,9 +842,10 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
+    const auto tierMode = GetTierCacheMode(tableId, partView->Label);
     for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
         partStore->PageCollections[slot]->SetCacheMode(
-            GetCacheMode(partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
+            GetCacheMode(tierMode, partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
         );
     }
 
@@ -883,6 +886,7 @@ void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCo
 void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
 {
     auto *partStore = CheckedCast<const NTable::TPartStore*>(&part);
+    PartCacheTiers.erase(part.Label);
 
     {
         ui32 room = 0;
@@ -924,7 +928,7 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
             auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
             for (auto& partView: subset->Flatten) {
                 if (updateCacheModes) {
-                    UpdateCacheModesForPartStore(partView, cacheModes, stickyColumns);
+                    UpdateCacheModesForPartStore(tid, partView, cacheModes, stickyColumns);
                 }
                 if (requestStickyColumns) {
                     RequestStickyPagesForPartStore(partView, stickyColumns);
@@ -1363,11 +1367,15 @@ void TExecutor::AddFollowerPartSwitch(
     partSwitch.TableId = switchProto.GetTableId();
     partSwitch.Step = step;
 
-    if (switchProto.HasIntroducedParts() && switchProto.GetIntroducedParts().BundlesSize()) {
-        Y_ENSURE(aux && aux->HotBundlesSize() == switchProto.GetIntroducedParts().BundlesSize());
+    const auto& introduced = switchProto.GetIntroducedParts();
+    if (introduced.BundlesSize()) {
+        Y_ENSURE(aux && aux->HotBundlesSize() == introduced.BundlesSize());
+        const ui32 sharedLevel = introduced.HasCompactionLevel()
+            ? introduced.GetCompactionLevel() : NLocalDb::TCompactionPolicy::DefaultFinalLevel;
         for (auto x : xrange(aux->HotBundlesSize())) {
+            const auto& bundle = introduced.GetBundles(x);
             NTable::TPartComponents c = TPageCollectionProtoHelper::MakePageCollectionComponents(aux->GetHotBundles(x));
-            PrepareExternalPart(partSwitch, std::move(c));
+            PrepareExternalPart(partSwitch, std::move(c), bundle.HasCompactionLevel() ? bundle.GetCompactionLevel() : sharedLevel);
         }
     }
 
@@ -1422,7 +1430,7 @@ void TExecutor::AddFollowerPartSwitch(
     }
 }
 
-bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc) {
+bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc, ui32 level) {
     Y_ENSURE(pc);
 
     const ui32 tableId = partSwitch.TableId;
@@ -1446,7 +1454,8 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPar
         }
     }
 
-    auto &bundle = partSwitch.NewBundles.emplace_back(std::move(pc));
+    const ui32 tierId = tableScheme.UsesTiering() ? tableScheme.CompactionPolicy->GetTierForLevel(level) : 0;
+    auto &bundle = partSwitch.NewBundles.emplace_back(std::move(pc), tierId);
 
     return PrepareExternalPart(partSwitch, bundle);
 }
@@ -1631,17 +1640,18 @@ bool TExecutor::ApplyReadyPartSwitches() {
     return true;
 }
 
-void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+void TExecutor::UpdateCacheModesForPartStore(ui32 tableId, const NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
     const THashSet<NTable::TTag>& stickyColumns) {
     Y_DEBUG_ABORT_UNLESS(cacheModes);
 
     auto* partStore = partView.As<NTable::TPartStore>();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
+    const auto tierMode = GetTierCacheMode(tableId, partView->Label);
     TVector<bool> modeChanged(partStore->PageCollections.size(), false);
 
     for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
         const size_t groupIndex = partStore->Slots.SlotLeaderGroup(slot);
-        ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
+        ECacheMode cacheMode = GetCacheMode(tierMode, partView->Scheme->Groups[groupIndex].Columns, cacheModes);
         auto* pageCollection = partStore->PageCollections[slot].Get();
 
         modeChanged[slot] = PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection);
@@ -1663,6 +1673,20 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
         auto* pageCollection = partStore->PageCollections[partStore->DataSlot(groupId)].Get();
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
             MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)));
+    }
+}
+
+void TExecutor::ResetMovedPartCacheModes(ui32 destinationTable, const TVector<NTable::TPartView>& parts) {
+    if (PartCacheTiers.empty()) {
+        return;
+    }
+    const auto cacheModes = GetCacheModes(destinationTable);
+    const auto stickyColumns = GetStickyColumns(destinationTable);
+    for (const auto& part : parts) {
+        // A moved part keeps its registered collections and enters the destination's default tier.
+        if (PartCacheTiers.erase(part->Label)) {
+            UpdateCacheModesForPartStore(destinationTable, part, cacheModes, stickyColumns);
+        }
     }
 }
 
@@ -1733,7 +1757,18 @@ THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
     return stickyColumns;
 }
 
-ECacheMode TExecutor::GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes) {
+std::optional<ECacheMode> TExecutor::GetTierCacheMode(ui32 tableId, const TLogoBlobID& label) const {
+    if (const auto* tier = PartCacheTiers.FindPtr(label)) {
+        return Scheme().Tables.at(tableId).Families.at(*tier).CacheMode;
+    }
+    return std::nullopt;
+}
+
+ECacheMode TExecutor::GetCacheMode(std::optional<ECacheMode> tierMode, const TVector<NTable::TPartScheme::TColumn>& columns,
+    const THashMap<NTable::TTag, ECacheMode>& cacheModes) {
+    if (tierMode) {
+        return *tierMode;
+    }
     ECacheMode cacheMode = ECacheMode::Regular;
     for (const auto& column : columns) {
         if (const auto* mode = cacheModes.FindPtr(column.Tag); mode && *mode == ECacheMode::TryKeepInMemory) {
@@ -1753,7 +1788,10 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     for (auto &bundle : partSwitch.NewBundles) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
-        AddPartStorePageCollections(stage->PartView, cacheModes, stickyColumns);
+        if (bundle.TierId) {
+            PartCacheTiers.emplace(stage->PartView->Label, bundle.TierId);
+        }
+        AddPartStorePageCollections(partSwitch.TableId, stage->PartView, cacheModes, stickyColumns);
         if (stickyColumns) {
             RequestStickyPagesForPartStore(stage->PartView, stickyColumns);
         }
@@ -1876,6 +1914,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             }
 
             // Merge rebased parts to the destination table
+            ResetMovedPartCacheModes(partSwitch.TableId, rebased);
             for (auto& partView : rebased) {
                 Database->Merge(partSwitch.TableId, partView);
 
@@ -2764,6 +2803,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                     }
 
                     // Add rebased parts to the destination table
+                    ResetMovedPartCacheModes(dst, rebased);
                     for (auto& partView : rebased) {
                         Database->Merge(dst, partView);
                         CompactionLogic->BorrowedPart(dst, partView);
@@ -2911,7 +2951,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                 LogoBlobIDFromLogoBlobID(glob.Logo, bySwitchAux->MutablePartSwitchRef());
             }
 
-            PrepareExternalPart(partSwitch, std::move(loaned->PartComponents));
+            PrepareExternalPart(partSwitch, std::move(loaned->PartComponents), CompactionLogic->BorrowedPartLevel());
         }
         for (auto &loaned : env.LoanTxStatus) {
             auto& partSwitch = PendingPartSwitches.emplace_back();
@@ -3017,7 +3057,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             for (size_t i = 0; i < result->Parts.size(); ++i) {
                 auto partView = result->Parts[i].CloneWithEpoch(partEpoch);
 
-                AddPartStorePageCollections(partView, cacheModes, stickyColumns);
+                AddPartStorePageCollections(attachTableId, partView, cacheModes, stickyColumns);
 
                 auto *partStore = partView.As<NTable::TPartStore>();
                 Y_ENSURE(partStore, "Direct write produced an unexpected part type");
@@ -4041,7 +4081,12 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            AddPartStorePageCollections(newPart, cacheModes, stickyColumns);
+            if (const auto& tiering = msg->Params->Tiering) {
+                if (const ui32 tier = tiering->OutputTiers.at(result.OutputId)) {
+                    PartCacheTiers.emplace(newPart->Label, tier);
+                }
+            }
+            AddPartStorePageCollections(tableId, newPart, cacheModes, stickyColumns);
 
             auto *partStore = newPart.As<NTable::TPartStore>();
 

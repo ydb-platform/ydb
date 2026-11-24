@@ -9,6 +9,22 @@
 namespace NKikimr {
 namespace NTable {
 
+bool TScheme::TTableInfo::UsesTiering() const {
+    if (SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact
+            || SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        return false;
+    }
+    if (TieringPolicy) {
+        return true;
+    }
+    for (const auto& generation : CompactionPolicy->Generations) {
+        if (generation.TierId.value_or(0) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     TAlter delta;
 

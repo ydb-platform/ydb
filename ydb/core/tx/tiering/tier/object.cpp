@@ -13,7 +13,7 @@ TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
     if (secrets) {
         {
             auto secretIdOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(config.GetAccessKey());
-            AFL_VERIFY(secretIdOrValue);
+            YDB_LOG_VERIFY(secretIdOrValue);
             auto value = secrets->GetSecretValue(*secretIdOrValue);
             if (value.IsFail()) {
                 return TConclusionStatus::Fail(TStringBuilder() << "Can't read access key: " << value.GetErrorMessage());
@@ -22,7 +22,7 @@ TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
         }
         {
             auto secretIdOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(config.GetSecretKey());
-            AFL_VERIFY(secretIdOrValue);
+            YDB_LOG_VERIFY(secretIdOrValue);
             auto value = secrets->GetSecretValue(*secretIdOrValue);
             if (value.IsFail()) {
                 return TConclusionStatus::Fail(TStringBuilder() << "Can't read secret key: " << value.GetErrorMessage());

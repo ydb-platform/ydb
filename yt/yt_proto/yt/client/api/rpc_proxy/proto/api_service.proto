@@ -312,6 +312,7 @@ enum EMaintenanceComponent
     MC_HTTP_PROXY = 2;
     MC_RPC_PROXY = 3;
     MC_HOST = 4;
+    MC_CHUNK_LOCATION = 5;
 }
 
 enum EJobSpecSource

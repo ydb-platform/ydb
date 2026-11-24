@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     contrib/libs/yaml-cpp
     library/cpp/json
+    library/cpp/logger
     ydb/apps/bridge_skipper/config
     ydb/apps/bridge_skipper/domain
     ydb/library/actors/core

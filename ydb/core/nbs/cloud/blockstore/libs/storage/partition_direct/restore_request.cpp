@@ -2,7 +2,6 @@
 
 #include "direct_block_group.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -16,9 +15,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TRestoreRequestExecutor::TRestoreRequestExecutor(
     NActors::TActorSystem* actorSystem,
-    IDirectBlockGroupPtr directBlockGroup)
+    IDirectBlockGroupPtr directBlockGroup,
+    THostMask hostsToList)
     : ActorSystem(actorSystem)
     , DirectBlockGroup(std::move(directBlockGroup))
+    , HostsToList(hostsToList)
     , Response(std::make_unique<TAggregatedListPBufferResponse>())
 {}
 
@@ -36,12 +37,20 @@ TRestoreRequestExecutor::~TRestoreRequestExecutor()
 
 void TRestoreRequestExecutor::Run()
 {
-    for (THostIndex i = 0; i < DirectBlockGroupHostCount; ++i) {
-        DoRun(i);
+    Y_ABORT_UNLESS(!HostsToList.Empty());
+
+    for (const auto host: HostsToList) {
+        DoListPBuffers(host);
     }
 }
 
-void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
+NThreading::TFuture<TAggregatedListPBufferResponse>
+TRestoreRequestExecutor::GetFuture() const
+{
+    return Promise.GetFuture();
+}
+
+void TRestoreRequestExecutor::DoListPBuffers(THostIndex hostIndex)
 {
     auto future = DirectBlockGroup->ListPBuffers(hostIndex);
     future.Subscribe(
@@ -53,23 +62,18 @@ void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
         });
 }
 
-NThreading::TFuture<TAggregatedListPBufferResponse>
-TRestoreRequestExecutor::GetFuture() const
-{
-    return Promise.GetFuture();
-}
-
 void TRestoreRequestExecutor::OnResponse(
     THostIndex hostIndex,
     TListPBufferResponse response)
 {
     if (HasError(response.Error)) {
+        // TODO(#55521): Retry failed lists; publish after all hosts succeed.
         Reply(response.Error);
         return;
     }
 
     Response->Meta[hostIndex] = std::move(response.Meta);
-    if (Response->Meta.size() == DirectBlockGroupHostCount) {
+    if (Response->Meta.size() == HostsToList.Count()) {
         Reply(MakeError(S_OK));
     }
 }

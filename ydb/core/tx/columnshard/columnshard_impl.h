@@ -561,16 +561,22 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
-    // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
-    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    // The held forced compaction request (ALTER TABLE ... COMPACT), at most one: the shard hosts a single standalone
+    // table and a repeated request supersedes the held one. In memory only, the schemeshard re-sends the request after
+    // a restart. Answered OK once nothing is left to compact and, for CASCADE, to rewrite.
     struct TForcedCompactionWaiter {
+        TInternalPathId InternalPathId;
         TActorId Sender;
         ui64 Cookie = 0;
         TPathId SchemePathId;
     };
 
-    THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
+    std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
+    // the forced compaction served (TEvCompactTable::TxId): the same id again is a retry, another one a new forced
+    // compaction
+    std::optional<ui64> ForcedCompactionTxId;
+    bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
+    void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;
@@ -702,7 +708,7 @@ public:
     }
 
     const NOlap::IColumnEngine& GetIndexVerified() const {
-        AFL_VERIFY(TablesManager.GetPrimaryIndex());
+        YDB_LOG_VERIFY(TablesManager.GetPrimaryIndex());
         return *TablesManager.GetPrimaryIndex();
     }
 
@@ -712,17 +718,17 @@ public:
     }
 
     TTxController& GetProgressTxController() const {
-        AFL_VERIFY(ProgressTxController);
+        YDB_LOG_VERIFY(ProgressTxController);
         return *ProgressTxController;
     }
 
     TOperationsManager& GetOperationsManager() const {
-        AFL_VERIFY(OperationsManager);
+        YDB_LOG_VERIFY(OperationsManager);
         return *OperationsManager;
     }
 
     TWriteGate& GetWriteGate() {
-        AFL_VERIFY(WriteGate);
+        YDB_LOG_VERIFY(WriteGate);
         return *WriteGate;
     }
 
@@ -743,12 +749,12 @@ public:
     }
 
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
         return StoragesManager;
     }
 
     const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
-        AFL_VERIFY(DataLocksManager);
+        YDB_LOG_VERIFY(DataLocksManager);
         return DataLocksManager;
     }
 

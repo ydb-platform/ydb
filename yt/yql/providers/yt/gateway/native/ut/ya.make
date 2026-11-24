@@ -2,7 +2,6 @@ UNITTEST()
 
 SRCS(
     yql_yt_native_folders_ut.cpp
-    yt_helpers_ut.cpp
     yql_yt_op_tracker_ut.cpp
 )
 

@@ -67,7 +67,7 @@ public:
 
     NColumnShard::TUnifiedPathId GetPathIdVerified() const {
         std::optional<NColumnShard::TUnifiedOptionalPathId> result = GetPathId();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -81,7 +81,7 @@ public:
 
     std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaVerified(const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const {
         auto result = GetSnapshotSchemaOptional(vSchemas, snapshot);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 
@@ -89,7 +89,7 @@ public:
 
     std::shared_ptr<const TVersionedIndex> GetVersionedIndexCopyVerified(TVersionedPresetSchemas& vSchemas) const {
         auto result = GetVersionedIndexCopyOptional(vSchemas);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 

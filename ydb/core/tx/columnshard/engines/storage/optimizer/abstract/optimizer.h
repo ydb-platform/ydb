@@ -97,7 +97,7 @@ public:
             return TOptimizationPriority(0, weight);
         }
 
-        AFL_VERIFY(min < max);
+        YDB_LOG_VERIFY(min < max);
 
         ui64 range = max - min;
         ui64 normalizedWeight = weight - min;
@@ -239,12 +239,10 @@ protected:
         return TConclusionStatus::Success();
     }
 
-    // Forced-compaction support: reports whether all portions have settled into the regular last
-    // level with no remaining intersections. Fail() means the optimizer does not support forced
-    // compaction (i.e. it is not tiling++); Success(true) means there are no intersections left,
-    // Success(false) means compaction is still in progress. Only tiling++ overrides this.
-    virtual TConclusion<bool> DoCheckNoIntersections() const {
-        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
+    // Forced compaction (ALTER TABLE ... COMPACT): is there still something to compact before the request is answered?
+    // Only tiling++ has an end state to wait for (no intersections left); the other planners answer false.
+    virtual bool DoNeedCompaction() const {
+        return false;
     }
 
 public:
@@ -328,8 +326,8 @@ public:
         return DoCheckWriteData();
     }
 
-    TConclusion<bool> CheckNoIntersections() const {
-        return DoCheckNoIntersections();
+    bool NeedCompaction() const {
+        return DoNeedCompaction();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {
@@ -469,7 +467,8 @@ public:
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
         auto result = TFactory::MakeHolder(defaultCompactionName);
-        AFL_VERIFY(!!result)("name", defaultCompactionName);
+        YDB_LOG_VERIFY(!!result,
+            {"name", defaultCompactionName});
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
 
@@ -521,7 +520,7 @@ public:
     }
 
     bool IsEqualTo(const std::shared_ptr<IOptimizerPlannerConstructor>& item) const {
-        AFL_VERIFY(!!item);
+        YDB_LOG_VERIFY(!!item);
         if (GetClassName() != item->GetClassName()) {
             return false;
         }

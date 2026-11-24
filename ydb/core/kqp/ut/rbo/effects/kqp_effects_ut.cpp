@@ -14,6 +14,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         config.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
         config.MutableTableServiceConfig()->SetEnableNewRBO(false);
         TKikimrRunner kikimr(TKikimrSettings(config)
+            .SetDisablePgCompatibility(false)
             .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

@@ -9,6 +9,9 @@
 #include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 
+#include <array>
+#include <utility>
+
 namespace NKikimr::NKMeans {
     namespace {
 
@@ -95,6 +98,50 @@ namespace NKikimr::NKMeans {
             UNIT_ASSERT_C(ValidateSettings(settings, error), error);
             settings.set_clusters(0);
             UNIT_ASSERT(!ValidateHnswSettings(settings, error));
+        }
+
+        Y_UNIT_TEST(DefaultRoutingSettings) {
+            auto settings = MakeSettings();
+            settings.clear_clusters();
+            settings.clear_levels();
+            TString error;
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 0, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+            settings.clear_clusters();
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 3ull << 30, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 4u);
+        }
+
+        Y_UNIT_TEST(AutoSelectedRoutingClustersAreCapped) {
+            const std::array<std::pair<ui64, ui32>, 4> cases = {{
+                {(2047ull << 30) - 1, 2047},
+                {2047ull << 30, 2048},
+                {2048ull << 30, 2048},
+                {Max<ui64>(), 2048},
+            }};
+            for (const auto& [dataSize, expectedClusters] : cases) {
+                auto settings = MakeSettings();
+                settings.clear_clusters();
+                TString error;
+                UNIT_ASSERT_C(AutoSelectHnswSettings(settings, dataSize, error), error);
+                UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), expectedClusters);
+                UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            }
+        }
+
+        Y_UNIT_TEST(ExplicitRoutingClustersKeepValidation) {
+            for (const ui32 clusters : {1u, 64u, 2048u, 2049u, Max<ui32>()}) {
+                auto settings = MakeSettings();
+                settings.set_clusters(clusters);
+                TString error;
+                const bool valid = AutoSelectHnswSettings(settings, Max<ui64>(), error);
+                UNIT_ASSERT_VALUES_EQUAL(valid, clusters <= 2048);
+                UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), clusters);
+                if (!valid) {
+                    UNIT_ASSERT_STRING_CONTAINS(error, "clusters");
+                }
+            }
         }
 
         Y_UNIT_TEST(ConstructionResourceLimits) {

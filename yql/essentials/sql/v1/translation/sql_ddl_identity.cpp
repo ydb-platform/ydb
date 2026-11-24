@@ -16,14 +16,15 @@ bool TIdentityTranslation::PasswordParameter(const TRule_password_option& passwo
     if (to_lower(stringValue) == "null") {
         result.IsPasswordNull = true;
     } else {
-        auto password = StringContent(Ctx_, Ctx_.Pos(), stringValue);
+        const auto pos = Ctx_.TokenPosition(token);
+        auto password = StringContent(Ctx_, pos, stringValue);
 
         if (!password) {
-            Error() << "Password should be enclosed into quotation marks.";
+            Ctx_.Error(pos) << "Password should be enclosed into quotation marks.";
             return false;
         }
 
-        result.Password = TDeferredAtom(Ctx_.Pos(), password->Content);
+        result.Password = TDeferredAtom(pos, password->Content);
     }
 
     result.IsPasswordEncrypted = passwordOption.HasBlock1();
@@ -37,14 +38,15 @@ bool TIdentityTranslation::HashParameter(const TRule_hash_option& hashOption, TU
     const auto& token = hashOption.GetToken2();
     TString stringValue(Ctx_.Token(token));
 
-    auto hash = StringContent(Ctx_, Ctx_.Pos(), stringValue);
+    const auto pos = Ctx_.TokenPosition(token);
+    auto hash = StringContent(Ctx_, pos, stringValue);
 
     if (!hash) {
-        Error() << "Hash should be enclosed into quotation marks.";
+        Ctx_.Error(pos) << "Hash should be enclosed into quotation marks.";
         return false;
     }
 
-    result.Hash = TDeferredAtom(Ctx_.Pos(), hash->Content);
+    result.Hash = TDeferredAtom(pos, hash->Content);
 
     return true;
 }
@@ -77,7 +79,7 @@ bool TIdentityTranslation::UserParameters(const std::vector<TRule_user_option>& 
         switch (option.Alt_case()) {
             case TRule_user_option::kAltUserOption1: {
                 if (used.contains(EUserOption::Authentication)) {
-                    Error() << "Conflicting or redundant options";
+                    Ctx_.Error(option) << "Conflicting or redundant options";
                     return false;
                 }
 
@@ -108,7 +110,7 @@ bool TIdentityTranslation::UserParameters(const std::vector<TRule_user_option>& 
             }
             case TRule_user_option::kAltUserOption2: {
                 if (used.contains(EUserOption::Login)) {
-                    Error() << "Conflicting or redundant options";
+                    Ctx_.Error(option) << "Conflicting or redundant options";
                     return false;
                 }
 
@@ -251,7 +253,7 @@ bool TIdentityTranslation::PermissionNameClause(const TRule_permission_name& nod
         }
         case TRule_permission_name::kAltPermissionName2: {
             const TString stringValue(Ctx_.Token(node.GetAlt_permission_name2().GetToken1()));
-            auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
+            auto unescaped = StringContent(Ctx_, Ctx_.Position(node), stringValue);
             if (!unescaped) {
                 return false;
             }
@@ -298,13 +300,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_create_user_stmt& node) {
     // create_user_stmt: CREATE USER role_name (user_option)*;
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 
@@ -336,13 +337,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_alter_user_stmt& node) {
     // alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 
@@ -393,13 +393,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_create_group_stmt& node) {
     // create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 
@@ -433,13 +432,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_alter_group_stmt& node) {
     // alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 
@@ -493,13 +491,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_drop_role_stmt& node) {
     // drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 
@@ -533,13 +530,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_grant_permissions_stmt& node) {
     // GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 
@@ -579,13 +575,12 @@ TNodePtr TIdentityTranslation::Build(const TRule_revoke_permissions_stmt& node) 
     // REVOKE (GRANT OPTION FOR)? permission_name_target ON an_id_schema (COMMA an_id_schema)* FROM role_name (COMMA role_name)*;
     Ctx_.BodyPart();
 
-    Ctx_.Token(node.GetToken1());
-    const TPosition pos = Ctx_.Pos();
+    const TPosition pos = Ctx_.Position(node);
 
     TString service = Ctx_.Scoped->CurrService;
     TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
     if (cluster.Empty()) {
-        Error() << "USE statement is missing - no default cluster is selected";
+        Ctx_.Error(node) << "USE statement is missing - no default cluster is selected";
         return {};
     }
 

@@ -120,14 +120,14 @@ namespace NKikimr::NConveyorComposite {
     }
 
     void TSchedulableWorkControl::SetStatus(TSchedulableWorkCell& cell, const ESchedulableWorkStatus status) {
-        AFL_VERIFY(cell.Control.get() == this);
-        AFL_VERIFY(static_cast<size_t>(cell.Status) < StatusCounts.size());
-        AFL_VERIFY(static_cast<size_t>(status) < StatusCounts.size());
+        YDB_LOG_VERIFY(cell.Control.get() == this);
+        YDB_LOG_VERIFY(static_cast<size_t>(cell.Status) < StatusCounts.size());
+        YDB_LOG_VERIFY(static_cast<size_t>(status) < StatusCounts.size());
         if (cell.Status == status) {
             return;
         }
         auto& oldCount = StatusCounts[static_cast<size_t>(cell.Status)];
-        AFL_VERIFY(oldCount);
+        YDB_LOG_VERIFY(oldCount);
         --oldCount;
         ++StatusCounts[static_cast<size_t>(status)];
         cell.Status = status;

@@ -120,11 +120,18 @@ public:
         std::vector<TString>& msg) const = 0;
 };
 
+enum class ENameserviceNodesOverride {
+    None,
+    Yaml,
+    NodeRegistration,
+};
+
 /**
- * Replaces kinds not managed by yaml config (e.g. NetClassifierConfig) from config 'from' in config 'to'
- * if corresponding configs are presenet in 'from'
+ * Applies unmanaged Console settings to the resolved YAML config. During bridged dynamic-node
+ * startup, returns the source that takes precedence over the Console nameservice node list.
  */
-void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
+ENameserviceNodesOverride ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to,
+    const NKikimrConfig::TAppConfig& bootstrapConfig);
 
 using TValidatorsMap = TMap<TString, TSimpleSharedPtr<IConfigValidator>>;
 

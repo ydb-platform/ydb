@@ -108,8 +108,8 @@ private:
 
         bool RemovePortion(const TFindActualizationInfo& info, const ui64 portionId) {
             auto itInstant = Portions.find(info.GetWaitInstant());
-            AFL_VERIFY(itInstant != Portions.end());
-            AFL_VERIFY(itInstant->second.erase(portionId));
+            YDB_LOG_VERIFY(itInstant != Portions.end());
+            YDB_LOG_VERIFY(itInstant->second.erase(portionId));
             if (itInstant->second.empty()) {
                 Portions.erase(itInstant);
             }
@@ -120,7 +120,6 @@ private:
     std::optional<TTiering> Tiering;
     std::optional<ui32> TieringColumnId;
 
-    std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
     const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
     const std::shared_ptr<IStoragesManager>& StoragesManager;
@@ -129,8 +128,6 @@ private:
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
     THashSet<ui64> NewPortionIds;
     THashMap<ui64, std::shared_ptr<arrow::Scalar>> MaxByPortionId;
-
-    std::shared_ptr<ISnapshotSchema> GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const;
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 
@@ -156,7 +153,7 @@ public:
         , StoragesManager(storagesManager)
     {
         Y_UNUSED(PathId);
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 

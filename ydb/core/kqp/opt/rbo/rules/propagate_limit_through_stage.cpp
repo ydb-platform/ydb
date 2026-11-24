@@ -5,12 +5,40 @@ namespace NKqp {
 
 namespace {
 
-bool CanPushLimitToRead(const TIntrusivePtr<IOperator>& input) {
+// As in the old optimizer, an unsorted datashard read takes the limit right over it. The read actor of each task stops
+// at the limit, and the read runs one shard at a time, so it stops reading shards once it has the rows.
+bool CanPushLimitToRowRead(const TOpLimit& limit, const TOpRead& read, TRBOContext& ctx) {
+    // The limit of a datashard read is a literal or a parameter, and a parameter is not pushed yet.
+    if (read.SortDir != ESortDir::None || read.Parents.size() != 1 || !TCoUint64::Match(limit.GetLimitCond().GetExpressionBody().Get())) {
+        return false;
+    }
+    const auto& kqpCtx = ctx.KqpCtx;
+    // As in the old optimizer, scan queries read row tables without a limit.
+    if (kqpCtx.IsScanQuery()) {
+        return false;
+    }
+    // A system view source ignores the limit of the read.
+    const auto tablePath = TExprBase(read.GetTable()).Cast<TKqpTable>().Path().StringValue();
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tablePath);
+    return table.Metadata && table.Metadata->Kind != NYql::EKikimrTableKind::SysView;
+}
+
+bool CanPushLimitToRead(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx) {
     if (input->GetKind() != EOperator::Source) {
         return false;
     }
     const auto read = CastOperator<TOpRead>(input);
-    return !read->Limit && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage;
+    if (read->Limit) {
+        return false;
+    }
+    switch (read->GetTableStorageType()) {
+        case NYql::EStorageType::ColumnStorage:
+            return true;
+        case NYql::EStorageType::RowStorage:
+            return CanPushLimitToRowRead(*limit, *read, ctx);
+        default:
+            return false;
+    }
 }
 
 bool CanPushLimitOverInput(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
@@ -18,9 +46,9 @@ bool CanPushLimitOverInput(const TIntrusivePtr<TOpLimit>& limit, const TIntrusiv
     return (kind == EOperator::Map && limit->Props.StageId == input->Props.StageId);
 }
 
+// The intermediate limit goes to the stage of its input, so that each task of the stage stops at the limit.
 bool CanPushLimitToStage(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
-    return !(limit->Props.StageId == input->Props.StageId || input->Kind == EOperator::Replicate ||
-             (input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::RowStorage));
+    return !(limit->Props.StageId == input->Props.StageId || input->Kind == EOperator::Replicate);
 }
 
 bool IsSuitableToPropagateLimitThroughStage(const TIntrusivePtr<IOperator>& input) {
@@ -79,7 +107,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
         limitProps.StageId = limitInput->Props.StageId;
         limitProps.StageInputEdges.clear();
         return MakeIntrusive<TOpLimit>(limitInput, limit->Pos, limitProps, limit->GetLimitCond(), limit->GetLimitPhase());
-    } else if (CanPushLimitToRead(limitInput)) {
+    } else if (CanPushLimitToRead(limit, limitInput, ctx)) {
         const auto read = CastOperator<TOpRead>(limitInput);
         const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
         return MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->GetTableStorageType(), read->TableCallable, read->OlapFilterLambda, limitCond,

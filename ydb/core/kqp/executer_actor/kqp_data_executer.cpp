@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
-#include "kqp_streaming_helper.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -60,7 +59,7 @@ public:
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
         TPartitionPrunerConfig partitionPrunerConfig,
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
@@ -73,7 +72,7 @@ public:
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
-            executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            executerConfig, userRequestContext, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, useKqpTasksGraphV2)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
@@ -1351,13 +1350,16 @@ private:
     }
 
     void StartStreamingQueryPrepare() {
+        TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions;
+        transactions.reserve(Request.Transactions.size());
         THashMap<TString, TString> secureParams;
         for (const auto& transaction : Request.Transactions) {
+            transactions.push_back(transaction.Body);
             for (const auto& stage : transaction.Body->GetStages()) {
                 TasksGraph.FillExternalSourceSecureParams(secureParams, stage);
             }
         }
-        StreamingQuery->StartPrepare(CollectPqSources(Request.Transactions, Database), std::move(secureParams));
+        StreamingQuery->StartPrepare(std::move(transactions), std::move(secureParams));
     }
 
 private:
@@ -1394,7 +1396,7 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
@@ -1403,7 +1405,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
-        std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
+        std::move(asyncIoFactory), creator, userRequestContext, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
         channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }

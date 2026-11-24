@@ -241,7 +241,6 @@ TEST_F(TFairShareHierarchicalSlotQueueTest, ZeroWeightUnregisteredSlot)
     Queue_->EnqueueSlot(userSlot)
         .ThrowOnError();
     Queue_->AccountSlot(userSlot, /*requestSize*/ 1);
-    // Probe selection compares an unregistered Idle slot with existing consumption.
     checkPriority();
 }
 

@@ -32,6 +32,7 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -2301,7 +2302,7 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportPg, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
@@ -5780,8 +5781,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", EnableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
     }
 
-    void ShouldFailOnInvalidCsv(const TString& csv, bool enableDataShardDirectPartImport) {
+    void ShouldFailOnInvalidCsv(const TString& csv, const TString& expectedError, bool enableDataShardDirectPartImport) {
+        std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         const auto data = TTestDataWithScheme(R"(
             columns {
@@ -5795,7 +5798,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "key"
         )", {TTestData(csv, EmptyYsonStr)});
 
-        Run(runtime, ConvertTestData(data), R"(
+        const auto importId = Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -5805,14 +5808,37 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", enableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
+
+        const auto result = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = result.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), expectedError);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), entry.GetIssues(0).message());
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnFileWithoutNewLines, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\"value1\"", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\"value1\"",
+            "/data_00.csv: cannot process data: reached end of file", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnEmptyToken, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\n", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\n",
+            "/data_00.csv: cannot process data: Empty token on line: \"a1\",", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnInvalidValue, EnableDataShardDirectPartImport) {
@@ -6784,6 +6810,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
 
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).message(), "Cancelled manually");
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), "Cancelled manually");
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
+
         // Check audit record for import end
         //
         {
@@ -6846,13 +6887,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 
-    Y_UNIT_TEST_FLAG(TablePermissions, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_FLAGS(TablePermissions, EnableDataShardDirectPartImport, InterruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
-        const auto permissions = R"(
+        const auto permissions = Sprintf(R"(
             actions {
               change_owner: "eve"
             }
@@ -6874,7 +6915,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 permission_names: "ydb.generic.read"
               }
             }
-        )";
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "");
 
         const auto data = GenerateTestData(R"(
             columns {
@@ -6913,6 +6955,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasRight("+W:alice"),
             NLs::HasRight("+R:bob")
         });
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), InterruptInheritance);
     }
 
     Y_UNIT_TEST_FLAG(UnexpectedPermission, EnableDataShardDirectPartImport) {
@@ -8975,7 +9021,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             if (tables) {
                 UNIT_ASSERT(replica);
-                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex || asyncIndex ? 1 : 2);
+                // The base table is marked together with the impl tables of its indexes
+                // (async index impl tables are maintained by the destination).
+                UNIT_ASSERT_VALUES_EQUAL(tables, asyncIndex ? 1 : 2);
                 ++finalAlterRequests;
             }
         });
@@ -8996,7 +9044,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
-        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
+        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? 1 : 0);
         if (replica) {
             CheckImportedReplica(runtime, "/MyRoot/Table");
             if (!asyncIndex) {
@@ -10360,14 +10408,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
+    Y_UNIT_TEST_FLAG(ShouldRestoreSystemViewPermissions, InterruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
 
         ui64 txId = 100;
 
-        const auto permissions = R"(
+        const auto permissions = Sprintf(R"(
             actions {
                 change_owner: "user1@builtin"
             }
@@ -10383,7 +10431,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     permission_names: "ydb.generic.list"
                 }
             }
-        )";
+            %s
+        )", InterruptInheritance ? "interrupt_inheritance: true" : "");
 
         const auto data = GenerateTestData(
             {
@@ -10402,6 +10451,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
+
+        NACLib::TDiffACL diffACL;
+        diffACL.SetInterruptInheritance(!InterruptInheritance);
+        TestModifyACL(runtime, ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "");
+        env.TestWaitNotification(runtime, txId);
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
@@ -10423,6 +10477,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasRight("+R:user2@builtin"),
             NLs::HasRight("+L:user2@builtin"),
         });
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
+        const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), InterruptInheritance);
     }
 
     Y_UNIT_TEST(ShouldFailOnSystemViewWrongPath) {

@@ -8,9 +8,10 @@ TSqlWindow::TSqlWindow(const TSqlTranslation& that)
 }
 
 TSQLStatus TSqlWindow::Build(const TRule_window_definition& node, TWinSpecs& winSpecs) {
-    const TString windowName = Id(node.GetRule_new_window_name1().GetRule_window_name1().GetRule_an_id_window1(), *this);
+    const auto& windowNameNode = node.GetRule_new_window_name1().GetRule_window_name1().GetRule_an_id_window1();
+    const TString windowName = Id(windowNameNode, *this);
     if (winSpecs.contains(windowName)) {
-        Ctx_.Error() << "Unable to declare window with same name: " << windowName;
+        Ctx_.Error(windowNameNode) << "Unable to declare window with same name: " << windowName;
         return std::unexpected(ESQLError::Basic);
     }
 

@@ -161,6 +161,9 @@ pb_istream_t pb_istream_from_buffer(const pb_byte_t *buf, size_t msglen)
 #ifndef PB_NO_ERRMSG
     stream.errmsg = NULL;
 #endif
+#ifdef PB_MESSAGE_NESTING_MAX
+    stream.depth = 0;
+#endif
     return stream;
 }
 
@@ -369,6 +372,12 @@ bool checkreturn pb_make_string_substream(pb_istream_t *stream, pb_istream_t *su
     if (substream->bytes_left < size)
         PB_RETURN_ERROR(stream, "parent stream too short");
     
+#ifdef PB_MESSAGE_NESTING_MAX
+    substream->depth++;
+    if (substream->depth > PB_MESSAGE_NESTING_MAX)
+        PB_RETURN_ERROR(stream, "max depth");
+#endif
+
     substream->bytes_left = (size_t)size;
     stream->bytes_left -= (size_t)size;
     return true;
@@ -751,6 +760,18 @@ static bool checkreturn decode_pointer_field(pb_istream_t *stream, pb_wire_type_
 
 static bool checkreturn decode_callback_field(pb_istream_t *stream, pb_wire_type_t wire_type, pb_field_iter_t *field)
 {
+    /* Clear any data that may have been decoded for another oneof field
+     * that has come before this callback field.
+     */
+    if (PB_HTYPE(field->type) == PB_HTYPE_ONEOF)
+    {
+        if (*(pb_size_t*)field->pSize != 0 && *(pb_size_t*)field->pSize != field->tag)
+        {
+            memset(field->pData, 0, (size_t)field->data_size);
+        }
+        *(pb_size_t*)field->pSize = field->tag;
+    }
+
     if (!field->descriptor->field_callback)
         return pb_skip_field(stream, wire_type);
 
@@ -761,6 +782,22 @@ static bool checkreturn decode_callback_field(pb_istream_t *stream, pb_wire_type
         
         if (!pb_make_string_substream(stream, &substream))
             return false;
+
+        /* If the callback field is inside a submsg, first call the submsg_callback which
+         * should set the decoder for the callback field. */
+        if (PB_LTYPE(field->type) == PB_LTYPE_SUBMSG_W_CB && field->pSize != NULL) {
+            pb_callback_t* callback;
+            *(pb_size_t*)field->pSize = field->tag;
+            callback = (pb_callback_t*)field->pSize - 1;
+
+            if (callback->funcs.decode)
+            {
+                if (!callback->funcs.decode(&substream, field, &callback->arg)) {
+                    PB_SET_ERROR(stream, substream.errmsg ? substream.errmsg : "submsg callback failed");
+                    return false;
+                }
+            }
+        }
         
         do
         {

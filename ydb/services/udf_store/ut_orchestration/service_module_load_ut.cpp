@@ -1,6 +1,6 @@
 #include "snapshot_helpers.h"
 
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 

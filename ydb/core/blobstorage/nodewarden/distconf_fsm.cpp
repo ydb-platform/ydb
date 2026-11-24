@@ -4,6 +4,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
 #include <ydb/library/actors/retro_tracing/span/retro_span.h>
@@ -179,10 +180,12 @@ namespace NKikimr::NStorage {
         // The previous root may have lost a selfheal actor mid-reconfiguration.
         // Pull fresh statuses even if Sentinel has observed no node changes.
         StartStateStorageSelfHealRefresh();
+        RefreshStaticGroupRepairs();
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
         AbortRootProbe();
+        StopStaticGroupRepairs();
         CancelStateStorageSelfHealRefresh();
         StateStorageSelfHealRefreshStarted = false;
         if (StateStorageSelfHealActor) {
@@ -1469,6 +1472,17 @@ namespace NKikimr::NStorage {
 
             UpdateFingerprint(configToPropose);
         }
+
+#define VALIDATE_SELECTION(NAME) \
+        if (configToPropose->Has##NAME##Config()) { \
+            if (TString error = NConfig::ValidateStateStorageConfigSelection(configToPropose->Get##NAME##Config())) { \
+                return TStringBuilder() << #NAME << ' ' << error; \
+            } \
+        }
+        VALIDATE_SELECTION(StateStorage)
+        VALIDATE_SELECTION(StateStorageBoard)
+        VALIDATE_SELECTION(SchemeBoard)
+#undef VALIDATE_SELECTION
 
         YDB_LOG_INFO("StartProposition",
             {"marker", "NWDC60"},

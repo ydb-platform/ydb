@@ -291,6 +291,7 @@ class TDataShard
     friend class TDataShardEngineHost;
     friend class TExecuteKqpScanTxUnit;
     friend class TAlterTableUnit;
+    friend class TFinalizeBuildIndexUnit;
     friend class TTableScan;
     friend class TKqpScan;
 
@@ -316,6 +317,7 @@ class TDataShard
 
     friend class TTableStatsCoroBuilder;
     friend class THnswIndexBuildActor;
+    friend class THnswIndexBuildUnit;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
@@ -457,6 +459,7 @@ class TDataShard
             TRowVersion BaseVersion;
             ui64 BuildToken = 0;
             THnswSnapshotScanCallback Finish;
+            std::shared_ptr<THnswSnapshotScanControl> Control;
         };
 
         struct TEvHnswSnapshotFinished : public TEventLocal<TEvHnswSnapshotFinished, EvHnswSnapshotFinished> {
@@ -2001,7 +2004,8 @@ public:
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db, TPathId indexId = {});
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
-        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, TPathId indexId = {});
+        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, TPathId indexId = {},
+        std::shared_ptr<THnswSnapshotScanControl> control = {});
     void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx);
     class TTxRebuildHnswIndex;
@@ -2358,10 +2362,6 @@ public:
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, const ui64 tableSchemaVersion,
         bool persist = true);
-
-    TUserTable::TPtr AlterTableFinishColumnBuild(
-        const TActorContext& ctx, TTransactionContext& txc,
-        const TPathId& pathId, ui64 tableSchemaVersion);
 
     TUserTable::TPtr AlterTableAddIndex(
         const TActorContext& ctx, TTransactionContext& txc,

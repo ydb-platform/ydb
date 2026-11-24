@@ -7,13 +7,13 @@ DATA(
 )
 
 TEST_SRCS(
-    test_query_files.py
     test_kqprun_recipe.py
+    test_query_files.py
 )
 
 PEERDIR(
-    ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python/enable_v3_new_behavior
+    ydb/tests/oss/ydb_sdk_import
 )
 
 DEPENDS(
@@ -31,3 +31,5 @@ USE_RECIPE(
 SIZE(MEDIUM)
 
 END()
+
+RECURSE_FOR_TESTS(replication)

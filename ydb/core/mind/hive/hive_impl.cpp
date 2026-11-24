@@ -846,6 +846,7 @@ void THive::BuildLocalConfig() {
 void THive::BuildCurrentConfig() {
     const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     const auto previousCountersExportMode = CurrentConfig.GetCountersExportMode();
+    const bool previousTrackResourceBrokerUsage = CurrentConfig.GetTrackResourceBrokerUsage();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
@@ -853,6 +854,9 @@ void THive::BuildCurrentConfig() {
     bool broadcastLocalSettings = false;
     if (CurrentConfig.GetCountersExportMode() != previousCountersExportMode) {
         UpdateCountersExportMode();
+        broadcastLocalSettings = true;
+    }
+    if (CurrentConfig.GetTrackResourceBrokerUsage() != previousTrackResourceBrokerUsage) {
         broadcastLocalSettings = true;
     }
     TabletLimit.clear();
@@ -3042,7 +3046,23 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
+    OnBridgeTabletPlacementChanged(previousConfig.GetBridgeTabletPlacement());
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
+void THive::OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous) {
+    if (!BridgeInfo || previous == GetBridgeTabletPlacement()) {
+        return;
+    }
+    // the tablets waiting for a node may fit in the piles that became allowed
+    ProcessWaitQueue();
+    // pending pile drains may now have targets to move tablets to, or nothing left to move
+    ProcessPileDrains();
+    // the tablets in the piles that are not allowed anymore are moved away by the pile drain;
+    // switching to a wider placement needs nothing more: running tablets spread out lazily
+    if (GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
+        UpdatePiles();
+    }
 }
 
 void THive::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -3723,6 +3743,7 @@ void THive::RemoveFromPingInProgress(TNodeId node) {
 
 void THive::FillLocalSettings(NKikimrLocal::THiveSettings* settings) const {
     settings->SetCountersExportMode(CurrentConfig.GetCountersExportMode());
+    settings->SetTrackResourceBrokerUsage(CurrentConfig.GetTrackResourceBrokerUsage());
 }
 
 void THive::SendPing(const TNodePing& nodePing) {

@@ -49,7 +49,7 @@ public:
             hFunc(TEvStartTask, Handle);
             hFunc(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated, Handle);
             default:
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
         }
     }
 };

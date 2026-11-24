@@ -11,6 +11,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -92,6 +93,7 @@ private:
             path = std::move(resolved->Path);
         } else {
             path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
+            NPersQueue::CountTopicPathWithDatabasePrefix(database, Settings.Strategy->GetTopicName(), path);
         }
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();

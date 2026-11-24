@@ -29,6 +29,7 @@ admin cluster bootstrap | Инициализация подготовленно�
 [admin cluster bridge join-pile (rejoin)](../commands/bridge/rejoin.md) | Подключение подготовленного [pile](../../../concepts/glossary.md#pile) или возврат после обслуживания
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
 [admin cluster bridge provision-pile](../commands/bridge/provision-pile.md) | Подготовка хранилища нового [pile](../../../concepts/glossary.md#pile)
+[admin cluster bridge rollback](../commands/bridge/rollback.md) | Возврат преобразованного [кластера](../../../concepts/glossary.md#cluster) из режима bridge в обычный режим
 [admin cluster bridge set-database-mode](../commands/bridge/set-database-mode.md) | Переключение [базы данных](../../../concepts/glossary.md#database) между режимом bridge и обычным хранилищем
 [admin cluster bridge switchover](../commands/bridge/switchover.md) | Плановая смена `PRIMARY` [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge takedown](../commands/bridge/takedown.md) | Вывод [pile](../../../concepts/glossary.md#pile) из [кластера](../../../concepts/glossary.md#cluster) для обслуживания

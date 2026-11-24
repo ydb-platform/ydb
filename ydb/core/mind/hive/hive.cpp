@@ -130,15 +130,14 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
-    if (MustBePrimaryPile) {
+    if (MustBePrimaryPile && Hive->GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
         return Hive->IsPrimaryPile(pile);
-    } else {
-        const auto* pileInfo = Hive->FindPile(pile);
-        if (!pileInfo) {
-            return false;
-        }
-        return pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
     }
+    if (Hive->IsPrimaryPile(pile)) {
+        return true; // the pile being promoted must be allowed even before it becomes synchronized
+    }
+    const auto* pileInfo = Hive->FindPile(pile);
+    return pileInfo && pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
 }
 
 TMetrics& TMetrics::operator+=(const TMetrics& other) {

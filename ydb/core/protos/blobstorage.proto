@@ -1791,6 +1791,7 @@ message TEvControllerDDiskInfoListTabletsResult {
 message TEvControllerDDiskInfoGetTablet {
     optional uint64 TabletId = 1;
     optional uint64 KnownRevision = 2;
+    optional bool IncludeHealth = 3; // enrich in CMS; BSC only supplies layout
 }
 
 message TEvControllerDDiskInfoGetTabletResult {
@@ -1806,6 +1807,9 @@ message TEvControllerDDiskInfoGetTabletResult {
     optional uint64 TabletId = 3;
     optional uint64 Revision = 4;
     repeated TDirectBlockGroup Groups = 5;
+    // Allocated slots referenced by either role, keyed by node, PDisk, and slot.
+    // Included with health so a consumer can display the layout from one snapshot.
+    repeated NKikimrWhiteboard.TDDiskStateInfo Slots = 6;
 }
 
 message TEvControllerDDiskInfoTabletRevisionChanged {

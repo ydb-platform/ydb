@@ -89,7 +89,7 @@ public:
     TNativeSerializer(const arrow::Compression::type compressionType) {
         Options.use_threads = false;
         auto r = arrow::util::Codec::Create(compressionType);
-        AFL_VERIFY(r.ok());
+        YDB_LOG_VERIFY(r.ok());
         Options.codec = std::move(*r);
     }
 

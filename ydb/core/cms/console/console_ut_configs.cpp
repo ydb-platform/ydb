@@ -11,15 +11,18 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
+#include <util/generic/algorithm.h>
 #include <util/string/subst.h>
 
 namespace NKikimr {
@@ -1155,6 +1158,45 @@ TVector<ui64> CheckConfigureLogAffected(TTenantTestRuntime &runtime,
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
+    Y_UNIT_TEST(TestMainConfigAuditUnknownKeys) {
+        std::vector<std::string> auditLines;
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.RegisterService(NAudit::MakeAuditServiceID(), runtime.Register(
+            NAudit::CreateAuditWriter(Tests::CreateTestAuditLogBackends(auditLines)).release()));
+
+        auto* request = new TEvConsole::TEvReplaceYamlConfigRequest;
+        request->Record.MutableRequest()->set_config(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    unknown_audit_option_a: true
+    unknown_audit_option_b: true
+)");
+        runtime.SendToConsole(request);
+        TAutoPtr<IEventHandle> handle;
+        const auto* error = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGenericError>(handle);
+        const auto& record = error->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(record.IssuesSize(), 2);
+        UNIT_ASSERT_STRING_CONTAINS(record.GetIssues(0).message(), "Unknown key# unknown_audit_option_a");
+        UNIT_ASSERT_STRING_CONTAINS(record.GetIssues(1).message(), "Unknown key# unknown_audit_option_b");
+        const auto reason = NYql::IssuesFromMessageAsString(record.GetIssues());
+
+        runtime.WaitFor("main config audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) {
+                return line.find("operation=REPLACE DYNCONFIG") != std::string::npos;
+            });
+        }, TDuration::Seconds(10));
+        const auto line = Tests::FindAuditLine(auditLines, "operation=REPLACE DYNCONFIG");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
+        UNIT_ASSERT_STRING_CONTAINS(line, "/config/feature_flags/unknown_audit_option_a");
+        UNIT_ASSERT_STRING_CONTAINS(line, "/config/feature_flags/unknown_audit_option_b");
+    }
+
     // Unit test for the unknown/deprecated -> proto conversion helper.
     Y_UNIT_TEST(BuildYamlConfigUnknownFieldsHelper) {
         TMap<TString, std::pair<TString, TString>> unknown{
@@ -1396,6 +1438,52 @@ selector_config:
         UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_in_selector");
         UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetPath(), "/selector_config/0/config/unknown_in_selector");
         UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetDeprecated(), false);
+    }
+
+    Y_UNIT_TEST(TestDatabaseConfigAuditUnknownKeys) {
+        std::vector<std::string> auditLines;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        auto validator = NYamlConfig::CreateDefaultConfigSwissKnife();
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), appConfig);
+        runtime.GetAppData().ConfigSwissKnife = validator.get();
+        runtime.RegisterService(NAudit::MakeAuditServiceID(), runtime.Register(
+            NAudit::CreateAuditWriter(Tests::CreateTestAuditLogBackends(auditLines)).release()));
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+
+        auto* request = new TEvConsole::TEvReplaceYamlConfigRequest;
+        request->Record.MutableRequest()->set_allow_absent_database(true);
+        request->Record.MutableRequest()->set_config(R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config:
+  feature_flags:
+    unknown_audit_option_a: true
+    unknown_audit_option_b: true
+)");
+        runtime.SendToConsole(request);
+        TAutoPtr<IEventHandle> handle;
+        const auto* error = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGenericError>(handle);
+        const auto& record = error->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(record.IssuesSize(), 2);
+        UNIT_ASSERT_STRING_CONTAINS(record.GetIssues(0).message(), "Unknown key# unknown_audit_option_a");
+        UNIT_ASSERT_STRING_CONTAINS(record.GetIssues(1).message(), "Unknown key# unknown_audit_option_b");
+        const auto reason = NYql::IssuesFromMessageAsString(record.GetIssues());
+
+        runtime.WaitFor("database config audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) {
+                return line.find("operation=REPLACE DATABASE CONFIG") != std::string::npos;
+            });
+        }, TDuration::Seconds(10));
+        const auto line = Tests::FindAuditLine(auditLines, "operation=REPLACE DATABASE CONFIG");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "database=/dc-1/users/tenant-1");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
+        UNIT_ASSERT_STRING_CONTAINS(line, "/feature_flags/unknown_audit_option_a");
+        UNIT_ASSERT_STRING_CONTAINS(line, "/feature_flags/unknown_audit_option_b");
     }
 
     Y_UNIT_TEST(TestAddConfigItem) {

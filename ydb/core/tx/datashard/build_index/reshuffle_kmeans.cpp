@@ -151,7 +151,7 @@ public:
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
-        const auto& data = request.GetDataColumns();
+        const auto data = MakeUploadDataColumns(table, embedding, request.GetDataColumns(), request.GetIndexType());
         ScanTags = MakeScanTags(table, embedding, data, toBuild, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
@@ -582,7 +582,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error, NKikimr::NKMeans::EClustersMode::AssignOnly);
         if (!clusters) {
             badRequest(error);
         } else if (request.ClustersSize() < 1) {

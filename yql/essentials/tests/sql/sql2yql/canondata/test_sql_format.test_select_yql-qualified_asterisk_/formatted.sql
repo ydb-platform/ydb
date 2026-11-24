@@ -1,6 +1,12 @@
 PRAGMA YqlSelect = 'force';
 
 SELECT
+    a.*
+FROM
+    AS_TABLE([<|id: 1, value: 'a'|>]) AS a
+;
+
+SELECT
     x.*,
     y.*
 FROM (

@@ -24,6 +24,18 @@ and adds the `experimental` (alias `exp`) command tree on top of it. The rest
 of the behaviour (authentication options, profiles, output formats, etc.)
 largely matches the official `ydb` client.
 
+### Tablet channel reassignment
+
+```bash
+./ydb/apps/ydb/experimental/ydb/ydb -e grpc://localhost:2135 -d /Root/db \
+  experimental reassign-tablets --storage-pool /Root/db:rot
+```
+
+The database selects the Hive; the storage pool and group filters select the
+affected tablets. Use `ydb operation get <id>` to check progress and
+`ydb operation cancel <id>` to stop scheduling new work. Run
+`ydb experimental reassign-tablets --help` for all options.
+
 ### Deferred topic publication
 
 Under `experimental topic`:

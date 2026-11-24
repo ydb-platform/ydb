@@ -7,7 +7,7 @@ namespace NKikimr::NArrow::NSSA::NAggregation {
 EAggregate TAggregationsHelper::GetSecondaryAggregationId(const EAggregate aggr) {
     switch (aggr) {
         case EAggregate::Unspecified:
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         case EAggregate::Min:
         case EAggregate::Max:
         case EAggregate::Sum:

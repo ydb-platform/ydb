@@ -19,7 +19,8 @@ TSummaryPolicyConflicts GetSummaryPolicyConflicts(ESummaryPolicy policy)
     int specifiedAggregateCount = static_cast<int>(Any(policy & ESummaryPolicy::Sum)) +
         static_cast<int>(Any(policy & ESummaryPolicy::Min)) +
         static_cast<int>(Any(policy & ESummaryPolicy::Max)) +
-        static_cast<int>(Any(policy & ESummaryPolicy::Avg));
+        static_cast<int>(Any(policy & ESummaryPolicy::Avg)) +
+        static_cast<int>(Any(policy & ESummaryPolicy::Count));
 
     return {
         .AllPolicyWithSpecifiedAggregates = isAllPolicy && specifiedAggregateCount > 0,

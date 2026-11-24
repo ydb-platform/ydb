@@ -139,8 +139,8 @@ public:
             column.second.IsBuildInProgress = false;
             context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, column.first);
         }
-
         tableInfo->ResetDescriptionCache();
+
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);

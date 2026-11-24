@@ -351,15 +351,14 @@ TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& 
             return {};
         }
 
+        // A read in the key order or in the reverse one can return the rows of the sort.
+        if (!GetKeyReadDirection(sort->GetSortElements())) {
+            return {};
+        }
         TVector<TString> sortColumns;
         const auto& sortElements = sort->GetSortElements().Items();
         sortColumns.reserve(sortElements.size());
-
-        const bool ascending = sortElements.empty() ? true : sortElements.front().second.Ascending;
         for (const auto& [id, order] : sortElements) {
-            if (order.Ascending != ascending || order.NullsFirst != ascending) {
-                return {};
-            }
             sortColumns.push_back(TString(ctx.GetIndexAsString(Substitute(id, copies))));
         }
         return sortColumns;
@@ -679,9 +678,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             .PointPrefixLen = lookupResult.PointPrefixLen,
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
-        if (GetStorageType(*lookupIndexMeta) == NYql::EStorageType::RowStorage) {
-            rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, winner.KeyColumns, *schemeType, read->Pos, ctx);
-        }
+        rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, winner.KeyColumns, *schemeType, read->Pos, ctx);
 
         const auto lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
         TUnorderedIUs indexColumns;
@@ -754,12 +751,10 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     };
     const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->GetTableStorageType();
 
-    // Only the row storage read source takes a literal range.
-    if (storageType == NYql::EStorageType::RowStorage) {
-        rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
-        if (rangeInfo.LiteralRange) {
-            YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);
-        }
+    // Only the row storage read source takes a literal range, but explain shows it for any storage.
+    rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
+    if (rangeInfo.LiteralRange) {
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);
     }
 
     const auto tableCallable = chosenIndexMeta ? BuildTableCallable(*chosenIndexMeta, read->Pos, ctx) : read->TableCallable;

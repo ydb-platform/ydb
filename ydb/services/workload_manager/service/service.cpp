@@ -111,6 +111,8 @@ public:
         EnabledResourcePoolsOnServerless =
             event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
+        // TODO: On disable, clear WM pool policy and subscriptions in the scheduler, preserving live query accounting.
+        // Ignore late updates from old subscriptions and rediscover pools on enable as on first startup.
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enabled");
             InitializeWorkloadService();
@@ -233,6 +235,7 @@ public:
 
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
+        hFunc(TEvPrivate::TEvRetryPoolSubscription, Handle);
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
         hFunc(TEvPrivate::TEvNodesInfoRequest, Handle);
@@ -348,6 +351,13 @@ private:
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdatePoolInfo(ev, poolHandler);
+    }
+
+    void Handle(TEvPrivate::TEvRetryPoolSubscription::TPtr& ev) {
+        auto it = DatabaseToState.find(ev->Get()->DatabaseId);
+        if (it != DatabaseToState.end()) {
+            it->second.RetryPoolSubscription(*ev->Get());
+        }
     }
 
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
@@ -722,11 +732,6 @@ IActor* CreateService(NMonitoring::TDynamicCounterPtr counters) {
 
 NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamicCounterPtr rootCounters) {
     return GetServiceCounters(rootCounters, "kqp")->GetSubgroup("subsystem", "workload_manager");
-}
-
-NActors::TActorId MakeServiceId(ui32 nodeId) {
-    const char name[12] = "kqp_workld";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
 }   // namespace NKikimr::NWorkloadManager

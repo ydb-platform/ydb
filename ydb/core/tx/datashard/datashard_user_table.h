@@ -309,8 +309,8 @@ struct TUserTable : public TThrRefBase {
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
-        bool IsBuildInProgress = false;
         bool SetNotNullInProgress = false;
+        bool IsBuildInProgress = false;
         // Set when the column default is a sequence: the path as written in the DDL
         // (possibly relative to the table). The data shard resolves it against its own
         // table path when it needs to address the sequence.
@@ -374,6 +374,7 @@ struct TUserTable : public TThrRefBase {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
+        using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
         using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
         TString Name;
@@ -386,6 +387,8 @@ struct TUserTable : public TThrRefBase {
         TMaybe<TString> AwsRegion;
         bool UserSIDs = false;
         bool TraceIds = false;
+        EHeartbeatMode HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
+        ui64 AggregatorTabletId = 0;
         ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
         i32 CompressionLevel = 0;
 
@@ -401,6 +404,8 @@ struct TUserTable : public TThrRefBase {
             , SchemaChanges(streamDesc.GetSchemaChanges())
             , UserSIDs(streamDesc.GetUserSIDs())
             , TraceIds(streamDesc.GetTraceIds())
+            , HeartbeatMode(streamDesc.GetHeartbeatMode())
+            , AggregatorTabletId(streamDesc.GetAggregatorTabletId())
             , Compression(streamDesc.GetCompression())
             , CompressionLevel(streamDesc.HasCompressionLevel() ? streamDesc.GetCompressionLevel() : 0)
         {
@@ -607,10 +612,13 @@ struct TUserTable : public TThrRefBase {
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
+    bool FinishColumnBuilding();
 
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
         return DetailedMetricsLevel;
     }
+
+    void UpdateLocalHnswIndex(const NKikimrSchemeOp::TTableDescription& description);
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);

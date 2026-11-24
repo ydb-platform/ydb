@@ -32,9 +32,9 @@ void TTrivialArray::Reallocate() {
 
 std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
     const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& typePtr) {
-    AFL_VERIFY(!!typePtr);
+    YDB_LOG_VERIFY(!!typePtr);
     if (scalar) {
-        AFL_VERIFY(scalar->type->id() == typePtr->id());
+        YDB_LOG_VERIFY(scalar->type->id() == typePtr->id());
         return BuildArrayFromScalar(scalar);
     } else {
         return TStatusValidator::GetValid(arrow::MakeArrayOfNull(typePtr, 1));
@@ -79,7 +79,7 @@ IChunkedArray::TLocalDataAddress TTrivialChunkedArray::DoGetLocalData(
     std::optional<IChunkedArray::TLocalDataAddress> result;
     TChunkAccessor accessor(Array, result);
     SelectChunk(chunkCurrent, position, accessor);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 

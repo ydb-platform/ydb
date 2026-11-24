@@ -247,8 +247,8 @@ protected:
         return Core.DoGetUsefulMetric();
     }
 
-    TConclusion<bool> DoCheckNoIntersections() const override {
-        return Core.HasNoIntersections();
+    bool DoNeedCompaction() const override {
+        return !Core.HasNoIntersections();
     }
 
     bool DoIsOverloaded() const override {
@@ -291,7 +291,7 @@ public:
         , PortionExpectedSize(settings.PortionExpectedSize)
         , CompactionThreads(settings.CompactionThreads)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 

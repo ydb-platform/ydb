@@ -5,9 +5,18 @@
 
 #include <library/cpp/resource/resource.h>
 
+#include <util/string/hex.h>
+
 namespace NKikimr::NKqp::NDigestTest {
 
 namespace NDigest = NYql::NDigest;
+
+inline TKikimrSettings ChecksumTableSettings() {
+    TKikimrSettings settings;
+    settings.SetWithSampleTables(false);
+    settings.FeatureFlags.SetEnableChecksumTable(true);
+    return settings;
+}
 
 inline const TString& DigestFactorySql() {
     static const TString sql = [] {
@@ -73,7 +82,7 @@ inline void AssertDigest(const TDigestResult& actual, const NDigest::TState& exp
     UNIT_ASSERT_VALUES_EQUAL(actual.Version, NDigest::TState::Version);
     UNIT_ASSERT_VALUES_EQUAL(actual.Algorithm, NDigest::GetAlgorithmName(expected.GetAlgorithm()));
     UNIT_ASSERT_VALUES_EQUAL(actual.Count, expected.GetCount());
-    UNIT_ASSERT_VALUES_EQUAL(actual.Hash, expected.GetHashBytes());
+    UNIT_ASSERT_VALUES_EQUAL(actual.Hash, HexEncode(expected.GetHashBytes()));
 }
 
 } // namespace NKikimr::NKqp::NDigestTest

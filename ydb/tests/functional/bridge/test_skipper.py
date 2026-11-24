@@ -133,6 +133,132 @@ class Skipper:
         self.log.close()
 
 
+class LoadedWrites:
+    """Continuous bounded writes; audit exactly the rows acknowledged by YDB."""
+
+    def __init__(self, test, pile, workers=4):
+        self.test = test
+        self.pile = pile
+        self.workers = workers
+        self.stop = Event()
+        self.lock = Lock()
+        self.acknowledgements = {}
+        self.successful = []
+        self.counts = [0] * workers
+        self.last_success = [None] * workers
+        self.last_errors = [None] * workers
+        self.futures = []
+        self.executor = None
+        self.driver = None
+
+    @staticmethod
+    def settings():
+        return (ydb.BaseRequestSettings().with_operation_timeout(1.5)
+                .with_cancel_after(1.5).with_timeout(2))
+
+    def __enter__(self):
+        self.test.query(self.pile, "CREATE TABLE `/Root/rto_load` "
+                        "(id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
+        self.driver = ydb.Driver(ydb.DriverConfig(
+            endpoint="grpc://" + self.test.pile_nodes[self.pile][0].endpoint,
+            database="/Root", disable_discovery=True))
+        self.test.cleanup.callback(self.close)
+        try:
+            self.driver.wait(timeout=15)
+            self.executor = ThreadPoolExecutor(max_workers=self.workers)
+            self.futures = [self.executor.submit(self.write, worker) for worker in range(self.workers)]
+            eventually(self.ready, "writes from every load worker", timeout=15)
+            return self
+        except BaseException:
+            self.close()
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def close(self):
+        self.stop.set()
+        try:
+            if self.executor is not None:
+                self.executor.shutdown(wait=True)
+                self.executor = None
+                for future in self.futures:
+                    future.result()
+        finally:
+            if self.driver is not None:
+                driver, self.driver = self.driver, None
+                self.test.stop_driver(driver)
+
+    def write(self, worker):
+        session = query = None
+        serial = 0
+        statement = ("DECLARE $id AS Uint64; DECLARE $value AS Utf8; "
+                     "UPSERT INTO `/Root/rto_load` (id,value) VALUES ($id,$value);")
+        while not self.stop.is_set():
+            started = time.monotonic()
+            try:
+                if session is None:
+                    session = self.driver.table_client.session().create(settings=self.settings())
+                if query is None:
+                    query = session.prepare(statement, settings=self.settings())
+                serial += 1
+                key = (worker + 1) * 1_000_000_000 + serial
+                value = "writer-%d-row-%d-%s" % (worker, serial, "x" * 256)
+                sent = time.monotonic()
+                session.transaction(ydb.SerializableReadWrite()).execute(
+                    query, {"$id": key, "$value": value}, commit_tx=True, settings=self.settings())
+                finished = time.monotonic()
+                with self.lock:
+                    self.acknowledgements[key] = value
+                    self.successful.append((sent, finished))
+                    self.counts[worker] += 1
+                    self.last_success[worker] = finished
+            except (ydb.Error, grpc.RpcError) as error:
+                with self.lock:
+                    self.last_errors[worker] = str(error)[:500]
+                if isinstance(error, (ydb.BadSession, ydb.SessionExpired, ydb.SessionBusy)):
+                    session = query = None
+            self.stop.wait(max(0, 0.05 - (time.monotonic() - started)))
+
+    def ready(self, require_fresh=False):
+        for future in self.futures:
+            if future.done():
+                future.result()
+                raise AssertionError("Load writer stopped unexpectedly")
+        with self.lock:
+            now = time.monotonic()
+            return (all(count >= 4 for count in self.counts)
+                    and (not require_fresh or all(at is not None and now - at <= 2
+                                                  for at in self.last_success)))
+
+    def first_ack_after(self, boundary):
+        self.ready()
+        with self.lock:
+            return min((record for record in self.successful if record[0] >= boundary),
+                       key=lambda record: record[1], default=None)
+
+    def recovery_elapsed(self, committed, started):
+        # A write sent after observing the commit proves fresh service recovery.
+        # Wait longer than the SLA so an RTO failure can still audit every ACK.
+        first = eventually(lambda: self.first_ack_after(committed), "acknowledged post-failover write",
+                           timeout=max(0, 60 - (time.monotonic() - started)))
+        elapsed = first[1] - started
+        self.test.logger.info("Skipper restored loaded writes after %.3f seconds", elapsed)
+        return elapsed
+
+    def verify(self, pile):
+        assert self.stop.is_set(), "Stop writers before taking the complete ACK audit"
+        for future in self.futures:
+            future.result()
+        assert all(self.counts), self.counts
+        keys = sorted(self.acknowledgements)
+        for offset in range(0, len(keys), 500):
+            expected = {key: self.acknowledgements[key] for key in keys[offset:offset + 500]}
+            result = self.test.query(pile, "SELECT id,value FROM `/Root/rto_load` WHERE id IN (%s)" %
+                                     ",".join("%du" % key for key in expected))
+            assert {row.id: row.value for row in result[0].rows} == expected
+
+
 class RealSkipperCluster(BridgeKiKiMRTest):
     def setup_method(self, method):
         self.hold_stage2 = method.__name__ == "test_stage2_failure"
@@ -283,6 +409,18 @@ class RealSkipperCluster(BridgeKiKiMRTest):
             list(executor.map(daemon.Daemon.kill, nodes))
         assert all(not node.is_alive() for node in nodes)
 
+    def check_processes(self, pids):
+        assert all(node.is_alive() and node.pid == pids[node_id]
+                   for node_id, node in self.cluster.nodes.items()), pids
+
+    def restart_bsc(self, pile):
+        # One bounded call: an uncertain poison must not be retried.
+        with grpc.insecure_channel(self.pile_nodes[pile][0].endpoint) as channel:
+            response = tablet_grpc.TabletServiceStub(channel).RestartTablet(
+                tablet.RestartTabletRequest(tablet_id=TabletTypes.FLAT_BS_CONTROLLER.tablet_id_for(0)),
+                metadata=TOKEN, timeout=5)
+        assert response.status in (StatusIds.SUCCESS, StatusIds.UNAVAILABLE), response
+
     def assert_auto_commit(self, failed, expected, generation):
         state = self.skipper.state()
         if state["decision"]["kind"] == "READY":
@@ -418,126 +556,37 @@ class TestSkipperFailoverLatency(RealSkipperCluster):
 
     def test_default_failover_restores_loaded_writes_within_20_seconds(self):
         self.create_data()
-        self.query("r2", "CREATE TABLE `/Root/rto_load` (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
-        driver = ydb.Driver(ydb.DriverConfig(
-            endpoint="grpc://" + self.pile_nodes["r2"][0].endpoint, database="/Root", disable_discovery=True))
-        self.cleanup.callback(self.stop_driver, driver)
-        driver.wait(timeout=15)
-        stop = Event()
-        lock = Lock()
-        workers = 4
-        acknowledgements = {}
-        successful = []
-        worker_counts = [0] * workers
-        last_success = [None] * workers
-        last_errors = [None] * workers
-        statement = ("DECLARE $id AS Uint64; DECLARE $value AS Utf8; "
-                     "UPSERT INTO `/Root/rto_load` (id,value) VALUES ($id,$value);")
-
-        def settings():
-            return (ydb.BaseRequestSettings().with_operation_timeout(1.5)
-                    .with_cancel_after(1.5).with_timeout(2))
-
-        def write(worker):
-            session = query = None
-            serial = 0
-            while not stop.is_set():
-                started = time.monotonic()
-                try:
-                    if session is None:
-                        session = driver.table_client.session().create(settings=settings())
-                    if query is None:
-                        query = session.prepare(statement, settings=settings())
-                    serial += 1
-                    key = (worker + 1) * 1_000_000_000 + serial
-                    value = "writer-%d-row-%d-%s" % (worker, serial, "x" * 256)
-                    sent = time.monotonic()
-                    session.transaction(ydb.SerializableReadWrite()).execute(
-                        query, {"$id": key, "$value": value}, commit_tx=True, settings=settings())
-                    finished = time.monotonic()
-                    with lock:
-                        acknowledgements[key] = value
-                        successful.append((sent, finished))
-                        worker_counts[worker] += 1
-                        last_success[worker] = finished
-                except (ydb.Error, grpc.RpcError) as error:
-                    with lock:
-                        last_errors[worker] = str(error)[:500]
-                    if isinstance(error, (ydb.BadSession, ydb.SessionExpired, ydb.SessionBusy)):
-                        session = query = None
-                # Maintain continuous, moderate load instead of saturating the server.
-                stop.wait(max(0, 0.05 - (time.monotonic() - started)))
-
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = []
-
-            def load_ready(require_fresh=False):
-                for future in futures:
-                    if future.done():
-                        future.result()
-                        raise AssertionError("Load writer stopped unexpectedly")
-                with lock:
-                    now = time.monotonic()
-                    return (all(count >= 4 for count in worker_counts)
-                            and (not require_fresh or all(at is not None and now - at <= 2 for at in last_success)))
-
-            def first_ack_after(boundary):
-                load_ready()
-                with lock:
-                    return min((record for record in successful if record[0] >= boundary),
-                               key=lambda record: record[1], default=None)
-
+        elapsed = recovery_error = None
+        with LoadedWrites(self, "r2") as load:
+            # Load stays active through the healthy warm-up and the fault.
+            before = self.start_skipper()
+            self.skipper.mode("auto")
+            generation = int(before["view"]["generation"])
+            primary = self.pile_nodes["r1"]
+            for node in primary:
+                self.cleanup.callback(lambda node=node: node.unfreeze() if node.is_alive() else None)
+            eventually(lambda: load.ready(require_fresh=True), "fresh writes from every worker before the fault", timeout=5)
+            started = time.monotonic()
+            with ThreadPoolExecutor(max_workers=len(primary)) as freezer:
+                list(freezer.map(lambda node: node.freeze(), primary))
+            expected = {"r1": "DISCONNECTED", "r2": "PRIMARY"}
+            state = self.wait_snapshot(
+                lambda state: state["view"] and {
+                    pile["name"]: pile["state"] for pile in state["view"]["piles"]} == expected,
+                "committed failover under write load", timeout=60)
+            committed = time.monotonic()
+            attempt = state["last_mutation"]
+            assert int(state["view"]["generation"]) > generation, state
+            assert int(attempt["expected_generation"]) == generation, attempt
+            assert attempt["update"] == expected, attempt
             try:
-                futures.extend(executor.submit(write, worker) for worker in range(workers))
-                eventually(load_ready, "writes from every load worker", timeout=15)
-                # The load stays active throughout Skipper's healthy warm-up and the fault.
-                before = self.start_skipper()
-                self.skipper.mode("auto")
-                generation = int(before["view"]["generation"])
-                primary = self.pile_nodes["r1"]
-                for node in primary:
-                    self.cleanup.callback(lambda node=node: node.unfreeze() if node.is_alive() else None)
-                eventually(lambda: load_ready(require_fresh=True), "fresh writes from every worker before the fault", timeout=5)
-                started = time.monotonic()
-                with ThreadPoolExecutor(max_workers=len(primary)) as freezer:
-                    list(freezer.map(lambda node: node.freeze(), primary))
-                expected = {"r1": "DISCONNECTED", "r2": "PRIMARY"}
-                state = self.wait_snapshot(
-                    lambda state: state["view"] and {
-                        pile["name"]: pile["state"] for pile in state["view"]["piles"]} == expected,
-                    "committed failover under write load", timeout=60)
-                committed = time.monotonic()
-                attempt = state["last_mutation"]
-                assert int(state["view"]["generation"]) > generation, state
-                assert int(attempt["expected_generation"]) == generation, attempt
-                assert attempt["update"] == expected, attempt
-                # Only a newly sent, post-commit write proves recovery; an old in-flight
-                # success during fault propagation cannot satisfy this check. Allow
-                # recovery before asserting its timestamp so an RTO regression still
-                # verifies every acknowledged row on the surviving pile.
-                elapsed = None
-                recovery_error = None
-                try:
-                    first = eventually(lambda: first_ack_after(committed), "acknowledged post-failover write",
-                                       timeout=max(0, 60 - (time.monotonic() - started)))
-                    elapsed = first[1] - started
-                    self.logger.info("Skipper restored loaded writes after %.3f seconds", elapsed)
-                except AssertionError as error:
-                    recovery_error = error
-                # Keep observing after recovery to catch a repeated mutation.
-                time.sleep(3)
-            finally:
-                stop.set()
+                elapsed = load.recovery_elapsed(committed, started)
+            except AssertionError as error:
+                recovery_error = error
+            # Keep observing after recovery to catch a repeated mutation.
+            time.sleep(3)
 
-        for future in futures:
-            future.result()
-        assert all(worker_counts), worker_counts
-        keys = sorted(acknowledgements)
-        for offset in range(0, len(keys), 500):
-            expected_rows = {key: acknowledgements[key] for key in keys[offset:offset + 500]}
-            result = self.query("r2", "SELECT id,value FROM `/Root/rto_load` WHERE id IN (%s)" %
-                                ",".join("%du" % key for key in expected_rows))
-            assert {row.id: row.value for row in result[0].rows} == expected_rows
+        load.verify("r2")
         self.check_data("r2")
         self.write_after_fault("r2")
         records = [json.loads(line) for line in (self.skipper.directory / "skipper.log").read_text().splitlines()]
@@ -545,7 +594,98 @@ class TestSkipperFailoverLatency(RealSkipperCluster):
         assert len(sends) == 1, sends
         assert int(sends[0]["expected_generation"]) == generation, sends
         assert recovery_error is None, recovery_error
-        assert elapsed <= 20, (elapsed, last_errors, state)
+        assert elapsed <= 20, (elapsed, load.last_errors, state)
+
+
+class TestSkipperSecondaryLoss(RealSkipperCluster):
+    erasure = Erasure.NONE
+    pile_names = ("r1", "r2", "r3")
+    nodes_count = 9
+    use_in_memory_pdisks = True
+
+    @pytest.mark.parametrize("secondary,restart_bsc", (("r2", False), ("r3", False), ("r3", True)),
+                             ids=("r2", "r3", "fallback"))
+    def test_secondary_freeze_restores_loaded_writes_within_20_seconds(self, secondary, restart_bsc):
+        self.create_data()
+        pids = {node_id: node.pid for node_id, node in self.cluster.nodes.items()}
+        elapsed = recovery_error = None
+        expected = {"r1": "PRIMARY", "r2": "SYNCHRONIZED", "r3": "SYNCHRONIZED"}
+        expected[secondary] = "DISCONNECTED"
+        with LoadedWrites(self, "r1") as load:
+            before = self.start_skipper()
+            if not restart_bsc:
+                self.skipper.mode("auto")
+            generation = int(before["view"]["generation"])
+            for node in self.pile_nodes[secondary]:
+                self.cleanup.callback(lambda node=node: node.unfreeze() if node.is_alive() else None)
+            eventually(lambda: load.ready(require_fresh=True), "fresh writes before secondary loss", timeout=5)
+            started = time.monotonic()
+            with ThreadPoolExecutor(max_workers=len(self.pile_nodes[secondary])) as freezer:
+                list(freezer.map(lambda node: node.freeze(), self.pile_nodes[secondary]))
+
+            if restart_bsc:
+                # Force real fallback instead of relying on BSC failure timing.
+                self.restart_bsc("r1")
+
+                def fallback_failed(snapshot):
+                    target = next((pile for pile in snapshot["piles"] if pile["name"] == secondary), {})
+                    return target.get("verdict") == "FAILED" and any(
+                        "outside fallback" in reason for reason in target.get("reasons", []))
+
+                self.wait_snapshot(fallback_failed, "decisive secondary fallback proof",
+                                   timeout=max(0, 20 - (time.monotonic() - started)))
+                self.skipper.mode("auto")
+
+            def disconnected(state):
+                if not state["view"]:
+                    return False
+                states = {pile["name"]: pile["state"] for pile in state["view"]["piles"]}
+                if states.get("r1") != "PRIMARY":
+                    raise RuntimeError("Secondary loss changed the primary: %r" % state)
+                return states == expected
+
+            state = self.wait_snapshot(disconnected, "only the frozen secondary disconnected", timeout=60)
+            committed = time.monotonic()
+            assert int(state["view"]["generation"]) > generation, state
+            assert state["controller_boot_id"] == before["controller_boot_id"], state
+            attempt = state["last_mutation"]
+            assert int(attempt["expected_generation"]) == generation, attempt
+            assert attempt["update"] == {secondary: "DISCONNECTED"}, attempt
+            try:
+                elapsed = load.recovery_elapsed(committed, started)
+            except AssertionError as error:
+                recovery_error = error
+            time.sleep(3)
+
+        # Check the complete ACK set while the lost pile remains frozen.
+        survivors = [name for name in self.pile_names if name != secondary]
+        for pile in survivors:
+            load.verify(pile)
+            self.check_data(pile)
+        self.write_after_fault("r1")
+        self.check_processes(pids)
+        records = [json.loads(line) for line in (self.skipper.directory / "skipper.log").read_text().splitlines()]
+        sends = [record for record in records if record.get("event") == "mutation_sent"]
+        assert len(sends) == 1 and int(sends[0]["expected_generation"]) == generation, sends
+
+        # External lifecycle administration requires Observe (operations runbook).
+        self.skipper.mode("observe")
+        # Resume the same processes, explicitly rejoin, and audit the recovered copy.
+        for node in self.pile_nodes[secondary]:
+            node.unfreeze()
+        self.guarded_update({secondary: UNSYNC})
+
+        def synchronized():
+            report = state_rpc(self.pile_nodes["r1"][0], connectivity=False)
+            states = {pile.pile_name: pile.state for pile in report.pile_states}
+            assert states.get("r1") == PRIMARY, report
+            return states == {"r1": PRIMARY, "r2": SYNC, "r3": SYNC}
+
+        eventually(synchronized, "resumed secondary synchronized", timeout=180)
+        load.verify(secondary)
+        self.check_data(secondary)
+        assert recovery_error is None, recovery_error
+        assert elapsed <= 20, (elapsed, load.last_errors, state)
 
 
 class TestSkipperLiveStorageFailure(RealSkipperCluster):
@@ -587,10 +727,6 @@ class TestSkipperLiveStorageFailure(RealSkipperCluster):
         assert failed, "No active RAM PDisk found in %s" % pile
         self.logger.info("Injected DeviceIoError into RAM PDisks: %s", failed)
 
-    def check_processes(self, pids):
-        assert all(node.is_alive() and node.pid == pids[node_id]
-                   for node_id, node in self.cluster.nodes.items()), pids
-
     @pytest.mark.parametrize("prepare_fallback", (False, True), ids=("auto_before_fault", "fallback_before_auto"))
     def test_primary_storage_error_fails_over_with_live_nodes(self, prepare_fallback):
         self.create_data()
@@ -610,13 +746,7 @@ class TestSkipperLiveStorageFailure(RealSkipperCluster):
         if prepare_fallback:
             # BSC may keep serving RED from memory after disk failure. Restart
             # just that tablet so this case must use the new fallback proof.
-            # One bounded call: an uncertain poison must not be retried.
-            node = self.pile_nodes["r2"][0]
-            with grpc.insecure_channel(node.endpoint) as channel:
-                response = tablet_grpc.TabletServiceStub(channel).RestartTablet(
-                    tablet.RestartTabletRequest(tablet_id=TabletTypes.FLAT_BS_CONTROLLER.tablet_id_for(0)),
-                    metadata=TOKEN, timeout=5)
-            assert response.status in (StatusIds.SUCCESS, StatusIds.UNAVAILABLE), response
+            self.restart_bsc("r2")
 
             def storage_failed(state):
                 self.check_processes(pids)

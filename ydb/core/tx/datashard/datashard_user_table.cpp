@@ -16,19 +16,28 @@ namespace NDataShard {
 
 namespace {
 
-void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
+void MergeLocalHnswIndex(NKikimrSchemeOp::TTableDescription& schema,
+        const NKikimrSchemeOp::TTableDescription& delta) {
+    if (delta.HasLocalHnswIndex()) {
+        schema.MutableLocalHnswIndex()->CopyFrom(delta.GetLocalHnswIndex());
+    }
+}
+
+void ParseLocalHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
     table.HnswIndexes.clear();
-    for (const auto& index : descr.GetTableIndexes()) {
-        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw || !index.HasHnswIndexDescription()) {
-            continue;
-        }
-        const auto& description = index.GetHnswIndexDescription();
-        if (description.HasSettings() && description.GetSettings().has_settings()
-                && description.HasEmbeddingColumnId()) {
-            table.HnswIndexes.emplace(TPathId(index.GetPathOwnerId(), index.GetLocalPathId()),
-                TUserTable::THnswIndexInfo{description.GetSettings().settings(),
-                    description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
-        }
+    if (!descr.HasLocalHnswIndex()) {
+        return;
+    }
+    const auto& index = descr.GetLocalHnswIndex();
+    if (!index.HasIndexId() || !index.HasHnswIndexDescription()) {
+        return;
+    }
+    const auto& description = index.GetHnswIndexDescription();
+    if (description.HasSettings() && description.GetSettings().has_settings()
+            && description.HasEmbeddingColumnId()) {
+        table.HnswIndexes.emplace(TPathId::FromProto(index.GetIndexId()),
+            TUserTable::THnswIndexInfo{description.GetSettings().settings(),
+                description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
     }
 }
 
@@ -85,6 +94,33 @@ bool TUserTable::ResetTableSchemaVersion()
     return false;
 }
 
+bool TUserTable::FinishColumnBuilding() {
+    NKikimrSchemeOp::TTableDescription schema;
+    GetSchema(schema);
+
+    bool changed = false;
+    for (auto& column : *schema.MutableColumns()) {
+        if (column.GetIsBuildInProgress()) {
+            Columns.at(column.GetId()).IsBuildInProgress = false;
+            column.SetIsBuildInProgress(false);
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        SetSchema(schema);
+    }
+    return changed;
+}
+
+void TUserTable::UpdateLocalHnswIndex(const NKikimrSchemeOp::TTableDescription& description) {
+    NKikimrSchemeOp::TTableDescription schema;
+    GetSchema(schema);
+    MergeLocalHnswIndex(schema, description);
+    ParseLocalHnswSettings(*this, schema);
+    SetSchema(schema);
+}
+
 void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     Y_ENSURE(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
@@ -101,7 +137,6 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     GetSchema(schema);
 
     schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc);
-    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 
@@ -145,7 +180,6 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
             indexes.erase(it);
-            ParseHnswSettings(*this, schema);
             SetSchema(schema);
             return;
         }
@@ -304,10 +338,10 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
+        column.SetNotNullInProgress = col.GetSetNotNullInProgress();
         if (col.HasIsBuildInProgress()) {
             column.IsBuildInProgress = col.GetIsBuildInProgress();
         }
-        column.SetNotNullInProgress = col.GetSetNotNullInProgress();
         switch (col.GetDefaultValueCase()) {
             case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
                 column.DefaultFromSequence = col.GetDefaultFromSequence();
@@ -369,7 +403,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
-    ParseHnswSettings(*this, descr);
+    ParseLocalHnswSettings(*this, descr);
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -794,27 +828,12 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
-    // Persist HNSW index descriptions with the table schema so restart and split
-    // recovery use the same graph settings. Other index types retain their
-    // existing add/drop handling.
-    for (const auto& index : delta.GetTableIndexes()) {
-        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
-            continue;
-        }
-        auto& indexes = *schema.MutableTableIndexes();
-        auto it = FindIf(indexes, [&](const auto& existing) {
-            return existing.GetPathOwnerId() == index.GetPathOwnerId()
-                && existing.GetLocalPathId() == index.GetLocalPathId();
-        });
-        if (it != indexes.end()) {
-            it->CopyFrom(index);
-        } else {
-            indexes.Add()->CopyFrom(index);
-        }
-    }
+    // Local graphs have their own metadata; TableIndexes only describes logical
+    // child indexes maintained by this table (including CDC/change collection).
+    MergeLocalHnswIndex(schema, delta);
     // An omitted index preserves its metadata; an explicitly empty HNSW
     // description disables the graph, including after a restart.
-    ParseHnswSettings(*this, schema);
+    ParseLocalHnswSettings(*this, schema);
     SetSchema(schema);
 }
 

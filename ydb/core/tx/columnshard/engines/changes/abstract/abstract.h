@@ -43,29 +43,32 @@ class TVersionedIndex;
 
 class TPortionEvictionFeatures {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+    YDB_READONLY(ui64, PortionSchemaVersion, 0);   // stored in the portion
+    // the portion's resolved schema, its blobs are read with it (newer than the stored version after a schema collapse)
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ReadScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);   // the rewrite writes with it
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
 
 public:
-    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
-        const TString& currentTierName)
-        : CurrentScheme(currentScheme)
+    TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& readScheme,
+        const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+        : PortionSchemaVersion(portionSchemaVersion)
+        , ReadScheme(readScheme)
         , TargetScheme(targetScheme)
         , CurrentTierName(currentTierName)
     {
-        AFL_VERIFY(CurrentTierName);
+        YDB_LOG_VERIFY(CurrentTierName);
     }
 
     const TString& GetTargetTierName() const {
-        AFL_VERIFY(TargetTierName);
+        YDB_LOG_VERIFY(TargetTierName);
         return *TargetTierName;
     }
 
     void SetTargetTierName(const TString& value) {
-        AFL_VERIFY(!TargetTierName);
+        YDB_LOG_VERIFY(!TargetTierName);
         TargetTierName = value;
     }
 
@@ -87,9 +90,9 @@ public:
 
     NActualizer::TRWAddress GetRWAddress() {
         if (!RWAddress) {
-            AFL_VERIFY(TargetTierName);
-            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName),
-                TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
+            YDB_LOG_VERIFY(TargetTierName);
+            RWAddress = NActualizer::TRWAddress(
+                ReadScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
         }
         return *RWAddress;
     }
@@ -101,10 +104,10 @@ public:
         if (CurrentTierName != TargetTierName) {
             return true;
         }
-        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+        if (PortionSchemaVersion != TargetScheme->GetVersion()) {
             return true;
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 };
@@ -227,7 +230,7 @@ public:
                     }
                 }
             }
-            AFL_VERIFY(dataColumnIds.size() <= resultSchema->GetColumnsCount());
+            YDB_LOG_VERIFY(dataColumnIds.size() <= resultSchema->GetColumnsCount());
             if (dataColumnIds.contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
                 pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
             }
@@ -238,7 +241,8 @@ public:
         {
             seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {
-                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
+                YDB_LOG_VERIFY(seqDataColumnIds.erase(i),
+                    {"id", i});
             }
         }
         return resultFiltered;
@@ -255,7 +259,7 @@ public:
     TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
         : VersionedIndex(versionedIndex)
     {
-        AFL_VERIFY(VersionedIndex);
+        YDB_LOG_VERIFY(VersionedIndex);
     }
 };
 
@@ -312,7 +316,7 @@ public:
     }
 
     void SetActivityFlag(const std::shared_ptr<const TAtomicCounter>& flag) {
-        AFL_VERIFY(!ActivityFlag);
+        YDB_LOG_VERIFY(!ActivityFlag);
         ActivityFlag = flag;
     }
 
@@ -321,12 +325,12 @@ public:
     }
 
     const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
-        AFL_VERIFY(FetchedDataAccessors);
+        YDB_LOG_VERIFY(FetchedDataAccessors);
         return FetchedDataAccessors->GetPortionAccessorVerified(portionId);
     }
 
     std::vector<TPortionDataAccessor> GetPortionDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions) const {
-        AFL_VERIFY(FetchedDataAccessors);
+        YDB_LOG_VERIFY(FetchedDataAccessors);
         std::vector<TPortionDataAccessor> result;
         for (auto&& i : portions) {
             result.emplace_back(GetPortionDataAccessor(i->GetPortionId()));
@@ -335,7 +339,7 @@ public:
     }
 
     void SetFetchedDataAccessors(TDataAccessorsResult&& result, const TDataAccessorsInitializationContext& context) {
-        AFL_VERIFY(!FetchedDataAccessors);
+        YDB_LOG_VERIFY(!FetchedDataAccessors);
         FetchedDataAccessors = std::move(result);
         OnDataAccessorsInitialized(context);
     }

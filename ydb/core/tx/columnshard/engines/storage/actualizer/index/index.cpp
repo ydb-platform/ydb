@@ -27,17 +27,21 @@ void TGranuleActualizationIndex::RemovePortion(const std::shared_ptr<TPortionInf
 }
 
 void TGranuleActualizationIndex::RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context) {
-    AFL_VERIFY(TieringActualizer);
+    YDB_LOG_VERIFY(TieringActualizer);
     TieringActualizer->Refresh(info, context);
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshTiering();
 }
 
 void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& context) {
-    AFL_VERIFY(SchemeActualizer);
+    YDB_LOG_VERIFY(SchemeActualizer);
     SchemeActualizer->Refresh(context);
-    AFL_VERIFY(TieringActualizer);
+    YDB_LOG_VERIFY(TieringActualizer);
     TieringActualizer->RefreshScheme(context);
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
+}
+
+bool TGranuleActualizationIndex::IsSchemeActualizationFinished() const {
+    return !SchemeActualizer || SchemeActualizer->IsFinished();
 }
 
 TGranuleActualizationIndex::TGranuleActualizationIndex(
@@ -50,7 +54,7 @@ TGranuleActualizationIndex::TGranuleActualizationIndex(
 }
 
 void TGranuleActualizationIndex::Start() {
-    AFL_VERIFY(Actualizers.empty());
+    YDB_LOG_VERIFY(Actualizers.empty());
     TieringActualizer = std::make_shared<TTieringActualizer>(PathId, VersionedIndex, StoragesManager);
     SchemeActualizer = std::make_shared<TSchemeActualizer>(PathId, VersionedIndex);
     Actualizers.emplace_back(TieringActualizer);

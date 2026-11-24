@@ -644,6 +644,9 @@ class TCdcChangeSenderMain
         if (!topicAutoPartitioning && !entry.PQGroupInfo->Schema) {
             return LogWarnAndRetry("Empty schema and disabled auto-partitioning");
         }
+        if (Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !entry.PQGroupInfo->Schema) {
+            return LogCritAndRetry("Empty schema for key range heartbeats");
+        }
 
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ENSURE(entry.PQGroupInfo->Partitioning);

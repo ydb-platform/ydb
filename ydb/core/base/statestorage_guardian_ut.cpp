@@ -11,7 +11,6 @@
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
-#include <array>
 #include <optional>
 
 namespace NKikimr {
@@ -151,6 +150,7 @@ enum class EGracePeriodScenario {
     Recovery,
     DisconnectDuringRetry,
     DisconnectFromFirstAttempt,
+    ReplaceMissingChild,
 };
 
 void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
@@ -166,7 +166,12 @@ void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
     auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
     const auto replicas = resolved->Get()->GetPlainReplicas();
     UNIT_ASSERT_VALUES_EQUAL(replicas.size(), 3);
-    const std::array unavailableReplicas{replicas[0], replicas[1]};
+    TVector<TActorId> unavailableReplicas{replicas[0]};
+    if (scenario == EGracePeriodScenario::ReplaceMissingChild) {
+        runtime.EnableScheduleForActor(MakeStateStorageProxyID());
+    } else {
+        unavailableReplicas.push_back(replicas[1]);
+    }
 
     THashMap<TActorId, TActorId> children;
     THashMap<TActorId, ui32> failures;
@@ -184,6 +189,7 @@ void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
             // The child's 250 ms retry wakeup is dropped unless scheduling is enabled.
             runtime.EnableScheduleForActor(ev->Sender);
             const bool disconnected = scenario == EGracePeriodScenario::DisconnectFromFirstAttempt
+                || scenario == EGracePeriodScenario::ReplaceMissingChild
                 || (scenario == EGracePeriodScenario::DisconnectDuringRetry
                     && ev->Recipient == unavailableReplicas.back() && attempt > 1);
             if (disconnected) {
@@ -220,6 +226,29 @@ void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
             UNIT_ASSERT_GT_C(failures[replica], 1u, "Missing retries for replica " << replica);
         }
     };
+    if (scenario == EGracePeriodScenario::ReplaceMissingChild) {
+        for (ui32 replacement = 0; replacement < 2; ++replacement) {
+            const TActorId retired = children.at(replicas[0]);
+            runtime.WaitFor("a replacement child for the disconnected replica", [&] {
+                return children.at(replicas[0]) != retired;
+            }, TDuration::Seconds(17));
+            UNIT_ASSERT_C(!demotedAt, "one disconnected replica caused isolation");
+        }
+        checkRetries();
+
+        // The replacement can register without clearing a missing report from its predecessor.
+        unavailableReplicas.front() = replicas[1];
+        runtime.Send(new IEventHandle(guardian, follower,
+            new TEvTablet::TEvFollowerUpdateState(false, follower, followerTablet)));
+        runtime.WaitFor("the replacement child to register", [&] {
+            return pingedChildren.contains(children.at(replicas[0]));
+        }, TDuration::Seconds(1));
+        runtime.SimulateSleep(TDuration::Seconds(4));
+        checkRetries();
+        UNIT_ASSERT_C(!demotedAt, "the replaced child left its replica marked missing");
+        return;
+    }
+
     if (scenario == EGracePeriodScenario::Recovery) {
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_C(!demotedAt, "the first transient outage caused isolation");
@@ -399,6 +428,10 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
 
     Y_UNIT_TEST(DisconnectOnFirstAttemptStartsMissingReplicaGracePeriod) {
         CheckGuardianGracePeriod(EGracePeriodScenario::DisconnectFromFirstAttempt);
+    }
+
+    Y_UNIT_TEST(LongDisconnectReplacesChildWithoutLeavingReplicaMissing) {
+        CheckGuardianGracePeriod(EGracePeriodScenario::ReplaceMissingChild);
     }
 }
 

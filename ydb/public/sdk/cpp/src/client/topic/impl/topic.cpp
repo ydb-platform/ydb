@@ -241,6 +241,13 @@ void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) con
     *request.mutable_supported_codecs() = Proto_.supported_codecs();
     request.set_partition_write_speed_bytes_per_second(Proto_.partition_write_speed_bytes_per_second());
     request.set_partition_write_burst_bytes(Proto_.partition_write_burst_bytes());
+    request.set_partition_write_speed_messages_per_second(Proto_.partition_write_speed_messages_per_second());
+    request.set_partition_write_burst_messages(Proto_.partition_write_burst_messages());
+    request.set_partition_total_read_speed_bytes_per_second(Proto_.partition_total_read_speed_bytes_per_second());
+    request.set_partition_total_read_speed_messages_per_second(Proto_.partition_total_read_speed_messages_per_second());
+    request.set_partition_read_without_consumer_speed_bytes_per_second(Proto_.partition_read_without_consumer_speed_bytes_per_second());
+    request.set_partition_read_without_consumer_speed_messages_per_second(Proto_.partition_read_without_consumer_speed_messages_per_second());
+    request.set_content_based_deduplication(Proto_.content_based_deduplication());
     *request.mutable_attributes() = Proto_.attributes();
     *request.mutable_consumers() = Proto_.consumers();
     request.set_metering_mode(Proto_.metering_mode());

@@ -3,7 +3,6 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/string_utils/url/url.h>
@@ -83,15 +82,6 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
 {
     Ydb::Topic::CreateTopicRequest request;
     description.SerializeTo(request);
-
-    const auto& source = NYdb::TProtoAccessor::GetProto(description);
-    request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
-    request.set_partition_write_burst_messages(source.partition_write_burst_messages());
-    request.set_partition_total_read_speed_messages_per_second(source.partition_total_read_speed_messages_per_second());
-    request.set_content_based_deduplication(source.content_based_deduplication());
-    request.set_partition_write_speed_messages_per_second(source.partition_write_speed_messages_per_second());
-    request.set_partition_read_without_consumer_speed_bytes_per_second(source.partition_read_without_consumer_speed_bytes_per_second());
-    request.set_partition_read_without_consumer_speed_messages_per_second(source.partition_read_without_consumer_speed_messages_per_second());
 
     request.mutable_attributes()->erase("_ydb_replication_consumer");
     // Source write restrictions must not block writes by the destination mirrorer.

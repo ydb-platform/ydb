@@ -1,3 +1,5 @@
+* Fixed topic description serialization to preserve partition throughput limits and content-based deduplication in create-topic requests.
+
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
 
 * Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.

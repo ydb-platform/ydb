@@ -305,10 +305,16 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
+    const auto thresholdBefore = vIndex.GetSchemeActualizationThreshold();
     const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
+    }
+    // re-targets (or stops) the scheme actualizer and makes the tiering actualizer pick up its option; a schema change
+    // without either keeps the target of ALTER TABLE ... COMPACT WITH (CASCADE = true) and its queue
+    if (isCriticalScheme || switchTieringActualization ||
+        (ActualizationStarted && vIndex.GetSchemeActualizationThreshold() != thresholdBefore)) {
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }
@@ -867,6 +873,15 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
     }
     ActualizationStarted = true;
     return true;
+}
+
+void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
+    // off is off, whatever the SchemeNeedActualization option of the current schema says
+    MutableVersionedIndex().SetSchemeNeedActualization(value);
+    StartActualization({});
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->RefreshScheme();
+    }
 }
 
 void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) {

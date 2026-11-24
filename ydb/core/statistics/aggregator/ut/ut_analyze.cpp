@@ -18,6 +18,8 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <util/string/cast.h>
 
 #include <deque>
@@ -1511,6 +1513,15 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
         setDisablePgCompatibility(true);
 
+        env.RunInThreadPool([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto stream = client.StreamExecuteScanQuery("SELECT Key FROM `/Root/Database/Table`;").GetValueSync();
+            UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+            const auto result = stream.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNSUPPORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        });
+
         bool sawAnalyzeCompilation = false;
         const auto observeCompile = runtime.AddObserver<NKqp::NPrivateEvents::TEvCompileRequest>([&](auto& ev) {
             const auto& request = *ev->Get();
@@ -1523,6 +1534,12 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
         UNIT_ASSERT(sawAnalyzeCompilation);
         CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
+
+        const auto stats = GetStatistics(runtime, tableInfo.PathId, EStatType::SIMPLE_COLUMN, {1u});
+        UNIT_ASSERT_VALUES_EQUAL(stats.size(), 1);
+        UNIT_ASSERT(stats[0].Success && stats[0].SimpleColumn.Data);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].SimpleColumn.Data->GetTypeId(), NScheme::NTypeIds::Pg);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].SimpleColumn.Data->GetCount(), 2);
     }
 }
 

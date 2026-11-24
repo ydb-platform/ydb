@@ -175,12 +175,12 @@ struct TEvSplitResponse: public TEventLocal<TEvSplitResponse, TKqpEvents::EvSpli
 
 struct TEvCompileInvalidateRequest: public TEventLocal<TEvCompileInvalidateRequest,
     TKqpEvents::EvCompileInvalidateRequest> {
-    TEvCompileInvalidateRequest(const TString& uid, TKqpDbCountersPtr dbCounters)
-        : Uid(uid)
+    TEvCompileInvalidateRequest(const TKqpCompileResult::TConstPtr& compileResult, TKqpDbCountersPtr dbCounters)
+        : CompileResult(compileResult)
         , DbCounters(dbCounters) {
     }
 
-    TString Uid;
+    TKqpCompileResult::TConstPtr CompileResult;
     TKqpDbCountersPtr DbCounters;
 };
 

@@ -3,6 +3,7 @@
 #include "tabletid.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -819,6 +820,16 @@ public:
     explicit TDeleteFixture(ui32 nodeCount)
         : Runtime(nodeCount)
     {
+        // The mock Interconnect queries the local nameservice before forwarding to a peer.
+        auto names = MakeIntrusive<TTableNameserverSetup>();
+        for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            const ui16 port = 12001 + nodeIndex;
+            names->StaticNodeTable[Runtime.GetNodeId(nodeIndex)] = TTableNameserverSetup::TNodeInfo("::1", "::1", port);
+        }
+        for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            Runtime.AddLocalService(GetNameserviceActorId(),
+                TActorSetupCmd(CreateNameserverTable(names), TMailboxType::Simple, 0), nodeIndex);
+        }
         Runtime.Initialize();
         for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
             Runtime.GetLogSettings(nodeIndex)->Append(NKikimrServices::EServiceKikimr_MIN,

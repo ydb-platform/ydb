@@ -545,6 +545,8 @@ namespace {
 
             if (name == "important") {
                 protoConsumer->set_important(GetBoolValue(setting));
+            } else if (name == "replicate_offsets") {
+                protoConsumer->set_replicate_offsets(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
                 auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
@@ -673,6 +675,8 @@ namespace {
             auto name = setting.Name().Value();
             if (name == "important") {
                 protoConsumer->set_set_important(GetBoolValue(setting));
+            } else if (name == "replicate_offsets") {
+                protoConsumer->set_set_replicate_offsets(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
                 auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
@@ -1226,6 +1230,15 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "bootstrap") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                const auto mode = to_lower(value);
+                if (mode != "scan" && mode != "import" && mode != "switchover") {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown bootstrap mode: " << value));
+                    return false;
+                }
+                dstSettings.Bootstrap = mode;
             }
         }
 

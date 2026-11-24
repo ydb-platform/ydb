@@ -114,7 +114,9 @@ struct TPhysicalOpProps {
         Analysis.Clear();
     }
 
-    std::optional<int> StageId;
+    std::optional<TStageId> StageId;
+    // Physical boundary bindings, indexed by operator child.
+    TVector<std::optional<TStageEdgeId>> StageInputEdges;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -141,6 +143,7 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
+        StageInputEdges = other.StageInputEdges;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -820,8 +823,13 @@ public:
         Props.OutputIUs.reset();
     }
     bool IsDistinctAll() const { return DistinctAll; }
-    // DISTINCT and grouping-only aggregates just remove duplicate rows.
-    bool IsDeduplication() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
+    // A trivial DISTINCT: DISTINCT or a grouping-only aggregate, which just
+    // removes duplicate rows.
+    bool IsTrivialDistinct() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
+    // An intermediate aggregate pushed down to column shards. It is computed by
+    // the program of the column table read under it, see MatchOlapAggregate.
+    bool IsPushedToOlap() const { return PushedToOlap; }
+    void SetPushedToOlap() { PushedToOlap = true; }
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
@@ -832,6 +840,7 @@ private:
     TOrderedIUs<> KeyColumns;
     EOpPhase AggregationPhase;
     bool DistinctAll;
+    bool PushedToOlap = false;
 };
 
 class TOpGroupingSets: public IUnaryOperator {
@@ -955,6 +964,7 @@ public:
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
     TString GetExplainName() const override { return "Window"; }
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
     const TWindowIUs& GetWindowFuncs() const Y_LIFETIME_BOUND { return WindowFuncs; }
     const TOrderedIUs<>& GetPartitionKeys() const Y_LIFETIME_BOUND { return PartitionKeys; }
@@ -1148,6 +1158,7 @@ public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
              std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetUniqueRawInputIUs() const override;
     virtual TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
@@ -1165,9 +1176,14 @@ public:
     TExpression GetLimitCond() const { return LimitCond; }
     bool HasOffset() const { return OffsetCond.has_value(); }
     std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
+    // The number of input rows this limit consumes: the rows it returns and the rows its offset skips.
+    TExpression GetInputRowsLimit(TExprContext& ctx, TPlanProps& props) const;
 
     // Make private.
     TExpression LimitCond;
+    // Whether the rows of the limit depend on the order of its input. A limit of a select without ORDER BY
+    // takes any rows, so the order of a subquery below it is not needed.
+    bool OrderedInput = true;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
@@ -1182,6 +1198,7 @@ private:
 
 class TOpSort: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetOutputIUs() override { return GetInput()->GetOutputIUs(); }
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, TSortIUs keys,
         std::optional<TExpression> limit = std::nullopt);
@@ -1273,6 +1290,7 @@ private:
  ***/
 class TOpIndexLookupJoin: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, TJoinIUs joinKeys);
     void PropagateLiveness(ILivenessContext& ctx) override;

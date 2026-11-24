@@ -66,6 +66,9 @@ TReadSessionActor<Protocol>::TReadSessionActor(
     if (auto value = Request->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER)) {
         SdkBuildInfo = *value;
     }
+    if (auto value = Request->GetPeerMetaValues("x-ydb-supports-replication-messages")) {
+        SupportsReplicationMessages = *value == "true";
+    }
 }
 
 template <EProtocol Protocol>
@@ -336,6 +339,11 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TP
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Die(const TActorContext& ctx) {
+    if (Dead) {
+        return;
+    }
+    Dead = true;
+
     if (AuthInitActor) {
         ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
     }
@@ -584,7 +592,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReleased::TPtr& ev, cons
                 return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                     << "releasing partition, but not all direct reads are done " << partitionInfo.Partition, ctx);
             }
-            SendReleaseSignal(it->second, true, ctx);
+            if (!SendReleaseSignal(partitionInfo, true, ctx)) {
+                return;
+            }
         }
     } else {
         AFL_ENSURE(DirectRead);
@@ -1549,7 +1559,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvError::TPtr& ev, const
 }
 
 template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx) {
+bool TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx) {
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
 
@@ -1575,12 +1585,13 @@ void TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partiti
     }
 
     if (!SendControlMessage(partition.Partition, std::move(result), ctx)) {
-        return;
+        return false;
     }
 
     AFL_ENSURE(partition.LockSent);
 
     partition.ReleaseSent = true;
+    return true;
 }
 
 template <EProtocol Protocol>
@@ -1826,11 +1837,14 @@ void TReadSessionActor<Protocol>::ProcessBalancerDead(ui64 tabletId, const TActo
                     auto jt = it;
                     ++it;
 
-                    if (jt->second.LockSent) {
-                        SendReleaseSignal(jt->second, true, ctx);
+                    if (jt->second.LockSent && !SendReleaseSignal(jt->second, true, ctx)) {
+                        return;
                     }
 
                     ReleasePartition(jt, true, ctx);
+                    if (Dead) {
+                        return;
+                    }
                 } else {
                     ++it;
                 }
@@ -1934,6 +1948,35 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     i64 diff = DirectReadByteSize - ByteSize;
     ByteSize = DirectReadByteSize;
     return diff;
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    if (!SupportsReplicationMessages) {
+        return;
+    }
+    const auto& record = ev->Get()->Record;
+    if (!ActualPartitionActors.contains(ev->Sender) || !Partitions.contains(record.GetPartitionSessionId())) {
+        return;
+    }
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+        auto* partitionData = response.mutable_read_response()->add_partition_data();
+        partitionData->set_partition_session_id(record.GetPartitionSessionId());
+        auto* batch = partitionData->add_batches();
+        batch->set_codec(Ydb::Topic::CODEC_RAW);
+        auto* message = batch->add_message_data();
+        message->set_offset(0);
+        message->set_data(record.GetPayload());
+        message->set_uncompressed_size(record.GetPayload().size());
+        auto* metadata = message->add_metadata_items();
+        metadata->set_key("_ydb_service_replication_message");
+        metadata->set_value("true");
+        if (!WriteToStreamOrDie(ctx, std::move(response))) {
+            return;
+        }
+    }
 }
 
 template <EProtocol Protocol>

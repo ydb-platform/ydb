@@ -266,6 +266,7 @@ private:
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
 
             // Balancer events
@@ -319,6 +320,7 @@ private:
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
@@ -358,7 +360,7 @@ private:
 
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);
-    void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
+    bool SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
     void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
 
     std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic) const;
@@ -390,6 +392,7 @@ private:
     bool ReadWithoutConsumer;
 
     bool InitDone;
+    bool Dead = false;
     bool RangesMode;
 
     ui32 MaxReadMessagesCount;
@@ -420,6 +423,7 @@ private:
 
     bool ReadOnlyLocal;
     bool BatchingSupported = false;
+    bool SupportsReplicationMessages = false;
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;

@@ -260,6 +260,8 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     else {
         auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
         auto limit = MakeIntrusive<TOpLimit>(subplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
+        // EXISTS only checks that a row exists, so any row will do.
+        limit->OrderedInput = false;
 
         // The counted rows and their count are distinct IUs.
         auto countInput = props.InfoUnitRegistry.AddGenerated("row");

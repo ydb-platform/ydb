@@ -5,11 +5,11 @@ SRCS(
     global_inlining.cpp
     global_pruning.cpp
     kqp_expression.cpp
+    kqp_olap_aggregate.cpp
     kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
     kqp_plan_props.cpp
-    kqp_plan_to_json.cpp
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_context.cpp
     kqp_rbo_statistics.cpp
@@ -20,7 +20,13 @@ SRCS(
     kqp_rbo_cbo.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    remove_redundant_sorts.cpp
     analysis/logical_liveness.cpp
+    explain/kqp_connection_explain.cpp
+    explain/kqp_expression_explain.cpp
+    explain/kqp_operator_explain.cpp
+    explain/kqp_plan_to_json.cpp
+    explain/kqp_read_ranges_explain.cpp
     logical_renames.cpp
     rebind_consumers.cpp
     traces/kqp_rbo_trace_format.cpp
@@ -31,6 +37,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/query_plan
     library/cpp/containers/absl
     library/cpp/containers/stack_vector
     ydb/core/kqp/common

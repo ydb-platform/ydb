@@ -197,7 +197,12 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         return false;
     }
 
-    BatchBuilder->AddRow(*row);
+    if (auto status = BatchBuilder->TryAddRow(*row); !status.ok()) {
+        ErrorString = TStringBuilder() << "Failed to append row to arrow batch: " << status.ToString();
+        BatchBuilder.reset();
+        ArrowWriter.reset();
+        return false;
+    }
     if (BatchBuilder->Rows() >= RowGroupSize) {
         if (!FlushRowGroup(false)) {
             return false;

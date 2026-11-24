@@ -152,6 +152,9 @@ private:
         }
 
         auto& partitionInfo = it->second;
+        if (partitionInfo.Success || partitionInfo.Error) {
+            return;
+        }
         const auto& record = ev->Get()->Record;
 
         partitionInfo.Success = true;
@@ -182,6 +185,9 @@ private:
         }
 
         auto& partitionInfo = it->second;
+        if (partitionInfo.Success || partitionInfo.Error) {
+            return;
+        }
 
         // TODO MLP Retry
         partitionInfo.Error = true;
@@ -208,11 +214,12 @@ private:
         it->second.Subscribed = false;
 
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
-            if (partitionInfo.Success || partitionInfo.Error) {
+            if (partitionInfo.TabletId != ev->Get()->TabletId || partitionInfo.Success || partitionInfo.Error) {
                 continue;
             }
 
             // TODO MLP Retry
+            partitionInfo.Error = true;
             --PendingRequests;
         }
 

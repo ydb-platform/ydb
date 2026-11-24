@@ -259,32 +259,24 @@ std::vector<std::pair<std::string, std::string>> BuildStageRows(const TStageGrap
     std::vector<std::pair<std::string, std::string>> rows;
     rows.emplace_back("Stage", std::to_string(stageId));
 
-    const auto guidIt = graph.StageGUIDs.find(stageId);
-    if (guidIt != graph.StageGUIDs.end() && !guidIt->second.empty()) {
-        rows.emplace_back("Guid", ToStdString(guidIt->second));
+    const auto& stage = graph.GetStage(stageId);
+    rows.emplace_back("Guid", ToStdString(stage.Guid()));
+    if (stage.IsSource()) {
+        rows.emplace_back("Source storage", FormatStorageType(stage.StorageType()));
     }
-
-    const auto sourceIt = graph.SourceStages.find(stageId);
-    if (sourceIt != graph.SourceStages.end()) {
-        rows.emplace_back("Source storage", FormatStorageType(sourceIt->second.StorageType));
-    }
-
-    const auto inputIt = graph.StageInputs.find(stageId);
-    if (inputIt != graph.StageInputs.end() && !inputIt->second.empty()) {
+    const auto& incoming = graph.IncomingEdges(stage);
+    if (!incoming.empty()) {
         std::vector<std::string> inputs;
-        inputs.reserve(inputIt->second.size());
-        for (const auto input : inputIt->second) {
-            inputs.push_back(std::to_string(input));
+        for (const auto* edge : incoming) {
+            inputs.push_back(std::to_string(edge->Producer().Id()));
         }
         rows.emplace_back("Inputs", JoinStrings(inputs));
     }
-
-    const auto outputIt = graph.StageOutputs.find(stageId);
-    if (outputIt != graph.StageOutputs.end() && !outputIt->second.empty()) {
+    const auto& outgoing = graph.OutgoingEdges(stage);
+    if (!outgoing.empty()) {
         std::vector<std::string> outputs;
-        outputs.reserve(outputIt->second.size());
-        for (const auto output : outputIt->second) {
-            outputs.push_back(std::to_string(output));
+        for (const auto* edge : outgoing) {
+            outputs.push_back(std::to_string(edge->Consumer().Id()));
         }
         rows.emplace_back("Outputs", JoinStrings(outputs));
     }
@@ -292,22 +284,11 @@ std::vector<std::pair<std::string, std::string>> BuildStageRows(const TStageGrap
     return rows;
 }
 
-struct TStageEdge {
-    ui32 From = 0;
-    ui32 To = 0;
-    ui32 Index = 0;
-    TIntrusivePtr<TConnection> Connection;
-};
-
-std::vector<TStageEdge> CollectStageEdges(const TStageGraph& graph) {
-    std::vector<TStageEdge> edges;
-    for (const auto& [key, connections] : graph.Connections) {
-        for (ui32 index = 0; index < connections.size(); ++index) {
-            edges.push_back({key.first, key.second, index, connections[index]});
-        }
-    }
-    std::sort(edges.begin(), edges.end(), [](const TStageEdge& lhs, const TStageEdge& rhs) {
-        return std::tie(lhs.From, lhs.To, lhs.Index) < std::tie(rhs.From, rhs.To, rhs.Index);
+std::vector<const TStageEdge*> CollectStageEdges(const TStageGraph& graph) {
+    std::vector<const TStageEdge*> edges(graph.Edges().begin(), graph.Edges().end());
+    std::sort(edges.begin(), edges.end(), [](const TStageEdge* lhs, const TStageEdge* rhs) {
+        return std::tuple(lhs->Producer().Id(), lhs->Consumer().Id(), lhs->Id())
+            < std::tuple(rhs->Producer().Id(), rhs->Consumer().Id(), rhs->Id());
     });
     return edges;
 }
@@ -316,10 +297,11 @@ std::string FormatConnectionLabel(const TConnection& connection) {
     return ToStdString(connection.Type) + " connection";
 }
 
-std::string FormatConnectionDetails(const TConnection& connection, const TInfoUnitRegistry& registry) {
+std::string FormatConnectionDetails(const TStageEdge& edge, const TInfoUnitRegistry& registry) {
+    const auto& connection = edge.Connection();
     std::vector<std::string> details = {
         "type=" + ToStdString(connection.Type),
-        "outputIndex=" + std::to_string(connection.GetOutputIndex())
+        "outputIndex=" + std::to_string(edge.OutputIndex())
     };
 
     if (const auto* shuffle = dynamic_cast<const TShuffleConnection*>(&connection)) {
@@ -342,7 +324,8 @@ std::string FormatConnectionDetails(const TConnection& connection, const TInfoUn
 optimizer_trace::Widget BuildStageGraphDetailsWidget(const TStageGraph& graph, const TInfoUnitRegistry& registry) {
     std::vector<std::pair<std::string, std::string>> rows;
 
-    for (const auto stageId : graph.StageIds) {
+    for (const auto* stage : graph.Stages()) {
+        const auto stageId = stage->Id();
         std::vector<std::string> details;
         for (const auto& [key, value] : BuildStageRows(graph, stageId)) {
             if (key == "Stage") {
@@ -353,10 +336,10 @@ optimizer_trace::Widget BuildStageGraphDetailsWidget(const TStageGraph& graph, c
         rows.emplace_back("Stage " + std::to_string(stageId), details.empty() ? "" : JoinStrings(details));
     }
 
-    for (const auto& edge : CollectStageEdges(graph)) {
+    for (const auto* edge : CollectStageEdges(graph)) {
         rows.emplace_back(
-            "Connection " + std::to_string(edge.From) + " -> " + std::to_string(edge.To) + " #" + std::to_string(edge.Index),
-            FormatConnectionDetails(*edge.Connection, registry));
+            "Connection " + std::to_string(edge->Producer().Id()) + " -> " + std::to_string(edge->Consumer().Id()) + " #" + std::to_string(static_cast<ui32>(edge->Id())),
+            FormatConnectionDetails(*edge, registry));
     }
 
     return BuildColumnValueTable("Stage graph details", rows);
@@ -544,7 +527,8 @@ optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TT
     optimizer_trace::Graph stageGraph;
     stageGraph.layout("LR", 70, 42);
 
-    for (const auto stageId : graph.StageIds) {
+    for (const auto* stage : graph.Stages()) {
+        const auto stageId = stage->Id();
         auto& graphNode = stageGraph.node(std::to_string(stageId), "Stage " + std::to_string(stageId));
         const auto rows = BuildStageRows(graph, stageId);
         std::vector<std::string> notes;
@@ -560,17 +544,17 @@ optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TT
         }
     }
 
-    for (const auto& edge : CollectStageEdges(graph)) {
-        auto& graphEdge = stageGraph.edge(std::to_string(edge.From), std::to_string(edge.To))
-            .setId(std::to_string(edge.From) + "-" + std::to_string(edge.To) + "-" + std::to_string(edge.Index))
-            .setLabel(FormatConnectionLabel(*edge.Connection));
+    for (const auto* edge : CollectStageEdges(graph)) {
+        auto& graphEdge = stageGraph.edge(std::to_string(edge->Producer().Id()), std::to_string(edge->Consumer().Id()))
+            .setId(std::to_string(edge->Producer().Id()) + "-" + std::to_string(edge->Consumer().Id()) + "-" + std::to_string(static_cast<ui32>(edge->Id())))
+            .setLabel(FormatConnectionLabel(edge->Connection()));
 
         std::vector<optimizer_trace::Target> targets;
-        const auto fromIt = state.StageTargets.find(edge.From);
+        const auto fromIt = state.StageTargets.find(edge->Producer().Id());
         if (fromIt != state.StageTargets.end()) {
             targets.insert(targets.end(), fromIt->second.begin(), fromIt->second.end());
         }
-        const auto toIt = state.StageTargets.find(edge.To);
+        const auto toIt = state.StageTargets.find(edge->Consumer().Id());
         if (toIt != state.StageTargets.end()) {
             targets.insert(targets.end(), toIt->second.begin(), toIt->second.end());
         }
@@ -591,7 +575,7 @@ optimizer_trace::Widget BuildStageGraphSwitcher(const TStageGraph& graph, const 
 
 std::vector<optimizer_trace::Widget> BuildPlanWidgets(const TOpRoot& root, const TTraceBuildState& state) {
     std::vector<optimizer_trace::Widget> widgets;
-    if (root.PlanProps.StageGraph.StageIds.empty()) {
+    if (root.PlanProps.StageGraph.Stages().empty()) {
         return widgets;
     }
 

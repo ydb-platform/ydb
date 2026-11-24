@@ -568,8 +568,17 @@ TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
     auto inputType = sort->GetInput()->Type;
+    if (sort->LimitCond) {
+        const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto& lambda = sort->LimitCond->Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        AnnotateLambdaIfNeeded(lambda, ctx);
+    }
+
     // TODO: Add sanity checks.
     sort->Type = inputType;
     return TStatus::Ok;

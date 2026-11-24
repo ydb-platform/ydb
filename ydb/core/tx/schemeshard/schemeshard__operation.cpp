@@ -203,6 +203,58 @@ bool TSchemeShard::ProcessOperationParts(
     return true;
 }
 
+namespace {
+
+bool IsAsyncReplicationFeed(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
+    return AnyOf(desc.GetUserAttributes(), [](const auto& attr) {
+        return attr.GetKey() == ATTR_ASYNC_REPLICATION;
+    });
+}
+
+bool IsAsyncReplicationFeed(const TPath& path) {
+    return path.IsResolved()
+        && path.Base()->PathType == NKikimrSchemeOp::EPathTypeCdcStream
+        && path.Base()->UserAttrs->Attrs.contains(ATTR_ASYNC_REPLICATION);
+}
+
+// The replication controller's own changefeed operations, which it issues over the public API
+// with the replication's credentials. The topic side exempts the same marker when reading and
+// committing, in TReadInitAndAuthActor.
+bool IsAsyncReplicationOperation(const NKikimrSchemeOp::TModifyScheme& tx, TSchemeShard* ss) {
+    const auto workingDir = TPath::Resolve(tx.GetWorkingDir(), ss);
+    switch (tx.GetOperationType()) {
+    case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
+        return IsAsyncReplicationFeed(tx.GetCreateCdcStream().GetStreamDescription());
+    case NKikimrSchemeOp::ESchemeOpAlterCdcStream: {
+        const auto& op = tx.GetAlterCdcStream();
+        return IsAsyncReplicationFeed(workingDir.Child(op.GetTableName()).Child(op.GetStreamName()));
+    }
+    case NKikimrSchemeOp::ESchemeOpDropCdcStream: {
+        const auto& op = tx.GetDropCdcStream();
+        const auto table = workingDir.Child(op.GetTableName());
+        return op.StreamNameSize() && AllOf(op.GetStreamName(), [&table](const auto& name) {
+            return IsAsyncReplicationFeed(table.Child(name));
+        });
+    }
+    case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup: {
+        // The feed's topic lives under the feed itself. Resolve it the way TAlterPQ::Propose
+        // does -- a PathId decides the target and the working dir is then ignored.
+        const auto& op = tx.GetAlterPersQueueGroup();
+        if (!op.HasName() && !op.HasPathId()) {
+            return false;
+        }
+        const auto topic = op.HasPathId()
+            ? TPath::Init(ss->MakeLocalId(op.GetPathId()), ss)
+            : workingDir.Child(op.GetName());
+        return IsAsyncReplicationFeed(topic.Parent());
+    }
+    default:
+        return false;
+    }
+}
+
+} // anonymous namespace
+
 THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context) {
     using namespace NGenerated;
     THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> response = nullptr;
@@ -220,7 +272,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
     if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
         && context.UserToken
         && !context.UserToken->IsSystemUser()
-        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get())
+        && !(record.TransactionSize() && AllOf(record.GetTransaction(), [this](const auto& tx) {
+            return IsAsyncReplicationOperation(tx, this);
+        })))
     {
         return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
             NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),

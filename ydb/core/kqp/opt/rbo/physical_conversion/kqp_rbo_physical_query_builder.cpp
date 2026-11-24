@@ -191,35 +191,25 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int rootIdx) {
     TVector<TExprNode::TPtr> phyStages;
     auto& graph = Graphs[rootIdx];
-    graph.TopologicalSort();
-    const auto& stageIds = graph.StageIds;
-    const auto& stageInputIds = graph.StageInputs;
+    const auto stages = graph.TopologicalOrder();
     auto& ctx = RBOCtx.ExprCtx;
 
     THashMap<ui32, TExprNode::TPtr> finalizedStages;
-    for (const auto id : stageIds) {
+    for (const auto* graphStage : stages) {
+        const auto id = graphStage->Id();
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
         TVector<TExprNode::TPtr> inputConnections;
-        THashSet<ui32> processedInputsIds;
-        for (const auto inputStageId : stageInputIds.at(id)) {
-            if (processedInputsIds.contains(inputStageId)) {
-                continue;
-            }
-            processedInputsIds.insert(inputStageId);
-
-            const auto inputStage = finalizedStages.at(inputStageId);
-            const auto connections = graph.GetConnections(inputStageId, id);
-            for (const auto& connection : connections) {
-                YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                auto dqConnection = connection->BuildConnection(inputStage, StagePos[rootIdx].at(inputStageId), ctx, Names[rootIdx]);
-                YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                inputConnections.push_back(dqConnection);
-            }
+        for (const auto* edge : graph.IncomingEdges(*graphStage)) {
+            const auto inputStageId = edge->Producer().Id();
+            const auto& connection = edge->Connection();
+            auto dqConnection = connection.BuildConnection(finalizedStages.at(inputStageId),
+                StagePos[rootIdx].at(inputStageId), ctx, Names[rootIdx]);
+            inputConnections.push_back(dqConnection);
         }
 
         TExprNode::TPtr stage;
-        if (graph.IsSourceStageRowType(id)) {
+        if ((graphStage->StorageType() == NYql::EStorageType::RowStorage)) {
             stage = Stages[rootIdx].at(id);
             // Want to build materialize for ranges.
             // TODO: Actually old optimizer has some machinery to compute ranges during compilation for some cases, for
@@ -244,15 +234,15 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         } else {
             TVector<TExprNode::TPtr> stageInputConnections;
             TVector<TExprNode::TPtr> stageInputArgs;
-            if (!graph.IsSourceStageColumnType(id)) {
+            if ((graphStage->StorageType() != NYql::EStorageType::ColumnStorage)) {
                 stageInputConnections = inputConnections;
                 stageInputArgs = StageArgs[rootIdx].at(id);
             }
 
-            auto stageGUID = graph.StageGUIDs.at(id);
-            if (graph.IsSinkStage(id)) {
+            auto stageGUID = graphStage->Guid();
+            if (graphStage->IsSink()) {
                 stage = BuildDqPhySinkStage(stageInputConnections, stageInputArgs, Stages[rootIdx].at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos[rootIdx].at(id)),
-                                    graph.GetSinkSettings(id), ctx, StagePos[rootIdx].at(id));
+                                    graphStage->SinkSettings(), ctx, StagePos[rootIdx].at(id));
             }
             else {
                 stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages[rootIdx].at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos[rootIdx].at(id)),
@@ -262,18 +252,35 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
 
-        if (graph.IsSourceStageColumnType(id)) {
+        if ((graphStage->StorageType() == NYql::EStorageType::ColumnStorage)) {
             auto readPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpBlockReadOlapTableRanges>(node); });
             if (readPtr) {
                 auto read = TExprBase(readPtr).Cast<TKqpBlockReadOlapTableRanges>();
-                if (!read.Ranges().Maybe<TCoVoid>()) {
-                    const auto materializeResult = BuildMaterialize(rootIdx, read.Ranges().Ptr());
-                    // clang-fomrat off
+                auto settings = TKqpReadTableSettings::Parse(read.Settings());
+                // Column shards take the limit as a literal or as a parameter, so compute any other limit.
+                const bool computeLimit = settings.ItemsLimit && !TCoUint64::Match(settings.ItemsLimit.Get())
+                    && !TCoParameter::Match(settings.ItemsLimit.Get());
+                if (!read.Ranges().Maybe<TCoVoid>() || computeLimit) {
+                    auto ranges = read.Ranges().Ptr();
+                    if (!read.Ranges().Maybe<TCoVoid>()) {
+                        ranges = BuildMaterialize(rootIdx, std::move(ranges));
+                    }
+                    if (computeLimit) {
+                        TypeAnnotate(settings.ItemsLimit);
+                        settings.SetItemsLimit(BuildMaterialize(rootIdx, settings.ItemsLimit, /*asTuple=*/false));
+                    }
+                    auto newSettings = settings.BuildNode(ctx, readPtr->Pos()).Ptr();
+                    // TKqpReadTableSettings does not keep the compute sharding keys, so carry them over.
+                    const auto& oldSettings = read.Settings().Ref();
+                    if (const auto groupBy = NYql::GetSetting(oldSettings, TKqpReadTableSettings::GroupByFieldNames)) {
+                        newSettings = NYql::AddSetting(*newSettings, groupBy, ctx);
+                    }
+                    // clang-format off
                     const auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
                         .Table(read.Table())
-                        .Ranges(materializeResult)
+                        .Ranges(ranges)
                         .Columns(read.Columns())
-                        .Settings(read.Settings())
+                        .Settings(newSettings)
                         .ExplainPrompt(read.ExplainPrompt())
                         .Process(read.Process())
                     .Done().Ptr();
@@ -288,11 +295,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
-    // The root stage is last in the topologically sorted StageIds. It is usually also phyStages.back(),
-    // but a lone row-source stage is built into Stages without being appended to phyStages (see above),
-    // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
-    Y_ENSURE(!stageIds.empty());
-    const auto maybeFinalStage = finalizedStages.at(stageIds.back());
+    // The result stage is explicit, including a lone row source.
+    const auto maybeFinalStage = finalizedStages.at(*Roots[rootIdx]->GetInput()->Props.StageId);
     const auto finalStage = GetFinalStage(maybeFinalStage);
     const bool needFinalNarrowing = NeedFinalNarrowing(rootIdx);
     const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(rootIdx, finalStage) : finalStage;
@@ -307,7 +311,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
     return phyStages;
 }
 
-TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::TPtr node) {
+TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::TPtr node, bool asTuple) {
     auto& ctx = RBOCtx.ExprCtx;
 
     TExprNode::TPtr afterPeephole;
@@ -319,17 +323,15 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::
     }
 
     // clang-format off
-    auto rangesProgram = Build<TCoToStream>(ctx, node->Pos())
+    auto program = Build<TCoToStream>(ctx, node->Pos())
         .Input<TCoJust>()
-            .Input<TExprList>()
-                .Add({afterPeephole})
-            .Build()
+            .Input(asTuple ? ctx.NewList(node->Pos(), {afterPeephole}) : afterPeephole)
         .Build()
     .Done().Ptr();
     // clang-format on
 
     auto stageSettings = NYql::NDq::TDqStageSettings().New().SetPartitionMode(NYql::NDq::TDqStageSettings::EPartitionMode::Single).BuildNode(ctx, node->Pos());
-    auto phyStage = BuildDqPhyStage({}, {}, rangesProgram, std::move(stageSettings), ctx, node->Pos());
+    auto phyStage = BuildDqPhyStage({}, {}, program, std::move(stageSettings), ctx, node->Pos());
 
     // clang-format off
     auto result = Build<TDqCnValue>(ctx, node->Pos())
@@ -667,10 +669,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
 
     TVector<TExprNode::TPtr> listElements;
-    if (RBOCtx.EmptyPreamble) {
-        listElements.push_back(ctx.NewList(Roots[0]->Pos, {}));
-    }
-
     if (!phyTxSettings.WithEffects) {
         listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns}));
     } else {

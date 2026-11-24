@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
@@ -56,6 +57,14 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         }
 
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
+        for (auto& consumer : *targetTabletConfig.MutableConsumers()) {
+            if (!consumer.HasReplicateOffsets()) {
+                const auto* existing = NPQ::GetConsumer(sourceTabletConfig, consumer.GetName());
+                if (existing && existing->HasReplicateOffsets()) {
+                    consumer.SetReplicateOffsets(existing->GetReplicateOffsets());
+                }
+            }
+        }
         targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());
         targetTabletConfig.SetProducer(sourceTabletConfig.GetProducer());

@@ -2,6 +2,37 @@
 
 namespace NKikimr::NKqp {
 
+const TStage& TPlanProps::GetStage(const IOperator& op) const {
+    Y_ENSURE(op.Props.StageId, "Operator has no assigned stage");
+    return StageGraph.GetStage(*op.Props.StageId);
+}
+
+TStageEdge* TPlanProps::GetStageInputEdge(const IOperator& consumer, ui32 childIndex) {
+    const auto* edge = std::as_const(*this).GetStageInputEdge(consumer, childIndex);
+    return edge ? &StageGraph.GetEdge(edge->Id()) : nullptr;
+}
+
+const TStageEdge* TPlanProps::GetStageInputEdge(const IOperator& consumer, ui32 childIndex) const {
+    const auto* producer = consumer.GetChild(childIndex).Get();
+    if (!consumer.Props.StageId || !producer->Props.StageId || consumer.Props.StageId == producer->Props.StageId) {
+        return nullptr;
+    }
+    const auto& bindings = consumer.Props.StageInputEdges;
+    Y_ENSURE(childIndex < bindings.size() && bindings[childIndex], "Missing physical input edge binding");
+    const auto& edge = StageGraph.GetEdge(*bindings[childIndex]);
+    Y_ENSURE(edge.Producer().Id() == *producer->Props.StageId && edge.Consumer().Id() == *consumer.Props.StageId,
+        "Physical input edge does not match operator stages");
+    return &edge;
+}
+
+void TPlanProps::BindStageInput(IOperator& consumer, ui32 childIndex, const TStageEdge& edge) {
+    Y_ENSURE(&StageGraph.GetEdge(edge.Id()) == &edge, "Input edge belongs to another graph");
+    Y_ENSURE(childIndex < consumer.GetChildren().size(), "Invalid operator input index");
+    auto& bindings = consumer.Props.StageInputEdges;
+    bindings.resize(consumer.GetChildren().size());
+    bindings[childIndex] = edge.Id();
+}
+
 // Out of line so plan properties can own operators without an include cycle.
 TSubplanEntry::TSubplanEntry(TIntrusivePtr<IOperator> plan, ESubplanType type,
     TOrderedIUs<> tuple, std::optional<TInfoUnitId> resultIU)

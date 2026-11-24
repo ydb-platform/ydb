@@ -1002,6 +1002,9 @@ message Consumer {
     // Read quota for this consumer for a single partition, in messages per second.
     // Not set or zero value means no limit.
     optional int64 read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
+
+    // Whether offsets for this consumer are replicated from the source topic. Defaults to true when omitted.
+    optional bool replicate_offsets = 13;
 }
 
 // Consumer alter description.
@@ -1043,6 +1046,9 @@ message AlterConsumer {
     // Set read quota for this consumer for a single partition, in messages per second.
     // Zero value means no limit.
     optional int64 set_read_speed_messages_per_second = 12 [(Ydb.value) = ">= 0"];
+
+    // Set whether offsets for this consumer are replicated from the source topic.
+    optional bool set_replicate_offsets = 13;
 }
 
 enum AutoPartitioningStrategy {

@@ -11,7 +11,7 @@ namespace NKqp {
 
 void CompileOlapProgram(const NYql::NNodes::TCoLambda& lambda, const NYql::TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames, NYql::TExprContext &exprCtx,
-    NYql::TTypeAnnotationContext& typesCtx);
+    NYql::TTypeAnnotationContext& typesCtx, bool newRboEnabled = false);
 
 } // namespace NKqp
 } // namespace NKikimr

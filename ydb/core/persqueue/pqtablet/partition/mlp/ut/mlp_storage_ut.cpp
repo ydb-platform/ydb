@@ -253,8 +253,8 @@ struct TUtils {
 
         UNIT_ASSERT_VALUES_EQUAL(other.Storage.GetFirstOffset(), Storage.GetFirstOffset());
         UNIT_ASSERT_VALUES_EQUAL(other.Storage.GetLastOffset(), Storage.GetLastOffset());
-        // FirstUncommitted/FirstUnlocked are advanced eagerly in runtime, but ApplyWAL only
-        // clamps them to FirstOffset — do not require exact equality after BeginSnapshot+WAL.
+        // Cursors are rebuilt from statuses. A runtime cursor may already have scanned past
+        // locked messages, so do not require exact equality after BeginSnapshot+WAL.
         UNIT_ASSERT_VALUES_EQUAL(other.Storage.GetBaseDeadline(), Storage.GetBaseDeadline());
         UNIT_ASSERT_VALUES_EQUAL(other.Storage.GetBaseWriteTimestamp(), Storage.GetBaseWriteTimestamp());
 
@@ -1614,6 +1614,102 @@ Y_UNIT_TEST(StorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+    }
+}
+
+Y_UNIT_TEST(SnapshotRestoreStopsUncommittedOffsetOnDelayed) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+
+    const auto writeTimestamp = timeProvider->Now();
+    const ui64 committedOffset = 3;
+    const ui64 delayedOffset = 4;
+    const ui64 unprocessedOffset = 5;
+
+    {
+        TStorage storage(timeProvider, {});
+        storage.AddMessage(committedOffset, false, 0, writeTimestamp);
+        storage.AddMessage(delayedOffset, false, 0, writeTimestamp, TDuration::Seconds(30));
+        storage.AddMessage(unprocessedOffset, false, 0, writeTimestamp);
+        UNIT_ASSERT(storage.Commit(committedOffset) == EOperationResult::Success);
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), delayedOffset);
+
+        storage.SerializeTo(snapshot);
+    }
+
+    {
+        TStorage storage(timeProvider, {});
+        storage.Initialize(snapshot);
+        storage.InitMetrics();
+
+        // Reload must keep the same frontier. Advancing FirstUncommittedOffset past the
+        // delayed message makes Compact fail on FirstUncommittedOffset <= FirstUnlockedOffset.
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), delayedOffset);
+
+        storage.Compact();
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetMessageCount(), 2);
+
+        auto it = storage.begin();
+        UNIT_ASSERT(it != storage.end());
+        UNIT_ASSERT_VALUES_EQUAL((*it).Offset, delayedOffset);
+        UNIT_ASSERT_VALUES_EQUAL((*it).Status, TStorage::EMessageStatus::Delayed);
+        ++it;
+        UNIT_ASSERT(it != storage.end());
+        UNIT_ASSERT_VALUES_EQUAL((*it).Offset, unprocessedOffset);
+        UNIT_ASSERT_VALUES_EQUAL((*it).Status, TStorage::EMessageStatus::Unprocessed);
+        ++it;
+        UNIT_ASSERT(it == storage.end());
+    }
+}
+
+Y_UNIT_TEST(WalUnlockMakesMessageReadableAgain) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    const auto writeTimestamp = timeProvider->Now();
+    const auto visibilityDeadline = timeProvider->Now() + TDuration::Seconds(30);
+
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    NKikimrPQ::TMLPStorageWAL wal;
+
+    {
+        TStorage storage(timeProvider, {});
+        storage.AddMessage(3, false, 0, writeTimestamp);
+        storage.AddMessage(4, false, 0, writeTimestamp);
+
+        TStorage::TPosition position;
+        auto locked = storage.Next(visibilityDeadline, position);
+        UNIT_ASSERT(locked);
+        UNIT_ASSERT_VALUES_EQUAL(locked->Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 4);
+
+        storage.ExtractBatch();
+        storage.SerializeTo(snapshot);
+
+        UNIT_ASSERT(storage.Unlock(3) == EOperationResult::Success);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 3);
+        storage.ExtractBatch().SerializeTo(wal);
+    }
+
+    {
+        TStorage storage(timeProvider, {});
+        storage.Initialize(snapshot);
+        storage.ApplyWAL(wal);
+        storage.InitMetrics();
+
+        // The snapshot still has offset 3 locked, so its unlock cursor is 4.
+        // The WAL returns 3 to the queue; the cursor must follow, or Next skips it.
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 3);
+
+        TStorage::TPosition position;
+        auto message = storage.Next(visibilityDeadline, position);
+        UNIT_ASSERT(message);
+        UNIT_ASSERT_VALUES_EQUAL(message->Offset, 3);
     }
 }
 

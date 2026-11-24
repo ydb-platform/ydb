@@ -75,6 +75,84 @@ namespace NKikimr::NCms {
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
         }
 
+        Y_UNIT_TEST(WhiteboardSeparatesComponentHealthAndSpaceByIncarnation) {
+            TTestBasicRuntime runtime;
+            SetupTabletServices(runtime);
+            using namespace NNodeWhiteboard;
+            using TStatus = NKikimrWhiteboard::TDDiskStateInfo;
+            const auto board = MakeNodeWhiteboardServiceId(runtime.GetNodeId(0));
+            const auto client = runtime.AllocateEdgeActor();
+            const auto ddisk = runtime.AllocateEdgeActor();
+            const auto buffer = runtime.AllocateEdgeActor();
+            const auto replacement = runtime.AllocateEdgeActor();
+
+            auto publish = [&](TActorId source, ui64 ownerRound, bool isBuffer, TStatus::EComponentStatus status,
+                    TDuration lifetime, TString reason = {}) {
+                runtime.Send(new IEventHandle(board, source, new TEvWhiteboard::TEvDDiskHealthUpdate(
+                    1, 2, ownerRound, isBuffer, status, std::move(reason), lifetime)));
+            };
+            auto publishSpace = [&] {
+                auto* update = new TEvWhiteboard::TEvDDiskStateUpdate;
+                update->OwnerRound = 1;
+                update->Lifetime = TDuration::Seconds(45);
+                update->Record.SetPDiskId(1);
+                update->Record.SetDDiskSlotId(2);
+                update->Record.SetDDiskOccupancy(0.25);
+                runtime.Send(new IEventHandle(board, buffer, update));
+            };
+            auto query = [&] {
+                auto* request = new TEvWhiteboard::TEvPDiskStateRequest;
+                request->Record.SetIncludeDDiskState(true);
+                runtime.Send(new IEventHandle(board, client, request));
+                auto result = runtime.GrabEdgeEventRethrow<TEvWhiteboard::TEvPDiskStateResponse>(client);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.DDiskStateInfoSize(), 1);
+                return result->Get()->Record.GetDDiskStateInfo(0);
+            };
+
+            publish(ddisk, 1, false, TStatus::Ready, TDuration::Seconds(15));
+            publish(buffer, 1, true, TStatus::Broken, TDuration::Seconds(30), "buffer broken");
+            publishSpace();
+            auto sample = query();
+            UNIT_ASSERT(sample.HasDDiskStatus());
+            UNIT_ASSERT(sample.GetDDiskStatus() == TStatus::Ready);
+            UNIT_ASSERT(sample.GetPersistentBufferStatus() == TStatus::Broken);
+            UNIT_ASSERT_VALUES_EQUAL(sample.GetPersistentBufferStatusReason(), "buffer broken");
+            UNIT_ASSERT(sample.GetHasWhiteboardData());
+            UNIT_ASSERT_VALUES_EQUAL(sample.GetDDiskOccupancy(), 0.25);
+            UNIT_ASSERT(sample.HasChangeTime());
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(16));
+            sample = query();
+            UNIT_ASSERT(!sample.HasDDiskStatus());
+            UNIT_ASSERT(sample.GetPersistentBufferStatus() == TStatus::Broken);
+            runtime.AdvanceCurrentTime(TDuration::Seconds(15));
+            sample = query();
+            UNIT_ASSERT(!sample.HasPersistentBufferStatus());
+            UNIT_ASSERT(!sample.HasPersistentBufferStatusReason());
+            UNIT_ASSERT(sample.GetHasWhiteboardData());
+
+            publish(replacement, 2, false, TStatus::Initializing, TDuration::Seconds(15));
+            publish(ddisk, 2, false, TStatus::Ready, TDuration::Seconds(15));
+            publish(buffer, 1, true, TStatus::Ready, TDuration::Seconds(15));
+            publishSpace();
+            sample = query();
+            UNIT_ASSERT_VALUES_EQUAL(sample.GetPDiskId(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sample.GetDDiskSlotId(), 2);
+            UNIT_ASSERT(sample.GetDDiskStatus() == TStatus::Initializing);
+            UNIT_ASSERT(!sample.HasPersistentBufferStatus());
+            UNIT_ASSERT(sample.HasHasWhiteboardData());
+            UNIT_ASSERT(!sample.GetHasWhiteboardData());
+            UNIT_ASSERT(!sample.HasChangeTime());
+            UNIT_ASSERT(!sample.HasDDiskOccupancy());
+
+            publish(buffer, 2, true, TStatus::Ready, TDuration::Seconds(15));
+            runtime.Send(new IEventHandle(board, buffer, new TEvWhiteboard::TEvDDiskStateDelete(1, 2, 2, true)));
+            publish(buffer, 2, true, TStatus::Ready, TDuration::Seconds(15));
+            sample = query();
+            UNIT_ASSERT(sample.GetDDiskStatus() == TStatus::Initializing);
+            UNIT_ASSERT(!sample.HasPersistentBufferStatus());
+        }
+
         Y_UNIT_TEST(SortOccupancyBeforePaging) {
             const TVector<TDDiskOccupancySortKey> keys{
                 {1, 1, 1, std::nullopt},

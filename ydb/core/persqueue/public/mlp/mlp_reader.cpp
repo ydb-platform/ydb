@@ -61,6 +61,10 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
             }
+            // The tablet rejects reads in a restricted write mode, so fail before any tablet call.
+            if (const auto error = GetWriteModeError(Info->Description.GetPQTabletConfig())) {
+                return ReplyErrorAndDie(error->Status, TString(error->Reason));
+            }
             return DoSelectPartition();
         }
         default: {

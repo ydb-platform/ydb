@@ -27,4 +27,16 @@ namespace NKikimr::NSqsTopic::V1 {
         }
         return result;
     }
+
+    NSQS::TError MapWriteModeError(Ydb::StatusIds::StatusCode status, const TString& message) {
+        switch (status) {
+            case Ydb::StatusIds::BAD_REQUEST:
+                return MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, message);
+            case Ydb::StatusIds::UNAVAILABLE:
+                return MakeError(NSQS::NErrors::SERVICE_UNAVAILABLE, message);
+            default:
+                return MakeError(NSQS::NErrors::INTERNAL_FAILURE, message);
+        }
+    }
+
 } // namespace NKikimr::NSqsTopic::V1

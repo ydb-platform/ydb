@@ -2,11 +2,14 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/digest/md5/md5.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -197,6 +200,96 @@ TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConf
         keyTypes.push_back(typeInfoMod.TypeInfo);
     }
     return keyTypes;
+}
+
+namespace {
+
+bool IsValidBound(const TMaybe<TSerializedCellVec>& bound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!bound) {
+        return true;
+    }
+    const auto cells = bound->GetCells();
+    if (cells.size() > keyTypes.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (NScheme::HasUnexpectedValueSize(cells[i], keyTypes[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsValidKeyRange(const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return IsValidBound(range.FromBound, keyTypes) && IsValidBound(range.ToBound, keyTypes);
+}
+
+int CompareBounds(const TSerializedCellVec& lhs, const TSerializedCellVec& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return ComparePrefixBorders(keyTypes,
+        lhs.GetCells(), PrefixModeLeftBorderInclusive,
+        rhs.GetCells(), PrefixModeLeftBorderInclusive);
+}
+
+bool IsFromBoundLess(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!lhs.FromBound || !rhs.FromBound) {
+        return !lhs.FromBound && rhs.FromBound;
+    }
+    return CompareBounds(*lhs.FromBound, *rhs.FromBound, keyTypes) < 0;
+}
+
+bool IsStrictlyInside(const TSerializedCellVec& boundary, const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return (!range.FromBound || CompareBounds(boundary, *range.FromBound, keyTypes) > 0)
+        && (!range.ToBound || CompareBounds(boundary, *range.ToBound, keyTypes) < 0);
+}
+
+TString MakeFullKey(const TSerializedCellVec& bound, size_t keySize) {
+    TVector<TCell> cells(bound.GetCells().begin(), bound.GetCells().end());
+    cells.resize(keySize);
+    return TSerializedCellVec::Serialize(cells);
+}
+
+} // anonymous
+
+std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKeyRange> sources, const TPartitionKeyRange& partition,
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes)
+{
+    if (!IsValidKeyRange(partition, keyTypes)) {
+        return std::nullopt;
+    }
+
+    TVector<const TWeightedKeyRange*> partitionSources;
+    ui64 total = 0;
+    for (const auto& source : sources) {
+        if (IsValidKeyRange(source.KeyRange, keyTypes) && Intersects(source.KeyRange, partition, keyTypes)) {
+            partitionSources.push_back(&source);
+            total += source.Weight;
+        }
+    }
+
+    StableSort(partitionSources.begin(), partitionSources.end(), [&](const TWeightedKeyRange* lhs, const TWeightedKeyRange* rhs) {
+        return IsFromBoundLess(lhs->KeyRange, rhs->KeyRange, keyTypes);
+    });
+
+    std::optional<TString> boundary;
+    ui64 bestImbalance = Max<ui64>();
+    ui64 left = 0;
+    for (size_t i = 1; i < partitionSources.size(); ++i) {
+        left += partitionSources[i - 1]->Weight;
+        const auto& lower = partitionSources[i - 1]->KeyRange;
+        const auto& upper = partitionSources[i]->KeyRange;
+        if (!upper.FromBound || Intersects(lower, upper, keyTypes) || !IsStrictlyInside(*upper.FromBound, partition, keyTypes)) {
+            continue;
+        }
+
+        const ui64 right = total - left;
+        const ui64 imbalance = left > right ? left - right : right - left;
+        if (imbalance < bestImbalance) {
+            bestImbalance = imbalance;
+            boundary = MakeFullKey(*upper.FromBound, keyTypes.size());
+        }
+    }
+
+    return boundary;
 }
 
 } // namespace NKikimr::NPQ

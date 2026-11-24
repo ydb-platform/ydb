@@ -146,6 +146,14 @@ bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TC
 
 TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig);
 
+struct TWeightedKeyRange {
+    TPartitionKeyRange KeyRange;
+    ui64 Weight = 0;
+};
+
+std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKeyRange> sources, const TPartitionKeyRange& partition,
+    TConstArrayRef<NScheme::TTypeInfo> keyTypes);
+
 } // namespace NKikimr::NPQ
 
 } // namespace NKikimr

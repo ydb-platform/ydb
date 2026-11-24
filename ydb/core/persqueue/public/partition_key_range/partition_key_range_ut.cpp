@@ -51,6 +51,10 @@ TMaybe<TSerializedCellVec> MakeKeyBound(const TString& key) {
     return TSerializedCellVec(key);
 }
 
+TWeightedKeyRange MakeSource(TMaybe<TSerializedCellVec> fromBound, TMaybe<TSerializedCellVec> toBound, ui64 weight) {
+    return {MakeKeyRange(std::move(fromBound), std::move(toBound)), weight};
+}
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TPartitionKeyRangeIntersectsTest) {
@@ -196,5 +200,114 @@ Y_UNIT_TEST_SUITE(TPartitionKeyRangeIntersectsTest) {
 
         // then
         UNIT_ASSERT(intersects);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TPartitionKeyRangeChooseSplitBoundaryTest) {
+    Y_UNIT_TEST(ShouldChooseBoundaryThatSplitsLoadInHalfWhenSourcesAreAdjacent) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), MakeBound({30}), 200),
+            MakeSource(MakeBound({30}), MakeBound({60}), 500),
+            MakeSource(MakeBound({60}), MakeBound({100}), 300),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), MakeBound({100})), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeBound({60})->GetBuffer());
+    }
+
+    Y_UNIT_TEST(ShouldNotChooseBoundaryWhenPartitionHasOneSource) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(MakeBound({10}), MakeBound({50}), 1000),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), MakeBound({100})), Uint64Key);
+
+        // then
+        UNIT_ASSERT(!boundary);
+    }
+
+    Y_UNIT_TEST(ShouldChooseInnerBoundaryWhenAnotherBoundaryIsOnPartitionEdge) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), MakeBound({30}), 500),
+            MakeSource(MakeBound({30}), MakeBound({60}), 200),
+            MakeSource(MakeBound({60}), MakeBound({100}), 300),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(MakeBound({30}), MakeBound({100})), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeBound({60})->GetBuffer());
+    }
+
+    Y_UNIT_TEST(ShouldNotChooseBoundaryWhenSourcesAreOutsidePartition) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), MakeBound({30}), 500),
+            MakeSource(MakeBound({30}), MakeBound({60}), 500),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(MakeBound({100}), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(!boundary);
+    }
+
+    Y_UNIT_TEST(ShouldChooseMiddleBoundaryWhenLoadIsEqual) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), MakeBound({10}), 100),
+            MakeSource(MakeBound({10}), MakeBound({20}), 100),
+            MakeSource(MakeBound({20}), MakeBound({30}), 100),
+            MakeSource(MakeBound({30}), Nothing(), 100),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeBound({20})->GetBuffer());
+    }
+
+    Y_UNIT_TEST(ShouldOrderSourcesByTypedKeyWhenBytesOrderDiffers) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(MakeBound({256}), Nothing(), 100),
+            MakeSource(Nothing(), MakeBound({2}), 300),
+            MakeSource(MakeBound({2}), MakeBound({256}), 100),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), Nothing()), Uint64Key);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeBound({2})->GetBuffer());
+    }
+
+    Y_UNIT_TEST(ShouldPadBoundaryWithNullsWhenSourceBoundIsKeyPrefix) {
+        // given
+        const TVector<TWeightedKeyRange> sources = {
+            MakeSource(Nothing(), MakeBound({5}), 100),
+            MakeSource(MakeBound({5}), Nothing(), 100),
+        };
+
+        // when
+        const auto boundary = ChooseSplitBoundary(sources, MakeKeyRange(Nothing(), Nothing()), Uint64PairKey);
+
+        // then
+        UNIT_ASSERT(boundary);
+        UNIT_ASSERT_VALUES_EQUAL(*boundary, MakeNullPaddedBound(5)->GetBuffer());
     }
 }

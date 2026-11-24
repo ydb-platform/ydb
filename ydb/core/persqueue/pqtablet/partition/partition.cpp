@@ -4823,6 +4823,10 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
     //request in correct session - make it
 
+    if (act.ResetOffsetReply) {
+        act.Offset = Max(act.Offset, CdcReplicationTrimOffset);
+    }
+
     ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
 
     if (strictCommitOffset && act.Offset < GetStartOffset()) {

@@ -115,7 +115,7 @@ void TPartition::FinishResetOffset(
     auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(
         /*cookie=*/0,
         consumer,
-        Max(offset, CdcReplicationTrimOffset),
+        offset,
         /*sessionId=*/"",
         /*partitionSessionId=*/0,
         /*generation=*/0,

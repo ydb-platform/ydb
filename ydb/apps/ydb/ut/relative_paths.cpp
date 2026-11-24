@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
             });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             result = client.RetryOperationSync([](NYdb::NTable::TSession session) {
-                return session.DropTable("RelativeSqlPaths").GetValueSync();
+                return session.DropTable(GetYdbDatabase() + "/RelativeSqlPaths").GetValueSync();
             });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
 
     Y_UNIT_TEST_F(InferenceKeepsRelativeDirectoryNames, TCliTestFixture) {
         const auto csv = EnvFile("key,name\n1,value\n", "input.csv");
-        for (const TString database : {GetDatabase(), TString("tenant"), TString{}}) {
+        for (const TString& database : {GetDatabase(), TString("tenant"), TString{}}) {
             const auto output = RunCli({"-d", database, "tools", "infer", "csv", csv, "--header", "--path", "tenant/orders"});
             UNIT_ASSERT_STRING_CONTAINS(output, "CREATE TABLE `tenant/orders`");
         }

@@ -209,14 +209,17 @@ bool TCdcCreation::CheckTopic(const NKikimrScheme::TEvDescribeSchemeResult& reco
         }
         return true;
     }
-    if (config.GetReplicationSourceConsumer() != Settings.Consumer || !config.HasCdcReplication()) {
+
+    // The first ALTER attaches the topic. Later consumer changes can advance its version.
+    if (config.GetReplicationSourceConsumer() != Settings.Consumer || !config.HasCdcReplication()
+        || self.GetVersion().GetPQVersion() < 2)
+    {
         error = "CDC destination registration changed or was not applied";
         return false;
     }
 
-    // The first ALTER installs the managed marker, consumers and quotas together.
-    if (self.GetVersion().GetPQVersion() != 2) {
-        error = "CDC topic was not created by the saved creation request";
+    if (config.GetCdcReplication().HasTrimTxId()) {
+        error = "CDC destination topic already has a trim request";
         return false;
     }
     return true;

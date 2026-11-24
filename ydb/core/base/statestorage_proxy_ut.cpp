@@ -847,8 +847,8 @@ void CheckDeleteConfigMismatch(bool newerGeneration) {
     if (newerGeneration) {
         reply(1, generation + 1, guid);
     } else {
-        // A plain quorum-based response would already report OK before this reply is counted.
         reply(1, generation, guid);
+        // The two matching replies already form a quorum when the mismatching reply arrives.
         reply(2, generation, guid + 1);
     }
     auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(1));

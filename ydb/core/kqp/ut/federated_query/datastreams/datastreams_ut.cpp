@@ -870,6 +870,76 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
     }
 
+    Y_UNIT_TEST(DisablePgCompatibilityForMixedExternalTableAtRuntime) {
+        const TString bucket = "pg_compatibility_mixed_schema";
+        CreateBucketWithObject(bucket, "data.json", R"({"id":42,"payload":"value"})");
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, config, NYql::NDq::CreateS3ActorsFactory());
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session
+                          .ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/source` WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{location}", AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
+                DATA_SOURCE="/Root/source", LOCATION="data.json", FORMAT="json_each_row"
+            );)", "location"_a = GetBucketLocation(bucket)), TTxControl::NoTx())
+                          .GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto setFlag = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
+        auto checkRejected = [](const auto& result) {
+            const auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues,
+                "PostgreSQL compatibility is disabled for external table '/Root/mixed' because its schema contains PostgreSQL column 'payload'");
+        };
+        auto check = [&](bool disabled) {
+            for (const auto* query :
+                { "SELECT COUNT(*) FROM `/Root/mixed`;", "SELECT id FROM `/Root/mixed`;", "SELECT payload FROM `/Root/mixed`;" }) {
+                auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                if (disabled) {
+                    checkRejected(result);
+                } else {
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(TResultSetParser(result.GetResultSet(0)).RowsCount(), 1);
+                }
+            }
+        };
+        check(false);
+        setFlag(true);
+        check(true);
+        checkRejected(session
+                          .ExecuteQuery(R"(
+            INSERT INTO `/Root/mixed`
+            SELECT 42 AS id;
+        )", TTxControl::BeginTx().CommitTx())
+                          .GetValueSync());
+
+        const auto replace = session
+                                 .ExecuteQuery(R"(
+            CREATE OR REPLACE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
+                DATA_SOURCE="/Root/source", LOCATION="replacement.json", FORMAT="json_each_row"
+            );)", TTxControl::NoTx())
+                                 .GetValueSync();
+        UNIT_ASSERT_C(!replace.IsSuccess(), replace.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(replace.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        setFlag(false);
+        check(false);
+    }
+
     Y_UNIT_TEST_F(S3RuntimeListingDisabledForStreamingQueries, TStreamingTestFixture) {
         constexpr char sourceBucket[] = "test_bucket_disable_runtime_listing";
         constexpr char objectPath[] = "test_bucket_object.json";

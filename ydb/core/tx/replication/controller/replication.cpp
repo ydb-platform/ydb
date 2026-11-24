@@ -6,6 +6,7 @@
 #include "target_discoverer.h"
 #include "target_table.h"
 #include "target_topic.h"
+#include "target_cdc.h"
 #include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
@@ -17,6 +18,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
@@ -97,6 +99,8 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::Transfer:
             return new TTargetTransfer(self, id, std::forward<Args>(args)...);
+        case ETargetKind::CdcTopic:
+            return new TTargetCdc(self, id, std::forward<Args>(args)...);
         case ETargetKind::Topic:
             return new TTargetTopic(self, id, std::forward<Args>(args)...);
         }
@@ -112,10 +116,12 @@ class TReplication::TImpl: public TLagProvider {
                 return ErrorState("Not implemented");
 
             case NKikimrReplication::TReplicationConfig::kSpecific:
-            case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific: {
                 TargetDiscovererRevision = CredentialsRevision;
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config,
+                    Config.GetReplicateChangefeeds() ? PathId : TPathId{}));
                 break;
+            }
 
             default:
                 return ErrorState(TStringBuilder() << "Unexpected targets: " << Config.GetTargetCase());
@@ -168,6 +174,15 @@ public:
         const auto previousLag = GetLag();
         const auto it = Targets.find(id);
         if (it != Targets.end()) {
+            if (auto* cdc = GetCdcTarget(it->second.Ptr.Get())) {
+                const auto parent = CdcChildren.find(cdc->GetCdc().GetParentTargetId());
+                Y_ABORT_UNLESS(parent != CdcChildren.end());
+                Erase(parent->second, cdc);
+                if (parent->second.empty()) {
+                    CdcChildren.erase(parent);
+                }
+            }
+
             TLagProvider::RemoveLag(it->second, id);
             Targets.erase(it);
             NotifyLagChanged(previousLag);
@@ -328,6 +343,7 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
+        config.SetReplicateChangefeeds(Config.GetReplicateChangefeeds());
         if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
             // A deferred ALTER installs the config before ResetCredentials.
             // Invalidate the old callbacks immediately, including A -> B -> A.
@@ -394,6 +410,7 @@ private:
     EState DesiredState = EState::Ready;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
+    THashMap<ui64, TVector<TTargetCdc*>> CdcChildren;
     THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
@@ -473,6 +490,33 @@ TVector<TReplication::ITarget*> TReplication::GetTargets() const {
 
 TVector<TString> TReplication::GetTargetTablePaths() const {
     return Impl->GetTargetTablePaths();
+}
+
+void TReplication::RegisterCdcChild(ui64 parentId, TTargetCdc& child) {
+    child.GetCdc().SetParentTargetId(parentId);
+    Impl->CdcChildren[parentId].push_back(&child);
+}
+
+TConstArrayRef<TTargetCdc*> TReplication::GetCdcChildren(ui64 parentId) const {
+    if (const auto* children = Impl->CdcChildren.FindPtr(parentId)) {
+        return *children;
+    }
+    return {};
+}
+
+bool TReplication::AreCdcChildrenPrepared(ui64 parentId) const {
+    for (const auto* child : GetCdcChildren(parentId)) {
+        if (child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::PREPARED
+            && child->GetCdc().GetPhase() != NKikimrReplicationController::TCdcTarget::FINISHED)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsTopicTarget(TReplication::ETargetKind kind) {
+    return kind == TReplication::ETargetKind::Topic || kind == TReplication::ETargetKind::CdcTopic;
 }
 
 void TReplication::Progress(const TActorContext& ctx) {

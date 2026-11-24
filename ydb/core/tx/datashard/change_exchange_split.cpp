@@ -16,6 +16,8 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr {
@@ -94,12 +96,13 @@ public:
     }
 
     explicit TCdcPartitionWorker(const TActorId& parent, ui32 partitionId, ui64 tabletId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const TString& sourceIdPrefix)
         : Parent(parent)
         , PartitionId(partitionId)
         , TabletId(tabletId)
         , SrcTabletId(srcTabletId)
         , DstTabletIds(dstTabletIds)
+        , SourceIdPrefix(sourceIdPrefix)
     {
     }
 
@@ -125,11 +128,13 @@ public:
         auto& cmd = *request.MutableCmdSplitMessageGroup();
         {
             auto& group = *cmd.AddDeregisterGroups();
-            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(SrcTabletId)));
+            const auto sourceId = NPQ::MakeCdcSourceId(SrcTabletId, SourceIdPrefix);
+            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
         }
         for (const auto dstTabletId : DstTabletIds) {
             auto& group = *cmd.AddRegisterGroups();
-            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dstTabletId)));
+            const auto sourceId = NPQ::MakeCdcSourceId(dstTabletId, SourceIdPrefix);
+            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
         }
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
@@ -152,6 +157,7 @@ private:
     const ui64 TabletId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
+    const TString SourceIdPrefix;
 
     TActorId PipeClient;
 
@@ -357,7 +363,11 @@ class TCdcWorker
 
         THashMap<ui32, TActorId> workers;
 
-        for (const auto& partition : entry.PQGroupInfo->Description.GetPartitions()) {
+        const auto& topic = entry.PQGroupInfo->Description;
+        // Splits proposed by older SchemeShards have no producer snapshot.
+        const auto& sourceIdPrefix = SourceIdPrefix
+            ? *SourceIdPrefix : topic.GetPQTabletConfig().GetReplicationSourceConsumer();
+        for (const auto& partition : topic.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
             const auto tabletId = partition.GetTabletId();
 
@@ -373,7 +383,8 @@ class TCdcWorker
                 YDB_LOG_TRACE("Registering CDC partition split worker",
                     {"partitionId", partitionId});
 
-                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
+                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId,
+                    SrcTabletId, DstTabletIds, sourceIdPrefix));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }
@@ -470,11 +481,12 @@ public:
     }
 
     explicit TCdcWorker(const TActorId& parent, const TPathId& pathId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const std::optional<TString>& sourceIdPrefix)
         : Parent(parent)
         , PathId(pathId)
         , SrcTabletId(srcTabletId)
         , DstTabletIds(dstTabletIds)
+        , SourceIdPrefix(sourceIdPrefix)
     {
     }
 
@@ -497,6 +509,7 @@ private:
     const TPathId PathId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
+    const std::optional<TString> SourceIdPrefix;
 
     THashMap<ui32, TActorId> Workers;
     THashMap<TActorId, ui32> Pending;
@@ -509,6 +522,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     struct TWorker {
         EWorkerType Type;
         TActorId ActorId;
+        std::optional<TString> SourceIdPrefix;
 
         explicit TWorker(EWorkerType type)
             : Type(type)
@@ -523,19 +537,15 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
             {"srcTabletId", DataShard.TabletId});
     }
 
-    TActorId RegisterWorker(const TPathId& pathId, EWorkerType type) const {
-        switch (type) {
+    TActorId RegisterWorker(const TPathId& pathId, TWorker& worker) const {
+        Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
+        switch (worker.Type) {
         case EWorkerType::CdcStream:
-            return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
+            worker.ActorId = Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards, worker.SourceIdPrefix));
+            return worker.ActorId;
         case EWorkerType::AsyncIndex:
             Y_ENSURE(false, "unreachable");
         }
-    }
-
-    TActorId RegisterWorker(const TPathId& pathId, TWorker& worker) const {
-        Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
-        worker.ActorId = RegisterWorker(pathId, worker.Type);
-        return worker.ActorId;
     }
 
     void Ack() {
@@ -581,7 +591,8 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards)
+    TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+            const NKikimrTxDataShard::TSplitMergeDescription* split)
         : TActorBootstrapped()
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
         , DstDataShards(dstDataShards)
@@ -589,6 +600,13 @@ public:
         for (const auto& [_, tableInfo] : self->GetUserTables()) {
             for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
                 Workers.emplace(streamPathId, EWorkerType::CdcStream);
+            }
+        }
+        if (split) {
+            for (const auto& producer : split->GetCdcProducers()) {
+                if (auto* worker = Workers.FindPtr(TPathId::FromProto(producer.GetStreamPathId()))) {
+                    worker->SourceIdPrefix = producer.GetSourceIdPrefix();
+                }
             }
         }
     }
@@ -629,8 +647,9 @@ private:
 
 }; // TChangeExchageSplit
 
-IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards) {
-    return new TChangeExchageSplit(self, dstDataShards);
+IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards,
+        const NKikimrTxDataShard::TSplitMergeDescription* split) {
+    return new TChangeExchageSplit(self, dstDataShards, split);
 }
 
 } // NDataShard

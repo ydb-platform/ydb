@@ -313,8 +313,9 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
                     ctx, consumer.GetName(), 0, IsImportant(consumer), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
-        if (userInfo->Offset < (i64)GetStartOffset())
+        if (ShouldClampConsumerOffset(userInfo->Offset)) {
             userInfo->Offset = GetStartOffset();
+        }
         ReadTimestampForOffset(consumer.GetName(), *userInfo, ctx);
     }
     for (auto&& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
@@ -797,6 +798,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
+    res->Offset = Max(res->Offset, CdcReplicationTrimOffset);
     TReadAnswer answer = res->FormAnswer(
             ctx, nullptr, GetStartOffset(), res->Offset, Partition, nullptr,
             res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
@@ -889,9 +891,10 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                    read->ReplyTo);
         return;
     }
-    if (read->Offset < GetStartOffset() && !read->IsInternal()) {
+    const ui64 firstReadableOffset = read->IsInternal() ? CdcReplicationTrimOffset : GetStartOffset();
+    if (read->Offset < firstReadableOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
-        read->Offset = GetStartOffset();
+        read->Offset = firstReadableOffset;
         if (read->PartNo > 0) {
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(
             0);
@@ -1239,6 +1242,12 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     if (subscription) {
         userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
+    }
+
+    // A read can wait for quota or new data while a trim commits.
+    if (info.Offset < CdcReplicationTrimOffset) {
+        info.Offset = CdcReplicationTrimOffset;
+        info.PartNo = 0;
     }
 
     TVector<TRequestedBlob> blobs;

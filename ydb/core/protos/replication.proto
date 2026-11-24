@@ -178,6 +178,8 @@ message TReplicationConfig {
         BOOTSTRAP_MODE_SWITCHOVER = 3;
     }
     optional EBootstrapMode Bootstrap = 13;
+    // The controller records this at CREATE so target discovery can resume after a restart.
+    optional bool ReplicateChangefeeds = 14 [default = false];
 
     reserved 6; // InitialSync
 }

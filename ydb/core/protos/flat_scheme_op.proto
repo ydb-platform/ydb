@@ -443,6 +443,10 @@ message TTableDescription {
 
     // Local graph of the logical index owning this physical posting table.
     optional TLocalHnswIndexDescription LocalHnswIndex = 56;
+
+    // Internal ALTER command: activate these streams atomically with replica detach.
+    // Persisted only in pending AlterData, never in the resulting table schema.
+    repeated NKikimrProto.TPathID ActivateCdcStreams = 57;
 }
 
 message TCompressionOptions {
@@ -1735,6 +1739,9 @@ message TPersQueueGroupDescription {
         optional bool CreatePartition = 3;
     }
     repeated TPartitionBoundary RootPartitionBoundaries = 17;
+
+    // Internal ALTER action. SchemeShard stamps the tablet config after checking ownership.
+    optional uint64 TrimCdcReplicationTxId = 18;
 }
 
 message TRtmrVolumeDescription {
@@ -1943,6 +1950,8 @@ message TReplicationDescription {
     }
 
     optional TAlterTransfer AlterTransfer = 10;
+    // Set by the controller before it enrolls the first mirrored changefeed.
+    optional bool ManagesChangefeeds = 11;
 }
 
 message TBlobDepotDescription {

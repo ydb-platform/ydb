@@ -1,4 +1,5 @@
 #include "replication.h"
+#include "target_cdc.h"
 #include "target_table.h"
 #include "util.h"
 
@@ -104,6 +105,27 @@ Y_UNIT_TEST_SUITE(Replication) {
         config.ClearSrcConnectionParams();
         replication->SetConfig(std::move(config));
         UNIT_ASSERT_VALUES_EQUAL(replication->GetConfig().GetSrcConnectionParams().GetIamCredentials().GetResourceId(), "");
+    }
+
+    Y_UNIT_TEST(RemovingCdcTargetsUpdatesTheirParent) {
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
+            NKikimrReplication::TReplicationConfig(), "/Root");
+        auto addFeed = [&](ui64 id, ui64 parentId) {
+            auto* target = replication->AddTarget(id, TReplication::ETargetKind::CdcTopic,
+                std::make_shared<TTargetCdc::TConfig>("source", "destination"));
+            replication->RegisterCdcChild(parentId, *GetCdcTarget(target));
+        };
+        addFeed(3, 1);
+        addFeed(4, 1);
+        addFeed(5, 2);
+
+        replication->RemoveTarget(3);
+        UNIT_ASSERT_VALUES_EQUAL(replication->GetCdcChildren(1).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replication->GetCdcChildren(1).front()->GetId(), 4);
+
+        replication->RemoveTarget(4);
+        UNIT_ASSERT(replication->GetCdcChildren(1).empty());
+        UNIT_ASSERT_VALUES_EQUAL(replication->GetCdcChildren(2).front()->GetId(), 5);
     }
 
     Y_UNIT_TEST(InitialScanIsImmutable) {

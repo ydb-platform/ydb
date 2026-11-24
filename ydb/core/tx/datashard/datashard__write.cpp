@@ -310,6 +310,7 @@ TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const 
     switch (kind) {
         case EOperationKind::DataTx:
         case EOperationKind::SchemeTx:
+        case EOperationKind::CdcHandoff:
         case EOperationKind::Snapshot:
         case EOperationKind::DistributedErase:
         case EOperationKind::CommitWrites:

@@ -888,24 +888,28 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message1 (passed with backend exception)",
             {"value", "1"});
 
-        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message2 (dropped)",
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message2 (trigger log become defunct)",
             {"value", "2"});
 
-        env.Runtime.SimulateSleep(TDuration::Seconds(10));
-        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message3 (passed)",
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message3 (dropped)",
             {"value", "3"});
 
+        env.Runtime.SimulateSleep(TDuration::Seconds(10));
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message4 (passed)",
+            {"value", "4"});
+
         auto& calls = sink->Calls;
-        UNIT_ASSERT_VALUES_EQUAL(calls.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(calls.size(), 4);
 
         // Check sink messages
         UNIT_ASSERT_VALUES_EQUAL(calls[0].TextMessage, "Test message1 (passed with backend exception)");
-        UNIT_ASSERT_VALUES_EQUAL(calls[1].TextMessage, "Test message2 (dropped)");
-        UNIT_ASSERT_VALUES_EQUAL(calls[2].TextMessage, "Test message3 (passed)");
+        UNIT_ASSERT_VALUES_EQUAL(calls[1].TextMessage, "Test message2 (trigger log become defunct)");
+        UNIT_ASSERT_VALUES_EQUAL(calls[2].TextMessage, "Test message3 (dropped)");
+        UNIT_ASSERT_VALUES_EQUAL(calls[3].TextMessage, "Test message4 (passed)");
 
         // Check backend messages
         env.FetchMeta({{"meta.value", "1"}});
-        env.FetchMeta({{"meta.value", "3"}});
+        env.FetchMeta({{"meta.value", "4"}});
     }
 }
 

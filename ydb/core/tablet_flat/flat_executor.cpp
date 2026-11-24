@@ -1853,30 +1853,19 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             DropPartStorePageCollections(*gone);
 
         Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), partSwitch.FollowerUpdateStep));
-    } else {
-        bool merged = false;
-        for (auto &partView : newParts) {
+    } else if (newParts || newColdParts || newTxStatus) {
+        for (const auto& partView : newParts) {
             Database->Merge(partSwitch.TableId, partView);
-            merged = true;
-
-            if (CompactionLogic) {
-                CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(partView));
-            }
         }
-        for (auto &part : newColdParts) {
+        for (const auto& part : newColdParts) {
             Database->Merge(partSwitch.TableId, part);
-            merged = true;
-
-            if (CompactionLogic) {
-                CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(part));
-            }
         }
         for (auto &txStatus : newTxStatus) {
             Database->Merge(partSwitch.TableId, txStatus);
-            merged = true;
         }
-        if (merged) {
-            Database->MergeDone(partSwitch.TableId);
+        Database->MergeDone(partSwitch.TableId);
+        if (CompactionLogic && (newParts || newColdParts)) {
+            CompactionLogic->BorrowedParts(partSwitch.TableId, newParts, newColdParts);
         }
     }
 
@@ -1895,11 +1884,11 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             }
         }
 
+        TVector<NTable::TPartView> rebased(Reserve(partSwitch.Moves.size()));
         // N.B. there should be a single source table per part switch
         for (auto& [sourceTable, state] : perTable) {
             // Rebase source parts to their respective new epochs
             auto srcSubset = Database->PartSwitchSubset(sourceTable, NTable::TEpoch::Zero(), state.Bundles, { });
-            TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
             for (const auto& partView : srcSubset->Flatten) {
                 Y_ENSURE(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                 NTable::TEpoch epoch = state.BundleToEpoch.Value(partView->Label, partView->Epoch);
@@ -1912,19 +1901,17 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             if (CompactionLogic) {
                 CompactionLogic->RemovedParts(sourceTable, state.Bundles);
             }
-
-            // Merge rebased parts to the destination table
-            ResetMovedPartCacheModes(partSwitch.TableId, rebased);
-            for (auto& partView : rebased) {
-                Database->Merge(partSwitch.TableId, partView);
-
-                if (CompactionLogic) {
-                    CompactionLogic->BorrowedPart(partSwitch.TableId, std::move(partView));
-                }
-            }
         }
 
+        // Merge rebased parts to the destination table
+        ResetMovedPartCacheModes(partSwitch.TableId, rebased);
+        for (const auto& partView : rebased) {
+            Database->Merge(partSwitch.TableId, partView);
+        }
         Database->MergeDone(partSwitch.TableId);
+        if (CompactionLogic) {
+            CompactionLogic->BorrowedParts(partSwitch.TableId, rebased);
+        }
     }
 }
 
@@ -2804,11 +2791,11 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
                     // Add rebased parts to the destination table
                     ResetMovedPartCacheModes(dst, rebased);
-                    for (auto& partView : rebased) {
+                    for (const auto& partView : rebased) {
                         Database->Merge(dst, partView);
-                        CompactionLogic->BorrowedPart(dst, partView);
                     }
                     Database->MergeDone(dst);
+                    CompactionLogic->BorrowedParts(dst, rebased);
 
                     // Serialize rebased parts as moved from the source table
                     NKikimrExecutorFlat::TTablePartSwitch proto;
@@ -3055,7 +3042,8 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             auto *bySwitchAux = aux.AddBySwitchAux();
 
             for (size_t i = 0; i < result->Parts.size(); ++i) {
-                auto partView = result->Parts[i].CloneWithEpoch(partEpoch);
+                auto& partView = result->Parts[i];
+                partView = partView.CloneWithEpoch(partEpoch);
 
                 AddPartStorePageCollections(attachTableId, partView, cacheModes, stickyColumns);
 
@@ -3072,12 +3060,12 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                 }
 
                 Database->Merge(attachTableId, partView);
-                CompactionLogic->BorrowedPart(attachTableId, partView);
 
                 TPageCollectionProtoHelper::Snap(snap, partView, attachTableId, CompactionLogic->BorrowedPartLevel());
                 TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), partView);
             }
             Database->MergeDone(attachTableId);
+            CompactionLogic->BorrowedParts(attachTableId, result->Parts);
 
             {
                 auto body = proto.SerializeAsString();

@@ -253,8 +253,8 @@ public:
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params);
 
-    void BorrowedPart(ui32 tableId, NTable::TPartView partView);
-    void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part);
+    void BorrowedParts(ui32 tableId, TConstArrayRef<NTable::TPartView> parts,
+        TConstArrayRef<TIntrusiveConstPtr<NTable::TColdPart>> coldParts = {});
     ui32 BorrowedPartLevel();
 
     TTableCompactionChanges RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts);

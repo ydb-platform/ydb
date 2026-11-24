@@ -138,9 +138,12 @@ namespace {
         }
 
         bool CancelTask(TTaskId id) override {
-            return Pending.erase(id) != 0;
+            const bool cancelled = Pending.erase(id) != 0;
+            CancelledPendingTasks += cancelled;
+            return cancelled;
         }
 
+        size_t CancelledPendingTasks = 0;
         bool HasPending() const { return !Pending.empty(); }
         bool HasRunning() const { return !Running.empty(); }
 
@@ -1372,6 +1375,44 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         }
     }
 
+    Y_UNIT_TEST(MergedBatchSchedulesFinalCompactionOnce) {
+        TStrategyFixture f;
+        const ui32 finalLevel = f.Policy->GetFinalLevel(0);
+        f.AddPart(20, finalLevel);
+        f.Start();
+        UNIT_ASSERT(!f.Broker.HasPending());
+
+        // The batch also carries the existing label, as when extra slices of a bundle arrive.
+        f.AddPart(10, finalLevel);
+        f.AddPart(30, finalLevel);
+        const auto unloaded = f.AddColdPart(15, finalLevel);
+        f.Strategy->PartsMerged(f.Parts, f.ColdParts, finalLevel);
+
+        // Scheduling after each part would cancel and resubmit the final task as the batch grows.
+        UNIT_ASSERT_VALUES_EQUAL(f.Broker.CancelledPendingTasks, 0u);
+        const auto state = f.Strategy->SnapshotState();
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.size(), f.Parts.size() + 1);
+        ui64 backingSize = 0;
+        for (const auto& part : f.Parts) {
+            backingSize += part->BackingSize();
+            UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(part->Label), finalLevel);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state.PartLevels.at(unloaded->Label), finalLevel);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetBackingSize(), backingSize);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetBackingSize(f.Backend.OwnerTabletId()), backingSize);
+
+        UNIT_ASSERT(f.Broker.RunPending(finalLevel));
+        const ui64 id = f.Backend.OnlyStarted();
+        const auto& params = *f.Backend.Started.at(id);
+        UNIT_ASSERT_VALUES_EQUAL(params.Parts.size(), f.Parts.size());
+        for (const auto& part : f.Parts) {
+            UNIT_ASSERT(Contains(params.Parts, part->Label));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.front()->Label, unloaded->Label);
+        f.Complete(id, {});
+    }
+
     Y_UNIT_TEST(MergingAPartCancelsConcurrentTacsAndRetriesIncludeItInTheUnderlay) {
         for (bool unloaded : {false, true}) {
             TStrategyFixture f;
@@ -1393,11 +1434,11 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
             const auto mergedLabel = [&] {
                 if (unloaded) {
                     const auto merged = f.AddColdPart(5, 255);
-                    f.Strategy->PartMerged(merged, 255);
+                    f.Strategy->PartsMerged({}, {merged}, 255);
                     return merged->Label;
                 }
                 const auto merged = f.AddPart(5, 255, 999);
-                f.Strategy->PartMerged(merged, 255);
+                f.Strategy->PartsMerged({merged}, {}, 255);
                 return merged->Label;
             }();
             UNIT_ASSERT(f.Backend.Cancelled.contains(originalHotId));

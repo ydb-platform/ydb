@@ -54,8 +54,8 @@ namespace NCompGen {
             THolder<TCompactionResult> result) override;
         void CompactionCancelled(ui64 compactionId, const TCompactionParams& params) override;
         bool TryReserveCompaction(TCompactionParams& params) override;
-        void PartMerged(TPartView part, ui32 level) override;
-        void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
+        void PartsMerged(TConstArrayRef<TPartView> parts,
+            TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
         TCompactionState SnapshotState() override;
         TCompactionChanges ApplyChanges() override;
@@ -235,6 +235,7 @@ namespace NCompGen {
         bool HasRunningCompactions() const;
         void ResumePendingGenerationTasks();
         void FinishReservationModeChange();
+        void MergeFinalPart(TPartView partView, ui32 level, TList<TPartInfo>& finalParts);
 
         void OnForcedGenCompactionDone();
 

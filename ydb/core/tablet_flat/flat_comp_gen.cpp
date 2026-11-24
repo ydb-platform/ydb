@@ -906,14 +906,7 @@ void TGenCompactionStrategy::OnForcedGenCompactionDone() {
     FinishedForcedGenCompactionTs = Time->Now();
 }
 
-void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
-    Y_ENSURE(TierManaged ? Policy->IsFinalLevel(level) : level == 255,
-        "Unexpected level of the merged part");
-    if (TierManaged) {
-        CancelTierCompactions();
-    }
-    auto& finalParts = GetFinalParts(level);
-
+void TGenCompactionStrategy::MergeFinalPart(TPartView partView, ui32 level, TList<TPartInfo>& finalParts) {
     const auto label = partView->Label;
 
     // Remove the old part data from our model (since it may have been changed)
@@ -946,34 +939,36 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
     auto& back = finalParts.emplace_back(std::move(partView));
     Stats += back.Stats;
     StatsPerTablet[back.Label.TabletID()] += back.Stats;
-    if (TierManaged) {
-        finalParts.sort();
-        ValidateTierEpochs();
-        UpdateStats();
-        CheckTierGenerations();
-    }
-    FinishReservationModeChange();
-
-    // The legacy path doesn't call UpdateStats here, so GarbageStatsAgg is not
-    // recalculated properly. This is not a problem, because this method is
-    // usually called when parts are borrowed, and we are not supposed to
-    // have any of our own data at that stage. We would wait for the first
-    // compaction to properly recalculate garbage stats histogram.
 }
 
-void TGenCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) {
-    Y_ENSURE(level == 255, "Unexpected level of the merged part");
+void TGenCompactionStrategy::PartsMerged(TConstArrayRef<TPartView> parts,
+        TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts, ui32 level) {
+    if (parts.empty() && coldParts.empty()) {
+        return;
+    }
+    Y_ENSURE(level == TCompactionPolicy::DefaultFinalLevel || (TierManaged && coldParts.empty() && Policy->IsFinalLevel(level)),
+        "Unexpected level of the merged parts");
     if (TierManaged) {
         CancelTierCompactions();
     }
 
-    const auto label = part->Label;
-    Y_ENSURE(!KnownParts.contains(label),
-        "Borrowed part attaching when another part with the same label exists");
+    auto& finalParts = GetFinalParts(level);
+    for (const auto& part : parts) {
+        MergeFinalPart(part, level, finalParts);
+    }
+    for (const auto& part : coldParts) {
+        Y_ENSURE(KnownParts.emplace(part->Label, level).second,
+            "Borrowed part attaching when another part with the same label exists");
+        ColdParts.emplace_back(part);
+    }
 
-    ColdParts.emplace_back(std::move(part));
-    KnownParts[label] = level;
     if (TierManaged) {
+        if (!parts.empty()) {
+            finalParts.sort();
+            ValidateTierEpochs();
+            // The legacy strategy refreshes the garbage histogram at the next compaction.
+            UpdateStats();
+        }
         CheckTierGenerations();
     }
     FinishReservationModeChange();

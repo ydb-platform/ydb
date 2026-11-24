@@ -714,16 +714,11 @@ TCompactionLogic::CancelledCompaction(
     table->Strategy->CompactionCancelled(compactionId, *params);
 }
 
-void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
+void TCompactionLogic::BorrowedParts(ui32 tableId, TConstArrayRef<NTable::TPartView> parts,
+        TConstArrayRef<TIntrusiveConstPtr<NTable::TColdPart>> coldParts) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_ENSURE(tableInfo);
-    tableInfo->Strategy->PartMerged(std::move(partView), 255);
-}
-
-void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {
-    auto *tableInfo = State->Tables.FindPtr(tableId);
-    Y_ENSURE(tableInfo);
-    tableInfo->Strategy->PartMerged(std::move(part), 255);
+    tableInfo->Strategy->PartsMerged(parts, coldParts, BorrowedPartLevel());
 }
 
 ui32 TCompactionLogic::BorrowedPartLevel() {

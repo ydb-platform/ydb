@@ -370,14 +370,13 @@ namespace NTable {
             THolder<TCompactionResult> result) = 0;
 
         /**
-         * Called after an external (borrowed) part is merged into the table
+         * Called after a batch of external (borrowed) parts is merged into the table.
          *
-         * A different subset of this part may have already been attached to
-         * the table, in which case strategy may need to correctly merge new
-         * subparts with its existing subparts.
+         * A different subset of a loaded part may already have been attached.
+         * The backend then provides the complete merged view via TablePart.
          */
-        virtual void PartMerged(TPartView part, ui32 level) = 0;
-        virtual void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) = 0;
+        virtual void PartsMerged(TConstArrayRef<TPartView> parts,
+            TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts, ui32 level) = 0;
 
         /**
          * Called after some parts have been removed from the table

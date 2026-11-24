@@ -22,8 +22,7 @@ namespace {
         ui64 GetLastFinishedForcedCompactionId() const override { return FinishedForcedId; }
         TInstant GetLastFinishedForcedCompactionTs() const override { return {}; }
         bool AllowForcedCompaction() override { return true; }
-        void PartMerged(TPartView, ui32) override { }
-        void PartMerged(TIntrusiveConstPtr<TColdPart>, ui32) override { }
+        void PartsMerged(TConstArrayRef<TPartView>, TConstArrayRef<TIntrusiveConstPtr<TColdPart>>, ui32) override { }
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID>) override { return {}; }
         TCompactionState SnapshotState() override { return {}; }
         TCompactionChanges ApplyChanges() override { return {}; }

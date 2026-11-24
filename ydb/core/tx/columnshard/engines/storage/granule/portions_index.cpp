@@ -3,26 +3,14 @@
 
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
-TPortionsIndex::TPortionsSnapshot::TConstPtr TPortionsIndex::GetPortionsSnapshot() const {
-    TPortions portions;
-    portions.reserve(Portions.size());
-    for (const auto& [_, portion] : Portions) {
-        portions.emplace_back(portion);
-    }
-    return std::make_shared<const TPortionsSnapshot>(std::move(portions), Owner.GetLoadedKeyRanges());
-}
-
-std::vector<TPortionsIndex::TKeyInterval> TPortionsIndex::TPortionsSnapshot::FindOverlappingKeyRanges(
-    const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const {
+std::vector<TPortionsIndex::TKeyInterval> TPortionsIndex::GetOlderIntervals(
+    const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) {
     const NArrow::TSimpleRow inputStart = inputPortion.IndexKeyStart();
     const NArrow::TSimpleRow inputEnd = inputPortion.IndexKeyEnd();
-    if (!LoadedKeyRanges.Covers(inputStart, inputEnd)) {
-        return { TKeyInterval(inputStart, inputEnd) };
-    }
     std::vector<TKeyInterval> intervals;
-    // A persisted `inputPortion` is listed in `skipPortions`. An intermediate merge result is absent from `Portions` but carries
+    // A persisted `inputPortion` is listed in `skipPortions`. An intermediate merge result is absent from `portions` but carries
     // a temporary id that may collide with the id of a persisted portion, so ids are never compared with the one of `inputPortion`.
-    for (const auto& p : Portions) {
+    for (const auto& p : portions) {
         if (skipPortions.contains(p->GetPortionId())) {
             continue;
         }

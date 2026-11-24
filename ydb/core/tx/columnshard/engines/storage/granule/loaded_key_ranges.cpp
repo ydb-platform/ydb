@@ -53,10 +53,6 @@ bool TLoadedKeyRanges::Covers(const TPKRangesFilter& ranges) const {
     });
 }
 
-bool TLoadedKeyRanges::Covers(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& /*end*/) const {
-    return CoversFrom(start);
-}
-
 bool TLoadedKeyRanges::CoversFrom(const NArrow::TSimpleRow& key) const {
     switch (Coverage) {
         case ECoverage::None:

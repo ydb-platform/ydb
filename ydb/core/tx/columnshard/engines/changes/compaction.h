@@ -19,7 +19,7 @@ protected:
     std::shared_ptr<TGranuleMeta> GranuleMeta;
     bool HasDeletions = false;
     // read only to decide whether delete markers can be dropped, so taken only if HasDeletions
-    NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot::TConstPtr PortionsIndexSnapshot;
+    NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot PortionsIndexSnapshot;
 
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
 

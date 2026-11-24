@@ -32,14 +32,14 @@ private:
 protected:
     const std::shared_ptr<TGranuleMeta> GranuleMeta;
     const bool HasDeletions;
-    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot::TConstPtr PortionsIndexSnapshot;
+    const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot PortionsIndexSnapshot;
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
         const bool useDeletionFilter) const;
 
 public:
     ISubsetToMerge(const std::shared_ptr<TGranuleMeta>& granule, const bool hasDeletions,
-        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot::TConstPtr& portionsIndexSnapshot)
+        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
         : GranuleMeta(granule)
         , HasDeletions(hasDeletions)
         , PortionsIndexSnapshot(portionsIndexSnapshot)
@@ -70,7 +70,7 @@ private:
 
 public:
     TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta, const bool hasDeletions,
-        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot::TConstPtr& portionsIndexSnapshot)
+        const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
         : TBase(granuleMeta, hasDeletions, portionsIndexSnapshot)
         , ReadPortion(std::move(rPortion))
     {
@@ -98,7 +98,7 @@ private:
 
 public:
     TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions, const std::shared_ptr<TGranuleMeta>& granuleMeta,
-        const bool hasDeletions, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot::TConstPtr& portionsIndexSnapshot);
+        const bool hasDeletions, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot);
 };
 
 }   // namespace NKikimr::NOlap::NCompaction

@@ -292,8 +292,7 @@ namespace NKikimr::NBlobDepot {
                 auto *item = resolve.AddItems();
                 item->SetExactKey(readContext.ReadArg.Key);
                 item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
-                resolve.SetDataKind(readContext.ReadArg.DataKind);
-                SetResolveDeadline(resolve);
+                SetResolveParameters(resolve, readContext.ReadArg.DataKind);
                 YDB_LOG_DEBUG("Issuing extra resolve",
                     {"marker", "BDA48"},
                     {"agent", Agent.LogId},
@@ -475,8 +474,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvResolve resolve;
             auto *item = resolve.AddItems();
             item->SetExactKey(checkContext.ReadArg.Key);
-            resolve.SetDataKind(checkContext.ReadArg.DataKind);
-            SetResolveDeadline(resolve);
+            SetResolveParameters(resolve, checkContext.ReadArg.DataKind);
             YDB_LOG_DEBUG("Issuing extra resolve to check integrity",
                 {"marker", "BDA71"},
                 {"agentId", Agent.LogId},

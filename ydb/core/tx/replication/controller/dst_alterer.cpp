@@ -619,7 +619,7 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
     }
 
     TVector<TCdcDetachStream> streams;
-    const auto children = GetCdcChildren(*replication, targetId);
+    const auto children = replication->GetCdcChildren(targetId);
     const bool completingCdcSetup = target->GetDstState() == TReplication::EDstState::PreparingCdc
         || (desiredState == TReplication::EState::Ready && !children.empty());
     if (desiredState == TReplication::EState::Done || completingCdcSetup) {

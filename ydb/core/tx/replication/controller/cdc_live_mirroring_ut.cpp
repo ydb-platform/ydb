@@ -43,7 +43,7 @@ class TLiveCdcMirror {
         return result;
     }
 
-    void WaitForState(NKikimrReplication::TReplicationState::StateCase state) {
+    void WaitForState(NKikimrReplication::TReplicationState::StateCase state, const TString& expectedIssue = {}) {
         const auto description = Destination.GetDescription("/Root/replication").GetPathDescription();
         const auto controllerId = description.GetReplicationDescription().GetControllerId();
         const auto pathId = Destination.GetPathId("/Root/replication");
@@ -54,7 +54,10 @@ class TLiveCdcMirror {
             const auto result = Destination.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
             const auto& record = result->Get()->Record;
             UNIT_ASSERT(record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
-            UNIT_ASSERT_C(!record.GetState().HasError(), record.GetState().ShortDebugString());
+            if (record.GetState().HasError()) {
+                UNIT_ASSERT_C(state == NKikimrReplication::TReplicationState::kError, record.GetState().ShortDebugString());
+                UNIT_ASSERT_STRING_CONTAINS(record.GetState().ShortDebugString(), expectedIssue);
+            }
             return record.GetState().GetStateCase() == state;
         }, "replication controller state");
     }
@@ -65,10 +68,14 @@ class TLiveCdcMirror {
         }, "destination data and consumer offsets");
     }
 
-    void ReplicateInitialRow(const TString& expectedPath) {
+    void CreateReplication() {
         Scheme(Destination, Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", Source.GetEndpoint().c_str()));
+    }
+
+    void ReplicateInitialRow(const TString& expectedPath) {
+        CreateReplication();
         WaitForReplication(Destination, [&] {
             return Destination.GetDescription(expectedPath).GetSchemeStatus() == NKikimrScheme::StatusSuccess;
         }, expectedPath);
@@ -79,20 +86,41 @@ class TLiveCdcMirror {
     }
 
 public:
-    explicit TLiveCdcMirror(const TFeatureFlags& destinationFlags)
+    explicit TLiveCdcMirror(const TFeatureFlags& destinationFlags, ui32 feedPartitions = 1)
         : Source(TopicReplicationFlags())
         , Destination(destinationFlags)
     {
         auto& runtime = Destination.GetRuntime();
         runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)), runtime.Register(CreateReplicationService()));
         Scheme(Source, "CREATE TABLE `/Root/source` (key Uint32, value Uint32, PRIMARY KEY (key));");
-        Scheme(Source, "ALTER TABLE `/Root/source` ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');");
+        Scheme(Source, Sprintf("ALTER TABLE `/Root/source` ADD CHANGEFEED feed WITH "
+            "(FORMAT = 'JSON', MODE = 'UPDATES', TOPIC_MIN_ACTIVE_PARTITIONS = %u);", feedPartitions));
         NYdb::NTopic::TTopicClient client(Source.GetDriver());
         NYdb::NTopic::TAlterTopicSettings consumers;
         consumers.BeginAddConsumer(Consumer);
         const auto added = client.AlterTopic(SourceFeed, consumers).GetValueSync();
         UNIT_ASSERT_C(added.IsSuccess(), added.GetIssues().ToString());
         Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (1u, 10u);");
+    }
+
+    void DropAfterCdcCreationFailed() {
+        const auto sourceFeedId = Source.GetPathId(SourceFeed);
+        CreateReplication();
+        WaitForState(NKikimrReplication::TReplicationState::kError, "source feed has 2 partitions, destination table has 1");
+
+        const auto dropped = Session(Destination).ExecuteSchemeQuery("DROP ASYNC REPLICATION `/Root/replication`;",
+            NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(60))).GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription(DestinationFeed).GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(Source.GetPathId(SourceFeed), sourceFeedId);
+        const auto source = NYdb::NTopic::TTopicClient(Source.GetDriver()).DescribeTopic(SourceFeed).GetValueSync();
+        UNIT_ASSERT_C(source.IsSuccess(), source.GetIssues().ToString());
+        const auto& consumers = source.GetTopicDescription().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumers.front().GetConsumerName(), Consumer);
     }
 
     void CheckTableReplicationWithoutChangefeed() {
@@ -116,7 +144,12 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(mirrored.SeqNo, first.SeqNo);
         CheckOffsets(1);
 
+        Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
+        WaitForState(NKikimrReplication::TReplicationState::kPaused);
         Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (2u, 20u);");
+
+        Scheme(Destination, "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'STANDBY');");
+        WaitForState(NKikimrReplication::TReplicationState::kStandBy);
         WaitForReplication(Destination, [&] {
             return Execute(Destination, "SELECT key FROM `/Root/replica` WHERE key = 2u AND value = 20u;")
                 .GetResultSet(0).RowsCount() == 1;
@@ -205,6 +238,13 @@ Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
 
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCdcTrimVerified>(parent);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Success, !ConflictingId);
+    }
+
+    Y_UNIT_TEST(DropAfterCdcCreationFailed) {
+        auto flags = TopicReplicationFlags();
+        flags.FeatureFlags.SetEnableCdcReplication(true);
+        TLiveCdcMirror test(flags, 2);
+        test.DropAfterCdcCreationFailed();
     }
 
     Y_UNIT_TEST(InitialScanSkipsChangefeedsByDefault) {

@@ -189,16 +189,15 @@ public:
             YQL_ENSURE(args.ComputesByStages);
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
             info.TraceId = NWilson::TTraceId(args.TraceId);
-            // Allocate bookkeeping before registering the actor.
-            auto& actorId = info.MutableActorIds().emplace_back();
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
-            actorId = args.UseBatchPool
+            TActorId result = args.UseBatchPool
                 ? TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId)
                 : TlsActivationContext->Register(computeActor);
-            return actorId;
+            info.MutableActorIds().emplace_back(result);
+            return result;
         } else {
             std::shared_ptr<TGUCSettings> GUCSettings;
             if (!args.SerializedGUCSettings.empty()) {

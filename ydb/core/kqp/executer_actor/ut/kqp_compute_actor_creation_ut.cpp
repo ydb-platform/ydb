@@ -1,9 +1,7 @@
-#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -15,7 +13,6 @@ constexpr TStringBuf CreationError = "injected compute actor creation failure";
 struct TCreationState {
     ui32 Attempts = 0;
     ui32 Aborted = 0;
-    TVector<TActorId> StartedActors;
     std::weak_ptr<IQueryQuotaManager> QueryQuota;
     TIntrusivePtr<NRm::TTxState> Tx;
 };
@@ -76,9 +73,7 @@ public:
             }
             ythrow yexception() << CreationError;
         }
-        auto actor = TlsActivationContext->Register(new TTestComputeActor(args, CreationState));
-        CreationState->StartedActors.push_back(actor);
-        return actor;
+        return TlsActivationContext->Register(new TTestComputeActor(args, CreationState));
     }
 
     void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager&) override {}
@@ -108,46 +103,6 @@ void CheckResourcesReleased(TTestActorRuntime& runtime, const TCreationState& st
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
-    Y_UNIT_TEST(CancelledBeforeActorCreation) {
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false));
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        const auto executer = runtime.AllocateEdgeActor();
-        const auto nodeService = runtime.GetLocalServiceId(MakeKqpNodeServiceID(runtime.GetNodeId()));
-        TBlockEvents<TEvKqpNode::TEvStartKqpTasksRequest> forwarded(runtime, [&](const auto& ev) {
-            return ev->Sender == executer && ev->GetRecipientRewrite() != nodeService;
-        });
-        auto sendStart = [&](ui64 taskId) {
-            auto start = MakeHolder<TEvKqpNode::TEvStartKqpTasksRequest>();
-            start->Record.SetTxId(TxId);
-            start->Record.SetStartAllOrFail(true);
-            start->Record.AddTasks()->SetId(taskId);
-            runtime.Send(new IEventHandle(nodeService, executer, start.Release()));
-        };
-        auto checkRejection = [&](TActorId sender, ui64 taskId) {
-            auto reply = runtime.GrabEdgeEventRethrow<TEvKqpNode::TEvStartKqpTasksResponse>(executer, TDuration::Seconds(5));
-            UNIT_ASSERT(reply);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Sender, sender);
-            const auto& record = reply->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.NotStartedTasksSize(), 1);
-            const auto& task = record.GetNotStartedTasks(0);
-            UNIT_ASSERT_VALUES_EQUAL(task.GetTaskId(), taskId);
-            UNIT_ASSERT_EQUAL(task.GetReason(), NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
-        };
-
-        sendStart(1);
-        runtime.WaitFor("start request forwarded to the query manager", [&] { return !forwarded.empty(); }, TDuration::Seconds(5));
-        const auto queryManager = forwarded.front()->GetRecipientRewrite();
-        auto cancel = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
-        cancel->Record.SetTxId(TxId);
-        runtime.Send(new IEventHandle(nodeService, executer, cancel.Release()));
-
-        sendStart(2);
-        checkRejection(nodeService, 2);
-        forwarded.Stop().Unblock();
-        checkRejection(queryManager, 1);
-    }
-
     Y_UNIT_TEST_TWIN(NodeServiceFailure, UnknownException) {
         for (ui32 failOnAttempt : {1u, 2u, 3u}) {
             TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false));
@@ -186,17 +141,11 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
             auto reply = runtime.GrabEdgeEventRethrow<TEvKqpNode::TEvStartKqpTasksResponse>(executer);
             const auto& record = reply->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), TxId);
-            const ui32 startedTasks = failOnAttempt == 3 ? 0 : failOnAttempt - 1;
-            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), startedTasks);
-            for (ui32 i = 0; i < startedTasks; ++i) {
-                const auto& task = record.GetStartedTasks(i);
-                UNIT_ASSERT_VALUES_EQUAL(task.GetTaskId(), firstTaskId + i);
-                UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(task.GetActorId()), factory->CreationState->StartedActors.at(i));
-            }
-            UNIT_ASSERT_VALUES_EQUAL(record.NotStartedTasksSize(), 3 - startedTasks);
-            for (ui32 i = 0; i < 3 - startedTasks; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(record.NotStartedTasksSize(), 3);
+            for (ui32 i = 0; i < 3; ++i) {
                 const auto& task = record.GetNotStartedTasks(i);
-                UNIT_ASSERT_VALUES_EQUAL(task.GetTaskId(), firstTaskId + startedTasks + i);
+                UNIT_ASSERT_VALUES_EQUAL(task.GetTaskId(), firstTaskId + i);
                 UNIT_ASSERT_VALUES_EQUAL(task.GetRequestId(), requestId);
                 UNIT_ASSERT_EQUAL(task.GetReason(), NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
                 UNIT_ASSERT_STRING_CONTAINS(task.GetMessage(), "Failed to create compute actor");

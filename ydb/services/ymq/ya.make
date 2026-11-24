@@ -7,13 +7,11 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/ipv6_address
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/server
     ydb/core/grpc_services
     ydb/core/mind
-    ydb/core/util
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/library/operation_id

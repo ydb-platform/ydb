@@ -8,8 +8,6 @@ message TAuthentification {
     optional string AuthType = 5;
     optional string SourceAddress = 6;
     optional string SanitizedToken = 7;
-    // Transport peer captured at the HTTP entry point, independent of forwarded headers.
-    optional string AuditRemoteAddress = 8;
 }
 
 message TCredentials {

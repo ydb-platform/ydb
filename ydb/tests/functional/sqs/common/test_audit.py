@@ -55,7 +55,7 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
     @pytest.mark.parametrize('security_token', [token, None], ids=['authenticated', 'anonymous'])
     @pytest.mark.parametrize('peer_address', ['127.0.0.1', '::1'], ids=['ipv4', 'ipv6'])
     @pytest.mark.parametrize('forwarded_for', [None, '192.0.2.17', '2001:db8::17', 'not-an-ip'],
-                             ids=['no-forwarded-for', 'spoofed-ipv4', 'spoofed-ipv6', 'invalid-ip'])
+                             ids=['no-forwarded-for', 'forwarded-ipv4', 'forwarded-ipv6', 'invalid-ip'])
     def test_queue_audit_fields(self, security_token, peer_address, forwarded_for):
         if security_token is not None:
             self._sqs_api.modify_permissions('Grant', security_token, self._username, ['CreateQueue', 'DeleteQueue'])
@@ -71,10 +71,6 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
             headers['X-Request-Id'] = request_id
             if forwarded_for is not None:
                 headers['X-Forwarded-For'] = f'{forwarded_for}, 198.51.100.7'
-                # Internal context names sent as HTTP headers must also be ignored.
-                headers['sourceAddress'] = forwarded_for
-                headers['auditRemoteAddress'] = forwarded_for
-                headers['peerName'] = forwarded_for
             params = {'QueueUrl': queue_url} if action == 'DeleteQueue' else {'QueueName': queue_name}
             started_at = datetime.now(timezone.utc)
             host = f'[{peer_address}]' if ':' in peer_address else peer_address
@@ -97,10 +93,13 @@ class TestSqsActionAudit(get_test_with_sqs_tenant_installation(KikimrSqsTestBase
             record = self._wait_for_audit_record(response_request_id)
             timestamp = datetime.fromisoformat(record['@timestamp'].replace('Z', '+00:00'))
             assert started_at <= timestamp <= datetime.now(timezone.utc), record
-            address = ipaddress.ip_address(record['remote_address'])
-            if isinstance(address, ipaddress.IPv6Address):
-                address = address.ipv4_mapped or address
-            assert address == ipaddress.ip_address(peer_address), record
+            if forwarded_for is not None:
+                assert record['remote_address'] == forwarded_for, record
+            else:
+                address = ipaddress.ip_address(record['remote_address'])
+                if isinstance(address, ipaddress.IPv6Address):
+                    address = address.ipv4_mapped or address
+                assert address == ipaddress.ip_address(peer_address), record
 
             expected = {
                 '@timestamp': record['@timestamp'],

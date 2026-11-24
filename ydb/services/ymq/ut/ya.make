@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/ymq)
 SIZE(SMALL)
 
 SRCS(
-    utils_ut.cpp
+    rpc_params_ut.cpp
 )
 
 PEERDIR(

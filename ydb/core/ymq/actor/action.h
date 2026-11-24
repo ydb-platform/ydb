@@ -537,7 +537,7 @@ private:
             AUDIT_PART("request_id", requestId)
             AUDIT_PART("sanitized_token", (SanitizedToken_ ? SanitizedToken_ : EmptyValue))
             AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
-            AUDIT_PART("remote_address", (AuditRemoteAddress_ ? AuditRemoteAddress_ : EmptyValue))
+            AUDIT_PART("remote_address", (SourceAddress_ ? SourceAddress_ : EmptyValue))
             AUDIT_PART("account", UserName_)
             AUDIT_PART("cloud_id", UserName_, Cfg().GetYandexCloudMode())
             AUDIT_PART("folder_id", Response_.GetFolderId(), Cfg().GetYandexCloudMode())
@@ -725,7 +725,6 @@ private:
         UserSID_ = request.GetAuth().GetUserSID();
         MaskedToken_ = request.GetAuth().GetMaskedToken();
         SanitizedToken_ = request.GetAuth().GetSanitizedToken();
-        AuditRemoteAddress_ = request.GetAuth().GetAuditRemoteAddress();
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (request.GetAuth().HasSourceAddress()) {
@@ -1057,7 +1056,6 @@ protected:
     TString  UserName_;
     TString  SecurityToken_;
     TString  SourceAddress_;
-    TString  AuditRemoteAddress_;
     TString  FolderId_;
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;

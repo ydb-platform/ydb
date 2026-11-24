@@ -59,7 +59,6 @@ private:
         auto* auth = request->MutableAuth();
         auth->SetUserName(UserName_);
         auth->SetSourceAddress(SourceAddress_);
-        auth->SetAuditRemoteAddress(AuditRemoteAddress_);
     }
 
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
@@ -105,6 +104,8 @@ private:
     void SetupTagQueue(TTagQueueRequest* const req);
     void SetupUntagQueue(TUntagQueueRequest* const req);
 
+    void ExtractSourceAddressFromSocket();
+
     void GenerateRequestId(const TString& sourceReqId);
 
     THttpActionCounters* GetActionCounters() const;
@@ -136,9 +137,6 @@ private:
 
     // Source values parsed from headers
     TString SourceAddress_;
-
-    // Transport peer for audit; never taken from HTTP headers.
-    TString AuditRemoteAddress_;
 
     ui64 RequestSizeInBytes_ = 0;
 

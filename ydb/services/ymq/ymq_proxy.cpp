@@ -137,7 +137,6 @@ namespace NKikimr::NYmq::V1 {
         , SecurityToken(GetMetaValue(request, SECURITY_TOKEN))
         , SanitizedToken(GetMetaValue(request, SANITIZED_TOKEN))
         , SourceAddress(GetMetaValue(request, SOURCE_ADDRESS))
-        , AuditRemoteAddress(GetAuditRemoteAddress(request->GetPeerName()))
         {
         }
 
@@ -160,7 +159,6 @@ namespace NKikimr::NYmq::V1 {
             request->MutableAuth()->SetUserSID(UserSid);
             request->MutableAuth()->SetSanitizedToken(SanitizedToken);
             request->MutableAuth()->SetSourceAddress(SourceAddress);
-            request->MutableAuth()->SetAuditRemoteAddress(AuditRemoteAddress);
 
             if (SecurityToken) {
                 request->MutableCredentials()->SetOAuthToken(SecurityToken);
@@ -186,7 +184,6 @@ namespace NKikimr::NYmq::V1 {
 
     protected:
         const TString SourceAddress;
-        const TString AuditRemoteAddress;
     };
 
     template<class TEvYmqRequest, class TRequest, class TReplyCallback>

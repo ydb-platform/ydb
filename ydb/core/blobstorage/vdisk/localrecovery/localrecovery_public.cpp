@@ -596,7 +596,8 @@ namespace NKikimr {
                     IsTinyDisk = m->PDiskParams->IsTinyDisk;
                 }
 
-                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
+                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config, m->ChunkNonces);
+                LocRecCtx->PDiskCtx->FormatContext = m->FormatContext;
 
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 

@@ -37,7 +37,7 @@ TConclusion<TString> TSerializer::SerializePayloadToString(const std::shared_ptr
 
 TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWithPayload(
     TStringBuf data, const std::shared_ptr<arrow::DataType>& dataType) {
-    AFL_VERIFY(dataType);
+    YDB_LOG_VERIFY(dataType);
     std::shared_ptr<arrow::Scalar> result;
     const bool resultFlag = NArrow::SwitchType(dataType->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -45,8 +45,8 @@ TConclusion<std::shared_ptr<arrow::Scalar>> TSerializer::DeserializeFromStringWi
         if constexpr (arrow::has_c_type<T>()) {
             using CType = typename T::c_type;
             using ScalarType = typename arrow::TypeTraits<T>::ScalarType;
-            AFL_VERIFY(data.size() == sizeof(CType))(
-                "mismatch", Sprintf("data.size(): %i vs CType: %s with size %i", data.size(), T::type_name(), sizeof(CType)));
+            YDB_LOG_VERIFY(data.size() == sizeof(CType),
+                {"mismatch", Sprintf("data.size(): %i vs CType: %s with size %i", data.size(), T::type_name(), sizeof(CType))});
             result = std::make_shared<ScalarType>(ReadUnaligned<CType>(data.data()), dataType);
             return true;
         } else if constexpr (arrow::has_string_view<T>()) {

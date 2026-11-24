@@ -7,7 +7,7 @@ from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_te
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_views", "enable_external_data_sources"],
-    extra_grpc_services=["view"],
+    extra_grpc_services=["view", "secret"],
     query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
 )
 
@@ -87,6 +87,64 @@ class TestSchemeDescribe:
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
         set_ydb_cli_test_canondata_root()
+
+    def test_describe_partitioned_table(self, ydb_cluster, ydb_database, ydb_client_session):
+        """Inspect the schema, retention and partitions of an indexed orders table."""
+        with ydb_client_session(ydb_database).checkout() as session:
+            session.execute_scheme("""
+                CREATE TABLE orders (
+                    order_id Uint64,
+                    customer_id Utf8,
+                    amount Uint64,
+                    created_at Timestamp,
+                    INDEX by_customer GLOBAL ON (customer_id) COVER (amount),
+                    PRIMARY KEY (order_id)
+                ) WITH (
+                    PARTITION_AT_KEYS = (1000),
+                    AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                    AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                    KEY_BLOOM_FILTER = ENABLED,
+                    TTL = Interval("P30D") ON created_at
+                );
+            """)
+
+        output = execute_ydb_cli_command(
+            ydb_cluster.nodes[1], ydb_database,
+            ["scheme", "describe", "orders", "--stats", "--partition-stats", "--partition-boundaries"],
+        )
+        assert "<table> orders" in output
+        rows = [
+            [cell.strip() for cell in line.split("│")[1:-1]]
+            for line in output.splitlines() if line.startswith("│")
+        ]
+        expected_columns = {
+            "order_id": ("Uint64?", "K0"),
+            "customer_id": ("Utf8?", ""),
+            "amount": ("Uint64?", ""),
+            "created_at": ("Timestamp?", ""),
+        }
+        columns = {row[0]: (row[1], row[3]) for row in rows if row[0] in expected_columns}
+        assert columns == expected_columns, output
+        index_rows = [row for row in rows if row[0] == "by_customer"]
+        assert len(index_rows) == 1, output
+        assert index_rows[0][2:] == ["customer_id", "amount"], output
+        assert "Ttl settings (date type column):" in output
+        assert "Column name: created_at" in output
+        assert "Expire after: 2592000.000000s" in output
+        assert "Bloom filter by key: true" in output
+        assert "Partitioning by size: false" in output
+        assert "Partitioning by load: false" in output
+        assert "Partitions count: 2" in output
+        assert "Approximate number of rows:" in output
+        assert "Approximate size of table:" in output
+        assert "Created:" in output and "Last modified:" in output
+        # Sizes and timestamps may change; the two partition ranges must not.
+        partitions = [row for row in rows if len(row) == 7 and row[0] in ("1", "2")]
+        assert [row[:5] for row in partitions] == [
+            ["1", "(", "-Inf", "[1000]", ")"],
+            ["2", "[", "[1000]", "+Inf", ")"],
+        ], output
+        assert all(int(row[5]) >= 0 and row[6] for row in partitions), output
 
     def test_describe_external_data_source(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
@@ -193,12 +251,6 @@ class TestSecretSchemeDescribe:
             assert int(description["version"]) == expected_version, (
                 f"actual version: {description.get('version')!r}"
             )
-
-    @pytest.fixture(scope="module")
-    def ydb_cluster_configuration(self, request):
-        return dict(
-            extra_grpc_services=["secret"],
-        )
 
     def test_describe_secret_format_default(self, ydb_cluster, ydb_database, ydb_client_session):
         secret_name = "cli_scheme_describe_secret"

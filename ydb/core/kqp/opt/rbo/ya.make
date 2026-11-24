@@ -69,6 +69,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    eval
+)
+
 RECURSE_FOR_TESTS(
     ut
     explain/ut

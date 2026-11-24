@@ -1704,6 +1704,7 @@ Y_UNIT_TEST(Table) {
     TTestEnv env(1, 4, {
         .StoragePools = 3,
         .ShowCreateTable = true,
+        .EnablePgCompatibility = true,
         .EnableFulltextIndex = true,
         .EnableSuperLemmer = true,
     });
@@ -2531,7 +2532,7 @@ Y_UNIT_TEST(TableSequences) {
 }
 
 Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnablePgCompatibility = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);

@@ -22,8 +22,9 @@ class TController::TTxDiscoveryTargetsResult: public TTxBase {
                 childPath(table.Config->GetSrcPath()), childPath(table.Config->GetDstPath()));
             const auto id = Replication->AddTarget(TReplication::ETargetKind::CdcTopic, config);
 
-            auto& cdc = GetCdcTarget(Replication->FindTarget(id))->GetCdc();
-            cdc.SetParentTargetId(parentId);
+            auto* child = GetCdcTarget(Replication->FindTarget(id));
+            Replication->RegisterCdcChild(parentId, *child);
+            auto& cdc = child->GetCdc();
             stream.SerializeTo(*cdc.MutableSourceStream());
 
             db.Table<Schema::Targets>().Key(Replication->GetId(), id).Update(

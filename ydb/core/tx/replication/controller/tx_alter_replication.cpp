@@ -76,7 +76,7 @@ bool KeepCdcStateDuringAlter(TReplication& replication, TReplication::ITarget& t
 {
     if (replication.GetDesiredState() == TReplication::EState::Done
         && target.GetDstState() == TReplication::EDstState::Done
-        && (GetCdcTarget(&target) || !GetCdcChildren(replication, target.GetId()).empty()))
+        && (GetCdcTarget(&target) || !replication.GetCdcChildren(target.GetId()).empty()))
     {
         return true;
     }

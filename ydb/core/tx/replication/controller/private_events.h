@@ -175,6 +175,8 @@ struct TEvPrivate {
         const TPathId DstPathId;
         const bool WaitingImport = false;
         bool PreparingCdc = false;
+        // A direct DROP may finish this child when the reserved CREATE cannot own a stream.
+        bool CdcStreamAbsent = false;
         // An invalid DstPathId carries prepared CDC creation; persist it before local CREATE.
         // A completed creation carries the identities and reset definition to persist before START.
         std::optional<NKikimrReplicationController::TCdcTarget> CdcState;

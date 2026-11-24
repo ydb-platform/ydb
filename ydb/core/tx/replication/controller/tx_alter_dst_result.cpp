@@ -119,9 +119,10 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        const bool continueCdcHandoff = GetCdcTarget(target) && Ev->Get()->IsSuccess()
-            && Replication->GetDesiredState() == TReplication::EState::Done;
-        if (!continueCdcHandoff && Replication->GetState() != TReplication::EState::Ready
+        const auto desiredState = Replication->GetDesiredState();
+        const bool progressCdcParent = GetCdcTarget(target) && Ev->Get()->IsSuccess()
+            && (desiredState == TReplication::EState::Ready || desiredState == TReplication::EState::Done);
+        if (!progressCdcParent && Replication->GetState() != TReplication::EState::Ready
             && Replication->GetState() != TReplication::EState::Removing)
         {
             Replication.Reset();

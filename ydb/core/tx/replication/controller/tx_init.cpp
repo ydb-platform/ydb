@@ -144,6 +144,7 @@ class TController::TTxInit: public TTxBase {
             target->SetIssue(issue);
             if (auto* cdc = GetCdcTarget(target)) {
                 Y_ABORT_UNLESS(cdc->GetCdc().ParseFromString(rowset.GetValue<Schema::Targets::Cdc>()));
+                replication->RegisterCdcChild(cdc->GetCdc().GetParentTargetId(), *cdc);
             }
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {

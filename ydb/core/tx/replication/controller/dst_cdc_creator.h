@@ -1,16 +1,13 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <optional>
-
-namespace NKikimrScheme {
-class TEvDescribeSchemeResult;
-}
 
 namespace NKikimr::NReplication::NController {
 
@@ -37,6 +34,7 @@ struct TCdcCreation {
     EPath Describe = EPath::Table;
     struct TRefusal {
         NKikimrSchemeOp::TModifyScheme Proposal;
+        NKikimrScheme::EStatus Status;
         TString Reason;
     };
     std::optional<TRefusal> Refusal;

@@ -89,7 +89,8 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         const auto pos = TPositionHandle();
         const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         auto argument = ctx.NewArgument(pos, "x");
-        auto identity = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), argument);
+        auto arguments = ctx.NewArguments(pos, {argument});
+        auto identity = ctx.NewLambda(pos, std::move(arguments), std::move(argument));
         UNIT_ASSERT(UpdateLambdaAllArgumentsTypes(identity, {type}, ctx));
         UNIT_ASSERT(InstantAnnotateTypes(identity, ctx, false, types));
         UNIT_ASSERT(CanEvaluateDefaultAtCompileTime(*identity));

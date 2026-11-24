@@ -130,4 +130,8 @@ message Operation {
 
     // User SID (Security ID) of the user who created this operation (if supported).
     string created_by = 10;
+
+    // Authenticated SID of the caller whose request initiated cancellation (if supported).
+    // Empty if the caller's identity is unavailable. Repeated requests do not overwrite it.
+    string cancel_requested_by = 11;
 }

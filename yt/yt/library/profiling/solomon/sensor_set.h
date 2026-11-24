@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
+#include <variant>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,12 +31,15 @@ struct TCounterState final
         TTagIdSet tagSet)
         : Owner(std::move(owner))
         , Reader(std::move(reader))
-        , TagSet(std::move(tagSet))
+        , TagSet(std::make_unique<TTagIdSet>(std::move(tagSet)))
     { }
 
     const TWeakPtr<TRefCounted> Owner;
     const std::function<i64()> Reader;
-    TTagIdSet TagSet;
+    //! Released after registration unless the sensor has dynamic tags.
+    std::unique_ptr<TTagIdSet> TagSet;
+
+    TCounterCube::TProjectionCookie ProjectionCookie;
 
     i64 LastValue = 0;
 };
@@ -51,11 +56,14 @@ struct TTimeCounterState final
         TWeakPtr<ITimeCounter> owner,
         TTagIdSet tagSet)
         : Owner(std::move(owner))
-        , TagSet(std::move(tagSet))
+        , TagSet(std::make_unique<TTagIdSet>(std::move(tagSet)))
     { }
 
     const TWeakPtr<ITimeCounter> Owner;
-    TTagIdSet TagSet;
+    //! Released after registration unless the sensor has dynamic tags.
+    std::unique_ptr<TTagIdSet> TagSet;
+
+    TTimeCounterCube::TProjectionCookie ProjectionCookie;
 
     TDuration LastValue = TDuration::Zero();
 };
@@ -74,12 +82,15 @@ struct TGaugeState final
         TTagIdSet tagSet)
         : Owner(std::move(owner))
         , Reader(std::move(reader))
-        , TagSet(std::move(tagSet))
+        , TagSet(std::make_unique<TTagIdSet>(std::move(tagSet)))
     { }
 
     const TWeakPtr<TRefCounted> Owner;
     const std::function<double()> Reader;
-    TTagIdSet TagSet;
+    //! Released after registration unless the sensor has dynamic tags.
+    std::unique_ptr<TTagIdSet> TagSet;
+
+    TGaugeCube::TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(TGaugeState)
@@ -94,11 +105,14 @@ struct TSummaryState final
         TWeakPtr<ISummary> owner,
         TTagIdSet tagSet)
         : Owner(std::move(owner))
-        , TagSet(std::move(tagSet))
+        , TagSet(std::make_unique<TTagIdSet>(std::move(tagSet)))
     { }
 
     const TWeakPtr<ISummary> Owner;
-    TTagIdSet TagSet;
+    //! Released after registration unless the sensor has dynamic tags.
+    std::unique_ptr<TTagIdSet> TagSet;
+
+    TSummaryCube::TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSummaryState)
@@ -113,11 +127,14 @@ struct TTimerSummaryState final
         TWeakPtr<ITimer> owner,
         TTagIdSet tagSet)
         : Owner(owner)
-        , TagSet(std::move(tagSet))
+        , TagSet(std::make_unique<TTagIdSet>(std::move(tagSet)))
     { }
 
     const TWeakPtr<ITimer> Owner;
-    TTagIdSet TagSet;
+    //! Released after registration unless the sensor has dynamic tags.
+    std::unique_ptr<TTagIdSet> TagSet;
+
+    TTimerCube::TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTimerSummaryState)
@@ -129,15 +146,24 @@ DECLARE_REFCOUNTED_STRUCT(THistogramState)
 
 struct THistogramState final
 {
+    using TProjectionCookie = std::variant<
+        TTimeHistogramCube::TProjectionCookie,
+        TGaugeHistogramCube::TProjectionCookie,
+        TRateHistogramCube::TProjectionCookie
+    >;
+
     THistogramState(
         TWeakPtr<THistogram> owner,
         TTagIdSet tagSet)
         : Owner(owner)
-        , TagSet(std::move(tagSet))
+        , TagSet(std::make_unique<TTagIdSet>(std::move(tagSet)))
     { }
 
     const TWeakPtr<THistogram> Owner;
-    TTagIdSet TagSet;
+    //! Released after registration unless the sensor has dynamic tags.
+    std::unique_ptr<TTagIdSet> TagSet;
+
+    TProjectionCookie ProjectionCookie;
 };
 
 DEFINE_REFCOUNTED_TYPE(THistogramState)
@@ -208,33 +234,37 @@ public:
 private:
     friend class TRemoteRegistry;
 
+    // Collect walks every set on each iteration, so keep the state pointers contiguous.
+    template <class TState>
+    using TStateSet = absl::flat_hash_set<TIntrusivePtr<TState>, THash<TIntrusivePtr<TState>>>;
+
     const TSensorOptions Options_;
     const int GridFactor_;
 
     TError Error_;
 
-    THashSet<TCounterStatePtr> Counters_;
+    TStateSet<TCounterState> Counters_;
     TCounterCube CountersCube_;
 
-    THashSet<TTimeCounterStatePtr> TimeCounters_;
+    TStateSet<TTimeCounterState> TimeCounters_;
     TTimeCounterCube TimeCountersCube_;
 
-    THashSet<TGaugeStatePtr> Gauges_;
+    TStateSet<TGaugeState> Gauges_;
     TGaugeCube GaugesCube_;
 
-    THashSet<TSummaryStatePtr> Summaries_;
+    TStateSet<TSummaryState> Summaries_;
     TSummaryCube SummariesCube_;
 
-    THashSet<TTimerSummaryStatePtr> Timers_;
+    TStateSet<TTimerSummaryState> Timers_;
     TTimerCube TimersCube_;
 
-    THashSet<THistogramStatePtr> TimeHistograms_;
+    TStateSet<THistogramState> TimeHistograms_;
     TTimeHistogramCube TimeHistogramsCube_;
 
-    THashSet<THistogramStatePtr> GaugeHistograms_;
+    TStateSet<THistogramState> GaugeHistograms_;
     TGaugeHistogramCube GaugeHistogramsCube_;
 
-    THashSet<THistogramStatePtr> RateHistograms_;
+    TStateSet<THistogramState> RateHistograms_;
     TRateHistogramCube RateHistogramsCube_;
 
     std::optional<ESensorType> Type_;

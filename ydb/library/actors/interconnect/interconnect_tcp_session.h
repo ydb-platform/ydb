@@ -164,6 +164,7 @@ namespace NActors {
                 size_t RdmaSize = 0;
                 std::optional<ui32> RdmaReadCumulativeCheckSum;
                 size_t DeclaredSize = 0; // sum of declared section sizes, bounded against EventMaxByteSize
+                ui32 RdmaBufferOffset = 0; // offset in the current receive buffer for credentials split across RDMA_READ commands
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -180,7 +181,8 @@ namespace NActors {
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};
-            using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
+            struct TRdmaReadReqFormatError {};
+            using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, TRdmaReadReqFormatError, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
             ScheduleRdmaReadRequestsResult ScheduleRdmaReadRequests(const NActorsInterconnect::TRdmaCreds& creds,
                 NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
         };

@@ -27,6 +27,7 @@ struct TShuffleHandle
     //! pull-based it may be null (schemaless) for backward compatibility, but a
     //! schema will eventually be required there too.
     NTableClient::TTableSchemaPtr Schema;
+
     //! Writers compress with it; push-based readers decompress with it, while pull-based
     //! readers take it from the chunk meta.
     NCompression::ECodec Codec;

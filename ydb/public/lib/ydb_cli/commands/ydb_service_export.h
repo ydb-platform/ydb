@@ -98,6 +98,8 @@ private:
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     EStorageClass AwsStorageClass = EStorageClass::NOT_SET;
     TString AwsBucket;
+    TString FileFormat = "csv";
+    TMaybe<ui32> ParquetRowGroupSize;
     bool UseVirtualAddressing = true;
 };
 

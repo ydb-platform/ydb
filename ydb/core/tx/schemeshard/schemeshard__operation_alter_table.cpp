@@ -336,6 +336,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+        .DisablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),

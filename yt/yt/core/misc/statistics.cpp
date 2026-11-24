@@ -7,9 +7,14 @@
 #include <yt/yt/core/ypath/token.h>
 #include <yt/yt/core/ypath/tokenizer.h>
 
+#include <yt/yt/core/yson/parser.h>
+#include <yt/yt/core/yson/writer.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/helpers.h>
 #include <yt/yt/core/ytree/serialize.h>
+
+#include <library/cpp/yt/string/stream.h>
 
 namespace NYT {
 
@@ -204,9 +209,61 @@ void Serialize(const TStatistics& statistics, IYsonConsumer* consumer)
     SerializeStatisticPathsMap<TSummary>(
         statistics.Data(),
         consumer,
-        [] (const TSummary& summary, IYsonConsumer* consumer) {
+        [] (const TStatisticPath&, const TSummary& summary, IYsonConsumer* consumer) {
             Serialize(summary, consumer);
         });
+}
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsSummaryFieldName(TStringBuf name)
+{
+    return name == "sum" || name == "count" || name == "min" || name == "max" || name == "last";
+}
+
+bool CanSerializeAsScalar(const TStatisticPath& path, const TSummary& summary)
+{
+    if (IsSummaryFieldName(path.Back())) {
+        return false;
+    }
+
+    auto last = summary.GetLast();
+    return summary.GetCount() == 1 &&
+        last &&
+        summary.GetSum() == summary.GetMin() &&
+        summary.GetSum() == summary.GetMax() &&
+        summary.GetSum() == *last;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+
+TYsonString SerializeCompactStatistics(const TStatistics& statistics)
+{
+    std::string data;
+    TStdStringOutput output(data);
+    TYsonWriter writer(&output);
+    if (auto timestamp = statistics.GetTimestamp()) {
+        writer.OnBeginAttributes();
+        writer.OnKeyedItem("timestamp");
+        NYTree::Serialize(*timestamp, &writer);
+        writer.OnEndAttributes();
+    }
+    SerializeStatisticPathsMap<TSummary>(
+        statistics.Data(),
+        &writer,
+        [] (const TStatisticPath& path, const TSummary& summary, IYsonConsumer* consumer) {
+            if (CanSerializeAsScalar(path, summary)) {
+                consumer->OnInt64Scalar(summary.GetSum());
+            } else {
+                Serialize(summary, consumer);
+            }
+        });
+    writer.Flush();
+    return TYsonString(std::move(data));
 }
 
 // Helper function for GetNumericValue.
@@ -256,6 +313,10 @@ class TStatisticsBuildingConsumer
     , public IBuildingYsonConsumer<TStatistics>
 {
 public:
+    explicit TStatisticsBuildingConsumer(bool allowSingletons = false)
+        : AllowSingletons_(allowSingletons)
+    { }
+
     void OnStringScalar(TStringBuf value) override
     {
         if (!AtAttributes_) {
@@ -268,6 +329,15 @@ public:
     {
         if (AtAttributes_) {
             THROW_ERROR_EXCEPTION("Timestamp should have string type");
+        }
+        if (AllowSingletons_ && !IsSummaryFieldName(LastKey_)) {
+            auto path = CurrentPath_ / TStatisticPathLiteral(LastKey_);
+            TSummary summary(value, /*count*/ 1, value, value, value);
+            auto [it, inserted] = CheckedEmplaceStatistic(Statistics_.Data_, path, summary);
+            if (!inserted) {
+                it->second = summary;
+            }
+            return;
         }
         bool isFieldKnown = true;
         AtSummaryMap_ = true;
@@ -367,7 +437,10 @@ public:
             if (!LastFound_) {
                 CurrentSummary_.Last_ = std::nullopt;
             }
-            Statistics_.Data_[CurrentPath_] = CurrentSummary_;
+            auto [it, inserted] = CheckedEmplaceStatistic(Statistics_.Data_, CurrentPath_, CurrentSummary_);
+            if (!inserted) {
+                it->second = CurrentSummary_;
+            }
             FilledSummaryFields_ = 0;
             LastFound_ = false;
             AtSummaryMap_ = false;
@@ -394,12 +467,14 @@ public:
         AtAttributes_ = false;
     }
 
-    TStatistics Finish() override
+    TStatistics Finish() && override
     {
-        return Statistics_;
+        return std::move(Statistics_);
     }
 
 private:
+    const bool AllowSingletons_;
+
     TStatistics Statistics_;
 
     TStatisticPath CurrentPath_;
@@ -419,6 +494,14 @@ void CreateBuildingYsonConsumer(std::unique_ptr<IBuildingYsonConsumer<TStatistic
 {
     YT_VERIFY(ysonType == EYsonType::Node);
     *buildingConsumer = std::make_unique<TStatisticsBuildingConsumer>();
+}
+
+TStatistics ParseCompactStatistics(TYsonStringBuf yson)
+{
+    YT_VERIFY(yson.GetType() == EYsonType::Node);
+    TStatisticsBuildingConsumer consumer(/*allowSingletons*/ true);
+    ParseYsonStringBuffer(yson.AsStringBuf(), yson.GetType(), &consumer);
+    return std::move(consumer).Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

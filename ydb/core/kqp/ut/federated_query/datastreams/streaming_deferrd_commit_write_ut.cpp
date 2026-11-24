@@ -369,7 +369,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             source = "`pqSource`.";
             client = GetDeferredPublishClient(false, "", NYdb::CreateLoginCredentialsProviderFactory({ .User = "root", .Password = "1234" }));
         }
-        const auto unrelated = CreatePublication("unrelated-publication", "unrelated-publication", *client);
+
+        const TString unrelatedPublication = MakeExternalName("unrelated-publication");
+        const auto unrelated = CreatePublication(unrelatedPublication, unrelatedPublication, *client);
 
         for (bool stopBeforeDrop : { false, true }) {
             const auto disposition = TInstant::Now();
@@ -419,7 +421,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             }
             ExecQuery(fmt::format("DROP STREAMING QUERY `{}`;", queryName));
             ValidatePublicationsCount(0, queryName, *client);
-            ValidatePublicationsCount(1, "unrelated-publication", *client);
+            ValidatePublicationsCount(/* count */ 1, unrelatedPublication, *client);
             CheckScriptExecutionsCount(0, 0);
             for (const auto* table : { "checkpoints_metadata", "checkpoints_graphs_description", "coordinators_sync" }) {
                 const auto results = ExecQuery(fmt::format("SELECT COUNT(*) FROM `.metadata/streaming/checkpoints/{}`", table));

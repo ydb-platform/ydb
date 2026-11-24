@@ -363,16 +363,24 @@ namespace NKikimr {
                 return counter;
             }
 
-            bool GotQuorum() const {
-                return QuorumTracker.HasQuorum();
+            void RestartSurvey(const TBlobStorageGroupInfo& info) {
+                Top = info.PickTopology();
+                QuorumTracker.ResetTopology(info);
+                for (auto& peer : Neighbors) {
+                    peer.Get() = {};
+                }
+            }
+
+            bool GotQuorum(const TBlobStorageGroupInfo& info) const {
+                return QuorumTracker.HasQuorum(info);
             }
 
 
             // calculates final decision
-            TDecision ReachAVerdict() const {
-                Y_VERIFY_S(QuorumTracker.HasQuorum(), VDiskLogPrefix);
+            TDecision ReachAVerdict(const TBlobStorageGroupInfo& info) const {
+                Y_VERIFY_S(QuorumTracker.HasQuorum(info), VDiskLogPrefix);
 
-                TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision();
+                TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision(info);
                 if (quorumDecision.IsInconsistent) {
                     return TDecision::Inconsistency(quorumDecision.Explanation);
                 }
@@ -389,13 +397,13 @@ namespace NKikimr {
         private:
             const TString VDiskLogPrefix;
             const TVDiskIdShort Self;
-            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+            std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
             const TLocalSyncerState LocallyRecoveredState;
             NSync::TVDiskNeighbors<TNeighborVDiskState> Neighbors;
             NSync::TQuorumTracker QuorumTracker;
             TSublog<> Sublog;
 
-            TVDiskQuorumDecision VDiskQuorumDecision() const {
+            TVDiskQuorumDecision VDiskQuorumDecision(const TBlobStorageGroupInfo& info) const {
                 // analyze obtained results
                 // via finalQuorum we calculate if we got quorum of fail domains of Final State
                 TQuorumTracker finalQuorum(Self, Top, true); // include my faildomain
@@ -436,7 +444,7 @@ namespace NKikimr {
                     }
                     Y_VERIFY_S(size == 1, VDiskLogPrefix);
                     const TVDiskEternalGuid guid = finalGuidMap.begin()->first;
-                    if (finalQuorum.HasQuorum()) {
+                    if (finalQuorum.HasQuorum(info)) {
                         return TVDiskQuorumDecision::Final(guid);
                     } else {
                         auto step = EFirstRunStep::ACTION_WriteFinalToQuorum;
@@ -668,6 +676,13 @@ namespace NKikimr {
                 // save new Group Info
                 GInfo = ev->Get()->NewInfo;
 
+                if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                    DecisionMaker.AbandomOngoingRequests(ctx);
+                    DecisionMaker.RestartSurvey(*GInfo);
+                    Bootstrap(ctx);
+                    return;
+                }
+
                 // reconfigure every proxy that hasn't returned a value yet
                 const TString& logPrefix = VCtx->VDiskLogPrefix;
                 auto reconfigureProxy = [&ctx, &logPrefix] (std::unique_ptr<TEvVGenerationChange> &&msg,
@@ -699,12 +714,16 @@ namespace NKikimr {
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: ObtainedFromPeer: " << msg->ToString();
                 });
+                if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                        && msg->VDiskId.GroupGeneration != GInfo->GroupGeneration) {
+                    return;
+                }
                 DecisionMaker.SetResponse(msg->VDiskId, msg->Guid, msg->State);
-                if (DecisionMaker.GotQuorum()) {
+                if (DecisionMaker.GotQuorum(*GInfo)) {
                     // kill actors that didn't respond
                     DecisionMaker.AbandomOngoingRequests(ctx);
                     // reach a verdict and save it
-                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict());
+                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict(*GInfo));
 
                     // log result of guid recovery
                     auto pri = NActors::NLog::PRI_INFO;

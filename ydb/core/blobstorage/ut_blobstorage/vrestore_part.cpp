@@ -86,6 +86,25 @@ namespace {
             return Info->GetVDiskInSubgroup(subgroupIdx, FullId.Hash());
         }
 
+        void EnterLeaving(ui32 leavingRealm) {
+            using R = NKikimrBlobStorage::TDataCenterState;
+            ui32 groupId = Info->GroupID.GetRawId();
+            NKikimrBlobStorage::TConfigRequest config;
+            config.SetIgnoreGroupFailModelChecks(true);
+            auto *definition = config.AddCommand()->MutableDefineGroupState()->AddGroups();
+            definition->SetGroupId(groupId);
+            definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                definition->AddFailRealmStates(realm == leavingRealm ? R::LEAVING : R::INCLUDED);
+            }
+            auto response = Env.Invoke(config);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            Env.Sim(TDuration::Seconds(5));
+            Info = Env.GetGroupInfo(groupId);
+            UNIT_ASSERT(Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::DC_FAILURE);
+            UNIT_ASSERT(Info->GetFailRealmState(leavingRealm) == R::LEAVING);
+        }
+
         void PutLocalPart(ui32 subgroupIdx, ui32 partId) {
             Env.PutBlob(VDisk(subgroupIdx), TLogoBlobID(FullId, partId), Data);
         }
@@ -181,6 +200,48 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         fixture.CheckWritten(2, 3);
         UNIT_ASSERT(!fixture.Read(5, 3));
         UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
+    Y_UNIT_TEST(RepairQueriesLeavingRealm) {
+        TFixture f;
+        f.Env.CommenceReplication();
+        // A legal NORMAL write placed both pairs outside the realm that needs repair.
+        for (ui32 disk : {0u, 1u, 3u, 4u}) {
+            f.PutLocalPart(disk, disk % 3 + 1);
+        }
+        const ui32 leaving = f.VDisk(0).FailRealm;
+        const ui32 groupId = f.Info->GroupID.GetRawId();
+        const TActorId edge = f.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        ui32 leavingReads = 0;
+        f.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NGroupSyncer::TEvRunMirror3dcRepair::EventType && event->Sender != edge) {
+                return false; // run one scan explicitly below
+            }
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                const auto *sender = f.Env.Runtime->GetActor(event->Sender);
+                if (sender && sender->GetActivityType() == NKikimrServices::TActivity::BS_BLOB_RECOVERY_ACTOR) {
+                    const auto& record = event->Get<TEvBlobStorage::TEvVGet>()->Record;
+                    leavingReads += record.GetVDiskID().GetRing() == leaving;
+                }
+            }
+            return true;
+        };
+        f.EnterLeaving(leaving);
+        UNIT_ASSERT_VALUES_EQUAL(f.RestorePart(6, 1).GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT(!f.Read(6, 1));
+        UNIT_ASSERT(!f.Read(2, 3));
+        auto request = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepair>();
+        request->Record.SetGroupId(groupId);
+        request->Record.SetGeneration(f.Info->GroupGeneration);
+        f.Env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release()), 1);
+        auto result = f.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvRunMirror3dcRepairResult>(
+            edge, false, f.Env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(leavingReads);
+        f.CheckWritten(2, 3);
+        UNIT_ASSERT(!f.Read(5, 3));
+        UNIT_ASSERT(!f.Read(8, 3));
     }
 
     Y_UNIT_TEST(Mirror3dcRepairSyncerPropagatesKeep) {

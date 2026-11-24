@@ -188,10 +188,6 @@ public:
         if (!IsValidMirror3dcGroupConfiguration({state.State, state.FailRealmStates})) {
             return Finish(NKikimrProto::ERROR);
         }
-        std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(state.State);
-        if (layouts->Durability == EMirror3dcLayout::LAYOUT_0) {
-            return Finish(NKikimrProto::ERROR);
-        }
         Become(&TThis::StateWork);
         ReadPage();
     }

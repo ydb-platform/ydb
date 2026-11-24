@@ -3839,7 +3839,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             return false;
         });
 
-        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId));
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, /*standalone=*/false, 2, ydbSchemaV2, ydbPk, {}), ++txId));
 
         // The restore scan was captured before the schema change and carries the write's schema
         // version (1). Observe (but don't drop) any scan error so we can assert the scan does not fail.

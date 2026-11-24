@@ -207,7 +207,8 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         } else {
             Cerr << "Reset TTL" << Endl;
         }
-        planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, ++schemaVersion, ydbSchema, ydbPk, spec), ++txId);
+        planStep = SetupSchema(
+            runtime, sender, TTestSchema::AlterTableTxBody(tableId, /*standalone=*/false, ++schemaVersion, ydbSchema, ydbPk, spec), ++txId);
     };
 
     auto getRowCount = [&]() {
@@ -541,7 +542,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
         if (i) {
             const ui32 version = 2 * i + 1;
-            planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, version, testYdbSchema, testYdbPk, specs[i]), ++txId);
+            planStep = SetupSchema(runtime, sender,
+                TTestSchema::AlterTableTxBody(tableId, /*standalone=*/false, version, testYdbSchema, testYdbPk, specs[i]), ++txId);
         }
         if (specs[i].HasTiers() || reboots) {
             csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
@@ -988,7 +990,8 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     spec.Tiers.back().EvictAfter = allow;
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, testYdbSchema, testYdbPk, spec), ++txId);
+    planStep =
+        SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, /*standalone=*/false, 1, testYdbSchema, testYdbPk, spec), ++txId);
     csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
 
     // Writes

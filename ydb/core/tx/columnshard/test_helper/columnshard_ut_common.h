@@ -365,18 +365,21 @@ struct TTestSchema {
         return out;
     }
 
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
+    static TString AlterTableTxBody(ui64 pathId, bool standalone, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
         NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
         tx.MutableSeqNo()->SetRound(version);
-
-        auto* preset = table->MutableSchemaPreset();
-        preset->SetId(1);
-        preset->SetName("default");
-        InitSchema(columns, pk, specials, preset->MutableSchema());
-        preset->MutableSchema()->SetVersion(version);
+        if (standalone) {
+            InitSchema(columns, pk, specials, table->MutableSchema());
+        } else {
+            auto* preset = table->MutableSchemaPreset();
+            preset->SetId(1);
+            preset->SetName("default");
+            InitSchema(columns, pk, specials, preset->MutableSchema());
+            preset->MutableSchema()->SetVersion(version);
+        }
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {

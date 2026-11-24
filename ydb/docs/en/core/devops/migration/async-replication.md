@@ -31,7 +31,7 @@ Configure permissions on the target database root and directories separately bef
 | Purpose | Access |
 | --- | --- |
 | Connect and inspect objects | `CONNECT` on each database; `DESCRIBE SCHEMA` on the directories and objects used |
-| Replication access to the source | `ALTER SCHEMA` on source tables and changefeed topics, and `SELECT ROW` on topics, for the user whose token replication uses |
+| Replication access to the source | `ALTER SCHEMA` on source tables and changefeed topics, and `SELECT ROW` on topics, for the user whose token replication uses. The user of the `source` CLI profile also needs these permissions when configuring changefeeds manually |
 | Create target objects | `CREATE TABLE` on the target directory; `CREATE DIRECTORY` on the parent when subdirectories are needed |
 | Manage replication | `ALTER SCHEMA` on the replication instance; `REMOVE SCHEMA` to delete it; for restored tables, `ALTER SCHEMA` for the replication owner |
 | Read the secret | `SELECT ROW` on `source_token` for the replication owner |

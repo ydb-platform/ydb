@@ -40,7 +40,8 @@ bool ValidateExternalTablePgCompatibility(const TKikimrTableMetadata& metadata, 
             if (column.TypeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_UNSUPPORTED,
                     TStringBuilder() << "PostgreSQL compatibility is disabled for external table '" << metadata.Name
-                        << "', column '" << name << "' of type '" << column.Type << "' (DisablePgCompatibility feature flag is on)"));
+                        << "' because its schema contains PostgreSQL column '" << name << "' of type '" << column.Type
+                        << "' (DisablePgCompatibility feature flag is on)"));
                 return false;
             }
         }

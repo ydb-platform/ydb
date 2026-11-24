@@ -307,7 +307,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(
 
     google::protobuf::Message* astProto(SqlAST(parsers, queryText, queryName, collector, settings.AnsiLexer, settings.Arena));
     if (astProto) {
-        auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
+        const auto& ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
         if (query.Alt_case() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1) {
             SqlASTToAstStatementsImpl(

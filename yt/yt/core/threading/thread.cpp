@@ -90,8 +90,7 @@ public:
 private:
     TExecutionStack Stack_;
 
-    // Symbolizing deeply inlined frames overflowed 32 KB; pages are committed on first
-    // touch, so the extra size costs address space only.
+    // Symbolizing deeply inlined frames overflows 32 KB.
     static constexpr size_t SignalHandlerStackSize = 256_KB;
 #endif
 };

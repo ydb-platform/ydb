@@ -655,6 +655,7 @@ Pear,15
         assert result_set.rows[0][0] == 3
         assert result_set.rows[0][1] == 0
 
+    @pytest.mark.parametrize('kikimr_settings', [{'disable_pg_compatibility': False}], indirect=True)
     def test_simple_pg_types(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
         storage_connection_name = client.path(unique_prefix + "fruitbucket")

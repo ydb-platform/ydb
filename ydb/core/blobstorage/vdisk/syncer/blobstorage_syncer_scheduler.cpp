@@ -267,17 +267,19 @@ namespace NKikimr {
             SyncerContext->MonGroup.SyncerUnsyncedDisks() = unsyncedDisks;
         }
 
-        void Bootstrap(const TActorContext &ctx) {
-            ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
-            bool localRealmRecovering = GInfo->IsFailRealmRecovering(localRealm);
-            // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
-            if (localRealmRecovering) {
-                for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
-                    ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
-                    if (!peer.Myself && !GInfo->IsFailRealmExcluded(realm)) {
-                        FullSyncRequested.insert(peer.OrderNumber);
-                    }
+        void RequestFullSyncWithAvailablePeers() {
+            for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
+                ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                if (!peer.Myself && !GInfo->IsFailRealmExcluded(realm)) {
+                    FullSyncRequested.insert(peer.OrderNumber);
                 }
+            }
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
+            if (GInfo->IsFailRealmRecovering(SyncerContext->VCtx->ShortSelfVDisk.FailRealm)) {
+                RequestFullSyncWithAvailablePeers();
             }
             // fill in SchedulerQueue
             for (const auto &x : *SyncerData->Neighbors) {
@@ -505,19 +507,13 @@ namespace NKikimr {
             if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
                 return;
             }
-            std::function<bool(ui32)> returned = [&](ui32 realm) {
-                return GInfo->IsFailRealmExcluded(realm)
-                    && msg->NewInfo->IsFailRealmRecovering(realm);
-            };
-            bool localRealmReturned = returned(SyncerContext->VCtx->ShortSelfVDisk.FailRealm);
-            for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
-                ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
-                bool peerAvailable = !msg->NewInfo->IsFailRealmExcluded(realm);
-                if (!peer.Myself && peerAvailable && (localRealmReturned || returned(realm))) {
-                    FullSyncRequested.insert(peer.OrderNumber);
-                }
-            }
+            ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
+            bool localRealmReturned = GInfo->IsFailRealmExcluded(localRealm)
+                && msg->NewInfo->IsFailRealmRecovering(localRealm);
             GInfo = msg->NewInfo;
+            if (localRealmReturned) {
+                RequestFullSyncWithAvailablePeers();
+            }
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
 
             // Running jobs finish first; queued peers can start full sync immediately.

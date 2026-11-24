@@ -2488,6 +2488,7 @@ public:
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
+        request.CompiledWithPgCompatibilityDisabled = request.SaveQueryPhysicalGraph && QueryState->GetDisablePgCompatibility();
         request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
         YDB_LOG_DEBUG("Sending to Executer",
             {"marker", "KQPSA"},

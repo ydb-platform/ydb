@@ -166,6 +166,7 @@ public:
         bool FlushEffects = false;
         bool DisablePessimisticLocks = false;
         bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+        bool CompiledWithPgCompatibilityDisabled = false;
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
         NLWTrace::TOrbit Orbit;

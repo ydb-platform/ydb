@@ -35,9 +35,11 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     counters_ut.cpp
+    end_write_timestamp_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp
     inflight_limiter_ut.cpp
+    kafka_batch.cpp
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp
@@ -45,6 +47,7 @@ SRCS(
     pq_ut.cpp
     partition_ut.cpp
     partitiongraph_ut.cpp
+    pqtablet_fixture.cpp
     pqtablet_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp

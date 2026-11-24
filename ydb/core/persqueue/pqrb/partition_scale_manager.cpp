@@ -385,7 +385,9 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
         Backoff.Reset();
         TrySendScaleRequest(ctx);
     } else {
-        if (keyRangeSplit && result->Status == TEvTxUserProxy::TResultStatus::ExecError) {
+        if (keyRangeSplit && result->Status == TEvTxUserProxy::TResultStatus::ExecError
+            && result->SchemeShardStatus == NKikimrScheme::StatusInvalidParameter)
+        {
             PartitionsToSplit.erase(keyRangeSplit->PartitionId);
             RejectedKeyRangeSplits.insert_or_assign(keyRangeSplit->PartitionId, *keyRangeSplit);
         }

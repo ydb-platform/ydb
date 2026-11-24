@@ -18,11 +18,14 @@ class TPartitionScaleRequest: public NActors::TActorBootstrapped<TPartitionScale
 
 public:
     struct TEvPartitionScaleRequestDone : public TEventLocal<TEvPartitionScaleRequestDone, TEvPQ::EvPartitionScaleRequestDone> {
-        TEvPartitionScaleRequestDone(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status)
+        TEvPartitionScaleRequestDone(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
+                NKikimrScheme::EStatus schemeShardStatus = NKikimrScheme::StatusSuccess)
             : Status(status)
+            , SchemeShardStatus(schemeShardStatus)
         {}
 
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus Status;
+        NKikimrScheme::EStatus SchemeShardStatus;
     };
 
 public:
@@ -56,7 +59,8 @@ private:
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
     TStructuredMessage LogPrefix() const override;
     bool IsOurPipe(const TActorId& clientId) const;
-    void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TActorContext& ctx);
+    void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TActorContext& ctx,
+        NKikimrScheme::EStatus schemeShardStatus = NKikimrScheme::StatusSuccess);
 
 private:
     const TString Topic;

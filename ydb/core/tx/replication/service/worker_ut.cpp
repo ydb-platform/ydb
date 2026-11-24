@@ -1971,6 +1971,7 @@ public:
         reader->SetConsumerName("consumer");
         reader->SetTopicPartitionId(0);
         TPathId(1, 1).ToProto(command->MutableLocalTableWriter()->MutablePathId());
+        command->MutableConsistencySettings()->MutableGlobal()->SetCommitIntervalMilliSeconds(100);
         Runtime.Send(new IEventHandle(Service, Controller, run.Release()), 0, true);
         RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
         Runtime.WaitFor("worker child handshakes", [&] { return Handshakes.size() == 2; }, TDuration::Seconds(30));
@@ -2021,12 +2022,21 @@ public:
         UNIT_ASSERT_C(reports.empty(), "Repeated or older heartbeat must not be forwarded");
     }
 
-    void AssignTxId(ui64 step) {
+    void AssignTxId(const TActorId& actor, ui64 step) {
+        UNIT_ASSERT(TxIdRequests.empty());
+        UNIT_ASSERT(TxIdResults.empty());
+        Runtime.Send(new IEventHandle(Service, actor,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(step - 10, 0)})), 0, true);
+        Runtime.WaitFor("controller tx-id request", [&] { return !TxIdRequests.empty(); }, TDuration::Seconds(30));
+        TxIdRequests.clear();
+
         auto result = MakeHolder<TEvService::TEvTxIdResult>(42, 1);
         auto* assignment = result->Record.AddVersionTxIds();
         TRowVersion(step, 0).ToProto(assignment->MutableVersion());
         assignment->SetTxId(step + 1000);
         Runtime.Send(new IEventHandle(Service, Controller, result.Release()), 0, true);
+        Runtime.WaitFor("tx-id result for the requesting worker", [&] { return !TxIdResults.empty(); }, TDuration::Seconds(30));
+        TxIdResults.clear();
     }
 
     void CheckTxId(const TActorId& actor, ui64 step, ui64 assignedStep, bool cached, TStringBuf reason) {
@@ -2063,8 +2073,8 @@ void CheckStoppedWorker(bool gone) {
     fixture.Heartbeat(first, 100);
     fixture.Heartbeat(second, 100);
     fixture.Stop(1, gone);
-    fixture.AssignTxId(150);
-    fixture.Heartbeat(second, 110);
+    fixture.AssignTxId(second, 150);
+    fixture.Heartbeat(second, 160);
     // The remaining worker supplies the whole heartbeat quorum, allowing the
     // service to evict this assignment and ask the controller for it again.
     fixture.CheckTxId(second, 140, 150, false,
@@ -2075,12 +2085,12 @@ void CheckRecreatedWorkerWaitsForHeartbeat(bool gone) {
     TServiceFixture fixture;
     const auto first = fixture.Add(1);
     const auto second = fixture.Add(2);
-    fixture.Heartbeat(first, 100);
+    fixture.Heartbeat(first, 200);
     fixture.Heartbeat(second, 100);
     fixture.Stop(1, gone);
     UNIT_ASSERT_VALUES_UNEQUAL(fixture.Add(1), first);
-    fixture.AssignTxId(150);
-    fixture.Heartbeat(second, 110);
+    fixture.AssignTxId(second, 150);
+    fixture.Heartbeat(second, 160);
     // The replacement has not sent a heartbeat yet. Its predecessor must not
     // satisfy the quorum and enable eviction on the other worker's heartbeat.
     fixture.CheckTxId(second, 140, 150, true,
@@ -2094,13 +2104,13 @@ void CheckRecreatedWorker(bool gone) {
     fixture.Stop(1, gone);
     const auto replacement = fixture.Add(1);
     UNIT_ASSERT_VALUES_UNEQUAL(replacement, first);
-    fixture.AssignTxId(150);
+    fixture.AssignTxId(replacement, 150);
     fixture.Heartbeat(replacement, 200);
     // Only the replacement's heartbeat may affect eviction. A newly added
     // worker probes the assignment without having reported any progress yet.
     const auto probe = fixture.Add(2);
-    fixture.CheckTxId(probe, 140, 150, true,
-        "Previous incarnation's heartbeat evicted a cached tx-id assignment");
+    fixture.CheckTxId(probe, 140, 150, false,
+        "Previous incarnation's heartbeat kept a passed tx-id assignment");
 }
 
 } // anonymous namespace
@@ -2140,10 +2150,10 @@ Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
             UNIT_ASSERT_VALUES_UNEQUAL(replacement, actor);
             actor = replacement;
             const ui64 boundary = 100 * i + 50;
-            fixture.AssignTxId(boundary);
+            fixture.AssignTxId(actor, boundary);
             fixture.Heartbeat(actor, 100 * (i + 1));
             const auto probe = fixture.Add(2);
-            fixture.CheckTxId(probe, boundary - 10, boundary, true,
+            fixture.CheckTxId(probe, boundary - 10, boundary, false,
                 "Repeated worker replacement retains an old heartbeat");
             fixture.Stop(2);
         }
@@ -2156,10 +2166,10 @@ Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
         fixture.Heartbeat(actor, 200);
         fixture.CheckIgnoredHeartbeat(actor, 200);
         fixture.CheckIgnoredHeartbeat(actor, 150);
-        fixture.AssignTxId(150);
-        fixture.Heartbeat(actor, 210);
+        fixture.AssignTxId(actor, 250);
+        fixture.Heartbeat(actor, 260);
         const auto probe = fixture.Add(2);
-        fixture.CheckTxId(probe, 140, 150, true,
+        fixture.CheckTxId(probe, 240, 250, false,
             "A repeated or older heartbeat changed tx-id cache eviction");
     }
 
@@ -2171,8 +2181,8 @@ Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
         UNIT_ASSERT_VALUES_UNEQUAL(first, second);
         fixture.Stop(1, true);
         const auto third = fixture.Add(1);
-        fixture.AssignTxId(150);
-        fixture.Heartbeat(third, 100);
+        fixture.AssignTxId(third, 150);
+        fixture.Heartbeat(third, 160);
         fixture.CheckTxId(third, 140, 150, false,
             "Stopping before the first heartbeat corrupted subsequent heartbeat quorum");
     }

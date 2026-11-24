@@ -1050,7 +1050,7 @@ public:
 
         const bool isExternalTable = metadata.IsExternalTable();
         if (isExternalTable && !ValidateExternalTablePgCompatibility(metadata,
-                SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, node->Pos())) {
+                SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, node->Child(2)->Pos())) {
             return false;
         }
         if (!ExternalWritePaths.insert(NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())).second) {

@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
             TimePredictionHistorySize,
             TimePredictionNthFromEnd);
 
-        auto mask = THostMask::MakeOne(0).Include(THostMask::MakeOne(2));
+        auto mask = THostMask::MakeOne(0).Union(THostMask::MakeOne(2));
 
         predictor.Add(mask, TDuration::MilliSeconds(100));
         predictor.Add(mask, TDuration::MilliSeconds(200));
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
         predictor.Add(THostIndex(1), TDuration::MilliSeconds(300));
         predictor.Add(THostIndex(1), TDuration::MilliSeconds(400));
 
-        auto mask = THostMask::MakeOne(0).Include(THostMask::MakeOne(1));
+        auto mask = THostMask::MakeOne(0).Union(THostMask::MakeOne(1));
 
         // Predict(mask) = max(100, 300) = 300.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
         predictor.Add(THostIndex(0), TDuration::MilliSeconds(200));
 
         // Host 1 has no data. Mask includes both.
-        auto mask = THostMask::MakeOne(0).Include(THostMask::MakeOne(1));
+        auto mask = THostMask::MakeOne(0).Union(THostMask::MakeOne(1));
 
         // max(Predict(0), Predict(1)) = max(100, 0) = 100.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
         predictor.Add(THostIndex(0), TDuration::MilliSeconds(200));
 
         // Host 20 is beyond History.size(), never added.
-        auto mask = THostMask::MakeOne(0).Include(THostMask::MakeOne(20));
+        auto mask = THostMask::MakeOne(0).Union(THostMask::MakeOne(20));
 
         // max(100, 0) = 100.
         UNIT_ASSERT_VALUES_EQUAL(

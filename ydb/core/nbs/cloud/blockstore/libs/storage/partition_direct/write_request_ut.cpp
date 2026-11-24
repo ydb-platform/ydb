@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
                     duplicatedHost));
                 UNIT_ASSERT_EQUAL(
                     MakeAllHostsMask(),
-                    response.AllWritesAnswered.Include(
+                    response.AllWritesAnswered.Union(
                         fixture.WriteClient->BelatedAllWritesAnswered));
                 UNIT_ASSERT_VALUES_EQUAL(3, directHosts.size());
             }

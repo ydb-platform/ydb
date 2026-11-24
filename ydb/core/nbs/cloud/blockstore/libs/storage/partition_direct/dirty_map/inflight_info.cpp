@@ -110,11 +110,11 @@ void TInflightInfo::OnWritten(
     ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
 }
 
-void TInflightInfo::OnAllWritesAnswered(THostMask allWritesAnswered)
+void TInflightInfo::MarkWritesAnswered(THostMask hosts)
 {
-    Y_ABORT_UNLESS(allWritesAnswered.Exclude(WriteRequested).Empty());
+    Y_ABORT_UNLESS(hosts.Exclude(WriteRequested).Empty());
 
-    AllWritesAnswered = AllWritesAnswered.Include(allWritesAnswered);
+    AllWritesAnswered = AllWritesAnswered.Union(hosts);
     if (State == EState::PBufferFlushed || State == EState::PBufferErasing) {
         MaybeQueryErase();
     }
@@ -330,17 +330,17 @@ void TInflightInfo::UpdateHosts(
         case EState::PBufferIncompleteWrite:
         case EState::PBufferWritten: {
             // Just update DesiredDDisks and Disabled.
-            DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
+            DesiredDDisks = DesiredDDisks.Union(added).Exclude(removed);
             Disabled = disabled;
             break;
         }
         case EState::PBufferFlushing: {
             // Just update DesiredDDisks and Disabled.
-            const auto unavailableDDisks = disabled.Include(removed);
+            const auto unavailableDDisks = disabled.Union(removed);
             const auto droppedFlushes =
                 GetInflightFlushes().LogicalAnd(unavailableDDisks);
 
-            DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
+            DesiredDDisks = DesiredDDisks.Union(added).Exclude(removed);
             Disabled = disabled;
             FlushRequested = FlushRequested.Exclude(unavailableDDisks);
             FlushConfirmed = FlushConfirmed.Exclude(removed);

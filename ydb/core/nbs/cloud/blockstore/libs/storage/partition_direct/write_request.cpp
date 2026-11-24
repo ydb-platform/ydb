@@ -359,7 +359,7 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
     }
 
     const auto candidates = VChunkConfig.GetDesiredPBuffers()
-                                .Include(VChunkConfig.GetSecondaryPBuffers())
+                                .Union(VChunkConfig.GetSecondaryPBuffers())
                                 .Exclude(RequestedDirectWrites)
                                 .Exclude(FailedWrites)
                                 .Exclude(CompletedWrites)
@@ -431,7 +431,7 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
 
     Bundle->Reply(
         std::move(error),
-        RequestedDirectWrites.Include(RequestedIndirectWrites),
+        RequestedDirectWrites.Union(RequestedIndirectWrites),
         CompletedWrites,
         GetHostsWithAllWritesAnswered());
 }
@@ -552,7 +552,7 @@ bool TWriteRequestExecutor::IsQuorumReached() const
 bool TWriteRequestExecutor::IsQuorumReachable() const
 {
     auto maybeSuccess = VChunkConfig.GetDesiredPBuffers()
-                            .Include(VChunkConfig.GetSecondaryPBuffers())
+                            .Union(VChunkConfig.GetSecondaryPBuffers())
                             .Exclude(FailedWrites);
 
     return maybeSuccess.Count() >= QuorumDirectBlockGroupHostCount;
@@ -576,8 +576,8 @@ THostMask TWriteRequestExecutor::GetHostsWithAllWritesAnswered() const
 {
     const auto inFlight =
         RequestedDirectWrites.Exclude(AnsweredDirectWrites)
-            .Include(RequestedIndirectWrites.Exclude(AnsweredIndirectWrites));
-    return RequestedDirectWrites.Include(RequestedIndirectWrites)
+            .Union(RequestedIndirectWrites.Exclude(AnsweredIndirectWrites));
+    return RequestedDirectWrites.Union(RequestedIndirectWrites)
         .Exclude(inFlight);
 }
 

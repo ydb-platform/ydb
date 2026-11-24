@@ -471,7 +471,7 @@ void TBlocksDirtyMap::OnBelatedWrite(
     Y_ABORT_UNLESS(completedWrites.Exclude(allWritesAnswered).Empty());
 
     if (auto item = Inflight.GetValue(pBufferKey)) {
-        item->Value.OnAllWritesAnswered(allWritesAnswered);
+        item->Value.MarkWritesAnswered(allWritesAnswered);
         return;
     }
 
@@ -1127,7 +1127,7 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
     }
     mask = mask.Exclude(DisabledHosts);
     if (mask.Empty()) {
-        mask = mask.Include(DesiredDDisks);
+        mask = mask.Union(DesiredDDisks);
         // If we don't have enabled hosts, we can return error or fail on
         // assert. Or we can try to use disabled hosts because it could return
         // to life. We choose 2 option and try to read from desired hosts.

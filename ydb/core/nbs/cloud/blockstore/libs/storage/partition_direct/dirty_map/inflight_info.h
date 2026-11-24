@@ -155,7 +155,7 @@ public:
         THostMask allWritesAnswered);
 
     // Records hosts whose last outstanding write request has answered.
-    void OnAllWritesAnswered(THostMask allWritesAnswered);
+    void MarkWritesAnswered(THostMask hosts);
 
     [[nodiscard]] EState GetState() const;
 

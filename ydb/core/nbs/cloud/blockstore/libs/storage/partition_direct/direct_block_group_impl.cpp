@@ -936,11 +936,10 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         const bool isCoordinator = coordinatorHostIndex == *hostIndex;
         coordinatorFound = coordinatorFound || isCoordinator;
 
-        // Undelivery does not prove a failure of other hosts.
-        const bool undeliveredOtherDisk =
-            !isCoordinator && HasError(error) &&
-            error.GetMessage().Contains(UndeliveryErrorMessage);
-        if (!undeliveredOtherDisk) {
+        // Only the coordinator's health is affected by indirect undelivery.
+        if (isCoordinator || !HasError(error) ||
+            !error.GetMessage().Contains(UndeliveryErrorMessage))
+        {
             OnResponse(
                 *hostIndex,
                 executionTime,

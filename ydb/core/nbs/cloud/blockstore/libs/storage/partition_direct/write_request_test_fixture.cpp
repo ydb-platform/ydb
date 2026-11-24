@@ -11,7 +11,7 @@ void TWriteClientMock::OnWriteBlocksResponse(
     const TWriteRequestResponse& response)
 {
     Y_UNUSED(bundle);
-    AllCompletedWrites = AllCompletedWrites.Include(response.CompletedWrites);
+    AllCompletedWrites = AllCompletedWrites.Union(response.CompletedWrites);
     Response = response;
 }
 
@@ -21,10 +21,10 @@ void TWriteClientMock::OnBelatedWriteBlocksResponse(
     THostMask allWritesAnswered)
 {
     Y_UNUSED(bundle);
-    AllCompletedWrites = AllCompletedWrites.Include(completedWrites);
-    BelatedCompletedWrites = BelatedCompletedWrites.Include(completedWrites);
+    AllCompletedWrites = AllCompletedWrites.Union(completedWrites);
+    BelatedCompletedWrites = BelatedCompletedWrites.Union(completedWrites);
     BelatedAllWritesAnswered =
-        BelatedAllWritesAnswered.Include(allWritesAnswered);
+        BelatedAllWritesAnswered.Union(allWritesAnswered);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

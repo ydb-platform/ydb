@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const auto key = MakeKey(5);
         const auto range = TBlockRange16::WithLength(10, 10);
         const auto pending = THostMask::MakeOne(THostIndex{3});
-        const auto requested = MakePrimaryHosts().Include(pending);
+        const auto requested = MakePrimaryHosts().Union(pending);
 
         dirtyMap->RegisterInflightWrite(key, range);
         dirtyMap->WriteFinished(

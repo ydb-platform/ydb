@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_borders.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -134,6 +135,26 @@ TPartitionKeyRange TPartitionKeyRange::Parse(const NKikimrPQ::TPartitionKeyRange
     return result;
 }
 
+std::optional<TPartitionKeyRange> TPartitionKeyRange::TryParse(const NKikimrPQ::TPartitionKeyRange& proto) {
+    auto tryParseBound = [](const TString& data, TMaybe<TSerializedCellVec>& bound) {
+        TSerializedCellVec cells;
+        if (!TSerializedCellVec::TryParse(data, cells)) {
+            return false;
+        }
+        bound.ConstructInPlace(std::move(cells));
+        return true;
+    };
+
+    TPartitionKeyRange result;
+    if (proto.HasFromBound() && !tryParseBound(proto.GetFromBound(), result.FromBound)) {
+        return std::nullopt;
+    }
+    if (proto.HasToBound() && !tryParseBound(proto.GetToBound(), result.ToBound)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
 void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
     if (FromBound) {
         proto.SetFromBound(FromBound->GetBuffer());
@@ -165,6 +186,17 @@ bool IsEntirelyBefore(const TPartitionKeyRange& range, const TPartitionKeyRange&
 
 bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
     return !IsEntirelyBefore(lhs, rhs, keyTypes) && !IsEntirelyBefore(rhs, lhs, keyTypes);
+}
+
+TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
+    TVector<NScheme::TTypeInfo> keyTypes;
+    keyTypes.reserve(tabletConfig.PartitionKeySchemaSize());
+    for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
+        const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(component.GetTypeId(),
+            component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
+        keyTypes.push_back(typeInfoMod.TypeInfo);
+    }
+    return keyTypes;
 }
 
 } // namespace NKikimr::NPQ

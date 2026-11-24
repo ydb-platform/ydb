@@ -159,7 +159,7 @@ protected:
     }
 
     std::optional<TString> SplitBoundary() override {
-        if (!IsEnabled()) {
+        if (!IsEnabled() || HasKeySchema()) {
             return std::nullopt;
         }
 
@@ -186,7 +186,7 @@ protected:
     }
 
     NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus /*currentState*/) override {
-        if (!IsEnabled()) {
+        if (!IsEnabled() || HasKeySchema()) {
             return NKikimrPQ::EScaleStatus::NORMAL;
         }
 
@@ -255,6 +255,10 @@ protected:
 protected:
     virtual bool IsEnabled() {
         return MaxUsagePerSec > 0;
+    }
+
+    bool HasKeySchema() const {
+        return Config.PartitionKeySchemaSize() > 0;
     }
 
     bool IsInKeyRange(const TString& key, const auto& keyRange) {

@@ -1,8 +1,8 @@
 diff --git a/README.md b/README.md
-index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..b72d4356aa0c5a459ae72b4b3d2e3c4b61e7eee8 100644
+index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..e0f2ed4ff1986048b6aa7b50b59ddcdb264bc22f 100644
 --- a/README.md
 +++ b/README.md
-@@ -651,3 +651,14 @@ $config = [
+@@ -651,3 +651,15 @@ $config = [
  ];
  $ydb = new \YdbPlatform\Ydb\Ydb($config);
  ```
@@ -12,7 +12,8 @@ index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..b72d4356aa0c5a459ae72b4b3d2e3c4b
 +Set both `discovery` and `eds` to `true` when connecting through a managed
 +discovery route. The PHP SDK retains one HTTP/2 connection to the bootstrap
 +address. Before starting each service request it checks the subscription and
-+rebinds existing service clients to the latest assignment. The PHP process
++rebinds existing service clients to the latest assignment. Streams already
++accepted by the previous replica can finish on their original channel. The PHP process
 +processes a route change on its next request when it has been idle. A server
 +that returns gRPC UNIMPLEMENTED uses unary discovery on the bootstrap
 +connection. The transport supports the configured CA file and requires
@@ -1884,7 +1885,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..42788061a9fb703e51ebadade7364521
          $this->meta = $ydb->meta();
  
 diff --git a/src/Traits/RequestTrait.php b/src/Traits/RequestTrait.php
-index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b3381ef02 100644
+index 500b3c3e6d3c9938eced88caeac997ba00376db8..38cf473cd2d37860294c87708fa164ca769b1045 100644
 --- a/src/Traits/RequestTrait.php
 +++ b/src/Traits/RequestTrait.php
 @@ -49,6 +49,7 @@ trait RequestTrait
@@ -1895,44 +1896,41 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
  
  
  
-@@ -165,18 +166,27 @@ trait RequestTrait
-         $options = $this->buildGrpcOptions();
-         $call = $this->client->$method($request, $this->meta, $options);
+@@ -163,20 +164,21 @@ trait RequestTrait
+         $request = new $requestClass($data);
  
+         $options = $this->buildGrpcOptions();
+-        $call = $this->client->$method($request, $this->meta, $options);
+-
 -        if (method_exists($call, 'responses')) {
 -            // $status = $call->getStatus();
 -            // $this->checkStatus($service, $method, $status);
--
++        // Hold the selected channel until this response generator finishes.
++        $client = $this->client;
++        $call = $client->$method($request, $this->meta, $options);
+ 
 -            foreach ($call->responses() as $response) {
 -                $result = $this->processResponse($service, $method, $response, $resultClass);
 -                yield $result ? new QueryResult($result) : true;
-+        $epoch = $this->edsEpoch;
 +        try {
 +            if (method_exists($call, 'responses')) {
 +                foreach ($call->responses() as $response) {
-+                    $this->checkStreamRoute($epoch);
 +                    $result = $this->processResponse($service, $method, $response, $resultClass);
 +                    yield $result ? new QueryResult($result) : true;
-+                    $this->checkStreamRoute($epoch);
 +                }
 +            }
 +        } finally {
 +            if (method_exists($this, 'release')) {
 +                $this->release();
              }
-         }
-+    }
- 
+-        }
+-
 -        if (method_exists($this, 'release')) {
 -            $this->release();
-+    private function checkStreamRoute($epoch)
-+    {
-+        if ($epoch !== null && $this->ydb->refreshEds() !== $epoch) {
-+            throw new \YdbPlatform\Ydb\Exceptions\Grpc\UnavailableException('The endpoint serving the stream was removed by discovery');
          }
      }
  
-@@ -204,7 +214,7 @@ trait RequestTrait
+@@ -204,7 +206,7 @@ trait RequestTrait
              if ($this->ydb->needDiscovery() && count($this->ydb->cluster()->all()) > 0){
                  $endpoint = $this->ydb->cluster()->all()[array_rand($this->ydb->cluster()->all())]->endpoint();
              }
@@ -1941,7 +1939,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
              if (isset(self::$grpcExceptions[$status->code])) {
                  throw new self::$grpcExceptions[$status->code]($message);
              } else {
-@@ -327,6 +337,15 @@ trait RequestTrait
+@@ -327,6 +329,15 @@ trait RequestTrait
          if (!$this->ydb->needDiscovery()) {
              return;
          }
@@ -1958,7 +1956,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..34e9a0602102a293550525b6e1464a0b
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f09271bc8243 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..3b2c043e8bf3c8fe33aeb05571bd3662defd9f8a 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
 @@ -115,6 +115,11 @@ class Ydb
@@ -1988,7 +1986,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f092
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +244,61 @@ class Ydb
+@@ -233,7 +244,53 @@ class Ydb
       */
      public function discover()
      {
@@ -2010,14 +2008,14 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f092
 +                throw new \RuntimeException('Current EDS assignment has no endpoints');
 +            }
 +        } catch (\Throwable $error) {
-+            $this->closeEdsChannel();
++            $this->edsDataChannel = null;
 +            $this->edsSnapshot = null;
 +            $this->cluster()->sync([]);
 +            throw $error;
 +        }
 +        $state = [$this->eds->epoch(), $snapshot];
 +        if ($state !== $this->edsSnapshot) {
-+            $this->closeEdsChannel();
++            $this->edsDataChannel = null;
 +            $this->edsSnapshot = $state;
 +            $this->applyDiscoveryResult($snapshot);
 +            ++$this->edsEpoch;
@@ -2040,23 +2038,15 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..d753aa3a5372d34682a6943a8c93f092
 +            $this->edsDataChannel = \Grpc\BaseStub::getDefaultChannel($this->endpoint, $opts);
 +        }
 +        return new $class($this->endpoint, $opts, $this->edsDataChannel);
-+    }
-+
-+    private function closeEdsChannel()
-+    {
-+        if ($this->edsDataChannel) {
-+            $this->edsDataChannel->close();
-+            $this->edsDataChannel = null;
-+        }
      }
  
      /**
 diff --git a/tests/Internal/EdsTest.php b/tests/Internal/EdsTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..ea7ecdaf4af84d44ab940601bb80f280a2d1c2fa
+index 0000000000000000000000000000000000000000..dc1a5d1927e5d9cea0272e4ed3e36d532876792c
 --- /dev/null
 +++ b/tests/Internal/EdsTest.php
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,88 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -2077,6 +2067,42 @@ index 0000000000000000000000000000000000000000..ea7ecdaf4af84d44ab940601bb80f280
 +
 +class EdsTest extends TestCase
 +{
++    public function testNewScanUsesReplacementWhileDispatchedScanFinishes()
++    {
++        $source = new class('A') {
++            private $name;
++            public function __construct($name) { $this->name = $name; }
++            public function StreamReadTable($request, $meta, $options) { return $this; }
++            public function responses() { yield $this->name . '1'; yield $this->name . '2'; }
++        };
++        $driver = new class($source) {
++            public $epoch = 1;
++            public $stub;
++            public function __construct($stub) { $this->stub = $stub; }
++            public function needDiscovery() { return true; }
++            public function refreshEds() { return $this->epoch; }
++            public function serviceClient($class) { return $this->stub; }
++        };
++        $table = new class($driver) {
++            use \YdbPlatform\Ydb\Traits\RequestTrait;
++            public $meta = [];
++            public $frames = [];
++            private $client;
++            public function __construct($driver) { $this->ydb = $driver; $this->client = $driver->stub; }
++            public function read() { return $this->doStreamRequest('Table', 'StreamReadTable', ['skip_get_token'=>true]); }
++            protected function buildGrpcOptions() { return []; }
++            protected function processResponse($service, $method, $response, $resultClass) { $this->frames[] = $response; }
++        };
++        $held = $table->read();
++        $held->current();
++        ++$driver->epoch;
++        $class = get_class($source);
++        $driver->stub = new $class('B');
++        iterator_to_array($table->read());
++        $held->next();
++        self::assertSame(['A1', 'B1', 'B2', 'A2'], $table->frames);
++    }
++
 +    private function response($port)
 +    {
 +        $result = new ListEndpointsResult(['endpoints' => [new EndpointInfo([
@@ -2101,40 +2127,6 @@ index 0000000000000000000000000000000000000000..ea7ecdaf4af84d44ab940601bb80f280
 +    {
 +        $this->assertSame([['address' => 'node.example', 'port' => 2135, 'nodeId' => 7]],
 +            Eds::decode($this->response(2135), '/db'));
-+    }
-+
-+    public function testExistingScanChecksDiscoveryBeforeReadingAnotherResponse()
-+    {
-+        $rpc = new class {
-+            public $reads = 0;
-+            public function StreamExecuteScanQuery($request, $metadata, $options) { return $this; }
-+            public function responses() {
-+                while (++$this->reads <= 2) {
-+                    yield new \Ydb\Table\ExecuteScanQueryPartialResponse([
-+                        'status' => \Ydb\StatusIds\StatusCode::SUCCESS,
-+                        'result' => new \Ydb\Table\ExecuteScanQueryPartialResult(),
-+                    ]);
-+                }
-+            }
-+        };
-+        $epoch = 1;
-+        $driver = $this->createMock(\YdbPlatform\Ydb\Ydb::class);
-+        $driver->method('needDiscovery')->willReturn(true);
-+        $driver->method('refreshEds')->willReturnCallback(function () use (&$epoch) { return $epoch; });
-+        $driver->method('serviceClient')->willReturn($rpc);
-+        $driver->method('iam')->willReturn($this->createMock(\YdbPlatform\Ydb\Contracts\IamTokenContract::class));
-+        $logger = new \Psr\Log\NullLogger();
-+        $retry = new \YdbPlatform\Ydb\Retry\Retry($logger);
-+        $table = new \YdbPlatform\Ydb\Table($driver, $logger, $retry);
-+        $scan = $table->scanQuery('SELECT 1');
-+        self::assertTrue($scan->valid());
-+        $epoch = 2;
-+        try {
-+            $scan->next();
-+            self::fail('A scan on the removed node returned another response');
-+        } catch (\YdbPlatform\Ydb\Exceptions\Grpc\UnavailableException $expected) {
-+            self::assertSame(1, $rpc->reads);
-+        }
 +    }
 +
 +    public function testRejectsInconsistentStandardAddress()

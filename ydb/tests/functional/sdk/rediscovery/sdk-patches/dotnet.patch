@@ -58,7 +58,7 @@ index d608296ab2011c30a8f6f68a90c3f28912ebd208..94f98db90977e5172ac390159759cda8
                      (builder, poolName) => builder.PoolName = poolName),
                  "PoolName", "Pool Name");
 diff --git a/src/Ydb.Sdk/src/Driver.cs b/src/Ydb.Sdk/src/Driver.cs
-index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..fb1ba2b3f8ba491475fee4820b767bf2d4779c96 100644
+index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..bd05bac60eb11d25fafa0f2760e03054d19779e4 100644
 --- a/src/Ydb.Sdk/src/Driver.cs
 +++ b/src/Ydb.Sdk/src/Driver.cs
 @@ -20,7 +20,7 @@ namespace Ydb.Sdk;
@@ -103,7 +103,7 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..fb1ba2b3f8ba491475fee4820b767bf2
          if (_discoveryTimer != null)
          {
              await _discoveryTimer.DisposeAsync().ConfigureAwait(false);
-@@ -176,62 +186,69 @@ internal sealed class Driver : BaseDriver
+@@ -176,62 +186,75 @@ internal sealed class Driver : BaseDriver
              }
  
              var resultProto = operation.Result.Unpack<ListEndpointsResult>();
@@ -117,15 +117,15 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..fb1ba2b3f8ba491475fee4820b767bf2
 +            throw new YdbException(e);
 +        }
 +    }
- 
--            string? preferredLocation = null;
--            if (Config.EnablePreferNearestDcBalancing)
++
 +    private async Task ApplyEndpoints(ListEndpointsResult resultProto)
 +    {
 +        var discoveredEndpoints = resultProto.Endpoints.Select(infoProto =>
 +            new EndpointInfo(infoProto.NodeId, infoProto.Ssl, infoProto.Address, infoProto.Port, infoProto.Location)
 +        ).ToImmutableList();
-+
+ 
+-            string? preferredLocation = null;
+-            if (Config.EnablePreferNearestDcBalancing)
 +        string? preferredLocation = null;
 +        if (Config.EnablePreferNearestDcBalancing)
 +        {
@@ -211,7 +211,13 @@ index 1624ddbb89d3a725d37757d91c15f3b4414bebdf..fb1ba2b3f8ba491475fee4820b767bf2
 +        lock (RouteLock)
          {
 -            throw new YdbException(e);
-+            shutdown = ChannelPool.RemoveChannels(_endpointPool.Reset(discoveredEndpoints, preferredLocation));
++            var removed = _endpointPool.Reset(discoveredEndpoints, preferredLocation);
++            if (Config.EnableEdsDiscovery)
++            {
++                ChannelPool.DrainChannels(removed);
++                return;
++            }
++            shutdown = ChannelPool.RemoveChannels(removed);
          }
 +        await shutdown.ConfigureAwait(false);
      }
@@ -229,20 +235,10 @@ index e25d06a5ab5ba7a0426df56ec7c07b214fa6052c..ff461a0bf8508a2a05f2534bbb876a96
      internal TimeSpan EndpointDiscoveryTimeout = TimeSpan.FromSeconds(10);
      internal EndpointInfo EndpointInfo { get; }
 diff --git a/src/Ydb.Sdk/src/IDriver.cs b/src/Ydb.Sdk/src/IDriver.cs
-index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8e821cdf1 100644
+index fd2f07d3234b9ad53760b652befee173e99047b4..0041164cac8d4c7bff3dc6822154ffc252ae5663 100644
 --- a/src/Ydb.Sdk/src/IDriver.cs
 +++ b/src/Ydb.Sdk/src/IDriver.cs
-@@ -104,6 +104,9 @@ public interface IDriver : IAsyncDisposable
- /// <typeparam name="TResponse">The type of response messages.</typeparam>
- public interface IBidirectionalStream<in TRequest, out TResponse> : IDisposable
- {
-+    /// <summary>Whether discovery has retired the route that accepted this stream.</summary>
-+    public bool IsRouteRetired => false;
-+
-     /// <summary>
-     /// Writes a request message to the stream.
-     /// </summary>
-@@ -209,21 +212,15 @@ internal abstract class BaseDriver : IDriver
+@@ -209,21 +209,16 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -263,11 +259,12 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8
 -                request: request
 -            );
 +            var options = await GetCallOptions(settings, endpointInfo).ConfigureAwait(false);
-+            using var call = StartCall(epoch, endpointInfo, invoker => invoker.AsyncUnaryCall(method, null, options, request));
++            using var call = StartCall(epoch, endpointInfo, invoker => invoker.AsyncUnaryCall(method, null, options, request), out var lease);
++            using var admission = lease;
  
              return await call.ResponseAsync.ConfigureAwait(false);
          }
-@@ -233,7 +230,7 @@ internal abstract class BaseDriver : IDriver
+@@ -233,7 +228,7 @@ internal abstract class BaseDriver : IDriver
  
              throw new YdbException(e);
          }
@@ -276,7 +273,7 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8
          {
              throw new YdbException(StatusCode.ClientTransportUnknown, "Unexpected transport exception", e);
          }
-@@ -246,16 +243,11 @@ internal abstract class BaseDriver : IDriver
+@@ -246,18 +241,13 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -285,18 +282,21 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8
 -        var channel = ChannelPool.GetChannel(endpointInfo);
  
 -        var callInvoker = channel.CreateCallInvoker();
--
++        var options = await GetCallOptions(settings, endpointInfo).ConfigureAwait(false);
++        var call = StartCall(epoch, endpointInfo, invoker => invoker.AsyncServerStreamingCall(method, null, options, request), out var lease);
+ 
 -        var call = callInvoker.AsyncServerStreamingCall(
 -            method: method,
 -            host: null,
 -            options: await GetCallOptions(settings, endpointInfo).ConfigureAwait(false),
 -            request: request);
-+        var options = await GetCallOptions(settings, endpointInfo).ConfigureAwait(false);
-+        var call = StartCall(epoch, endpointInfo, invoker => invoker.AsyncServerStreamingCall(method, null, options, request));
- 
-         return new ServerStream<TResponse>(call, e => { OnRpcError(endpointInfo, e); });
+-
+-        return new ServerStream<TResponse>(call, e => { OnRpcError(endpointInfo, e); });
++        return new ServerStream<TResponse>(call, e => { OnRpcError(endpointInfo, e); }, lease);
      }
-@@ -266,25 +258,43 @@ internal abstract class BaseDriver : IDriver
+ 
+     public async ValueTask<IBidirectionalStream<TRequest, TResponse>> BidirectionalStreamCall<TRequest, TResponse>(
+@@ -266,25 +256,53 @@ internal abstract class BaseDriver : IDriver
          where TRequest : class
          where TResponse : class
      {
@@ -311,22 +311,23 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8
 -            host: null,
 -            options: await GetCallOptions(settings, endpointInfo).ConfigureAwait(false));
 +        var options = await GetCallOptions(settings, endpointInfo).ConfigureAwait(false);
-+        var call = StartCall(epoch, endpointInfo, invoker => invoker.AsyncDuplexStreamingCall(method, null, options));
++        var call = StartCall(epoch, endpointInfo, invoker => invoker.AsyncDuplexStreamingCall(method, null, options), out var lease);
  
          return new BidirectionalStream<TRequest, TResponse>(
              call,
              e => { OnRpcError(endpointInfo, e); },
 -            _credentialsProvider
 +            _credentialsProvider,
-+            Config.EnableEdsDiscovery ? () => epoch != Volatile.Read(ref RouteEpoch) : null
++            lease
          );
      }
  
 +    protected readonly object RouteLock = new();
 +    protected long RouteEpoch;
 +
-+    private T StartCall<T>(long epoch, EndpointInfo endpoint, Func<CallInvoker, T> start)
++    private T StartCall<T>(long epoch, EndpointInfo endpoint, Func<CallInvoker, T> start, out IDisposable? lease)
 +    {
++        lease = null;
 +        if (!Config.EnableEdsDiscovery)
 +        {
 +            return start(ChannelPool.GetChannel(endpoint).CreateCallInvoker());
@@ -337,7 +338,16 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8
 +            {
 +                throw new YdbException(StatusCode.Unavailable, "Discovery route changed");
 +            }
-+            return start(ChannelPool.GetChannel(endpoint).CreateCallInvoker());
++            var channel = ChannelPool.Acquire(endpoint, out lease);
++            try
++            {
++                return start(channel.CreateCallInvoker());
++            }
++            catch
++            {
++                lease.Dispose();
++                throw;
++            }
 +        }
 +    }
 +
@@ -348,31 +358,109 @@ index fd2f07d3234b9ad53760b652befee173e99047b4..aed1e72f27791bcf3002c0d314560bf8
      protected abstract void OnRpcError(EndpointInfo endpointInfo, RpcException e);
  
      protected async ValueTask<CallOptions> GetCallOptions(GrpcRequestSettings settings, EndpointInfo endpointInfo)
-@@ -436,11 +446,17 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
+@@ -401,8 +419,11 @@ internal sealed class ServerStream<TResponse> : IServerStream<TResponse>
+     private readonly AsyncServerStreamingCall<TResponse> _stream;
+     private readonly Action<RpcException> _rpcErrorAction;
+ 
+-    internal ServerStream(AsyncServerStreamingCall<TResponse> stream, Action<RpcException> rpcErrorAction)
++    private readonly IDisposable? _lease;
++
++    internal ServerStream(AsyncServerStreamingCall<TResponse> stream, Action<RpcException> rpcErrorAction, IDisposable? lease = null)
+     {
++        _lease = lease;
+         _stream = stream;
+         _rpcErrorAction = rpcErrorAction;
+     }
+@@ -411,23 +432,31 @@ internal sealed class ServerStream<TResponse> : IServerStream<TResponse>
+     {
+         try
+         {
+-            return await _stream.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false);
++            var available = await _stream.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false);
++            if (!available) { _lease?.Dispose(); }
++            return available;
+         }
+         catch (RpcException e)
+         {
++            _lease?.Dispose();
+             _rpcErrorAction(e);
+ 
+             throw new YdbException(e);
+         }
+         catch (Exception e)
+         {
++            _lease?.Dispose();
+             throw new YdbException(StatusCode.ClientTransportUnknown, "Unexpected transport exception", e);
+         }
+     }
+ 
+     public TResponse Current => _stream.ResponseStream.Current;
+ 
+-    public void Dispose() => _stream.Dispose();
++    public void Dispose()
++    {
++        try { _stream.Dispose(); }
++        finally { _lease?.Dispose(); }
++    }
+ }
+ 
+ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<TRequest, TResponse>
+@@ -436,11 +465,15 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
      private readonly Action<RpcException> _rpcErrorAction;
      private readonly ICredentialsProvider? _credentialsProvider;
  
-+    private readonly Func<bool>? _isRouteRetired;
-+
-+    public bool IsRouteRetired => _isRouteRetired?.Invoke() == true;
++    private readonly IDisposable? _lease;
 +
      internal BidirectionalStream(
          AsyncDuplexStreamingCall<TRequest, TResponse> stream,
          Action<RpcException> rpcErrorAction,
 -        ICredentialsProvider? credentialsProvider)
 +        ICredentialsProvider? credentialsProvider,
-+        Func<bool>? isRouteRetired = null)
++        IDisposable? lease = null)
      {
-+        _isRouteRetired = isRouteRetired;
++        _lease = lease;
          _stream = stream;
          _rpcErrorAction = rpcErrorAction;
          _credentialsProvider = credentialsProvider;
+@@ -468,16 +501,20 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
+     {
+         try
+         {
+-            return await _stream.ResponseStream.MoveNext(CancellationToken.None).ConfigureAwait(false);
++            var available = await _stream.ResponseStream.MoveNext(CancellationToken.None).ConfigureAwait(false);
++            if (!available) { _lease?.Dispose(); }
++            return available;
+         }
+         catch (RpcException e)
+         {
++            _lease?.Dispose();
+             _rpcErrorAction(e);
+ 
+             throw new YdbException(e);
+         }
+         catch (Exception e)
+         {
++            _lease?.Dispose();
+             throw new YdbException(StatusCode.ClientTransportUnknown, "Unexpected transport exception", e);
+         }
+     }
+@@ -500,5 +537,9 @@ internal class BidirectionalStream<TRequest, TResponse> : IBidirectionalStream<T
+         }
+     }
+ 
+-    public void Dispose() => _stream.Dispose();
++    public void Dispose()
++    {
++        try { _stream.Dispose(); }
++        finally { _lease?.Dispose(); }
++    }
+ }
 diff --git a/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058fbca988e
+index 0000000000000000000000000000000000000000..60e8481cb8325778b4e49f603ef21f8fec239d37
 --- /dev/null
 +++ b/src/Ydb.Sdk/src/Internal/Eds/EdsDiscovery.cs
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,236 @@
 +using System.Globalization;
 +using Google.Protobuf;
 +using Grpc.Core;
@@ -604,7 +692,8 @@ index 0000000000000000000000000000000000000000..bf13611d09fca41b1889f414c8716058
 +        lock (RouteLock)
 +        {
 +            Interlocked.Increment(ref RouteEpoch);
-+            return ChannelPool.RemoveChannels(_endpointPool.Reset(Array.Empty<EndpointInfo>()));
++            ChannelPool.DrainChannels(_endpointPool.Reset(Array.Empty<EndpointInfo>()));
++            return ValueTask.CompletedTask;
 +        }
 +    }
 +}
@@ -691,6 +780,103 @@ index 0000000000000000000000000000000000000000..af5ab76c613e2d828dd91a84c7c5a38a
 +    string cluster_name = 1;
 +    repeated LocalityLbEndpoints endpoints = 2;
 +}
+diff --git a/src/Ydb.Sdk/src/Pool/ChannelPool.cs b/src/Ydb.Sdk/src/Pool/ChannelPool.cs
+index 717989051446e5624bd9f856d3ba1224d299bfce..806f572749f21090e272238258c43ed4dd63ec0a 100644
+--- a/src/Ydb.Sdk/src/Pool/ChannelPool.cs
++++ b/src/Ydb.Sdk/src/Pool/ChannelPool.cs
+@@ -12,11 +12,69 @@ internal class ChannelPool<T>(ILoggerFactory loggerFactory, IChannelFactory<T> c
+ {
+     private readonly ConcurrentDictionary<string, Lazy<T>> _channels = new();
+ 
++    private readonly Dictionary<T, int> _activeCalls = new();
++    private readonly HashSet<T> _draining = new();
++    private bool _disposed;
++
++    private sealed class Lease(ChannelPool<T> pool, T channel) : IDisposable
++    {
++        private ChannelPool<T>? _owner = pool;
++        public void Dispose() => Interlocked.Exchange(ref _owner, null)?.Release(channel);
++    }
++
+     private readonly ILogger<ChannelPool<T>> _logger = loggerFactory.CreateLogger<ChannelPool<T>>();
+ 
+     public T GetChannel(EndpointInfo endpointInfo) => _channels.GetOrAdd(endpointInfo.Endpoint,
+         new Lazy<T>(() => channelFactory.CreateChannel(endpointInfo.Endpoint))).Value;
+ 
++    public T Acquire(EndpointInfo endpoint, out IDisposable lease)
++    {
++        lock (_activeCalls)
++        {
++            ObjectDisposedException.ThrowIf(_disposed, this);
++            var channel = GetChannel(endpoint);
++            _activeCalls[channel] = _activeCalls.GetValueOrDefault(channel) + 1;
++            lease = new Lease(this, channel);
++            return channel;
++        }
++    }
++
++    private void Release(T channel)
++    {
++        lock (_activeCalls)
++        {
++            if (!_activeCalls.TryGetValue(channel, out var count)) { return; }
++            if (count > 1)
++            {
++                _activeCalls[channel] = count - 1;
++                return;
++            }
++            _activeCalls.Remove(channel);
++            if (!_draining.Remove(channel)) { return; }
++        }
++        channel.Dispose();
++    }
++
++    public void DrainChannels(IReadOnlyList<EndpointInfo> removedEndpoints)
++    {
++        lock (_activeCalls)
++        {
++            foreach (var endpoint in removedEndpoints)
++            {
++                if (!_channels.TryRemove(endpoint.Endpoint, out var lazy) || !lazy.IsValueCreated) { continue; }
++                var channel = lazy.Value;
++                if (_activeCalls.ContainsKey(channel))
++                {
++                    _draining.Add(channel);
++                }
++                else
++                {
++                    channel.Dispose();
++                }
++            }
++        }
++    }
++
+     public async ValueTask RemoveChannels(IReadOnlyList<EndpointInfo> removedEndpoints)
+     {
+         var shutdownGrpcChannels = new List<T>();
+@@ -36,12 +94,16 @@ internal class ChannelPool<T>(ILoggerFactory loggerFactory, IChannelFactory<T> c
+     {
+         GC.SuppressFinalize(this);
+ 
+-        await ShutdownChannels([
+-                .._channels.Values
+-                    .Where(lazyChannel => lazyChannel.IsValueCreated)
+-                    .Select(lazyChannel => lazyChannel.Value)
+-            ]
+-        ).ConfigureAwait(false);
++        List<T> channels;
++        lock (_activeCalls)
++        {
++            _disposed = true;
++            channels = [.._channels.Values.Where(c => c.IsValueCreated).Select(c => c.Value), .._draining];
++            _channels.Clear();
++            _draining.Clear();
++            _activeCalls.Clear();
++        }
++        await ShutdownChannels(channels).ConfigureAwait(false);
+     }
+ 
+     private async ValueTask ShutdownChannels(ICollection<T> channels)
 diff --git a/src/Ydb.Sdk/src/Pool/EndpointPool.cs b/src/Ydb.Sdk/src/Pool/EndpointPool.cs
 index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..8053c41620163cb3e9ff3b81a676236af4b1b4ab 100644
 --- a/src/Ydb.Sdk/src/Pool/EndpointPool.cs
@@ -724,19 +910,6 @@ index f012d5c0ef8032ddd2f539c59da00a90bcdd818d..8053c41620163cb3e9ff3b81a676236a
              _sortedByPriorityEndpoints =
              [
                  ..prioritizedEndpoints
-diff --git a/src/Ydb.Sdk/src/Topic/TopicSession.cs b/src/Ydb.Sdk/src/Topic/TopicSession.cs
-index 56e1287dca00f3679fe2f7fa5f65c87f69335324..714486f59156d8c6eee6dd8ca7f743951d44407d 100644
---- a/src/Ydb.Sdk/src/Topic/TopicSession.cs
-+++ b/src/Ydb.Sdk/src/Topic/TopicSession.cs
-@@ -17,7 +17,7 @@ internal abstract class TopicSession<TFromClient, TFromServer>(
-     private int _isActive = 1;
-     private string? _lastToken = lastToken;
- 
--    public bool IsActive => Volatile.Read(ref _isActive) == 1;
-+    public bool IsActive => Volatile.Read(ref _isActive) == 1 && !Stream.IsRouteRetired;
- 
-     protected void ReconnectSession(StatusCode statusCode = StatusCode.Unspecified)
-     {
 diff --git a/src/Ydb.Sdk/src/Ydb.Sdk.csproj b/src/Ydb.Sdk/src/Ydb.Sdk.csproj
 index e74e4d66e32673d97e0fdc0e4a3882131bddcb9f..8e8cf0b4d30328e20b1b53e3429ae0a325eeffb6 100644
 --- a/src/Ydb.Sdk/src/Ydb.Sdk.csproj
@@ -783,6 +956,84 @@ index 0000000000000000000000000000000000000000..d0d0603a2bf19ebb061a1a5e598a65c6
 +        Assert.Null(Driver.CutoverGeneration(null, error));
 +    }
 +}
+diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/ChannelPoolTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/ChannelPoolTests.cs
+index 21dabd4440f19334f9a20187762d923785ec61ba..1f834ce098b9dca644fbd6e3d83ebc860cd7ac09 100644
+--- a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/ChannelPoolTests.cs
++++ b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/ChannelPoolTests.cs
+@@ -1,6 +1,11 @@
+ using System.Collections.Concurrent;
+ using System.Collections.Immutable;
+ using Grpc.Core;
++using Grpc.Net.Client;
++using System.Net;
++using System.Net.Http.Headers;
++using WhoAmIRequest = Ydb.Discovery.WhoAmIRequest;
++using Ydb.Discovery.V1;
+ using Moq;
+ using Xunit;
+ using Ydb.Sdk.Ado.Tests.Utils;
+@@ -32,6 +37,61 @@ public class ChannelPoolTests
+ 
+     private static EndpointInfo Endpoint(string host) => new(0, false, host, 2136, string.Empty);
+ 
++    private sealed class HeldResponse : HttpMessageHandler
++    {
++        public readonly TaskCompletionSource Accepted = new(TaskCreationOptions.RunContinuationsAsynchronously);
++        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
++
++        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
++        {
++            Accepted.TrySetResult();
++            await Release.Task.WaitAsync(token);
++            var response = new HttpResponseMessage(HttpStatusCode.OK)
++            {
++                Version = HttpVersion.Version20,
++                Content = new ByteArrayContent(new byte[5]) // A framed empty protobuf message.
++            };
++            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
++            response.TrailingHeaders.Add("grpc-status", "0");
++            return response;
++        }
++    }
++
++    [Fact]
++    public async Task CutDrainsAdmittedCallWhileDestinationServesNewCalls()
++    {
++        var a = Endpoint("source");
++        var b = Endpoint("destination");
++        var source = new HeldResponse();
++        var destination = new HeldResponse();
++        var factory = new Mock<IChannelFactory<GrpcChannel>>();
++        factory.Setup(f => f.CreateChannel(It.IsAny<string>())).Returns<string>(endpoint =>
++            GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
++            {
++                HttpHandler = endpoint == a.Endpoint ? source : destination
++            }));
++        await using var pool = new ChannelPool<GrpcChannel>(TestUtils.LoggerFactory, factory.Object);
++        var sourceChannel = pool.Acquire(a, out var first);
++        using var pending = new DiscoveryService.DiscoveryServiceClient(sourceChannel).WhoAmIAsync(new WhoAmIRequest());
++        await source.Accepted.Task.WaitAsync(TimeSpan.FromSeconds(5));
++        pool.DrainChannels([a]);
++        var destChannel = pool.Acquire(b, out var second);
++        destination.Release.SetResult();
++        using (second)
++        using (var fresh = new DiscoveryService.DiscoveryServiceClient(destChannel).WhoAmIAsync(new WhoAmIRequest()))
++        {
++            await fresh.ResponseAsync.WaitAsync(TimeSpan.FromSeconds(5));
++        }
++        Assert.True(destination.Accepted.Task.IsCompletedSuccessfully);
++        source.Release.SetResult();
++        await pending.ResponseAsync.WaitAsync(TimeSpan.FromSeconds(5));
++        first.Dispose();
++        Assert.Throws<ObjectDisposedException>(() =>
++        {
++            using var rejected = new DiscoveryService.DiscoveryServiceClient(sourceChannel).WhoAmIAsync(new WhoAmIRequest());
++        });
++    }
++
+     [Fact]
+     public async Task ChannelPool_AllMethodsWorkAsExpected()
+     {
 diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs
 index 4cdb55e9bc1631b5e01c1bdfa5add9a0d37f71f5..ef69fa7e245e19661a450d4dd6fc30cb7c0fd35e 100644
 --- a/src/Ydb.Sdk/test/Ydb.Sdk.Ado.Tests/Pool/EndpointPoolTests.cs
@@ -830,42 +1081,3 @@ index 99f6cb6b309ba1c34ca2417243451a052a44e554..0f126a0506b4c99ad92fb3d7405803a3
      private const int MessageSize = 64 * 1024 * 1024;
  
      [Fact]
-diff --git a/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs b/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs
-index b8f7914d6d6740c7ce894021334d448c4d5252ad..1f95b6789f39b0c837d90cc7df128fd24b911ac0 100644
---- a/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs
-+++ b/src/Ydb.Sdk/test/Ydb.Sdk.Topic.Tests/ReaderUnitTests.cs
-@@ -38,6 +38,34 @@ public class ReaderUnitTests
-         });
-     }
- 
-+    [Theory]
-+    [InlineData(false)]
-+    [InlineData(true)]
-+    public async Task ReaderDiscardsPrefetchedDataWhenDiscoveryRetiresRoute(bool batch)
-+    {
-+        _mockStream.SetupSequence(stream => stream.MoveNextAsync())
-+            .ReturnsAsync(true).ReturnsAsync(true).ReturnsAsync(true).Returns(_lastMoveNext);
-+        _mockStream.SetupSequence(stream => stream.Current)
-+            .Returns(InitResponse).Returns(StartPartitionSessionRequest())
-+            .Returns(ReadResponse(0, "first"u8.ToArray(), "stale"u8.ToArray()));
-+
-+        await using var reader = new ReaderBuilder<string>(_driverFactoryMock)
-+        {
-+            ConsumerName = "Consumer",
-+            SubscribeSettings = { new SubscribeSettings("/topic") }
-+        }.Build();
-+        Assert.Equal("first", (await reader.ReadAsync()).Data);
-+        _mockStream.SetupGet(stream => stream.IsRouteRetired).Returns(true);
-+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-+        {
-+            if (batch)
-+                await reader.ReadBatchAsync(deadline.Token);
-+            else
-+                await reader.ReadAsync(deadline.Token);
-+        });
-+    }
-+
-     /*
-      * Performed invocations:
- 

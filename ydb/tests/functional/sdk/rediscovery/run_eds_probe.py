@@ -117,9 +117,6 @@ async def run_direction(database, source, destination, command, timeout, balance
                     recovered_count = requests_completed(destination[1], database)
                     while requests_completed(destination[1], database) < recovered_count + 3:
                         await successes(process, 1)
-                    if source_before is not None:
-                        while established_sockets(process.pid, source_peers):
-                            await asyncio.sleep(0.025)
                     after_sockets = established_sockets(process.pid, peers)
                     final_src = requests_completed(source[1], database)
                     final_dst = requests_completed(destination[1], database)

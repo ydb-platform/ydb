@@ -434,10 +434,10 @@ index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80bec
 +}
 diff --git a/internal/balancer/eds_connection_test.go b/internal/balancer/eds_connection_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..d3fb0f708b63cf76c42bcb2c654fe0f35da985af
+index 0000000000000000000000000000000000000000..219b232e8e36a1ee8b076c4b930bc740badb9efe
 --- /dev/null
 +++ b/internal/balancer/eds_connection_test.go
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,64 @@
 +package balancer
 +
 +import (
@@ -449,71 +449,58 @@ index 0000000000000000000000000000000000000000..d3fb0f708b63cf76c42bcb2c654fe0f3
 +
 +	"github.com/stretchr/testify/require"
 +	"google.golang.org/grpc"
-+	"google.golang.org/grpc/codes"
 +	"google.golang.org/grpc/credentials/insecure"
 +	"google.golang.org/grpc/health"
 +	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-+	"google.golang.org/grpc/status"
 +
 +	"github.com/ydb-platform/ydb-go-sdk/v3/config"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
 +)
 +
-+func TestEDSRetiresSharedRoutesAndClosesLastDataTransport(t *testing.T) {
-+	ctx, cancel := context.WithTimeout(conn.WithoutWrapping(t.Context()), 5*time.Second)
++func TestCutoverDrainsSourceStream(t *testing.T) {
++	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 +	defer cancel()
-+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
-+	require.NoError(t, err)
-+	var sockets atomic.Int64
-+	server := grpc.NewServer(grpc.StatsHandler(&serverConnStats{active: &sockets}))
-+	healthServer := health.NewServer()
-+	healthpb.RegisterHealthServer(server, healthServer)
-+	go func() { _ = server.Serve(listener) }()
-+	t.Cleanup(server.Stop)
-+
++	node := func(state healthpb.HealthCheckResponse_ServingStatus) (endpoint.Endpoint, *health.Server, *atomic.Int64) {
++		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
++		require.NoError(t, err)
++		sockets := new(atomic.Int64)
++		server := grpc.NewServer(grpc.StatsHandler(&serverConnStats{active: sockets}))
++		service := health.NewServer()
++		service.SetServingStatus("", state)
++		healthpb.RegisterHealthServer(server, service)
++		go func() { _ = server.Serve(listener) }()
++		t.Cleanup(server.Stop)
++		return endpoint.New(listener.Addr().String(), endpoint.WithID(1)), service, sockets
++	}
++	source, service, sockets := node(healthpb.HealthCheckResponse_SERVING)
++	destination, _, _ := node(healthpb.HealthCheckResponse_NOT_SERVING)
 +	cfg := config.New(config.WithGrpcOptions(grpc.WithTransportCredentials(insecure.NewCredentials())))
 +	pool := conn.NewPool(ctx, cfg)
-+	defer func() { _ = pool.RemoveRef(ctx) }()
-+	nodes := []endpoint.Endpoint{endpoint.New(listener.Addr().String(), endpoint.WithID(1))}
-+	watch := func() (*Balancer, healthpb.Health_WatchClient) {
-+		b := &Balancer{driverConfig: cfg, pool: newWatchedPool(pool)}
-+		b.applyDiscoveredEndpoints(ctx, nodes, "")
-+		s, err := healthpb.NewHealthClient(b).Watch(ctx, &healthpb.HealthCheckRequest{})
-+		require.NoError(t, err)
-+		_, err = s.Recv()
-+		require.NoError(t, err)
-+		return b, s
-+	}
-+	parent, parentStream := watch()
-+	old := parent.connections().All()[0]
-+	child, childStream := watch()
-+	require.EqualValues(t, 1, sockets.Load())
-+	parent.applyDiscoveredEndpoints(ctx, nodes, "")
-+	parent.clearEDS(ctx)
-+	// A live child stream still owns the shared TCP connection.
-+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
-+	_, err = parentStream.Recv()
-+	require.Error(t, err)
-+	reply, err := childStream.Recv()
-+	require.NoError(t, err)
-+	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, reply.Status)
-+	require.EqualValues(t, 1, sockets.Load())
++	defer func() { require.NoError(t, pool.RemoveRef(ctx)) }()
++	watched := newWatchedPool(pool)
 +
-+	// Re-admitting the same pooled socket creates a fresh route. Previously
-+	// retained handles cannot start another RPC, including after failback.
-+	parent.applyDiscoveredEndpoints(ctx, nodes, "")
-+	_, err = healthpb.NewHealthClient(old).Check(ctx, &healthpb.HealthCheckRequest{})
-+	require.Equal(t, codes.Unavailable, status.Code(err))
-+	_, err = healthpb.NewHealthClient(parent).Check(ctx, &healthpb.HealthCheckRequest{})
++	b := &Balancer{driverConfig: cfg, pool: watched}
++	b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{source}, "")
++	client := healthpb.NewHealthClient(b)
++	streamCtx, stop := context.WithCancel(ctx)
++	defer stop()
++	stream, err := client.Watch(streamCtx, &healthpb.HealthCheckRequest{})
 +	require.NoError(t, err)
-+	parent.clearEDS(ctx)
-+
-+	// A removal within a live watch must retire the last transport immediately.
-+	child.applyDiscoveredEndpoints(ctx, nil, "")
++	first, err := stream.Recv()
++	require.NoError(t, err)
++	require.Equal(t, healthpb.HealthCheckResponse_SERVING, first.Status)
++	b.clearEDS(ctx)
++	b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{destination}, "")
++	fresh, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
++	require.NoError(t, err)
++	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, fresh.Status)
++	service.SetServingStatus("", healthpb.HealthCheckResponse_UNKNOWN)
++	held, err := stream.Recv()
++	require.NoError(t, err)
++	require.Equal(t, healthpb.HealthCheckResponse_UNKNOWN, held.Status)
++	stop()
 +	require.Eventually(t, func() bool { return sockets.Load() == 0 }, 2*time.Second, time.Millisecond)
-+	_, err = childStream.Recv()
-+	require.Error(t, err)
 +}
 diff --git a/internal/balancer/eds_test.go b/internal/balancer/eds_test.go
 new file mode 100644
@@ -582,16 +569,15 @@ index 0000000000000000000000000000000000000000..5a71256ad14be0272e1b53e7ba603b02
 +}
 diff --git a/internal/balancer/watched_conn.go b/internal/balancer/watched_conn.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f51687f1d960773182fddcc07f1f4ceaf8b097d1
+index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337a0c3720b
 --- /dev/null
 +++ b/internal/balancer/watched_conn.go
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,95 @@
 +package balancer
 +
 +import (
 +	"context"
 +	"sync"
-+	"sync/atomic"
 +
 +	"google.golang.org/grpc"
 +	"google.golang.org/grpc/codes"
@@ -599,102 +585,8 @@ index 0000000000000000000000000000000000000000..f51687f1d960773182fddcc07f1f4cea
 +
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
-+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xcontext"
-+	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xerrors"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xslices"
 +)
-+
-+// Each balancer owns the RPC lifetime for its assignment. Driver.With can
-+// share the underlying pool (and TCP connection) across independent databases.
-+type watchedConn struct {
-+	conn.Conn
-+	calls   *xcontext.CancelsGuard
-+	retired atomic.Bool
-+	refs    int // guarded by watchedPool.mu
-+}
-+
-+func watchConn(c conn.Conn) *watchedConn {
-+	return &watchedConn{Conn: c, calls: xcontext.NewCancelsGuard()}
-+}
-+
-+func (c *watchedConn) retire() {
-+	c.retired.Store(true)
-+	c.calls.Cancel()
-+}
-+
-+var errRouteRetired = status.Error(codes.Unavailable, "discovery retired the data endpoint")
-+
-+func retirementError(ctx context.Context) error {
-+	if conn.UseWrapping(ctx) {
-+		return xerrors.Transport(errRouteRetired)
-+	}
-+	return errRouteRetired
-+}
-+
-+func (c *watchedConn) routeError(ctx context.Context, err error) error {
-+	if err != nil && c.retired.Load() &&
-+		(xerrors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled || xerrors.IsTransportError(err, codes.Canceled)) {
-+		return retirementError(ctx)
-+	}
-+	return err
-+}
-+
-+func (c *watchedConn) callContext(ctx context.Context) (context.Context, func(), error) {
-+	ctx, cancel := c.calls.WithCancel(ctx)
-+	if c.retired.Load() {
-+		cancel()
-+		return nil, nil, retirementError(ctx)
-+	}
-+	return ctx, cancel, nil
-+}
-+
-+func (c *watchedConn) Invoke(ctx context.Context, method string, req, reply any, opts ...grpc.CallOption) error {
-+	ctx, done, err := c.callContext(ctx)
-+	if err != nil {
-+		return err
-+	}
-+	defer done()
-+	return c.routeError(ctx, c.Conn.Invoke(ctx, method, req, reply, opts...))
-+}
-+
-+func (c *watchedConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-+	ctx, done, err := c.callContext(ctx)
-+	if err != nil {
-+		return nil, err
-+	}
-+	stream, err := c.Conn.NewStream(ctx, desc, method, append(opts, grpc.OnFinish(func(error) { done() }))...)
-+	if err != nil {
-+		done()
-+		return nil, c.routeError(ctx, err)
-+	}
-+	return &watchedStream{ClientStream: stream, conn: c, ctx: ctx}, nil
-+}
-+
-+func (c *watchedConn) Ban(ctx context.Context) {
-+	if !c.retired.Load() {
-+		c.Conn.Ban(ctx)
-+	}
-+}
-+
-+type watchedStream struct {
-+	grpc.ClientStream
-+	conn *watchedConn
-+	ctx  context.Context
-+}
-+
-+func (s *watchedStream) SendMsg(m any) error {
-+	if s.conn.retired.Load() {
-+		return retirementError(s.ctx)
-+	}
-+	return s.conn.routeError(s.ctx, s.ClientStream.SendMsg(m))
-+}
-+
-+func (s *watchedStream) RecvMsg(m any) error {
-+	if s.conn.retired.Load() {
-+		return retirementError(s.ctx)
-+	}
-+	return s.conn.routeError(s.ctx, s.ClientStream.RecvMsg(m))
-+}
 +
 +type connectionPool interface {
 +	Get(endpoint.Endpoint) conn.Conn
@@ -703,49 +595,64 @@ index 0000000000000000000000000000000000000000..f51687f1d960773182fddcc07f1f4cea
 +	RemoveRef(context.Context) error
 +}
 +
-+// Track which calls belong to this balancer even if other balancers use the
-+// same physical connection. The last pool reference closes its gRPC transport.
++// Routing and in-flight RPCs hold independent references on the same channel.
 +type watchedPool struct {
 +	*conn.Pool
-+	mu     sync.Mutex
-+	routes map[endpoint.Key]*watchedConn
++}
++
++// Each routing reference admits calls until discovery releases it. Each admitted
++// call then owns a reference to the underlying connection until it finishes.
++type watchedConn struct {
++	conn.Conn
++	pool     *conn.Pool
++	mu       sync.Mutex
++	released bool
 +}
 +
 +func newWatchedPool(pool *conn.Pool) *watchedPool {
-+	return &watchedPool{Pool: pool, routes: make(map[endpoint.Key]*watchedConn)}
++	return &watchedPool{Pool: pool}
 +}
 +
 +func (p *watchedPool) Get(e endpoint.Endpoint) conn.Conn {
-+	p.mu.Lock()
-+	defer p.mu.Unlock()
-+	c := p.Pool.Get(e)
-+	if c == nil {
++	cc := p.Pool.Get(e)
++	if cc == nil {
 +		return nil
 +	}
-+	key := e.Key()
-+	route := p.routes[key]
-+	if route == nil {
-+		route = watchConn(c)
-+		p.routes[key] = route
-+	}
-+	route.refs++
-+	return route
++	return &watchedConn{Conn: cc, pool: p.Pool}
 +}
 +
 +func (p *watchedPool) Put(ctx context.Context, c conn.Conn) {
 +	route := c.(*watchedConn)
-+	p.mu.Lock()
-+	route.refs--
-+	last := route.refs == 0
-+	if last {
-+		delete(p.routes, route.Endpoint().Key())
-+	}
-+	p.mu.Unlock()
-+
-+	if last {
-+		route.retire()
-+	}
++	route.mu.Lock()
++	route.released = true
++	route.mu.Unlock()
 +	p.Pool.Put(ctx, route.Conn)
++}
++
++func (c *watchedConn) acquire() bool {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	return !c.released && c.pool.Get(c.Endpoint()) != nil
++}
++
++func (c *watchedConn) Invoke(ctx context.Context, method string, req, reply any, opts ...grpc.CallOption) error {
++	if !c.acquire() {
++		return status.Error(codes.Unavailable, "discovery removed endpoint")
++	}
++	defer c.pool.Put(ctx, c.Conn)
++	return c.Conn.Invoke(ctx, method, req, reply, opts...)
++}
++
++func (c *watchedConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
++	if !c.acquire() {
++		return nil, status.Error(codes.Unavailable, "discovery removed endpoint")
++	}
++	release := sync.OnceFunc(func() { c.pool.Put(ctx, c.Conn) })
++	stream, err := c.Conn.NewStream(ctx, desc, method, append(opts, grpc.OnFinish(func(error) { release() }))...)
++	if err != nil {
++		release()
++	}
++	return stream, err
 +}
 +
 +func (p *watchedPool) releaseRemoved(ctx context.Context, quarantine []conn.Conn, endpoints []endpoint.Endpoint) []conn.Conn {

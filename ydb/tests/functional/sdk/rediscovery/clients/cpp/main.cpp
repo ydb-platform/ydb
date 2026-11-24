@@ -101,7 +101,11 @@ namespace {
             }
 
             if (token && !awaitingAck) {
-                writer->Write(std::move(*token), TWriteMessage("probe"));
+                std::string payload = "probe";
+                if (std::getenv("YDB_PROBE_ON_DEMAND") && !std::getline(std::cin, payload)) {
+                    return;
+                }
+                writer->Write(std::move(*token), TWriteMessage(payload));
                 token.reset();
                 awaitingAck = true;
             }

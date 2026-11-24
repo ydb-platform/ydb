@@ -1,5 +1,5 @@
 diff --git a/packages/core/README.md b/packages/core/README.md
-index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..0caa590341a3798f137e72fcd0f39ab37452ec2b 100644
+index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..e096b5bfbd58825f0168b5909832e2f7911f7a00 100644
 --- a/packages/core/README.md
 +++ b/packages/core/README.md
 @@ -55,6 +55,10 @@ console.log(endpoints)
@@ -8,13 +8,13 @@ index d7cbf8fbfc3e7af62f33a37b305f82bad3b32a34..0caa590341a3798f137e72fcd0f39ab3
  
 +### Stream endpoint discovery
 +
-+Set `'ydb.sdk.enable_eds': true` to subscribe to endpoint changes over the driver's bootstrap connection. The driver uses periodic discovery when a server reports that EDS is unimplemented and periodically probes for support. Bridge pile preferences apply to streamed assignments.
++Set `'ydb.sdk.enable_eds': true` to subscribe to endpoint changes over the driver's bootstrap connection. The driver uses periodic discovery when a server reports that EDS is unimplemented and periodically probes for support. New calls use the installed assignment while calls already in flight finish on their original channels. Bridge pile preferences apply to streamed assignments.
 +
  ### Closing the driver
  
  `using driver = new Driver(...)` and `driver.close()` immediately cancel active RPCs and close all connections, with or without discovery. The driver has no asynchronous disposal or shutdown grace period.
 diff --git a/packages/core/src/driver.discovery.test.ts b/packages/core/src/driver.discovery.test.ts
-index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96ac94b718f 100644
+index d87f684b3ae110ec4994068e76412bf7f45fc1b7..03aa44dd1b3c141db64b7431f6b69cb772d992ff 100644
 --- a/packages/core/src/driver.discovery.test.ts
 +++ b/packages/core/src/driver.discovery.test.ts
 @@ -7,13 +7,18 @@ import {
@@ -38,7 +38,7 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96a
  
  // Controlled discovery can remove a node while its real RPC remains live.
  test.for([false, true])(
-@@ -111,3 +116,141 @@ test.for([false, true])(
+@@ -111,3 +116,195 @@ test.for([false, true])(
  		await shutdown
  	}
  )
@@ -54,6 +54,46 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96a
 +		responseSerialize: (bytes: Uint8Array) => bytes,
 +	},
 +} as const
++
++let typeUrl = 'type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment'
++let response = (database: string, nonce: string, port: number) => {
++	let result = create(ListEndpointsResultSchema, {
++		endpoints: [{ nodeId: 1, address: '127.0.0.1', port }],
++	})
++	let assignment = create(ClusterLoadAssignmentSchema, {
++		clusterName: database,
++		endpoints: [
++			{
++				metadata: {
++					typedFilterMetadata: {
++						'ydb.discovery': anyPack(ListEndpointsResultSchema, result),
++					},
++				},
++				lbEndpoints: [
++					{
++						endpoint: {
++							address: {
++								socketAddress: {
++									address: '127.0.0.1',
++									portSpecifier: { case: 'portValue', value: port },
++								},
++							},
++						},
++					},
++				],
++			},
++		],
++	})
++	return toBinary(
++		DiscoveryResponseSchema,
++		create(DiscoveryResponseSchema, {
++			typeUrl,
++			versionInfo: 'v' + nonce,
++			nonce,
++			resources: [{ typeUrl, value: toBinary(ClusterLoadAssignmentSchema, assignment) }],
++		})
++	)
++}
 +
 +test('EDS access denial does not select endpoints from unary discovery', async (tc) => {
 +	let server = new Server()
@@ -98,45 +138,7 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96a
 +	let server = new Server()
 +	let port = 0
 +	let requestsSeen = Promise.withResolvers<void>()
-+	let typeUrl = 'type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment'
-+	let response = (database: string, nonce: string) => {
-+		let result = create(ListEndpointsResultSchema, {
-+			endpoints: [{ nodeId: 1, address: '127.0.0.1', port }],
-+		})
-+		let assignment = create(ClusterLoadAssignmentSchema, {
-+			clusterName: database,
-+			endpoints: [
-+				{
-+					metadata: {
-+						typedFilterMetadata: {
-+							'ydb.discovery': anyPack(ListEndpointsResultSchema, result),
-+						},
-+					},
-+					lbEndpoints: [
-+						{
-+							endpoint: {
-+								address: {
-+									socketAddress: {
-+										address: '127.0.0.1',
-+										portSpecifier: { case: 'portValue', value: port },
-+									},
-+								},
-+							},
-+						},
-+					],
-+				},
-+			],
-+		})
-+		return toBinary(
-+			DiscoveryResponseSchema,
-+			create(DiscoveryResponseSchema, {
-+				typeUrl,
-+				versionInfo: 'v' + nonce,
-+				nonce,
-+				resources: [{ typeUrl, value: toBinary(ClusterLoadAssignmentSchema, assignment) }],
-+			})
-+		)
-+	}
++
 +	server.add(DiscoveryServiceDefinition, {
 +		async whoAmI() {
 +			return create(WhoAmIResponseSchema, { operation: { id: 'chosen' } })
@@ -150,11 +152,11 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96a
 +					if (!req.responseNonce) {
 +						expect(req.resourceNames).toEqual(['/local'])
 +						expect(req.node?.id).toBeTruthy()
-+						yield response('/other', '1')
++						yield response('/other', '1', port)
 +					} else if (req.responseNonce === '1') {
 +						expect(req.errorDetail?.code).toBe(Status.INVALID_ARGUMENT)
 +						expect(req.versionInfo).toBe('')
-+						yield response('/local', '2')
++						yield response('/local', '2', port)
 +					} else {
 +						expect(req.versionInfo).toBe('v2')
 +						expect(req.errorDetail).toBeUndefined()
@@ -178,6 +180,58 @@ index d87f684b3ae110ec4994068e76412bf7f45fc1b7..b95f6f2aaba828557bb8e9b111dca96a
 +		expect(who.operation?.id).toBe('chosen')
 +	} finally {
 +		await server.close()
++	}
++})
++
++test('EDS reroutes new calls while an accepted RPC finishes on the source', async (tc) => {
++	let boot = new Server()
++	let source = new Server()
++	let target = new Server()
++	let entered = Promise.withResolvers<void>()
++	let release = Promise.withResolvers<void>()
++	let applied = Promise.withResolvers<void>()
++	let firstPort = 0
++	let secondPort = 0
++	source.add(DiscoveryServiceDefinition, {
++		async whoAmI() {
++			entered.resolve()
++			await release.promise
++			return create(WhoAmIResponseSchema, { operation: { id: 'source' } })
++		},
++	})
++	target.add(DiscoveryServiceDefinition, {
++		async whoAmI() {
++			return create(WhoAmIResponseSchema, { operation: { id: 'target' } })
++		},
++	})
++	boot.add(eds, {
++		async *streamEndpoints(stream) {
++			for await (let bytes of stream) {
++				let req = fromBinary(DiscoveryRequestSchema, bytes)
++				if (!req.responseNonce) yield response('/local', '1', firstPort)
++				else if (req.responseNonce === '1') {
++					await entered.promise
++					yield response('/local', '2', secondPort)
++				} else applied.resolve()
++			}
++		},
++	})
++	try {
++		firstPort = await source.listen('127.0.0.1:0')
++		secondPort = await target.listen('127.0.0.1:0')
++		let port = await boot.listen('127.0.0.1:0')
++		using driver = new Driver(`grpc://127.0.0.1:${port}/local`, { 'ydb.sdk.enable_eds': true })
++		await driver.ready(tc.signal)
++		let client = driver.createClient(DiscoveryServiceDefinition)
++		let held = client.whoAmI({}, { signal: tc.signal })
++		void held.catch(() => {})
++		await applied.promise
++		expect((await client.whoAmI({}, { signal: tc.signal })).operation?.id).toBe('target')
++		release.resolve()
++		expect((await held).operation?.id).toBe('source')
++	} finally {
++		release.resolve()
++		await Promise.all([boot.close(), source.close(), target.close()])
 +	}
 +})
 diff --git a/packages/core/src/driver.ts b/packages/core/src/driver.ts
@@ -454,7 +508,7 @@ index 0000000000000000000000000000000000000000..b4fc07983081d7e4b04c959c6dd33935
 +	}
 +}
 diff --git a/packages/core/src/endpoints/endpoints-runtime.ts b/packages/core/src/endpoints/endpoints-runtime.ts
-index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0b4ecdb56 100644
+index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..6b3770df553c042808e7e9b7a32689d1692317f0 100644
 --- a/packages/core/src/endpoints/endpoints-runtime.ts
 +++ b/packages/core/src/endpoints/endpoints-runtime.ts
 @@ -62,6 +62,8 @@ export type DiscoveryResult = {
@@ -475,7 +529,51 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  	connectionFactory: ConnectionFactory
  
  	// I/O-owned channel state — NEVER touched by the transition.
-@@ -270,7 +274,7 @@ let effects = {
+@@ -91,9 +95,10 @@ type EndpointsEnv = {
+ 	pinnedChannels: Map<bigint, Connection>
+ 	banStart: Map<bigint, number>
+ 	retiredAt: Map<bigint, number>
+-	// Per-node in-flight RPC count, maintained by routing transport around each call.
++	// Per-transport in-flight RPC count, maintained by routing transport around each call.
+ 	// Keeps retired connections alive until their current streams finish.
+-	inflight: Map<bigint, number>
++	inflight: Map<Connection, number>
++	draining: Set<Connection>
+ 
+ 	discoveryTimeoutMs: number
+ 	discoveryIntervalMs: number
+@@ -143,7 +148,8 @@ let clearTimerByKey = function clearTimerByKey(env: EndpointsEnv, key: string):
+ let dropChannel = function dropChannel(
+ 	env: EndpointsEnv,
+ 	nodeId: bigint,
+-	store: 'any' | 'discovered' | 'pinned' = 'any'
++	store: 'any' | 'discovered' | 'pinned' = 'any',
++	drain = false
+ ): void {
+ 	let stores =
+ 		store === 'any'
+@@ -152,7 +158,10 @@ let dropChannel = function dropChannel(
+ 	for (let channels of stores) {
+ 		let connection = channels.get(nodeId)
+ 		channels.delete(nodeId)
+-		connection?.close()
++		if (connection) {
++			if (drain && env.inflight.has(connection)) env.draining.add(connection)
++			else connection.close()
++		}
+ 	}
+ 	if (store !== 'pinned') {
+ 		env.banStart.delete(nodeId)
+@@ -171,6 +180,8 @@ let finalizeEnv = function finalizeEnv(env: EndpointsEnv): void {
+ 	for (let nodeId of [...env.channels.keys(), ...env.pinnedChannels.keys()]) {
+ 		dropChannel(env, nodeId)
+ 	}
++	for (let connection of env.draining) connection.close()
++	env.draining.clear()
+ 	env.inflight.clear()
+ 	if (!env.ac.signal.aborted) env.ac.abort(new Error('Endpoints finalized'))
+ }
+@@ -270,7 +281,7 @@ let effects = {
  	// them to the discovery span — the async #consume loop has no active span, so
  	// publishing them there would silently drop them from traces.
  	'endpoints.effect.run_discovery_round': (ctx: FullCtx, _effect, runtime) => {
@@ -484,7 +582,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  		ctx.roundStart = Date.now()
  		// Bound each round independently: a single hung listEndpoints must not
  		// wedge the single-flight discovery forever (a timeout is retryable). A
-@@ -281,12 +285,30 @@ let effects = {
+@@ -281,12 +292,30 @@ let effects = {
  			() => timeoutAc.abort(new Error('discovery round timed out')),
  			ctx.discoveryTimeoutMs
  		)
@@ -516,7 +614,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  				let result = await discoveryCh.tracePromise(
  					async () => {
  						let r = await ctx.listEndpoints(link.signal)
-@@ -311,6 +333,7 @@ let effects = {
+@@ -311,6 +340,7 @@ let effects = {
  				if (ctx.ac.signal.aborted) return
  				// A per-round timeout (not the pool abort) is retryable — keep the
  				// interval/backoff cadence rather than treating it as terminal.
@@ -524,7 +622,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  				let timedOut = timeoutAc.signal.aborted
  				runtime.dispatch({
  					type: 'endpoints.discovery.round_failed',
-@@ -318,6 +341,7 @@ let effects = {
+@@ -318,6 +348,7 @@ let effects = {
  					retryable: timedOut || isRetryableError(error, true),
  				})
  			} finally {
@@ -532,7 +630,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  				clearTimeout(timer)
  				link[Symbol.dispose]()
  			}
-@@ -350,7 +374,9 @@ let effects = {
+@@ -350,7 +381,9 @@ let effects = {
  					ctx.timers.delete(key)
  					runtime.dispatch(event)
  				}, delay)
@@ -543,7 +641,25 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  		ctx.timers.set(key, handle)
  	},
  
-@@ -436,6 +462,10 @@ export class EndpointPool implements Disposable {
+@@ -370,7 +403,7 @@ let effects = {
+ 	},
+ 
+ 	'endpoints.effect.close_channel': (ctx: FullCtx, effect) => {
+-		dropChannel(ctx, effect.nodeId, effect.store ?? 'any')
++		dropChannel(ctx, effect.nodeId, effect.store ?? 'any', effect.drain)
+ 	},
+ 
+ 	// Keep ready connections for bound streams. Other states are reaped after the
+@@ -379,7 +412,7 @@ let effects = {
+ 		let now = Date.now()
+ 		for (let [nodeId, conn] of ctx.channels) {
+ 			if (ctx.byNodeId.get(nodeId)?.subState !== 'retired') continue
+-			if ((ctx.inflight.get(nodeId) ?? 0) > 0) continue
++			if ((ctx.inflight.get(conn) ?? 0) > 0) continue
+ 			let state = conn.client.state
+ 			if (state === 'ready') continue
+ 			if (state === 'closed') {
+@@ -436,6 +469,10 @@ export class EndpointPool implements Disposable {
  		return this.#snapshot
  	}
  
@@ -554,7 +670,37 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  	get closed(): boolean {
  		return (
  			this.#machine.signal.aborted ||
-@@ -540,7 +570,7 @@ export class EndpointPool implements Disposable {
+@@ -476,18 +513,23 @@ export class EndpointPool implements Disposable {
+ 
+ 	// Discovery retirement must preserve channels with active RPCs, including
+ 	// sessions that stopped accepting new streams after GOAWAY.
+-	callStarted(nodeId: bigint): void {
++	isDraining(connection: Connection): boolean {
++		return this.#env.draining.has(connection)
++	}
++
++	callStarted(connection: Connection): void {
+ 		if (this.#env.isFinalized) return
+-		this.#env.inflight.set(nodeId, (this.#env.inflight.get(nodeId) ?? 0) + 1)
++		this.#env.inflight.set(connection, (this.#env.inflight.get(connection) ?? 0) + 1)
+ 	}
+ 
+-	callEnded(nodeId: bigint): void {
+-		let n = (this.#env.inflight.get(nodeId) ?? 0) - 1
++	callEnded(connection: Connection): void {
++		let n = (this.#env.inflight.get(connection) ?? 0) - 1
+ 		if (n > 0) {
+-			this.#env.inflight.set(nodeId, n)
++			this.#env.inflight.set(connection, n)
+ 			return
+ 		}
+-		this.#env.inflight.delete(nodeId)
++		this.#env.inflight.delete(connection)
++		if (this.#env.draining.delete(connection)) connection.close()
+ 	}
+ 
+ 	pin(
+@@ -540,7 +582,7 @@ export class EndpointPool implements Disposable {
  		signal?.throwIfAborted()
  		this.#machine.signal.throwIfAborted()
  		if (this.#env.isFinalized) throw new Error('Endpoints closed')
@@ -563,7 +709,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  			let waiter = Promise.withResolvers<void>()
  			let onAbort = () => {
  				this.#env.readyWaiters.delete(waiter)
-@@ -819,6 +849,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
+@@ -819,6 +861,7 @@ let toEndpointInfo = function toEndpointInfo(e: {
  export type EndpointsRuntimeConfig = {
  	identity: DriverIdentity
  	listEndpoints: ListEndpoints
@@ -571,7 +717,7 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  	secure?: boolean
  	transportOptions?: ClientOptions | undefined
  	connectionFactory?: ConnectionFactory | undefined
-@@ -845,6 +876,8 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
+@@ -845,12 +888,15 @@ export let createEndpointsRuntime = function createEndpointsRuntime(
  		identity: config.identity,
  		hooks: config.hooks,
  		listEndpoints: config.listEndpoints,
@@ -580,11 +726,18 @@ index dd52c18c065c01f9e20c53b0acfff62d7c5a3f20..8dc412c8db9f3f6734a5f4a1184705d0
  		connectionFactory: config.connectionFactory ?? defaultFactory,
  		channels: new Map(),
  		pinnedChannels: new Map(),
+ 		banStart: new Map(),
+ 		retiredAt: new Map(),
+ 		inflight: new Map(),
++		draining: new Set(),
+ 		discoveryTimeoutMs: config.discoveryTimeoutMs ?? DEFAULT_DISCOVERY_TIMEOUT_MS,
+ 		discoveryIntervalMs: config.discoveryIntervalMs ?? DEFAULT_DISCOVERY_INTERVAL_MS,
+ 		idleIntervalMs: config.idleIntervalMs ?? DEFAULT_IDLE_INTERVAL_MS,
 diff --git a/packages/core/src/endpoints/endpoints-state.test.ts b/packages/core/src/endpoints/endpoints-state.test.ts
-index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf33852fb3367 100644
+index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..d6066923c7466117bf9d0b910d947d184f13fef2 100644
 --- a/packages/core/src/endpoints/endpoints-state.test.ts
 +++ b/packages/core/src/endpoints/endpoints-state.test.ts
-@@ -170,6 +170,49 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
+@@ -170,6 +170,50 @@ test('a node dropped from discovery is retired, keeping its channel', () => {
  	expect(h.ctx.byNodeId.get(2n)!.subState).toBe('retired')
  })
  
@@ -599,7 +752,7 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf338
 +	})
 +	expect(h.ctx.byNodeId.has(1n)).toBe(false)
 +	expect(h.effects.filter((effect) => effect.type === 'endpoints.effect.close_channel')).toEqual([
-+		{ type: 'endpoints.effect.close_channel', nodeId: 1n, store: 'discovered' },
++		{ type: 'endpoints.effect.close_channel', drain: true, nodeId: 1n, store: 'discovered' },
 +	])
 +})
 +
@@ -626,6 +779,7 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf338
 +	expect(h.ctx.pinned.size).toBe(0)
 +	expect(h.effects).toContainEqual({
 +		type: 'endpoints.effect.close_channel',
++		drain: true,
 +		nodeId: 99n,
 +		store: 'pinned',
 +	})
@@ -635,7 +789,7 @@ index e1ceb66d9328912cc1463a19dc1aab9e935b76e5..3357006937b7f8b3f000eeb5939bf338
  	let h = toReady([ep(1), ep(2)])
  	step(h, round([ep(1)])) // node 2 retired
 diff --git a/packages/core/src/endpoints/endpoints-state.ts b/packages/core/src/endpoints/endpoints-state.ts
-index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4ccc64b6c32 100644
+index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..032a1f1ecee02588b4d9894334db73a7c56ed7c5 100644
 --- a/packages/core/src/endpoints/endpoints-state.ts
 +++ b/packages/core/src/endpoints/endpoints-state.ts
 @@ -154,8 +154,10 @@ export type TimerRef = { which: TimerName }
@@ -649,7 +803,15 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  			endpoints: DiscoveredEndpoint[]
  			selfLocation: string
  			pileStates: PileState[]
-@@ -384,14 +386,35 @@ let rejectEmptyRound = function rejectEmptyRound(
+@@ -196,6 +198,7 @@ export type EndpointsEffect =
+ 			type: 'endpoints.effect.close_channel'
+ 			nodeId: bigint
+ 			store?: 'any' | 'discovered' | 'pinned'
++			drain?: true | undefined
+ 	  }
+ 	// Scan retired channels; dispatch endpoints.channel_closeable for any that
+ 	// are genuinely gone (broken or idle past grace). Pure I/O in the runtime.
+@@ -384,14 +387,36 @@ let rejectEmptyRound = function rejectEmptyRound(
  // from `computeRoundDiff`; the loop below only mutates the registry.
  let applyRound = function applyRound(
  	ctx: EndpointsCtx,
@@ -679,6 +841,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
 +				effects.push({
 +					type: 'endpoints.effect.close_channel',
 +					nodeId: id,
++					drain: true,
 +					store: 'pinned',
 +				})
 +			}
@@ -688,7 +851,15 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  	// Mutate: add new entries, revive retired, un-ban pessimized, refresh dial info.
  	for (let ep of endpoints) {
  		let existing = ctx.byNodeId.get(ep.nodeId)
-@@ -441,10 +464,18 @@ let applyRound = function applyRound(
+@@ -408,6 +433,7 @@ let applyRound = function applyRound(
+ 			effects.push({
+ 				type: 'endpoints.effect.close_channel',
+ 				nodeId: ep.nodeId,
++				drain: authoritative,
+ 				store: 'discovered',
+ 			})
+ 		}
+@@ -441,10 +467,19 @@ let applyRound = function applyRound(
  		}
  	}
  
@@ -701,6 +872,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
 +			effects.push({
 +				type: 'endpoints.effect.close_channel',
 +				nodeId: r.nodeId,
++				drain: true,
 +				store: 'discovered',
 +			})
 +		} else {
@@ -710,14 +882,14 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  	}
  
  	// Emit the add/retire outputs from the single-sourced diff.
-@@ -614,6 +645,18 @@ export let endpointsTransition = function endpointsTransition(
+@@ -614,6 +649,18 @@ export let endpointsTransition = function endpointsTransition(
  		return terminate(ctx, new Error('Endpoints closed'), runtime)
  	}
  
 +	if (state !== 'closed' && event.type === 'endpoints.discovery.watch_lost') {
 +		let effects: EndpointsEffect[] = []
 +		for (let nodeId of new Set([...ctx.byNodeId.keys(), ...ctx.pinned.keys()])) {
-+			effects.push({ type: 'endpoints.effect.close_channel', nodeId })
++			effects.push({ type: 'endpoints.effect.close_channel', nodeId, drain: true })
 +		}
 +		ctx.byNodeId.clear()
 +		ctx.pinned.clear()
@@ -729,7 +901,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  	if (state !== 'closed' && event.type === 'endpoints.invalidate') {
  		return applyInvalidate(ctx, event.nodeId, runtime)
  	}
-@@ -637,13 +680,7 @@ export let endpointsTransition = function endpointsTransition(
+@@ -637,13 +684,7 @@ export let endpointsTransition = function endpointsTransition(
  			switch (event.type) {
  				case 'endpoints.discovery.round_succeeded': {
  					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
@@ -744,7 +916,7 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  					effects.push({
  						type: 'endpoints.effect.timer.schedule',
  						which: 'discovery_interval',
-@@ -687,13 +724,7 @@ export let endpointsTransition = function endpointsTransition(
+@@ -687,13 +728,7 @@ export let endpointsTransition = function endpointsTransition(
  					// would retire every node and black-hole balanced RPCs until the
  					// next interval while the state still reads 'ready'.
  					if (event.endpoints.length === 0) return rejectEmptyRound(ctx, runtime)
@@ -759,6 +931,83 @@ index 6c57fbd4f413706d2522cfb983412d4c3c0f7bbb..1fa37af121e80a6f5415af0ebd61f4cc
  					effects.push({
  						type: 'endpoints.effect.timer.schedule',
  						which: 'discovery_interval',
+diff --git a/packages/core/src/endpoints/endpoints.contract.test.ts b/packages/core/src/endpoints/endpoints.contract.test.ts
+index 224a380c080948f2afb871bc91e99e38ca538a20..797ac12ae971eaa40e3ff7449fb5c9c64d39ecd7 100644
+--- a/packages/core/src/endpoints/endpoints.contract.test.ts
++++ b/packages/core/src/endpoints/endpoints.contract.test.ts
+@@ -344,14 +344,14 @@ test('close immediately aborts a busy pin with no discovered channel', async (tc
+ 	using h = setup([endpoint(1)])
+ 	await h.pool.ready(tc.signal)
+ 	await h.pool.pin(1n, 'direct-node', 2137)
+-	h.pool.acquireNode(1n, { hard: true })
+-	h.pool.callStarted(1n)
++	let connection = h.pool.acquireNode(1n, { hard: true })
++	h.pool.callStarted(connection)
+ 
+ 	h.pool.close()
+ 
+ 	expect(h.connections.materialized[0]!.closed).toBe(true)
+ 	expect(h.pool.closed).toBe(true)
+-	h.pool.callEnded(1n)
++	h.pool.callEnded(connection)
+ })
+ 
+ test('releasing the last pin makes an undiscovered node unreachable', async (tc) => {
+@@ -430,14 +430,14 @@ test('close immediately clears routing and rejects new pins', async (tc) => {
+ test('dispose immediately closes a channel with an active RPC', async (tc) => {
+ 	using h = setup([endpoint(1)])
+ 	await h.pool.ready(tc.signal)
+-	h.pool.acquire(1n)
+-	h.pool.callStarted(1n)
++	let connection = h.pool.acquire(1n)
++	h.pool.callStarted(connection)
+ 
+ 	h.pool[Symbol.dispose]()
+ 
+ 	expect(h.pool.closed).toBe(true)
+ 	expect(h.connections.byNode(1n)!.closed).toBe(true)
+-	h.pool.callEnded(1n)
++	h.pool.callEnded(connection)
+ 	expect(() => h.pool.acquire()).toThrow(EndpointsUnavailableError)
+ })
+ 
+@@ -669,7 +669,7 @@ test('keeps a live channel through repeated retirement and revival', async (tc)
+ 	h.pool.acquire(2n)
+ 	let connection = h.connections.byNode(2n)!
+ 	connection.driveState('ready')
+-	h.pool.callStarted(2n)
++	h.pool.callStarted(connection)
+ 	try {
+ 		for (let endpoints of [[endpoint(1)], [endpoint(1), endpoint(2)], [endpoint(1)]]) {
+ 			discovery.push(discoveryResult(endpoints))
+@@ -681,7 +681,7 @@ test('keeps a live channel through repeated retirement and revival', async (tc)
+ 		}
+ 		expect(h.connections.factoryCalls()).toBe(1)
+ 	} finally {
+-		h.pool.callEnded(2n)
++		h.pool.callEnded(connection)
+ 	}
+ })
+ 
+@@ -714,14 +714,15 @@ test('keeps a retired connection while its GOAWAY session drains a live RPC', as
+ 	using h = setup([endpoint(1), endpoint(2)], { discovery, connections, retiredGraceMs: 0 })
+ 	await h.pool.ready(tc.signal)
+ 	await retireNode2(h, discovery)
+-	connections.byNode(2n)!.driveState('idle')
+-	h.pool.callStarted(2n)
++	let connection = connections.byNode(2n)!
++	connection.driveState('idle')
++	h.pool.callStarted(connection)
+ 
+ 	h.machine.dispatch({ type: 'endpoints.timer.idle_sweep' })
+ 	await settle()
+ 	expect(connections.byNode(2n)!.closed).toBe(false)
+ 
+-	h.pool.callEnded(2n)
++	h.pool.callEnded(connection)
+ 	h.machine.dispatch({ type: 'endpoints.timer.idle_sweep' })
+ 	await settle()
+ 	expect(connections.byNode(2n)!.closed).toBe(true)
 diff --git a/packages/core/src/endpoints/wire/eds.proto b/packages/core/src/endpoints/wire/eds.proto
 new file mode 100644
 index 0000000000000000000000000000000000000000..e175e7ded8c906a1aeab340a9f9282329d8d80df
@@ -1162,10 +1411,42 @@ index 0000000000000000000000000000000000000000..08bc462cfa7edce963ed412ab7467e07
 + */
 +export const ClusterLoadAssignmentSchema: GenMessage<ClusterLoadAssignment> = /*@__PURE__*/
 +  messageDesc(file_eds, 11);
+diff --git a/packages/core/src/routing.test.ts b/packages/core/src/routing.test.ts
+index d97b520aa01fa73f6190b127e99f423453840645..cdfda394c8cf20e2884b145320bc5d3179b6ef8e 100644
+--- a/packages/core/src/routing.test.ts
++++ b/packages/core/src/routing.test.ts
+@@ -71,11 +71,14 @@ function fixture(state: EndpointRef['state'] = 'active') {
+ 			selections.push({ nodeId, hard: true })
+ 			return connection
+ 		},
+-		callStarted(nodeId: bigint) {
+-			started.push(nodeId)
++		isDraining() {
++			return false
+ 		},
+-		callEnded(nodeId: bigint) {
+-			ended.push(nodeId)
++		callStarted(connection: Connection) {
++			started.push(connection.endpoint.nodeId)
++		},
++		callEnded(connection: Connection) {
++			ended.push(connection.endpoint.nodeId)
+ 		},
+ 		penalize(nodeId: bigint) {
+ 			reports.push({ nodeId, ok: false })
 diff --git a/packages/core/src/routing.ts b/packages/core/src/routing.ts
-index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..8f4fb3cdf65d5dbc032bcb13a56e2aa504ba29dd 100644
+index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..6e5d65b85244e1d0b3d513f4f66d7795612ecef9 100644
 --- a/packages/core/src/routing.ts
 +++ b/packages/core/src/routing.ts
+@@ -63,7 +63,7 @@ export function createRoutingTransport(
+ 				}
+ 
+ 				statusReported = true
+-				if (pool && connection) {
++				if (pool && connection && !pool.isDraining(connection)) {
+ 					let nodeId = connection.endpoint.nodeId
+ 					if (
+ 						status.code === Status.UNAVAILABLE ||
 @@ -99,6 +99,12 @@ export function createRoutingTransport(
  						options.metadata,
  						auth?.signal ?? linked.signal
@@ -1179,3 +1460,21 @@ index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..8f4fb3cdf65d5dbc032bcb13a56e2aa5
  				}
  				linked.signal.throwIfAborted()
  				if (closed || pool?.closed) {
+@@ -113,7 +119,7 @@ export function createRoutingTransport(
+ 					connection = pool.acquire(routing.nodeId)
+ 				}
+ 				if (pool) {
+-					pool.callStarted(connection.endpoint.nodeId)
++					pool.callStarted(connection)
+ 					registeredWithPool = true
+ 				}
+ 				if (routing.hooks?.onCall) {
+@@ -164,7 +170,7 @@ export function createRoutingTransport(
+ 					metadata: {},
+ 				})
+ 				if (registeredWithPool) {
+-					pool!.callEnded(connection!.endpoint.nodeId)
++					pool!.callEnded(connection!)
+ 				}
+ 			}
+ 		},

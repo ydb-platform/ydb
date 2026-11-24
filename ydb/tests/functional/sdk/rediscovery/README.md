@@ -4,6 +4,8 @@
 
 The EDS fixture switches the bootstrap route while the old data nodes stay healthy. It ends only the database's `StreamEndpoints` RPC. A new watch receives a complete assignment from the selected replica. The C++ functional test checks both a generation-stamped close and a fixed gRPC `UNAVAILABLE` close. The latter makes the driver request a current-route check from the balancer.
 
+After the SDK installs a new assignment, fresh RPCs use the destination. An RPC already running on the healthy source can continue until it finishes or its owner closes it. This includes bidirectional Topic and Coordination streams. A node-bound handle that needs a new RPC may have to be recreated. The bootstrap connection is reused. Both data connections can coexist while source work drains.
+
 Run the native server and C++ tests from the repository root.
 
 ```sh
@@ -38,7 +40,7 @@ python3 run_eds_probe.py --database /Root/tenant \
   --replica localhost:3136 http://localhost:9765 -- /tmp/ydb-eds-go-probe/probe
 ```
 
-The runner requires Python 3.11+, grpcio and two isolated plaintext YDB tenants with the same path and EDS support. It runs the supplied Scheme probe in both directions, compares each server's ListDirectory counters and checks whether the bootstrap TCP peer stays the same. On Linux it verifies that an established source-node socket existed before cutover and that every such socket closes after recovery. It also samples the total number of established sockets to the three test listeners. Concurrent workloads on those tenants affect the counters.
+The runner requires Python 3.11+, grpcio and two isolated plaintext YDB tenants with the same path and EDS support. It runs the supplied Scheme probe in both directions, compares each server's ListDirectory counters and checks whether the bootstrap TCP peer stays the same. On Linux it verifies that an established source-node socket existed before cutover and reports how many are still open after recovery. It also samples the total number of established sockets to the three test listeners. Concurrent workloads on those tenants affect the counters.
 
 ## Transport-disconnect experiment
 

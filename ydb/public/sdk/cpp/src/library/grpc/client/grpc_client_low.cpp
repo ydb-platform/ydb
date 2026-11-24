@@ -122,34 +122,17 @@ grpc_socket_mutator_vtable TGRpcSocketMutator::VTable =
     };
 #endif
 
-std::shared_lock<std::shared_mutex> TEndpointAdmission::Acquire(const IQueueClientContextPtr& call) {
+std::shared_lock<std::shared_mutex> TEndpointAdmission::Acquire() {
     std::shared_lock lock(Mutex_);
     if (!Open_) {
         return {};
-    }
-    if (call) {
-        std::lock_guard guard(CallsMutex_);
-        if (Calls_.size() == Calls_.capacity()) {
-            std::erase_if(Calls_, [](const auto& weak) { return weak.expired(); });
-            Calls_.reserve(2 * Calls_.size() + 1); // amortize cleanup even with long-lived streams
-        }
-        Calls_.emplace_back(call);
     }
     return lock;
 }
 
 void TEndpointAdmission::Retire() {
-    decltype(Calls_) calls;
-    {
-        std::unique_lock lock(Mutex_);
-        Open_ = false;
-        calls.swap(Calls_);
-    }
-    for (const auto& weak : calls) {
-        if (auto call = weak.lock()) {
-            call->Cancel();
-        }
-    }
+    std::unique_lock lock(Mutex_);
+    Open_ = false;
 }
 
 void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {

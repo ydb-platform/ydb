@@ -124,6 +124,11 @@ protected:
         AdvancedTill = now;
     }
 
+    // Discards the time elapsed since the last Advance(): the state during it is unknown.
+    void Discard(NHPTimer::STime now) {
+        AdvancedTill = now;
+    }
+
     NHPTimer::STime Now() {
         // Avoid time going backwards
         NHPTimer::STime now = HPNow();
@@ -166,19 +171,23 @@ private:
     TSpinLock Lock;
     size_t HeadIdx = 0; // Index of current state
     size_t FilledCount = 0;
-    ui16 Seqno = 0; // Current seqno
+    ui16 Seqno = 1; // Expected first seqno, then seqno of the current state
     TStackVec<TItem, 32> Data; // In theory should have not more than thread count items
 public:
+    // Events with seqno further ahead of the current state are treated as stale
+    static constexpr ui16 MaxSeqnoDistance = (1u << 15) - 1;
+
     TLight() {
         InitData();
     }
 
+    // Events must have consecutive seqnos starting with 1, modulo ui16.
     void Set(bool state, ui16 seqno) {
         TGuard<TSpinLock> g(Lock);
-        Push(state, seqno);
+        NHPTimer::STime now = Now();
+        Push(state, seqno, now);
         bool prevState;
         // Note that 'state' variable is being reused
-        NHPTimer::STime now = Now();
         while (Pop(state, prevState)) {
             Modify(state, prevState);
             Advance(prevState, now);
@@ -187,7 +196,10 @@ public:
 
     void Update() {
         TGuard<TSpinLock> g(Lock);
-        Advance(Data[HeadIdx].State, Now());
+        const TItem& head = Data[HeadIdx];
+        if (head.Filled) { // The state is unknown until the initial event arrives
+            Advance(head.State, Now());
+        }
     }
 
 private:
@@ -198,33 +210,34 @@ private:
         HeadIdx = 0;
     }
 
-    void Push(bool state, ui16 seqno) {
-        FilledCount++;
-        if (FilledCount == 1) { // First event must initialize seqno
-            Seqno = seqno;
-            InitData(state, true);
-            if (state) {
-                Modify(true, false);
-            }
-            return;
-        }
-        Y_ABORT_UNLESS(seqno != Seqno, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
+    void Push(bool state, ui16 seqno, NHPTimer::STime now) {
         ui16 diff = seqno;
         diff -= Seqno; // Underflow is fine
+        // The head seqno advances only after all the preceding seqnos have been consumed,
+        // so a seqno behind it is a duplicate or a stale event, never a late one.
+        Y_ABORT_UNLESS(diff <= MaxSeqnoDistance, "stale event headSeqno# %d seqno# %d state# %d filled# %d",
+                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
         size_t size = Data.size();
-        if (size <= diff) { // Buffer is full -- extend and move wrapped part
+        while (size <= diff) { // Buffer is full -- extend and move wrapped part
             Data.resize(size * 2);
             for (size_t i = 0; i < HeadIdx; i++) {
                 Data[size + i] = Data[i];
                 Data[i].Filled = false;
             }
+            size = Data.size();
         }
         TItem& item = Data[(HeadIdx + diff) % Data.size()];
         Y_ABORT_UNLESS(!item.Filled, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
                  (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
         item.Filled = true;
         item.State = state;
+        ++FilledCount;
+        if (diff == 0) { // The initial expected event has arrived, the state before it was unknown.
+            Discard(now);
+            if (state) {
+                Modify(true, false);
+            }
+        }
     }
 
     bool Pop(bool& state, bool& prevState) {

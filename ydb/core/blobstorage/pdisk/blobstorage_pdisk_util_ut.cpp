@@ -6,6 +6,7 @@
 #include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_mon.h"
+#include "blobstorage_pdisk_util_idlecounter.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 #include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_thread.h"
@@ -20,8 +21,10 @@
 #include <ydb/library/pdisk_io/wcache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/datetime/base.h>
 #include <util/stream/null.h>
 #include <util/system/tempfile.h>
+#include <algorithm>
 #include <cstring>
 
 #ifdef _unix_
@@ -299,11 +302,16 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
         { // Seqno overflow and reorderings with max possible size
             i64 cnt = count->Val();
+            while (seqno != ui16(-100)) { // approach the overflow
+                l.Set(false, ++seqno);
+            }
+            UNIT_ASSERT_EQUAL(state->Val(), 0);
+            UNIT_ASSERT_EQUAL(count->Val(), cnt);
             i64 cntStart = cnt;
             ui16 missedSeqno = ++seqno;
+            const ui16 lastSeqno = (missedSeqno - 1) + TLight::MaxSeqnoDistance; // the farthest from the current state
             bool st = false;
-            UNIT_ASSERT(missedSeqno > 10);
-            while (seqno != missedSeqno - 2) { // one for missed and one for initial
+            while (seqno != lastSeqno) {
                 bool stPrev = st;
                 st = (seqno % 5 == 0);
                 l.Set(st, ++seqno);
@@ -326,7 +334,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         auto count = c->GetCounter("l_count");
 
         { // Seqno overflow
-            ui64 seqno = 0;
+            ui64 seqno = 1;
             ui64 N = 3ull << 16ull;
             for (ui64 i = 0; i < N; i++) {
                 l.Set(false, seqno);
@@ -334,6 +342,129 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             }
             UNIT_ASSERT_EQUAL(state->Val(), 0);
         }
+    }
+
+    Y_UNIT_TEST(AtomicBlockCounterInitialValue) {
+        TAtomicBlockCounter counter(1025);
+        UNIT_ASSERT_EQUAL(counter.Get(), 1025);
+        UNIT_ASSERT_EQUAL(counter.IsBlocked(), false);
+
+        TAtomicBlockCounter::TResult res;
+        UNIT_ASSERT_EQUAL(counter.ThresholdSub(1, 1024, res), 1024);
+        UNIT_ASSERT_EQUAL(res.PrevSeqno, 0);
+        UNIT_ASSERT_EQUAL(res.Seqno, 1);
+        UNIT_ASSERT_EQUAL(res.A, false);
+
+        UNIT_ASSERT_EQUAL(counter.ThresholdAdd(1, 1024, res), 1025);
+        UNIT_ASSERT_EQUAL(res.Seqno, 2);
+        UNIT_ASSERT_EQUAL(res.A, true);
+
+        UNIT_ASSERT_EQUAL(counter.ThresholdSub(1, 1024, res), 1024);
+        UNIT_ASSERT_EQUAL(res.Seqno, 3);
+        UNIT_ASSERT_EQUAL(res.A, false);
+    }
+
+    Y_UNIT_TEST(IdleCounterStartsAtOne) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+        TIdleCounter idle(l);
+
+        idle.Increment();
+        idle.Decrement();
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        idle.Increment();
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+    }
+
+    Y_UNIT_TEST(LightInitialEventPermutations) {
+        TVector<ui16> seqnos{1, 2, 3, 4, 5};
+        do {
+            TLight l;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+            l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+            for (ui16 seqno : seqnos) {
+                l.Set(seqno % 2 == 1, seqno);
+            }
+            UNIT_ASSERT_EQUAL(c->GetCounter("l_state")->Val(), 1);
+            UNIT_ASSERT_EQUAL(c->GetCounter("l_count")->Val(), 3);
+        } while (std::next_permutation(seqnos.begin(), seqnos.end()));
+    }
+
+    Y_UNIT_TEST(LightInitialReorderingDoesNotCreateBursts) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+
+        for (ui16 seqno = 2; seqno <= 5; ++seqno) {
+            l.Set(false, seqno);
+        }
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 0);
+        l.Set(true, 1);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        const ui64 initialRedMs = l.GetRedMs();
+        for (ui32 seqno = 6; seqno < (2u << 16); ++seqno) {
+            l.Set(false, ui16(seqno));
+            UNIT_ASSERT_EQUAL(state->Val(), 0);
+            UNIT_ASSERT_EQUAL(count->Val(), 1);
+        }
+        l.Update();
+        UNIT_ASSERT_EQUAL(l.GetRedMs(), initialRedMs);
+    }
+
+    Y_UNIT_TEST(LightInitialFarEvent) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
+
+        l.Set(true, 1000);
+        for (ui16 seqno = 1; seqno < 999; ++seqno) {
+            l.Set(false, seqno);
+            UNIT_ASSERT_EQUAL(state->Val(), 0);
+            UNIT_ASSERT_EQUAL(count->Val(), 0);
+        }
+        l.Set(false, 999);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(false, 1001);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+    }
+
+    Y_UNIT_TEST(LightDoesNotAccountTimeBeforeInitialEvent) {
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
+        const TDuration sleep = TDuration::MilliSeconds(200); // Above the 100ms update threshold
+
+        // The state is unknown until the initial event, so the time before it is neither red nor green.
+        Sleep(sleep);
+        l.Update();
+        UNIT_ASSERT_VALUES_EQUAL(l.GetRedMs(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(l.GetGreenMs(), 0);
+
+        // The time before the initial event is not charged to its state either.
+        Sleep(sleep);
+        l.Set(true, 1);
+        l.Set(false, 2);
+        l.Update();
+        UNIT_ASSERT_LT(l.GetRedMs() + l.GetGreenMs(), sleep.MilliSeconds());
+
+        // The accounting starts with the initial event.
+        Sleep(sleep);
+        l.Update();
+        UNIT_ASSERT_GE(l.GetGreenMs(), sleep.MilliSeconds() / 2);
     }
 
     Y_UNIT_TEST(DriveEstimator) {

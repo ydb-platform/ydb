@@ -223,7 +223,7 @@ class TRealBlockDevice : public IBlockDevice {
     private:
         TRealBlockDevice &Device;
         const size_t MaxQueuedActions;
-        TAtomic SeqnoL7 = 0;
+        TAtomic SeqnoL7 = 1;
     };
 
     class TSubmitThreadBase : public TPDiskSimpleThread {

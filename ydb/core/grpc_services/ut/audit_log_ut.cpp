@@ -1,3 +1,4 @@
+#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/grpc_services/audit_log.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
@@ -20,10 +21,6 @@ const TLogClassConfig::ELogClass LogClasses[] = {
     TLogClassConfig::Ddl, TLogClassConfig::Dml, TLogClassConfig::Operations,
     TLogClassConfig::ExportImport, TLogClassConfig::Acl,
     TLogClassConfig::AuditHeartbeat, TLogClassConfig::Default,
-};
-
-const TString RequiredRequestFields[] = {
-    "remote_address", "subject", "sanitized_token", "operation",
 };
 
 const TString OptionalFields[] = {
@@ -73,8 +70,8 @@ Y_UNIT_TEST_SUITE(GrpcAuditLog) {
         TAuditLogTest test;
         TAuditLogParts parts;
         if (emptyValues) {
-            for (const auto& field : RequiredRequestFields) {
-                parts[field] = {};
+            for (const auto field : NAudit::RequiredFields) {
+                parts[TString(field)] = {};
             }
             for (const auto& field : OptionalFields) {
                 parts[field] = {};
@@ -84,8 +81,10 @@ Y_UNIT_TEST_SUITE(GrpcAuditLog) {
             const auto line = test.Log([&] { AuditLog(logClass, std::nullopt, parts); });
             UNIT_ASSERT_STRING_CONTAINS(line, "component=grpc-proxy");
             UNIT_ASSERT_STRING_CONTAINS(line, "status=IN-PROCESS");
-            for (const auto& field : RequiredRequestFields) {
-                UNIT_ASSERT_STRING_CONTAINS(line, field + "={none}");
+            for (const auto field : NAudit::RequiredFields) {
+                if (field != "component" && field != "status") {
+                    UNIT_ASSERT_STRING_CONTAINS(line, TString(field) + "={none}");
+                }
             }
             for (const auto& field : OptionalFields) {
                 UNIT_ASSERT_C(!line.Contains(field + "="), line);
@@ -103,6 +102,11 @@ Y_UNIT_TEST_SUITE(GrpcAuditLog) {
                     {}, {{"reason", ""}}, {{"reason", "Invalid request"}},
                 }) {
                     const auto line = test.Log([&] { AuditLog(logClass, status, parts); });
+                    if (status == Ydb::StatusIds::BAD_REQUEST) {
+                        for (const auto field : NAudit::RequiredFieldsOnError) {
+                            UNIT_ASSERT_STRING_CONTAINS(line, " " + TString(field) + "=");
+                        }
+                    }
                     if (parts.contains("reason") && !parts.at("reason").empty()) {
                         UNIT_ASSERT_STRING_CONTAINS(line, "reason=Invalid request");
                     } else if (status == Ydb::StatusIds::BAD_REQUEST) {

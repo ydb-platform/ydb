@@ -1936,7 +1936,7 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SchemaFreezeUsesClientModificationIdentityExemptions, schemaFreeze) {
+    Y_UNIT_TEST_FLAG(SchemaFreezeUsesClientModificationIdentityExemptions, schemaFreeze) {
         TFreezeEnv env;
         if (schemaFreeze) {
             env.WaitMode(1, true, false);
@@ -1993,7 +1993,7 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.WaitMode(3, false, false);
     }
 
-    Y_UNIT_TEST_TWIN(SchemaFreezeUsesClientModificationReplicationExemptions, schemaFreeze) {
+    Y_UNIT_TEST_FLAG(SchemaFreezeUsesClientModificationReplicationExemptions, schemaFreeze) {
         TFreezeEnv env;
         env.CreateTable();
         TestCreatePQGroup(env.Runtime, ++env.TxId, env.Root, R"(
@@ -2052,7 +2052,7 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         TestDescribeResult(DescribePath(env.Runtime, env.Owner, env.Path("Unexpected")), {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST_TWIN(DataFreezeProtectionCannotBeBypassedByClientModificationExemptions, schemaFreeze) {
+    Y_UNIT_TEST_FLAG(DataFreezeProtectionCannotBeBypassedByClientModificationExemptions, schemaFreeze) {
         TFreezeEnv env;
         env.CreateTable();
         NKikimrSchemeOp::TModifyScheme createStream;
@@ -2180,7 +2180,7 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.CheckSchemaBlocked();
     }
 
-    Y_UNIT_TEST_TWIN(LongRunningEntryPointsUseClientModificationIdentityExemptions, dataFreeze) {
+    Y_UNIT_TEST_FLAG(LongRunningEntryPointsUseClientModificationIdentityExemptions, dataFreeze) {
         TFreezeEnv env;
         env.Runtime.GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
         env.CreateTable();

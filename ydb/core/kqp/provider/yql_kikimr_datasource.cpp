@@ -27,13 +27,26 @@
 
 #include <library/cpp/resource/resource.h>
 
-#include <util/generic/algorithm.h>
 #include <util/generic/is_in.h>
 #include <util/generic/scope.h>
 
 #include <algorithm>
 
 namespace NYql {
+
+bool ValidateExternalTablePgCompatibility(const TKikimrTableMetadata& metadata, bool disablePgCompatibility, TExprContext& ctx, TPositionHandle pos) {
+    if (disablePgCompatibility) {
+        for (const auto& [name, column] : metadata.Columns) {
+            if (column.TypeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_UNSUPPORTED,
+                    TStringBuilder() << "PostgreSQL compatibility is disabled for external table '" << metadata.Name
+                        << "', column '" << name << "' of type '" << column.Type << "' (DisablePgCompatibility feature flag is on)"));
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content) {
     TExprNode::TListType items;
@@ -981,12 +994,8 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->IsExternalTable()) {
-                    if (SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility()
-                        && AnyOf(tableDesc.Metadata->Columns, [](const auto& column) {
-                            return column.second.TypeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg;
-                        }))
-                    {
-                        ctx.AddError(YqlIssue(node->Pos(ctx), TIssuesIds::KIKIMR_UNSUPPORTED, "PostgreSQL compatibility is disabled"));
+                    if (!ValidateExternalTablePgCompatibility(*tableDesc.Metadata,
+                            SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility(), ctx, node->Pos())) {
                         return nullptr;
                     }
                     YQL_ENSURE(ExternalSourceFactory);

@@ -242,13 +242,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 appData.UpdateRuntimeFlags(flags);
             }
         };
+        auto checkRejected = [](const auto& result) {
+            const auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "PostgreSQL compatibility is disabled for external table '/Root/mixed', column 'payload'");
+        };
         auto check = [&](bool disabled) {
             for (const auto* query :
                 { "SELECT COUNT(*) FROM `/Root/mixed`;", "SELECT id FROM `/Root/mixed`;", "SELECT payload FROM `/Root/mixed`;" }) {
                 auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 if (disabled) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
-                    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+                    checkRejected(result);
                 } else {
                     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                     UNIT_ASSERT_VALUES_EQUAL(TResultSetParser(result.GetResultSet(0)).RowsCount(), 1);
@@ -258,6 +262,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         check(false);
         setFlag(true);
         check(true);
+        checkRejected(session.ExecuteQuery(R"(
+            INSERT INTO `/Root/mixed`
+            SELECT 42 AS id;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
         const auto replace = session
                                  .ExecuteQuery(R"(
             CREATE OR REPLACE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (

@@ -226,6 +226,12 @@ To prevent degradation:
 * Avoid creating a vector index on an empty table.
 * If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.
 
+To determine when an index replacement is required:
+
+1. Select a representative set of query vectors. Measure recall by comparing the index search results with the exact results of a full scan of the same table. An example of such a comparison with the `--recall` option is available in the [vector workload command](../reference/ydb-cli/workload-vector.md#run-select).
+2. Measure the search time for the same queries. Repeat the measurements with the same distance function and search settings, including [KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
+3. Build a new index and atomically replace the old one if recall has consistently decreased or search time has increased after the data distribution changed. A growing row count alone is a reason to measure, not a replacement threshold.
+
 ### Update inconsistency during index build
 
 Vector indexes do not support consistent updates during build. That is, a vector index is not updated when data in the main table is modified until the index build is finished.

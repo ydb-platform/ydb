@@ -884,7 +884,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
     }
 
-    Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenStreamSendsPeriodicResolvedHeartbeats) {
+    Y_UNIT_TEST(ShouldPartitionTopicByHashWhenKeyRangeFlagDisabledAndStreamSendsResolvedHeartbeats) {
         // given
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
         const auto stream = GlobalReplicationStream(true, true);
@@ -893,8 +893,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, TFeatureFlags());
 
         // then
-        UNIT_ASSERT(!params.ReplicationAutoPartitioning);
-        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000 / 16);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
     }
 
     Y_UNIT_TEST(CdcStreamTopicUnsetMaxDefaults) {

@@ -748,8 +748,7 @@ void DoCreateLock(
 }
 
 bool ShouldUseHashAutoPartitioning(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    return !SendsPeriodicResolvedHeartbeats(streamDesc)
-        && HasCapabilityInStreamDescription(streamDesc, "supports_topic_autopartitioning");
+    return HasCapabilityInStreamDescription(streamDesc, "supports_topic_autopartitioning");
 }
 
 TCdcPqPartParams MakeKeyRangeCdcPqPartParams(ui64 tablePartitionCount) {

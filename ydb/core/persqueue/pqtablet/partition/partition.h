@@ -322,6 +322,7 @@ private:
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
     void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
+    void FinishLostMultipartRead(const TReadInfo& info, const TActorContext& ctx);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
     void ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx);

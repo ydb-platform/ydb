@@ -12,6 +12,7 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -32,6 +33,7 @@
 
 #include "make_config.h"
 
+#include <array>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -9576,6 +9578,72 @@ void AddBodyKeyToEncoder(
     const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, partNo, count, internalPartsCount);
     encoder.DataKeysBody.push_back(TDataKey{key, size, timestamp, 0, MakeTestBlobKeyToken()});
     encoder.BodySize += size;
+}
+
+Y_UNIT_TEST_F(CdcReplicationTrimRejectsQueuedMultipartRead, TPartitionFixture) {
+    TConfigParams config{.Version = 1, .Consumers = {{.Consumer = "reader", .Offset = 1}},
+        .CdcReplicationSourceConsumer = "source", .Important = true};
+    Ctx->Runtime->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+    const TPartitionId partition{0};
+    auto* actor = CreatePartition({.Partition = partition, .Begin = 0, .End = 1, .Config = config}, config);
+    auto& body = TPartitionTestWrapper::CompactionBlobEncoder(*actor);
+    body.DataKeysBody.clear();
+    body.BodySize = 0;
+    std::array<TString, 2> packed;
+    for (ui16 part = 0; part < packed.size(); ++part) {
+        auto data = MakeMultipartBodyReadBlob(1, part, 2, 300_KB, 'a' + part);
+        packed[part] = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(0, {std::move(data)}));
+        AddBodyKeyToEncoder(body, partition, 0, packed[part].size(), TInstant::Now(), part, part == 1, part == 0);
+        body.DataKeysBody.back().CumulativeSize = body.BodySize - packed[part].size();
+    }
+
+    SendEvent(MakeTestRead(16, 0, 1, "reader").Release());
+    auto request = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(request);
+    UNIT_ASSERT_VALUES_EQUAL(request->Blobs.size(), packed.size());
+    for (ui16 part = 0; part < packed.size(); ++part) {
+        UNIT_ASSERT_VALUES_EQUAL(request->Blobs[part].PartNo, part);
+        request->Blobs[part].RawValue = packed[part];
+    }
+    SendEvent(new TEvPQ::TEvBlobResponse(request->Cookie, std::move(request->Blobs)));
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(response);
+    const auto& result = response->Response->GetPartitionResponse().GetCmdReadResult();
+    UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), 1);
+    const auto& firstPart = result.GetResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(firstPart.GetPartNo(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(firstPart.GetTotalParts(), 2);
+
+    constexpr ui64 quotaCookie = 17, blobCookie = 18;
+    TBlockEvents<TEvPQ::TEvApproveReadQuota> approvals(*Ctx->Runtime, [](const auto& ev) {
+        return ev->Get()->ReadRequest->Get()->Cookie == quotaCookie;
+    });
+    for (ui64 cookie : {quotaCookie, blobCookie}) {
+        auto read = MakeTestRead(cookie, firstPart.GetOffset(), 1, "reader");
+        read->PartNo = firstPart.GetPartNo() + 1;
+        SendEvent(read.Release());
+    }
+    Ctx->Runtime->WaitFor("multipart read quota approval", [&] { return !approvals.empty(); }, TDuration::Seconds(5));
+    auto pending = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(pending);
+    UNIT_ASSERT_VALUES_EQUAL(pending->Blobs.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(pending->Blobs.front().PartNo, 1);
+    pending->Blobs.front().RawValue = packed[1];
+
+    config.Version = 2;
+    config.CdcReplicationTrimTxId = 42;
+    SendChangePartitionConfig(config);
+    GrabStaleMetaKvRequest("CDC trim must persist");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    SendEvent(new TEvPQ::TEvBlobResponse(pending->Cookie, std::move(pending->Blobs)));
+    WaitErrorResponse({.Cookie = blobCookie, .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET});
+    approvals.Stop().Unblock();
+    WaitErrorResponse({.Cookie = quotaCookie, .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET});
+    const auto* reader = TPartitionTestWrapper::GetUserInfo(*actor, "reader");
+    UNIT_ASSERT_VALUES_EQUAL(reader->ActiveReads, 0);
+    UNIT_ASSERT_VALUES_EQUAL(reader->ReadsInQuotaQueue, 0);
 }
 
 void AddHeadKeyWithPartNo(

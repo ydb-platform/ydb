@@ -756,6 +756,11 @@ public:
             return result;
         }
 
+        if (trimRequested && (tabletConfig.GetEnableCompactification() || newTabletConfig.GetEnableCompactification())) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "CDC trim requires key compaction to be disabled");
+            return result;
+        }
+
         if (attachCdcTopic || trimRequested || configureManagedMirror) {
             const auto tablePath = streamPath.Parent();
             const auto checks = tablePath.Check();

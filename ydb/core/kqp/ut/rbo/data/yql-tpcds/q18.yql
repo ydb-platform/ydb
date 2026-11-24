@@ -17,19 +17,19 @@ SELECT
     Avg(CAST(c_birth_year AS Decimal (12, 2))) AS agg6,
     Avg(CAST(cd1.cd_dep_count AS Decimal (12, 2))) AS agg7
 FROM
-    `/Root/test/ds/catalog_sales`
+    `catalog_sales`
 ,
-    `/Root/test/ds/customer_demographics` AS cd1
+    `customer_demographics` AS cd1
 ,
-    `/Root/test/ds/customer_demographics` AS cd2
+    `customer_demographics` AS cd2
 ,
-    `/Root/test/ds/customer`
+    `customer`
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/item`
+    `item`
 WHERE
     cs_sold_date_sk == d_date_sk
     AND cs_item_sk == i_item_sk

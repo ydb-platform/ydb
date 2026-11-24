@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(150)
+SPLIT_FACTOR(30)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -12,6 +12,7 @@ ENDIF()
 
 SRCS(
     cache_blobs_after_write_ut.cpp
+    compact_ut.cpp
     delete_ut.cpp
     write_ut.cpp
 )

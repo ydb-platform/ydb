@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/kqp/runtime/streaming)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)
 

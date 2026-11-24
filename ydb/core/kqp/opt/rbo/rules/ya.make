@@ -4,6 +4,7 @@ SRCS(
     expand_insert_revert.cpp
     expand_replicate.cpp
     inline_join_filters.cpp
+    kqp_rbo_index_selection.cpp
     propagate_topsort_through_stage.cpp
     pull_up_map_over_cbo.cpp
     push_map_elements_through_input.cpp
@@ -82,6 +83,7 @@ JOIN_SRCS(
     decorrelation/dependent_join_pushdown.cpp
     decorrelation/pull_up_correlated_predicate.cpp
     disable_blocks_on_columns_limit.cpp
+    eliminate_duplicate_aggregations.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
 )

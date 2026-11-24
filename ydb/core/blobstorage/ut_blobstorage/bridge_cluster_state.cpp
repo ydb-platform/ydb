@@ -2,10 +2,57 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/library/testlib/helpers.h>
+
+#include <algorithm>
 
 using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeClusterState) {
+    Y_UNIT_TEST_TWIN(HistorySurvivesUncommittedState, rejoining) {
+        using TState = NKikimrBridge::TClusterState;
+        NKikimrBlobStorage::TStorageConfig config;
+        config.SetGeneration(1);
+        config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(2));
+        auto update = [&] {
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+                UNIT_FAIL(*error);
+            }
+            if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&config)) {
+                UNIT_FAIL(*error);
+            }
+        };
+        update();
+        auto advance = [&](TState::EPileState state) {
+            auto prev = config;
+            prev.ClearPrevConfig();
+            config.MutablePrevConfig()->CopyFrom(prev);
+            config.SetGeneration(prev.GetGeneration() + 1);
+            config.MutableClusterState()->SetPerPileState(1, state);
+            update();
+        };
+
+        advance(TState::DISCONNECTED);
+        advance(TState::NOT_SYNCHRONIZED_1);
+        if constexpr (!rejoining) {
+            advance(TState::NOT_SYNCHRONIZED_2);
+            advance(TState::NOT_SYNCHRONIZED_2);
+        }
+        const auto lastCommittedState = config.GetClusterState();
+        advance(rejoining ? TState::NOT_SYNCHRONIZED_2 : TState::SYNCHRONIZED);
+
+        const auto& history = config.GetClusterStateDetails().GetUnsyncedHistory();
+        UNIT_ASSERT_C(std::ranges::any_of(history, [&](const auto& entry) {
+            return NBridge::IsSameClusterState(entry.GetClusterState(), lastCommittedState);
+        }), "previous committed state was trimmed before its successor was committed on the pile");
+
+        const auto currentState = config.GetClusterState();
+        advance(currentState.GetPerPileState(1));
+        const auto& trimmed = config.GetClusterStateDetails().GetUnsyncedHistory();
+        UNIT_ASSERT_VALUES_EQUAL(trimmed.size(), 1);
+        UNIT_ASSERT(NBridge::IsSameClusterState(trimmed.Get(0).GetClusterState(), currentState));
+    }
+
     Y_UNIT_TEST(RecoveredStateRejectsInvalidPileRolesAndStates) {
         using namespace NBridgeTest;
         TEnvironmentSetup env{{

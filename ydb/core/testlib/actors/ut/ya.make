@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/core/testlib/actors)
 
-FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

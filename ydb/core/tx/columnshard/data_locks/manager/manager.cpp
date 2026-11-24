@@ -7,8 +7,9 @@
 namespace NKikimr::NOlap::NDataLocks {
 
 std::shared_ptr<TManager::TGuard> TManager::RegisterLock(const std::shared_ptr<ILock>& lock) {
-    AFL_VERIFY(lock);
-    AFL_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second)("process_id", lock->GetLockName());
+    YDB_LOG_VERIFY(lock);
+    YDB_LOG_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second,
+        {"processId", lock->GetLockName()});
     YDB_LOG_DEBUG("",
         {"event", "lock"},
         {"processId", lock->GetLockName()});
@@ -19,7 +20,8 @@ void TManager::UnregisterLock(const TString& processId) {
     YDB_LOG_DEBUG("",
         {"event", "unlock"},
         {"processId", processId});
-    AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
+    YDB_LOG_VERIFY(ProcessLocks.erase(processId),
+        {"processId", processId});
 }
 
 std::optional<TString> TManager::IsLocked(
@@ -34,20 +36,20 @@ std::optional<TString> TManager::IsLocked(
 
 std::optional<TString> TManager::IsLocked(const std::shared_ptr<const TPortionInfo>& portion, const ELockCategory lockCategory,
     const THashSet<TString>& excludedLocks /*= {}*/) const {
-    AFL_VERIFY(!!portion);
+    YDB_LOG_VERIFY(!!portion);
     return IsLocked(*portion, lockCategory, excludedLocks);
 }
 
 void TManager::Stop() {
-    AFL_VERIFY(StopFlag->Inc() == 1);
+    YDB_LOG_VERIFY(StopFlag->Inc() == 1);
 }
 
 TManager::TGuard::~TGuard() {
-    AFL_VERIFY(Released || !NActors::TlsActivationContext || StopFlag->Val() == 1);
+    YDB_LOG_VERIFY(Released || !NActors::TlsActivationContext || StopFlag->Val() == 1);
 }
 
 void TManager::TGuard::Release(TManager& manager) {
-    AFL_VERIFY(!Released);
+    YDB_LOG_VERIFY(!Released);
     manager.UnregisterLock(ProcessId);
     Released = true;
 }

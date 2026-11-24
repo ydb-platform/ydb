@@ -22,7 +22,7 @@ namespace NSQLTranslationV1 {
 
 NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr);
 
-NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers, const TString& query, const google::protobuf::Message& protoAst, const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings);
+NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers, const TString& query, const google::protobuf::Message& protoAst, const NSQLTranslation::TParsedTokenList& tokens, const NSQLTranslation::TTranslationSettings& settings);
 
 TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const TParsers& parsers, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
 
@@ -32,4 +32,5 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
                             const NSQLTranslation::TTranslationSettings& settings);
 
 NSQLTranslation::TTranslatorPtr MakeTranslator(const TLexers& lexers, const TParsers& parsers);
+bool IsKnownSimpleFlag(TStringBuf flag);
 } // namespace NSQLTranslationV1

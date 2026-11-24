@@ -1,6 +1,10 @@
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/events/control.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/session/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
@@ -108,6 +112,14 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
             runtime.SimulateSleep(TDuration::MilliSeconds(10));
         }
         return !csControllerGuard->GetTheOnlyShard()->GetOperationsManager().GetLockOptional(LockId);
+    }
+
+    void AddSchemaVersion(TTestBasicRuntime & runtime, TActorId & sender, const ui32 version) {
+        const TestTableDescription table;
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(TableId, true, version, table.Schema, table.Pk, {})));
+        tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
+        Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), 200 + version));
     }
 
     bool IsWriteAnswered(TTestBasicRuntime & runtime) {
@@ -414,6 +426,57 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         reader.Ack();
         Y_UNUSED(reader.ContinueReadAll());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
+    }
+
+    // an unloaded portion may still use a version that no loaded portion uses
+    Y_UNIT_TEST(SchemaCleanupWaitsUntilEverythingIsLoaded) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        Y_UNUSED(StartShardWithRows(runtime, sender));
+        runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(500));
+
+        AddSchemaVersion(runtime, sender, 2);
+        AddSchemaVersion(runtime, sender, 3);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.SimulateSleep(NoAnswerWait);
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCleanupSchemasFinishedCounter().Val(), 0);
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.WaitFor("schemas cleaned", [&] {
+            return csControllerGuard->GetCleanupSchemasFinishedCounter().Val() > 0;
+        }, TDuration::Seconds(30));
+    }
+
+    Y_UNIT_TEST(SharingSessionWaitsUntilEverythingIsLoaded) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        const NOlap::TSnapshot snapshot = StartShardWithRows(runtime, sender);
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(500));
+
+        TBlockEvents<TEvPipeCache::TEvForward> toDestination(runtime);
+        const auto shardTabletId = (NOlap::TTabletId)TTestTxConfig::TxTablet0;
+        const auto destinationTabletId = (NOlap::TTabletId)TTestTxConfig::TxTablet1;
+        const TInternalPathId pathId = csControllerGuard->GetTheOnlyShard()->GetTablesManager().ResolveInternalPathIdVerified(
+            TSchemeShardLocalPathId::FromRawValue(TableId), false);
+        const NOlap::NDataSharing::TSourceSession session("sharing",
+            NOlap::NDataSharing::TTransferContext(destinationTabletId, { shardTabletId }, snapshot, false), shardTabletId, { pathId },
+            destinationTabletId);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NOlap::NDataSharing::NEvents::TEvStartToSource(session));
+        const auto isStarted = [&] {
+            const auto source = csControllerGuard->GetTheOnlyShard()->GetSharingSessionsManager()->GetSourceSession("sharing");
+            return source && !source->IsReadyForStarting() && !source->IsPrepared();
+        };
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.SimulateSleep(NoAnswerWait);
+        UNIT_ASSERT(!isStarted());
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.WaitFor("sharing session started", isStarted, TDuration::Seconds(30));
     }
 }
 

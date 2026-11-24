@@ -76,7 +76,7 @@ public:
     // and would break the commit.
     // The move is verified when both the removed shard and a target carry filled
     // partitioning metadata: the target's partitioning version must be strictly
-    // newer and its borders must intersect the removed shard's range (AFL_ENSURE,
+    // newer and its borders must intersect the removed shard's range (YDB_LOG_ENSURE,
     // fail closed). The border comparison uses the moved table's key schema stored
     // by SetTableMeta (the table metadata must be stored); shards without filled
     // metadata (e.g. a fresh EnsureShards-only target) are safely skipped.

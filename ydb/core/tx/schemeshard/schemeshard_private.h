@@ -65,6 +65,7 @@ namespace TEvPrivate {
         EvExportKesusTimeout,
         EvKesusResourcesDescribeResult,
         EvKesusSemaphoresDescribeResult,
+        EvImportKesusResult,
         EvEnd
     };
 
@@ -144,6 +145,20 @@ namespace TEvPrivate {
 
         TEvImportSchemaMappingReady(ui64 id, bool success, const TString& error)
             : ImportId(id)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvImportKesusResult: public TEventLocal<TEvImportKesusResult, EvImportKesusResult> {
+        const ui64 ImportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+
+        TEvImportKesusResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
         {}

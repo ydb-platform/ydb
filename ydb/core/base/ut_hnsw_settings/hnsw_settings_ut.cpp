@@ -9,6 +9,9 @@
 #include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 
+#include <array>
+#include <utility>
+
 namespace NKikimr::NKMeans {
     namespace {
 
@@ -57,7 +60,17 @@ namespace NKikimr::NKMeans {
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexCreationConfig>(description);
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>(description);
                 CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexAlteringConfig>(description);
+                NKikimrSchemeOp::TTableDescription table;
+                auto* index = table.AddTableIndexes();
+                index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                *index->MutableHnswIndexDescription() = description;
+                NKikimrSchemeOp::TTableDescription restored;
+                UNIT_ASSERT(restored.ParseFromString(table.SerializeAsString()));
+                UNIT_ASSERT_VALUES_EQUAL(restored.TableIndexesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetTableIndexes(0).SerializeAsString(), index->SerializeAsString());
             }
+            // Empty but present index metadata is the persisted HNSW disable marker.
+            CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>({});
         }
 
         Y_UNIT_TEST(IndexTypeConversion) {
@@ -87,13 +100,59 @@ namespace NKikimr::NKMeans {
             UNIT_ASSERT(!ValidateHnswSettings(settings, error));
         }
 
+        Y_UNIT_TEST(DefaultRoutingSettings) {
+            auto settings = MakeSettings();
+            settings.clear_clusters();
+            settings.clear_levels();
+            TString error;
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 0, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+            settings.clear_clusters();
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 3ull << 30, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 4u);
+        }
+
+        Y_UNIT_TEST(AutoSelectedRoutingClustersAreCapped) {
+            const std::array<std::pair<ui64, ui32>, 4> cases = {{
+                {(2047ull << 30) - 1, 2047},
+                {2047ull << 30, 2048},
+                {2048ull << 30, 2048},
+                {Max<ui64>(), 2048},
+            }};
+            for (const auto& [dataSize, expectedClusters] : cases) {
+                auto settings = MakeSettings();
+                settings.clear_clusters();
+                TString error;
+                UNIT_ASSERT_C(AutoSelectHnswSettings(settings, dataSize, error), error);
+                UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), expectedClusters);
+                UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            }
+        }
+
+        Y_UNIT_TEST(ExplicitRoutingClustersKeepValidation) {
+            for (const ui32 clusters : {1u, 64u, 2048u, 2049u, Max<ui32>()}) {
+                auto settings = MakeSettings();
+                settings.set_clusters(clusters);
+                TString error;
+                const bool valid = AutoSelectHnswSettings(settings, Max<ui64>(), error);
+                UNIT_ASSERT_VALUES_EQUAL(valid, clusters <= 2048);
+                UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), clusters);
+                if (!valid) {
+                    UNIT_ASSERT_STRING_CONTAINS(error, "clusters");
+                }
+            }
+        }
+
         Y_UNIT_TEST(ConstructionResourceLimits) {
             auto settings = MakeSettings();
             auto* vector = settings.mutable_settings();
             TString error;
-            for (const auto m : {0u, MaxHnswM + 1}) {
+            for (const auto m : {0u, 1u, MaxHnswM + 1}) {
                 vector->set_m(m);
                 UNIT_ASSERT(!ValidateHnswSettings(settings, error));
+                UNIT_ASSERT_STRING_CONTAINS(error, "M");
+                UNIT_ASSERT(!ValidateHnswSettingsPartial(settings, error));
                 UNIT_ASSERT_STRING_CONTAINS(error, "M");
             }
             vector->set_m(MaxHnswM);
@@ -106,6 +165,9 @@ namespace NKikimr::NKMeans {
             vector->set_min_rows(0);
             vector->set_delta_rows(Max<ui64>());
             UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            vector->set_m(MinHnswM);
+            UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            UNIT_ASSERT_C(ValidateHnswSettingsPartial(settings, error), error);
         }
 
         Y_UNIT_TEST(KMeansRejectsHnswOnlySettings) {

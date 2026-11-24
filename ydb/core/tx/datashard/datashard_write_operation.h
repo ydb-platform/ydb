@@ -70,6 +70,7 @@ public:
     bool HasWrites() const {
         return TxInfo().HasWrites();
     }
+    bool IsReadOnlyPrepare(const TSysLocks& sysLocks) const;
     bool HasLockedWrites() const {
         return HasWrites() && LockTxId;
     }

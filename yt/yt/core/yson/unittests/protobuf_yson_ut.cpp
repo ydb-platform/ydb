@@ -2891,7 +2891,7 @@ TEST(TYsonListTest, ResolveRecursiveYPath)
     }
 }
 
-TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
+TEST(TPackedRepeatedProtobufTest, SerializeDeserialize)
 {
     auto node = BuildYsonNodeFluently()
         .BeginMap()
@@ -3023,7 +3023,7 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
+TEST(TEnumYsonStorageTypeTest, DeserializeSerialize)
 {
     for (auto storageType : {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
         auto config = New<TProtobufInteropConfig>();

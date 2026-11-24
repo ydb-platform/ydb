@@ -31,6 +31,7 @@ namespace {
         size_t NextItem = 0;
         size_t NumInFlight = 0;
         ui32 InflightLimit = 1;
+        ui32 IssueKeepFlag = 0;
 
         static TResult MakeResult(NKikimrProto::EReplyStatus status, const TString& error = {}) {
             TResult result;
@@ -84,6 +85,12 @@ namespace {
                         }
                     }
                     DIV_CLASS("control-group") {
+                        LABEL_CLASS_FOR("control-label", "restore-part-keep") { out << "issueKeepFlag"; }
+                        DIV_CLASS("controls") {
+                            out << "<input id=\"restore-part-keep\" name=\"issueKeepFlag\" type=\"checkbox\">";
+                        }
+                    }
+                    DIV_CLASS("control-group") {
                         LABEL_CLASS_FOR("control-label", "restore-part-blobs") { out << "BlobIds (one per line)"; }
                         DIV_CLASS("controls") {
                             out << "<textarea id=\"restore-part-blobs\" name=\"blobs\" rows=\"16\" class=\"form-control\" "
@@ -93,7 +100,7 @@ namespace {
                     }
                     DIV_CLASS("control-group") {
                         DIV_CLASS("controls") {
-                            PARA() { out << "OK means a part was written; ALREADY means a valid part is already stored locally."; }
+                            PARA() { out << "OK means a part was written."; }
                             out << "<button type=\"submit\" class=\"btn btn-default\">Submit</button>";
                         }
                     }
@@ -112,6 +119,7 @@ namespace {
         for (const name of ['GroupId', 'timeout', 'inflight']) {
             url.searchParams.set(name, form.elements[name].value);
         }
+        url.searchParams.set('issueKeepFlag', form.elements.issueKeepFlag.checked ? '1' : '0');
         report.hidden = false;
         report.textContent = 'Restoring...';
         button.disabled = true;
@@ -166,6 +174,7 @@ namespace {
                 VDiskIDFromVDiskID(SelfVDiskId, request->Record.MutableVDiskID());
                 LogoBlobIDFromLogoBlobID(item.BlobId, request->Record.MutableBlobID());
                 request->Record.SetDeadline(Deadline.GetValue());
+                request->Record.SetIssueKeepFlag(IssueKeepFlag);
                 ++NumInFlight;
                 Send(SkeletonFrontId, request.release(), IEventHandle::FlagTrackDelivery, cookie);
             }
@@ -233,6 +242,9 @@ namespace {
             }
             if (params.Has("inflight") && (!TryFromString(params.Get("inflight"), InflightLimit) || !InflightLimit)) {
                 return ReplyText("400 Bad Request", "inflight must be a positive integer\n");
+            }
+            if (params.Has("issueKeepFlag") && !TryFromString(params.Get("issueKeepFlag"), IssueKeepFlag)) {
+                return ReplyText("400 Bad Request", "issueKeepFlag must be an integer\n");
             }
             TStringBuf text = request.GetPostContent();
             while (text) {

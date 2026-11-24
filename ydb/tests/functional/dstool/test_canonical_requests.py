@@ -832,6 +832,65 @@ class Test(TestBase):
             _trace_cluster_balance(pending_reassigns={0x80000004: (1, 1003, 1000)}),
         ]
 
+    @pytest.mark.parametrize('scenario', ['move', 'dry_run', 'full', 'rejected', 'retry', 'unhealthy', 'balanced'])
+    def test_cluster_balance_group_slots(self, scenario):
+        builder = BaseConfigBuilder().add_storage_pool(name='test-pool')
+        for node in range(1, 6):
+            builder.add_node(node_id=node).add_pdisk(node_id=node, pdisk_id=1, expected_slot_count=10)
+        balanced_targets = {(0, 2): 4, (1, 0): 5, (2, 1): 4}
+        for index in range(3):
+            group_id = 0x80000001 + index
+            slots = []
+            for domain in range(3):
+                node = balanced_targets.get((index, domain), domain + 1) if scenario == 'balanced' else domain + 1
+                slots.append((node, 1, index + 1))
+                builder.add_vslot(
+                    node_id=node,
+                    pdisk_id=1,
+                    vslot_id=index + 1,
+                    group_id=group_id,
+                    group_generation=1,
+                    fail_domain_idx=domain,
+                    ready=not (scenario == 'unhealthy' and index == 0 and domain == 0),
+                )
+            builder.add_group(group_id=group_id, erasure_species='mirror-3', vslot_ids=slots)
+
+        base_config = builder.build()
+        # Force destination selection past the first empty disk, which is full of static slots.
+        if scenario != 'balanced':
+            base_config['BaseConfig'].PDisk[3].NumStaticSlots = 10
+        if scenario == 'full':
+            base_config['BaseConfig'].PDisk[4].NumStaticSlots = 10
+        pending_reassigns = (
+            {}
+            if scenario == 'rejected'
+            else {
+                0x80000001 if scenario == 'retry' else 0x80000002: (5, 1, 1000),
+            }
+        )
+        handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
+        flags = ['--dry-run'] if scenario == 'dry_run' else []
+        with patch.object(handler, 'handle', wraps=handler.handle) as calls:
+            result = self._trace(
+                *flags,
+                'cluster',
+                'balance',
+                '--sort-by=group_slots',
+                '--storage-pool=test-pool',
+                '--max-iterations=1',
+                with_grpc_calls=True,
+                mock_base_config=base_config,
+                fake_grpc_handler=handler,
+                expected_exit_status=0,
+            )
+        if scenario in ('full', 'balanced'):
+            assert calls.call_count == 0
+        elif scenario in ('move', 'dry_run'):
+            assert calls.call_count == 1
+        elif scenario == 'retry':
+            assert calls.call_count > 1
+        return result
+
     def test_cluster_balance_mismatching_size_in_units(self):
         def make_builder(pu, vu_list):
             builder = (

@@ -11,7 +11,7 @@ namespace NKikimr::NOlap {
 
 const std::shared_ptr<TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
     const auto& result = GetColumnLoaderOptional(columnId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return result;
 }
 
@@ -75,7 +75,7 @@ TString IIndexInfo::GetColumnName(const ui32 id, const bool required) const {
     } else if (ESpecialColumn(id) == ESpecialColumn::DELETE_FLAG) {
         return SPEC_COL_DELETE_FLAG;
     } else {
-        AFL_VERIFY(!required);
+        YDB_LOG_VERIFY(!required);
         return Default<TString>();
     }
 }
@@ -87,8 +87,8 @@ ui32 IIndexInfo::CalcDeletions(const std::shared_ptr<arrow::RecordBatch>& batch,
             return 0;
         }
     }
-    AFL_VERIFY(c);
-    AFL_VERIFY(c->type()->id() == arrow::boolean()->id());
+    YDB_LOG_VERIFY(c);
+    YDB_LOG_VERIFY(c->type()->id() == arrow::boolean()->id());
     auto cBool = static_pointer_cast<arrow::BooleanArray>(c);
     return cBool->true_count();
 }
@@ -109,7 +109,7 @@ std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldOptional(const ui32 colu
 
 std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldVerified(const ui32 columnId) {
     auto result = GetColumnFieldOptional(columnId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return result;
 }
 
@@ -124,7 +124,7 @@ std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) 
         static const std::shared_ptr<arrow::Scalar> deleteDefault(new arrow::BooleanScalar(false));
         return deleteDefault;
     } else {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return nullptr;
     }
 }

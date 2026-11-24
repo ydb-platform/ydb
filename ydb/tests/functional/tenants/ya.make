@@ -12,7 +12,6 @@ TEST_SRCS(
     test_storage_config.py
     test_system_views.py
     test_auth_system_views.py
-    test_remove_storage_groups.py
     test_user_administration.py
     test_users_groups_with_acl.py
 )
@@ -31,8 +30,6 @@ PEERDIR(
     ydb/tests/library/flavours
     ydb/tests/library/clients
     ydb/tests/oss/ydb_sdk_import
-    ydb/tests/stress/remove_storage_groups/workload
-    ydb/tests/stress/tpcc/workload
     ydb/public/sdk/python
 )
 
@@ -44,7 +41,11 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:10 cpu:16)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 END()
+
+RECURSE(
+    storage_groups
+)

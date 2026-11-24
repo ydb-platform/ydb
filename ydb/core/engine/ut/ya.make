@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/engine)
 
 ALLOCATOR(J)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 SRCS(

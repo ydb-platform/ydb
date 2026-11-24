@@ -11,17 +11,17 @@ namespace {
 class TBlobInUseTracker: public IBlobInUseTracker {
 private:
     virtual bool DoFreeBlob(const NOlap::TUnifiedBlobId& /*blobId*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return true;
     }
 
     virtual bool DoUseBlob(const NOlap::TUnifiedBlobId& /*blobId*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return true;
     }
 
     virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& /*blobId*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
@@ -41,7 +41,7 @@ private:
 
 protected:
     virtual void DoDeclareRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& /*blobId*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) override {

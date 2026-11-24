@@ -17,8 +17,10 @@ SRCS(
     type_ann_types.cpp
     type_ann_wide.cpp
     type_ann_yql.cpp
+    type_ann_yql_aggregation.cpp
     type_ann_yql_flatten.cpp
     type_ann_match_recognize.cpp
+    type_ann_impl.cpp
 )
 
 PEERDIR(

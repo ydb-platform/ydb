@@ -114,6 +114,54 @@ TJoinColumn StatisticsColumn(const TColumnLineage& lineage, TInfoUnitId id) {
     return TJoinColumn(entry ? entry->GetRawAlias() : TString{}, ToString(id));
 }
 
+// Bounds describe the entire operator result, not an individual partition.
+struct TCardinalityBounds {
+    ui64 Lower = 0;
+    std::optional<ui64> Upper;
+
+    static TCardinalityBounds From(ELogicalCardinality cardinality) {
+        switch (cardinality) {
+            case ELogicalCardinality::Zero: return {0, 0};
+            case ELogicalCardinality::ZeroOrOne: return {0, 1};
+            case ELogicalCardinality::One: return {1, 1};
+            case ELogicalCardinality::OneOrMore: return {1, std::nullopt};
+            case ELogicalCardinality::ZeroOrMore: return {};
+        }
+        Y_UNREACHABLE();
+    }
+
+    ELogicalCardinality ToCardinality() const {
+        if (Upper == std::optional<ui64>{0}) {
+            return ELogicalCardinality::Zero;
+        }
+        if (Upper == std::optional<ui64>{1}) {
+            return Lower ? ELogicalCardinality::One : ELogicalCardinality::ZeroOrOne;
+        }
+        return Lower ? ELogicalCardinality::OneOrMore : ELogicalCardinality::ZeroOrMore;
+    }
+};
+
+ELogicalCardinality LimitCardinality(ELogicalCardinality input, const TExpression& limit,
+    const std::optional<TExpression>& offset, EOpPhase phase)
+{
+    auto bounds = TCardinalityBounds::From(input);
+    const auto count = limit.GetUnsignedLiteral();
+    const auto skip = offset ? offset->GetUnsignedLiteral() : std::optional<ui64>{0};
+    // Complete execution returns min(max(rows - offset, 0), limit).
+    bounds.Lower = skip && bounds.Lower > *skip ? bounds.Lower - *skip : 0;
+    if (bounds.Upper && skip) {
+        bounds.Upper = *bounds.Upper > *skip ? *bounds.Upper - *skip : 0;
+    }
+    bounds.Lower = count ? Min(bounds.Lower, *count) : 0;
+    // A positive partition-local limit does not cap the global row count.
+    // Zero still empties every partition. Subtracting a known offset above
+    // remains a safe upper bound even when each partition applies that offset.
+    if (count && (phase != EOpPhase::Intermediate || *count == 0)) {
+        bounds.Upper = bounds.Upper ? Min(*bounds.Upper, *count) : *count;
+    }
+    return bounds.ToCardinality();
+}
+
 } // anonymous namespace
 
 /**
@@ -239,6 +287,10 @@ void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     if (IsJoin()) {
         Props.Metadata->KeyColumns = {};
+        // Prefix lookups may fan out, so the raw stream (including unmatched-row
+        // sentinels) must not inherit singleton guarantees from the input.
+        Props.Metadata->LogicalCard = Props.Metadata->LogicalCard == ELogicalCardinality::Zero
+            ? ELogicalCardinality::Zero : ELogicalCardinality::ZeroOrMore;
         return;
     }
 
@@ -249,6 +301,13 @@ void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         }
     }
     Props.Metadata->KeyColumns = std::move(keyColumns);
+}
+
+void TOpIndexLookupJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (Props.Metadata) {
+        Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
+    }
 }
 
 /***
@@ -269,9 +328,9 @@ void TOpEmptySource::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Y_UNUSED(planProps);
     Y_ENSURE(Props.Metadata.has_value());
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->ERows = 1;
-    Props.Statistics->EBytes = 1;
-    Props.Cost = 0;
+    Props.Statistics->ERows = 1.0;
+    Props.Statistics->EBytes = 1.0;
+    Props.Cost = 0.0;
 }
 
 /***
@@ -329,7 +388,7 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = TRBOStatistics();
     Props.Statistics->ERows = tableData.Metadata->RecordsCount;
     Props.Statistics->EBytes = tableData.Metadata->DataSize;
-    Props.Cost = 0;
+    Props.Cost = 0.0; // Cost remains zero regardless of read type
 
     auto overrideStats = ctx.KqpCtx.GetOverrideStatistics();
     if (overrideStats) {
@@ -357,7 +416,10 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     const auto totalColumns = tableData.Metadata->Columns.size();
     const auto readColumns = GetColumns().Size();
     if (totalColumns > 0 && readColumns < totalColumns) {
-        Props.Statistics->EBytes *= static_cast<double>(readColumns) / static_cast<double>(totalColumns);
+        // A read of no columns still returns a row per record, e.g. for COUNT(*)
+        Props.Statistics->EBytes = readColumns == 0
+            ? Props.Statistics->ERows * 8.0
+            : Props.Statistics->EBytes * static_cast<double>(readColumns) / static_cast<double>(totalColumns);
     }
 
     // Overwrite with selectivity for successfully pushed-down filters within the read operator.
@@ -366,10 +428,9 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         auto lambda = TCoLambda(OriginalPredicate->Node);
         double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
-        double filterSelectivity = selectivity * Props.Statistics->Selectivity;
-        Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
-        Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
-        Props.Statistics->Selectivity = filterSelectivity;
+        Props.Statistics->EBytes *= selectivity;
+        Props.Statistics->ERows *= selectivity;
+        Props.Statistics->Selectivity *= selectivity;
     }
 }
 
@@ -422,6 +483,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
+    // Cost is not changed in the case of separate Filter over Join
     Props.Statistics->EBytes *= selectivity;
     Props.Statistics->ERows *= selectivity;
     Props.Statistics->Selectivity *= selectivity;
@@ -483,7 +545,7 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
         double inputDataSize = Props.Statistics->EBytes;
-        if (inputColumnsCount!=0) {
+        if (inputColumnsCount != 0) {
             Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
         }
         // Input may have 0 columns (e.g. EmptySource), in such case the data size depends on the number of records
@@ -507,9 +569,11 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata = TRBOMetadata();
 
     Props.Metadata->StorageType = inputMetadata.StorageType;
-    // Compute logical cardinality info. Its the same as input cardinality, except in the case
-    // where the group-by list is empty, then we always produce a single tuple
-    Props.Metadata->LogicalCard = KeyColumns.Items().empty() ? ELogicalCardinality::One : inputMetadata.LogicalCard;
+    // Only a complete scalar aggregate emits a default row on empty input.
+    // Intermediate aggregation may emit partial states on several partitions;
+    // like grouped aggregation it preserves emptiness and singleton bounds.
+    Props.Metadata->LogicalCard = KeyColumns.Items().empty() && GetAggregationPhase() != EOpPhase::Intermediate
+        ? ELogicalCardinality::One : inputMetadata.LogicalCard;
     Props.Metadata->Type = EStatisticsType::BaseTable;
 
     const auto& outputIUs = GetOutputIUs();
@@ -564,6 +628,20 @@ void TOpGroupingSets::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         return;
     }
     auto& metadata = *Props.Metadata;
+    // The child aggregate defines the branches; its output is not the input
+    // stream consumed by those branches. Sum their bounds over the source.
+    const auto& aggregate = CastOperator<TOpAggregate>(*GetInput());
+    const auto& sourceMetadata = aggregate.GetInput()->Props.Metadata;
+    const auto sourceCard = sourceMetadata ? sourceMetadata->LogicalCard : ELogicalCardinality::ZeroOrMore;
+    TCardinalityBounds bounds{0, 0};
+    for (const auto& keys : GetGroupingSets()) {
+        const auto branch = TCardinalityBounds::From(keys.Empty() && aggregate.GetAggregationPhase() != EOpPhase::Intermediate
+            ? ELogicalCardinality::One : sourceCard);
+        bounds.Lower = Max(bounds.Lower, branch.Lower);
+        bounds.Upper = bounds.Upper && branch.Upper
+            ? std::optional<ui64>{*bounds.Upper + *branch.Upper} : std::nullopt;
+    }
+    metadata.LogicalCard = bounds.ToCardinality();
     TMappedIUs<TInfoUnitId> outputs;
     for (const auto output : Columns.Keys()) {
         const auto input = *Columns.Find(output);
@@ -870,18 +948,15 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
 void TOpLimit::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     IUnaryOperator::ComputeMetadata(ctx, planProps);
-    if (!HasOffset() && GetLimitCond().IsLiteralOne()) {
-        switch(Props.Metadata->LogicalCard) {
-            case ELogicalCardinality::OneOrMore:
-            case ELogicalCardinality::One:
-                Props.Metadata->LogicalCard = ELogicalCardinality::One;
-                break;
-            case ELogicalCardinality::Zero:
-                break;
-            default:
-                Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrOne;
-                break;
-        }
+    if (Props.Metadata) {
+        Props.Metadata->LogicalCard = LimitCardinality(Props.Metadata->LogicalCard, GetLimitCond(), GetOffsetCond(), GetLimitPhase());
+    }
+}
+
+void TOpSort::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (Props.Metadata && LimitCond) {
+        Props.Metadata->LogicalCard = LimitCardinality(Props.Metadata->LogicalCard, *LimitCond, std::nullopt, GetSortPhase());
     }
 }
 

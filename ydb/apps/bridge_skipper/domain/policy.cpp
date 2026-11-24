@@ -121,7 +121,7 @@ void TConfirmations::Update(const TClusterView& view, const std::map<TString, TP
                 const auto state = view.Piles.find(it->first);
                 const auto previous = States.find(it->first);
                 if (state == view.Piles.end() || previous == States.end() || state->second != previous->second
-                    || it->second.FallbackFailure)
+                    || it->second.FailureEvidence != EFailureEvidence::Ordinary)
                 {
                     it = Piles.erase(it);
                 } else {
@@ -135,7 +135,7 @@ void TConfirmations::Update(const TClusterView& view, const std::map<TString, TP
     for (auto it = Piles.begin(); it != Piles.end();) {
         const auto verdict = verdicts.find(it->first);
         if (verdict == verdicts.end() || !IsDown(verdict->second.Verdict)
-            || verdict->second.FallbackFailure != it->second.FallbackFailure)
+            || verdict->second.FailureEvidence != it->second.FailureEvidence)
         {
             it = Piles.erase(it);
         } else {
@@ -147,7 +147,7 @@ void TConfirmations::Update(const TClusterView& view, const std::map<TString, TP
             continue;
         }
         auto [it, inserted] = Piles.try_emplace(pile,
-            TConfirmation{now, verdict.NewestEvidenceSentAt, verdict.NewestEvidenceSentAt, verdict.FallbackFailure});
+            TConfirmation{now, verdict.NewestEvidenceSentAt, verdict.NewestEvidenceSentAt, verdict.FailureEvidence});
         if (!inserted) {
             it->second.NewestEvidenceSentAt = verdict.NewestEvidenceSentAt;
         }

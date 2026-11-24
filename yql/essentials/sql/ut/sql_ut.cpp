@@ -16,6 +16,10 @@ struct TCallState {
 
 class TMockTranslator final: public NSQLTranslation::ITranslator {
 public:
+    bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma&) const final {
+        return false;
+    }
+
     explicit TMockTranslator(TCallState& calls)
         : Calls_(calls)
     {
@@ -39,7 +43,7 @@ public:
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString&, const google::protobuf::Message&,
-                                              const NSQLTranslation::TSQLHints&,
+                                              const NSQLTranslation::TParsedTokenList&,
                                               const NSQLTranslation::TTranslationSettings&) final {
         Calls_.TextAndMessageToAst = true;
         return {};
@@ -65,6 +69,11 @@ NSQLTranslation::TTranslators MakeTranslators(TCallState& calls) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSqlTranslation) {
+Y_UNIT_TEST(DummyTranslatorRejectsProjectSettings) {
+    const auto translator = NSQLTranslation::MakeDummyTranslator("unsupported");
+    UNIT_ASSERT(!translator->AcceptsProjectSetting({.Name = "ClassicDivision", .Value = {"false"}}));
+}
+
 Y_UNIT_TEST(UsesCustomSyntaxTranslator) {
     TCallState calls;
     NSQLTranslation::TTranslatorsRegistry translatorsRegistry = {
@@ -116,9 +125,9 @@ Y_UNIT_TEST(UsesCustomSyntaxForSqlAstToYql) {
     NSQLTranslation::TTranslationSettings settings;
     settings.Syntax = "mock";
     google::protobuf::Any protoAst;
-    NSQLTranslation::TSQLHints hints;
+    NSQLTranslation::TParsedTokenList tokens;
 
-    NSQLTranslation::SqlASTToYql(translators, "SELECT 1;", protoAst, hints, settings);
+    NSQLTranslation::SqlASTToYql(translators, "SELECT 1;", protoAst, tokens, settings);
 
     UNIT_ASSERT(calls.TextAndMessageToAst);
 }

@@ -12,11 +12,11 @@ $frequent_ss_items = (
         d_date AS solddate,
         Count(*) AS cnt
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         ss_sold_date_sk == d_date_sk
         AND ss_item_sk == i_item_sk
@@ -37,11 +37,11 @@ $max_store_sales = (
             c_customer_sk,
             Sum(ss_quantity * ss_sales_price) AS csales
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/customer`
+            `customer`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ss_customer_sk == c_customer_sk
             AND ss_sold_date_sk == d_date_sk
@@ -56,9 +56,9 @@ $best_ss_customer = (
         c_customer_sk,
         Sum(ss_quantity * ss_sales_price) AS ssales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     WHERE
         ss_customer_sk == c_customer_sk
     GROUP BY
@@ -78,9 +78,9 @@ FROM (
     SELECT
         cs_quantity * cs_list_price AS sales
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_year == 1999
         AND d_moy == 1
@@ -101,9 +101,9 @@ FROM (
     SELECT
         ws_quantity * ws_list_price AS sales
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_year == 1999
         AND d_moy == 1
@@ -130,11 +130,11 @@ $frequent_ss_items = (
         d_date AS solddate,
         Count(*) AS cnt
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         ss_sold_date_sk == d_date_sk
         AND ss_item_sk == i_item_sk
@@ -155,11 +155,11 @@ $max_store_sales = (
             c_customer_sk,
             Sum(ss_quantity * ss_sales_price) AS csales
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/customer`
+            `customer`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ss_customer_sk == c_customer_sk
             AND ss_sold_date_sk == d_date_sk
@@ -174,9 +174,9 @@ $best_ss_customer = (
         c_customer_sk,
         Sum(ss_quantity * ss_sales_price) AS ssales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     WHERE
         ss_customer_sk == c_customer_sk
     GROUP BY
@@ -200,11 +200,11 @@ FROM (
         c_first_name,
         Sum(cs_quantity * cs_list_price) AS sales
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_year == 1999
         AND d_moy == 1
@@ -231,11 +231,11 @@ FROM (
         c_first_name,
         Sum(ws_quantity * ws_list_price) AS sales
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_year == 1999
         AND d_moy == 1

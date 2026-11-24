@@ -15,7 +15,11 @@ DEFINE_ENUM(EWatermarkComparisonOperator,
     (GreaterEqual)
 );
 
+TStringBuf GetWatermarkComparisonOperatorTextForm(EWatermarkComparisonOperator op);
+
 ////////////////////////////////////////////////////////////////////////////////
+
+constexpr TStringBuf BackgroundDeletePredicateKey = "background_delete_predicate";
 
 struct TWatermarkRuntimeDataConfig
     : public NYTree::TYsonStructLite
@@ -27,15 +31,6 @@ struct TWatermarkRuntimeDataConfig
     REGISTER_YSON_STRUCT_LITE(TWatermarkRuntimeDataConfig);
 
     static void Register(TRegistrar registrar);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TWatermarkRuntimeData
-{
-    ui64 Watermark;
-    int ColumnIndex;
-    EWatermarkComparisonOperator ComparisonOperator;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

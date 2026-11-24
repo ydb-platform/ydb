@@ -50,13 +50,13 @@ struct TOptimizeContext {
 
     bool IsPersistentNode(const TExprNode& node) const {
         if (Types) {
-            for (auto& source: Types->DataSources) {
+            for (auto& source : Types->DataSources) {
                 if (source->IsPersistent(node)) {
                     return true;
                 }
             }
 
-            for (auto& sink: Types->DataSinks) {
+            for (auto& sink : Types->DataSinks) {
                 if (sink->IsPersistent(node)) {
                     return true;
                 }
@@ -71,9 +71,9 @@ struct TOptimizeContext {
     }
 };
 
-using TCallableOptimizerExt = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, TOptimizeContext&)>;
+using TCallableOptimizerExt = std::function<TExprNode::TPtr(const TExprNode::TPtr&, TExprContext&, TOptimizeContext&)>;
 using TCallableOptimizerMap = std::unordered_map<std::string_view, TCallableOptimizerExt>;
-using TFinalizingOptimizerExt = std::function<bool (const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>;
+using TFinalizingOptimizerExt = std::function<bool(const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>;
 using TFinalizingOptimizerMap = std::unordered_map<std::string_view, TFinalizingOptimizerExt>;
 
 struct TCoCallableRules {
@@ -114,4 +114,4 @@ void RegisterCoFlowCallables3(TCallableOptimizerMap& map);
 void RegisterCoFinalizers(TFinalizingOptimizerMap& map);
 void RegisterCoFinalCallables(TCallableOptimizerMap& map);
 
-}
+} // namespace NYql

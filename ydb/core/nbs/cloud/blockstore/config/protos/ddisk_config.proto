@@ -24,6 +24,10 @@ message TDDiskConfig
     // Complete DDisk data I/O without touching the device. Reads return zeroes.
     // All DDisk slots on one PDisk must use the same mode; not for persistence.
     optional bool DevNullMode = 9;
+
+    // Whiteboard health reporting interval for DDisk and PersistentBuffer.
+    // Unset or zero uses the default of 5000 milliseconds.
+    optional uint32 HealthReportPeriodMilliseconds = 10;
 }
 
 message TPBufferConfig

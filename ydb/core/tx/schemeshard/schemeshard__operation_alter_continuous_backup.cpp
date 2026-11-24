@@ -75,7 +75,7 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     changeMetadataCol->SetNotNull(false);
     // TODO: cleanup all sequences
 
-    result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
+    result.push_back(CreateNewTable(NextPartId(opId, result), outTx, {}, /*allowPgForBackup*/ true));
 }
 
 bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream) {

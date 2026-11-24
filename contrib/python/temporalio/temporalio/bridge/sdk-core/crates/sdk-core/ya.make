@@ -126,7 +126,7 @@ PEERDIR(
     contrib/crates/futures-util-0.3.34
     contrib/crates/gethostname-1.1.0
     contrib/crates/itertools-0.14.0
-    contrib/crates/lru-0.18.1
+    contrib/crates/lru-0.18.5
     contrib/crates/mockall-0.14.0
     contrib/crates/parking_lot-0.12.5
     contrib/crates/pid-4.0.0

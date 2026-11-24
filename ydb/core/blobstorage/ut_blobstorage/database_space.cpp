@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 Y_UNIT_TEST_SUITE(DatabaseSpace) {
 
@@ -118,6 +119,17 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
             UNIT_ASSERT_C(matches(), "subscriber " << subscriber.ActorId << " has not got state with Exhausted# "
                 << exhausted << " within " << timeout);
             return subscriber.States->back();
+        }
+
+        // restart BS_CONTROLLER and check that the database stays blocked all the time
+        void RestartControllerKeepingBlocked(const TSubscriber& subscriber, const char *what) {
+            const size_t numStates = subscriber.States->size();
+            Env.RestartNode(Env.Settings.ControllerNodeId);
+            WaitState(subscriber, true, TDuration::Seconds(60), numStates);
+            Env.Sim(TDuration::Seconds(20));
+            for (size_t i = numStates; i < subscriber.States->size(); ++i) {
+                UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked after " << what);
+            }
         }
 
         // sequence numbers of injected VDisk reports, above the ones real VDisks of the test use
@@ -313,13 +325,7 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         UNIT_ASSERT(subscriber.States->back().GetExhausted());
 
         // the latch must survive BS_CONTROLLER restart: the database stays blocked all the time
-        const size_t numStates = subscriber.States->size();
-        ctx.Env.RestartNode(ctx.Env.Settings.ControllerNodeId);
-        ctx.WaitState(subscriber, true, TDuration::Seconds(60), numStates);
-        ctx.Env.Sim(TDuration::Seconds(20));
-        for (size_t i = numStates; i < subscriber.States->size(); ++i) {
-            UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked after BS_CONTROLLER restart");
-        }
+        ctx.RestartControllerKeepingBlocked(subscriber, "BS_CONTROLLER restart");
     }
 
     Y_UNIT_TEST(HysteresisSurvivesReassignmentAndRestart) {
@@ -374,16 +380,9 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         const auto response = ctx.Env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
-        const size_t numStates = subscriber.States->size();
-        ctx.Env.RestartNode(controllerNodeId);
-
         // the latch must be kept while colors are unknown or partially reported (CYAN VDisks may report before the
         // worst one), and after they are refreshed within the hysteresis band
-        ctx.WaitState(subscriber, true, TDuration::Seconds(60), numStates);
-        ctx.Env.Sim(TDuration::Seconds(20));
-        for (size_t i = numStates; i < subscriber.States->size(); ++i) {
-            UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked after reassignment and restart");
-        }
+        ctx.RestartControllerKeepingBlocked(subscriber, "reassignment and restart");
     }
 
     Y_UNIT_TEST(ResubscribeAfterControllerRestart) {
@@ -418,7 +417,7 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
             .NumPiles = 2,
             .AutomaticBootstrap = true,
         });
-        ctx.SetThresholds(TColor::YELLOW, TColor::YELLOW);
+        ctx.SetThresholds(TColor::YELLOW, TColor::LIGHT_YELLOW);
         const TSubscriber subscriber = ctx.Subscribe(ctx.Env.Settings.ControllerNodeId + 1);
         ctx.WaitState(subscriber, false, TDuration::Seconds(10));
 
@@ -439,20 +438,19 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         ctx.Env.Sim(TDuration::Seconds(20));
         reportPart(parts[1], TColor::YELLOW);
         ctx.WaitState(subscriber, true, TDuration::Seconds(9));
-        ctx.Env.Sim(TDuration::Seconds(20)); // let BSC persist the colors
 
-        // Stable colors and the exhaustion latch must survive a controller restart.
-        size_t numStates = subscriber.States->size();
-        ctx.Env.RestartNode(ctx.Env.Settings.ControllerNodeId);
-        ctx.WaitState(subscriber, true, TDuration::Seconds(60), numStates);
-        ctx.Env.Sim(TDuration::Seconds(20));
-        for (size_t i = numStates; i < subscriber.States->size(); ++i) {
-            UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked after BS_CONTROLLER restart");
-        }
+        // The part gets between the unblock and block colors, so it is only the latch that keeps the pool exhausted:
+        // the colors stored wouldn't make it exhausted anew.
+        reportPart(parts[1], TColor::LIGHT_YELLOW);
+        ctx.Env.Sim(TDuration::Seconds(20)); // let BSC persist the colors
+        UNIT_ASSERT(subscriber.States->back().GetExhausted());
+
+        // The exhaustion latch must survive a controller restart.
+        ctx.RestartControllerKeepingBlocked(subscriber, "BS_CONTROLLER restart");
 
         // Removing the full part from the data quorum unblocks the pool without waiting for new metrics.
         NBridgeTest::SwitchPileState(ctx.Env, 1, NKikimrBridge::TClusterState::SUSPENDED);
-        numStates = subscriber.States->size();
+        const size_t numStates = subscriber.States->size();
         ctx.WaitState(subscriber, false, TDuration::Seconds(10), numStates);
 
         // A healthy part outside the data quorum must not keep the remaining full part unblocked.
@@ -460,6 +458,72 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
         ctx.Env.Sim(TDuration::Seconds(20));
         reportPart(parts[0], TColor::YELLOW);
         ctx.WaitState(subscriber, true, TDuration::Seconds(9), numStates + 1);
+    }
+
+    // The group to be decommitted keeps taking writes into its VDisks until it is switched to BlobDepot, so it is still
+    // counted; the test environment has no SchemeCache, so the decommission never goes beyond PENDING state.
+    void CheckPendingDecommitKeepsDatabaseBlocked(TTestContext& ctx) {
+        ctx.SetThresholds(TColor::YELLOW, TColor::YELLOW);
+        const TSubscriber subscriber = ctx.Subscribe(ctx.Env.Settings.ControllerNodeId + 1);
+        ctx.WaitState(subscriber, false, TDuration::Seconds(10));
+
+        const auto baseConfig = ctx.Env.FetchBaseConfig();
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            ctx.ReportColor(vslot, TColor::YELLOW);
+        }
+        ctx.WaitState(subscriber, true, TDuration::Seconds(9));
+
+        const auto groups = ctx.Env.GetGroups();
+        UNIT_ASSERT(!groups.empty());
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableDecommitGroups();
+        for (const ui32 groupId : groups) {
+            cmd->AddGroupIds(groupId);
+        }
+        cmd->SetDatabase(TStringBuilder() << '/' << ctx.Env.Runtime->GetDomainsInfo()->GetDomain()->Name);
+        for (auto kind : {NKikimrBlobDepot::TChannelKind::System, NKikimrBlobDepot::TChannelKind::Data}) {
+            auto *prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(ctx.Env.StoragePoolName);
+            prof->SetChannelKind(kind);
+            prof->SetCount(2);
+        }
+        const auto response = ctx.Env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        const size_t numStates = subscriber.States->size();
+        ctx.Env.Sim(TDuration::Seconds(20));
+        size_t numPending = 0;
+        const auto decommitConfig = ctx.Env.FetchBaseConfig();
+        for (const auto& group : decommitConfig.GetGroup()) {
+            if (Find(groups, group.GetGroupId()) != groups.end()) {
+                const auto status = group.GetVirtualGroupInfo().GetDecommitStatus();
+                UNIT_ASSERT_C(status == NKikimrBlobStorage::TGroupDecommitStatus::PENDING,
+                    NKikimrBlobStorage::TGroupDecommitStatus::E_Name(status));
+                ++numPending;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numPending, groups.size());
+        for (size_t i = numStates; i < subscriber.States->size(); ++i) {
+            UNIT_ASSERT_C((*subscriber.States)[i].GetExhausted(), "database got unblocked by pending decommission");
+        }
+        UNIT_ASSERT(subscriber.States->back().GetExhausted());
+    }
+
+    Y_UNIT_TEST(PendingDecommitKeepsDatabaseBlocked) {
+        TTestContext ctx;
+        CheckPendingDecommitKeepsDatabaseBlocked(ctx);
+    }
+
+    Y_UNIT_TEST(PendingDecommitKeepsDatabaseBlockedBridged) {
+        TTestContext ctx(TEnvironmentSetup::TSettings{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = NBridgeTest::GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        });
+        CheckPendingDecommitKeepsDatabaseBlocked(ctx);
     }
 
 }

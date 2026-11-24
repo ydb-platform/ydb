@@ -163,7 +163,8 @@ namespace NKikimr {
 
             bool ShouldUpdateWithMem() const {
                 Y_DEBUG_ABORT_UNLESS(Type == ET_CLEAN || Type == ET_SETDISK || Type == ET_SETMEM);
-                return Type == ET_CLEAN || Type == ET_SETDISK;
+                // Fresh memory records are visited in increasing LSN order; keep the latest version.
+                return true;
             }
 
             EType GetType() const {

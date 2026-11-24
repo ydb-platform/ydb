@@ -76,7 +76,7 @@ private:
                 return;
             }
 
-            AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+            YDB_LOG_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
             std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
             for (auto&& i : Fetcher->GetInput().GetPortions()) {
                 accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
@@ -214,49 +214,6 @@ public:
     using TAskDataResourceStep::TAskDataResourceStep;
 };
 
-class TAskGeneralResourceStep: public IFetchingStep {
-private:
-    std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
-    const ui64 MemoryUsage;
-
-    class TSubscriber: public NGroupedMemoryManager::IAllocation {
-    private:
-        using TBase = NGroupedMemoryManager::IAllocation;
-        std::shared_ptr<TPortionsDataFetcher> FetchingContext;
-
-        virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-            FetchingContext->OnError(errorMessage);
-        }
-
-        virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
-            const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
-            FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
-            FetchingContext->MutableScript().Next();
-            return FetchingContext->Resume(FetchingContext);
-        }
-
-    public:
-        TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
-            : TBase(memory)
-            , FetchingContext(fetchingContext)
-        {
-        }
-    };
-
-    virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
-        fetchingContext->SetStage(EFetchingStage::AskGeneralResources);
-        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(MemoryUsage, fetchingContext));
-        return IFetchingStep::EStepResult::Detached;
-    }
-
-public:
-    TAskGeneralResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const ui64 memoryUsage)
-        : ColumnIds(columnIds)
-        , MemoryUsage(memoryUsage)
-    {
-    }
-};
-
 class TAskDataStep: public IFetchingStep {
 private:
     std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
@@ -341,10 +298,10 @@ private:
         std::vector<std::shared_ptr<TPortionDataAccessor>> accessors = context.ExtractPortionAccessors();
         auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
         for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
-            AFL_VERIFY(i < accessors.size());
+            YDB_LOG_VERIFY(i < accessors.size());
             const auto& accessor = accessors[i];
             const auto& portion = fetchingContext->GetInput().GetPortions()[i];
-            AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
+            YDB_LOG_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
                 accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i]).AssembleToGeneralContainer({}).DetachResult();

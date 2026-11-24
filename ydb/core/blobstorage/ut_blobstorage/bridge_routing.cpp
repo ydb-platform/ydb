@@ -76,6 +76,8 @@ namespace {
         bool RaceWithNewerPileGeneration = false;
         bool HoldResults = false;
         std::vector<std::unique_ptr<IEventHandle>> HeldResults;
+        std::optional<TInstant> PileOutAt; // when the proxy got the first cluster state with a pile disconnected
+        std::map<ui64, TInstant> ResultAt;
 
         TQueuedRoutingTest() {
             Env.CreatePool();
@@ -90,6 +92,11 @@ namespace {
                         ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
                     Config = ev->Get<TEvNodeWardenStorageConfig>()->Config;
                     BridgeInfo = ev->Get<TEvNodeWardenStorageConfig>()->BridgeInfo;
+                    if (!PileOutAt && BridgeInfo && std::ranges::any_of(BridgeInfo->Piles, [](const auto& pile) {
+                            return pile.State == NKikimrBridge::TClusterState::DISCONNECTED;
+                        })) {
+                        PileOutAt = Env.Runtime->GetClock();
+                    }
                 } else if (HoldResults && ev->GetRecipientRewrite() == Proxy &&
                         ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
                     HeldResults.push_back(std::move(ev));
@@ -99,6 +106,7 @@ namespace {
                     MakeRace(*ev->Get<TEvBlobStorage::TEvGetResult>());
                 } else if (ev->GetRecipientRewrite() == Edge && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
                     UNIT_ASSERT_C(!Results.contains(ev->Cookie), "duplicate terminal response");
+                    ResultAt.emplace(ev->Cookie, Env.Runtime->GetClock());
                     Results.emplace(ev->Cookie, std::unique_ptr<TEvBlobStorage::TEvGetResult>(
                         ev->Release<TEvBlobStorage::TEvGetResult>().Release()));
                     return false;
@@ -566,7 +574,6 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(poisoned);
         UNIT_ASSERT_C(res, "restarted request lost when the proxy stopped");
-        Cerr << "*** result " << res->Get()->ToString() << Endl;
     }
 
     // the request restarted as it waits for the pile disconnected keeps the routing wait it has left
@@ -587,10 +594,14 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         test.Env.Sim(TDuration::MilliSeconds(10));
         UNIT_ASSERT(!test.Results.contains(1));
         SwitchPileState(test.Env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
-        const TInstant restarted = test.Env.Runtime->GetClock();
         WaitUntil(test.Env, [&] { return test.Results.contains(1); }, "read timed out", TDuration::MilliSeconds(10),
             300);
-        const TDuration waited = test.Env.Runtime->GetClock() - restarted;
+
+        // the read had waited for 1.5 s of 2 s when it was dispatched, so it is to wait for the remaining 0.5 s since
+        // the proxy has restarted it: neither for the whole wait anew, nor for no time at all
+        UNIT_ASSERT(test.PileOutAt);
+        const TDuration waited = test.ResultAt.at(1) - *test.PileOutAt;
+        UNIT_ASSERT_C(waited >= TDuration::MilliSeconds(300), "restarted read lost its routing wait: " << waited);
         UNIT_ASSERT_C(waited <= TDuration::MilliSeconds(700), "restarted read got a new routing wait: " << waited);
         UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
         UNIT_ASSERT_STRING_CONTAINS(test.Results.at(1)->ErrorReason, "bridge request timed out");
@@ -612,6 +623,177 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
                 UNIT_ASSERT_VALUES_EQUAL(res.Responses[0].Id, id);
                 UNIT_ASSERT_VALUES_EQUAL_C(res.Responses[0].Status, NKikimrProto::NODATA, res.ToString());
             });
+    }
+
+    // The read with MustRestoreFirst has got the answer of the pile lacking the blob and waits for the pile having it,
+    // when the former leaves data quorum. The blob is not restored into the pile out then (it gets synced when it is
+    // back, and the write could only fail the read), and the read is answered with what the remaining pile has.
+    Y_UNIT_TEST(RestoreSkipsPileDisconnected) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+        TDataChecker checker(env);
+        checker.Write(groupId); // start the bridge proxy on node 1
+
+        // the blob only the first pile has
+        const TString data = "restore me!";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const auto put = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[0], 1,
+            new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Status, NKikimrProto::OK, put->ToString());
+
+        bool hold = true;
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        ui32 numGetsOfSecondPile = 0;
+        ui32 numPutsToSecondPile = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId != 1) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                const ui32 resultGroupId = ev->Get<TEvBlobStorage::TEvGetResult>()->GroupId;
+                if (hold && resultGroupId == pileGroups[0]) {
+                    held.push_back(std::move(ev));
+                    return false;
+                }
+                numGetsOfSecondPile += resultGroupId == pileGroups[1];
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut &&
+                    ev->Get<TEvBlobStorage::TEvPut>()->Id == id) {
+                ++numPutsToSecondPile; // the first pile has the blob, so any write of it is the restoring one
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        WaitUntil(env, [&] { return !held.empty() && numGetsOfSecondPile; }, "results of both piles",
+            TDuration::MilliSeconds(10), 100);
+        env.Sim(TDuration::Seconds(1)); // the proxy handles the answer of the second pile
+        UNIT_ASSERT_VALUES_EQUAL(numPutsToSecondPile, 0);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(1));
+
+        hold = false;
+        for (auto& ev : std::exchange(held, {})) {
+            env.Runtime->Send(ev.release(), 1);
+        }
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(10));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(res, "read not completed");
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Responses[0].Status, NKikimrProto::OK, res->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), data);
+        UNIT_ASSERT_VALUES_EQUAL_C(numPutsToSecondPile, 0, "the blob was restored into the pile out of data quorum");
+    }
+
+    // Discovery finds the blob in the pile which leaves data quorum before the last pile reports the blob missing. The
+    // blob is not reread from the pile gone to be restored (it may never answer): the request starts over and finds the
+    // blob in the pile still there.
+    Y_UNIT_TEST(RestoreSourceDisconnected) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 3,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 3);
+        TDataChecker checker(env);
+        checker.Write(groupId); // start the bridge proxy on node 1
+
+        // the blob the last pile lacks
+        const ui64 tabletId = 200600; // not the one the checker writes blobs of
+        const TString data = "restore me!";
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+        for (ui32 i : {0, 1}) {
+            const auto put = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[i], 1,
+                new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            UNIT_ASSERT_VALUES_EQUAL_C(put->Status, NKikimrProto::OK, put->ToString());
+        }
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto pileOf = [&](const IEventHandle& ev) -> std::optional<ui32> {
+            for (ui32 i = 0; i < pileGroups.size(); ++i) {
+                const TActorId proxyId = MakeBlobStorageProxyID(pileGroups[i]);
+                if (ev.Recipient == proxyId || ev.GetRecipientRewrite() == proxyId) {
+                    return i;
+                }
+            }
+            return std::nullopt;
+        };
+        std::map<ui64, ui32> discoverPile; // subrequest cookie -> pile index
+        std::map<ui32, std::vector<std::unique_ptr<IEventHandle>>> held; // pile index -> its results held
+        std::set<ui32> holdPiles{0, 2}; // the second pile answers first and makes the source of restoration
+        ui32 numResultsOfSecondPile = 0;
+        bool disconnected = false;
+        ui32 numGetsOfPileGone = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId != 1) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvDiscover) {
+                if (const auto pile = pileOf(*ev)) {
+                    discoverPile[ev->Cookie] = *pile;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvDiscoverResult && ev->Recipient != edge) {
+                if (const auto it = discoverPile.find(ev->Cookie); it != discoverPile.end()) {
+                    if (holdPiles.contains(it->second)) {
+                        held[it->second].push_back(std::move(ev));
+                        return false;
+                    }
+                    numResultsOfSecondPile += it->second == 1;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && disconnected && pileOf(*ev) == 1u) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvGet>();
+                numGetsOfPileGone += msg->QuerySize == 1 && msg->Queries[0].Id == id;
+            }
+            return true;
+        };
+        auto release = [&](ui32 pile) {
+            holdPiles.erase(pile);
+            auto events = std::move(held[pile]);
+            held.erase(pile);
+            UNIT_ASSERT_C(!events.empty(), "no result held of pile " << pile);
+            for (auto& ev : events) {
+                env.Runtime->Send(ev.release(), 1);
+            }
+        };
+
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvDiscover(tabletId, 0, true, false, TInstant::Max(), 0,
+                true));
+        });
+        WaitUntil(env, [&] { return numResultsOfSecondPile && held.contains(0) && held.contains(2); },
+            "results of all piles", TDuration::MilliSeconds(10), 100);
+        env.Sim(TDuration::Seconds(1)); // the proxy handles the answer of the second pile
+        release(0);
+        env.Sim(TDuration::Seconds(1));
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(1));
+        disconnected = true;
+
+        release(2);
+        const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(10));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(res, "discovery not completed");
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Id, id);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Buffer, data);
+        UNIT_ASSERT_VALUES_EQUAL_C(numGetsOfPileGone, 0, "the blob was reread from the pile out of data quorum");
+        UNIT_ASSERT_EQUAL(ReadFromPileGroup(env, pileGroups[2], 1, id, data), NKikimrProto::OK); // restored
     }
 
 }

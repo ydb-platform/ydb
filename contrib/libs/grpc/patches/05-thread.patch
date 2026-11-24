@@ -8,8 +8,8 @@ index 2751b22..23598df 100644
  #include <grpc/support/port_platform.h>
 +#include <util/system/thread.h>
  
- #include <util/generic/string.h>
- #include <util/string/cast.h>
+ #include <inttypes.h>
+ 
 @@ -118,19 +118,7 @@
            thd_arg arg = *static_cast<thd_arg*>(v);
            free(v);

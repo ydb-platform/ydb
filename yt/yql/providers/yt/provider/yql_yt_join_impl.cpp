@@ -247,7 +247,7 @@ TStatus UpdateInMemorySizeUsingBlocksSetting(TMapJoinSettings& settings, TYtSect
     YQL_CLOG(INFO, ProviderYt) << "Estimated block map join index size for " << (isLeft ? "left" : "right") << " table: " << indexSize << " bytes";
 
     const ui64 result = dataSize + indexSize;
-    (isLeft ? settings.LeftMemSizeUsingBlocks : settings.RightMemSizeUsingBlocks) = result;
+    (isLeft ? settings.LeftMemSize : settings.RightMemSize) = result;
     return TStatus::Ok;
 }
 
@@ -1780,20 +1780,10 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         }
     }
 
-    if (useBlocks) {
-        for (auto& [_, columnType] : columnTypes) {
-            if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
-                useBlocks = false;
-                YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
-                break;
-            }
-        }
-    }
-
     ui64 partCount = 1;
     ui64 partRows = settings.RightRows;
     if (settings.RightRows && settings.RightSize && useShards) {
-        partCount = std::min(((useBlocks ? settings.RightMemSizeUsingBlocks : settings.RightMemSize) + settings.MapJoinLimit - 1) / settings.MapJoinLimit, settings.RightRows);
+        partCount = std::min((settings.RightMemSize + settings.MapJoinLimit - 1) / settings.MapJoinLimit, settings.RightRows);
         partRows = (settings.RightRows + partCount - 1) / partCount;
     }
 
@@ -3450,6 +3440,20 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     TJoinSideStats rightStats;
 
     bool mapJoinUseBlocks = state->Configuration->BlockMapJoin.Get().GetOrElse(state->Types->UseBlocks);
+    if (mapJoinUseBlocks) {
+        // check that both sides have block-compatible types
+        mapJoinUseBlocks = AllOf(std::make_pair(leftItemType, rightItemType), [&](const TStructExprType* input) {
+            for (auto item : input->GetItems()) {
+                if (!IsSupportedAsBlockType(equiJoin.Pos(), *item->GetItemType(), ctx, *state->Types)) {
+                    YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because the "
+                        << (input == leftItemType ? "left" : "right") << " column '" << item->GetName()
+                        << "' has unsupported type: " << *item->GetItemType();
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
 
     const bool allowLookupJoin = !isCross && leftTablesReady && rightTablesReady && !forceMergeJoin;
     if (allowLookupJoin) {
@@ -3512,12 +3516,13 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
                 DoSwap(mapSettings.LeftUnique, mapSettings.RightUnique);
                 YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the right table, use content of the left one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
 
-                return RewriteYtMapJoin(equiJoin, labels, true, op, rightLeaf, leftLeaf, ctx, mapSettings, false, mapJoinUseBlocks, state) ?
+                // TODO: support block map join for lookup join
+                return RewriteYtMapJoin(equiJoin, labels, true, op, rightLeaf, leftLeaf, ctx, mapSettings, false, false, state) ?
                        TStatus::Ok : TStatus::Error;
             } else {
                 YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the left table, use content of the right one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
 
-                return RewriteYtMapJoin(equiJoin, labels, true, op, leftLeaf, rightLeaf, ctx, mapSettings, false, mapJoinUseBlocks, state) ?
+                return RewriteYtMapJoin(equiJoin, labels, true, op, leftLeaf, rightLeaf, ctx, mapSettings, false, false, state) ?
                        TStatus::Ok : TStatus::Error;
             }
         }
@@ -3750,11 +3755,23 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
 
-    if (auto mapJoinLimit = state->Configuration->MapJoinLimit.Get(); mapJoinLimit && !forceMergeJoin) {
-        YQL_CLOG(INFO, ProviderYt) << "MapJoinLimit: " << *mapJoinLimit;
-        mapSettings.MapJoinLimit = *mapJoinLimit;
+    const auto mapJoinLimit = state->Configuration->MapJoinLimit.Get();
+    // if yt.MapJoinLimit is explicitly set to zero, disable both block and regular mapjoin
+    if (!forceMergeJoin && (!mapJoinLimit || *mapJoinLimit)) {
+        const auto blockMapJoinLimit = state->Configuration->BlockMapJoinLimit.Get();
+        TVector<bool> mapJoinModes;
+        if (mapJoinUseBlocks && blockMapJoinLimit && *blockMapJoinLimit) {
+            // try block map join first
+            mapJoinModes.push_back(true);
+        }
+        if (mapJoinLimit) {
+            mapJoinModes.push_back(false);
+        }
 
-        if (mapSettings.MapJoinLimit) {
+        for (const bool useBlocks : mapJoinModes) {
+            mapSettings.MapJoinLimit = useBlocks ? *blockMapJoinLimit : *mapJoinLimit;
+            YQL_CLOG(INFO, ProviderYt) << (useBlocks ? "BlockMapJoinLimit: " : "MapJoinLimit: ") << mapSettings.MapJoinLimit;
+
             mapSettings.MapJoinShardMinRows = state->Configuration->MapJoinShardMinRows.Get().GetOrElse(1);
             mapSettings.MapJoinShardCount = state->Configuration->MapJoinShardCount.Get().GetOrElse(1);
 
@@ -3799,30 +3816,20 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             bool mapJoinUseFlow = state->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
 
             if (leftTablesReady) {
-                auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables, mapJoinUseFlow);
+                auto status = useBlocks
+                    ? UpdateInMemorySizeUsingBlocksSetting(mapSettings, leftLeaf.Section, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables)
+                    : UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables, mapJoinUseFlow);
                 if (status.Level != TStatus::Ok) {
                     return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
-                }
-
-                if (mapJoinUseBlocks) {
-                    auto status = UpdateInMemorySizeUsingBlocksSetting(mapSettings, leftLeaf.Section, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables);
-                    if (status.Level != TStatus::Ok) {
-                        return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
-                    }
                 }
             }
 
             if (rightTablesReady) {
-                auto status = UpdateInMemorySizeSetting(mapSettings, rightLeaf.Section, labels, op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables, mapJoinUseFlow);
+                auto status = useBlocks
+                    ? UpdateInMemorySizeUsingBlocksSetting(mapSettings, rightLeaf.Section, op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables)
+                    : UpdateInMemorySizeSetting(mapSettings, rightLeaf.Section, labels, op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables, mapJoinUseFlow);
                 if (status.Level != TStatus::Ok) {
                     return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
-                }
-
-                if (mapJoinUseBlocks) {
-                    auto status = UpdateInMemorySizeUsingBlocksSetting(mapSettings, rightLeaf.Section, op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables);
-                    if (status.Level != TStatus::Ok) {
-                        return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
-                    }
                 }
             }
 
@@ -3830,21 +3837,18 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
                 << ", MapJoinShardCount: " << mapSettings.MapJoinShardCount
                 << ", left is present: " << leftTablesReady
                 << ", left size limit: " << leftLimit << ", left mem size:" << mapSettings.LeftMemSize
-                << ", left mem size using blocks: " << mapSettings.LeftMemSizeUsingBlocks
                 << ", right is present: " << rightTablesReady
-                << ", right size limit: " << rightLimit << ", right mem size: " << mapSettings.RightMemSize
-                << ", right mem size using blocks: " << mapSettings.RightMemSizeUsingBlocks;
+                << ", right size limit: " << rightLimit << ", right mem size: " << mapSettings.RightMemSize;
 
             bool leftAny = linkSettings.LeftHints.contains("any");
             bool rightAny = linkSettings.RightHints.contains("any");
 
-            const bool isLeftAllowBlockMapJoin = mapJoinUseBlocks && (mapSettings.RightMemSizeUsingBlocks <= rightLimit);
-            const bool isRightAllowBlockMapJoin = mapJoinUseBlocks && (mapSettings.LeftMemSizeUsingBlocks <= leftLimit);
-
-            const bool isLeftAllowMapJoin = !leftAny && rightTablesReady && (mapSettings.RightMemSize <= rightLimit || isLeftAllowBlockMapJoin) &&
+            const bool isLeftAllowMapJoin = !leftAny && rightTablesReady &&
+                (mapSettings.RightMemSize <= rightLimit) &&
                 (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "Cross")
                 && !rightStats.IsDynamic;
-            const bool isRightAllowMapJoin = !rightAny && leftTablesReady && (mapSettings.LeftMemSize <= leftLimit || isRightAllowBlockMapJoin) &&
+            const bool isRightAllowMapJoin = !rightAny && leftTablesReady &&
+                (mapSettings.LeftMemSize <= leftLimit) &&
                 (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "Cross")
                 && !leftStats.IsDynamic;
             YQL_CLOG(INFO, ProviderYt) << "MapJoin: isLeftAllowMapJoin: " << isLeftAllowMapJoin
@@ -3861,28 +3865,17 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
 
                 mapSettings.SwapTables = swapTables;
 
-                if (mapJoinUseBlocks && !state->Types->UseBlocks && (
-                    (mapSettings.RightMemSize < mapSettings.RightMemSizeUsingBlocks) ||
-                    (swapTables && (mapSettings.LeftMemSize < mapSettings.LeftMemSizeUsingBlocks))
-                )) {
-                    ui64 memSize = swapTables ? mapSettings.LeftMemSize : mapSettings.RightMemSize;
-                    ui64 memSizeUsingBlocks = swapTables ? mapSettings.LeftMemSizeUsingBlocks : mapSettings.RightMemSizeUsingBlocks;
-                    YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used: memSize=" << memSize << " is less than memSizeUsingBlocks=" << memSizeUsingBlocks;
-                    mapJoinUseBlocks = false;
-                }
-
                 if (swapTables) {
                     DoSwap(mapSettings.LeftRows, mapSettings.RightRows);
                     DoSwap(mapSettings.LeftSize, mapSettings.RightSize);
                     DoSwap(mapSettings.LeftMemSize, mapSettings.RightMemSize);
-                    DoSwap(mapSettings.LeftMemSizeUsingBlocks, mapSettings.RightMemSizeUsingBlocks);
                     DoSwap(mapSettings.LeftUnique, mapSettings.RightUnique);
                     YQL_CLOG(INFO, ProviderYt) << "Selected MapJoin: map over the right table, use content of the left one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
-                    return RewriteYtMapJoin(equiJoin, labels, false, op, rightLeaf, leftLeaf, ctx, mapSettings, allowShardLeft, mapJoinUseBlocks, state) ?
+                    return RewriteYtMapJoin(equiJoin, labels, false, op, rightLeaf, leftLeaf, ctx, mapSettings, allowShardLeft, useBlocks, state) ?
                            TStatus::Ok : TStatus::Error;
                 } else {
                     YQL_CLOG(INFO, ProviderYt) << "Selected MapJoin: map over the left table, use content of the right one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
-                    return RewriteYtMapJoin(equiJoin, labels, false, op, leftLeaf, rightLeaf, ctx, mapSettings, allowShardRight, mapJoinUseBlocks, state) ?
+                    return RewriteYtMapJoin(equiJoin, labels, false, op, leftLeaf, rightLeaf, ctx, mapSettings, allowShardRight, useBlocks, state) ?
                            TStatus::Ok : TStatus::Error;
                 }
             }

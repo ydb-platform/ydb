@@ -1,6 +1,8 @@
 #include "udf_module.h"
 #include "udf_module_behaviour.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NUdfStore {

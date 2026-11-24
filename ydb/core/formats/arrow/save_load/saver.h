@@ -19,7 +19,7 @@ public:
 
     void AddSerializerWithBorder(const ui32 upperBorder, const NArrow::NSerialization::TSerializerContainer& serializer) {
         if (Serializer.IsCompatibleForExchange(serializer)) {
-            AFL_VERIFY(SerializerBySizeUpperBorder.emplace(upperBorder, serializer).second);
+            YDB_LOG_VERIFY(SerializerBySizeUpperBorder.emplace(upperBorder, serializer).second);
         } else {
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "cannot_add_serializer"},

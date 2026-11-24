@@ -254,6 +254,28 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(BillingTxType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // with no progress from the shard the build stays in Filling and is billed every ReBillPeriod (10s)
+        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progressBlocker(runtime);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.SimulateSleep(runtime, TDuration::Seconds(15));
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, TTestTxConfig::SchemeShard, "SchemeShard/TxBillingIndexBuild"), 0);
+    }
+
     void BaseCase(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

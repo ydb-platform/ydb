@@ -1,5 +1,6 @@
 PY3TEST()
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

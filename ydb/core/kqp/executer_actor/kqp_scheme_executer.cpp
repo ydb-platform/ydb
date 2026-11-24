@@ -233,12 +233,12 @@ public:
     void FindWorkingDirForCTAS() {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
 
-        AFL_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
+        YDB_LOG_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
         const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
-        AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
+        YDB_LOG_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
 
         const auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
-        AFL_ENSURE(dirPath.size() >= 2);
+        YDB_LOG_ENSURE(dirPath.size() >= 2);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
@@ -274,9 +274,9 @@ public:
         }
 
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-        AFL_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
+        YDB_LOG_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
         const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
-        AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
+        YDB_LOG_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
         const auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
 
         if (!workingDir) {
@@ -293,8 +293,8 @@ public:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
         }
-        AFL_ENSURE(!workingDir->empty() && workingDir->size() < dirPath.size());
-        AFL_ENSURE(std::equal(
+        YDB_LOG_ENSURE(!workingDir->empty() && workingDir->size() < dirPath.size());
+        YDB_LOG_ENSURE(std::equal(
             workingDir->begin(),
             workingDir->end(),
             dirPath.begin(),
@@ -310,8 +310,8 @@ public:
     }
 
     void CreateCTASDirectory(const TConstArrayRef<TString> workingDir, const TConstArrayRef<TString> dirPath) {
-        AFL_ENSURE(!dirPath.empty());
-        AFL_ENSURE(!workingDir.empty());
+        YDB_LOG_ENSURE(!dirPath.empty());
+        YDB_LOG_ENSURE(!workingDir.empty());
 
         auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
@@ -327,9 +327,9 @@ public:
 
         const auto& schemeOp = PhyTx->GetSchemeOperation();
 
-        AFL_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
+        YDB_LOG_ENSURE(schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable);
         const auto& alterTableModifyScheme = schemeOp.GetAlterTable();
-        AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
+        YDB_LOG_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
 
         if (dirPath.size() == 1) {
             auto ev = MakeHolder<TEvPrivate::TEvMakeCTASDirResult>();
@@ -376,7 +376,7 @@ public:
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 auto modifyScheme = schemeOp.GetCreateTable();
-                AFL_ENSURE(!IsCreateTableAs || Temporary);
+                YDB_LOG_ENSURE(!IsCreateTableAs || Temporary);
                 if (Temporary) {
                     auto changePath = [this](NKikimrSchemeOp::TTableDescription* tableDesc) {
                         const auto fullPath = JoinPath({tableDesc->GetPath(), tableDesc->GetName()});
@@ -417,7 +417,7 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kAlterTable: {
                 const auto& modifyScheme = schemeOp.GetAlterTable();
-                AFL_ENSURE(!IsCreateTableAs || modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
+                YDB_LOG_ENSURE(!IsCreateTableAs || modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -936,7 +936,7 @@ public:
             FindWorkingDirForCTAS();
         } else {
             if (CreateTmpDir) {
-                AFL_ENSURE(Temporary);
+                YDB_LOG_ENSURE(Temporary);
                 CreateTmpDirectory();
             } else {
                 MakeSchemeOperationRequest();
@@ -1084,7 +1084,7 @@ public:
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
         if (IsCreateTableAs) {
-            AFL_ENSURE(std::all_of(resp->ResultSet.begin(), resp->ResultSet.end(), [](const auto& entry) {
+            YDB_LOG_ENSURE(std::all_of(resp->ResultSet.begin(), resp->ResultSet.end(), [](const auto& entry) {
                 return entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpPath;
             }));
             HandleCTASWorkingDir(ev);
@@ -1111,7 +1111,7 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
-        AFL_ENSURE(resp->ResultSet.size() <= 2);
+        YDB_LOG_ENSURE(resp->ResultSet.size() <= 2);
 
         if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
             YDB_LOG_ERROR("Access check failed",

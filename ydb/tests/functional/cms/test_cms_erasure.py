@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import time
 from hamcrest import assert_that
 
 from ydb.core.protos.cms_pb2 import EAvailabilityMode
@@ -29,10 +28,7 @@ class AbstractLocalClusterTest(object):
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
-        # CMS will not let disable state storage
-        # nodes for first 2 minutes
-        time.sleep(120)
-        cms.request_increase_ratio_limit(cls.cluster.client)
+        utils.configure_cms_and_wait(cls.cluster, cls.mode)
         host = cls.cluster.nodes[1].host
         mon_port = cls.cluster.nodes[1].mon_port
         cls.swagger_client = SwaggerClient(host, mon_port)

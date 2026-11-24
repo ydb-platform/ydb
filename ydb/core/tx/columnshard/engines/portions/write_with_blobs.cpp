@@ -7,7 +7,7 @@ namespace NKikimr::NOlap {
 
 void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
     TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
-    AFL_VERIFY(chunk);
+    YDB_LOG_VERIFY(chunk);
     Y_ABORT_UNLESS(!Finished);
     const TString& data = chunk->GetData();
 
@@ -21,8 +21,10 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
 }
 
 void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
-    AFL_VERIFY(!BlobId);
-    AFL_VERIFY(blobId.BlobSize() == ResultBlob.size())("blob_id", blobId.BlobSize())("data", ResultBlob.size());
+    YDB_LOG_VERIFY(!BlobId);
+    YDB_LOG_VERIFY(blobId.BlobSize() == ResultBlob.size(),
+        {"blobId", blobId.BlobSize()},
+        {"data", ResultBlob.size()});
     BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
@@ -66,7 +68,7 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
             TIndexChunk(i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
     }
 
-    AFL_VERIFY(bsIndexBlobBytes <= Max<ui32>());
+    YDB_LOG_VERIFY(bsIndexBlobBytes <= Max<ui32>());
     result.GetPortionConstructor().SetBsIndexBlobBytes(static_cast<ui32>(bsIndexBlobBytes));
     return result;
 }
@@ -82,14 +84,16 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TWritePortionInfoWithBlobsConstr
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
+        YDB_LOG_VERIFY(i.second->GetChunkIdxVerified() == result.size(),
+            {"idx", i.second->GetChunkIdxVerified()},
+            {"size", result.size()});
         result.emplace_back(i.second);
     }
     return result;
 }
 
 TString TWritePortionInfoWithBlobsResult::GetBlobByRangeVerified(const ui32 entityId, const ui32 chunkIdx) const {
-    AFL_VERIFY(!!PortionConstructor);
+    YDB_LOG_VERIFY(!!PortionConstructor);
     for (auto&& rec : PortionConstructor->GetRecords()) {
         if (rec.GetEntityId() != entityId || rec.GetChunkIdx() != chunkIdx) {
             continue;
@@ -101,9 +105,9 @@ TString TWritePortionInfoWithBlobsResult::GetBlobByRangeVerified(const ui32 enti
                 }
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return "";
 }
 

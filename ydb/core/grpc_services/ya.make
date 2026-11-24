@@ -207,14 +207,17 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
-    ydb/core/kqp/common
     ydb/core/kqp/common/events
-    ydb/core/kqp/opt
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/common/stats
+    ydb/core/kqp/executer_actor/shards_resolver
+    ydb/core/kqp/query_plan
     ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/scheme/mkql
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/core/security/sasl
@@ -235,6 +238,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/services
     ydb/library/yaml_config
+    ydb/library/yaml_json
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq

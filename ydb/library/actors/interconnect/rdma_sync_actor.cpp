@@ -267,9 +267,13 @@ namespace {
         }
 
         void Run() override {
-            SetPrefix(Sprintf("RdmaSync %s [node %" PRIu32 " %s]",
-                SelfActorId.ToString().data(), PeerNodeId, Incoming ? "incoming" : "outgoing"));
+            SetPrefix(YDB_LOG_CREATE_MESSAGE(
+                {"selfActorKind", "RdmaSync"},
+                {"selfActorId", SelfActorId},
+                {"nodeId", PeerNodeId},
+                {"direction", Incoming ? "incoming" : "outgoing"}));
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting rdma sync actor",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"});
 
             try {
@@ -287,6 +291,7 @@ namespace {
             auto* result = static_cast<TSessionCreatorDelegate*>(ev->GetBase());
             if (const TString* error = result->GetError()) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to create rdma sync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"session", error->data()});
                 Finish(*error);
@@ -300,6 +305,7 @@ namespace {
             ui64 peerStartSyncChecksum = 0;
             if (!DoStart(peerStartSync, localStartSyncChecksum, peerStartSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA StartSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -311,6 +317,7 @@ namespace {
             const TMonotonic rdmaStart = TActivationContext::Monotonic();
             if (!DoData(peerStartSync, peerStartSyncChecksum, localDataSync, localDataSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA DataSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -321,6 +328,7 @@ namespace {
             ui64 peerDataSyncChecksum = 0;
             if (!DoReceiveData(localStartSyncChecksum, peerDataSync, peerDataSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive DataSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -331,6 +339,7 @@ namespace {
             ui64 localAckSyncChecksum = 0;
             if (!DoAck(peerDataSyncChecksum, localAckSync, localAckSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA AckSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -342,6 +351,7 @@ namespace {
             TMonotonic peerAckReceivedAt;
             if (!DoReceiveAck(localDataSyncChecksum, peerAckSync, peerAckSyncChecksum, peerAckReceivedAt, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive AckSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -351,6 +361,7 @@ namespace {
 
             if (!DoSwitchToTransitionMode(session.get(), error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to switch RDMA session to data",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"mode", error.data()});
                 Finish(std::move(error));
@@ -359,6 +370,7 @@ namespace {
 
             if (!DoFin(peerAckSyncChecksum, rdmaRtt, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA FinSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -367,6 +379,7 @@ namespace {
 
             if (!DoReceiveFin(localAckSyncChecksum, error)) {
                 YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive FinSync",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICRDMA"},
                     {"failed", error.data()});
                 Finish(std::move(error));
@@ -1025,6 +1038,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA StartSync exchanged",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"featureMask", peerStartSync.GetFeatureMask()});
 
@@ -1069,6 +1083,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA DataSync received",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"payloadSize", dataSync.GetPayload().size()});
 
@@ -1108,6 +1123,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA AckSync received",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"});
 
             return true;
@@ -1160,6 +1176,7 @@ namespace {
             }
 
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA FinSync received",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"rdmaRtt", finSync.GetRdmaRtt()});
 

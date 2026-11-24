@@ -48,15 +48,15 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
 TSharingTransactionOperator::TProposeResult TSharingTransactionOperator::DoStartProposeOnExecute(
     TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
     if (!SessionExistsFlag) {
-        AFL_VERIFY(!!TxPropose);
-        AFL_VERIFY(TxPropose->Execute(txc, NActors::TActivationContext::AsActorContext()));
+        YDB_LOG_VERIFY(!!TxPropose);
+        YDB_LOG_VERIFY(TxPropose->Execute(txc, NActors::TActivationContext::AsActorContext()));
     }
     return TProposeResult();
 }
 
 void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
     if (!SessionExistsFlag) {
-        AFL_VERIFY(!!TxPropose);
+        YDB_LOG_VERIFY(!!TxPropose);
         TxPropose->Complete(ctx);
         TxPropose.reset();
     }
@@ -79,7 +79,7 @@ bool TSharingTransactionOperator::ProgressOnComplete(TColumnShard& owner, const 
     if (!SharingTask) {
         return true;
     }
-    AFL_VERIFY(!!TxFinish);
+    YDB_LOG_VERIFY(!!TxFinish);
     TxFinish->Complete(ctx);
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
@@ -103,7 +103,7 @@ bool TSharingTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const
     if (!SharingTask) {
         return true;
     }
-    AFL_VERIFY(!!TxAbort);
+    YDB_LOG_VERIFY(!!TxAbort);
     TxAbort->Complete(ctx);
     return true;
 }

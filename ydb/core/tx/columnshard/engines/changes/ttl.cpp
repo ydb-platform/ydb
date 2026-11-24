@@ -26,10 +26,10 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     if (IsAborted()) {
         THashMap<TInternalPathId, THashSet<ui64>> restoreIndexAddresses;
         for (auto&& i : PortionsToEvict) {
-            AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo()->GetPathId()].emplace(i.GetPortionInfo()->GetPortionId()).second);
+            YDB_LOG_VERIFY(restoreIndexAddresses[i.GetPortionInfo()->GetPathId()].emplace(i.GetPortionInfo()->GetPortionId()).second);
         }
         for (auto&& i : GetPortionsToRemove().GetPortions()) {
-            AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
+            YDB_LOG_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
         }
         engine.ReturnToIndexes(restoreIndexAddresses);
     }
@@ -41,7 +41,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateE
     auto& evictFeatures = info.GetFeatures();
     auto blobSchema = portionInfo.GetSchema(context.SchemaVersions);
     Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() ||
-                   blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
+                   portionInfo.GetSchemaVersionVerified() < evictFeatures.GetTargetScheme()->GetVersion());
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(
         GetPortionDataAccessor(info.GetPortionInfo()->GetPortionId()), srcBlobs, blobSchema->GetIndexInfo());
@@ -59,7 +59,7 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
             AddPortionToRemove(info.GetPortionInfo(), false);
             for (const auto& x : pwb->MutableBlobs()) {
-                AFL_VERIFY(x.GetOperator()->GetStorageId() != IStoragesManager::LocalMetadataStorageId);
+                YDB_LOG_VERIFY(x.GetOperator()->GetStorageId() != IStoragesManager::LocalMetadataStorageId);
             }
             AppendedPortions.emplace_back(std::move(*pwb));
         }

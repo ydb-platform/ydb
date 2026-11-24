@@ -9,8 +9,8 @@
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
@@ -79,7 +79,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"reason", "db_reading_not_finished"});
         return;
     }
-    AFL_VERIFY(!WriteGate);
+    YDB_LOG_VERIFY(!WriteGate);
     WriteGate.emplace(*Executor(), TablesManager, *OperationsManager, *SpaceWatcher, Counters, TabletID());
     ProgressTxController->OnTabletInit();
     AbortNotProposedTransactions();
@@ -343,8 +343,9 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
     const TDuration usedLivetime = NYDBTest::TControllers::GetColumnShardController()->GetUsedSnapshotLivetime();
-    AFL_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()))("used", usedLivetime)(
-                                                "staleness", stalenessInMem);
+    YDB_LOG_VERIFY(usedLivetime < stalenessInMem || (stalenessInMem == usedLivetime && usedLivetime == TDuration::Zero()),
+        {"used", usedLivetime},
+        {"staleness", stalenessInMem});
     const TDuration ping = 0.3 * std::min(stalenessInMem - usedLivetime, stalenessLivetime - stalenessInMem);
     if (auto writeTx = InFlightReadsTracker.Ping(this, stalenessInMem, usedLivetime, TInstant::Now())) {
         Execute(writeTx.release(), ctx);
@@ -489,7 +490,6 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     }
 
     ui64 storageBytes =
-        Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_INSERTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMPACTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_SPLIT_COMPACTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_INACTIVE_BYTES);
 

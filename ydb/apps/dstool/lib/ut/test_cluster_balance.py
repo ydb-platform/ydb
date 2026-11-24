@@ -8,7 +8,7 @@ from ydb.apps.dstool.lib import dstool_cmd_cluster_balance as balance
 @pytest.fixture
 def strategy():
     args = SimpleNamespace(
-        group_ids=None, storage_pool=None, only_from_overpopulated_pdisks=False,
+        group_ids=None, storage_pool=None, pdisk_type=None, only_from_overpopulated_pdisks=False,
         max_donors_per_pdisk=0, max_replicating_pdisks=None,
         prefer_less_occupied_rack=False, with_attention_to_replication=False,
         dry_run=False, quiet=True,
@@ -44,6 +44,39 @@ def response_to(node, index=0):
     item.From.NodeId, item.From.PDiskId = 1, 1
     item.To.NodeId, item.To.PDiskId = node, 1
     return response
+
+
+@pytest.mark.parametrize('pdisk_type, expected_groups, expected_histo', [
+    (None, {101, 202, 303}, {6: 1, 5: 1, 2: 1}),
+    ('ROT', {101}, {6: 1}),
+    ('SSD', {202}, {5: 1}),
+    ('NVME', {303}, {2: 1}),
+])
+def test_pdisk_type_selection(strategy, pdisk_type, expected_groups, expected_histo):
+    info = strategy.cluster_info
+    vslots = balance.common.build_vslot_map(info.base_config)
+    for node, media_type, group_id, used_slots in (
+        (1, 'ROT', 101, 6),
+        (2, 'SSD', 202, 5),
+        (3, 'NVME', 303, 2),
+    ):
+        info.pdisk_map[node, 1].Type = balance.common.EPDiskType.Value(media_type)
+        vslots[node, 1, 1].GroupId = group_id
+        info.pdisk_usage[node, 1] = used_slots
+    strategy.groups_info.healthy_groups = {101, 202, 303}
+
+    by_type_args = SimpleNamespace(**vars(strategy.args))
+    by_type_args.pdisk_type = pdisk_type
+    by_type = balance.VSlotBalancingStrategy(by_type_args, info, strategy.groups_info)
+    by_type.calculate_extra_info()
+    candidates, _ = by_type.list_candidate_vslots()
+    assert {vslot.GroupId for vslot in candidates} == expected_groups
+    assert by_type.histo == expected_histo
+
+    by_group_ids_args = SimpleNamespace(**vars(strategy.args))
+    by_group_ids_args.group_ids = expected_groups
+    by_group_ids = balance.VSlotBalancingStrategy(by_group_ids_args, info, strategy.groups_info)
+    assert by_group_ids.list_candidate_vslots()[0] == candidates
 
 
 @pytest.fixture
@@ -290,3 +323,39 @@ def test_donor_weight_uses_its_pdisk_capacity_model(
     usage = balance.common.build_pdisk_usage_map(base_config, count_donors=count_donors)
     assert usage[1, 1] == 6
     assert usage[3, 1] == 1 + (2 if count_donors else 0)
+
+
+@pytest.mark.parametrize(
+    'usage, limit, weight, expected_node',
+    [
+        (10, 10, 1, 3),
+        (11, 10, 1, 3),
+        (9, 10, 1, 2),
+        (9, 10, 2, 3),
+        (8, 10, 2, 2),
+        (10, 0, 1, 2),
+    ],
+)
+def test_group_slots_skips_targets_without_capacity(strategy, monkeypatch, usage, limit, weight, expected_node):
+    strategy.args.allow_same_node = False
+    info = strategy.cluster_info
+    info.pdisk_usage[2, 1] = 0
+    info.pdisk_usage_w_donors[2, 1] = usage
+    info.expected_slot_count_map[2, 1] = limit
+    info.group_map[1] = SimpleNamespace(GroupSizeInUnits=weight)
+    group_strategy = balance.GroupVSlotsBalancingStrategy(strategy.args, info, strategy.groups_info)
+    group_strategy.pdisk_groups_usage = {(1, 1): 4, (2, 1): 0, (3, 1): 1}
+    group_strategy.ideal_distribution = 2
+    group_strategy.max_vdisks_per_pdisk = 4
+    group_strategy.group_pdisks = {1: {(1, 1)}}
+    group_strategy.group_nodes = {1: {1}}
+    requests = []
+
+    def invoke(request):
+        requests.append(request)
+        return response_to(expected_node)
+
+    monkeypatch.setattr(balance.common, 'invoke_bsc_request', invoke)
+    assert group_strategy.reassign_vslot(info.base_config.VSlot[0], False)
+    assert len(requests) == 1
+    assert requests[0].Command[0].ReassignGroupDisk.TargetPDiskId.NodeId == expected_node

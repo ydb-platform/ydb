@@ -4,12 +4,14 @@
 #include "export_iface.h"
 #include "type_serialization.h"
 
+#include <ydb/library/table_digest/json_document.h>
+
 #include <library/cpp/string_utils/quote/quote.h>
-#include <yql/essentials/types/binary_json/read.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 #include <util/stream/buffer.h>
+#include <util/stream/format.h>
 #include <util/stream/output.h>
 
 namespace NKikimr::NDataShard {
@@ -95,10 +97,10 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
             serialized = cell.ToStream<bool>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Double:
-            serialized = cell.ToStream<double>(out, ErrorString);
+            out << Prec(cell.AsValue<double>(), PREC_AUTO);
             break;
         case NScheme::NTypeIds::Float:
-            serialized = cell.ToStream<float>(out, ErrorString);
+            out << Prec(cell.AsValue<float>(), PREC_AUTO);
             break;
         case NScheme::NTypeIds::Date:
             out << TInstant::Days(cell.AsValue<ui16>());
@@ -135,7 +137,8 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
             out << '"' << CGIEscapeRet(cell.AsBuf()) << '"';
             break;
         case NScheme::NTypeIds::JsonDocument:
-            out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
+            // Preserve stored doubles when the exported JSON is restored.
+            out << '"' << CGIEscapeRet(NYql::NDigest::CanonicalJsonDocument(cell.AsBuf(), /*writeNanAsString=*/true)) << '"';
             break;
         case NScheme::NTypeIds::Pg:
             serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);

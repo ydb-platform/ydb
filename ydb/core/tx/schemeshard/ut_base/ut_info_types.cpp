@@ -3,15 +3,158 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/string/printf.h>
 #include <util/string/strip.h>
 
+#include <optional>
 #include <source_location>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+struct TVectorBuildRow {
+    NKikimrSchemeOp::EIndexType IndexType;
+    TString CreationConfig;
+
+    template<class TColumn>
+    typename TColumn::Type GetValue() const {
+        if constexpr (std::is_same_v<TColumn, Schema::IndexBuild::IndexType>) {
+            return IndexType;
+        } else if constexpr (std::is_same_v<TColumn, Schema::IndexBuild::CreationConfig>) {
+            return CreationConfig;
+        } else if constexpr (std::is_same_v<TColumn, Schema::IndexBuild::State>) {
+            return typename TColumn::Type(TIndexBuildInfo::EState::Done);
+        } else {
+            return {};
+        }
+    }
+
+    template<class TColumn>
+    bool HaveValue() const {
+        return std::is_same_v<TColumn, Schema::IndexBuild::CreationConfig>;
+    }
+
+    template<class TColumn>
+    typename TColumn::Type GetValueOrDefault(const typename TColumn::Type& fallback = {}) const {
+        return HaveValue<TColumn>() ? GetValue<TColumn>() : fallback;
+    }
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
+
+    NKikimrCompaction::TCompactionPolicy CompactionPolicyWithGenerationIds(
+            const TVector<std::optional<ui32>>& ids) {
+        NKikimrCompaction::TCompactionPolicy policy;
+        for (const auto id : ids) {
+            auto* generation = policy.AddGeneration();
+            if (id) {
+                generation->SetGenerationId(*id);
+            }
+        }
+        return policy;
+    }
+
+    Y_UNIT_TEST(CompactionPolicyRejectsInvalidGenerationIds) {
+        struct TCase {
+            TVector<std::optional<ui32>> Ids;
+            ui32 Index;
+            ui32 ActualId;
+        };
+        const TCase cases[] = {
+            {{1}, 0, 1},
+            {{0, 0}, 1, 0},
+            {{0, 2}, 1, 2},
+            {{0, 2, 1}, 1, 2},
+            {{0, std::nullopt}, 1, 0},
+        };
+        for (const auto& test : cases) {
+            const auto policy = CompactionPolicyWithGenerationIds(test.Ids);
+            TString error;
+            UNIT_ASSERT(!TPartitionConfigMerger::VerifyCompactionPolicy(policy, error));
+            UNIT_ASSERT_VALUES_EQUAL(error, Sprintf(
+                "Compaction generation %u: expected GenerationId %u, got %u",
+                test.Index, test.Index, test.ActualId));
+        }
+    }
+
+    Y_UNIT_TEST(CompactionPolicyAcceptsSequentialGenerationIds) {
+        for (const bool omitFirstId : {false, true}) {
+            auto policy = CompactionPolicyWithGenerationIds({0, 1, 2});
+            if (omitFirstId) {
+                policy.MutableGeneration(0)->ClearGenerationId();
+            }
+            TString error;
+            UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCompactionPolicy(policy, error), error);
+        }
+    }
+
+    Y_UNIT_TEST(CreateAndAlterRejectInvalidCompactionGenerationIds) {
+        NKikimrSchemeOp::TPartitionConfig source;
+        source.MutableCompactionPolicy()->CopyFrom(CompactionPolicyWithGenerationIds({0, 1, 2}));
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(source, nullptr, false, error), error);
+
+        auto invalid = source;
+        invalid.MutableCompactionPolicy()->MutableGeneration(1)->SetGenerationId(2);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyCreateParams(invalid, nullptr, false, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+        error.clear();
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, invalid, nullptr, false, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+    }
+
+    Y_UNIT_TEST_FLAG(VectorIndexMismatchedBuildDescriptionIsBroken, Hnsw) {
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        if (Hnsw) {
+            config.MutableVectorIndexKmeansTreeDescription();
+        } else {
+            config.MutableHnswIndexDescription();
+        }
+        const TVectorBuildRow row{Hnsw ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, config.SerializeAsString()};
+        TIndexBuildInfo restored;
+        TIndexBuildInfo::FillFromRow(row, &restored);
+        UNIT_ASSERT(restored.IsBroken);
+        UNIT_ASSERT_STRING_CONTAINS(restored.GetIssue(), "type and description do not match");
+        // Querying diagnostics must not throw a second bad_variant_access.
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetVectorSettings().ByteSizeLong(), 0u);
+    }
+
+    Y_UNIT_TEST_FLAG(VectorIndexRoutingSettings, Hnsw) {
+        TIndexBuildInfo build;
+        build.IndexType = Hnsw
+            ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        if (Hnsw) {
+            build.SpecializedIndexDescription.emplace<NKikimrSchemeOp::THnswIndexDescription>();
+        } else {
+            build.SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>();
+        }
+        auto& settings = build.MutableVectorSettings();
+        settings.set_levels(1);
+        settings.set_clusters(Hnsw ? 1 : 2);
+        auto* vector = settings.mutable_settings();
+        vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        vector->set_vector_dimension(2);
+        if (Hnsw) {
+            vector->set_m(8);
+            vector->set_ef_construction(40);
+            vector->set_min_rows(1);
+            vector->set_delta_rows(256);
+        }
+        const auto original = settings.SerializeAsString();
+        TString error;
+        const auto routing = build.GetKMeansVectorSettings();
+        UNIT_ASSERT_C(NKikimr::NKMeans::ValidateSettings(routing, error), error);
+        UNIT_ASSERT_C(NKikimr::NKMeans::CreateClusters(routing, 2, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(build.GetVectorSettings().SerializeAsString(), original);
+    }
 
     Y_UNIT_TEST_FLAG(VectorIndexDescriptionPersistence, Hnsw) {
         NKikimrSchemeOp::TIndexCreationConfig config;

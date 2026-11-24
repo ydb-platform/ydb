@@ -74,6 +74,8 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kqp
+    ydb/core/kqp/common/dynamic_function_registry
+    ydb/core/kqp/common/warmup
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/rm_service
     ydb/core/kqp/script_executions/finalization
@@ -91,6 +93,7 @@ PEERDIR(
     ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
@@ -114,6 +117,8 @@ PEERDIR(
     ydb/core/tracing
     ydb/core/transfer
     ydb/core/tx
+    ydb/core/tx/cdc_aggregator/service
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/data_accessor/cache_policy

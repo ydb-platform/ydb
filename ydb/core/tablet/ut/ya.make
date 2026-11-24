@@ -1,10 +1,9 @@
 UNITTEST_FOR(ydb/core/tablet)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(10)
 
 SIZE(MEDIUM)
-
-SPLIT_FACTOR(50)
 
 PEERDIR(
     library/cpp/getopt
@@ -17,6 +16,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     bootstrapper_ut.cpp
+    node_whiteboard_ut.cpp
     pipe_tracker_ut.cpp
     resource_broker_ut.cpp
     tablet_counters_ut.cpp

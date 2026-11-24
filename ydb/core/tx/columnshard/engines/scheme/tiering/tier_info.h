@@ -163,16 +163,16 @@ public:
             , NextTierName(nextTierName)
             , NextTierWaiting(nextTierDuration)
         {
-            AFL_VERIFY(!nextTierName == !nextTierDuration);
+            YDB_LOG_VERIFY(!nextTierName == !nextTierDuration);
         }
 
         TString GetNextTierNameVerified() const {
-            AFL_VERIFY(NextTierName);
+            YDB_LOG_VERIFY(NextTierName);
             return *NextTierName;
         }
 
         TDuration GetNextTierWaitingVerified() const {
-            AFL_VERIFY(NextTierWaiting);
+            YDB_LOG_VERIFY(NextTierWaiting);
             return *NextTierWaiting;
         }
     };
@@ -189,7 +189,7 @@ public:
     }
 
     [[nodiscard]] bool Add(const std::shared_ptr<TTierInfo>& tier) {
-        AFL_VERIFY(tier);
+        YDB_LOG_VERIFY(tier);
         if (!TTLColumnName) {
             if (tier->GetEvictColumnName().empty()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -250,7 +250,7 @@ public:
     }
 
     const TString& GetEvictColumnName() const {
-        AFL_VERIFY(TTLColumnName);
+        YDB_LOG_VERIFY(TTLColumnName);
         return *TTLColumnName;
     }
 

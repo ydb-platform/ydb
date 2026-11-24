@@ -4,7 +4,10 @@
 #include "tablet_info.h"
 #include "event_history.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/intrlist.h>
+
+#include <memory>
 
 namespace NKikimr {
 namespace NHive {
@@ -55,10 +58,8 @@ public:
         }
 
         void RemoveRestriction() {
-            // We set IsSet to true if we are removing a restriction that does not exist anyway
-            // This way, it takes priority over DefaultTabletCount from HiveConfig
-            IsSet = (EffectiveMaxCount == FromLocal.GetMaxCount() || FromLocal.GetMaxCount() != MAX_TABLET_COUNT_DEFAULT_VALUE);
             EffectiveMaxCount = FromLocal.GetMaxCount();
+            IsSet = (EffectiveMaxCount != MAX_TABLET_COUNT_DEFAULT_VALUE);
         }
     };
 
@@ -72,6 +73,7 @@ public:
     THive& Hive;
     TNodeId Id;
     TActorId Local;
+    NKikimrLocal::TLocalCapabilities Capabilities;
     bool Down;
     bool Freeze;
     bool Drain;
@@ -91,6 +93,8 @@ public:
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
     NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
+    TNamedResourceValues NamedResourceValues; // accumulated named resources from tablet metrics
+    THashMap<TString, ui64> NamedResourceMaximum; // capacities of named resources reported by the node
     TInstant StartTime;
     TNodeLocation Location;
     bool LocationAcquired;
@@ -111,11 +115,46 @@ public:
     // diagnostics only: newest events of this node, constructed on the first event, see THive::RecordNodeEvent
     TEventHistory EventHistory;
 
+    struct TCounters {
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Parent;
+
+        // THive::GetStats, take part in the decision whether to start a balancer and which one.
+        TCounterPtr BalanceUsagePercent; // Node usage as THive::GetStats sees it: max{TabletsUsage* over all resources, fast rising average TotalNodeUsage reported by Local}. Its min/max over nodes are BalanceUsageMin/BalanceUsageMax, used to decide whether to start the emergency balancer.
+        TCounterPtr TabletsUsageCpuPercent; // Normalized tablets CPU usage. Its scatter over nodes is used to decide whether to trigger the balancer.
+        TCounterPtr TabletsUsageMemPercent; // Normalized tablets memory usage. Its scatter over nodes is used to decide whether to trigger the balancer.
+        TCounterPtr TabletsUsageNetPercent; // Normalized tablets network usage. Its scatter over nodes is used to decide whether to trigger the balancer.
+        TCounterPtr TabletsUsageCtr; // Number of tablets without CPU, memory and network usage (not normalized, because the denominator is too big). Its scatter over nodes is used to decide whether to trigger the balancer.
+
+        // GetNodeUsage(resource): node ordering and move expediency inside a balancer run.
+        TCounterPtr NodeUsageAvgComputeResourcesPercent; // Max{NodeUsageAvg* over all resources (Ctr is normalized here), fast rising average TotalNodeUsage reported by Local}. TotalNodeUsage is calculated by Local as: max{pool usage among monitored pools (System,User,IC by default), node memory usage over memory limit (if the limit is known)}.
+        // NodeUsageAvg*: normalized max{tablets usage, average TotalResourceUsage reported by Local}, see GetResourceCurrentValues.
+        TCounterPtr NodeUsageAvgCpuPercent; // Normalized node CPU usage.
+        TCounterPtr NodeUsageAvgMemPercent; // Normalized node memory usage.
+        TCounterPtr NodeUsageAvgNetPercent; // Normalized node network usage.
+        TCounterPtr NodeUsageAvgCtr; // Number of tablets without CPU, memory and network usage (not normalized, because the denominator is too big). Local doesn't report it, so it equals TabletsUsageCtr.
+
+        TCounterPtr NodeTabletsRunning;
+        TCounterPtr NodeTabletsStarting;
+        TCounterPtr TabletsMovedToNode;
+        TCounterPtr TabletsMovedFromNode;
+    };
+    std::unique_ptr<TCounters> Counters;
+
+    void CreateCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& hiveGroup); // no-op when present
+    void DropCounters(); // removes the node subgroup, no-op when absent
+    void UpdateCounters(); // no-op when absent
+
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
     TNodeInfo(TNodeInfo&&) = delete;
     TNodeInfo& operator =(const TNodeInfo&) = delete;
     TNodeInfo& operator =(TNodeInfo&&) = delete;
+
+    ~TNodeInfo() {
+        DropCounters(); // the counters belong to the node's process, a Hive that stops or moves must not leave them behind
+    }
 
     TString GetLogPrefix() const;
 
@@ -195,6 +234,12 @@ public:
     i32 GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
     ui64 GetMaxTabletsScheduled() const;
     ui64 GetMaxCountForTabletType(TTabletTypes::EType tabletType) const;
+    void SetTabletAvailabilityRestriction(TTabletTypes::EType tabletType, ui64 maxCount);
+    // Cycles restricted -> default -> explicitly allowed (overriding DefaultTabletLimit).
+    // Explicit allow is stored as a MAX_TABLET_COUNT_DEFAULT_VALUE restriction, so it survives node re-registration.
+    // Types not present in TabletAvailability are never explicitly allowed, their restriction is just removed.
+    // Returns true if the type is now explicitly allowed.
+    bool ResetTabletAvailabilityRestriction(TTabletTypes::EType tabletType);
 
     bool IsAbleToScheduleTablet() const {
         return GetTabletsScheduled() < GetMaxTabletsScheduled();
@@ -245,6 +290,7 @@ public:
             }
             Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
             Local = TActorId();
+            DropCounters(); // a node that is not alive is not balanced, do not show its stale values
             ChangeVolatileState(EVolatileState::Disconnected);
             for (TTabletInfo* tablet : TabletsToRestart) {
                 if (tablet->IsReadyToBoot()) {
@@ -268,7 +314,7 @@ public:
     bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
-    void Ping();
+    void Ping(bool sendSettings = false, bool sendCapabilities = false);
     void SendReconnect(const TActorId& local);
     // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
     void SetDown(bool down, EHiveEventReason reason, TString details = {});
@@ -276,16 +322,27 @@ public:
     void SetLocation(const TNodeLocation& location, EHiveEventReason reason);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);
 
+    // Max{tablets usage, average TotalResourceUsage reported by Local} per resource. Local values are used only after the average is stable.
     TResourceRawValues GetResourceCurrentValues() const;
 
     const TResourceRawValues& GetResourceMaximumValues() const {
         return ResourceMaximumValues;
     }
 
-    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
+    // includeNamed adds the balanced named resources of the tablet: they rank nodes for the tablet,
+    // but must not make a node unable to run it, as a full queue only means the work has to wait
+    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true, bool includeNamed = false) const;
+    // The highest usage among the balanced named resources of the tablet if it runs on this node, 0 if none
+    double GetNamedUsageForTablet(const TTabletInfo& tablet) const;
     double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
                         EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
+
+    // Capacity of the named resource: reported by the node or the default from config
+    std::optional<ui64> GetNamedResourceMaximum(const TString& name) const;
+    // Normalized usage of the named resource with `extra` added to the node's value,
+    // nullopt when capacity of the resource on the node is unknown
+    std::optional<double> GetNamedResourceUsage(const TString& name, ui64 extra = 0) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 

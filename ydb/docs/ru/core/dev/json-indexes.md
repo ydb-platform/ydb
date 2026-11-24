@@ -43,9 +43,15 @@ ALTER TABLE documents DROP INDEX json_idx
 
 Готовые сценарии использования собраны в разделе [рецептов поиска по JSON-документам](../recipes/json-search/index.md).
 
+## JSON-индексы с фильтрацией {#filtered}
+
+JSON-индекс с фильтрацией ограничивает поиск строками с заданными значениями колонок фильтрации, например документами одного клиента. Для создания такого индекса укажите колонки фильтрации перед JSON-колонкой в `ON`. См. [пример создания](../yql/reference/syntax/create_table/json_index.md#filtered).
+
+В запросе вместе с условием поиска по JSON требуется условие равенства для каждой колонки фильтрации. См. [пример запроса](../yql/reference/syntax/select/json_index.md#filtered).
+
 ## Обновление JSON-индексов {#update}
 
-JSON-индексы автоматически поддерживаются при модификации данных и обновляются синхронно вместе с основной таблицей. Таблицы с JSON-индексами поддерживают:
+JSON-индексы автоматически поддерживаются при модификации данных и обновляются синхронно вместе с основной таблицей. Запрос через JSON-индекс видит строки, вставленные ранее в той же транзакции, до её фиксации. Таблицы с JSON-индексами поддерживают:
 
 * `INSERT`
 * `UPSERT`
@@ -63,6 +69,8 @@ JSON-индексы автоматически поддерживаются пр
 ## Поддерживаемые предикаты {#predicates}
 
 Для выполнения через JSON-индексы поддерживаются только выражения на основе функций `JSON_EXISTS` и `JSON_VALUE` в блоке `WHERE`, объединённые операторами `AND` / `OR` по правилам ниже.
+
+В секции `PASSING` также поддерживаются параметры типа `Json`, в том числе массивы искомых значений. См. [пример запроса](../yql/reference/syntax/select/json_index.md#json-parameters).
 
 ### JSON_EXISTS {#json-exists}
 
@@ -93,7 +101,7 @@ WHERE JSON_EXISTS(doc, '$.a') AND JSON_EXISTS(doc, '$.b')
 WHERE JSON_EXISTS(doc, '$.a') OR JSON_EXISTS(doc, '$.b')
 ```
 
-**Запрещено** (ошибка при использовании оператора `VIEW` или отказ автовыбора индекса):
+**Примеры предикатов, которые нельзя использовать для поиска по индексу:**
 
 ```yql
 -- Предикаты сравнения на верхнем уровне пути (вне ? (...))
@@ -106,6 +114,9 @@ WHERE JSON_EXISTS(doc, '!($.key == 10)')
 
 -- ON ERROR TRUE
 WHERE JSON_EXISTS(doc, '$.key' TRUE ON ERROR)
+
+-- ERROR ON ERROR
+WHERE JSON_EXISTS(doc, 'strict $.key' ERROR ON ERROR)
 
 -- Путь без оператора контекста ($) — переданный документ не используется
 WHERE JSON_EXISTS(doc, '1')
@@ -182,6 +193,10 @@ WHERE JSON_VALUE(doc, '$.key') = "x"
 -- DEFAULT при ON EMPTY / ON ERROR (кроме NULL)
 WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 DEFAULT "x" ON ERROR) = "y"
 
+-- ERROR ON EMPTY / ERROR ON ERROR
+WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 ERROR ON EMPTY) = "x"u
+WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 ERROR ON ERROR) = "x"u
+
 -- Неподдерживаемый тип данных в RETURNING
 WHERE JSON_VALUE(doc, '$.ts' RETURNING Timestamp) = ...
 
@@ -204,10 +219,11 @@ WHERE JSON_VALUE(JSON_QUERY(doc, '$.a'), '$.b' RETURNING Utf8) = "x"
 
 {% endnote %}
 
+Предикаты с `ERROR ON EMPTY` или `ERROR ON ERROR` не используются для поиска по индексу: пропуск строк мог бы скрыть ошибки. См. [обработку ошибок](../yql/reference/syntax/select/json_index.md#error-handling).
+
 ## Ограничения {#limitations}
 
 * JSON-индексы поддерживаются только для [строковых](../concepts/datamodel/table.md#row-oriented-tables) таблиц.
-* Первичный ключ таблицы должен состоять из единственной колонки целочисленного типа (`Uint64`, `Uint32`, `Int64` или `Int32`). Это временное ограничение, которое будет снято в ходе дальнейшего развития.
 * В одном JSON-индексе индексируется ровно одна колонка типа `Json` или `JsonDocument`.
 * Выражение `COVER` для JSON-индексов не поддерживается.
 * Для таблиц с JSON-индексами [не поддерживается](#update) ряд операций и механизмов модификации данных.

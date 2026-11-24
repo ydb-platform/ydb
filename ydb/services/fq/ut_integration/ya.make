@@ -5,6 +5,8 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)
 
+SUPPRESSIONS(tsan.supp)
+
 SRCS(
     ut_utils.cpp
     fq_ut.cpp

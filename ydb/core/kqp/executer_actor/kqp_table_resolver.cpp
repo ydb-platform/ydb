@@ -96,7 +96,7 @@ private:
                 return;
             }
 
-            AFL_ENSURE(entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath);
+            YDB_LOG_ENSURE(entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath);
             if (iterTableRequestPathes != TableRequestPathes.end()) {
                 TVector<TStageId> stageIds(std::move(iterTableRequestPathes->second));
                 const bool isOlap = (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
@@ -107,7 +107,7 @@ private:
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
                         stageMeta.TableKind = ETableKind::Datashard;
                     } else {
-                        AFL_ENSURE(isOlap);
+                        YDB_LOG_ENSURE(isOlap);
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
@@ -115,23 +115,23 @@ private:
                     const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
                     if (stage.GetSinks().size() == 1) {
-                        AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                        YDB_LOG_ENSURE(stage.OutputTransformsSize() == 0);
                         const auto& sink = stage.GetSinks(0);
-                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
+                        YDB_LOG_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
                         intSinkPtr = &sink.GetInternalSink();
                     } else if (stage.OutputTransformsSize() == 1) {
-                        AFL_ENSURE(stage.GetSinks().size() == 0);
+                        YDB_LOG_ENSURE(stage.GetSinks().size() == 0);
                         const auto& transform = stage.GetOutputTransforms(0);
-                        AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                        YDB_LOG_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
                         intSinkPtr = &transform.GetInternalSink();
                     } else {
                         YQL_ENSURE(false);
                     }
 
-                    AFL_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    YDB_LOG_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
-                    AFL_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
-                    AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                    YDB_LOG_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
+                    YDB_LOG_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
                     settings.MutableTable()->SetSysView(entry.TableId.SysViewInfo);
@@ -155,13 +155,13 @@ private:
                     TVector<NScheme::TTypeInfo> keyTypes;
 
                     // CTAS writes all columns
-                    AFL_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
+                    YDB_LOG_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
 
                     for (const auto& [index, columnInfo] : entry.Columns) {
                         columnNameToIndex[columnInfo.Name] = index;
                         columnIdToIndex[columnInfo.Id] = index;
                         if (columnInfo.KeyOrder != -1) {
-                            AFL_ENSURE(columnInfo.KeyOrder >= 0);
+                            YDB_LOG_ENSURE(columnInfo.KeyOrder >= 0);
                             keyPositionToIndex[columnInfo.KeyOrder] = index;
                         }
                     }
@@ -169,14 +169,14 @@ private:
                     keyTypes.reserve(keyPositionToIndex.size());
                     for (const auto& [_, index] : keyPositionToIndex) {
                         const auto columnInfo = entry.Columns.FindPtr(index);
-                        AFL_ENSURE(columnInfo);
+                        YDB_LOG_ENSURE(columnInfo);
 
                         auto keyColumnProto = settings.AddKeyColumns();
                         fillColumnProto(*columnInfo, keyColumnProto);
 
                         keyTypes.push_back(columnInfo->PType);
                     }
-                    AFL_ENSURE(!keyPositionToIndex.empty());
+                    YDB_LOG_ENSURE(!keyPositionToIndex.empty());
 
                     stageMeta.ShardKey = ExtractKey(
                         stageMeta.TableId,
@@ -185,9 +185,9 @@ private:
 
                     for (const auto& columnName : settings.GetInputColumns()) {
                         const auto index = columnNameToIndex.FindPtr(columnName);
-                        AFL_ENSURE(index);
+                        YDB_LOG_ENSURE(index);
                         const auto columnInfo = entry.Columns.FindPtr(*index);
-                        AFL_ENSURE(columnInfo);
+                        YDB_LOG_ENSURE(columnInfo);
 
                         auto columnProto = settings.AddColumns();
                         fillColumnProto(*columnInfo, columnProto);
@@ -199,18 +199,18 @@ private:
                         if (!isOlap) {
                             for (const auto& [_, index] : keyPositionToIndex) {
                                 const auto columnInfo = entry.Columns.FindPtr(index);
-                                AFL_ENSURE(columnInfo);
+                                YDB_LOG_ENSURE(columnInfo);
                                 columnToOrder[columnInfo->Name] = currentIndex++;
                             }
                         }
                         for (const auto& [id, index] : columnIdToIndex) {
                             const auto columnInfo = entry.Columns.FindPtr(index);
-                            AFL_ENSURE(columnInfo);
-                            AFL_ENSURE(columnInfo->Id == id);
+                            YDB_LOG_ENSURE(columnInfo);
+                            YDB_LOG_ENSURE(columnInfo->Id == id);
                             if (isOlap || columnInfo->KeyOrder == -1) {
                                 columnToOrder[columnInfo->Name] = currentIndex++;
                             } else {
-                                AFL_ENSURE(columnToOrder.contains(columnInfo->Name));
+                                YDB_LOG_ENSURE(columnToOrder.contains(columnInfo->Name));
                             }
                         }
 
@@ -219,7 +219,7 @@ private:
                         }
                     }
 
-                    AFL_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
+                    YDB_LOG_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
 
                     stageMeta.ResolvedSinkSettings = settings;
                 }
@@ -232,7 +232,7 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        AFL_ENSURE(ResolvingNamesFinished);
+        YDB_LOG_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -275,7 +275,7 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
-        AFL_ENSURE(ResolvingNamesFinished);
+        YDB_LOG_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -315,7 +315,7 @@ private:
             }
 
             for (auto& partition : entry.KeyDescription->GetPartitions()) {
-                AFL_ENSURE(partition.Range);
+                YDB_LOG_ENSURE(partition.Range);
             }
 
             YDB_LOG_DEBUG("Resolved",
@@ -369,8 +369,8 @@ private:
                 if (!stageInfo.Meta.ShardOperations.empty()) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (!tableInfo && !SkipUnresolvedNames) {
-                        AFL_ENSURE(!stageInfo.Meta.TableId);
-                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        YDB_LOG_ENSURE(!stageInfo.Meta.TableId);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TablePath);
                         needToResolveNames = true;
                     }
                 }
@@ -388,7 +388,7 @@ private:
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (tableInfo) {
                         if (ResolvingNamesFinished) {
-                            AFL_ENSURE(stageInfo.Meta.TableId);
+                            YDB_LOG_ENSURE(stageInfo.Meta.TableId);
                             TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
                             stageInfo.Meta.TableKind = tableInfo->TableKind;
 
@@ -442,8 +442,8 @@ private:
                         }
                     } else if (!ResolvingNamesFinished) {
                         // CTAS
-                        AFL_ENSURE(!stageInfo.Meta.TableId);
-                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        YDB_LOG_ENSURE(!stageInfo.Meta.TableId);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TablePath);
                         const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);
                         const auto canonizedPath = CanonizePath(splittedPath);
                         if (TableRequestPathes.find(canonizedPath) == TableRequestPathes.end()) {
@@ -459,8 +459,8 @@ private:
                         }
                     } else if (!SkipUnresolvedNames) {
                         // CTAS
-                        AFL_ENSURE(stageInfo.Meta.TableId);
-                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TableId);
+                        YDB_LOG_ENSURE(stageInfo.Meta.TablePath);
 
                         TablePathsById.emplace(stageInfo.Meta.TableId, stageInfo.Meta.TablePath);
 
@@ -476,7 +476,7 @@ private:
 
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
-                        AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
+                        YDB_LOG_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
                         entry.Access = NACLib::EAccessRights::UpdateRow;
                     }
                 }

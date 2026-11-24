@@ -15,6 +15,19 @@ namespace NKikimrKqp {
     class TKqpAlterTableRequest;
 }
 
+namespace NKikimrSchemeOp {
+    class TAlterColumnTable;
+    class TCdcStreamDescription;
+    class TColumnDescription;
+    class TColumnTableDescription;
+    class TIndexedTableCreationConfig;
+    class TModifyScheme;
+    class TMultiColumnStatisticsDescription;
+    class TPathDescription;
+    class TSequenceDescription;
+    class TTableDescription;
+}
+
 namespace NYql{
     struct TKikimrTableMetadata;
 }

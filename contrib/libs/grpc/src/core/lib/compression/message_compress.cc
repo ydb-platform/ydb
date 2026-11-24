@@ -145,10 +145,16 @@ static int zlib_decompress(grpc_slice_buffer* input, grpc_slice_buffer* output,
 }
 
 struct CompressTraits {
-  static std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> CreateContext() {
-    return std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)>(
+  static std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> CreateContext(size_t input_length) {
+    std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> context(
        ZSTD_createCCtx(),
        &ZSTD_freeCCtx);
+    if (context) {
+      // Content size goes into the frame header; zstd sizes the window to it.
+      size_t rc = ZSTD_CCtx_setPledgedSrcSize(context.get(), input_length);
+      if (ZSTD_isError(rc)) context.reset();
+    }
+    return context;
   }
 
   static size_t ProcessPart(
@@ -162,7 +168,7 @@ struct CompressTraits {
 };
 
 struct DecompressTraits {
-  static std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> CreateContext() {
+  static std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> CreateContext(size_t /* input_length */) {
     return std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)>(
        ZSTD_createDCtx(),
        &ZSTD_freeDCtx);
@@ -179,36 +185,67 @@ struct DecompressTraits {
 
 template<typename Traits>
 static bool zstd_common(grpc_slice_buffer* input, grpc_slice_buffer* output) {
-  const auto context_ptr = Traits::CreateContext();
+  const auto context_ptr = Traits::CreateContext(input->length);
   if (!context_ptr) {
     gpr_log(GPR_INFO, "Failed create zstd context");
     return false;
   }
+  // ZSTD_e_end goes with the last non-empty slice. Empty slices are skipped:
+  // zstd given no input only asks for more, which looped forever.
+  size_t last = input->count;
+  for (size_t i = input->count; i-- > 0;) {
+    if (GRPC_SLICE_LENGTH(input->slices[i]) != 0) {
+      last = i;
+      break;
+    }
+  }
+  grpc_slice outbuf = GRPC_SLICE_MALLOC(OUTPUT_BLOCK_SIZE);
+  ZSTD_outBuffer zstd_output;
+  zstd_output.dst = GRPC_SLICE_START_PTR(outbuf);
+  zstd_output.size = GRPC_SLICE_LENGTH(outbuf);
+  zstd_output.pos = 0;
+  size_t process_result = 0;  // Do not fail on an empty input.
   for (size_t i = 0; i < input->count; i++) {
-    const bool is_last_chunk = (i == input->count - 1);
+    const bool is_last_chunk = (i == last);
     ZSTD_inBuffer zstd_input;
     zstd_input.src = GRPC_SLICE_START_PTR(input->slices[i]);
     zstd_input.size = GRPC_SLICE_LENGTH(input->slices[i]);
     zstd_input.pos = 0;
-    bool should_continue = true;
-    while (should_continue) {
-      grpc_slice outbuf = GRPC_SLICE_MALLOC(OUTPUT_BLOCK_SIZE);
-      ZSTD_outBuffer zstd_output;
-      zstd_output.dst = GRPC_SLICE_START_PTR(outbuf);
-      zstd_output.size = GRPC_SLICE_LENGTH(outbuf);
-      zstd_output.pos = 0;
-      size_t const process_result = Traits::ProcessPart(context_ptr.get(), &zstd_output, &zstd_input, is_last_chunk);
+    if (zstd_input.size == 0) continue;
+    // Repeat while the block fills up and zstd still has data to flush, or
+    // input remains (the next frame of a multi-frame message).
+    do {
+      if (zstd_output.pos == zstd_output.size) {
+        grpc_slice_buffer_add_indexed(output, outbuf);
+        outbuf = GRPC_SLICE_MALLOC(OUTPUT_BLOCK_SIZE);
+        zstd_output.dst = GRPC_SLICE_START_PTR(outbuf);
+        zstd_output.size = GRPC_SLICE_LENGTH(outbuf);
+        zstd_output.pos = 0;
+      }
+      process_result = Traits::ProcessPart(context_ptr.get(), &zstd_output, &zstd_input, is_last_chunk);
       if (ZSTD_isError(process_result)) {
         gpr_log(GPR_INFO, "zstd error code (%d)", ZSTD_getErrorCode(process_result));
         grpc_core::CSliceUnref(outbuf);
         return false;
       }
-      const auto out_data_left = zstd_output.size - zstd_output.pos;
-      outbuf.data.refcounted.length -= out_data_left;
-      grpc_slice_buffer_add_indexed(output, outbuf);
-
-      should_continue = is_last_chunk ? (process_result != 0) : (zstd_input.pos != zstd_input.size);
+    } while ((zstd_output.pos == zstd_output.size && process_result != 0) ||
+             zstd_input.pos != zstd_input.size);
+    if (zstd_input.pos != zstd_input.size) {
+      gpr_log(GPR_INFO, "zstd: not all input consumed");
+      grpc_core::CSliceUnref(outbuf);
+      return false;
     }
+  }
+  if (process_result != 0) {
+    gpr_log(GPR_INFO, "zstd: incomplete stream");
+    grpc_core::CSliceUnref(outbuf);
+    return false;
+  }
+  if (zstd_output.pos == 0) {
+    grpc_core::CSliceUnref(outbuf);
+  } else {
+    outbuf.data.refcounted.length = zstd_output.pos;
+    grpc_slice_buffer_add_indexed(output, outbuf);
   }
   return true;
 }

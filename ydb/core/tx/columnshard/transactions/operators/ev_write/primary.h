@@ -92,8 +92,8 @@ private:
                 // TxStartPreparation may be executed AFTER some ReadSets from the secondary.
                 // So, TxBroken may already be set, we must not ignore that.
                 op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
-                AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
-                AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
+                YDB_LOG_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
+                YDB_LOG_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "remove_tablet_id"},
                     {"waitBrokenFlags", JoinSeq(",", op->WaitShardsBrokenFlags)},
@@ -237,7 +237,7 @@ private:
     }
 
     virtual bool IsTxBroken() const override {
-        AFL_VERIFY(TxBroken);
+        YDB_LOG_VERIFY(TxBroken);
         return *TxBroken;
     }
 
@@ -265,7 +265,7 @@ private:
     }
 
     void SendResult(TColumnShard& owner) {
-        AFL_VERIFY(!!TxBroken);
+        YDB_LOG_VERIFY(!!TxBroken);
         NKikimrTx::TReadSetData readSetData;
         readSetData.SetDecision(*TxBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         for (auto&& tabletDest : ReceivingShards) {

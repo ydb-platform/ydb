@@ -35,7 +35,7 @@ public:
 
     virtual void FillDefaultColumn(
         NAssembling::TColumnAssemblingInfo& /*column*/, const std::optional<TSnapshot>& /*defaultSnapshot*/) const override {
-        //        AFL_VERIFY(false);
+        //        YDB_LOG_VERIFY(false);
     }
 
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(

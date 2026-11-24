@@ -215,11 +215,13 @@ def wait_for_counter_increase(node, sensor_name, initial_value, timeout=30):
 
 
 def measure_rate(node, sensor_name, duration):
-    started_at = time.monotonic()
     initial_value = read_counter(node, sensor_name)
+    started_at = time.monotonic()
     time.sleep(duration)
     final_value = read_counter(node, sensor_name)
     elapsed = time.monotonic() - started_at
+    logger.info("%s increased from %d to %d bytes over %.2f seconds",
+                sensor_name, initial_value, final_value, elapsed)
     assert final_value > initial_value, "%s did not increase during measurement" % sensor_name
     return (final_value - initial_value) / elapsed
 
@@ -278,7 +280,10 @@ def write_test_data(cluster, table_path):
             table_path,
             partition_id=0,
             kv_pairs=[(key, value) for key in keys[offset:offset + VALUES_PER_REQUEST]],
-            channel=1,
+            # Public channel 2 is MAIN: keep the values as separate blobs.
+            # Channel 1 is INLINE, whose tablet data can be compacted and
+            # collected, leaving too little replication work for both samples.
+            channel=2,
         )
         assert response.operation.status == StatusIds.SUCCESS, response
     return value, keys

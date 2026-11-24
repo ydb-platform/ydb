@@ -121,7 +121,7 @@ public:
     }
 
     void Unlink() override {
-        AFL_ENSURE(ReadIdToState.empty());
+        YDB_LOG_ENSURE(ReadIdToState.empty());
 
         for (auto& [_, state] : ShardToState) {
             state.HasPipe = false;
@@ -193,7 +193,7 @@ public:
                 KeyColumnTypes.push_back(typeInfo);
             }
         } else {
-            AFL_ENSURE(KeyColumnTypes.size() == keyColumns.size());
+            YDB_LOG_ENSURE(KeyColumnTypes.size() == keyColumns.size());
         }
 
         {
@@ -215,7 +215,7 @@ public:
         }
 
         {
-            AFL_ENSURE(lookupKeyPrefix <= keyColumns.size());
+            YDB_LOG_ENSURE(lookupKeyPrefix <= keyColumns.size());
             settings.InputColumns.reserve(lookupKeyPrefix);
             for (size_t index = 0; index < lookupKeyPrefix; ++index) {
                 const auto& keyColumn = keyColumns.at(index);
@@ -259,7 +259,7 @@ public:
             }
         }
 
-        AFL_ENSURE(CookieToLookupState.emplace(
+        YDB_LOG_ENSURE(CookieToLookupState.emplace(
                 cookie,
                 TLookupState{
                     .Worker = CreateLookupWorker(std::move(settings), Settings.TypeEnv, Settings.HolderFactory),
@@ -282,8 +282,8 @@ public:
         auto& state = CookieToLookupState.at(cookie);
         auto& worker = state.Worker;
 
-        AFL_ENSURE(state.ReadsInflight == 0);
-        AFL_ENSURE(state.Worker->AllRowsProcessed());
+        YDB_LOG_ENSURE(state.ReadsInflight == 0);
+        YDB_LOG_ENSURE(state.Worker->AllRowsProcessed());
 
         state.IsUniqueCheck = isUnique;
         state.FailOnUniqueCheck = immediateFail;
@@ -326,14 +326,14 @@ public:
     }
 
     void ExtractResult(ui64 cookie, std::function<void(TConstArrayRef<TCell>)>&& callback) override {
-        AFL_ENSURE(HasResult(cookie) || IsEmpty(cookie));
+        YDB_LOG_ENSURE(HasResult(cookie) || IsEmpty(cookie));
         auto& state = CookieToLookupState.at(cookie);
         auto& worker = state.Worker;
 
         const auto stats = worker->ReadAllResult(callback);
         ReadRowsCount += stats.ReadRowsCount;
         ReadBytesCount += stats.ReadBytesCount;
-        AFL_ENSURE(worker->AllRowsProcessed());
+        YDB_LOG_ENSURE(worker->AllRowsProcessed());
     }
 
     TTableId GetTableId() const override {
@@ -368,7 +368,7 @@ public:
             record.MutableSnapshot()->SetTxId(lookupState.MvccSnapshot->GetTxId());
         }
 
-        AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);
+        YDB_LOG_ENSURE(Settings.LockTxId && Settings.LockNodeId);
         record.SetLockTxId(Settings.LockTxId);
         record.SetLockNodeId(Settings.LockNodeId);
 
@@ -379,7 +379,7 @@ public:
             record.SetQuerySpanId(Settings.QuerySpanId);
         }
 
-        AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
+        YDB_LOG_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
         if (failOnUniqueCheck) {
             record.SetTotalRowsLimit(1);
@@ -420,7 +420,7 @@ public:
 
         shardState.HasPipe = true;
 
-        AFL_ENSURE(ReadIdToState.emplace(
+        YDB_LOG_ENSURE(ReadIdToState.emplace(
             readId,
             TReadState {
                 .LookupCookie = cookie,
@@ -453,8 +453,8 @@ public:
         auto& shardState = ShardToState.at(shardId);
 
         auto& lookupState = CookieToLookupState.at(cookie);
-        AFL_ENSURE(lookupState.Worker);
-        AFL_ENSURE(lookupState.ReadsInflight > 0);
+        YDB_LOG_ENSURE(lookupState.Worker);
+        YDB_LOG_ENSURE(lookupState.ReadsInflight > 0);
 
         // At current time don't add shard partitioning metadata for reads. (Read Committed doesn't collect locks for reads.)
         Settings.TxManager->AddShard(shardId, false, lookupState.Worker->GetTablePath());
@@ -579,7 +579,7 @@ public:
             Settings.Counters->DataShardIteratorFails->Inc();
         }
 
-        AFL_ENSURE(read.LastSeqNo < record.GetSeqNo());
+        YDB_LOG_ENSURE(read.LastSeqNo < record.GetSeqNo());
         read.LastSeqNo = record.GetSeqNo();
 
         // Save values before potentially erasing the read state
@@ -590,10 +590,10 @@ public:
             --lookupState.ReadsInflight;
             ReadIdToState.erase(readIt);
         } else {
-            AFL_ENSURE(record.HasContinuationToken());
+            YDB_LOG_ENSURE(record.HasContinuationToken());
             NKikimrTxDataShard::TReadContinuationToken continuationToken;
-            AFL_ENSURE(continuationToken.ParseFromString(record.GetContinuationToken()));
-            AFL_ENSURE(!continuationToken.HasLastProcessedKey()); // can't read more than 1 row per range
+            YDB_LOG_ENSURE(continuationToken.ParseFromString(record.GetContinuationToken()));
+            YDB_LOG_ENSURE(!continuationToken.HasLastProcessedKey()); // can't read more than 1 row per range
 
             Settings.Counters->SentIteratorAcks->Inc();
             THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
@@ -720,7 +720,7 @@ public:
     }
 
     void DoRetryTableRead(const ui64 failedReadId, TLookupState& lookupState, TReadState& failedRead) {
-        AFL_ENSURE(failedRead.Blocked);
+        YDB_LOG_ENSURE(failedRead.Blocked);
         ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedReadId);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
@@ -878,7 +878,7 @@ public:
 
 private:
     void ClearAllWorkerResults() {
-        AFL_ENSURE(Settings.Alloc);
+        YDB_LOG_ENSURE(Settings.Alloc);
         TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
         for (auto& [cookie, state] : CookieToLookupState) {
             if (state.Worker) {

@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
-
-SPLIT_FACTOR(60)
+SPLIT_FACTOR(5)
 
 SIZE(SMALL)
 

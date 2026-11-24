@@ -12,6 +12,9 @@ class IImmutableSnapshotRegistry;
 
 namespace NLongTxService {
 
+// Shared age boundary for snapshot promotion and new explicit registrations.
+ui64 PromotionCutoffStep(TInstant now, TDuration promotionTime);
+
 struct TLocalSnapshotInfo {
     TRowVersion Snapshot;
     NActors::TActorId SessionActorId;
@@ -60,7 +63,7 @@ struct TRemoteSnapshotInfo {
 
 class TLocalSnapshotsStorage : public TThrRefBase {
 public:
-    void Insert(TLocalSnapshotInfo snapshot);
+    bool Insert(TLocalSnapshotInfo snapshot);
     void CleanExpired();
     void Clear();
 

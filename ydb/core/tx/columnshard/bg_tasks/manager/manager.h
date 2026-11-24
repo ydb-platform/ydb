@@ -47,15 +47,15 @@ public:
     bool HasTask(const TTask& task) const;
 
     void Start() {
-        AFL_VERIFY(!Finished);
-        AFL_VERIFY(!Started);
+        YDB_LOG_VERIFY(!Finished);
+        YDB_LOG_VERIFY(!Started);
         Storage->Start(Adapter);
         Started = true;
     }
 
     void Stop() {
         if (Started) {
-            AFL_VERIFY(Started);
+            YDB_LOG_VERIFY(Started);
             Storage->Finish();
             Started = false;
         }

@@ -1,4 +1,4 @@
-PROGRAM()
+G_BENCHMARK()
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -7,7 +7,6 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
-    library/cpp/getopt
 )
 
 SRCS(

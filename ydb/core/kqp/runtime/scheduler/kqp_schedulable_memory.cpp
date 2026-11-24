@@ -121,7 +121,7 @@ bool TSchedulableMemory::TryIncreaseUsage(ui64 bytes, bool optional) {
         return false;
     }
 
-    if (!TryIncrease(Root->MemoryUsage, bytes, GetElasticPart(Root->TotalMemoryLimit.load(), elasticPercent))) {
+    if (!TryIncrease(Root->MemoryUsage, bytes, GetElasticPart(Root->GetStaticTree()->TotalMemoryLimit, elasticPercent))) {
         Pool->MemoryUsage -= bytes;
         return false;
     }
@@ -167,11 +167,11 @@ void TSchedulableMemory::DecreaseUsage(ui64 bytes) {
 
 i64 TSchedulableMemory::GetAvailability() const {
     i64 availability = CalculateAvailability(
-        Root->MemoryUsage.load(std::memory_order_relaxed), GetElasticPart(Root->TotalMemoryLimit.load(), ElasticMemoryPercent));
+        Root->MemoryUsage, GetElasticPart(Root->GetStaticTree()->TotalMemoryLimit, ElasticMemoryPercent));
 
     if (const ui64 poolLimit = GetPoolLimit(); poolLimit != NHdrf::Infinity()) {
         availability = Min(availability, CalculateAvailability(
-            Pool->MemoryUsage.load(std::memory_order_relaxed), GetElasticPart(poolLimit, ElasticMemoryPercent)));
+            Pool->MemoryUsage, GetElasticPart(poolLimit, ElasticMemoryPercent)));
     }
 
     return availability;

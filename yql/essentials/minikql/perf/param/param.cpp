@@ -40,7 +40,6 @@ void Run(benchmark::State& state, bool useParameter) {
         Y_ENSURE(result == expected, "At " << i << ": got " << result << ", expected " << expected);
         ++i;
     }
-    state.SetItemsProcessed(state.iterations());
 }
 
 void Const(benchmark::State& state) {

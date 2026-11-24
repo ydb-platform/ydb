@@ -6,7 +6,7 @@
 #include "wasm/manifest.h"
 #include "wasm/registry_helpers.h"
 
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

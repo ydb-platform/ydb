@@ -14,8 +14,10 @@ TEST_SRCS(
     helpers.py
     http_helpers.py
     test_auditlog.py
+    test_heartbeat.py
     test_canonical_records.py
     test_canonical_records_legacy_dstool.py
+    test_monitoring.py
 )
 
 DEPENDS(
@@ -23,6 +25,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/psutil
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import

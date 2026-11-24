@@ -56,7 +56,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
         {"inFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly()},
         {"sizeInFlight", NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly()});
 
-    AFL_VERIFY(writeOperation);
+    YDB_LOG_VERIFY(writeOperation);
     writeOperation->SetBehaviour(Behaviour);
     writeOperation->SetDeadline(GetDeadline());
     const auto applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : owner->GetMaxReadVersionForSchema(Schema->GetVersion());
@@ -82,7 +82,7 @@ void TWriteTask::Abort(
 }
 
 void TWriteTask::FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const {
-    AFL_VERIFY(overloadStatus != EOverloadStatus::None);
+    YDB_LOG_VERIFY(overloadStatus != EOverloadStatus::None);
     const TString reason = TStringBuilder{} << "Column shard " << owner->TabletID()
                                             << " is overloaded. Reason: " << OverloadReason(overloadStatus);
     if (Orbit) {

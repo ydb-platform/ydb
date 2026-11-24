@@ -105,6 +105,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
     , EnableChecksumReadValidationOnVDisk(0, 0, 1)
     , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
+    , EnableVDiskSectorPreparation(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
     , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -256,6 +257,11 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
+        hFunc(NGroupSyncer::TEvRunMirror3dcRepair, Handle);
+        hFunc(NGroupSyncer::TEvMirror3dcRepairScanResult, Handle);
+        hFunc(TEvNodeWardenStandbyDirty, Handle);
+        hFunc(TEvNodeWardenRegisterBridgeProxy, Handle);
+        hFunc(TEvNodeWardenStandbySealed, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
@@ -581,6 +587,7 @@ void TNodeWarden::Bootstrap() {
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
         TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
+        TControlBoard::RegisterSharedControl(EnableVDiskSectorPreparation, icb->VDiskControls.EnableVDiskSectorPreparation);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
         TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 
@@ -1231,6 +1238,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.GetUpdateSyncers()) {
         ApplyWorkingSyncers(record);
     }
+    ApplyStandbySeals(record);
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {

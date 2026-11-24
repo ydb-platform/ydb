@@ -44,6 +44,7 @@ RECURSE(
     pdisk
     storagepoolmon
     subsystem
+    syncer
     testing
     vdisk
 )

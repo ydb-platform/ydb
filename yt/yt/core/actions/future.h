@@ -274,6 +274,7 @@ public:
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
+    //! An expired deadline overrides an already set successful result but preserves an already set error.
     TFuture<T> WithDeadline(
         TInstant deadline,
         TFutureTimeoutOptions options = {}) const;

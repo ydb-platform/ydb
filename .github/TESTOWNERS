@@ -85,6 +85,9 @@
 /ydb/core/engine @ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
 /ydb/core/memory_controller/ut @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_column_build @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_column_build_reboots @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_generated_columns @ydb-platform/qp
 /ydb/tests/sql @slonn @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
 /ydb/tests/functional/canonical @ydb-platform/qp

@@ -92,6 +92,43 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
             new TEvYdbProxy::TEvRenameTablesRequest({}, {}));
     }
 
+    Y_UNIT_TEST(ShutdownRepliesToPendingDeleteSession) {
+        bool replied = false;
+        {
+            TEnv<> env(true, NTestHelpers::ERuntimeMode::Simulated);
+            auto& runtime = env.GetRuntime();
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = env.RunCall([&] {
+                return client.CreateSession().GetValueSync().GetSession();
+            });
+
+            TAutoPtr<IEventHandle> pending;
+            auto captured = NThreading::NewPromise();
+            auto observer = runtime.AddObserver<NGRpcService::TEvProxyRuntimeEvent>(
+                [&](NGRpcService::TEvProxyRuntimeEvent::TPtr& ev) {
+                    if (ev->Get()->GetRpcMethodName().EndsWith("/DeleteSession")) {
+                        UNIT_ASSERT(!pending);
+                        pending.Reset(ev.Release());
+                        captured.SetValue();
+                    }
+                });
+            env.RunCall([&] {
+                session.Close();
+                captured.GetFuture().GetValueSync();
+            });
+            observer.Remove();
+
+            auto* request = dynamic_cast<NGRpcService::IRequestProxyCtx*>(pending->GetBase());
+            UNIT_ASSERT(request);
+            request->SetRespHook([&replied](NGRpcService::TRespHookCtx::TPtr ctx) {
+                replied = true;
+                ctx->Pass();
+            });
+            runtime.Send(pending.Release());
+        }
+        UNIT_ASSERT_C(replied, "Shutdown did not reply to the accepted DeleteSession request");
+    }
+
     Y_UNIT_TEST(MakeDirectory) {
         TEnv env;
         // ok
@@ -961,6 +998,45 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         UNIT_ASSERT_VALUES_EQUAL(started->Get()->Result.CommittedOffset, enableClientModifications ? 1 : 0);
 
         env.SendAsync(reader->Get()->Result, new TEvents::TEvPoison());
+    }
+
+    Y_UNIT_TEST_TWIN(ClientModificationsReplicationCommitOffset, local) {
+        // An async replication keeps reading and committing while client modifications are off:
+        // its consumer belongs to the engine, and a blocked commit would stall the replication
+        // instead of the clients. The remote path exempts a feed marked __async_replication in
+        // TReadInitAndAuthActor; the local one has to agree.
+        TEnv env;
+        auto table = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
+            new TEvYdbProxy::TEvCreateTableRequest("/Root/table", NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint32)
+                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("key")
+                .Build(), {}));
+        UNIT_ASSERT_C(table->Get()->Result.IsSuccess(), table->Get()->Result.GetIssues().ToString());
+
+        auto feed = NYdb::NTable::TChangefeedDescription("feed",
+                NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json)
+            .AddAttribute("__async_replication", "{}");
+        auto altered = env.Send<TEvYdbProxy::TEvAlterTableResponse>(
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/table",
+                NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(feed)));
+        UNIT_ASSERT_C(altered->Get()->Result.IsSuccess(), altered->Get()->Result.GetIssues().ToString());
+
+        // The controller adds the consumer in a separate alter of the feed's topic.
+        NYdb::NTopic::TAlterTopicSettings consumerSettings;
+        consumerSettings.BeginAddConsumer("consumer").EndAddConsumer();
+        auto consumer = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
+            new TEvYdbProxy::TEvAlterTopicRequest("/Root/table/feed", consumerSettings));
+        UNIT_ASSERT_C(consumer->Get()->Result.IsSuccess(), consumer->Get()->Result.GetIssues().ToString());
+
+        const auto proxy = local ? env.GetRuntime().Register(CreateLocalYdbProxy(env.GetDatabase())) : env.GetYdbProxy();
+        env.GetRuntime().GetAppData().FeatureFlags.SetEnableClientModifications(false);
+
+        auto commit = env.Send<TEvYdbProxy::TEvCommitOffsetResponse>(proxy,
+            new TEvYdbProxy::TEvCommitOffsetRequest("/Root/table/feed", 0, "consumer", 0,
+                NYdb::NTopic::TCommitOffsetSettings()));
+        UNIT_ASSERT_VALUES_EQUAL_C(commit->Get()->Result.GetStatus(), NYdb::EStatus::SUCCESS,
+            commit->Get()->Result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ClientModificationsLocalAutoCommit) {

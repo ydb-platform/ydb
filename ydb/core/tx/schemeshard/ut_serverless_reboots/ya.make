@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

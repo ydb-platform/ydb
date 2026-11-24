@@ -1479,7 +1479,7 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()), replication->GetDatabase(),
         replication->GetConfig().GetInitialScan(), replication->GetDesiredState(),
         IsSwitchover(replication->GetConfig()), {});
-    if (replication->GetConfig().GetInitialScan() && !GetCdcChildren(*replication, targetId).empty()) {
+    if (replication->GetConfig().GetInitialScan() && !replication->GetCdcChildren(targetId).empty()) {
         creator->PrepareCdcChildren();
     }
     return creator;

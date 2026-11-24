@@ -29,6 +29,7 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <util/string/cast.h>
+#include <util/string/subst.h>
 #include <util/system/env.h>
 
 namespace NKikimr::NKqp {
@@ -304,6 +305,96 @@ struct TMainCheckAliveResponse: TEventPB<TMainCheckAliveResponse, google::protob
 }   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
+    Y_UNIT_TEST_TWIN(StatsCollectionModeRejectsInvalidValues, Alter) {
+        TContinuationTest f(/* initializeMetadata */ false);
+        // Allow asynchronous compilation to finish before advancing simulated timers.
+        f.Runtime.SetFastSimulatedTime(false);
+        if constexpr (Alter) {
+            f.Exec(f.CreateQuery());
+        }
+        for (const TString& value : { "invalid", "", "unspecified", "STATS_COLLECTION_UNSPECIFIED" }) {
+            TString query;
+            if constexpr (Alter) {
+                query = TStringBuilder() << "ALTER STREAMING QUERY ContinuedQuery SET (STATS_COLLECTION_MODE = '" << value << "');";
+            } else {
+                query = f.CreateQuery();
+                SubstGlobal(query, "RUN = FALSE", TStringBuilder() << "RUN = FALSE, STATS_COLLECTION_MODE = '" << value << "'");
+            }
+            // SQL object operations wrap property validation failures in GENERIC_ERROR.
+            const auto result = f.Exec(query, EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid value for stats_collection_mode");
+        }
+        if constexpr (Alter) {
+            f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(StatsCollectionModeNormalizesSqlValues, Alter) {
+        TContinuationTest f(/* initializeMetadata */ false);
+        // Allow asynchronous compilation to finish before advancing simulated timers.
+        f.Runtime.SetFastSimulatedTime(false);
+        if constexpr (Alter) {
+            f.Exec(f.CreateQuery());
+        }
+        for (const auto& [value, expected] : std::vector<std::pair<TString, TString>>{
+                 { "none", "STATS_COLLECTION_NONE" },
+                 { "basic", "STATS_COLLECTION_BASIC" },
+                 { "full", "STATS_COLLECTION_FULL" },
+                 { "profile", "STATS_COLLECTION_PROFILE" },
+                 { "sTaTs_CoLlEcTiOn_PrOfIlE", "STATS_COLLECTION_PROFILE" },
+             }) {
+            TString query;
+            if constexpr (Alter) {
+                query = TStringBuilder() << "ALTER STREAMING QUERY ContinuedQuery SET (STATS_COLLECTION_MODE = '" << value << "');";
+            } else {
+                query = f.CreateQuery();
+                SubstGlobal(query, "RUN = FALSE", TStringBuilder() << "RUN = FALSE, STATS_COLLECTION_MODE = '" << value << "'");
+            }
+            f.Exec(query);
+            auto description = f.Describe();
+            UNIT_ASSERT_VALUES_EQUAL(description->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties()
+                                         .at("stats_collection_mode"), expected);
+
+            // An unrelated ALTER must retain the normalized stored mode.
+            f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+            description = f.Describe();
+            UNIT_ASSERT_VALUES_EQUAL(description->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties()
+                                         .at("stats_collection_mode"), expected);
+            if constexpr (!Alter) {
+                f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+            }
+        }
+        if constexpr (Alter) {
+            f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(StatsCollectionModeReachesStartQuery, Profile) {
+        TContinuationTest f(/* initializeMetadata */ false);
+        // Allow asynchronous compilation to finish before advancing simulated timers.
+        f.Runtime.SetFastSimulatedTime(false);
+        auto query = f.CreateQuery();
+        if constexpr (Profile) {
+            SubstGlobal(query, "RUN = FALSE", "RUN = FALSE, STATS_COLLECTION_MODE = 'profile'");
+        }
+        f.Exec(query);
+
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> observed;
+        auto observer = f.Runtime.AddObserver<TEvKqp::TEvScriptRequest>([&](auto& ev) {
+            if (ev->Get()->StreamingQueryPath == TContinuationTest::QueryPath) {
+                observed = ev->Get()->Record.GetRequest().GetCollectStats();
+            }
+        });
+        // Omit the mode on restart to exercise the stored setting and the default.
+        f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = TRUE);");
+        f.WaitFor("streaming query script request", [&] { return observed.has_value(); });
+        const auto expected = Profile ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE
+                                      : Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(*observed), static_cast<int>(expected));
+        f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+        f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+    }
+
     Y_UNIT_TEST(MixedVersionLivenessPreservesWireIds) {
         TContinuationTest f;
         TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);

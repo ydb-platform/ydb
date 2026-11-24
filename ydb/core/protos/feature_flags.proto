@@ -504,4 +504,9 @@ message TFeatureFlags {
     optional bool DisablePgCompatibility = 400 [default = false];
     optional bool EnableBridgeProxyLocalPileFirstGet = 401 [default = false];
     optional bool EnableChecksumTable = 402 [default = false];
+    // Enable on the destination before CDC enrollment, after upgrading its SchemeShard and
+    // every eligible DataShard host. All supported rollback binaries must handle the handoff.
+    // Before downgrading below that floor, stop enrollment, finish enrolled replications,
+    // disable handoff admission and drain accepted handoffs.
+    optional bool EnableCdcHandoff = 404 [default = false];
 }

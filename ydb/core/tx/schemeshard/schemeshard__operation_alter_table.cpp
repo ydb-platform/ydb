@@ -62,15 +62,16 @@ TString CheckCdcActivation(const TTxTransaction& tx, const TPath& tablePath, TOp
         return {};
     }
 
+    if (!AppData()->FeatureFlags.GetEnableCdcHandoff()) {
+        return "CDC handoff is disabled on the destination SchemeShard (EnableCdcHandoff)";
+    }
+
     using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
     if (!tx.GetInternal() || !tx.HasExpectedReplicationOwnerPathId()
-        || !alter.HasReplicationConfig()
-        || alter.GetReplicationConfig().GetMode() != TConfig::REPLICATION_MODE_NONE
-        || !CheckAllowedFields(alter.GetReplicationConfig(), {"Mode"})
-        || !CheckAllowedFields(alter, {"Name", "PathId", "ReplicationConfig", "ActivateCdcStreams"})
+        || !CheckAllowedFields(alter, {"Name", "PathId", "ActivateCdcStreams"})
         || !tablePath.IsCommonSensePath())
     {
-        return "CDC activation requires an internal owner-checked replica detach without other alterations";
+        return "CDC activation requires an internal owner-checked request with only the table path and stream IDs";
     }
 
     const auto& config = context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig();
@@ -231,6 +232,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     auto copyAlter = alter;
+    if (alter.ActivateCdcStreamsSize()) {
+        // The sender omits ReplicationConfig so an older SchemeShard sees an empty ALTER.
+        copyAlter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    }
 
     const bool hasSchemaChanges = (
             copyAlter.ColumnsSize() != 0 ||

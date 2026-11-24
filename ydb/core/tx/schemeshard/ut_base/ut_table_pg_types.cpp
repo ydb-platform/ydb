@@ -37,7 +37,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
         TestCreateTable(runtime, ++txId, "/MyRoot", schema);
         env.TestWaitNotification(runtime, txId);
 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TableWithSequence"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot/TableWithSequence", R"(
+            Name: "seq"
+            DataType: "pgint8"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         updatePgCompatibility(true);
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "CopyWithSequence", "/MyRoot/TableWithSequence");
+        TestModificationResults(runtime, txId, {
+            {NKikimrScheme::StatusInvalidParameter, "PostgreSQL compatibility is disabled for the source sequence"}});
+        env.TestWaitNotification(runtime, txId);
+
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table1");
         TestModificationResults(runtime, txId, {
             {NKikimrScheme::StatusSchemeError, "PostgreSQL compatibility is disabled"}});

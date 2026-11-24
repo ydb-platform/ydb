@@ -732,18 +732,29 @@ public:
             }
         }
 
-        if (TxType == TTxState::TxRestore && !restoreImportingReplica && path->IsTable() && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
-            const auto* table = context.SS->Tables.FindPtr(path->PathId);
-            if (!table) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    TStringBuilder() << "Table metadata is missing for path: " << path.PathString());
-                return result;
-            }
-            for (const auto& [_, column] : (*table)->Columns) {
-                if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+        if (TxType == TTxState::TxRestore && !restoreImportingReplica && AppData()->FeatureFlags.GetDisablePgCompatibility()) {
+            if (path->IsTable()) {
+                const auto* table = context.SS->Tables.FindPtr(path->PathId);
+                if (!table) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
+                        TStringBuilder() << "Table metadata is missing for path: " << path.PathString());
                     return result;
+                }
+                for (const auto& [_, column] : (*table)->Columns) {
+                    if (!column.IsDropped() && column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                            TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.Name << "'");
+                        return result;
+                    }
+                }
+            } else {
+                const auto table = context.SS->ColumnTables.GetVerified(path->PathId);
+                for (const auto& column : table->Description.GetSchema().GetColumns()) {
+                    if (column.GetTypeId() == NScheme::NTypeIds::Pg) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                            TStringBuilder() << "PostgreSQL compatibility is disabled for column '" << column.GetName() << "'");
+                        return result;
+                    }
                 }
             }
         }

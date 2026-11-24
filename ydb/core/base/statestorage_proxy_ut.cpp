@@ -10,6 +10,16 @@
 namespace NKikimr {
 namespace {
 
+void InitializeStateStorageRuntime(TTestActorRuntimeBase& runtime) {
+    runtime.Initialize();
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        runtime.GetLogSettings(nodeIndex)->Append(NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+    }
+    runtime.SetDispatchTimeout(TDuration::Seconds(5));
+}
+
 // Exercise the real proxy with controlled replica replies and nondelivery.
 // Pending replicas stay silent until the test explicitly responds for them.
 class TLookupFixture {
@@ -40,13 +50,9 @@ public:
     explicit TLookupFixture(TOptions::ESigWaitMode mode = TOptions::SigNone, ui32 ringGroupCount = 1,
             const TVector<ERingGroupState>& ringGroupStates = {}, bool waitForAllRingGroups = false,
             ui64 clusterStateGeneration = 0, ui64 clusterStateGuid = 0) {
-        Runtime.Initialize();
-        Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        InitializeStateStorageRuntime(Runtime);
         Runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&,
                                            TDuration, TInstant&) { return false; });
-        Runtime.SetDispatchTimeout(TDuration::Seconds(5));
         Edge = Runtime.AllocateEdgeActor();
         Leader = Runtime.AllocateEdgeActor();
         OtherLeader = Runtime.AllocateEdgeActor();
@@ -191,13 +197,9 @@ public:
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
 
     explicit TLockFixture(TEvStateStorage::TProxyOptions::ESigWaitMode mode = TEvStateStorage::TProxyOptions::SigNone) {
-        Runtime.Initialize();
-        Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        InitializeStateStorageRuntime(Runtime);
         Runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&,
                                            TDuration, TInstant&) { return false; });
-        Runtime.SetDispatchTimeout(TDuration::Seconds(5));
         Edge = Runtime.AllocateEdgeActor();
         Leader = Runtime.AllocateEdgeActor();
         OtherLeader = Runtime.AllocateEdgeActor();
@@ -813,11 +815,7 @@ void CheckDeleteConfigMismatch(bool newerGeneration) {
     constexpr ui64 generation = 7;
     constexpr ui64 guid = 42;
     TTestActorRuntimeBase runtime{1};
-    runtime.Initialize();
-    runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-        NKikimrServices::EServiceKikimr_MAX,
-        [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
-    runtime.SetDispatchTimeout(TDuration::Seconds(5));
+    InitializeStateStorageRuntime(runtime);
     const TActorId edge = runtime.AllocateEdgeActor();
 
     auto info = MakeIntrusive<TStateStorageInfo>();
@@ -878,11 +876,7 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardianRingGroups) {
         static constexpr ui32 Generation = 2;
 
         TTestActorRuntimeBase runtime{1};
-        runtime.Initialize();
-        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
-        runtime.SetDispatchTimeout(TDuration::Seconds(5));
+        InitializeStateStorageRuntime(runtime);
         const TActorId leader = runtime.AllocateEdgeActor();
         const TActorId tabletLeader = runtime.AllocateEdgeActor();
 
@@ -940,11 +934,7 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardianRingGroups) {
 Y_UNIT_TEST_SUITE(TStateStorageFollowerGuardian) {
     Y_UNIT_TEST(RegistrationAcknowledgesUpdatesAndDuplicates) {
         TTestActorRuntimeBase runtime{1};
-        runtime.Initialize();
-        runtime.SetDispatchTimeout(TDuration::Seconds(5));
-        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        InitializeStateStorageRuntime(runtime);
 
         constexpr ui64 tabletId = 72075186224037888ull;
         const TActorId guardian = runtime.AllocateEdgeActor();
@@ -966,13 +956,9 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerGuardian) {
 
     Y_UNIT_TEST(FollowerRecoveryClearsMissingReplica) {
         TTestActorRuntimeBase runtime{1};
-        runtime.Initialize();
-        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        InitializeStateStorageRuntime(runtime);
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&,
                                            TDuration, TInstant&) { return false; });
-        runtime.SetDispatchTimeout(TDuration::Seconds(5));
 
         constexpr ui64 tabletId = 72075186224037888ull;
         const TActorId follower = runtime.AllocateEdgeActor();

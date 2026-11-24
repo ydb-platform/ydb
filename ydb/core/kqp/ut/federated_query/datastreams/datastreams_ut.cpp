@@ -2,7 +2,9 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
@@ -459,6 +461,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphBasic, ModernChannels, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(true);
         DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
@@ -499,7 +502,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             DROP EXTERNAL DATA SOURCE `{s3_sink}`;
             DROP EXTERNAL DATA SOURCE `{pq_source}`;)", "s3_sink"_a = s3SinkName, "pq_source"_a = pqSourceName));
 
-        executeQuery({ .SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId) });
+        auto graph = LoadPhysicalGraph(executionId);
+        UNIT_ASSERT(graph.GetCompiledWithPgCompatibilityDisabled());
+        executeQuery({ .SaveState = true, .PhysicalGraph = std::move(graph) });
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
@@ -600,6 +605,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(false);
         const auto pqGateway = SetupMockPqGateway();
 
         const auto inputTopicName = MakeExternalName("inputTopicName");
@@ -610,6 +616,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        auto& runtime = GetRuntime();
         const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
@@ -636,6 +643,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
         WaitCheckpointUpdate(checkpointId);
+
+        auto graph = LoadPhysicalGraph(executionId);
+        UNIT_ASSERT(graph.GetZeroCheckpointSaved());
+        graph.ClearCompiledWithPgCompatibilityDisabled();
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(CreateSaveScriptExecutionPhysicalGraphActor(
+            edge, TEST_DATABASE, TString{ executionId }, std::move(graph), 1, runtime.GetAppData().QueryServiceConfig));
+        const auto saved = runtime.GrabEdgeEvent<TEvSaveScriptPhysicalGraphResponse>(edge, TEST_OPERATION_TIMEOUT);
+        UNIT_ASSERT(saved);
+        UNIT_ASSERT_VALUES_EQUAL_C(saved->Get()->Status, Ydb::StatusIds::SUCCESS, saved->Get()->Issues.ToString());
+        UNIT_ASSERT(!LoadPhysicalGraph(executionId).HasCompiledWithPgCompatibilityDisabled());
+
+        NKikimrConfig::TFeatureFlags flags = runtime.GetAppData().FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        runtime.GetAppData().UpdateRuntimeFlags(flags);
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
@@ -846,6 +868,76 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         for (ui64 i = 0; i < 3; ++i) {
             WaitCheckpointUpdate(checkpointId);
         }
+    }
+
+    Y_UNIT_TEST(DisablePgCompatibilityForMixedExternalTableAtRuntime) {
+        const TString bucket = "pg_compatibility_mixed_schema";
+        CreateBucketWithObject(bucket, "data.json", R"({"id":42,"payload":"value"})");
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, config, NYql::NDq::CreateS3ActorsFactory());
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session
+                          .ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/source` WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{location}", AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
+                DATA_SOURCE="/Root/source", LOCATION="data.json", FORMAT="json_each_row"
+            );)", "location"_a = GetBucketLocation(bucket)), TTxControl::NoTx())
+                          .GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto setFlag = [&](bool disabled) {
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                auto& appData = runtime.GetAppData(node);
+                NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+                flags.SetDisablePgCompatibility(disabled);
+                appData.UpdateRuntimeFlags(flags);
+            }
+        };
+        auto checkRejected = [](const auto& result) {
+            const auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues,
+                "PostgreSQL compatibility is disabled for external table '/Root/mixed' because its schema contains PostgreSQL column 'payload'");
+        };
+        auto check = [&](bool disabled) {
+            for (const auto* query :
+                { "SELECT COUNT(*) FROM `/Root/mixed`;", "SELECT id FROM `/Root/mixed`;", "SELECT payload FROM `/Root/mixed`;" }) {
+                auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                if (disabled) {
+                    checkRejected(result);
+                } else {
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(TResultSetParser(result.GetResultSet(0)).RowsCount(), 1);
+                }
+            }
+        };
+        check(false);
+        setFlag(true);
+        check(true);
+        checkRejected(session
+                          .ExecuteQuery(R"(
+            INSERT INTO `/Root/mixed`
+            SELECT 42 AS id;
+        )", TTxControl::BeginTx().CommitTx())
+                          .GetValueSync());
+
+        const auto replace = session
+                                 .ExecuteQuery(R"(
+            CREATE OR REPLACE EXTERNAL TABLE `/Root/mixed` (id Int32 NOT NULL, payload PgText) WITH (
+                DATA_SOURCE="/Root/source", LOCATION="replacement.json", FORMAT="json_each_row"
+            );)", TTxControl::NoTx())
+                                 .GetValueSync();
+        UNIT_ASSERT_C(!replace.IsSuccess(), replace.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(replace.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        setFlag(false);
+        check(false);
     }
 
     Y_UNIT_TEST_F(S3RuntimeListingDisabledForStreamingQueries, TStreamingTestFixture) {

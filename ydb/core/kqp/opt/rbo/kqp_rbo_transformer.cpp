@@ -868,6 +868,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     TVector<std::unique_ptr<IRule>> indexSelectionRules;
     indexSelectionRules.emplace_back(std::make_unique<TPushRangesRule>(NYql::EStorageType::RowStorage));
+    indexSelectionRules.emplace_back(std::make_unique<TSelectIndexForTopSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Index selection rules", std::move(indexSelectionRules)));
 
     // CBO stages.

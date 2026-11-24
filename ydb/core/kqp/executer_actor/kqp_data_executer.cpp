@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
+#include "kqp_streaming_helper.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -1399,16 +1400,13 @@ private:
     }
 
     void StartStreamingQueryPrepare() {
-        TVector<std::shared_ptr<const TKqpPhyTxHolder>> transactions;
-        transactions.reserve(Request.Transactions.size());
         THashMap<TString, TString> secureParams;
         for (const auto& transaction : Request.Transactions) {
-            transactions.push_back(transaction.Body);
             for (const auto& stage : transaction.Body->GetStages()) {
                 TasksGraph.FillExternalSourceSecureParams(secureParams, stage);
             }
         }
-        StreamingQuery->StartPrepare(std::move(transactions), std::move(secureParams));
+        StreamingQuery->StartPrepare(CollectPqSources(Request.Transactions, Database), std::move(secureParams));
     }
 
 private:

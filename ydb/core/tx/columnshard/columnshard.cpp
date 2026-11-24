@@ -100,8 +100,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
-    // the request for every portion takes long to build, so it is not part of the start
-    ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
@@ -119,8 +117,14 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             portionsCount += granule->GetPortions().size();
         }
     }
-    StartupTimeline.OnSwitchedToWork(portionsCount);
+    StartupTimeline.OnSwitchedToWork(portionsCount, !DeferredPortionLoader.IsEnabled());
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
+    if (DeferredPortionLoader.IsEnabled()) {
+        StartDeferredPortionLoading(ctx);
+    } else {
+        // the request for every portion takes long to build, so it is not part of the start
+        ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
+    }
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -330,13 +334,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& /*ev*/)
     if (TablesManager.HasPrimaryIndex()) {
         TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().PrefetchPortionsMetadata();
     }
-}
-
-void TColumnShard::Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev) {
-    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    engine.GetGranulePtrVerified(ev->Get()->PathId)->SetLoadedKeyRanges(std::move(ev->Get()->LoadedKeyRanges));
-    ScanGate.ReleaseLoadedPortions();
-    DrainWriteQueue(ActorContext());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {

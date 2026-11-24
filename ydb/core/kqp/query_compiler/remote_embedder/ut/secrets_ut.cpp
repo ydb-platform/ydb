@@ -50,18 +50,40 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
         UNIT_ASSERT(params.empty());
     }
 
+    Y_UNIT_TEST(CollectsPositionalAndNamedSecretArguments) {
+        NYql::TExprContext ctx;
+        const auto pos = ctx.AppendPosition({});
+        const auto secret = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "secret")});
+        const auto apply = Apply(ctx, "Knn.ApplyRemoteEmbedder", secret);
+        NYql::TExprNode::TListType args(apply->Children().begin() + 1, apply->Children().end());
+        const auto namedOption = ctx.NewCallable(pos, "NamedApply", {
+            apply->HeadPtr(), ctx.NewList(pos, NYql::TExprNode::TListType(args)),
+            ctx.NewCallable(pos, "AsStruct", {ctx.NewList(pos, {ctx.NewAtom(pos, "MaxRetries"), ctx.NewCallable(pos, "Uint32", {ctx.NewAtom(pos, "0")})})})});
+        args.pop_back();
+        const auto namedSecret = ctx.NewCallable(pos, "NamedApply", {
+            apply->HeadPtr(), ctx.NewList(pos, std::move(args)),
+            ctx.NewCallable(pos, "AsStruct", {ctx.NewList(pos, {ctx.NewAtom(pos, "AuthSecretName"), secret})})});
+        for (const auto& call : {namedOption, namedSecret}) {
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(ValidateRemoteEmbedderSecretNames(call, ctx));
+            FillRemoteEmbedderSecureParams(call, params);
+            UNIT_ASSERT_VALUES_EQUAL(params.size(), 1);
+            UNIT_ASSERT(params.contains("secret"));
+        }
+    }
+
     Y_UNIT_TEST(RejectsDynamicAndEmptySecretNames) {
         NYql::TExprContext ctx;
         const auto pos = ctx.AppendPosition({});
         THashMap<TString, TString> params;
         const auto parameter = ctx.NewCallable(pos, "Parameter", {ctx.NewAtom(pos, "dynamic")});
         const auto empty = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "")});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedder", parameter), params),
-            yexception, "AuthSecretName must be a non-empty String literal");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedder", empty, /*stream=*/true), params),
-            yexception, "AuthSecretName must be a non-empty String literal");
+        const auto scalar = Apply(ctx, "Knn.ApplyRemoteEmbedder", parameter);
+        const auto stream = Apply(ctx, "Knn.ApplyRemoteEmbedder", empty, /*stream=*/true);
+        UNIT_ASSERT(!ValidateRemoteEmbedderSecretNames(ctx.NewList(pos, {scalar, stream}), ctx));
+        UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "AuthSecretName must be a non-empty String literal");
+        FillRemoteEmbedderSecureParams(ctx.NewList(pos, {scalar, stream}), params);
+        UNIT_ASSERT(params.empty());
     }
 }
 

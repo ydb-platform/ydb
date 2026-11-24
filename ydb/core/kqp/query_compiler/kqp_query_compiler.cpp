@@ -1213,6 +1213,7 @@ private:
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
                             ui32 txIdx, const THashSet<std::pair<ui32, ui32>>& shouldCreateChannel, bool hasDiscards) {
+        SecretNames.clear();
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));

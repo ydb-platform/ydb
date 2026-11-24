@@ -187,6 +187,9 @@ TGeneratedFindings CollectFindings(const TExprNode::TPtr& root) {
             findings.HasWindow = true;
         } else if (TCoParameter::Match(node.Get())) {
             findings.HasParameter = true;
+        } else if (node->IsCallable({"SqlCall", "Udf"}) && node->ChildrenSize()
+            && node->Head().IsAtom() && node->Head().Content() == "Knn.ApplyRemoteEmbedder") {
+            findings.NonRowCallable = "Knn::ApplyRemoteEmbedder";
         } else if (IsNonRowNode(*node)) {
             if (findings.NonRowCallable.empty()) {
                 findings.NonRowCallable = name;

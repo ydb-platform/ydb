@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
+    ydb/core/kqp/query_compiler/remote_embedder
     ydb/core/kqp/query_data
     ydb/core/kqp/sql
     ydb/core/kqp/tracing

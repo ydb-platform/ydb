@@ -9,6 +9,7 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/query_service_config.h>
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/events/configs_dispatcher.h>
@@ -562,6 +563,7 @@ public:
     void RebuildSharedServiceConfigs() {
         SharedTableServiceConfig = std::make_shared<const NKikimrConfig::TTableServiceConfig>(TableServiceConfig);
         SharedQueryServiceConfig = std::make_shared<const NKikimrConfig::TQueryServiceConfig>(QueryServiceConfig);
+        PublishQueryServiceConfig(*AppData(), SharedQueryServiceConfig);
         SharedTliConfig = std::make_shared<const NKikimrConfig::TTliConfig>(TliConfig);
     }
 

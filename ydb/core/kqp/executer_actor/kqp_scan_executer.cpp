@@ -77,6 +77,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
+                hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
@@ -153,6 +154,25 @@ private:
         }
 
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
+        const auto& names = Request.Transactions.front().Body->GetSecretNames();
+        if (!names.empty()) {
+            SecretNames.assign(names.begin(), names.end());
+            GetSecretsSnapshot();
+            return;
+        }
+        Execute();
+    }
+
+    void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
+        const auto& description = ev->Get()->Description;
+        if (description.Status != Ydb::StatusIds::SUCCESS) {
+            TBase::ReplyErrorAndDie(description.Status, description.Issues);
+            return;
+        }
+        YQL_ENSURE(description.SecretValues.size() == SecretNames.size());
+        for (size_t i = 0; i < SecretNames.size(); ++i) {
+            TasksGraph.GetMeta().SecureParams.emplace(SecretNames[i], description.SecretValues[i]);
+        }
         Execute();
     }
 

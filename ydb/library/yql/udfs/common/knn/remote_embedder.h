@@ -2,7 +2,11 @@
 
 #include <yql/essentials/public/udf/udf_registrator.h>
 
+#include <util/generic/strbuf.h>
+
 namespace NKnn {
+
+void ValidateRemoteEmbedderHost(TStringBuf host);
 
 struct TRemoteEmbedder {
     using TTypeAwareMarker = void;

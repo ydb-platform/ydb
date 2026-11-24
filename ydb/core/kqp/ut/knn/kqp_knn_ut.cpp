@@ -40,7 +40,9 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         NMock::TMockServer server(port, [] { return new TEmbedderMock; });
         const TString url = TStringBuilder() << "http://localhost:" << port << "/v1";
 
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableQueryServiceConfig()->AddHostnamePatterns("^localhost$");
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         auto create = client.ExecuteQuery(R"(
             CREATE SECRET `/Root/embedder_token` WITH (value = 'embedder-token');
@@ -48,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
 
         auto scalar = client.ExecuteQuery(TStringBuilder() << R"(
-            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/embedder_token').Status AS Status;
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '/Root/embedder_token', 0 AS MaxRetries).Status AS Status;
         )", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(scalar.IsSuccess(), scalar.GetIssues().ToString());
         auto scalarRows = TResultSetParser(scalar.GetResultSet(0));
@@ -66,6 +68,33 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         UNIT_ASSERT(batchRows.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(batchRows.ColumnParser("Status").GetUint32(), 200);
         UNIT_ASSERT(!batchRows.TryNextRow());
+
+        auto blocked = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', 'http://127.0.0.1:)" << port << R"(/v1', '/Root/embedder_token', 0).Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!blocked.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(blocked.GetIssues().ToString(), "It is not allowed to access hostname");
+
+        auto invalid = client.ExecuteQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder('Дом', 'test-model', ')" << url << R"(', '').Status;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(invalid.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "AuthSecretName must be a non-empty String literal");
+
+        auto table = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/EmbedderInput` (id Int32, text String, PRIMARY KEY (id));
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+        auto insert = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/EmbedderInput` (id, text) VALUES (1, 'Молоко');
+        )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+        auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(TStringBuilder() << R"(
+            SELECT ApplyRemoteEmbedder(Unwrap(text), 'test-model', ')" << url << R"(', '/Root/embedder_token', 0).Status
+            FROM `/Root/EmbedderInput`;
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+        CompareYson("[[200u]]", StreamResultToYson(scan));
     }
 
     void CheckDistance(float actual, float expected) {

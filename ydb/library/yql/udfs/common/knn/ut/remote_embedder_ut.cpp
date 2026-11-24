@@ -26,23 +26,30 @@ public:
         TString FirstLine;
         TString Authorization;
         TString ContentType;
+        TString Host;
         NJson::TJsonValue Body;
     };
 
     struct TReply {
         HttpCodes Status;
         TString Body;
+        bool OmitContentLength = false;
     };
 
-    explicit TServer(TVector<TReply> replies = {})
+    explicit TServer(TVector<TReply> replies = {}, bool ipv6 = false)
         : Port_(Ports_.GetPort())
+        , Ipv6_(ipv6)
         , Replies_(std::move(replies))
-        , Server_(Port_, [this] { return new TReplier(*this); })
+        , Server_(Address(), [this] { return new TReplier(*this); })
     {
     }
 
     TString Url() const {
-        return TStringBuilder() << "http://localhost:" << Port_ << "/v1/";
+        return TStringBuilder() << "http://" << Authority() << "/v1/";
+    }
+
+    TString Authority() const {
+        return TStringBuilder() << (Ipv6_ ? "[::1]" : "localhost") << ':' << Port_;
     }
 
     TVector<TRequest> Requests() const {
@@ -51,6 +58,15 @@ public:
     }
 
 private:
+    THttpServerOptions Address() const {
+        THttpServerOptions options;
+        options.AddBindAddress(Ipv6_ ? "::1" : "localhost", Port_);
+        options.SetThreads(1);
+        options.SetMaxConnections(300);
+        options.SetMaxQueueSize(30);
+        return options;
+    }
+
     class TReplier: public TRequestReplier {
     public:
         explicit TReplier(TServer& owner)
@@ -66,6 +82,9 @@ private:
             }
             if (const auto* header = params.Input.Headers().FindHeader("Content-Type")) {
                 request.ContentType = header->Value();
+            }
+            if (const auto* header = params.Input.Headers().FindHeader("Host")) {
+                request.Host = header->Value();
             }
             NJson::ReadJsonTree(params.Input.ReadAll(), &request.Body);
             const auto& input = request.Body["input"];
@@ -91,6 +110,10 @@ private:
                     reply = Owner_.Replies_[index];
                 }
             }
+            if (reply.OmitContentLength) {
+                params.Output << "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n" << reply.Body;
+                return true;
+            }
             THttpResponse response(reply.Status);
             response.SetContent(reply.Body);
             response.OutTo(params.Output);
@@ -103,6 +126,7 @@ private:
 
     TPortManager Ports_;
     ui16 Port_;
+    bool Ipv6_;
     mutable std::mutex Mutex_;
     TVector<TRequest> Requests_;
     TVector<TReply> Replies_;
@@ -197,9 +221,9 @@ private:
     bool Yielded_ = false;
 };
 
-TVector<NUdf::TUnboxedValue> RunStream(TSetup& setup, const TServer& server, ui32 rows, ui32 batchSize, bool yield = false, ui32 rate = 0, ui32 retries = 0) {
+TVector<NUdf::TUnboxedValue> RunStream(TSetup& setup, const TServer& server, ui32 rows, ui32 batchSize, bool yield = false, ui32 rate = 0, ui32 retries = 0, TString text = "text") {
     const NUdf::TUnboxedValue args[] = {
-        NUdf::TUnboxedValuePod(new TInputStream(setup, rows, yield)),
+        NUdf::TUnboxedValuePod(new TInputStream(setup, rows, yield, std::move(text))),
         setup.String("model"), setup.String(server.Url()), setup.String("secret"),
         NUdf::TUnboxedValuePod(batchSize), NUdf::TUnboxedValuePod(rate), NUdf::TUnboxedValuePod(retries)};
     auto stream = setup.Function(true).Run(&setup.Builder, args);
@@ -246,9 +270,19 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         UNIT_ASSERT_VALUES_EQUAL(requests[0].FirstLine, "POST /v1/embeddings HTTP/1.1");
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Authorization, "Bearer test-token");
         UNIT_ASSERT_VALUES_EQUAL(requests[0].ContentType, "application/json");
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Host, server.Authority());
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["model"].GetString(), "model");
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["encoding_format"].GetString(), "float");
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["input"].GetString(), text);
+    }
+
+    Y_UNIT_TEST(Ipv6AuthorityContainsPort) {
+        TServer server({}, /*ipv6=*/true);
+        TSetup setup;
+        UNIT_ASSERT_VALUES_EQUAL(setup.Scalar(server).GetElement(1).Get<ui32>(), 200);
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Host, server.Authority());
     }
 
     Y_UNIT_TEST(BatchesPreservePassThroughAcrossYields) {
@@ -272,6 +306,28 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         TServer server;
         TSetup setup;
         UNIT_ASSERT(RunStream(setup, server, 0, 2).empty());
+        UNIT_ASSERT(server.Requests().empty());
+    }
+
+    Y_UNIT_TEST(BatchesFlushAtByteLimit) {
+        TServer server;
+        TSetup setup;
+        const auto rows = RunStream(setup, server, 3, 10, true, 0, 0, TString(600 * 1024, 'x'));
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
+        for (size_t i = 0; i < rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rows[i].GetElement(1).Get<ui64>(), i + 1);
+            UNIT_ASSERT_VALUES_EQUAL(requests[i].Body["input"].GetArray().size(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(RejectOversizedInputBeforeRequest) {
+        TServer server;
+        TSetup setup;
+        const TString text(1024 * 1024 + 1, 'x');
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.Scalar(server, 0, text), yexception, "request byte limit");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(RunStream(setup, server, 1, 10, false, 0, 0, text), yexception, "batch byte limit");
         UNIT_ASSERT(server.Requests().empty());
     }
 
@@ -360,6 +416,18 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
             const auto result = setup.Scalar(server);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetElement(1).Get<ui32>(), 502, body);
             UNIT_ASSERT_VALUES_EQUAL(EmbeddingSize(result), 0);
+        }
+    }
+
+    Y_UNIT_TEST(RejectOversizedResponseWithoutRetry) {
+        TSetup setup;
+        const TString body(16 * 1024 * 1024 + 1, 'x');
+        for (const bool omitContentLength : {false, true}) {
+            TServer server({{HTTP_OK, body, omitContentLength}});
+            const auto result = setup.Scalar(server, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 502);
+            UNIT_ASSERT_VALUES_EQUAL(EmbeddingSize(result), 0);
+            UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
         }
     }
 

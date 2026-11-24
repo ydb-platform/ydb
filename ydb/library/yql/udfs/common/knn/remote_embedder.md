@@ -31,12 +31,14 @@ The token is read from the execution environment's UDF secure parameters using
 KQP resolves it using the normal secret permission checks and supplies it to
 the UDF. Other UDF hosts must provide this secure parameter themselves.
 Missing secrets and invalid configuration fail the query.
+KQP checks each request against the node's `QueryServiceConfig.HostnamePatterns`.
 
 `Embedding` uses the binary float-vector representation produced by
 `Knn::ToBinaryStringFloat` (without its type tag), suitable for storage in a
 vector column. An unsuccessful request produces an empty string.
 `Status` is the HTTP response status, normally `200` on success; `0` means a
-transport failure, and `502` also represents an invalid embeddings response.
+transport failure, and `502` also represents an invalid embeddings response
+or a response body larger than 16 MiB.
 Malformed, incomplete, duplicate-index, or inconsistent-dimension responses
 fail the entire batch. Response indices determine the association with input
 rows; output order and the exact `PassThrough` type and value are preserved.
@@ -47,10 +49,12 @@ starting at 100 ms and capped at 10 seconds. Other HTTP failures and malformed
 successful responses are returned immediately. Requests have a 10-second
 connection timeout and a 60-second socket timeout.
 
-`BatchSize` must be positive. The stream buffers at most one batch and forwards
-upstream yields without losing partially buffered rows. It flushes the final
-partial batch at end of input; an empty stream sends no request. HTTP calls,
-retry backoff and throttling are synchronous.
+`BatchSize` must be positive. A batch holds at most 1,024 rows and has a 1 MiB
+budget for text and estimated retained values. A row above that budget fails
+the query. A pass-through value whose size cannot be estimated is processed on
+its own. The stream forwards upstream yields without losing buffered rows and
+flushes the final partial batch. An empty stream sends no request.
+HTTP calls, retry backoff, and throttling are synchronous.
 
 `MaxTokensPerSecond` applies independently to each stream invocation; omitted,
 NULL or zero disables throttling. As no model-specific tokenizer is available,

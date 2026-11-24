@@ -8,6 +8,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/providers/common/structured_token
+    yql/essentials/public/issue/protos
 )
 
 END()

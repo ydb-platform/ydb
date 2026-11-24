@@ -19,6 +19,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
+#include <ydb/core/kqp/query_compiler/remote_embedder/secrets.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 
@@ -129,6 +130,10 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
                     return TStatus::Error;
                 }
+            }
+
+            if (!ValidateRemoteEmbedderSecretNames(physicalQuery.Ptr(), ctx)) {
+                return TStatus::Error;
             }
 
             auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);

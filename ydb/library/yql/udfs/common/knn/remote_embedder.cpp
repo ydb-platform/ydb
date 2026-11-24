@@ -11,8 +11,11 @@
 #include <library/cpp/uri/uri.h>
 
 #include <util/stream/str.h>
+#include <util/string/ascii.h>
 
+#include <algorithm>
 #include <cmath>
+#include <optional>
 
 using namespace NYql::NUdf;
 using NMonotonic::TMonotonic;
@@ -23,13 +26,41 @@ constexpr ui32 DefaultBatchSize = 32;
 constexpr ui32 DefaultMaxRetries = 5;
 constexpr ui32 TransportError = 0;
 constexpr ui32 InvalidResponse = 502;
+constexpr size_t MaxBatchRows = 1024;
+constexpr size_t MaxBatchBytes = 1024 * 1024;
+constexpr size_t MaxResponseBytes = 16 * 1024 * 1024;
+
+class TResponseTooLarge : public yexception {};
+
+class TBoundedResponse final : public IOutputStream {
+public:
+    const TString& Body() const {
+        return Body_;
+    }
+
+private:
+    void DoWrite(const void* data, size_t size) override {
+        if (size > MaxResponseBytes - Body_.size()) {
+            ythrow TResponseTooLarge();
+        }
+        Body_.append(static_cast<const char*>(data), size);
+    }
+
+    TString Body_;
+};
+
+bool IsSafeHttpRequestPart(TStringBuf part) {
+    return std::ranges::none_of(part, [](unsigned char c) {
+        return c <= ' ' || c == 0x7f;
+    });
+}
 
 struct TBatchResult {
     ui32 Status = TransportError;
     TVector<TString> Embeddings;
 };
 
-// Each invocation owns its connection, retry budget and rate limiter.
+// Each invocation owns its retry budget and rate limiter.
 class TEmbedderClient {
 public:
     TEmbedderClient(TString model, TStringBuf baseUrl, TString token, ui32 maxRetries, ui32 tokensPerSecond)
@@ -42,7 +73,9 @@ public:
             (url.GetScheme() == NUri::TScheme::SchemeHTTP || url.GetScheme() == NUri::TScheme::SchemeHTTPS) &&
             !url.GetHost().empty() && !(url.GetFieldMask() & (NUri::TField::FlagAuth | NUri::TField::FlagQuery | NUri::TField::FlagFrag)),
             "RemoteEmbedder: BaseUrl must be an HTTP(S) base URL without credentials, query or fragment");
+        NKnn::ValidateRemoteEmbedderHost(url.GetHost());
         Y_ENSURE(!Model_.empty(), "RemoteEmbedder: Model must not be empty");
+        Y_ENSURE(Model_.size() <= MaxBatchBytes, "RemoteEmbedder: Model exceeds the request byte limit");
         Y_ENSURE(!token.empty() && token.find_first_of("\r\n") == TString::npos,
             "RemoteEmbedder: invalid authentication secret");
         Path_ = url.GetField(NUri::TField::FieldPath);
@@ -50,13 +83,21 @@ public:
             Path_.pop_back();
         }
         Path_ += "/embeddings";
-        const TString host = TStringBuilder() << url.GetField(NUri::TField::FieldScheme) << "://" << url.GetHost();
-        Client_ = MakeHolder<TKeepAliveHttpClient>(host, url.GetPort(), TDuration::Seconds(60), TDuration::Seconds(10), true, false, true);
-        Headers_["Content-Type"] = "application/json";
-        Headers_["Authorization"] = "Bearer " + token;
+        UseTls_ = url.GetScheme() == NUri::TScheme::SchemeHTTPS;
+        Port_ = url.GetPort();
+        const auto host = url.GetHost();
+        DialHost_ = host.StartsWith('[') && host.EndsWith(']') ? host.SubStr(1, host.size() - 2) : host;
+        Authority_ = host;
+        if (Port_ != (UseTls_ ? 443 : 80)) {
+            Authority_ += TStringBuilder() << ':' << Port_;
+        }
+        Y_ENSURE(IsSafeHttpRequestPart(Path_) && IsSafeHttpRequestPart(Authority_),
+            "RemoteEmbedder: invalid HTTP request target");
+        Authorization_ = "Bearer " + token;
     }
 
     TBatchResult Apply(const TString& text) {
+        Y_ENSURE(text.size() <= MaxBatchBytes, "RemoteEmbedder: Text exceeds the request byte limit");
         return ApplyRequest(NJson::TJsonValue(text), 1, Max<size_t>(1, text.size()));
     }
 
@@ -79,24 +120,49 @@ private:
         request["encoding_format"] = "float";
         request["input"] = std::move(input);
         const TString body = NJson::WriteJson(request);
+        const TString httpRequest = TStringBuilder()
+            << "POST " << Path_ << " HTTP/1.1\r\nHost: " << Authority_
+            << "\r\nConnection: close\r\nContent-Type: application/json\r\nAuthorization: " << Authorization_
+            << "\r\nContent-Length: " << body.size() << "\r\n\r\n" << body;
         for (ui64 attempt = 0; ; ++attempt) {
             Throttle(estimatedTokens);
-            TStringStream response;
+            NKnn::ValidateRemoteEmbedderHost(DialHost_);
+            TBoundedResponse response;
             ui32 status = TransportError;
             try {
-                status = Client_->DoPost(Path_, body, &response, Headers_);
+                status = PostOnce(httpRequest, response);
+            } catch (const TResponseTooLarge&) {
+                return {InvalidResponse, {}};
             } catch (const std::exception&) {
                 // HTTP diagnostics may contain credentials or input text.
-                Client_->ResetConnection();
+                status = TransportError;
             }
             if (status >= 200 && status < 300) {
-                return ParseResponse(response.Str(), count, status, estimatedTokens);
+                return ParseResponse(response.Body(), count, status, estimatedTokens);
             }
             if (attempt >= MaxRetries_ || !(status == TransportError || status == 408 || status == 429 || status >= 500)) {
                 return {status, {}};
             }
             Sleep(TDuration::MilliSeconds(Min<ui64>(10000, 100ULL << Min<ui64>(attempt, 7))));
         }
+    }
+
+    ui32 PostOnce(const TString& request, IOutputStream& response) const {
+        // A fresh connection makes each POST exactly one transport attempt.
+        using TVerifyCert = TOpenSslClientIO::TOptions::TVerifyCert;
+        NPrivate::THttpConnection connection(DialHost_, Port_, TDuration::Seconds(60), TDuration::Seconds(10),
+            UseTls_, Nothing(), TVerifyCert{DialHost_}, false, true);
+        connection.Write(request);
+        auto& input = *connection.GetHttpInput();
+        const auto status = ParseHttpRetCode(input.FirstLine());
+        if (status >= 200 && status < 300 && status != HTTP_NO_CONTENT) {
+            ui64 contentLength = 0;
+            if (input.GetContentLength(contentLength) && contentLength > MaxResponseBytes) {
+                ythrow TResponseTooLarge();
+            }
+            TransferData(&input, &response);
+        }
+        return status;
     }
 
     void Throttle(ui64 tokens) {
@@ -154,8 +220,11 @@ private:
 
     TString Model_;
     TString Path_;
-    TKeepAliveHttpClient::THeaders Headers_;
-    THolder<TKeepAliveHttpClient> Client_;
+    TString DialHost_;
+    TString Authority_;
+    TString Authorization_;
+    ui16 Port_;
+    bool UseTls_;
     ui32 MaxRetries_;
     ui32 TokensPerSecond_;
     TMonotonic NextRequest_;
@@ -179,9 +248,58 @@ TUnboxedValue MakeResult(const IValueBuilder* builder, const TBatchResult& batch
     return result;
 }
 
+std::optional<size_t> EstimatePassThroughBytes(const ITypeInfoHelper& helper, const TType* type,
+    const TUnboxedValuePod& value, size_t limit)
+{
+    size_t size = sizeof(TUnboxedValue);
+    if (value.IsString()) {
+        return size + value.AsStringRef().Size();
+    }
+    if (!value.IsBoxed() || size > limit) {
+        return size;
+    }
+    if (const TOptionalTypeInspector optional(helper, type); optional) {
+        return EstimatePassThroughBytes(helper, optional.GetItemType(), value.GetOptionalValue(), limit);
+    }
+    if (const TTaggedTypeInspector tagged(helper, type); tagged) {
+        return EstimatePassThroughBytes(helper, tagged.GetBaseType(), value, limit);
+    }
+
+    const TStructTypeInspector structure(helper, type);
+    const TTupleTypeInspector tuple(helper, type);
+    const TListTypeInspector list(helper, type);
+    const auto* elements = list ? value.GetElements() : nullptr;
+    size_t count = 0;
+    if (structure) {
+        count = structure.GetMembersCount();
+    } else if (tuple) {
+        count = tuple.GetElementsCount();
+    } else if (elements && value.HasFastListLength()) {
+        count = value.GetListLength();
+    } else {
+        // Traversing other values can consume a lazy input or evaluate user code.
+        return std::nullopt;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const auto* itemType = structure ? structure.GetMemberType(i) : tuple ? tuple.GetElementType(i) : list.GetItemType();
+        const auto item = elements ? elements[i] : value.GetElement(i);
+        const auto bytes = EstimatePassThroughBytes(helper, itemType, item, limit - size);
+        if (!bytes) {
+            return std::nullopt;
+        }
+        size += *bytes;
+        if (size > limit) {
+            break;
+        }
+    }
+    return size;
+}
+
 class TEmbedderStream: public TBoxedValue {
 public:
-    TEmbedderStream(const IValueBuilder* builder, const TUnboxedValuePod* args, ui32 textIndex, ui32 passThroughIndex, TSourcePosition pos)
+    TEmbedderStream(const IValueBuilder* builder, const TUnboxedValuePod* args, ui32 textIndex, ui32 passThroughIndex,
+        TSourcePosition pos, ITypeInfoHelper::TPtr typeHelper, const TType* passThroughType)
         : Builder_(builder)
         , Input_(args[0])
         , Client_(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()),
@@ -190,6 +308,8 @@ public:
         , TextIndex_(textIndex)
         , PassThroughIndex_(passThroughIndex)
         , Pos_(pos)
+        , TypeHelper_(std::move(typeHelper))
+        , PassThroughType_(passThroughType)
     {
         Y_ENSURE(BatchSize_ > 0, "RemoteEmbedder: BatchSize must be positive");
     }
@@ -204,24 +324,42 @@ private:
         if (OutputIndex_) {
             PassThrough_.clear();
             Texts_.clear();
+            BatchBytes_ = 0;
             Batch_ = {};
             BatchReady_ = false;
             OutputIndex_ = 0;
         }
-        while (!Finished_ && Texts_.size() < BatchSize_) {
-            TUnboxedValue row;
-            switch (Input_.Fetch(row)) {
-                case EFetchStatus::Yield:
-                    return EFetchStatus::Yield;
-                case EFetchStatus::Finish:
-                    Finished_ = true;
-                    break;
-                case EFetchStatus::Ok: {
-                    const auto text = row.GetElement(TextIndex_);
-                    Texts_.emplace_back(text.AsStringRef());
-                    PassThrough_.push_back(row.GetElement(PassThroughIndex_));
-                    break;
+        while (!Finished_ && Texts_.size() < Min<size_t>(BatchSize_, MaxBatchRows)) {
+            if (!PendingRow_) {
+                switch (Input_.Fetch(PendingRow_)) {
+                    case EFetchStatus::Yield:
+                        return EFetchStatus::Yield;
+                    case EFetchStatus::Finish:
+                        Finished_ = true;
+                        break;
+                    case EFetchStatus::Ok:
+                        break;
                 }
+            }
+            if (Finished_) {
+                break;
+            }
+            const auto text = PendingRow_.GetElement(TextIndex_);
+            const auto textRef = text.AsStringRef();
+            auto passThrough = PendingRow_.GetElement(PassThroughIndex_);
+            const auto passThroughBytes = EstimatePassThroughBytes(*TypeHelper_, PassThroughType_, passThrough, MaxBatchBytes);
+            const size_t rowBytes = size_t(textRef.Size()) + sizeof(TString) + passThroughBytes.value_or(sizeof(TUnboxedValue));
+            Y_ENSURE(rowBytes <= MaxBatchBytes, "RemoteEmbedder: stream row exceeds the batch byte limit");
+            if (rowBytes > MaxBatchBytes - BatchBytes_ || (!passThroughBytes && !Texts_.empty())) {
+                break;
+            }
+            BatchBytes_ += rowBytes;
+            Texts_.emplace_back(textRef);
+            PassThrough_.push_back(std::move(passThrough));
+            PendingRow_.Clear();
+            // Hold at most one pass-through value whose storage cannot be estimated.
+            if (!passThroughBytes) {
+                break;
             }
         }
         if (Texts_.empty()) {
@@ -241,8 +379,12 @@ private:
     ui32 TextIndex_;
     ui32 PassThroughIndex_;
     TSourcePosition Pos_;
+    ITypeInfoHelper::TPtr TypeHelper_;
+    const TType* PassThroughType_;
     TVector<TString> Texts_;
     TVector<TUnboxedValue> PassThrough_;
+    TUnboxedValue PendingRow_;
+    size_t BatchBytes_ = 0;
     TBatchResult Batch_;
     size_t OutputIndex_ = 0;
     bool BatchReady_ = false;
@@ -251,18 +393,21 @@ private:
 
 class TApplyRemoteEmbedder: public TBoxedValue {
 public:
-    TApplyRemoteEmbedder(TSourcePosition pos, bool stream, ui32 textIndex = 0, ui32 passThroughIndex = 0)
+    TApplyRemoteEmbedder(TSourcePosition pos, bool stream, ui32 textIndex, ui32 passThroughIndex,
+        ITypeInfoHelper::TPtr typeHelper, const TType* passThroughType)
         : Pos_(pos)
         , Stream_(stream)
         , TextIndex_(textIndex)
         , PassThroughIndex_(passThroughIndex)
+        , TypeHelper_(std::move(typeHelper))
+        , PassThroughType_(passThroughType)
     {
     }
 
 private:
     TUnboxedValue Run(const IValueBuilder* builder, const TUnboxedValuePod* args) const override try {
         if (Stream_) {
-            return TUnboxedValuePod(new TEmbedderStream(builder, args, TextIndex_, PassThroughIndex_, Pos_));
+            return TUnboxedValuePod(new TEmbedderStream(builder, args, TextIndex_, PassThroughIndex_, Pos_, TypeHelper_, PassThroughType_));
         }
         TEmbedderClient client(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()),
             args[4] ? args[4].Get<ui32>() : DefaultMaxRetries, 0);
@@ -275,6 +420,8 @@ private:
     bool Stream_;
     ui32 TextIndex_;
     ui32 PassThroughIndex_;
+    ITypeInfoHelper::TPtr TypeHelper_;
+    const TType* PassThroughType_;
 };
 
 void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) try {
@@ -282,6 +429,17 @@ void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& bui
     const TTupleTypeInspector user(*helper, userType);
     const TTupleTypeInspector positional(*helper, user && user.GetElementsCount() ? user.GetElementType(0) : nullptr);
     const auto* firstArg = positional && positional.GetElementsCount() ? positional.GetElementType(0) : nullptr;
+    if (!firstArg && user && user.GetElementsCount() > 1) {
+        const TStructTypeInspector named(*helper, user.GetElementType(1));
+        if (named) {
+            for (ui32 i = 0; i < named.GetMembersCount(); ++i) {
+                if (AsciiEqualsIgnoreCase(TStringBuf(named.GetMemberName(i)), "InputStream")) {
+                    firstArg = named.GetMemberType(i);
+                    break;
+                }
+            }
+        }
+    }
     const TStreamTypeInspector input(*helper, firstArg);
     const TListTypeInspector listHint(*helper, firstArg);
     const bool stream = input || listHint;
@@ -329,7 +487,7 @@ void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& bui
     args->Add<TOptional<ui32>>().Name("MaxRetries");
     args->Done();
     if (!typesOnly) {
-        builder.Implementation(new TApplyRemoteEmbedder(builder.GetSourcePosition(), stream, textIndex, passThroughIndex));
+        builder.Implementation(new TApplyRemoteEmbedder(builder.GetSourcePosition(), stream, textIndex, passThroughIndex, helper, passThroughType));
     }
 } catch (const std::exception& e) {
     builder.SetError(TStringBuf(e.what()));

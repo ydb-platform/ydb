@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
@@ -322,6 +323,217 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                                    result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                     "Datashard program size limit exceeded");
+    }
+
+    enum class ERemoteStart {
+        Late,               // the start request is delivered after all
+        LateWithoutReply,   // the same, but the executer learns about the compute actor from its first state only
+        NotStarted,         // the node replies that the tasks are not started
+        Undelivered,        // the start request bounces
+    };
+
+    /* Scenario: the tasks of a read-only data query on the second node cannot delay its error response.
+        - The physical tx reads a table on the second node. With failLocally it also reads another table on the
+          executer node, where Ensure() fails on the first row.
+        - TEvStartKqpTasksRequest to the second node is held, so the executer does not know the remote compute actor.
+        - With failLocally TerminateComputeActors() skips the remote task (no CA id yet) and the executer waits for it
+          in WaitShutdownState. Otherwise the executer is still executing.
+        - Then the remote start ends as remoteStart says.
+        - The response must come without waiting for WaitCAStatsTimeoutMs, a late compute actor must be aborted
+          (with channels v1 it also fails by itself sending to its aborted consumer).
+     */
+    void CheckRemoteStartDoesNotDelayError(bool channelsV2, bool failLocally, ERemoteStart remoteStart,
+        Ydb::StatusIds::StatusCode expectedStatus, const TString& expectedIssue)
+    {
+        // Simulated time: the response must come much earlier than the timeout
+        const TDuration waitCAStatsTimeout = TDuration::Seconds(60);
+        const TDuration responseBudget = TDuration::Seconds(10);
+        const bool lateStart = remoteStart == ERemoteStart::Late || remoteStart == ERemoteStart::LateWithoutReply;
+
+        TKikimrSettings settings = TKikimrSettings()
+            .SetNodeCount(2)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false);
+        auto& tableServiceConfig = *settings.AppConfig.MutableTableServiceConfig();
+        tableServiceConfig.SetDqChannelVersion(channelsV2 ? 2 : 1);
+        tableServiceConfig.MutableQueryLimits()->SetWaitCAStatsTimeoutMs(waitCAStatsTimeout.MilliSeconds());
+        // Pin the defaults: with the single partition optimization a read stage runs on the executer node
+        tableServiceConfig.SetEnableSimpleProgramsSinglePartitionOptimization(false);
+        tableServiceConfig.SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(false);
+
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const ui32 executerNodeId = runtime.GetNodeId(0);
+        const ui32 remoteNodeId = runtime.GetNodeId(1);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        for (const char* table : {"LocalTable", "RemoteTable"}) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `/Root/" << table
+                    << "` (Key Uint64, Value Uint64, PRIMARY KEY (Key));").GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery("UPSERT INTO `/Root/LocalTable` (Key, Value) VALUES (1ul, 1ul);",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto localShards = GetTableShards(&kikimr.GetTestServer(), edge, "/Root/LocalTable");
+        const auto remoteShards = GetTableShards(&kikimr.GetTestServer(), edge, "/Root/RemoteTable");
+        UNIT_ASSERT_VALUES_EQUAL(localShards.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(remoteShards.size(), 1);
+
+        const TString sessionId = NDataShard::NKqpHelpers::CreateSessionRPC(runtime, "/Root");
+
+        TActorId executerId;
+        bool localFailure = false;
+        TActorId lateComputeActorId;
+
+        // Whatever nodes the shards are on, read LocalTable on the executer node and RemoteTable on the other one
+        auto placeShards = runtime.AddObserver<NShardResolver::TEvShardsResolveStatus>([&](auto& ev) {
+            auto& shardsToNodes = ev->Get()->ShardsToNodes;
+            if (auto it = shardsToNodes.find(localShards[0]); it != shardsToNodes.end()) {
+                it->second = executerNodeId;
+            }
+            if (auto it = shardsToNodes.find(remoteShards[0]); it != shardsToNodes.end() && !executerId) {
+                it->second = remoteNodeId;
+                executerId = ev->GetRecipientRewrite();
+            }
+        });
+
+        // Recipient keeps the service id, the node service forwards the request to its query manager
+        NActors::TBlockEvents<TEvKqpNode::TEvStartKqpTasksRequest> remoteStartRequests(runtime, [&](const auto& ev) {
+            return executerId && ev->Sender == executerId && ev->Recipient == MakeKqpNodeServiceID(remoteNodeId);
+        });
+
+        // The executer handles the event right after the observers
+        auto watchFailure = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>([&](auto& ev) {
+            if (executerId && ev->GetRecipientRewrite() == executerId && ev->Sender.NodeId() == executerNodeId
+                && ev->Get()->Record.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE)
+            {
+                localFailure = true;
+            }
+        });
+
+        auto watchAbort = runtime.AddObserver<TEvKqp::TEvAbortExecution>([&](auto& ev) {
+            if (executerId && ev->Sender == executerId && ev->GetRecipientRewrite().NodeId() == remoteNodeId) {
+                lateComputeActorId = ev->GetRecipientRewrite();
+            }
+        });
+
+        // Unlike runtime.WaitFor() does not abort on timeout
+        auto dispatchUntil = [&](std::function<bool()> condition, TDuration simTimeout) {
+            if (!condition()) {
+                TDispatchOptions opts;
+                opts.CustomFinalCondition = condition;
+                runtime.DispatchEvents(opts, simTimeout);
+            }
+            return condition();
+        };
+
+        TStringBuilder query;
+        if (failLocally) {
+            query << R"(SELECT Ensure(Key, Key > 100, "expected_local_failure") AS Key FROM `/Root/LocalTable`;)";
+        }
+        query << "SELECT Key, Value FROM `/Root/RemoteTable`;";
+
+        auto future = NDataShard::NKqpHelpers::SendRequest(runtime,
+            NDataShard::NKqpHelpers::MakeSimpleRequestRPC(query, sessionId, /* txId */ "", /* commitTx */ true), "/Root");
+
+        const bool remoteStartHeld = dispatchUntil([&] {
+            return (localFailure || !failLocally) && !remoteStartRequests.empty();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_C(remoteStartHeld, "local failure: " << localFailure
+            << ", remote start requests: " << remoteStartRequests.size() << ", executer: " << executerId
+            << ", response: " << (future.HasValue() ? future.GetValue().DebugString() : "none"));
+        UNIT_ASSERT_VALUES_EQUAL(remoteStartRequests.size(), 1);
+        // The aborted local compute actors report meanwhile, only the remote task can keep the executer waiting
+        UNIT_ASSERT_C(!dispatchUntil([&] { return future.HasValue(); }, TDuration::Seconds(1)),
+            "The executer has replied before the remote start ended: " << future.GetValue().DebugString());
+
+        NActors::TBlockEvents<TEvKqpNode::TEvStartKqpTasksResponse> startReplies(runtime, [&](const auto& ev) {
+            return remoteStart == ERemoteStart::LateWithoutReply && ev->GetRecipientRewrite() == executerId;
+        });
+
+        const TInstant released = runtime.GetCurrentTime();
+        remoteStartRequests.Stop();
+        if (lateStart) {
+            remoteStartRequests.Unblock();
+        } else {
+            auto request = std::move(remoteStartRequests.front());
+            remoteStartRequests.pop_front();
+
+            IEventBase* reply = nullptr;
+            if (remoteStart == ERemoteStart::NotStarted) {
+                auto response = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+                response->Record.SetTxId(request->Get()->Record.GetTxId());
+                for (const auto& task : request->Get()->Record.GetTasks()) {
+                    auto* notStartedTask = response->Record.AddNotStartedTasks();
+                    notStartedTask->SetTaskId(task.GetId());
+                    notStartedTask->SetReason(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY);
+                    notStartedTask->SetMessage("remote_node_out_of_memory");
+                    notStartedTask->SetRequestId(request->Cookie);
+                }
+                reply = response.Release();
+            } else {
+                reply = new NActors::TEvents::TEvUndelivered(TEvKqpNode::TEvStartKqpTasksRequest::EventType,
+                    NActors::TEvents::TEvUndelivered::Disconnected);
+            }
+            runtime.Send(new IEventHandle(executerId, request->GetRecipientRewrite(), reply, 0, request->Cookie),
+                /* senderNodeIndex */ 1, /* viaActorSystem */ true);
+        }
+
+        UNIT_ASSERT_C(dispatchUntil([&] { return future.HasValue(); }, responseBudget),
+            "No response within " << responseBudget << " (WaitCAStatsTimeoutMs " << waitCAStatsTimeout.MilliSeconds() << ")");
+        UNIT_ASSERT_LT(runtime.GetCurrentTime() - released, responseBudget);
+        const auto response = future.ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), expectedStatus, response.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), expectedIssue);
+
+        if (lateStart) {
+            UNIT_ASSERT_C(lateComputeActorId, "The executer has not aborted the compute actor started late");
+            UNIT_ASSERT_C(dispatchUntil([&] { return !runtime.FindActor(lateComputeActorId); }, responseBudget),
+                "Compute actor " << lateComputeActorId << " is still alive");
+        }
+        if (remoteStart == ERemoteStart::LateWithoutReply) {
+            UNIT_ASSERT_VALUES_EQUAL_C(startReplies.size(), 1, "The executer is expected to learn about the compute actor from its state");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(LateRemoteStartAfterLocalFailure, ChannelsV2) {
+        CheckRemoteStartDoesNotDelayError(ChannelsV2, /* failLocally */ true, ERemoteStart::Late,
+            Ydb::StatusIds::PRECONDITION_FAILED, "expected_local_failure");
+    }
+
+    Y_UNIT_TEST(LateRemoteStateAfterLocalFailure) {
+        CheckRemoteStartDoesNotDelayError(/* channelsV2 */ true, /* failLocally */ true, ERemoteStart::LateWithoutReply,
+            Ydb::StatusIds::PRECONDITION_FAILED, "expected_local_failure");
+    }
+
+    Y_UNIT_TEST(RemoteTasksNotStartedAfterLocalFailure) {
+        CheckRemoteStartDoesNotDelayError(/* channelsV2 */ true, /* failLocally */ true, ERemoteStart::NotStarted,
+            Ydb::StatusIds::PRECONDITION_FAILED, "expected_local_failure");
+    }
+
+    Y_UNIT_TEST(RemoteStartUndeliveredAfterLocalFailure) {
+        CheckRemoteStartDoesNotDelayError(/* channelsV2 */ true, /* failLocally */ true, ERemoteStart::Undelivered,
+            Ydb::StatusIds::PRECONDITION_FAILED, "expected_local_failure");
+    }
+
+    Y_UNIT_TEST(RemoteTasksNotStarted) {
+        CheckRemoteStartDoesNotDelayError(/* channelsV2 */ true, /* failLocally */ false, ERemoteStart::NotStarted,
+            Ydb::StatusIds::OVERLOADED, "remote_node_out_of_memory");
+    }
+
+    Y_UNIT_TEST(RemoteStartUndelivered) {
+        CheckRemoteStartDoesNotDelayError(/* channelsV2 */ true, /* failLocally */ false, ERemoteStart::Undelivered,
+            Ydb::StatusIds::UNAVAILABLE, "node is unavailable");
     }
 }
 

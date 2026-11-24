@@ -7812,6 +7812,60 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "TotalGroupCount: 4 "
                         "PartitionPerTablet: 2 ",
                          {NKikimrScheme::StatusInvalidParameter});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup\""
+                        "PartitionPerTablet: 1001 ",
+                         {{NKikimrScheme::StatusInvalidParameter, "Invalid partition per tablet count"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup\""
+                        "TotalGroupCount: 0 ",
+                         {{NKikimrScheme::StatusInvalidParameter, "Invalid total groups count specified: 0"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot",
+                        "Name: \"PQGroup\""
+                        "PartitionPerTablet: 0 ",
+                         {{NKikimrScheme::StatusInvalidParameter, "Invalid partition per tablet count specified: 0"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 0 } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid retention period"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 2678401 } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid retention period"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PQTabletConfig {}
+        )", {{NKikimrScheme::StatusInvalidParameter, "no PartitionConfig"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PartitionsToDelete: 1
+        )", {{NKikimrScheme::StatusInvalidParameter, "deletion of partitions is not supported yet"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            TotalGroupCount: 5
+            PartitionsToAdd { PartitionId: 8 GroupId: 5 }
+        )", {{NKikimrScheme::StatusInvalidParameter, "providing TotalGroupCount and PartitionsToAdd"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PartitionsToAdd { PartitionId: 8 GroupId: 5 }
+            PartitionsToAdd { PartitionId: 8 GroupId: 5 }
+        )", {{NKikimrScheme::StatusInvalidParameter, "several times in PartitionsToAdd"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PartitionsToAdd { PartitionId: 8 GroupId: 0 }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid partition group id 0"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PartitionsToAdd { PartitionId: 8 GroupId: 5 }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid partition group id 5"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            PartitionsToAdd { PartitionId: 0 GroupId: 1 }
+        )", {{NKikimrScheme::StatusSchemeError, "Partition already exists: 0"}});
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup"
+            BootstrapConfig {}
+        )", {{NKikimrScheme::StatusInvalidParameter, "Bootstrap config can be passed only upon creation"}});
 
         // TODO: describe + alter by PathId
 
@@ -8204,6 +8258,125 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )", {NKikimrScheme::StatusSchemeError});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(CreatePersQueueGroupValidationBoundaries) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "DeleteOnCreate"
+            TotalGroupCount: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+            PartitionsToDelete: 1
+        )", {{NKikimrScheme::StatusSchemeError, "trying to delete partitions from not created PQGroup"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "ZeroCount"
+            TotalGroupCount: 0
+            PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid total partition count specified: 0"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "MissingTabletConfig"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+        )", {{NKikimrScheme::StatusSchemeError, "No PQTabletConfig specified"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "MissingPartitionConfig"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {}
+        )", {{NKikimrScheme::StatusSchemeError, "no PartitionConfig"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "ZeroRetention"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 0 } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid retention period"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "NegativeRetention"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: -1 } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid retention period"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "TooLongRetention"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 2678401 } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid retention period"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "ZeroPartsPerTablet"
+            TotalGroupCount: 1
+            PartitionPerTablet: 0
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+        )", {{NKikimrScheme::StatusSchemeError, "Invalid partition per tablet count specified: 0"}});
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "TooManyPartsPerTablet"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1001
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+        )", {{NKikimrScheme::StatusSchemeError, "Invalid partition per tablet count specified: 1001"}});
+
+        TString tooManyChannels = R"(
+            Name: "TooManyChannels"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 10
+        )";
+        // Hive supports at most 256 tablet channels.
+        for (ui32 i = 0; i <= 256; ++i) {
+            tooManyChannels += " ExplicitChannelProfiles { PoolKind: \"pool-kind-1\" }";
+        }
+        tooManyChannels += "} }";
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", tooManyChannels,
+                          {{NKikimrScheme::StatusInvalidParameter, "ExplicitChannelProfiles"}});
+
+        for (const auto& name : {"DeleteOnCreate", "ZeroCount", "MissingTabletConfig", "MissingPartitionConfig", "ZeroRetention",
+                                 "NegativeRetention", "TooLongRetention", "ZeroPartsPerTablet", "TooManyPartsPerTablet",
+                                 "TooManyChannels"}) {
+            TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/" << name), {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST(PersQueueGroupWriteSpeedLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        constexpr ui64 excessiveWriteSpeed = (ui64(1) << 32) + 50 * 1024 * 1024;
+        const TString writeSpeed = ToString(excessiveWriteSpeed);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+            Name: "CreateTooFast"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 3600
+                    WriteSpeedInBytesPerSecond: )" << writeSpeed << R"(
+                }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid write speed"}});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CreateTooFast"), {NLs::PathNotExist});
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "AlterTooFast"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig { PartitionConfig { LifetimeSeconds: 3600 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+            Name: "AlterTooFast"
+            PQTabletConfig {
+                PartitionConfig {
+                    WriteSpeedInBytesPerSecond: )" << writeSpeed << R"(
+                }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid write speed"}});
     }
 
     Y_UNIT_TEST(TopicMeteringMode) {

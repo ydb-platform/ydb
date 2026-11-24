@@ -1,6 +1,8 @@
 #pragma once
 
 #include "dedicated_pipe_pool.h"
+
+#include <ydb/core/persqueue/public/constants.h>
 #include "olap/manager/manager.h"
 #include "operation_queue_timer.h"
 #include "schemeshard.h"
@@ -225,7 +227,7 @@ private:
 public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
-    static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
+    static constexpr ui64 MaxPQWriteSpeedPerPartition = NPQ::MAX_WRITE_SPEED_PER_PARTITION;
     static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
     static constexpr ui32 PublishChunkSize = 1000;
 

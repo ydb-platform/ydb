@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        for (const auto& rp : {TDuration::Hours(12), TDuration::Days(7), TDuration::Days(60)}) {
+        for (const auto& rp : {TDuration::Hours(12), TDuration::Days(7), TDuration::Seconds(TSchemeShard::MaxPQLifetimeSeconds), TDuration::Days(60)}) {
             const auto status = rp.Seconds() <= TSchemeShard::MaxPQLifetimeSeconds
                 ? NKikimrScheme::StatusAccepted
                 : NKikimrScheme::StatusInvalidParameter;
@@ -508,6 +508,24 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 NLs::PathExist,
                 NLs::RetentionPeriod(rp),
             });
+        }
+
+        // The CDC request uses uint64, while the generated topic config uses int32.
+        // The overflow value would become a valid one-day retention if narrowed first.
+        constexpr ui64 overflowingRetention = (ui64(1) << 32) + 86400;
+        for (const ui64 retention : {ui64(0), ui64(TSchemeShard::MaxPQLifetimeSeconds) + 1, overflowingRetention}) {
+            const TString streamName = TStringBuilder() << "InvalidRetention" << retention;
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: ")" << streamName << R"("
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+                RetentionPeriodSeconds: )" << retention,
+                {{NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Invalid retention period: specified: " << retention << "s"}});
+            const TString streamPath = TStringBuilder() << "/MyRoot/Table/" << streamName;
+            TestDescribeResult(DescribePrivatePath(runtime, streamPath), {NLs::PathNotExist});
         }
     }
 
@@ -596,6 +614,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
 
+        // The PQ sub-operation rejected the request after the CDC parts proposed.
+        // Rollback must release both the stream name and table state for this retry.
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamDescription {
@@ -609,7 +629,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {
+            NLs::PathExist,
+            NLs::CheckPartCount("streamImpl", 10, 2, 5, 10),
+            NLs::RetentionPeriod(TDuration::Days(1)),
+        });
     }
 
     Y_UNIT_TEST(Attributes) {

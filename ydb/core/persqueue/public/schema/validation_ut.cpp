@@ -441,6 +441,8 @@ Y_UNIT_TEST(ValidateConfigWriteSpeedAndBurst) {
     auto& pq = runtime.GetAppData().PQConfig;
     pq.ClearValidWriteSpeedLimitsKbPerSec();
     pq.AddValidWriteSpeedLimitsKbPerSec(1); // 1 KB/s
+    pq.AddValidWriteSpeedLimitsKbPerSec(1024); // 1 MB/s
+    pq.AddValidWriteSpeedLimitsKbPerSec(4096); // 4 MB/s
     pq.ClearValidRetentionLimits();
     auto* limit = pq.AddValidRetentionLimits();
     limit->SetMinPeriodSeconds(3600);
@@ -468,10 +470,104 @@ Y_UNIT_TEST(ValidateConfigWriteSpeedAndBurst) {
         }
         {
             auto config = makeBase();
+            config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond((ui64(1) << 32) + 1_KB);
+            auto r = ValidateConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "write_speed");
+        }
+        {
+            auto config = makeBase();
             config.MutablePartitionConfig()->SetBurstSize(3_MB);
             auto r = ValidateConfig(config, EOperation::Create);
             UNIT_ASSERT(!r);
             UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
+        }
+        {
+            // uint64 value that wraps to 2_KB when truncated to ui32 must be rejected too
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetBurstSize((ui64(1) << 32) + 2_KB);
+            auto r = ValidateConfig(config, EOperation::Create);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
+        }
+        {
+            // a legacy out-of-range speed inherited unchanged from the stored
+            // config is accepted on alter, but rejected when it changes
+            const ui64 legacySpeed = (ui64(1) << 32) + 1_KB;
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(legacySpeed);
+            auto oldConfig = makeBase();
+            oldConfig.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(legacySpeed);
+            UNIT_ASSERT(ValidateConfig(config, EOperation::Alter, &oldConfig));
+
+            UNIT_ASSERT(!ValidateConfig(config, EOperation::Alter));
+
+            auto otherOldConfig = makeBase();
+            auto r = ValidateConfig(config, EOperation::Alter, &otherOldConfig);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "write_speed");
+        }
+        {
+            // a legacy out-of-range burst inherited unchanged from the stored
+            // config is accepted on alter, but rejected when it changes
+            const ui64 legacyBurst = (ui64(1) << 32) + 2_KB;
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetBurstSize(legacyBurst);
+            auto oldConfig = makeBase();
+            oldConfig.MutablePartitionConfig()->SetBurstSize(legacyBurst);
+            UNIT_ASSERT(ValidateConfig(config, EOperation::Alter, &oldConfig));
+
+            UNIT_ASSERT(!ValidateConfig(config, EOperation::Alter));
+
+            auto otherOldConfig = makeBase();
+            auto r = ValidateConfig(config, EOperation::Alter, &otherOldConfig);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
+        }
+        {
+            // the burst cap is derived from the write speed: an alter that
+            // lowers the speed must revalidate an unchanged burst against
+            // the new cap
+            const ui64 speed4MB = 4_MB;
+            const ui64 burst8MB = 8_MB;
+            auto oldConfig = makeBase();
+            oldConfig.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(speed4MB);
+            oldConfig.MutablePartitionConfig()->SetBurstSize(burst8MB);
+            // burst 8 MB is valid at speed 4 MB (cap = 2 * speed)
+            UNIT_ASSERT(ValidateConfig(oldConfig, EOperation::Create));
+
+            // lowering only the speed leaves the burst above the new cap
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(1_MB);
+            config.MutablePartitionConfig()->SetBurstSize(burst8MB);
+            auto r = ValidateConfig(config, EOperation::Alter, &oldConfig);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
+
+            // lowering both keeps the topic valid
+            config.MutablePartitionConfig()->SetBurstSize(1_MB);
+            UNIT_ASSERT(ValidateConfig(config, EOperation::Alter, &oldConfig));
+        }
+        {
+            // a legacy speed above the supported maximum inherited unchanged
+            // from the stored config must not raise the burst cap above the
+            // supported maximum
+            const ui64 legacySpeed = (ui64(1) << 32) + 1_MB; // stored by old build (truncated to ui32 = 1 MiB/s)
+            auto oldConfig = makeBase();
+            oldConfig.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(legacySpeed);
+            oldConfig.MutablePartitionConfig()->SetBurstSize(1_MB);
+
+            // burst-only alter: the unchanged legacy speed must not raise the cap
+            auto config = makeBase();
+            config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(legacySpeed);
+            config.MutablePartitionConfig()->SetBurstSize(1_GB);
+            auto r = ValidateConfig(config, EOperation::Alter, &oldConfig);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Invalid write burst");
+
+            // a burst within the supported maximum cap is accepted
+            config.MutablePartitionConfig()->SetBurstSize(100_MB);
+            UNIT_ASSERT(ValidateConfig(config, EOperation::Alter, &oldConfig));
         }
         {
             auto config = makeBase();

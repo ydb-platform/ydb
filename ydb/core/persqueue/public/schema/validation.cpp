@@ -44,7 +44,8 @@ TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
 
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const EOperation operation
+    const EOperation operation,
+    const NKikimrPQ::TPQTabletConfig* oldConfig
 ) {
     const auto& pqConfig = AppData()->PQConfig;
 
@@ -57,27 +58,45 @@ TResult ValidateConfig(
         }
     }
 
-    ui32 speed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-    ui32 burst = config.GetPartitionConfig().GetBurstSize();
+    ui64 speed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    ui64 burst = config.GetPartitionConfig().GetBurstSize();
 
-    std::set<ui32> validLimits {};
+    // Values inherited unchanged from the stored config may predate the
+    // current validation rules (older versions truncated these fields to
+    // ui32 and could persist out-of-range values). Only enforce the speed
+    // check when the alter actually changes the speed. The burst cap is
+    // derived from the speed, so the burst must be revalidated whenever
+    // either value changes — and when the speed is a legacy value above
+    // the supported maximum, the cap must be bounded by the maximum
+    // supported speed instead of the stored value.
+    const bool speedUnchanged = oldConfig
+        && oldConfig->GetPartitionConfig().GetWriteSpeedInBytesPerSecond() == speed;
+    const bool burstUnchanged = oldConfig
+        && oldConfig->GetPartitionConfig().GetBurstSize() == burst;
+
+    std::set<ui64> validLimits {};
     if (pqConfig.ValidWriteSpeedLimitsKbPerSecSize() == 0) {
         validLimits.insert(speed);
     } else {
         const auto& limits = AppData()->PQConfig.GetValidWriteSpeedLimitsKbPerSec();
         for (auto& limit : limits) {
-            validLimits.insert(limit * 1_KB);
+            validLimits.insert(ui64(limit) * 1_KB);
         }
     }
-    if (validLimits.find(speed) == validLimits.end()) {
+    if (!speedUnchanged && validLimits.find(speed) == validLimits.end()) {
         return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "write_speed per second in partition must have values from set {" << JoinSeq(",", validLimits) << "}, got " << speed};
     }
 
-    if (burst > speed * 2 && burst > 1_MB) {
+    // The burst cap is derived from the write speed. A legacy speed
+    // inherited unchanged from the stored config may exceed the supported
+    // maximum (older builds truncated it to ui32 and accepted it), so the
+    // speed used to calculate the cap is bounded by the supported maximum.
+    const ui64 cappedSpeed = Min<ui64>(speed, MAX_WRITE_SPEED_PER_PARTITION);
+    if (!(speedUnchanged && burstUnchanged) && burst > cappedSpeed * 2 && burst > 1_MB) {
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
             << "Invalid write burst in partition specified: " << burst
-            << " vs " << Max(speed * 2, (ui32)1_MB)};
+            << " vs " << Max<ui64>(cappedSpeed * 2, 1_MB)};
     }
 
     ui32 lifeTimeSeconds = config.GetPartitionConfig().GetLifetimeSeconds();

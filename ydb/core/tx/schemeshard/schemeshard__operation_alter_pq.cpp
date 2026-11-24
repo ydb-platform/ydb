@@ -242,7 +242,11 @@ public:
         }
         if (alter.HasPartitionPerTablet()) {
             ui32 maxPartsPerTablet = alter.GetPartitionPerTablet();
-            if (!maxPartsPerTablet) {
+            // A value inherited unchanged from the stored config may predate
+            // the cap (older versions had no upper bound); reject only a
+            // genuine change above the cap.
+            if (!maxPartsPerTablet || (maxPartsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount
+                    && maxPartsPerTablet != topic->MaxPartsPerTablet)) {
                 errStr = Sprintf("Invalid partition per tablet count specified: %u", maxPartsPerTablet);
                 return nullptr;
             }
@@ -951,6 +955,12 @@ public:
                     return result;
                 }
 
+                if (!partition->KeyRange || !adjacentPartition->KeyRange) {
+                    errStr = TStringBuilder() << "You cannot merge non-contiguous partitions";
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                    return result;
+                }
+
                 NKikimr::NSchemeShard::TTopicTabletInfo::TTopicPartitionInfo *left, *right;
                 if (partition->KeyRange->FromBound && adjacentPartition->KeyRange->ToBound &&
                     *partition->KeyRange->FromBound == *adjacentPartition->KeyRange->ToBound) {
@@ -1173,7 +1183,13 @@ public:
 
         const auto& partConfig = newTabletConfig.GetPartitionConfig();
 
-        if ((ui32)partConfig.GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
+        // The config may carry a value inherited unchanged from the stored
+        // topic config (e.g. internal split/merge requests carry no
+        // PQTabletConfig at all). Such a value may predate the cap (older
+        // versions truncated the field to ui32); enforce the cap only when
+        // the alter changes it.
+        if (partConfig.GetWriteSpeedInBytesPerSecond() != tabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
+                && partConfig.GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
             errStr = TStringBuilder() << "Invalid write speed"
                 << ": specified: " << partConfig.GetWriteSpeedInBytesPerSecond() << "bps"
                 << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";

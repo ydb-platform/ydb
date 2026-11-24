@@ -1201,6 +1201,16 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Topic partitions count must be greater than 0")};
     }
 
+    // Validate the uint64 request before DoCreatePqPart narrows it to an int32 lifetime.
+    const ui64 retentionPeriodSeconds = op.GetRetentionPeriodSeconds();
+    if (retentionPeriodSeconds == 0 || retentionPeriodSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+            << "Invalid retention period"
+            << ": specified: " << retentionPeriodSeconds << "s"
+            << ", min: " << 1 << "s"
+            << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s")};
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     if (initialScan) {

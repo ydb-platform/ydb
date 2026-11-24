@@ -419,7 +419,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
     }
 
-    CreateConsistentCopyTables(opId, consistentCopyTables, context, result);
+    CreateConsistentCopyTables(opId, consistentCopyTables, context, result, /*fromBackupCollection*/ true);
 
     if (incrBackupNames) {
         // op id increased internally

@@ -4257,9 +4257,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     // A full-only restore (no incremental backups) must be visible via Get/List:
     // a state row is always created regardless of whether incrementals are present.
-    Y_UNIT_TEST(FullOnlyRestoreIsListable) {
+    Y_UNIT_TEST_FLAG(FullOnlyRestoreIsListable, PgSchema) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableTablePgTypes(PgSchema).DisablePgCompatibility(!PgSchema));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -4273,12 +4273,13 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             Name: "Table1"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Uint32" }
+            %s
             KeyColumnNames: ["key"]
-        )");
+        )", PgSchema ? R"(Columns { Name: "pg_value" Type: "pgint8" })" : ""));
         env.TestWaitNotification(runtime, txId);
 
         UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
@@ -4290,12 +4291,24 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
         env.TestWaitNotification(runtime, txId);
 
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetDisablePgCompatibility(true);
+        }
+
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
         Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
         UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        if (PgSchema) {
+            const auto restored = DescribePath(runtime, "/MyRoot/Table1");
+            TestDescribeResult(restored, {NLs::PathExist, NLs::IsTable});
+            const auto& table = restored.GetPathDescription().GetTable();
+            UNIT_ASSERT_VALUES_EQUAL(table.ColumnsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(2).GetTypeId(), NScheme::NTypeIds::Pg);
+        }
 
         auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         UNIT_ASSERT_C(!listResp.GetEntries().empty(),

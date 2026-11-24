@@ -4449,10 +4449,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             CreateMirrorerActor();
         }
     } else {
-        if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
-            Mirrorer.Reset();
-        }
+        DestroyMirrorer();
     }
 
     if (SendChangeConfigReply) {
@@ -4826,6 +4823,10 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     }
 
     //request in correct session - make it
+
+    if (act.ResetOffsetReply) {
+        act.Offset = Max(act.Offset, CdcReplicationTrimOffset);
+    }
 
     ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
 
@@ -5447,6 +5448,10 @@ void TPartition::CreateMirrorerActor() {
 
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
+        if (IsCdcReplicationTopic()) {
+            PendingReplicationData.reset();
+            ReplicationDataNeedsApply = false;
+        }
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
         Mirrorer.Reset();
     }

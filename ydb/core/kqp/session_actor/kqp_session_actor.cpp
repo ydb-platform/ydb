@@ -348,6 +348,7 @@ public:
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
+        QueryState->RequestEv->DisablePgCompatibility = QueryState->GetDisablePgCompatibility();
         WorkerStatsMode = QueryState->GetStatsMode();
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
                     nullptr, QueryState->KqpSessionSpan.GetTraceId()));
@@ -2655,7 +2656,7 @@ public:
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
             auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
-                QueryState->CompileResult->Uid, Settings.DbCounters);
+                QueryState->CompileResult, Settings.DbCounters);
 
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
         }

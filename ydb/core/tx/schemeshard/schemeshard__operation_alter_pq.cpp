@@ -282,15 +282,15 @@ public:
                 // Validate explicit channel profiles alter attempt
                 const auto& ecps = alterConfig.GetPartitionConfig().GetExplicitChannelProfiles();
                 if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
-                                        ecps.size(),
-                                        NHive::MAX_TABLET_CHANNELS);
+                    errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
+                                     ecps.size(),
+                                     NHive::MAX_TABLET_CHANNELS);
                     return nullptr;
                 }
                 if (ecps.size() < tabletConfig->GetPartitionConfig().GetExplicitChannelProfiles().size()) {
-                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be at least %lu (current config)",
-                                        ecps.size(),
-                                        tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize());
+                    errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be at least %lu (current config)",
+                                     ecps.size(),
+                                     tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize());
                     return nullptr;
                 }
             } else if (tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
@@ -781,6 +781,15 @@ public:
             {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
                     "Managed CDC attachment, mirroring, and trim require a Disabled stream and the current replica table owner");
+                return result;
+            }
+
+            const bool partitionHeartbeats = stream->ResolvedTimestamps != TDuration::Zero()
+                && stream->HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
+            // Attachment keeps the bare producer groups, which cannot contribute to the partition quorum.
+            if (attachCdcTopic && (partitionHeartbeats || stream->SchemaChanges)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "Managed CDC attachment does not support partition heartbeats or schema changes");
                 return result;
             }
         }

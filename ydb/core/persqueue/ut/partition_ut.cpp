@@ -3450,6 +3450,42 @@ Y_UNIT_TEST_F(DisabledReplicationRejectsMirrorerButAllowsClientWrites, TPartitio
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
 }
 
+Y_UNIT_TEST_F(DisabledCdcReplicationDiscardsBufferedOffsets, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {{.Consumer = "reader"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+
+    TActorId mirrorer;
+    auto observer = Ctx->Runtime->AddObserver<TEvPQ::TEvInitCredentials>([&](auto& ev) {
+        mirrorer = ev->Sender;
+        ev.Reset();
+    });
+    Config.SetVersion(2);
+    Config.MutableCdcReplication();
+    Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(true);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    SendSetOffset(1, "reader", 7, "");
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 7}}}});
+    UNIT_ASSERT(mirrorer);
+    auto update = MakeHolder<TEvPQ::TEvReplicationData>();
+    update->OffsetsByConsumers = {{"reader", 2}};
+    Ctx->Runtime->Send(ActorId, mirrorer, update.Release());
+    UNIT_ASSERT(TPartitionTestWrapper::HasPendingReplicationData(*partition));
+
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
+    Ctx->Runtime->Send(ActorId, mirrorer, new TEvPQ::TEvReplicationData());
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1});
+    UNIT_ASSERT(!TPartitionTestWrapper::HasPendingReplicationData(*partition));
+    SendGetOffset(2, "reader");
+    WaitProxyResponse({.Cookie = 2, .Offset = 7});
+}
+
 Y_UNIT_TEST_F(DisabledReplicationAllowsMirroringWithoutConsumerOffsets, TPartitionFixture)
 {
     auto* partition = CreatePartition({.Partition=TPartitionId{0}, .Begin=0, .End=10});
@@ -3549,7 +3585,7 @@ Y_UNIT_TEST_F(WriteWithoutSourceHeartbeatsEmitsNoHeartbeat, TPartitionFixture)
 Y_UNIT_TEST_F(CdcReplicationTrimPersistsCutAndDeletesData, TPartitionFixture) {
     TConfigParams config{
         .Version = 1,
-        .Consumers = {{.Consumer = "reader", .Offset = 3}},
+        .Consumers = {{.Consumer = "reader", .Offset = 3}, {.Consumer = "rewind", .Offset = 5}},
         .CdcReplicationSourceConsumer = "source",
         .Important = true,
     };
@@ -3585,10 +3621,21 @@ Y_UNIT_TEST_F(CdcReplicationTrimPersistsCutAndDeletesData, TPartitionFixture) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 0);
+    // Earliest still resolves to zero while the trim write is in flight.
+    Ctx->Runtime->Send(ActorId, Ctx->Edge, new TEvPQ::TEvResetOffsetRequest(
+        "topic", "rewind", 0, NKikimrPQ::TEvResetOffsetRequest::kEarliest));
+
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitPartitionConfigChanged();
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 10);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);
+
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "rewind", .Offset = 10}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    auto reset = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvResetOffsetResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(reset);
+    UNIT_ASSERT_VALUES_EQUAL(reset->GetStatus(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "rewind")->Offset, 10);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 3);
 }
 

@@ -35,6 +35,8 @@ struct TTopicOffsets {
 };
 
 std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer);
+void WaitForTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
+    const std::function<bool(const TTopicOffsets&)>& ready, const TString& description);
 
 struct TTopicRecord {
     TString Data;

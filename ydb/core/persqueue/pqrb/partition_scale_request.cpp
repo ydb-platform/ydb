@@ -113,11 +113,12 @@ bool TPartitionScaleRequest::IsOurPipe(const TActorId& clientId) const {
 
 void TPartitionScaleRequest::ReplyAndDie(
     TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    NKikimrScheme::EStatus schemeShardStatus)
 {
     if (!ReplySent) {
         ReplySent = true;
-        Send(ParentActorId, new TEvPartitionScaleRequestDone(status));
+        Send(ParentActorId, new TEvPartitionScaleRequestDone(status, schemeShardStatus));
     }
     Die(ctx);
 }
@@ -175,7 +176,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
             }
             LOG_E("TPartitionScaleRequest SchemaShard error when trying to execute a scale request", {"status", TEvTxUserProxy::TResultStatus::Str(status)},
                 {"request", issues});
-            ReplyAndDie(status, ctx);
+            ReplyAndDie(status, ctx, static_cast<NKikimrScheme::EStatus>(msg->Record.GetSchemeShardStatus()));
             return;
         }
     }

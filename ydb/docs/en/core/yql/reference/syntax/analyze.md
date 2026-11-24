@@ -1,9 +1,9 @@
 # ANALYZE
 
 {% if feature_flags.enable_column_statistics == false %}
-{% note warning "Experimental feature" %}
+{% note info "Feature is disabled by default" %}
 
-This feature is under development and is disabled by default by the [`enable_column_statistics`](../../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../../reference/configuration/feature_flags.md#experimental).
+In this version, column statistics are disabled by the [`enable_column_statistics`](../../../reference/configuration/feature_flags.md) flag. `ANALYZE` and the use of statistics by the optimizer become available after you enable the flag in the cluster configuration. [How to check availability](../../../reference/configuration/feature_flags.md#check-availability).
 
 {% endnote %}
 {% endif %}

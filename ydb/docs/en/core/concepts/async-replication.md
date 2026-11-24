@@ -96,7 +96,7 @@ After the restore is complete, the user switches replication to `STANDBY` using 
 
 To ensure data completeness, changefeeds must be ready before the backup is created, and accumulated records must remain available until their processing is acknowledged. The availability period is set with the [AVAILABILITY_PERIOD](#availability-period) parameter. For the procedure and checks, see the [guide to initial synchronization using backup and restore](../devops/async-replication-initial-sync.md).
 
-#### Choosing an Initial Synchronization Method {#initial-sync-comparison}
+#### Initial Synchronization Methods {#initial-sync-comparison}
 
 Both methods require reading the source data and writing it to the target. Their additional costs differ:
 
@@ -107,7 +107,7 @@ Both methods require reading the source data and writing it to the target. Their
 | Network transfer | Initial data is transferred from the source changefeeds to the target | Data is transferred from the source to S3 and then from S3 to the target; export compression can reduce the transfer volume |
 | Setup and operation | Synchronization starts automatically when replication is created | Requires S3 storage, separate backup and restore operations, checking their completion, and starting replication |
 
-An initial scan is simpler to set up and suits small datasets. For large datasets, backup and restore can reduce the cost of processing the initial data through CDC, but require additional storage and S3 operations. Actual costs and duration depend on data volume, the rate of changes, cluster resources, compression, and the terms of S3 usage.
+For practical selection criteria and resource preparation, see the [migration planning guide](../devops/migration/index.md#initial-sync).
 
 ### Change Data Replication {#replication-of-changes}
 
@@ -162,14 +162,7 @@ Possible errors during asynchronous replication can be grouped into the followin
 
 {% note warning %}
 
-After fixing the cause of a critical error, you can resume asynchronous replication without dropping the instance. First pause it, then set its state to `STANDBY`:
-
-```yql
-ALTER ASYNC REPLICATION my_replication SET (STATE = 'PAUSED');
-ALTER ASYNC REPLICATION my_replication SET (STATE = 'STANDBY');
-```
-
-Make sure the pause and processing of accumulated changes fit within the [record retention period](cdc.md#retention-period). For details, see [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md).
+After the cause of a critical error is resolved, replication can resume without dropping the instance if the required changes remain available on the source. For recovery steps and state checks, see the [guide](../devops/migration/async-replication.md#replication-overload).
 
 {% endnote %}
 
@@ -201,9 +194,9 @@ The change commit interval directly affects the barrier emission interval in the
 
 ## Asynchronous Replication Completion {#done}
 
-Completion of asynchronous replication might be an end goal of data migration from one database to another. In this case the client stops writing data to the source, waits for the zero replication lag, and completes replication. After the replication process is completed, replicas become available both for reading and writing. Then you can switch the load from the source database to the target database and complete data migration.
+Completing asynchronous replication makes replica objects readable and writable. This transition is used to switch an application to the target during migration. For a continuously updated copy, replication remains running after initial synchronization.
 
-Before completing replication, get an up-to-date lag value using `scheme describe --stats`. If the value is unavailable, wait for reporting to resume: a missing value or a previously displayed zero does not confirm that all changes have been transferred.
+For stopping writes, verifying applied changes, and switching the application, see the [migration recipe](../devops/migration/async-replication.md#readiness).
 
 {% note info %}
 
@@ -235,3 +228,9 @@ If asynchronous replication is dropped without prior [completion](#done) and rep
 {% endnote %}
 
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.
+
+## Practical Guides {#guides}
+
+- [Choosing a migration method](../devops/migration/index.md).
+- [Migration using asynchronous replication](../devops/migration/async-replication.md).
+- [Initial synchronization using a backup](../devops/async-replication-initial-sync.md).

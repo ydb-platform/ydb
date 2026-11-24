@@ -218,6 +218,7 @@ NActors::IActor* MakeDiscoverYDBBindingContentActor(const TActorId& proxyActorId
     auto entityNameExtractorFactoryMethod = [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& event,
                                                 const FederatedQuery::DescribeBindingResult& result) {
         event->Get()->OldBindingContent = result.binding().content();
+        event->Get()->OldBindingRevision = result.binding().meta().revision();
     };
 
     return new TControlPlaneStorageRequesterActor<TEvControlPlaneProxy::TEvModifyBindingRequest, TEvControlPlaneProxy::TEvModifyBindingResponse,

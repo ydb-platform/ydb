@@ -582,6 +582,18 @@ public:
                 return AddOffsetsToTransaction();
         }
 
+        if (QueryState->GetDisablePgCompatibility()) {
+            if (QueryState->QueryPhysicalGraph && !QueryState->QueryPhysicalGraph->GetCompiledWithPgCompatibilityDisabled()) {
+                ythrow TRequestFail(Ydb::StatusIds::UNSUPPORTED)
+                    << "PostgreSQL compatibility is disabled and the saved plan was not compiled in that mode";
+            }
+            try {
+                TQueryData::ValidateNoPgParameters(QueryState->GetYdbParameters());
+            } catch (const yexception& e) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << e.what();
+            }
+        }
+
         QueryState->UpdateTempTablesState(TempTablesState);
 
         QueryClassifier = TryCreateQueryClassifier();
@@ -2480,6 +2492,7 @@ public:
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
+        request.CompiledWithPgCompatibilityDisabled = request.SaveQueryPhysicalGraph && QueryState->GetDisablePgCompatibility();
         request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
         YDB_LOG_DEBUG("Sending to Executer",
             {"marker", "KQPSA"},

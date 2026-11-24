@@ -387,6 +387,7 @@ struct TEvControlPlaneStorage {
         using TBaseControlPlaneRequest::TBaseControlPlaneRequest;
 
         TMaybe<i64> ObservedRevision;
+        bool ValidateOnly = false;
         EBindingRenameAction RenameAction = EBindingRenameAction::None;
         TString RenameOperationId;
         TString RenameIdentity;

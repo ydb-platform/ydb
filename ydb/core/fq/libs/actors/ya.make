@@ -45,6 +45,7 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
+    ydb/core/kqp/common/pg_policy
     ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/core/util
@@ -78,6 +79,7 @@ PEERDIR(
     yql/essentials/core/dq_integration/transform
     yql/essentials/core/facade
     yql/essentials/core/services/mounts
+    yql/essentials/minikql
     yql/essentials/minikql/comp_nodes
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes

@@ -2322,6 +2322,7 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(true);
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2335,6 +2336,7 @@ value {
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        runtime.GetAppData().FeatureFlags.SetDisablePgCompatibility(false);
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"

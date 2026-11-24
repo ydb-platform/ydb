@@ -99,8 +99,9 @@ struct TTestBootstrap {
     TGrabActor* TestConnectionGrab;
     TGrabActor* RateLimiterGrab;
 
-    TTestBootstrap(const NConfig::TControlPlaneProxyConfig& config = {})
+    TTestBootstrap(const NConfig::TControlPlaneProxyConfig& config = {}, const NConfig::TComputeConfig& computeConfig = {})
         : Config(config)
+        , ComputeConfig(computeConfig)
         , Runtime(PrepareTestActorRuntime())
     {
     }
@@ -595,6 +596,78 @@ Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
         UNIT_ASSERT(state.Advance(EBindingRenameAction::Finish) == EBindingRenameWrite::Forget);
         state.Internal.clear_rename();
         UNIT_ASSERT(!HasPendingBindingRename(state.Internal));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TControlPlaneProxyBindingUpdate) {
+    Y_UNIT_TEST(PgUpdatesValidateBeforeMutatingAndPreserveIdempotentReplay) {
+        NConfig::TComputeConfig computeConfig;
+        computeConfig.SetDefaultCompute(NConfig::EComputeType::YDB);
+        computeConfig.MutableYdb()->SetEnable(true);
+        computeConfig.MutableYdb()->MutableControlPlane()->SetEnable(true);
+
+        const std::pair<const char*, bool> cases[] = {
+            { "new_name", false },
+            { "new_name", true },
+            { "old_name", false },
+            { "old_name", true },
+        };
+        for (const auto& [name, replay] : cases) {
+            TTestBootstrap bootstrap({}, computeConfig);
+            FederatedQuery::ModifyBindingRequest proto;
+            proto.set_binding_id("binding-id");
+            proto.set_previous_revision(5);
+            proto.set_idempotency_key("modify-request");
+            proto.mutable_content()->set_name(name);
+
+            const auto sender = bootstrap.Runtime->AllocateEdgeActor();
+            auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>(
+                "yandexcloud://my_folder", proto, "test_user@staff", "", AllPermissions());
+            request->CloudId = "cloud";
+            request->SubjectType = "user_account";
+            request->ComputeDatabase.ConstructInPlace();
+            request->RequestValidationPassed = true;
+            request->ConnectionContent.ConstructInPlace().set_name("source");
+            auto& binding = request->OldBindingContent.ConstructInPlace();
+            binding.set_name("old_name");
+            auto* column = binding.mutable_setting()->mutable_object_storage()->add_subset()->mutable_schema()->add_column();
+            column->set_name("pg_column");
+            column->mutable_type()->mutable_pg_type()->set_oid(23);
+            request->Request.mutable_content()->mutable_setting()->CopyFrom(binding.setting());
+            request->OldBindingRevision = 4;
+
+            constexpr ui64 cookie = 42;
+            bootstrap.Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release(), 0, cookie));
+            auto forwarded = bootstrap.MetaStorageGrab->GetRequest();
+            const auto* storageRequest = forwarded->Get<TEvControlPlaneStorage::TEvModifyBindingRequest>();
+            UNIT_ASSERT(storageRequest->ValidateOnly);
+            UNIT_ASSERT(storageRequest->ObservedRevision);
+            UNIT_ASSERT_VALUES_EQUAL(*storageRequest->ObservedRevision, 4);
+            UNIT_ASSERT_VALUES_EQUAL(storageRequest->Request.previous_revision(), 5);
+
+            using TStorageResponse = TEvControlPlaneStorage::TEvModifyBindingResponse;
+            std::unique_ptr<TStorageResponse> response;
+            if (replay) {
+                TAuditDetails<FederatedQuery::Binding> audit;
+                audit.IdempotencyResult = true;
+                response = std::make_unique<TStorageResponse>(FederatedQuery::ModifyBindingResult{}, audit);
+            } else {
+                NYql::TIssues issues;
+                NYql::TIssue issue("Binding revision changed");
+                issue.SetCode(TIssuesIds::BAD_REQUEST, NYql::TSeverityIds::S_ERROR);
+                issues.AddIssue(std::move(issue));
+                response = std::make_unique<TStorageResponse>(issues);
+            }
+            bootstrap.Runtime->Send(new IEventHandle(forwarded->Sender, forwarded->Recipient, response.release()));
+            const auto result = bootstrap.Runtime->GrabEdgeEventRethrow<TEvControlPlaneProxy::TEvModifyBindingResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(result->Cookie, cookie);
+            if (replay) {
+                UNIT_ASSERT(result->Get()->Issues.Empty());
+                UNIT_ASSERT(result->Get()->AuditDetails.IdempotencyResult);
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "Binding revision changed");
+            }
+        }
     }
 }
 

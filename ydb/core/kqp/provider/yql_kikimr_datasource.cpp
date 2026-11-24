@@ -27,6 +27,7 @@
 
 #include <library/cpp/resource/resource.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/is_in.h>
 #include <util/generic/scope.h>
 
@@ -980,6 +981,14 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->IsExternalTable()) {
+                    if (SessionCtx->Config().FeatureFlags.GetDisablePgCompatibility()
+                        && AnyOf(tableDesc.Metadata->Columns, [](const auto& column) {
+                            return column.second.TypeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg;
+                        }))
+                    {
+                        ctx.AddError(YqlIssue(node->Pos(ctx), TIssuesIds::KIKIMR_BAD_REQUEST, "PostgreSQL compatibility is disabled"));
+                        return nullptr;
+                    }
                     YQL_ENSURE(ExternalSourceFactory);
                     const auto& databaseType = tableDesc.Metadata->GetExternalSourceDatabaseType();
                     if (!databaseType) {

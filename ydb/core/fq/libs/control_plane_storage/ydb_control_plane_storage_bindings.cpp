@@ -445,7 +445,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
 
     using TResponse = std::pair<FederatedQuery::ModifyBindingResult, TBindingModifyAuditDetails>;
     auto response = std::make_shared<TResponse>();
-    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request = request,
+    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request = request, validateOnly = event.ValidateOnly,
                              observedRevision = event.ObservedRevision, renameAction, clientRequest, requiresAccess, checkCommitKey, operationId,
                              identity = event.RenameIdentity, tablePathPrefix = YdbConnection->TablePathPrefix,
                              idempotencyKeyTtl = Config->IdempotencyKeyTtl,
@@ -566,6 +566,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         if (content.connection_id() != request.content().connection_id()) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
                 << "Connection id cannot be changed. Please specify the same connection id";
+        }
+
+        if (validateOnly) {
+            response->second.Before = std::move(binding);
+            return noWrite();
         }
 
         if (renameAction == EBindingRenameAction::Prepare) {

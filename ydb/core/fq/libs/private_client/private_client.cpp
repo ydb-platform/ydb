@@ -28,12 +28,14 @@ public:
     {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
-        auto channelPoolUpdateWrapper = [weakConnections, knownEndpoints = KnownEndpoints](NYdb::NIssue::TIssues&&, EStatus status) mutable {
+        auto weakState = std::weak_ptr<TDbDriverState>(DbDriverState_);
+        auto channelPoolUpdateWrapper = [weakConnections, weakState, knownEndpoints = KnownEndpoints](NYdb::NIssue::TIssues&&, EStatus status) mutable {
             if (status != EStatus::SUCCESS) {
                 return false;
             }
             auto connections = weakConnections.lock();
-            if (!connections) {
+            auto state = weakState.lock();
+            if (!connections || !state) {
                 return false;
             }
             std::vector<std::string> endpoints;
@@ -42,7 +44,7 @@ public:
                 endpoints.assign(knownEndpoints->Endpoints.begin(), knownEndpoints->Endpoints.end());
                 knownEndpoints->Endpoints.clear();
             }
-            connections->DeleteChannels(endpoints);
+            connections->DeleteChannels(endpoints, state->EndpointPool);
             return true;
         };
         Connections_->AddPeriodicTask(channelPoolUpdateWrapper, PERIODIC_REBALANCE_INTERVAL);

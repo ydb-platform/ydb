@@ -1,5 +1,5 @@
 RECURSE_FOR_TESTS(
-    ut_auditsettings
+    ut_audit
     ut_topic_cloud_events
     ut_background_cleaning
     ut_backup
@@ -78,6 +78,7 @@ RECURSE_FOR_TESTS(
     ut_system_names
     ut_sysview
     ut_sysview_reboots
+    ut_topic_common
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_test_shard
@@ -406,7 +407,6 @@ PEERDIR(
     ydb/core/test_tablet
     ydb/core/tx
     ydb/core/tx/datashard
-    ydb/core/tx/replication/common
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/index

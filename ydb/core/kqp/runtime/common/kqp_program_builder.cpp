@@ -1,7 +1,6 @@
 #include "kqp_program_builder.h"
 
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/minikql/mkql_node_cast.h>

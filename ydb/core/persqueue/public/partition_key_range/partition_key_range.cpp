@@ -174,20 +174,19 @@ void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellV
 
 namespace {
 
-bool IsBefore(const TMaybe<TSerializedCellVec>& fromBound, const TMaybe<TSerializedCellVec>& toBound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    if (!fromBound || !toBound) {
-        return true;
+bool IsEntirelyBefore(const TPartitionKeyRange& range, const TPartitionKeyRange& other, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!range.ToBound || !other.FromBound) {
+        return false;
     }
-
     return ComparePrefixBorders(keyTypes,
-        fromBound->GetCells(), PrefixModeLeftBorderInclusive,
-        toBound->GetCells(), PrefixModeRightBorderNonInclusive) < 0;
+        other.FromBound->GetCells(), PrefixModeLeftBorderInclusive,
+        range.ToBound->GetCells(), PrefixModeRightBorderNonInclusive) >= 0;
 }
 
 } // anonymous
 
 bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    return IsBefore(lhs.FromBound, rhs.ToBound, keyTypes) && IsBefore(rhs.FromBound, lhs.ToBound, keyTypes);
+    return !IsEntirelyBefore(lhs, rhs, keyTypes) && !IsEntirelyBefore(rhs, lhs, keyTypes);
 }
 
 TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {

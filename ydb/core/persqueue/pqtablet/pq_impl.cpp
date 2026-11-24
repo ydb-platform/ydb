@@ -39,6 +39,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 
+#include <tuple>
+
 //TODO: move this code to vieiwer
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -90,6 +92,34 @@ static bool IsDirectReadCmd(const auto& cmd) {
 
 namespace {
 
+bool IsKeyRangeBootstrap(const NKikimrPQ::TBootstrapConfig& bootstrapCfg) {
+    return AnyOf(bootstrapCfg.GetExplicitMessageGroups(), [](const auto& mg) {
+        return mg.HasKeyRange();
+    });
+}
+
+std::tuple<bool, TVector<NScheme::TTypeInfo>, TPartitionKeyRange> PrepareTopicPartitionKeys(const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+        const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
+    if (!IsKeyRangeBootstrap(bootstrapCfg) || !tabletConfig.PartitionKeySchemaSize()) {
+        return {false, {}, {}};
+    }
+    const auto* partition = GetPartitionConfig(tabletConfig, partitionId);
+    AFL_ENSURE(partition)("partition_id", partitionId);
+    return {true, MakePartitionKeyTypes(tabletConfig), TPartitionKeyRange::Parse(partition->GetKeyRange())};
+}
+
+void AddBootstrapMessageGroups(TEvPQ::TMessageGroups& messageGroups, const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+        const NKikimrPQ::TPQTabletConfig& tabletConfig, ui32 partitionId) {
+    const auto [shouldFilterDataShardsByKeyRange, keyTypes, topicPartitionKeyRange] = PrepareTopicPartitionKeys(bootstrapCfg, tabletConfig, partitionId);
+    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
+        auto dataShardKeyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+        if (shouldFilterDataShardsByKeyRange && !Intersects(dataShardKeyRange, topicPartitionKeyRange, keyTypes)) {
+            continue;
+        }
+        messageGroups[mg.GetId()] = {.SeqNo = 0, .KeyRange = std::move(dataShardKeyRange)};
+    }
+}
+
 struct TPartitionKeyRangeFilter {
     TVector<NScheme::TTypeInfo> KeyTypes;
     TPartitionKeyRange PartitionKeyRange;
@@ -109,58 +139,46 @@ std::optional<TPartitionKeyRangeFilter> MakePartitionKeyRangeFilter(const NKikim
     return TPartitionKeyRangeFilter{MakePartitionKeyTypes(tabletConfig), std::move(*partitionKeyRange)};
 }
 
-} // anonymous
-
-TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
-    TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
-
+void AddParentMessageGroups(TEvPQ::TMessageGroups& messageGroups, const NKikimrPQ::TPartitions& partitionsData,
+        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
     const auto* partition = tabletConfig.PartitionKeySchemaSize() ? GetPartitionConfig(tabletConfig, partitionId) : nullptr;
-    const auto keyRangeFilter = MakePartitionKeyRangeFilter(tabletConfig, partition);
-    auto intersectsPartition = [&](const TPartitionKeyRange& keyRange) {
-        return !keyRangeFilter || Intersects(keyRange, keyRangeFilter->PartitionKeyRange, keyRangeFilter->KeyTypes);
-    };
-
-    for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
-        TPartitionKeyRange keyRange;
-        if (mg.HasKeyRange()) {
-            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
-            if (!intersectsPartition(keyRange)) {
-                continue;
-            }
-        }
-
-        (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
-    }
-
     if (partition && partition->GetCreateVersion() && partition->GetCreateVersion() < tabletConfig.GetVersion()) {
-        return explicitMessageGroups;
+        return;
     }
-
-    if (graph) {
-        auto* node = graph.GetPartition(partitionId);
-        AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
-        for (const auto& p : partitionsData.GetPartition()) {
-            if (node->IsParent(p.GetPartitionId())) {
-                for (const auto& g : p.GetMessageGroup()) {
-                    TMaybe<TPartitionKeyRange> keyRange;
-                    if (g.HasKeyRange()) {
-                        keyRange = TPartitionKeyRange::Parse(g.GetKeyRange());
-                        if (!intersectsPartition(*keyRange)) {
-                            continue;
-                        }
+    if (!graph) {
+        return;
+    }
+    const auto keyRangeFilter = MakePartitionKeyRangeFilter(tabletConfig, partition);
+    auto* node = graph.GetPartition(partitionId);
+    AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
+    for (const auto& p : partitionsData.GetPartition()) {
+        if (node->IsParent(p.GetPartitionId())) {
+            for (const auto& g : p.GetMessageGroup()) {
+                TMaybe<TPartitionKeyRange> keyRange;
+                if (g.HasKeyRange()) {
+                    keyRange = TPartitionKeyRange::Parse(g.GetKeyRange());
+                    if (keyRangeFilter && !Intersects(*keyRange, keyRangeFilter->PartitionKeyRange, keyRangeFilter->KeyTypes)) {
+                        continue;
                     }
+                }
 
-                    auto& group = (*explicitMessageGroups)[g.GetId()];
-                    group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
-                    if (keyRange) {
-                        group.KeyRange = std::move(*keyRange);
-                    }
+                auto& group = messageGroups[g.GetId()];
+                group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+                if (keyRange) {
+                    group.KeyRange = std::move(*keyRange);
                 }
             }
         }
     }
+}
 
-    return explicitMessageGroups;
+} // anonymous
+
+TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const NKikimrPQ::TPQTabletConfig& tabletConfig, const TPartitionGraph& graph, ui32 partitionId) {
+    TEvPQ::TMessageGroups messageGroups;
+    AddBootstrapMessageGroups(messageGroups, bootstrapCfg, tabletConfig, partitionId);
+    AddParentMessageGroups(messageGroups, partitionsData, tabletConfig, graph, partitionId);
+    return std::make_shared<TEvPQ::TMessageGroups>(std::move(messageGroups));
 }
 
 /******************************************************* AnswerBuilderProxy *********************************************************/
@@ -2741,6 +2759,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "multiple commands in request: " << count);
         return;
+    }
+
+    // Write sessions and MLP reject earlier, but late requests and protocols without
+    // that check (e.g. kafka_proxy) must still be stopped here.
+    if (req.CmdWriteSize() > 0) {
+        if (const auto error = GetWriteModeError(Config)) {
+            ReplyError(ctx, responseCookie, error->Code, error->Reason);
+            return;
+        }
     }
 
     if (IsTopicMutateDisabled(ctx)

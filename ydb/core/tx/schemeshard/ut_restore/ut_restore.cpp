@@ -32,6 +32,7 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -2301,7 +2302,7 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportPg, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true).DisablePgCompatibility(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
@@ -5780,8 +5781,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", EnableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
     }
 
-    void ShouldFailOnInvalidCsv(const TString& csv, bool enableDataShardDirectPartImport) {
+    void ShouldFailOnInvalidCsv(const TString& csv, const TString& expectedError, bool enableDataShardDirectPartImport) {
+        std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         const auto data = TTestDataWithScheme(R"(
             columns {
@@ -5795,7 +5798,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "key"
         )", {TTestData(csv, EmptyYsonStr)});
 
-        Run(runtime, ConvertTestData(data), R"(
+        const auto importId = Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -5805,14 +5808,37 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", enableDataShardDirectPartImport, Ydb::StatusIds::CANCELLED);
+
+        const auto result = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = result.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), expectedError);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), entry.GetIssues(0).message());
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = FindAuditLine(auditLines, "operation=IMPORT END");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnFileWithoutNewLines, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\"value1\"", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\"value1\"",
+            "/data_00.csv: cannot process data: reached end of file", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnEmptyToken, EnableDataShardDirectPartImport) {
-        ShouldFailOnInvalidCsv("\"a1\",\n", EnableDataShardDirectPartImport);
+        ShouldFailOnInvalidCsv("\"a1\",\n",
+            "/data_00.csv: cannot process data: Empty token on line: \"a1\",", EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ShouldFailOnInvalidValue, EnableDataShardDirectPartImport) {
@@ -6783,6 +6809,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).message(), "Cancelled manually");
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetIssues(0).severity(), ui32(NYql::TSeverityIds::S_ERROR));
+        const auto list = TestListImports(runtime, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        const auto& listed = list.GetEntries(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetId(), importId);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetStatus(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(listed.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetIssues(0).message(), "Cancelled manually");
+
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
 
         // Check audit record for import end
         //
@@ -7941,9 +7982,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ChangefeedsExportRestore(false, EnableDataShardDirectPartImport);
     }
 
+    // Async replication manages its own changefeed and consumer on the source
+    // table. Replication keeps reading the source feed, so a restored copy of
+    // that feed is never consumed; its important consumer would retain every
+    // write to the destination forever once the table takes writes. The
+    // existing __async_replication marker excludes both old and new feeds.
     static constexpr TStringBuf AsyncReplicationChangefeedName = "replication_feed";
     static constexpr TStringBuf AsyncReplicationAttrValue = R"({"id":"1","path":"/MyRoot/Replication"})";
-    static constexpr TStringBuf KeyRangeReplicationAttrValue = R"({"id":"1","path":"/MyRoot/Replication","supports_key_range_autopartitioning":true,"supports_topic_autopartitioning":true})";
 
     using TAttrs = TVector<std::pair<TString, TString>>;
 
@@ -7961,6 +8006,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     TAttrs OmitBackupAttrs() {
         return {{"__omit_backup", "true"}};
+    }
+
+    TAttrs KeyRangeReplicationFeedAttrs() {
+        return {{"__async_replication", R"({"id":"1","path":"/MyRoot/Replication","supports_key_range_autopartitioning":true})"}};
     }
 
     TString ChangefeedAttrsProto(const TAttrs& attrs) {
@@ -8046,10 +8095,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    void ImportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool replica,
-            const TTestEnvOptions& options = {}) {
+    void ImportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool replica) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, options);
+        TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -8117,52 +8165,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ImportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport, false);
     }
 
-    Y_UNIT_TEST_FLAG(ImportSkipsReplicationChangefeedWithoutResolvedTimestamps, EnableCdcKeyRangeHeartbeats) {
-        ImportSkipsChangefeed({
-            {"__async_replication", TString(KeyRangeReplicationAttrValue)},
-        }, false, false, TTestEnvOptions().EnableCdcKeyRangeHeartbeats(EnableCdcKeyRangeHeartbeats));
-    }
-
     Y_UNIT_TEST_FLAG(ReplicaImportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {
         ImportSkipsChangefeed(ReplicationFeedWithOmitBackupAttrs(), EnableDataShardDirectPartImport, true);
     }
 
-    void CheckRestoredKeyRangeFeed(TTestBasicRuntime& runtime, NKikimrSchemeOp::ECdcStreamHeartbeatMode expectedMode) {
-        const TString stream = "/MyRoot/Restored/" + TString(AsyncReplicationChangefeedName);
-        TestDescribeResult(DescribePrivatePath(runtime, stream), {NLs::StreamHeartbeatMode(expectedMode)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Restored/Stream_1"), {NLs::PathExist});
-        const auto table = DescribePath(runtime, "/MyRoot/Restored", true, true).GetPathDescription();
-        UNIT_ASSERT_VALUES_EQUAL(table.TablePartitionsSize(), 2);
-        const auto& boundary = table.GetTablePartitions(0).GetEndOfRangeKeyPrefix();
-        UNIT_ASSERT(!boundary.empty());
-
-        const auto topic = DescribePrivatePath(runtime, stream + "/streamImpl", true).GetPathDescription().GetPersQueueGroup();
-        const auto& config = topic.GetPQTabletConfig();
-        UNIT_ASSERT_VALUES_EQUAL(config.PartitionKeySchemaSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(topic.GetTotalGroupCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(topic.PartitionsSize(), 2);
-        for (const auto& part : topic.GetPartitions()) {
-            const auto& range = part.GetKeyRange();
-            if (part.GetPartitionId() == 0) {
-                UNIT_ASSERT(!range.HasFromBound());
-                UNIT_ASSERT_VALUES_EQUAL(range.GetToBound(), boundary);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(part.GetPartitionId(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(range.GetFromBound(), boundary);
-                UNIT_ASSERT(!range.HasToBound());
-            }
-        }
-        const auto strategy = expectedMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange
-            ? NKikimrPQ::TPQTabletConfig::CAN_SPLIT : NKikimrPQ::TPQTabletConfig::DISABLED;
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(config.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(strategy));
-        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetName(), "application");
-        UNIT_ASSERT(config.GetConsumers(0).GetImportant());
-    }
-
-    void TestReplicationChangefeedBackup(const TAttrs& attrs, bool enableDataShardDirectPartImport,
-            bool removeOmitBackup = false, std::optional<NKikimrSchemeOp::ECdcStreamHeartbeatMode> restoredMode = {},
-            bool sourceKeyRangeEnabled = true) {
+    void ExportSkipsChangefeed(const TAttrs& attrs, bool enableDataShardDirectPartImport, bool removeOmitBackup = false, bool keyRangeHeartbeats = false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -8170,10 +8177,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableCdcKeyRangeHeartbeats(sourceKeyRangeEnabled));
+        TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableCdcKeyRangeHeartbeats(keyRangeHeartbeats);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
@@ -8183,8 +8191,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-            PartitionConfig { PartitioningPolicy { MinPartitionsCount: 2 MaxPartitionsCount: 2 } }
-            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 37 } } } }
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -8199,30 +8205,33 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               Name: "%s"
               Mode: ECdcStreamModeUpdate
               Format: ECdcStreamFormatJson
-              ResolvedTimestampsIntervalMs: 1000
-              VirtualTimestamps: true
+              %s
               %s
             }
             RetentionPeriodSeconds: 1
-        )", AsyncReplicationChangefeedName.data(), CdcStreamAttrsProto(attrs).c_str()));
+        )", AsyncReplicationChangefeedName.data(), CdcStreamAttrsProto(attrs).c_str(),
+            keyRangeHeartbeats ? "VirtualTimestamps: true ResolvedTimestampsIntervalMs: 1000" : ""));
         env.TestWaitNotification(runtime, txId);
 
-        const TString sourceFeedPath = "/MyRoot/Original/" + TString(AsyncReplicationChangefeedName);
-        if (restoredMode) {
-            TestDescribeResult(DescribePrivatePath(runtime, sourceFeedPath),
-                {NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange)});
+        if (keyRangeHeartbeats) {
+            TestDescribeResult(DescribePrivatePath(runtime, TStringBuilder() << "/MyRoot/Original/" << AsyncReplicationChangefeedName), {
+                NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange),
+            });
         }
-        auto alterTopic = DescribePrivatePath(runtime, sourceFeedPath + "/streamImpl").GetPathDescription().GetPersQueueGroup();
-        alterTopic.ClearTotalGroupCount();
-        auto* topicConfig = alterTopic.MutablePQTabletConfig();
-        topicConfig->ClearPartitionKeySchema();
-        for (const char* name : {"replicationConsumer", "application"}) {
-            auto* consumer = topicConfig->AddConsumers();
-            consumer->SetName(name);
-            consumer->SetImportant(true);
-        }
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(
-            AlterPQGroupRequest(++txId, sourceFeedPath, alterTopic.DebugString())));
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterPQGroupRequest(++txId,
+            TStringBuilder() << "/MyRoot/Original/" << AsyncReplicationChangefeedName, R"(
+                Name: "streamImpl"
+                PQTabletConfig {
+                    PartitionConfig {
+                        LifetimeSeconds: 1
+                    }
+                    Consumers {
+                        Name: "replicationConsumer"
+                        Important: true
+                    }
+                }
+            )")));
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
@@ -8250,24 +8259,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetExport(runtime, txId, "/MyRoot");
 
         bool applicationChangefeedExported = false;
-        bool replicationChangefeedExported = false;
         for (const auto& [key, content] : s3Mock.GetData()) {
-            if (restoredMode) {
-                replicationChangefeedExported |= key.EndsWith("/replication_feed/changefeed_description.pb");
-            } else {
-                UNIT_ASSERT_C(!key.Contains(AsyncReplicationChangefeedName), key);
-                UNIT_ASSERT_C(!content.Contains(AsyncReplicationChangefeedName), key);
-            }
+            UNIT_ASSERT_C(!key.Contains(AsyncReplicationChangefeedName), key);
+            UNIT_ASSERT_C(!content.Contains(AsyncReplicationChangefeedName), key);
             if (key.EndsWith("/Stream_1/changefeed_description.pb")) {
                 applicationChangefeedExported = true;
             }
         }
         UNIT_ASSERT(applicationChangefeedExported);
-        UNIT_ASSERT_VALUES_EQUAL(replicationChangefeedExported, restoredMode.has_value());
-        runtime.GetAppData().FeatureFlags.SetEnableCdcKeyRangeHeartbeats(restoredMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange);
-        if (restoredMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect) {
-            runtime.GetAppData().FeatureFlags.SetEnableCdcAggregator(true);
-        }
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
@@ -8282,11 +8281,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        if (restoredMode) {
-            CheckRestoredKeyRangeFeed(runtime, *restoredMode);
-        } else {
-            CheckOnlyApplicationChangefeeds(runtime, "/MyRoot/Restored", {"Stream_1"});
-        }
+        CheckOnlyApplicationChangefeeds(runtime, "/MyRoot/Restored", {"Stream_1"});
 
         // The source keeps its replication feed and consumer untouched.
         TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/Original/" << AsyncReplicationChangefeedName << "/streamImpl", false, false, true), {
@@ -8295,11 +8290,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(ExportSkipsOmittedChangefeed, EnableDataShardDirectPartImport) {
-        TestReplicationChangefeedBackup(OmitBackupAttrs(), EnableDataShardDirectPartImport);
+        ExportSkipsChangefeed(OmitBackupAttrs(), EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST_FLAG(ExportSkipsReplicationChangefeedAfterOmitBackupRemoval, EnableDataShardDirectPartImport) {
-        TestReplicationChangefeedBackup(ReplicationFeedWithOmitBackupAttrs(), EnableDataShardDirectPartImport, true);
+        ExportSkipsChangefeed(ReplicationFeedWithOmitBackupAttrs(), EnableDataShardDirectPartImport, true);
     }
 
     Y_UNIT_TEST_FLAG(ReplicaImportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
@@ -8307,24 +8302,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(ExportSkipsLegacyAsyncReplicationChangefeed, EnableDataShardDirectPartImport) {
-        TestReplicationChangefeedBackup(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport);
+        ExportSkipsChangefeed(LegacyReplicationFeedAttrs(), EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_FLAG(ExportRestoreKeyRangeReplicationChangefeed, EnableCdcKeyRangeHeartbeats) {
-        const auto mode = EnableCdcKeyRangeHeartbeats
-            ? NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange : NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
-        TestReplicationChangefeedBackup({{"__async_replication", TString(KeyRangeReplicationAttrValue)}}, false, false, mode);
-    }
-
-    Y_UNIT_TEST(ExportSkipsExplicitlyOmittedKeyRangeReplicationChangefeed) {
-        TestReplicationChangefeedBackup({
-            {"__async_replication", TString(KeyRangeReplicationAttrValue)}, {"__omit_backup", "true"},
-        }, false);
-    }
-
-    Y_UNIT_TEST(ExportSkipsDirectReplicationChangefeedWithKeyRangeCapability) {
-        TestReplicationChangefeedBackup({{"__async_replication", TString(KeyRangeReplicationAttrValue)}},
-            false, false, {}, false);
+    Y_UNIT_TEST(ExportSkipsKeyRangeReplicationChangefeed) {
+        ExportSkipsChangefeed(KeyRangeReplicationFeedAttrs(), false, false, true);
     }
 
     // An explicitly requested object marked with __omit_backup is refused with

@@ -10,7 +10,7 @@
 #include <ydb/core/grpc_services/base/flow_control.h>
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/common/events/stream.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -136,7 +136,7 @@ private:
             HFunc(NKqp::TEvKqp::TEvDataQueryStreamPart, Handle);
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            HFunc(NKqp::TEvKqpExecuterStreamData, Handle);
             // Overide default forget action which terminate this actor on client disconnect
             hFunc(TRpcServices::TEvForgetOperation, HandleForget);
             default: {
@@ -255,7 +255,7 @@ private:
     }
 
     // From TKqpScanQueryStreamRequestHandler
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqpExecuterStreamData::TPtr& ev, const TActorContext& ctx) {
         if (GatewayRequestHandlerActorId_ != ev->Sender) {
             ++ResultsReceived_;
             GatewayRequestHandlerActorId_ = ev->Sender;
@@ -284,7 +284,7 @@ private:
             {"actorId", ev->Sender},
             {"queue", FlowControl_.QueueSize()});
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuterStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());
@@ -326,7 +326,7 @@ private:
                     {"freeSpaceBytes", freeSpaceBytes},
                     {"actorId", GatewayRequestHandlerActorId_});
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
+                auto resp = MakeHolder<NKqp::TEvKqpExecuterStreamDataAck>(*LastSeqNo_, 0);
                 resp->Record.SetFreeSpace(freeSpaceBytes);
 
                 ctx.Send(GatewayRequestHandlerActorId_, resp.Release());

@@ -131,7 +131,7 @@ TError ParseYTError(
             .With("source", source)
             .With(ex);
     }
-    return buildingConsumer->Finish();
+    return std::move(*buildingConsumer).Finish();
 }
 
 class TErrorWrappingHttpHandler

@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -573,8 +574,93 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
+    Y_UNIT_TEST(DisablePgCompatibilityPreservesPreparedQueryId) {
+        TKikimrSettings settings;
+        settings.SetDisablePgCompatibility(false).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetCompileQueryCacheSize(1);
+        TKikimrRunner kikimr(settings);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto prepared = session.PrepareDataQuery("SELECT 44 AS value;").ExtractValueSync();
+        UNIT_ASSERT_C(prepared.IsSuccess(), prepared.GetIssues().ToString());
+        auto query = prepared.GetQuery();
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto execSettings = TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        for (const bool disablePgCompatibility : {true, false}) {
+            NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+            flags.SetDisablePgCompatibility(disablePgCompatibility);
+            appData.UpdateRuntimeFlags(flags);
+            for (const bool fromCache : {false, true}) {
+                const auto result = query.Execute(txControl, execSettings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CompareYson("[[44]]", FormatResultSetYson(result.GetResultSet(0)));
+                const auto stats = result.GetStats();
+                UNIT_ASSERT(stats);
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*stats).compilation().from_cache(), fromCache);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DisablePgCompatibilityRejectsPgInParsedType) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext types;
+        const NYql::TPositionHandle pos;
+        auto transformer = CreateKqpTypeAnnCallableFactory(types, true)();
+        const auto annotate = [&](TStringBuf type) {
+            auto input = ctx.NewCallable(pos, "ParseType", {ctx.NewAtom(pos, type)});
+            NYql::TExprNode::TPtr output;
+            return transformer->Transform(input, output, ctx);
+        };
+
+        UNIT_ASSERT(annotate("Optional<Uint64>") == NYql::IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT(annotate("Optional<pgint4>") == NYql::IGraphTransformer::TStatus::Error);
+        const auto& issues = ctx.IssueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(issues.back().GetCode(), static_cast<NYql::TIssueCode>(NYql::TIssuesIds::KIKIMR_UNSUPPORTED));
+    }
+
+    Y_UNIT_TEST(DisablePgCompatibilityAllowsNativeProjection) {
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false).SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Mixed (
+                id Uint64 NOT NULL,
+                legacy PgInt4,
+                PRIMARY KEY (id)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        const auto txControl = TTxControl::BeginTx().CommitTx();
+        const auto populated = session.ExecuteDataQuery("UPSERT INTO Mixed (id, legacy) VALUES (1u, 42p);", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+
+        const auto native = session.ExecuteDataQuery("SELECT id FROM Mixed;", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(native.IsSuccess(), native.GetIssues().ToString());
+        CompareYson("[[1u]]", FormatResultSetYson(native.GetResultSet(0)));
+
+        for (const TString query : {
+            "SELECT legacy FROM Mixed;",
+            "SELECT * FROM Mixed;",
+            "SELECT id FROM Mixed WHERE legacy IS NULL;",
+        }) {
+            const auto pg = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(pg.GetStatus(), EStatus::UNSUPPORTED, pg.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(pg.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+        }
+
+        const auto explicitPgType = session.ExecuteDataQuery("SELECT id, PgType('int4') FROM Mixed;", txControl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explicitPgType.GetStatus(), EStatus::BAD_REQUEST, explicitPgType.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(explicitPgType.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+    }
+
     Y_UNIT_TEST(SecondaryIndex_PgKey) {
-        TKikimrRunner kikimr = GetKikimrRunner();
+        TKikimrRunner kikimr(TKikimrSettings().SetDisablePgCompatibility(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

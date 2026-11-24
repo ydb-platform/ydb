@@ -121,7 +121,7 @@ WHERE JSON_VALUE(
 ) = 10;
 ```
 
-В индексируемых предикатах не поддерживаются `ERROR ON ERROR` в `JSON_EXISTS`, `ERROR ON EMPTY` и `ERROR ON ERROR` в `JSON_VALUE`; подробнее см. в [поддерживаемых предикатах](../../dev/json-indexes.md#predicates).
+В индексируемых предикатах не поддерживаются `ERROR ON ERROR` в `JSON_EXISTS`, `ERROR ON EMPTY` и `ERROR ON ERROR` в `JSON_VALUE`; подробнее см. в разделе [Обработка ошибок](../../yql/reference/syntax/select/json_index.md#error-handling).
 
 ## Пересечение JSON-массивов
 
@@ -144,7 +144,7 @@ ORDER BY id;
 
 ## Поддерживаемые типы параметров
 
-Скалярные параметры поддерживают `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`) и `Bool`. Дополнительно параметр типа `Json` можно использовать в `PASSING` в условии равенства, в том числе для поиска по массиву значений. Опциональные типы (`Optional<T>`) в параметрах не поддерживаются.
+Для скалярных параметров поддерживаются типы `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`. В `IN` передаётся коллекция таких значений. В `PASSING` также можно передать параметр типа `Json` для сравнения по равенству, в том числе с массивом значений. Опциональные типы (`Optional<T>`) в параметрах не поддерживаются.
 
 Подробнее о типах см. в [{#T}](../../dev/json-indexes.md#json-value).
 

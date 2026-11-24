@@ -42,12 +42,6 @@ void DoCreateStream(
     const bool initialScan,
     const bool internal = false);
 
-bool ShouldUseKeyRangeHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
-
-bool CheckCdcKeyRangeHeartbeatsCanBeUsed(
-    const NKikimrSchemeOp::TCreateCdcStream& op,
-    const THolder<TProposeResponse>& result);
-
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
 TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(
@@ -89,7 +83,7 @@ struct TCdcPqPartParams {
 // Replication autopartitioning caps max at maxShardsInPath and min at that limit / 4.
 // An explicit TopicPartitions stays the initial count and the strategy minimum, capped by that max.
 TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount,
-    ui64 maxShardsInPath, bool keyRangeHeartbeats = false, bool keyRangeImport = false);
+    ui64 maxShardsInPath, const TFeatureFlags& featureFlags);
 
 void DoCreatePqPart(
     TVector<ISubOperation::TPtr>& result,
@@ -99,7 +93,6 @@ void DoCreatePqPart(
     const TString& streamName,
     TTableInfo::TCPtr table,
     const TVector<TString>& boundaries,
-    const bool acceptExisted,
-    const bool keyRangeImport = false);
+    const bool acceptExisted);
 
 } // namespace NKikimr::NSchemesShard::NCdc

@@ -239,6 +239,15 @@ using TAdvancedResponseCallback = std::function<void (const grpc::ClientContext&
 // keep their retired guard even when the same address appears after failback.
 class TEndpointAdmission {
 public:
+    explicit TEndpointAdmission(std::string channelKey = {})
+        : ChannelKey(std::move(channelKey))
+    {}
+
+    const std::string& PoolKey(const std::string& endpoint) const {
+        return ChannelKey.empty() ? endpoint : ChannelKey;
+    }
+
+    const std::string ChannelKey;
     std::shared_lock<std::shared_mutex> Acquire();
     void Retire();
 

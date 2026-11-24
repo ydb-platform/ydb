@@ -25,7 +25,7 @@ After the SDK installs a new assignment, fresh RPCs use the destination. An RPC 
 | PHP | `'discovery' => true, 'discoveryLongPoll' => true` |
 | Rust | `?use_discovery=long_poll` |
 
-A PHP driver with a running ReactPHP event loop can process discovery while application code is idle. A synchronous process observes discovery on its next SDK call or stream iteration. A blocked native gRPC receive pauses the event loop. PHP applications with a custom in-memory gRPC trust bundle must also supply its CA file for the discovery poll.
+A PHP driver with a running ReactPHP event loop can process discovery while application code is idle. A synchronous process observes discovery on its next SDK call that selects a data transport. An application that only reads an existing stream can keep using the source. A blocked native gRPC receive pauses the event loop. PHP applications with a custom in-memory gRPC trust bundle must also supply its CA file for the discovery poll.
 
 The seven external SDK patches target the public revisions in `sdk-patches/sources.json`. Apply them into new local checkouts with `python3 sdk-patches/prepare.py /tmp/ydb-long-poll-sdks`.
 

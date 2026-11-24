@@ -32,9 +32,10 @@ public:
 
     TEndpointPool(TListEndpointsResultProvider&& provider, IInternalClient* client);
     ~TEndpointPool();
-    void EnableWatch();
+    void EnableWatch(const std::string& bootstrap, const std::string& database);
     enum class ERouteUpdate { Refresh, Switch, LegacyRefresh };
-    void PublishWatchResult(TListEndpointsResult result, ERouteUpdate update = ERouteUpdate::Refresh);
+    void PublishWatchResult(TListEndpointsResult result, ERouteUpdate update = ERouteUpdate::Refresh,
+        std::optional<uint64_t> routeGeneration = {});
     bool UsesWatch() const { return UsesWatch_; }
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
@@ -65,6 +66,8 @@ private:
     TEndpointElectorSafe Elector_;
     bool UsesWatch_ = false; // Set before publishing the driver state.
     TPlainStatus WatchStatus_;
+    std::string WatchScope_;
+    std::string WatchChannelSuffix_;
     std::unordered_map<std::string, std::shared_ptr<NYdbGrpc::TEndpointAdmission>> WatchAdmissions_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
     std::atomic_uint64_t LastUpdateTime_;

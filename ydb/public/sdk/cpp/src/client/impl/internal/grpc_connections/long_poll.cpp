@@ -84,7 +84,7 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
         } else {
             failures = 0;
         }
-        state->EndpointPool.PublishWatchResult(std::move(result), update);
+        state->EndpointPool.PublishWatchResult(std::move(result), update, generation);
         state->SignalDiscoveryCompleted();
         state.reset();
         if (delay && !(co_await ScheduleFuture(delay, context))) {

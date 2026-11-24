@@ -13,6 +13,7 @@
 #include <atomic>
 #include <fstream>
 #include <sstream>
+#include <set>
 #include <memory>
 #include <string>
 #include <vector>
@@ -59,6 +60,13 @@ namespace {
         return !HasEstablishedConnection(port);
     }
 #endif
+
+    std::string RpcPeer(const TStatus& status) {
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        const auto& headers = status.GetResponseMetadata();
+        UNIT_ASSERT(headers.contains("test-peer"));
+        return headers.find("test-peer")->second;
+    }
 
     class TTableService: public Ydb::Table::V1::TableService::Service {
     public:
@@ -332,15 +340,14 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
 
     Y_UNIT_TEST(LongPollDrainsInFlightRequestsAndReusesBootstrap) {
         TPortManager ports;
-        const auto sourcePort = ports.GetPort(), targetPort = ports.GetPort(), bootstrapPort = ports.GetPort();
-        TTableService source, target;
+        const auto sourcePort = ports.GetPort(), bootstrapPort = ports.GetPort();
+        TTableService source;
         auto a = StartServer(sourcePort, source);
-        auto b = StartServer(targetPort, target);
         TDiscovery discovery;
         auto switched = NThreading::NewPromise<void>();
         auto waiting = NThreading::NewPromise<void>();
         auto installed = NThreading::NewPromise<void>();
-        std::string peer;
+        std::set<TString> bootstrapPeers;
         std::mutex mutex;
         discovery.Lookup = [&](auto* context, auto& result) {
             auto& headers = context->client_metadata();
@@ -349,8 +356,11 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
             }
             {
                 std::lock_guard guard(mutex);
-                if (peer.empty()) { peer = context->peer(); }
-                if (peer != context->peer()) { return grpc::Status(grpc::StatusCode::INTERNAL, "bootstrap changed"); }
+                if (!headers.contains("x-ydb-if-route-generation")) {
+                    bootstrapPeers.insert(context->peer());
+                } else if (!bootstrapPeers.contains(context->peer())) {
+                    return grpc::Status(grpc::StatusCode::INTERNAL, "bootstrap changed");
+                }
             }
             auto it = headers.find("x-ydb-if-route-generation");
             if (it != headers.end()) {
@@ -363,10 +373,10 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
                     return grpc::Status::CANCELLED;
                 }
             }
-            context->AddTrailingMetadata("x-ydb-route-generation", it == headers.end() ? "1" : "2");
+            context->AddTrailingMetadata("x-ydb-route-generation", switched.GetFuture().HasValue() ? "2" : "1");
             auto* endpoint = result.add_endpoints();
             endpoint->set_address("127.0.0.1");
-            endpoint->set_port(it == headers.end() ? sourcePort : targetPort);
+            endpoint->set_port(sourcePort);
             endpoint->set_node_id(1);
             return grpc::Status::OK;
         };
@@ -380,17 +390,14 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         };
         auto otherBootstrap = StartServer(otherPort, otherDiscovery);
         auto boot = StartServer(bootstrapPort, discovery);
-        TDriver driver(TDriverConfig().SetEndpoint(Address(bootstrapPort)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::LongPoll)
-            .SetUsePerChannelTcpConnection(true).SetSocketIdleTimeout(TDuration::Max()));
+        const auto config = TDriverConfig().SetEndpoint(Address(bootstrapPort)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll).SetSocketIdleTimeout(TDuration::Max());
+        TDriver driver(config);
         NTable::TTableClient client(driver);
         std::optional<NTable::TTableClient> other(std::in_place, driver, NTable::TClientSettings().Database("/Other")
             .DiscoveryEndpoint(Address(otherPort)).DiscoveryMode(EDiscoveryMode::Sync));
         auto otherPeer = [&] {
-            auto status = other->BulkUpsert("/Other/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-            const auto& headers = status.GetResponseMetadata();
-            UNIT_ASSERT(headers.contains("test-peer"));
-            return headers.find("test-peer")->second;
+            return RpcPeer(other->BulkUpsert("/Other/T", NTable::EDataFormat::CSV, "1", {}).GetValueSync());
         };
         NTable::TBulkUpsertSettings settings;
         settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
@@ -402,13 +409,14 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT(source.Held.GetFuture().Wait(TDuration::Seconds(5)));
         switched.SetValue();
         UNIT_ASSERT(installed.GetFuture().Wait(TDuration::Seconds(5)));
-        UNIT_ASSERT(upsert().GetValueSync().IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
+        const auto freshPeer = RpcPeer(upsert().GetValueSync());
+        TDriver second(config);
+        NTable::TTableClient cold(second);
+        UNIT_ASSERT_VALUES_EQUAL(RpcPeer(cold.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings).GetValueSync()), freshPeer);
         source.ReleaseHeld.SetValue();
-        UNIT_ASSERT(old.GetValueSync().IsSuccess());
+        UNIT_ASSERT_UNEQUAL(freshPeer, RpcPeer(old.GetValueSync()));
         const auto peerAfter = otherPeer();
-        UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 5);
 #if defined(_linux_)
         UNIT_ASSERT(HasEstablishedConnection(sourcePort));
         other.reset();

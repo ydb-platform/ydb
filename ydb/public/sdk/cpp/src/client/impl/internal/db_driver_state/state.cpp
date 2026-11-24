@@ -57,7 +57,7 @@ TDbDriverState::TDbDriverState(
 {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     if (DiscoveryMode == EDiscoveryMode::LongPoll && !Database.empty()) {
-        EndpointPool.EnableWatch();
+        EndpointPool.EnableWatch(DiscoveryEndpoint, Database);
     }
 #endif
     EndpointPool.SetStatCollector(StatCollector);

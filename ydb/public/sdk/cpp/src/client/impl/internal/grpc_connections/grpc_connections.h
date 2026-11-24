@@ -179,6 +179,10 @@ public:
             }
         }
 
+        if (selected.Admission && !selected.Admission->ChannelKey.empty()) {
+            // gRPC also pools subchannels across channel objects. Separate the new assignment there.
+            clientConfig.StringChannelParams["ydb.sdk.assignment"] = selected.Admission->ChannelKey;
+        }
         if (UsePerChannelTcpConnection_) {
             clientConfig.IntChannelParams[GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL] = 1;
         }
@@ -189,8 +193,9 @@ public:
         }
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+        const auto& key = selected.Admission ? selected.Admission->PoolKey(clientConfig.Locator) : clientConfig.Locator;
         ChannelPool_.GetStubsHolderLocked(
-            clientConfig.Locator, clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
+            key, clientConfig, [&](NYdbGrpc::TStubsHolder& holder) {
             holder.AddOwner(std::shared_ptr<void>(dbState, &dbState->EndpointPool));
             if (dbState->EndpointPool.UsesWatch() && !selected.Admission) {
                 std::lock_guard guard(dbState->BootstrapPinMutex);

@@ -1145,7 +1145,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..4f57636f3b104d2c4c789b4ba694b61d
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..18bead5132e552840b9bccc83cbeb17c431ec9db 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..bd9d630b9440f58ca4b3cf205a8c7c0c3489d343 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
 @@ -115,6 +115,14 @@ class Ydb
@@ -1190,7 +1190,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..18bead5132e552840b9bccc83cbeb17c
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +250,108 @@ class Ydb
+@@ -233,7 +250,115 @@ class Ydb
       */
      public function discover()
      {
@@ -1258,8 +1258,15 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..18bead5132e552840b9bccc83cbeb17c
 +            throw new \RuntimeException('No current endpoint assignment');
 +        }
 +        if (!$this->routeDataChannel) {
-+            // Own the closeable channel handle. gRPC shares its data socket with compatible channels.
++            // force_new creates a PHP channel wrapper. The native subchannel pool
++            // can still reuse an established transport when two replicas advertise the same address.
 +            $opts['force_new'] = true;
++            $route = $this->fileSessionPartition();
++            if ($route === null) {
++                $opts['grpc.use_local_subchannel_pool'] = 1;
++            } else {
++                $opts['ydb.discovery_route'] = $route;
++            }
 +            $this->routeDataChannel = \Grpc\BaseStub::getDefaultChannel($this->endpoint, $opts);
 +        }
 +        return new $class($this->endpoint, $opts, $this->routeDataChannel);
@@ -1302,10 +1309,10 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..18bead5132e552840b9bccc83cbeb17c
      /**
 diff --git a/tests/Internal/LongPollTest.php b/tests/Internal/LongPollTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..74f9eea84c39932c41ee3b23fe82f4c9247e03e4
+index 0000000000000000000000000000000000000000..dc266958ec78eb31f38cef9883d23bd451c56ec9
 --- /dev/null
 +++ b/tests/Internal/LongPollTest.php
-@@ -0,0 +1,343 @@
+@@ -0,0 +1,384 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -1315,6 +1322,47 @@ index 0000000000000000000000000000000000000000..74f9eea84c39932c41ee3b23fe82f4c9
 +
 +class LongPollTest extends TestCase
 +{
++    public function testNativeChannelsSeparateGenerationsAtTheSameAddress()
++    {
++        $listener = stream_socket_server('tcp://127.0.0.1:0');
++        $endpoint = stream_socket_get_name($listener, false);
++        $set = static function ($object, $property, $value) {
++            $field = new \ReflectionProperty($object, $property);
++            $field->setAccessible(true);
++            $field->setValue($object, $value);
++        };
++        $client = static function ($generation) use ($endpoint, $set) {
++            $driver = new \YdbPlatform\Ydb\Ydb([
++                'endpoint' => $endpoint, 'database' => '/db',
++                'iam_config' => ['anonymous' => true, 'insecure' => true],
++            ]);
++            $set($driver, 'longPoll', true);
++            $set($driver, 'routeSnapshot', [$generation, []]);
++            return $driver->serviceClient(\Ydb\Table\V1\TableServiceClient::class);
++        };
++        $accept = function ($client) use ($listener) {
++            $client->getConnectivityState(true);
++            $peer = @stream_socket_accept($listener, 2);
++            self::assertTrue(is_resource($peer), 'A new route must dial a new socket even at the same address');
++            fwrite($peer, "\x00\x00\x00\x04\x00\x00\x00\x00\x00");
++            self::assertTrue($client->waitForReady(2000000));
++            return $peer;
++        };
++        try {
++            $held = $client('1');
++            $a = $accept($held);
++            $fresh = $client('2');
++            $b = $accept($fresh);
++            // A separate driver on the same authoritative assignment can reuse its data socket.
++            self::assertTrue($client('2')->waitForReady(2000000));
++            self::assertSame(\Grpc\CHANNEL_READY, $held->getConnectivityState());
++        } finally {
++            if (isset($a)) { fclose($a); }
++            if (isset($b)) { fclose($b); }
++            fclose($listener);
++        }
++    }
++
 +    public function testNewScanUsesReplacementWhileDispatchedScanFinishes()
 +    {
 +        $source = new class('A') {
@@ -1516,7 +1564,7 @@ index 0000000000000000000000000000000000000000..74f9eea84c39932c41ee3b23fe82f4c9
 +        for ($i = 0; $i < 2; ++$i) {
 +            $driver = new \YdbPlatform\Ydb\Ydb([
 +                'endpoint' => $endpoint,
-+                'database' => '/db' . $i,
++                'database' => '/db',
 +                'iam_config' => ['anonymous' => true, 'insecure' => true],
 +            ]);
 +            // Both drivers have received an assignment for this node.

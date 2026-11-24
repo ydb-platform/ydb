@@ -26,11 +26,14 @@ namespace NKikimr::NBlobDepot {
     private:
         class TContext;
         std::unique_ptr<TContext> Context;
+        const TTxType TxType;
 
     public:
-        TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void(TContextBase&)> body);
+        TCoroTx(TBlobDepot *self, TTokens&& tokens, NKikimrBlobDepot::ETxTypes txType, std::function<void(TContextBase&)> body);
         TCoroTx(TCoroTx& predecessor);
         ~TCoroTx();
+
+        TTxType GetTxType() const override { return TxType; }
 
     private:
         bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override;

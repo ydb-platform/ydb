@@ -8,7 +8,7 @@
 #include "blob_depot_test_functions.h"
 
 void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId) {
-    TString blobDepotPool = "decommit_blob_depot_pool";
+    const TString& blobDepotPool = DecommitBlobDepotPool;
     ui32 blobDepotPoolId = 42;
     tenv.Env->CreatePoolInBox(1, blobDepotPoolId, blobDepotPool);
     NKikimrBlobStorage::TConfigRequest request;

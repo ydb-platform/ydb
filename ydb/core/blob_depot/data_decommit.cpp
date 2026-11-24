@@ -55,7 +55,7 @@ namespace NKikimr::NBlobDepot {
             bool RestartTx = false;
 
         public:
-            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DECOMMIT_BLOBS; }
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE; }
 
             TTxPrepare(TResolveDecommitActor *actor, std::deque<TScan>&& scans)
                 : TTransactionBase(actor->Self)

@@ -130,5 +130,22 @@ bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TStr
     return true;
 }
 
+std::optional<bool> GetKeyReadDirection(const TSortIUs& sortElements) {
+    const auto& items = sortElements.Items();
+    if (items.empty()) {
+        return std::nullopt;
+    }
+    // The nulls order of a sort does not matter: the physical sort orders by the direction only, with NULLs smaller
+    // than any value, as in the key order of a datashard table. A read in the reverse order returns NULLs last, as
+    // a descending sort does, although the YQL translator always marks NULLs first.
+    const bool ascending = items.front().second.Ascending;
+    for (const auto& [column, order] : items) {
+        if (order.Ascending != ascending) {
+            return std::nullopt;
+        }
+    }
+    return ascending;
+}
+
 }
 }

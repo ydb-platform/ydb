@@ -28,6 +28,9 @@ bool JoinOutputsRight(const TString& joinKind);
 TString GetValidJoinKind(const TString& joinKind);
 
 bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TString>& keyColumns, size_t pointPrefixLen);
+// Whether a sort orders all its keys in one direction, as a datashard read in the key order (true) or in the reverse
+// order (false) returns rows; nothing if the sort has no keys or mixes the directions.
+std::optional<bool> GetKeyReadDirection(const TSortIUs& sortElements);
 
 }
 }

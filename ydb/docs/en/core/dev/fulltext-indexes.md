@@ -154,6 +154,14 @@ Multiple filter columns are supported. The equality predicates may appear in any
 
 ## Primary key types {#primary-key}
 
+{% if feature_flags.enable_fulltext_index_row_id == false %}
+{% note warning "Experimental feature" %}
+
+This feature is under development and is disabled by default by the [`enable_fulltext_index_row_id`](../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../reference/configuration/feature_flags.md#experimental).
+
+{% endnote %}
+{% endif %}
+
 Inside the inverted index, every indexed document is identified by a numeric document id (`doc_id`). How {{ ydb-short-name }} derives the `doc_id` depends on the base table's [primary key](../concepts/glossary.md#primary-key):
 
 * **Single integer primary key** (`Uint64`, `Int64`, `Uint32`, or `Int32`) — the primary key value is used directly as the `doc_id`. This is the most compact form, and no additional structures are created.

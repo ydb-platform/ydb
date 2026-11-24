@@ -180,10 +180,12 @@ namespace NKikimr::NStorage {
         // The previous root may have lost a selfheal actor mid-reconfiguration.
         // Pull fresh statuses even if Sentinel has observed no node changes.
         StartStateStorageSelfHealRefresh();
+        RefreshStaticGroupRepairs();
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
         AbortRootProbe();
+        StopStaticGroupRepairs();
         CancelStateStorageSelfHealRefresh();
         StateStorageSelfHealRefreshStarted = false;
         if (StateStorageSelfHealActor) {

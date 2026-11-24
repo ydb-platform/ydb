@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
 
 #include <atomic>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <set>
@@ -137,6 +138,31 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         replacement.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
         UNIT_ASSERT_VALUES_EQUAL(request(replacement), int(grpc::StatusCode::OK));
         UNIT_ASSERT_VALUES_EQUAL(request(stale), int(grpc::StatusCode::UNAVAILABLE));
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST(SimpleUnaryRejectsRetiredEndpointHandles) {
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TTableService table;
+        auto server = StartServer(port, table);
+        NYdbGrpc::TGRpcClientLow client;
+        using TService = Ydb::Table::V1::TableService;
+        auto connection = client.CreateGRpcServiceConnection<TService>(NYdbGrpc::TGRpcClientConfig(Address(port)));
+        NYdbGrpc::TCallMeta meta;
+        meta.Timeout = std::chrono::seconds(3);
+        meta.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
+        auto call = [&] {
+            auto status = NThreading::NewPromise<int>();
+            connection->DoRequest<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>({},
+                [status](NYdbGrpc::TGrpcStatus&& response, auto&&) mutable {
+                    status.SetValue(response.GRpcStatusCode);
+                }, &TService::Stub::AsyncBulkUpsert, meta);
+            return status.GetFuture().GetValueSync();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(call(), int(grpc::StatusCode::OK));
+        meta.EndpointAdmission->Retire();
+        UNIT_ASSERT_VALUES_EQUAL(call(), int(grpc::StatusCode::UNAVAILABLE));
         UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
     }
 
@@ -417,6 +443,56 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT_VALUES_EQUAL(RpcPeer(held.GetValueSync()), peer);
         UNIT_ASSERT_C(!unexpectedPoll.GetFuture().Wait(TDuration::MilliSeconds(300)),
             "a server without endpoint version support triggered immediate polling");
+    }
+
+    Y_UNIT_TEST(DirectPollRecoversFromAnEmptyAssignmentWithIpv6Endpoints) {
+        TPortManager ports;
+        const auto bootstrapPort = ports.GetPort(), dataPort = ports.GetPort();
+        TTableService table;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort("[::1]:" + ToString(dataPort), grpc::InsecureServerCredentials());
+        builder.RegisterService(&table);
+        auto node = builder.BuildAndStart();
+        UNIT_ASSERT(node);
+
+        TDiscovery discovery;
+        std::atomic_uint replies = 0;
+        auto installed = NThreading::NewPromise<void>();
+        auto release = NThreading::NewPromise<void>();
+        discovery.Lookup = [&](auto* context, auto& result) {
+            if (++replies == 1) {
+                // YDB may have no advertised nodes while a tenant starts up.
+                return grpc::Status::OK;
+            }
+            auto* endpoint = result.add_endpoints();
+            endpoint->set_address("undiscoverable.invalid");
+            endpoint->set_port(dataPort);
+            endpoint->set_bridge_pile_name("local");
+            result.add_pile_states()->set_pile_name("local");
+            endpoint->add_ip_v6("");
+            endpoint->add_ip_v6("::1");
+            endpoint->add_ip_v6("[::1]");
+            endpoint->add_ip_v4("");
+            context->AddTrailingMetadata("x-ydb-endpoint-version", "ready");
+            if (context->client_metadata().contains("x-ydb-if-endpoint-version")) {
+                installed.TrySetValue();
+                if (!release.GetFuture().Wait(TDuration::Seconds(5))) {
+                    return grpc::Status::CANCELLED;
+                }
+            }
+            return grpc::Status::OK;
+        };
+        auto bootstrap = StartServer(bootstrapPort, discovery);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(bootstrapPort)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll));
+        NTable::TTableClient client(driver);
+        UNIT_ASSERT(installed.GetFuture().Wait(TDuration::Seconds(4)));
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        const auto response = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings).GetValueSync();
+        release.TrySetValue();
+        UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
     }
 
     Y_UNIT_TEST(DirectPollThrottlesServersThatReturnUnchangedVersionsImmediately) {

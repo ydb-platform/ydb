@@ -68,24 +68,32 @@ void CheckWriteMode(const TModeCase& mode) {
     setup->Write(topic, "msg-2", 0);
     Sleep(TDuration::Seconds(2));
 
-    SetWriteMode(setup, topic, mode.Mode);
     auto& runtime = setup->GetRuntime();
+    auto read = [&](ui32 count) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = topic,
+            .Consumer = Consumer,
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = count,
+        });
+        return GetReadResponse(runtime);
+    };
+    auto locked = read(2);
+    UNIT_ASSERT_VALUES_EQUAL_C(locked->Status, Ydb::StatusIds::SUCCESS, locked->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(locked->Messages.size(), 2);
+    const auto first = locked->Messages[0].MessageId;
+    const auto second = locked->Messages[1].MessageId;
+
+    SetWriteMode(setup, topic, mode.Mode);
     AssertWriteRejected(runtime, topic, mode);
 
-    // Consumer operations do not write to the topic and stay allowed, as on the tablet.
-    CreateReaderActor(runtime, {
-        .DatabasePath = "/Root",
-        .TopicName = topic,
-        .Consumer = Consumer,
-        .WaitTime = TDuration::Seconds(1),
-        .ProcessingTimeout = TDuration::Seconds(30),
-        .MaxNumberOfMessage = 2,
-    });
-    auto read = GetReadResponse(runtime);
-    UNIT_ASSERT_VALUES_EQUAL(read->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(read->Messages.size(), 2);
-    const auto first = read->Messages[0].MessageId;
-    const auto second = read->Messages[1].MessageId;
+    // The tablet rejects reads in this mode, so MLP must fail them before calling it.
+    auto rejected = read(1);
+    UNIT_ASSERT_VALUES_EQUAL(rejected->Status, mode.Status);
+    UNIT_ASSERT_VALUES_EQUAL(rejected->ErrorDescription, mode.Message);
+    UNIT_ASSERT(rejected->Messages.empty());
 
     CreateMessageDeadlineChangerActor(runtime, {
         .DatabasePath = "/Root",
@@ -131,6 +139,8 @@ void CheckWriteMode(const TModeCase& mode) {
         UNIT_ASSERT_C(TInstant::Now() < deadline, "Writes were not allowed after the write mode change");
         Sleep(TDuration::MilliSeconds(100));
     }
+    auto reopened = read(1);
+    UNIT_ASSERT_VALUES_EQUAL_C(reopened->Status, Ydb::StatusIds::SUCCESS, reopened->ErrorDescription);
 }
 
 } // namespace

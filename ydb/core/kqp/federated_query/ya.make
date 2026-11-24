@@ -24,7 +24,6 @@ PEERDIR(
     ydb/library/yql/providers/ydb_external/provider
     ydb/library/yql/providers/yt/gateway/clients/message_stream
     ydb/public/api/protos
-    ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/extensions/discovery_mutator
     yql/essentials/core/dq_integration/transform

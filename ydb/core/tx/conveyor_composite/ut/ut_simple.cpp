@@ -91,7 +91,8 @@ private:
         while (TMonotonic::Now() - start < ExecutionTime) {
         }
         if (PerWorker) {
-            AFL_VERIFY(AssignedWorker < PerWorker->size())("worker", AssignedWorker);
+            YDB_LOG_VERIFY(AssignedWorker < PerWorker->size(),
+                {"worker", AssignedWorker});
             (*PerWorker)[AssignedWorker].Inc();
         }
         Counter->Inc();
@@ -135,7 +136,7 @@ void WaitWarmupAccounted(NActors::TActorSystem& actorSystem, const NActors::TAct
 
 NConfig::TConfig ParseConveyorProto(const TString& textProto) {
     NKikimrConfig::TCompositeConveyorConfig protoConfig;
-    AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+    YDB_LOG_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
     return NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
 }
 
@@ -228,7 +229,7 @@ public:
         auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         const std::string textProto = GetConveyorConfig();
         NKikimrConfig::TCompositeConveyorConfig protoConfig;
-        AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+        YDB_LOG_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
         NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
         const auto actorId = actorSystem.Register(CreateService(config, counters));
@@ -292,7 +293,8 @@ public:
         };
 
         bool result = DoWithRetryOnRetCode(checkCount, TRetryOptions{retries, sleep});
-        AFL_VERIFY(result)("count", getCount());
+        YDB_LOG_VERIFY(result,
+            {"count", getCount()});
 
         actorSystem.Stop();
         actorSystem.Cleanup();
@@ -605,7 +607,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     Y_UNIT_TEST(HeavyLimitsParseErrors) {
         auto expectFail = [](const TString& textProto) {
             NKikimrConfig::TCompositeConveyorConfig protoConfig;
-            AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+            YDB_LOG_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
             UNIT_ASSERT(NConfig::TConfig::BuildFromProto(protoConfig).IsFail());
         };
         expectFail(R"(

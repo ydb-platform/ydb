@@ -59,6 +59,8 @@ def kikimr(kikimr_params, kikimr_settings, s3):
     flags['enable_external_source_schema_inference'] = kikimr_settings.get('enable_schema_inference', True)
     flags['enable_replace_if_exists_for_external_entities'] = kikimr_settings.get('is_replace_if_exists', False)
     flags['disable_old_secret_creation'] = False
+    if 'disable_pg_compatibility' in kikimr_settings:
+        flags['disable_pg_compatibility'] = kikimr_settings['disable_pg_compatibility']
     config.yaml_config['table_service_config']['query_limits']['result_rows_limit'] = 100000
     gateway = config.yaml_config['query_service_config'].setdefault('s3', {})
     gateway['generator_paths_limit'] = 50000

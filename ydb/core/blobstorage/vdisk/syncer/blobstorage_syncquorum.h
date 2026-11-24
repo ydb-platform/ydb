@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
 namespace NKikimr {
@@ -59,6 +60,19 @@ namespace NKikimr {
                 return checker.CheckQuorumForGroup(SyncedDisks);
             }
 
+            bool HasQuorum(const TBlobStorageGroupInfo& info) const {
+                if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                        && info.GetTopology().GetTotalFailRealmsNum() == 3) {
+                    return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, SyncedDisks);
+                }
+                return HasQuorum();
+            }
+
+            void ResetTopology(const TBlobStorageGroupInfo& info) {
+                Top = info.PickTopology();
+                Clear();
+            }
+
             void Clear() {
                 Debug.Clear();
                 SyncedDisks = TBlobStorageGroupInfo::TGroupVDisks(Top.get());
@@ -75,7 +89,7 @@ namespace NKikimr {
             }
 
         private:
-            const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
+            std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
             const ui32 MyFailDomainOrderNumber;
             const bool IncludeMyFailDomain;
             TQuorumTrackerDebug Debug;

@@ -13,6 +13,7 @@
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
+#include <atomic>
 #include <type_traits>
 
 namespace NYT::NProfiling {
@@ -29,14 +30,68 @@ struct TIntPoint
     i64 Value;
 };
 
+ui64 AllocateCubeId()
+{
+    static std::atomic<ui64> LastCubeId = 0;
+    ui64 cubeId = LastCubeId.fetch_add(1, std::memory_order_relaxed) + 1;
+    YT_VERIFY(cubeId != 0);
+
+    return cubeId;
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
+TCube<T>::TProjection::TProjection(TTagIdList tagIds, int windowSize)
+    : TagIds(std::move(tagIds))
+    , WindowSize(windowSize)
+{
+    std::uninitialized_value_construct_n(static_cast<T*>(this->GetExtraSpacePtr()), WindowSize);
+    std::fill_n(HasValue().GetData(), NBitmapDetail::GetByteSize(WindowSize), 0);
+}
+
+template <class T>
+TCube<T>::TProjection::~TProjection()
+{
+    std::destroy_n(static_cast<T*>(this->GetExtraSpacePtr()), WindowSize);
+}
+
+template <class T>
+size_t TCube<T>::TProjection::GetExtraSpaceSize(int windowSize)
+{
+    return windowSize * sizeof(T) + NBitmapDetail::GetByteSize(windowSize);
+}
+
+template <class T>
+TMutableRange<T> TCube<T>::TProjection::Values()
+{
+    return TMutableRange<T>(static_cast<T*>(this->GetExtraSpacePtr()), WindowSize);
+}
+
+template <class T>
+TRange<T> TCube<T>::TProjection::Values() const
+{
+    return TRange<T>(static_cast<const T*>(this->GetExtraSpacePtr()), WindowSize);
+}
+
+template <class T>
+TMutableBitmap TCube<T>::TProjection::HasValue()
+{
+    return TMutableBitmap(Values().end());
+}
+
+template <class T>
+TBitmap TCube<T>::TProjection::HasValue() const
+{
+    return TBitmap(Values().end());
+}
+
+template <class T>
 bool TCube<T>::TProjection::IsZero(int index) const
 {
-    return IsZeroValue(Values[index]);
+    return IsZeroValue(Values()[index]);
 }
 
 template <class T>
@@ -48,6 +103,7 @@ bool TCube<T>::TProjection::IsLingering(i64 iteration) const
 template <class T>
 TCube<T>::TCube(int windowSize, i64 nextIteration)
     : WindowSize_(windowSize)
+    , CubeId_(AllocateCubeId())
     , NextIteration_(nextIteration)
     , BaseIteration_(nextIteration - (nextIteration % windowSize))
 { }
@@ -59,10 +115,10 @@ void TCube<T>::StartIteration()
     NextIteration_++;
     BaseIteration_ = NextIteration_ - (NextIteration_ % WindowSize_);
 
-    for (auto& [tagIds, projection] : Projections_) {
-        projection.Rollup += projection.Values[Index_];
-        projection.Values[Index_] = {};
-        projection.HasValue[Index_] = false;
+    for (const auto& projection : Projections_) {
+        projection->Rollup += projection->Values()[Index_];
+        projection->Values()[Index_] = {};
+        projection->HasValue().Set(Index_, false);
     }
 }
 
@@ -73,24 +129,36 @@ void TCube<T>::FinishIteration()
 template <class T>
 void TCube<T>::Add(TTagIdList tagIds)
 {
-    std::sort(tagIds.begin(), tagIds.end());
-    if (auto it = Projections_.find(tagIds); it != Projections_.end()) {
-        it->second.UsageCount++;
-    } else {
-        TProjection projection;
-        projection.UsageCount = 1;
-        projection.Values.resize(WindowSize_);
-        projection.HasValue.resize(WindowSize_);
-        Projections_[tagIds] = std::move(projection);
-    }
+    DoAdd(std::move(tagIds));
 }
 
 template <class T>
-void TCube<T>::AddAll(const TTagIdSet& tagSet)
+typename TCube<T>::TProjectionPtr TCube<T>::DoAdd(TTagIdList tagIds)
 {
-    tagSet.Range([this] (auto tagIds) mutable {
-        Add(std::move(tagIds));
+    std::sort(tagIds.begin(), tagIds.end());
+    if (auto it = Projections_.find(tagIds); it != Projections_.end()) {
+        (*it)->UsageCount++;
+        return *it;
+    }
+
+    auto projection = NewWithExtraSpace<TProjection>(
+        TProjection::GetExtraSpaceSize(WindowSize_),
+        std::move(tagIds),
+        WindowSize_);
+    projection->UsageCount = 1;
+    InsertOrCrash(Projections_, projection);
+    return projection;
+}
+
+template <class T>
+typename TCube<T>::TProjectionCookie TCube<T>::AddAll(const TTagIdSet& tagSet)
+{
+    TProjectionCookie cookie;
+    cookie.OwnerCubeId_ = CubeId_;
+    tagSet.Range([&] (auto tagIds) {
+        cookie.Projections_.push_back(DoAdd(std::move(tagIds)));
     });
+    return cookie;
 }
 
 template <class T>
@@ -103,18 +171,23 @@ void TCube<T>::Remove(TTagIdList tagIds)
             .With("tag_ids", tagIds);
     }
 
-    it->second.UsageCount--;
-    if (it->second.UsageCount == 0) {
+    (*it)->UsageCount--;
+    if ((*it)->UsageCount == 0) {
         Projections_.erase(it);
     }
 }
 
 template <class T>
-void TCube<T>::RemoveAll(const TTagIdSet& tagSet)
+void TCube<T>::RemoveAll(TProjectionCookie cookie)
 {
-    tagSet.Range([this] (auto tagIds) mutable {
-        Remove(std::move(tagIds));
-    });
+    YT_VERIFY(cookie.OwnerCubeId_ == CubeId_);
+
+    for (const auto& projection : cookie.Projections_) {
+        projection->UsageCount--;
+        if (projection->UsageCount == 0) {
+            EraseOrCrash(Projections_, projection);
+        }
+    }
 }
 
 template <class T>
@@ -127,6 +200,12 @@ void TCube<T>::Update(TTagIdList tagIds, T value)
             .With("tag_ids", tagIds);
     }
 
+    DoUpdate(it->Get(), value);
+}
+
+template <class T>
+void TCube<T>::DoUpdate(TProjection* projection, const T& value)
+{
     if constexpr (std::is_same_v<T, double>) {
         // Special value for gauges with DisableDefault option enabled.
         if (std::isnan(value)) {
@@ -134,15 +213,25 @@ void TCube<T>::Update(TTagIdList tagIds, T value)
         }
     }
 
-    it->second.Values[Index_] += value;
-    it->second.HasValue[Index_] = true;
-    if (!it->second.IsZero(Index_)) {
-        it->second.LastNonZeroIteration = NextIteration_ - 1;
+    projection->Values()[Index_] += value;
+    projection->HasValue().Set(Index_, true);
+    if (!projection->IsZero(Index_)) {
+        projection->LastNonZeroIteration = NextIteration_ - 1;
     }
 }
 
 template <class T>
-const THashMap<TTagIdList, typename TCube<T>::TProjection>& TCube<T>::GetProjections() const
+void TCube<T>::UpdateAll(const TProjectionCookie& cookie, const T& value)
+{
+    YT_VERIFY(cookie.OwnerCubeId_ == CubeId_);
+
+    for (const auto& projection : cookie.Projections_) {
+        DoUpdate(projection.Get(), value);
+    }
+}
+
+template <class T>
+const typename TCube<T>::TProjectionHashSet& TCube<T>::GetProjections() const
 {
     return Projections_;
 }
@@ -179,7 +268,7 @@ T TCube<T>::Rollup(const TProjection& window, int index) const
             i = 0;
         }
 
-        sum += window.Values[i];
+        sum += window.Values()[i];
         if (i == index) {
             break;
         }
@@ -322,7 +411,7 @@ int TCube<T>::ReadSensors(
         return true;
     };
 
-    auto skipSparse = [&] (auto window, const std::vector<int>& indices) {
+    auto skipSparse = [&] (const auto& window, const std::vector<int>& indices) {
         if (!options.Sparse) {
             return false;
         }
@@ -336,7 +425,18 @@ int TCube<T>::ReadSensors(
         return true;
     };
 
-    for (const auto& [tagIds, window] : Projections_) {
+    // Projections are separate allocations, so without prefetch this pass stalls on a cache miss per projection.
+    auto prefetchIt = Projections_.begin();
+    for (int step = 0; step < 2 && prefetchIt != Projections_.end(); ++step) {
+        Y_PREFETCH_READ((prefetchIt++)->Get(), 3);
+    }
+    for (const auto& windowPtr : Projections_) {
+        if (prefetchIt != Projections_.end()) {
+            Y_PREFETCH_READ((prefetchIt++)->Get(), 3);
+        }
+
+        const auto& window = *windowPtr;
+        const auto& tagIds = window.TagIds;
         if (options.EnableSolomonAggregationWorkaround && skipByHack(window)) {
             continue;
         }
@@ -363,13 +463,13 @@ int TCube<T>::ReadSensors(
 
                 T value{};
                 for (auto index : indices) {
-                    if (index < 0 || static_cast<size_t>(index) >= window->Values.size()) {
+                    if (index < 0 || index >= window->WindowSize) {
                         THROW_ERROR_EXCEPTION("Read index is invalid")
                             .With("index", index)
-                            .With("window_size", window->Values.size());
+                            .With("window_size", window->WindowSize);
                     }
 
-                    value += window->Values[index];
+                    value += window->Values()[index];
                 }
 
                 cb(value, time, indices);
@@ -570,12 +670,12 @@ int TCube<T>::ReadSensors(
             writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&, window = &window] (auto /* value */, auto time, const auto& indices) {
-                if (options.DisableDefault && !window->HasValue[indices.back()]) {
+                if (options.DisableDefault && !window->HasValue()[indices.back()]) {
                     return;
                 }
 
                 sensorCount += 1;
-                consumer->OnDouble(time, window->Values[indices.back()]);
+                consumer->OnDouble(time, window->Values()[indices.back()]);
             });
 
             consumer->OnMetricEnd();
@@ -806,7 +906,8 @@ int TCube<T>::ReadSensorValues(
     // NB(eshcherbin): ReadAllProjections is intended only for debugging purposes.
     if (options.ReadAllProjections) {
         std::vector<TTagIdList> filteredProjectionTagIds;
-        for (const auto& [projectionTagIds, _] : Projections_) {
+        for (const auto& projection : Projections_) {
+            const auto& projectionTagIds = projection->TagIds;
             // NB(eshcherbin): All tagIds vector are guaranteed to be sorted.
             if (std::includes(projectionTagIds.begin(), projectionTagIds.end(), tagIds.begin(), tagIds.end())) {
                 filteredProjectionTagIds.push_back(projectionTagIds);
@@ -815,7 +916,7 @@ int TCube<T>::ReadSensorValues(
 
         if (!filteredProjectionTagIds.empty()) {
             fluent.DoListFor(filteredProjectionTagIds, [&] (TFluentList fluent, const auto& projectionTagIds) {
-                const auto& projection = GetOrCrash(Projections_, projectionTagIds);
+                const auto& projection = **GetIteratorOrCrash(Projections_, projectionTagIds);
 
                 fluent
                     .Item().BeginMap()
@@ -824,7 +925,7 @@ int TCube<T>::ReadSensorValues(
                             fluent.Item(key).Value(value);
                         })
                         .Item("value").Do([&] (TFluentAny fluent) {
-                            doReadValueForProjection(fluent, projection, projection.Values[index]);
+                            doReadValueForProjection(fluent, projection, projection.Values()[index]);
                         })
                     .EndMap();
             });
@@ -835,8 +936,8 @@ int TCube<T>::ReadSensorValues(
             return valuesRead;
         }
 
-        const auto& projection = it->second;
-        doReadValueForProjection(fluent, projection, projection.Values[index]);
+        const auto& projection = **it;
+        doReadValueForProjection(fluent, projection, projection.Values()[index]);
     }
 
     return valuesRead;
@@ -853,32 +954,33 @@ void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extr
 template <class T>
 void TCube<T>::DumpCube(NProto::TCube *cube, const TTagIdList& extraTagIds) const
 {
-    for (const auto& [tagIds, window] : Projections_) {
+    for (const auto& windowPtr : Projections_) {
+        const auto& window = *windowPtr;
         auto projection = cube->add_projections();
-        for (auto tagId : tagIds) {
+        for (auto tagId : window.TagIds) {
             projection->add_tag_ids(tagId);
         }
         for (auto tagId : extraTagIds) {
             projection->add_tag_ids(tagId);
         }
 
-        projection->set_has_value(window.HasValue[Index_]);
+        projection->set_has_value(window.HasValue()[Index_]);
         if constexpr (std::is_same_v<T, i64>) {
-            projection->set_counter(window.Values[Index_]);
+            projection->set_counter(window.Values()[Index_]);
         } else if constexpr (std::is_same_v<T, TDuration>) {
-            projection->set_duration(window.Values[Index_].GetValue());
+            projection->set_duration(window.Values()[Index_].GetValue());
         } else if constexpr (std::is_same_v<T, double>) {
-            projection->set_gauge(window.Values[Index_]);
+            projection->set_gauge(window.Values()[Index_]);
         } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
-            ToProto(projection->mutable_summary(), window.Values[Index_]);
+            ToProto(projection->mutable_summary(), window.Values()[Index_]);
         } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
-            ToProto(projection->mutable_timer(), window.Values[Index_]);
+            ToProto(projection->mutable_timer(), window.Values()[Index_]);
         } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
-            ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
+            ToProto(projection->mutable_time_histogram(), window.Values()[Index_]);
         } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
-            ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
+            ToProto(projection->mutable_gauge_histogram(), window.Values()[Index_]);
         } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
-            ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
+            ToProto(projection->mutable_rate_histogram(), window.Values()[Index_]);
         } else {
             THROW_ERROR_EXCEPTION("Unexpected cube type %Qv", TypeName<T>());
         }

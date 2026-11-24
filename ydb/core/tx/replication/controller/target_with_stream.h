@@ -10,6 +10,8 @@ namespace NKikimrReplication {
 
 namespace NKikimr::NReplication::NController {
 
+extern const TString ReplicationConsumerName;
+
 class TTargetWithStreamStats: public ITargetBaseStats {
 protected:
     struct TMultiSlidingWindow {

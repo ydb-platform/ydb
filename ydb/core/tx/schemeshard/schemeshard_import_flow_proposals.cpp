@@ -5,14 +5,14 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
-#include <ydb/core/backup/common/omit_backup.h>
+#include <algorithm>
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
-#include <ydb/core/tx/replication/common/changefeed.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -568,10 +568,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     }
 
-    if (::NKikimr::NBackup::IsKeyRangeReplicationBackup(changefeed)) {
-        return propose;
-    }
-
     auto tableDesc = GetTableDescription(ss, dstPath->PathId);
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
@@ -597,6 +593,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             } else if (minActivePartitions == 0) {
                 minActivePartitions = 1;
             }
+            if (minActivePartitions > Max<ui32>()) {
+                // Internal fields are uint32, a larger value would silently truncate.
+                error = TStringBuilder() << "min_active_partitions must not exceed " << Max<ui32>();
+                return nullptr;
+            }
             cdcStream.SetTopicPartitions(minActivePartitions);
         }
 
@@ -610,7 +611,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
                 error = "maxActivePartitions must be >= 0";
                 return nullptr;
             } else if (maxActivePartitions == 0) {
-                maxActivePartitions = 50;
+                // Unset max keeps the historical ceiling of 50, but never
+                // below the requested min. The effective value is
+                // materialized on the wire so older schemeshards keep
+                // accepting the request during a rolling upgrade.
+                maxActivePartitions = std::max<i64>(cdcStream.GetTopicPartitions(), 50);
+            }
+            if (maxActivePartitions > Max<ui32>()) {
+                // Internal fields are uint32, a larger value would silently truncate.
+                error = TStringBuilder() << "max_active_partitions must not exceed " << Max<ui32>();
+                return nullptr;
             }
             cdcStream.SetMaxPartitionCount(maxActivePartitions);
         }
@@ -656,12 +666,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;
-    const bool keyRangeBackup = ::NKikimr::NBackup::IsKeyRangeReplicationBackup(importChangefeedTopic.GetChangefeed());
 
     for (const auto& consumer : topic.consumers()) {
-        if (keyRangeBackup && TStringBuf(consumer.name()) == NReplication::ReplicationConsumerName) {
-            continue;
-        }
         auto& addedConsumer = *tabletConfig->AddConsumers();
         auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
         addedConsumer.SetName(consumerName);

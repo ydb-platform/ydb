@@ -165,9 +165,7 @@ public:
     }
 
     void Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        if (!TBaseColumnShardLogWriter::Write(message)) {
-            return;
-        }
+        TBaseColumnShardLogWriter::Write(message);
         WrittenCount++;
     }
 

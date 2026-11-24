@@ -2,6 +2,12 @@
 
 This recipe transfers a row-oriented table between {{ ydb-short-name }} databases using [asynchronous replication](../../concepts/async-replication.md), then switches the application to the target. The application continues using the source during the initial transfer. Writes must stop for final verification and cutover.
 
+{% note warning %}
+
+This step-by-step example applies to a table **without secondary indexes**. A replicated index can be processed separately from the base table, so matching base-table exports do not establish index readiness. Before migrating tables with indexes, agree on a separate procedure that fully compares every record of each replicated index, including keys and covering columns. Do not treat the base-table check below as authorization to run `DONE/FORCE` for such a migration.
+
+{% endnote %}
+
 Choose an [initial synchronization method](index.md#initial-sync) before creating replication. The alternatives below use the same object names; perform only one of them.
 
 ## Example Objects {#input-data}
@@ -213,15 +219,18 @@ Wait until the description contains `paused` without `error`:
 {{ ydb-cli }} -p target scheme describe my_replication --format proto-json-base64
 ```
 
-Check that both table descriptions have the same column names and types and the same primary key columns in the same order. Then [stream-read the full tables](../../reference/ydb-cli/commands/readtable.md), ordered by primary key, and compare the exports:
+Check that both table descriptions have the same column names and types and the same primary key columns in the same order. Build a complete column list from the schema, including every primary key column, and pass it through `--columns` in the same order to both exports. Replace `id,value` below with the complete column list for your table. Then [stream-read the full tables](../../reference/ydb-cli/commands/readtable.md), ordered by primary key, and compare the exports:
 
 ```bash
-{{ ydb-cli }} -p source table read original_table --ordered --format json-base64 > source.rows.jsonl &&
-{{ ydb-cli }} -p target table read replica_table --ordered --format json-base64 > target.rows.jsonl &&
+columns='id,value'
+{{ ydb-cli }} -p source table read original_table --ordered --columns "$columns" --format json-base64 > source.rows.jsonl 2> source.read.stderr &&
+{{ ydb-cli }} -p target table read replica_table --ordered --columns "$columns" --format json-base64 > target.rows.jsonl 2> target.read.stderr &&
+test ! -s source.read.stderr &&
+test ! -s target.read.stderr &&
 cmp source.rows.jsonl target.rows.jsonl
 ```
 
-Use the same CLI version and output format. Do not specify `--limit`, `--columns`, `--from`, or `--to`: verification must include every row and column. Both exports must finish completely, without errors or an `<INTERRUPTED>` message. Partial files are invalid even if they match. `cmp` must return exit code `0` with no output, indicating byte-for-byte equality. For multiple tables, repeat the full comparison for every source and target pair.
+Use the same CLI version and output format. `--ordered` orders rows; the shared complete `--columns` list orders fields. Do not specify `--limit`, `--from`, or `--to`: verification must include every row and column. The example runs `cmp` only after both commands succeed and both stderr files are empty. This also rejects a handled interruption: the CLI can write `<INTERRUPTED>` to stderr and return exit code `0`. If the chain stops, inspect `source.read.stderr` and `target.read.stderr`, fix the cause, and repeat both full exports. Do not delete messages from the files to continue the chain. Partial files are invalid even if they match. `cmp` must return exit code `0` with no output, indicating byte-for-byte equality of the complete exports. For multiple tables without secondary indexes, repeat the full comparison for every source and target pair.
 
 If the files differ, investigate the differences. If the target has not applied all changes, resume with `STATE = 'STANDBY'`, wait for progress, and repeat pausing and both full exports. Keep source writes stopped throughout. Do not run `DONE/FORCE` until full comparison succeeds and the data remains unchanged. If verification cannot fit the agreed window, stop the procedure and agree on further actions with your installation's support team.
 

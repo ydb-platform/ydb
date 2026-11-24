@@ -113,7 +113,6 @@
 /ydb/core/kqp/common/events/script_executions.h @ydb-platform/fq
 /ydb/core/kqp/common/kqp_streaming_query_controller.h @ydb-platform/fq
 /ydb/core/kqp/common/ut/dynamic_function_registry_ut.cpp @ydb-platform/fq
-/ydb/core/kqp/executer_actor/kqp_streaming_helper.* @ydb-platform/fq
 /ydb/core/kqp/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/external_data_source/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
@@ -271,7 +270,9 @@
 /ydb/tests/functional/secrets @ydb-platform/Security
 /ydb/tests/functional/security @ydb-platform/Security
 
-/ydb/tests/functional/tpc/medium @ydb-platform/Engineering
+/ydb/tests/functional/tpc @ydb-platform/Engineering
+/ydb/tests/olap/load/lib @ydb-platform/Engineering
+/ydb/tests/olap/lib @ydb-platform/Engineering
 /ydb/tests/library @ydb-platform/Engineering
 
 /ydb/core/nbs @ydb-platform/nbs_yandex

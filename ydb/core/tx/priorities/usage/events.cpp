@@ -9,8 +9,8 @@ TEvExecution::TEvAsk::TEvAsk(const ui64 clientId, const ui32 count, const std::s
     , Count(count)
     , Request(request)
     , Priority(priority) {
-    AFL_VERIFY(Request);
-    AFL_VERIFY(Count);
+    YDB_LOG_VERIFY(Request);
+    YDB_LOG_VERIFY(Count);
 }
 
 TEvExecution::TEvAskMax::TEvAskMax(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 priority)
@@ -18,8 +18,8 @@ TEvExecution::TEvAskMax::TEvAskMax(const ui64 clientId, const ui32 count, const 
     , Count(count)
     , Request(request)
     , Priority(priority) {
-    AFL_VERIFY(Request);
-    AFL_VERIFY(Count);
+    YDB_LOG_VERIFY(Request);
+    YDB_LOG_VERIFY(Count);
 }
 
 }   // namespace NKikimr::NPrioritiesQueue

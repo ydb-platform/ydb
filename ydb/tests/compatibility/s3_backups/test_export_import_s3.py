@@ -18,6 +18,10 @@ from ydb.import_client import ImportClient, ImportFromS3Settings
 from ydb.topic import TopicClient
 
 
+# Allow the server to retry transient requests to the S3 mock.
+S3_REQUEST_RETRIES = 10
+
+
 class TestExportImportS3(MixedClusterFixture):
     class SchemeObject(Enum):
         TABLE = 0
@@ -48,6 +52,7 @@ class TestExportImportS3(MixedClusterFixture):
             .with_access_key(s3_access_key)
             .with_secret_key(s3_secret_key)
             .with_bucket(s3_bucket)
+            .with_number_of_retries(S3_REQUEST_RETRIES)
         )
 
         extra_feature_flags = ["enable_export_auto_dropping"]
@@ -222,6 +227,7 @@ class TestExportImportS3(MixedClusterFixture):
             .with_access_key(s3_access_key)
             .with_secret_key(s3_secret_key)
             .with_bucket(s3_bucket)
+            .with_number_of_retries(S3_REQUEST_RETRIES)
         )
         for num in range(1, 6):
             if "TABLE" in scheme_objects:

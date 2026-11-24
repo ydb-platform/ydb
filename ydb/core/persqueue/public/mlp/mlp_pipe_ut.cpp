@@ -356,6 +356,40 @@ Y_UNIT_TEST(DeadlineChangerPipeBreakThenSuccess) {
     UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
 }
 
+Y_UNIT_TEST(DeadlineChangerPipeBreakOnOneTabletKeepsOtherPartition) {
+    auto setup = CreatePipeSetup();
+    {
+        auto status = CreatePipeTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    }
+    const ui64 brokenTabletId = GetTabletId(setup, "/Root", "/Root/topic1", 0);
+    UNIT_ASSERT_VALUES_UNEQUAL(brokenTabletId, GetTabletId(setup, "/Root", "/Root/topic1", 1));
+
+    auto& runtime = setup->GetRuntime();
+    TPipeBreakGuard pipeBreak(runtime, { TEvPQ::TEvMLPChangeMessageDeadlineRequest::EventType },
+        Max<size_t>(), brokenTabletId);
+    const auto deadline = TInstant::Now() + TDuration::Minutes(5);
+    CreateMessageDeadlineChangerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { TMessageId(0, 0), TMessageId(1, 0) },
+        .Deadlines = { deadline, deadline },
+    });
+
+    auto result = GetChangeResponse(runtime, TDuration::Seconds(30));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
+    for (const auto& message : result->Messages) {
+        // Partition 1 is empty, so its tablet answers NotFound instead of the pipe-break Failed.
+        const auto expected = message.MessageId.PartitionId == 0 ? EOperationResult::Failed : EOperationResult::NotFound;
+        UNIT_ASSERT_C(message.Status == expected, "partition " << message.MessageId.PartitionId
+            << " status " << static_cast<ui32>(message.Status));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(pipeBreak.BrokenCount(), 1u);
+}
+
 Y_UNIT_TEST(DescriberPipeBreakThenSuccess) {
     auto setup = CreatePipeSetup();
     {

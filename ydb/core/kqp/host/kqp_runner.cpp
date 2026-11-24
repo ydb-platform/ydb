@@ -1,4 +1,6 @@
 #include "kqp_host_impl.h"
+
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
@@ -98,6 +100,9 @@ public:
 
         if (!TransformerFinished) {
             TransformerFinished = true;
+            if (Config->FeatureFlags.GetDisablePgCompatibility() && !ValidateOptimizedKqpPgTypes(input, ctx)) {
+                return TStatus::Error;
+            }
             auto& preparedQuery = *TransformCtx.QueryCtx->PreparingQuery;
             TKqpPhysicalQuery physicalQuery(input);
 
@@ -375,7 +380,7 @@ private:
 
         sessionCtx->SetInternalTypeAnnTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), Config));
 
-        auto physicalOptimizePipeline = TTransformationPipeline(typesCtx)
+        auto physicalOptimizePipeline = TTransformationPipeline(typesCtx, CreateKqpTypeAnnCallableFactory(*typesCtx, Config->FeatureFlags.GetDisablePgCompatibility()))
             .AddServiceTransformers()
             .Add(Log("PhysicalOptimize"), "LogPhysicalOptimize")
             .AddPreTypeAnnotation()
@@ -405,7 +410,7 @@ private:
             .Add(CreateKqpCheckPhysicalQueryTransformer(OptimizeCtx), "CheckKqlPhysicalQuery")
             .Build(false));
 
-        auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
+        auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx, CreateKqpTypeAnnCallableFactory(*typesCtx, Config->FeatureFlags.GetDisablePgCompatibility()))
             .AddServiceTransformers()
             .Add(Log("PhysicalBuildTxs"), "LogPhysicalBuildTxs")
             .AddTypeAnnotationTransformer()
@@ -419,7 +424,7 @@ private:
                 "BuildPhysicalTxs")
             .Build(false));
 
-        auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
+        auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx, CreateKqpTypeAnnCallableFactory(*typesCtx, Config->FeatureFlags.GetDisablePgCompatibility()))
             .AddServiceTransformers()
             .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
             .AddTypeAnnotationTransformer()
@@ -429,7 +434,7 @@ private:
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 
-        auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)
+        auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx, CreateKqpTypeAnnCallableFactory(*typesCtx, Config->FeatureFlags.GetDisablePgCompatibility()))
             .AddServiceTransformers()
             .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
             .AddTypeAnnotationTransformer()
@@ -477,7 +482,7 @@ private:
             auto newRBOPreparedExplainTransformer = traced(CreateKqpRBOExplainPreparedTransformer(
                 Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx), "Build explain plan");
 
-            auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
+            auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx, CreateKqpTypeAnnCallableFactory(*typesCtx, Config->FeatureFlags.GetDisablePgCompatibility()))
                 .Add(TAutoPtr<IGraphTransformer>(new TRboGcTransformer()), "GC")
                 .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
                 .AddTypeAnnotationTransformer()
@@ -492,7 +497,7 @@ private:
             //    .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             //    .Build(false);
 
-            auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
+            auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx, CreateKqpTypeAnnCallableFactory(*typesCtx, Config->FeatureFlags.GetDisablePgCompatibility()))
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
                 .Add(CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, "Optimize query",

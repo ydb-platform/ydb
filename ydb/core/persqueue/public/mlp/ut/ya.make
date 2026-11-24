@@ -12,6 +12,7 @@ SRCS(
     mlp_describer_ut.cpp
     mlp_purger_ut.cpp
     mlp_reader_ut.cpp
+    mlp_write_mode_ut.cpp
     mlp_writer_ut.cpp
 )
 

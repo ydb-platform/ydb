@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {
-        for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {true, 1u}, {true, 7u}}) {
+        for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {false, 7u}, {true, 1u}, {true, 7u}}) {
             TActorSystemStub actorSystemStub;
             TGroupMock group(0, TErasureType::ErasureMirror3dc, 4, 3, 1);
             const auto info = group.GetInfo();

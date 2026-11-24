@@ -323,6 +323,11 @@ namespace NKikimr::NBlobDepot {
 
         void PassAway() override {
             ClearPendingEventQueue("BlobDepot agent destroyed");
+            // Destruction releases outstanding subrequests. Normal PUT error cleanup can also issue
+            // new tablet requests, so shutdown only needs to send each client's terminal reply.
+            for (auto& query : ExecutingQueries) {
+                query.SendErrorResponse(NKikimrProto::ERROR, "BlobDepot agent destroyed");
+            }
             if (AgentCounters) {
                 GetServiceCounters(AppData()->Counters, "blob_depot_agent")->RemoveSubgroup("group", ::ToString(VirtualGroupId));
             }
@@ -471,6 +476,7 @@ namespace NKikimr::NBlobDepot {
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
+            bool SkipBridgeAccountingForSubrequests = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
             NWilson::TSpan Span;
@@ -486,13 +492,19 @@ namespace NKikimr::NBlobDepot {
 
             void CheckQueryExecutionTime(TMonotonic now);
             bool CheckDeadline(TMonotonic now);
-            void SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const;
+            void SetResolveParameters(NKikimrBlobDepot::TEvResolve& resolve,
+                NKikimrBlobStorage::TDataKind::E dataKind) const;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
+            void SendErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             TString GetQueryId() const;
+            bool ShouldSkipBridgeAccountingForSubrequests() const {
+                return SkipBridgeAccountingForSubrequests;
+            }
             virtual ui64 GetTabletId() const { return 0; }
             virtual void Initiate() = 0;
 
@@ -555,6 +567,8 @@ namespace NKikimr::NBlobDepot {
                 , Request(*Event->Get<TEvent>())
             {
                 ExecutionRelay = std::move(Request.ExecutionRelay);
+                SkipBridgeAccountingForSubrequests = Request.IsProxySubrequest ||
+                    (ExecutionRelay && ExecutionRelay->BridgeProxyPoolCounters);
             }
 
         protected:
@@ -634,7 +648,7 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DS proxy interaction
 
-        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
+        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TQuery *query,
             TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

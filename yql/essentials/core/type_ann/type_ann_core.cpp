@@ -12241,7 +12241,7 @@ IGraphTransformer::TStatus TableSourceWrapper(const TExprNode::TPtr& input, TExp
     }
 
     if (isWide) {
-        if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+        if (!EnsureWideStreamType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
     } else {

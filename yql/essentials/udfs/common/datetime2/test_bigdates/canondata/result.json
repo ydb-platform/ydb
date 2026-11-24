@@ -1,9 +1,9 @@
 {
     "test.test[BlockFrom-Peephole]": [
         {
-            "checksum": "3e7b2620524a4780e0dc38dad18112be",
+            "checksum": "3dbc6defcebd56af7dfd910ae2cc1cb9",
             "size": 5096,
-            "uri": "https://{canondata_backend}/212715/074d96b5bbec3fa3a192521a4fa0b0dfacec305f/resource.tar.gz#test.test_BlockFrom-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1871102/ef652eebbd33b9c43ee5b0caae0a4eefe4ce9572/resource.tar.gz#test.test_BlockFrom-Peephole_/opt.yql"
         }
     ],
     "test.test[BlockFrom-Results]": [
@@ -13,9 +13,9 @@
     ],
     "test.test[BlockSplitMake-Peephole]": [
         {
-            "checksum": "c455fc13325c0d5a6e5a6fd6ec456265",
-            "size": 6827,
-            "uri": "https://{canondata_backend}/1871182/f98682bd61f2fe12214f8c34287ed6d3e975ebc2/resource.tar.gz#test.test_BlockSplitMake-Peephole_/opt.yql"
+            "checksum": "564e1a32b3b673d6d57b54c3d72f286f",
+            "size": 6847,
+            "uri": "https://{canondata_backend}/1871102/ef652eebbd33b9c43ee5b0caae0a4eefe4ce9572/resource.tar.gz#test.test_BlockSplitMake-Peephole_/opt.yql"
         }
     ],
     "test.test[BlockSplitMake-Results]": [

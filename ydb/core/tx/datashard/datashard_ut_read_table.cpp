@@ -754,7 +754,7 @@ using TProjection = TVector<TString>;
 using TRow = TVector<ui32>;
 using TRows = TVector<TRow>;
 
-enum class ERead { Iterator, Columns, KqpScan, ReadTable, MiniKQL };
+enum class ERead { Iterator, PointIterator, Columns, KqpScan, ReadTable, MiniKQL };
 enum class EColumnState { Building, Ready, Absent };
 
 // The fixture only uses Nullable(UInt32) columns in ClickHouse native blocks.
@@ -860,7 +860,7 @@ public:
 
     ui32 Value(ui32 key, const TString& name) const {
         if (name == "key") { return key; }
-        if (name == "value") { return key * 10; }
+        if (name == "value") { return Values.at(key); }
         if (name == "extra") { return 42; }
         UNIT_ASSERT_VALUES_EQUAL(name, "other");
         return 73;
@@ -966,12 +966,20 @@ public:
         const auto sender = runtime.AllocateEdgeActor();
         TRows rows;
         switch (read) {
-        case ERead::Iterator: {
+        case ERead::Iterator:
+        case ERead::PointIterator: {
             auto request = GetBaseReadRequest(TableId, schema, ++ReadId,
                 NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
             request->Record.ClearColumns();
             for (const auto& name : projection) { request->Record.AddColumns(ColumnIds.at(name)); }
-            AddFullRangeQuery(*request);
+            if (read == ERead::PointIterator) {
+                // Match ReadRows: individual keys without a schema version or snapshot.
+                request->Record.MutableTableId()->ClearSchemaVersion();
+                request->Record.ClearSnapshot();
+                for (const auto key : KeysInShard(schema)) { AddKeyQuery(*request, {key}); }
+            } else {
+                AddFullRangeQuery(*request);
+            }
             runtime.SendToPipe(shard, sender, request.release());
             auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender);
             const auto& result = *response->Get();
@@ -1309,7 +1317,8 @@ public:
     }
 
     void CheckInvariants(EColumnState state) {
-        CheckInvariants({ERead::Iterator, ERead::Columns, ERead::KqpScan, ERead::ReadTable, ERead::MiniKQL}, state);
+        CheckInvariants({ERead::Iterator, ERead::PointIterator, ERead::Columns,
+            ERead::KqpScan, ERead::ReadTable, ERead::MiniKQL}, state);
     }
 
     std::pair<TString, TAutoPtr<NMiniKQL::IEngineFlat>> CompileSelectRow(
@@ -1360,6 +1369,18 @@ public:
     void InsertDuringBuild() {
         ExecSQL(Server, Sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);");
         Keys.push_back(3);
+        Values.emplace(3, 30);
+    }
+
+    void UpdateAndDeleteDuringBuild() {
+        ExecSQL(Server, Sender,
+            "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 111);"
+            "DELETE FROM `/Root/Table` WHERE key = 2;");
+        Values.at(1) = 111;
+        const auto deleted = Find(Keys, 2);
+        UNIT_ASSERT(deleted != Keys.end());
+        Keys.erase(deleted);
+        Values.erase(2);
     }
 
     void RestartDataShards() {
@@ -1434,6 +1455,7 @@ public:
     TTableId TableId;
     ui64 ReadId = 100000;
     TVector<ui32> Keys = {1, 2};
+    THashMap<ui32, ui32> Values = {{1, 10}, {2, 20}};
     TProjection ExistingColumns = {"key", "value"};
     THashMap<TString, ui32> ColumnIds;
 };
@@ -1643,11 +1665,38 @@ Y_UNIT_TEST_SUITE(DataShardBuildingColumns) {
     }
 
     Y_UNIT_TEST(ReadIterator) { TestBuildingColumn(ERead::Iterator); }
+    Y_UNIT_TEST(PointReadIterator) { TestBuildingColumn(ERead::PointIterator); }
     Y_UNIT_TEST(ReadIteratorAfterReboot) { TestBuildingColumn(ERead::Iterator, true); }
     Y_UNIT_TEST(ReadColumns) { TestBuildingColumn(ERead::Columns); }
     Y_UNIT_TEST(KqpScan) { TestBuildingColumn(ERead::KqpScan); }
     Y_UNIT_TEST(ReadTable) { TestBuildingColumn(ERead::ReadTable); }
     Y_UNIT_TEST(SelectRow) { TestBuildingColumn(ERead::MiniKQL); }
+
+    Y_UNIT_TEST_TWIN(ConcurrentRowChangesDuringBackfill, Cancel) {
+        TBuildingColumnFixture fixture;
+        TColumnBuild build(fixture);
+        fixture.CheckInvariants(EColumnState::Building);
+        build.CommitBatch(1);
+        fixture.InsertDuringBuild();
+        fixture.UpdateAndDeleteDuringBuild();
+        fixture.CheckInvariants(EColumnState::Building);
+        if constexpr (Cancel) {
+            build.Cancel();
+            fixture.CheckSchemeShardColumns(EColumnState::Absent);
+        } else {
+            // The queued upload still contains deleted key 2 from the build snapshot.
+            build.CommitBatch(2);
+            fixture.CheckInvariants(EColumnState::Building);
+            build.WaitForFinalization();
+            fixture.CheckInvariants(EColumnState::Building);
+            build.Finish();
+        }
+        const auto state = Cancel ? EColumnState::Absent : EColumnState::Ready;
+        fixture.CheckInvariants(state);
+        fixture.RestartSchemeShard();
+        fixture.RestartDataShards();
+        fixture.CheckInvariants(state);
+    }
 
     Y_UNIT_TEST(ReadTableImplicitKeyOnlyDuringBackfill) {
         TBuildingColumnFixture fixture(true);

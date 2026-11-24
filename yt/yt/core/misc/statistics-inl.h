@@ -164,7 +164,11 @@ void Serialize(const TTaggedStatistics<TTags>& statistics, NYson::IYsonConsumer*
     SerializeStatisticPathsMap<THashMap<TTags, TSummary>>(
         statistics.GetData(),
         consumer,
-        [] (const THashMap<TTags, TSummary>& summaries, NYson::IYsonConsumer* consumer) {
+        [] (
+            const NStatisticPath::TStatisticPath&,
+            const THashMap<TTags, TSummary>& summaries,
+            NYson::IYsonConsumer* consumer)
+        {
             NYTree::BuildYsonFluently(consumer)
                 .DoListFor(summaries, [] (NYTree::TFluentList fluentList, const auto& pair) {
                     fluentList.Item()
@@ -182,7 +186,10 @@ template <class TMapValue>
 void SerializeStatisticPathsMap(
     const std::map<NStatisticPath::TStatisticPath, TMapValue>& map,
     NYson::IYsonConsumer* consumer,
-    const std::function<void(const TMapValue&, NYson::IYsonConsumer*)>& valueSerializer)
+    const std::function<void(
+        const NStatisticPath::TStatisticPath&,
+        const TMapValue&,
+        NYson::IYsonConsumer*)>& valueSerializer)
 {
     using NYT::Serialize;
 
@@ -223,7 +230,7 @@ void SerializeStatisticPathsMap(
         }
 
         // Serialize value.
-        valueSerializer(value, consumer);
+        valueSerializer(currentPath, value, consumer);
 
         previousDepth = currentDepth;
         previousPath = currentPath;

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import boto3
 import logging
+import pytest
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 
@@ -96,6 +97,7 @@ class TestExternalTables:
         describe_string = "{}".format(describe_result)
         assert "Row type mismatch for S3 external table" in describe_string, describe_string
 
+    @pytest.mark.parametrize('kikimr_settings', [{'disable_pg_compatibility': False}], indirect=True)
     def test_count_for_pg_binding(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"

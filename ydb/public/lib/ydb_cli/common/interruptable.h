@@ -3,6 +3,8 @@
 #include <library/cpp/threading/future/future.h>
 #include <util/datetime/base.h>
 
+#include <atomic>
+
 namespace NYdb::NConsoleClient {
 
 class TInterruptableCommand {
@@ -28,7 +30,7 @@ protected:
     }
 
 private:
-    static TAtomic Interrupted;
+    static std::atomic<bool> Interrupted;
     inline static std::unordered_map<int, void (*)(int)> SignalHandlers;
 };
 

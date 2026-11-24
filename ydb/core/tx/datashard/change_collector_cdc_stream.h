@@ -16,6 +16,7 @@ class TCdcStreamChangeCollector: public TBaseChangeCollector {
         ui64 Version = 0;
         TVector<NTable::TTag> Tags;
         TVector<NScheme::TTypeInfo> Types;
+        bool HasBuildInProgressColumns = false;
     };
 
     const TValueSchema& GetValueSchema(const TUserTable::TCPtr& table);

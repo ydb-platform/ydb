@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_buffer_lock_actor.h"
 #include "kqp_buffer_lookup_actor.h"
+#include "kqp_lock_logging.h"
 #include "kqp_write_actor_settings.h"
 #include "kqp_write_table.h"
 
@@ -955,17 +956,12 @@ public:
             return issues;
         };
 
-        TStringBuilder txLocks;
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            txLocks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Recv EvWriteResult",
             {"logPrefix", this->LogPrefix},
             {"shardID", ev->Get()->Record.GetOrigin()},
             {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
             {"txId", ev->Get()->Record.GetTxId()},
-            {"locks", txLocks},
+            {"locks", FormatLocksForLog(ev->Get()->Record.GetTxLocks())},
             {"cookie", ev->Cookie});
 
         // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
@@ -1296,18 +1292,13 @@ public:
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
 
-        TStringBuilder txLocks;
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            txLocks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Got completed result",
             {"logPrefix", this->LogPrefix},
             {"txId", ev->Get()->Record.GetTxId()},
             {"tabletId", ev->Get()->Record.GetOrigin()},
             {"cookie", ev->Cookie},
             {"mode", static_cast<int>(Mode)},
-            {"locks", txLocks});
+            {"locks", FormatLocksForLog(ev->Get()->Record.GetTxLocks())});
 
         if (Mode == EMode::COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
@@ -1553,10 +1544,6 @@ public:
 
         const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
 
-        TStringBuilder locks;
-        for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
-            locks << lock.ShortDebugString();
-        };
         YDB_LOG_DEBUG("Send EvWrite",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
@@ -1565,7 +1552,7 @@ public:
             {"txId", evWrite->Record.GetTxId()},
             {"lockTxId", evWrite->Record.GetLockTxId()},
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
-            {"locks", locks},
+            {"locks", FormatLocksForLog(evWrite->Record.GetLocks().GetLocks())},
             {"size", serializationResult.TotalDataSize},
             {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
@@ -5300,11 +5287,6 @@ public:
         const auto rollbackCookie = isRollback ? RollbackMessageCookie : 0;
         SendTime[shardId] = TInstant::Now();
 
-        TStringBuilder locks;
-        for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
-            locks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Send EvWrite (external)",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
@@ -5313,7 +5295,7 @@ public:
             {"txId", evWrite->Record.GetTxId()},
             {"lockTxId", evWrite->Record.GetLockTxId()},
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
-            {"locks", locks},
+            {"locks", FormatLocksForLog(evWrite->Record.GetLocks().GetLocks())},
             {"size", 0},
             {"cookie", rollbackCookie},
             {"operationsCount", 0},
@@ -5934,17 +5916,12 @@ public:
     }
 
     void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        TStringBuilder txLocks;
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            txLocks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Recv EvWriteResult (external)",
             {"logPrefix", this->LogPrefix},
             {"shardID", ev->Get()->Record.GetOrigin()},
             {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
             {"txId", ev->Get()->Record.GetTxId()},
-            {"locks", txLocks},
+            {"locks", FormatLocksForLog(ev->Get()->Record.GetTxLocks())},
             {"cookie", ev->Cookie});
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -5970,16 +5947,12 @@ public:
     }
 
     void HandleCommit(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        TStringBuilder locks;
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            locks << lock.ShortDebugString();
-        }
         YDB_LOG_DEBUG("Recv EvWriteResult (external)",
             {"logPrefix", this->LogPrefix},
             {"shardID", ev->Get()->Record.GetOrigin()},
             {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
             {"txId", ev->Get()->Record.GetTxId()},
-            {"locks", locks},
+            {"locks", FormatLocksForLog(ev->Get()->Record.GetTxLocks())},
             {"cookie", ev->Cookie});
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -6005,17 +5978,12 @@ public:
     }
 
     void HandleRollback(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        TStringBuilder locks;
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            locks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Recv EvWriteResult (external)",
             {"logPrefix", this->LogPrefix},
             {"shardID", ev->Get()->Record.GetOrigin()},
             {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
             {"txId", ev->Get()->Record.GetTxId()},
-            {"locks", locks},
+            {"locks", FormatLocksForLog(ev->Get()->Record.GetTxLocks())},
             {"cookie", ev->Cookie});
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -6318,17 +6286,13 @@ public:
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         OnMessageReceived(ev->Get()->Record.GetOrigin());
-        TStringBuilder locks;
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            locks << lock.ShortDebugString();
-        }
 
         YDB_LOG_DEBUG("Got completed result",
             {"logPrefix", this->LogPrefix},
             {"txId", ev->Get()->Record.GetTxId()},
             {"tabletId", ev->Get()->Record.GetOrigin()},
             {"cookie", ev->Cookie},
-            {"locks", locks});
+            {"locks", FormatLocksForLog(ev->Get()->Record.GetTxLocks())});
 
         CollectTliStats(ev->Get()->Record);
 

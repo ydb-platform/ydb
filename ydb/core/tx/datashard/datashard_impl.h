@@ -293,6 +293,7 @@ class TDataShard
     friend class TDataShardEngineHost;
     friend class TExecuteKqpScanTxUnit;
     friend class TAlterTableUnit;
+    friend class TFinalizeBuildIndexUnit;
     friend class TTableScan;
     friend class TKqpScan;
 

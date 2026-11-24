@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_shard_meta.h>
+#include <ydb/core/kqp/runtime/kqp_lock_logging.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
@@ -994,6 +995,19 @@ Y_UNIT_TEST_SUITE(KqpBufferWriteActor) {
         for (const bool transfer : {false, true}) {
             CheckLockTablesWithoutWriteActors(transfer, true);
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpLockLogging) {
+    Y_UNIT_TEST(PreservesTextAndOrder) {
+        NKikimrDataEvents::TEvWriteResult result;
+        UNIT_ASSERT(FormatLocksForLog(result.GetTxLocks()).empty());
+
+        result.AddTxLocks()->SetLockId(42);
+        result.AddTxLocks()->SetLockId(7);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatLocksForLog(result.GetTxLocks()),
+            result.GetTxLocks(0).ShortDebugString() + result.GetTxLocks(1).ShortDebugString());
     }
 }
 

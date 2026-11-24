@@ -114,6 +114,9 @@ void CheckSortedRead(bool newRbo, bool separated) {
         {"SELECT * FROM `/Root/SortedRead` WHERE k IN (2u, 7u, 18u, 30u) ORDER BY k, subkey;", true},
         {"SELECT * FROM `/Root/SortedRead` WHERE k >= 100 ORDER BY k, subkey;", true},
         {"SELECT * FROM `/Root/SortedRead` ORDER BY k, subkey LIMIT 7;", true},
+        // Same shape as ydb tools dump of a column table, including a resume predicate.
+        {"SELECT k, subkey, value FROM `/Root/SortedRead` ORDER BY k, subkey;", true},
+        {"SELECT k, subkey, value FROM `/Root/SortedRead` WHERE (k, subkey) > (3u, 0u) ORDER BY k, subkey;", true},
         {"SELECT k FROM `/Root/SortedRead` ORDER BY k LIMIT 7;", true},
         {"SELECT * FROM `/Root/SortedRead` WHERE value > 60 ORDER BY k, subkey;", true},
         {"SELECT * FROM `/Root/SortedRead` WHERE k >= 3 AND value < 60 ORDER BY k, subkey LIMIT 7;", true},
@@ -127,6 +130,34 @@ void CheckSortedRead(bool newRbo, bool separated) {
         {"SELECT 100u - k AS k, subkey, value FROM `/Root/SortedRead` ORDER BY k, subkey;", false},
     };
     run(cases.front().Query, std::nullopt, false, true);
+    // Dump resumes with a bound parameter, not a literal tuple.
+    {
+        const TString query = TStringBuilder()
+            << "DECLARE $pk AS Tuple<Uint64, Uint64>;\n"
+            << "SELECT k, subkey, value FROM `/Root/SortedRead` WHERE (k, subkey) > $pk ORDER BY k, subkey;";
+        TParamsBuilder paramsBuilder;
+        paramsBuilder.AddParam("$pk").BeginTuple().AddElement().Uint64(3).AddElement().Uint64(0).EndTuple().Build();
+        const auto params = paramsBuilder.Build();
+        auto executeParams = [&](bool enabled) {
+            TStringBuilder full;
+            full << "PRAGMA kikimr.OptEnableOlapSortedRead = \"" << (enabled ? "true" : "false") << "\";\n" << query;
+            sortedScans = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(full, TTxControl::BeginTx().CommitTx(), params,
+                    TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), full << "\n" << result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats() && result.GetStats()->GetAst());
+            return std::pair{TString(*result.GetStats()->GetAst()), FormatResultSetYson(result.GetResultSet(0))};
+        };
+        const auto disabled = executeParams(false);
+        const auto enabled = executeParams(true);
+        UNIT_ASSERT_C(!disabled.first.Contains("RequireSortedRead"), disabled.first);
+        UNIT_ASSERT_C(enabled.first.Contains("RequireSortedRead"), enabled.first);
+        UNIT_ASSERT_C(enabled.first.Contains("DqCnMerge"), enabled.first);
+        UNIT_ASSERT_C(sortedScans.load() > 0, enabled.first);
+        CompareYson(disabled.second, enabled.second);
+    }
     for (bool blocks : {true, false}) {
         for (const auto& test : cases) {
             const auto expected = run(test.Query, false, false, blocks);

@@ -68,15 +68,16 @@ private:
                 request.ContentType = header->Value();
             }
             NJson::ReadJsonTree(params.Input.ReadAll(), &request.Body);
-            const auto& inputs = request.Body["input"].GetArray();
+            const auto& input = request.Body["input"];
+            const size_t count = input.IsString() ? 1 : input.GetArray().size();
             NJson::TJsonValue body(NJson::JSON_MAP);
             body["data"].SetType(NJson::JSON_ARRAY);
             // Deliberately return the vectors in reverse order.
-            for (size_t i = inputs.size(); i > 0; --i) {
+            for (size_t i = count; i > 0; --i) {
                 NJson::TJsonValue item(NJson::JSON_MAP);
                 item["index"] = i - 1;
                 item["embedding"].SetType(NJson::JSON_ARRAY);
-                item["embedding"].AppendValue(inputs[i - 1].GetString().size());
+                item["embedding"].AppendValue((input.IsString() ? input : input[i - 1]).GetString().size());
                 item["embedding"].AppendValue(-0.25);
                 body["data"].AppendValue(std::move(item));
             }
@@ -126,25 +127,28 @@ struct TSetup {
         Builder.SetCalleePositionHolder(CalleePosition);
     }
 
-    TFunctionTypeInfo Resolve(bool stream, TType* userType = nullptr, bool typesOnly = false) {
+    TFunctionTypeInfo Resolve(TType* userType, bool typesOnly = false) {
         TFunctionTypeInfo info;
         auto status = Registry->FindFunctionTypeInfo(NYql::UnknownLangVersion, *RuntimeSettings, Env, new TTypeInfoHelper(), nullptr,
-            stream ? "Knn.ApplyRemoteEmbedderStream" : "Knn.ApplyRemoteEmbedder", userType, {},
+            "Knn.ApplyRemoteEmbedder", userType, {},
             typesOnly ? NUdf::IUdfModule::TFlags::TypesOnly : 0, NUdf::TSourcePosition(), Secrets.get(), nullptr, &info);
         UNIT_ASSERT_C(status.IsOk(), status.GetError());
         return info;
     }
 
-    TType* StreamUserType(bool valid = true, bool listHint = false) {
+    TType* UserType(bool stream, bool valid = true, bool listHint = false) {
         TFunctionTypeInfoBuilder types(NYql::UnknownLangVersion, *RuntimeSettings, Env, new TTypeInfoHelper(), "", nullptr, NUdf::TSourcePosition());
-        auto row = types.Struct(2)->AddField<ui64>("PassThrough", nullptr).AddField<char*>(valid ? NUdf::TStringRef::Of("Text") : NUdf::TStringRef::Of("Other"), nullptr).Build();
-        auto stream = listHint ? types.List()->Item(row).Build() : types.Stream()->Item(row).Build();
-        auto args = types.Tuple(4)->Add<char*>().Add<char*>().Add<char*>().Add(stream).Build();
+        const NUdf::TType* first = types.SimpleType<char*>();
+        if (stream) {
+            auto row = types.Struct(2)->AddField<ui64>("PassThrough", nullptr).AddField<char*>(valid ? NUdf::TStringRef::Of("Text") : NUdf::TStringRef::Of("Other"), nullptr).Build();
+            first = listHint ? types.List()->Item(row).Build() : types.Stream()->Item(row).Build();
+        }
+        auto args = types.Tuple(4)->Add(first).Add<char*>().Add<char*>().Add<char*>().Build();
         return static_cast<TType*>(types.Tuple(3)->Add(args).Add(types.Struct(0)->Build()).Add(types.Tuple(0)->Build()).Build());
     }
 
     NUdf::TUnboxedValue Function(bool stream) {
-        auto info = Resolve(stream, stream ? StreamUserType() : nullptr);
+        auto info = Resolve(UserType(stream));
         return NUdf::TUnboxedValuePod(info.Implementation.Release());
     }
 
@@ -153,7 +157,7 @@ struct TSetup {
     }
 
     NUdf::TUnboxedValue Scalar(const TServer& server, ui32 retries = 0, TStringBuf text = "Дом") {
-        const NUdf::TUnboxedValue args[] = {String("model"), String(server.Url()), String("secret"), String(text), NUdf::TUnboxedValuePod(retries)};
+        const NUdf::TUnboxedValue args[] = {String(text), String("model"), String(server.Url()), String("secret"), NUdf::TUnboxedValuePod(retries)};
         return Function(false).Run(&Builder, args);
     }
 };
@@ -195,8 +199,8 @@ private:
 
 TVector<NUdf::TUnboxedValue> RunStream(TSetup& setup, const TServer& server, ui32 rows, ui32 batchSize, bool yield = false, ui32 rate = 0, ui32 retries = 0) {
     const NUdf::TUnboxedValue args[] = {
-        setup.String("model"), setup.String(server.Url()), setup.String("secret"),
         NUdf::TUnboxedValuePod(new TInputStream(setup, rows, yield)),
+        setup.String("model"), setup.String(server.Url()), setup.String("secret"),
         NUdf::TUnboxedValuePod(batchSize), NUdf::TUnboxedValuePod(rate), NUdf::TUnboxedValuePod(retries)};
     auto stream = setup.Function(true).Run(&setup.Builder, args);
     TVector<NUdf::TUnboxedValue> result;
@@ -244,7 +248,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         UNIT_ASSERT_VALUES_EQUAL(requests[0].ContentType, "application/json");
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["model"].GetString(), "model");
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["encoding_format"].GetString(), "float");
-        UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["input"][0].GetString(), text);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["input"].GetString(), text);
     }
 
     Y_UNIT_TEST(BatchesPreservePassThroughAcrossYields) {
@@ -275,8 +279,8 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         TServer server;
         TSetup setup;
         const NUdf::TUnboxedValue args[] = {
-            setup.String("model"), setup.String(server.Url()), setup.String("secret"),
-            NUdf::TUnboxedValuePod(new TInputStream(setup, 33)), {}, {}, {}};
+            NUdf::TUnboxedValuePod(new TInputStream(setup, 33)),
+            setup.String("model"), setup.String(server.Url()), setup.String("secret"), {}, {}, {}};
         auto stream = setup.Function(true).Run(&setup.Builder, args);
         size_t count = 0;
         for (NUdf::TUnboxedValue row; stream.Fetch(row) == NUdf::EFetchStatus::Ok; ++count) {
@@ -287,7 +291,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(requests[0].Body["input"].GetArray().size(), 32);
         UNIT_ASSERT_VALUES_EQUAL(requests[1].Body["input"].GetArray().size(), 1);
-        const NUdf::TUnboxedValue scalarArgs[] = {setup.String("model"), setup.String(server.Url()), setup.String("secret"), setup.String("text"), {}};
+        const NUdf::TUnboxedValue scalarArgs[] = {setup.String("text"), setup.String("model"), setup.String(server.Url()), setup.String("secret"), {}};
         UNIT_ASSERT_VALUES_EQUAL(setup.Function(false).Run(&setup.Builder, scalarArgs).GetElement(1).Get<ui32>(), 200);
     }
 
@@ -295,7 +299,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         TServer server;
         TSetup setup;
         UNIT_ASSERT_EXCEPTION_CONTAINS(RunStream(setup, server, 1, 0), yexception, "BatchSize must be positive");
-        const NUdf::TUnboxedValue args[] = {setup.String("model"), setup.String(server.Url()), setup.String("missing-secret"), setup.String("text"), {}};
+        const NUdf::TUnboxedValue args[] = {setup.String("text"), setup.String("model"), setup.String(server.Url()), setup.String("missing-secret"), {}};
         UNIT_ASSERT_EXCEPTION_CONTAINS(setup.Function(false).Run(&setup.Builder, args), yexception, "authentication secret is not available");
         UNIT_ASSERT(server.Requests().empty());
     }
@@ -304,9 +308,8 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         TPortManager ports;
         const auto port = ports.GetPort();
         TSetup setup;
-        const NUdf::TUnboxedValue args[] = {setup.String("model"),
-            setup.String(TStringBuilder() << "http://localhost:" << port << "/v1"), setup.String("secret"),
-            setup.String("text"), NUdf::TUnboxedValuePod(ui32(0))};
+        const NUdf::TUnboxedValue args[] = {setup.String("text"), setup.String("model"),
+            setup.String(TStringBuilder() << "http://localhost:" << port << "/v1"), setup.String("secret"), NUdf::TUnboxedValuePod(ui32(0))};
         const auto result = setup.Function(false).Run(&setup.Builder, args);
         UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui32>(), 0);
         UNIT_ASSERT_VALUES_EQUAL(EmbeddingSize(result), 0);
@@ -383,10 +386,10 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
 
     Y_UNIT_TEST(ResolveSignaturesAndRejectInvalidStream) {
         TSetup setup;
-        auto scalar = setup.Resolve(false, nullptr, true);
+        auto scalar = setup.Resolve(setup.UserType(false), true);
         UNIT_ASSERT_VALUES_EQUAL(scalar.FunctionType->GetArgumentsCount(), 5);
         UNIT_ASSERT_VALUES_EQUAL(scalar.FunctionType->GetOptionalArgumentsCount(), 1);
-        auto stream = setup.Resolve(true, setup.StreamUserType(), true);
+        auto stream = setup.Resolve(setup.UserType(true), true);
         UNIT_ASSERT_VALUES_EQUAL(stream.FunctionType->GetArgumentsCount(), 7);
         UNIT_ASSERT_VALUES_EQUAL(stream.FunctionType->GetOptionalArgumentsCount(), 3);
         TStringBuilder out;
@@ -394,15 +397,15 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         UNIT_ASSERT_VALUES_EQUAL(out, "Stream<Struct<'Embedding':String,'PassThrough':Uint64,'Status':Uint32>>");
         TFunctionTypeInfo invalid;
         const auto status = setup.Registry->FindFunctionTypeInfo(NYql::UnknownLangVersion, *setup.RuntimeSettings, setup.Env, new TTypeInfoHelper(), nullptr,
-            "Knn.ApplyRemoteEmbedderStream", setup.StreamUserType(false), {}, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, nullptr, &invalid);
+            "Knn.ApplyRemoteEmbedder", setup.UserType(true, false), {}, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, nullptr, &invalid);
         UNIT_ASSERT(!status.IsOk());
         UNIT_ASSERT_STRING_CONTAINS(status.GetError(), "Text:String");
     }
 
     Y_UNIT_TEST(ProcessListHintDeclaresStreamArgument) {
         TSetup setup;
-        const auto info = setup.Resolve(true, setup.StreamUserType(true, true), true);
-        UNIT_ASSERT_EQUAL(info.FunctionType->GetArgumentType(3)->GetKind(), TType::EKind::Stream);
+        const auto info = setup.Resolve(setup.UserType(true, true, true), true);
+        UNIT_ASSERT_EQUAL(info.FunctionType->GetArgumentType(0)->GetKind(), TType::EKind::Stream);
         UNIT_ASSERT_EQUAL(info.FunctionType->GetReturnType()->GetKind(), TType::EKind::Stream);
     }
 }

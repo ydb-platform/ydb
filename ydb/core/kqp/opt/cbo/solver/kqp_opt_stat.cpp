@@ -153,7 +153,7 @@ namespace {
         // Remote calls require runtime secret resolution, including when they
         // are nested inside a map over constant input.
         if (NYql::FindNode(input->ChildPtr(1), [](const TExprNode::TPtr& node) {
-                return node->IsCallable("Udf") && node->Head().Content().StartsWith("Knn.ApplyRemoteEmbedder");
+                return node->IsCallable("Udf") && node->Head().Content() == "Knn.ApplyRemoteEmbedder";
             })) {
             return false;
         }

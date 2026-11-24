@@ -7,14 +7,14 @@ namespace NKikimr::NKqp {
 
 void FillRemoteEmbedderSecureParams(const NYql::TExprNode::TPtr& node, THashMap<TString, TString>& secureParams) {
     NYql::VisitExpr(node, [&](const NYql::TExprNode::TPtr& expr) {
-        if (!expr->IsCallable("Apply") || expr->ChildrenSize() < 4 || !expr->Head().IsCallable("Udf")) {
+        if (!expr->IsCallable("Apply") || expr->ChildrenSize() < 5 || !expr->Head().IsCallable("Udf")) {
             return true;
         }
         const auto name = expr->Head().Head().Content();
-        if (name != "Knn.ApplyRemoteEmbedder" && name != "Knn.ApplyRemoteEmbedderStream") {
+        if (name != "Knn.ApplyRemoteEmbedder") {
             return true;
         }
-        const auto& secret = *expr->Child(3);
+        const auto& secret = *expr->Child(4);
         YQL_ENSURE(secret.IsCallable("String") && secret.ChildrenSize() == 1 && secret.Head().IsAtom() && !secret.Head().Content().empty(),
             "RemoteEmbedder: AuthSecretName must be a non-empty String literal");
         const TString secretName(secret.Head().Content());

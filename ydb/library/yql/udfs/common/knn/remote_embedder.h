@@ -5,19 +5,10 @@
 namespace NKnn {
 
 struct TRemoteEmbedder {
+    using TTypeAwareMarker = void;
+
     static NYql::NUdf::TStringRef Name() {
         return NYql::NUdf::TStringRef::Of("ApplyRemoteEmbedder");
-    }
-
-    static bool DeclareSignature(const NYql::NUdf::TStringRef& name, NYql::NUdf::TType* userType,
-        NYql::NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly);
-};
-
-struct TRemoteEmbedderStream {
-    using TTypeAwareMarker = bool;
-
-    static NYql::NUdf::TStringRef Name() {
-        return NYql::NUdf::TStringRef::Of("ApplyRemoteEmbedderStream");
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name, NYql::NUdf::TType* userType,

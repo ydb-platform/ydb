@@ -510,7 +510,6 @@ SIMPLE_MODULE(TKnnModule,
               TCosineDistance,
               TManhattanDistance,
               TEuclideanDistance,
-              NKnn::TRemoteEmbedder,
-              NKnn::TRemoteEmbedderStream)
+              NKnn::TRemoteEmbedder)
 
 REGISTER_MODULES(TKnnModule)

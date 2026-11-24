@@ -7,14 +7,14 @@
 namespace NKikimr::NKqp {
 namespace {
 
-NYql::TExprNode::TPtr Apply(NYql::TExprContext& ctx, TStringBuf function, const NYql::TExprNode::TPtr& secret) {
+NYql::TExprNode::TPtr Apply(NYql::TExprContext& ctx, TStringBuf function, const NYql::TExprNode::TPtr& secret, bool stream = false) {
     const auto pos = ctx.AppendPosition({});
     return ctx.NewCallable(pos, "Apply", {
         ctx.NewCallable(pos, "Udf", {ctx.NewAtom(pos, function)}),
+        stream ? ctx.NewArgument(pos, "input") : ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "text")}),
         ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "model")}),
         ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "http://localhost/v1")}),
-        secret,
-        ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "text")})});
+        secret});
 }
 
 } // namespace
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
         const auto pos = ctx.AppendPosition({});
         const auto secret = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "/Root/openai_token")});
         const auto scalar = Apply(ctx, "Knn.ApplyRemoteEmbedder", secret);
-        const auto stream = Apply(ctx, "Knn.ApplyRemoteEmbedderStream", secret);
+        const auto stream = Apply(ctx, "Knn.ApplyRemoteEmbedder", secret, /*stream=*/true);
         const auto program = ctx.NewList(pos, {scalar, stream});
         THashMap<TString, TString> params;
         FillRemoteEmbedderSecureParams(program, params);
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
             FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedder", parameter), params),
             yexception, "AuthSecretName must be a non-empty String literal");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedderStream", empty), params),
+            FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedder", empty, /*stream=*/true), params),
             yexception, "AuthSecretName must be a non-empty String literal");
     }
 }

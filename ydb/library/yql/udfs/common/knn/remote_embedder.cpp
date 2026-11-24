@@ -56,12 +56,12 @@ public:
         Headers_["Authorization"] = "Bearer " + token;
     }
 
+    TBatchResult Apply(const TString& text) {
+        return ApplyRequest(NJson::TJsonValue(text), 1, Max<size_t>(1, text.size()));
+    }
+
     TBatchResult Apply(const TVector<TString>& texts) {
-        NJson::TJsonValue request(NJson::JSON_MAP);
-        request["model"] = Model_;
-        request["encoding_format"] = "float";
-        auto& input = request["input"];
-        input.SetType(NJson::JSON_ARRAY);
+        NJson::TJsonValue input(NJson::JSON_ARRAY);
         ui64 estimatedTokens = 0;
         for (const auto& text : texts) {
             input.AppendValue(text);
@@ -69,6 +69,15 @@ public:
             // estimate for byte-based tokenizers, including non-ASCII input.
             estimatedTokens += Max<size_t>(1, text.size());
         }
+        return ApplyRequest(std::move(input), texts.size(), estimatedTokens);
+    }
+
+private:
+    TBatchResult ApplyRequest(NJson::TJsonValue input, size_t count, ui64 estimatedTokens) {
+        NJson::TJsonValue request(NJson::JSON_MAP);
+        request["model"] = Model_;
+        request["encoding_format"] = "float";
+        request["input"] = std::move(input);
         const TString body = NJson::WriteJson(request);
         for (ui64 attempt = 0; ; ++attempt) {
             Throttle(estimatedTokens);
@@ -81,7 +90,7 @@ public:
                 Client_->ResetConnection();
             }
             if (status >= 200 && status < 300) {
-                return ParseResponse(response.Str(), texts.size(), status, estimatedTokens);
+                return ParseResponse(response.Str(), count, status, estimatedTokens);
             }
             if (attempt >= MaxRetries_ || !(status == TransportError || status == 408 || status == 429 || status >= 500)) {
                 return {status, {}};
@@ -90,7 +99,6 @@ public:
         }
     }
 
-private:
     void Throttle(ui64 tokens) {
         if (!TokensPerSecond_) {
             return;
@@ -175,8 +183,8 @@ class TEmbedderStream: public TBoxedValue {
 public:
     TEmbedderStream(const IValueBuilder* builder, const TUnboxedValuePod* args, ui32 textIndex, ui32 passThroughIndex, TSourcePosition pos)
         : Builder_(builder)
-        , Input_(args[3])
-        , Client_(TString(args[0].AsStringRef()), args[1].AsStringRef(), GetToken(builder, args[2].AsStringRef()),
+        , Input_(args[0])
+        , Client_(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()),
               args[6] ? args[6].Get<ui32>() : DefaultMaxRetries, args[5] ? args[5].Get<ui32>() : 0)
         , BatchSize_(args[4] ? args[4].Get<ui32>() : DefaultBatchSize)
         , TextIndex_(textIndex)
@@ -256,9 +264,9 @@ private:
         if (Stream_) {
             return TUnboxedValuePod(new TEmbedderStream(builder, args, TextIndex_, PassThroughIndex_, Pos_));
         }
-        TEmbedderClient client(TString(args[0].AsStringRef()), args[1].AsStringRef(), GetToken(builder, args[2].AsStringRef()),
+        TEmbedderClient client(TString(args[1].AsStringRef()), args[2].AsStringRef(), GetToken(builder, args[3].AsStringRef()),
             args[4] ? args[4].Get<ui32>() : DefaultMaxRetries, 0);
-        return MakeResult(builder, client.Apply({TString(args[3].AsStringRef())}), 0);
+        return MakeResult(builder, client.Apply(TString(args[0].AsStringRef())), 0);
     } catch (const std::exception& e) {
         UdfTerminate((TStringBuilder() << builder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
     }
@@ -269,21 +277,22 @@ private:
     ui32 PassThroughIndex_;
 };
 
-void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly, bool stream) try {
+void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) try {
+    const auto helper = builder.TypeInfoHelper();
+    const TTupleTypeInspector user(*helper, userType);
+    const TTupleTypeInspector positional(*helper, user && user.GetElementsCount() ? user.GetElementType(0) : nullptr);
+    const auto* firstArg = positional && positional.GetElementsCount() ? positional.GetElementType(0) : nullptr;
+    const TStreamTypeInspector input(*helper, firstArg);
+    const TListTypeInspector listHint(*helper, firstArg);
+    const bool stream = input || listHint;
     const TType* inputType = nullptr;
     const TType* passThroughType = nullptr;
     ui32 textIndex = 0;
     ui32 passThroughIndex = 0;
     if (stream) {
-        const auto helper = builder.TypeInfoHelper();
-        const TTupleTypeInspector user(*helper, userType);
-        const TTupleTypeInspector args(*helper, user && user.GetElementsCount() ? user.GetElementType(0) : nullptr);
-        const auto sequenceType = args && args.GetElementsCount() > 3 ? args.GetElementType(3) : nullptr;
-        const TStreamTypeInspector input(*helper, sequenceType);
-        const TListTypeInspector listHint(*helper, sequenceType);
         // PROCESS supplies a List hint for TableRows(), then SqlProcess
         // adapts its input to the Stream argument declared below.
-        const auto rowType = input ? input.GetItemType() : listHint ? listHint.GetItemType() : nullptr;
+        const auto rowType = input ? input.GetItemType() : listHint.GetItemType();
         const TStructTypeInspector row(*helper, rowType);
         if (!row || row.GetMembersCount() != 2 ||
             (textIndex = row.GetMemberIndex("Text")) == Max<ui32>() ||
@@ -294,8 +303,8 @@ void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& bui
         }
         inputType = builder.Stream()->Item(rowType).Build();
         passThroughType = row.GetMemberType(passThroughIndex);
-        builder.UserType(userType);
     }
+    builder.UserType(userType);
     auto result = builder.Struct(stream ? 3 : 2);
     result->AddField<char*>("Embedding", nullptr);
     if (stream) {
@@ -305,15 +314,17 @@ void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& bui
     const auto resultType = result->Build();
     builder.Returns(stream ? builder.Stream()->Item(resultType).Build() : resultType).OptionalArgs(stream ? 3 : 1);
     auto args = builder.Args(stream ? 7 : 5);
+    if (stream) {
+        args->Add(inputType).Name("InputStream");
+    } else {
+        args->Add<char*>().Name("Text");
+    }
     args->Add<char*>().Name("Model");
     args->Add<char*>().Name("BaseUrl");
     args->Add<char*>().Name("AuthSecretName");
     if (stream) {
-        args->Add(inputType).Name("InputStream");
         args->Add<TOptional<ui32>>().Name("BatchSize");
         args->Add<TOptional<ui32>>().Name("MaxTokensPerSecond");
-    } else {
-        args->Add<char*>().Name("Text");
     }
     args->Add<TOptional<ui32>>().Name("MaxRetries");
     args->Done();
@@ -332,15 +343,7 @@ bool TRemoteEmbedder::DeclareSignature(const TStringRef& name, TType* userType, 
     if (name != Name()) {
         return false;
     }
-    BuildRemoteEmbedderSignature(userType, builder, typesOnly, false);
-    return true;
-}
-
-bool TRemoteEmbedderStream::DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
-    if (name != Name()) {
-        return false;
-    }
-    BuildRemoteEmbedderSignature(userType, builder, typesOnly, true);
+    BuildRemoteEmbedderSignature(userType, builder, typesOnly);
     return true;
 }
 

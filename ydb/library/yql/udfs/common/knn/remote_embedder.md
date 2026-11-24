@@ -3,18 +3,18 @@
 Implements the [remote embedder RFC](https://wiki.yandex-team.ru/kikimr/developers/rfc/udf-dlja-udalennogo-jembeddera/)
 using the [OpenAI-compatible embeddings API](https://developers.openai.com/api/reference/resources/embeddings/methods/create).
 
-The bare SQL names `ApplyRemoteEmbedder` and `ApplyRemoteEmbedderStream` from
-the RFC are aliases for the functions in the `Knn` module.
+The SQL name `ApplyRemoteEmbedder` is an alias for `Knn::ApplyRemoteEmbedder`.
+The first argument selects the scalar or streaming form.
 
 ```text
 Knn::ApplyRemoteEmbedder(
-    Model:String, BaseUrl:String, AuthSecretName:String, Text:String,
+    Text:String, Model:String, BaseUrl:String, AuthSecretName:String,
     MaxRetries:Uint32? = 5
 ) -> Struct<Embedding:String, Status:Uint32>
 
-Knn::ApplyRemoteEmbedderStream(
-    Model:String, BaseUrl:String, AuthSecretName:String,
+Knn::ApplyRemoteEmbedder(
     InputStream:Stream<Struct<Text:String, PassThrough:T>>,
+    Model:String, BaseUrl:String, AuthSecretName:String,
     BatchSize:Uint32? = 32, MaxTokensPerSecond:Uint32? = 0,
     MaxRetries:Uint32? = 5
 ) -> Stream<Struct<Embedding:String, Status:Uint32, PassThrough:T>>
@@ -23,6 +23,8 @@ Knn::ApplyRemoteEmbedderStream(
 `BaseUrl` is the API base URL, for example `https://api.openai.com/v1`.
 The UDF appends `/embeddings`, accepting a trailing slash in the base URL.
 HTTP and HTTPS are supported; HTTPS verifies the server certificate.
+The scalar request sends `input` as a JSON string. The streaming request sends
+each batch as a JSON array.
 The token is read from the execution environment's UDF secure parameters using
 `AuthSecretName` and sent as `Authorization: Bearer <token>`. In KQP queries,
 `AuthSecretName` must be a non-empty String literal naming a database secret;
@@ -61,7 +63,7 @@ quota.
 
 ```sql
 SELECT Knn::ApplyRemoteEmbedder(
-    'text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token', 'Дом');
+    'Дом', 'text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token');
 
 $requests = AsList(
     AsStruct('Молоко' AS Text, AsStruct(1 AS Id) AS PassThrough),
@@ -71,8 +73,8 @@ $requests = AsList(
 SELECT Embedding, Status, PassThrough
 FROM (
     PROCESS AS_TABLE($requests)
-    USING Knn::ApplyRemoteEmbedderStream(
-        'text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token',
-        TableRows(), 32u, 10240u, 5u)
+    USING Knn::ApplyRemoteEmbedder(
+        TableRows(), 'text-embedding-3-large', 'https://api.openai.com/v1',
+        'openai_token', 32u, 10240u, 5u)
 );
 ```

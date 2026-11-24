@@ -19,8 +19,7 @@ namespace {
 
 using namespace NSQLv1Generated;
 
-constexpr TStringBuf AliasPrefix = "ApplyRemoteEmbedder";
-constexpr TStringBuf StreamAlias = "ApplyRemoteEmbedderStream";
+constexpr TStringBuf Alias = "ApplyRemoteEmbedder";
 
 TStringBuf GetAlias(TStringBuf name, bool normalize) {
     TString decoded;
@@ -44,13 +43,7 @@ TStringBuf GetAlias(TStringBuf name, bool normalize) {
         }
         name = normalized;
     }
-    if (AsciiEqualsIgnoreCase(name, AliasPrefix)) {
-        return AliasPrefix;
-    }
-    if (AsciiEqualsIgnoreCase(name, StreamAlias)) {
-        return StreamAlias;
-    }
-    return {};
+    return AsciiEqualsIgnoreCase(name, Alias) ? Alias : TStringBuf{};
 }
 
 bool MayContainAlias(TStringBuf query) {

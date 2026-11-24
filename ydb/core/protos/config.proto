@@ -2108,7 +2108,7 @@ message TImmediateControlsConfig {
             DefaultValue: 0,
         }];
 
-        optional uint64 EnablePhantomFlagStorageReplication = 57 [(ControlOptions) = {
+        optional uint64 EnablePhantomFlagStorageReplication = 58 [(ControlOptions) = {
             Description: "Enable persistent PhantomFlagStorage replication when a VDisk starts",
             MinValue: 0,
             MaxValue: 1,

@@ -152,8 +152,9 @@ storage
 1. ㉓ **BSC manages static group** (reconfiguration of the static BlobStorage group must be done BlobStorage Controller as for any other group)
 1. ㉓ **(Semi-)Hard disk space separation** (Better guarantees for disk space usage by VDisks on a single PDisk)
 1. ㉓ **Reduce space amplification** (Optimize storage layer)
-1. ✅ ㉓ **Storage nodes decommission** (Add ability to remove storage nodes)
-2. 🚧 ㉕ **Bridge Cluster Configuration** (available, rolling out)
+1. ✅ ㉓ **Storage nodes decommission** (add ability to remove storage nodes)
+1. 🚧 ㉕ **Bridge Cluster Configuration** (available, rolling out)
+1. ㉖ **Mirror-3-dc degraded-mode operation for -2DCs** (support operation with two datacenters unavailable, reconfiguration is required to restore quorum)
 
 
 ## Analytical Capabilities

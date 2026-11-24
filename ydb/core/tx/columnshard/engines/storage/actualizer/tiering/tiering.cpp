@@ -12,21 +12,39 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(
-    const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
-    if (!TargetCriticalSchema) {
-        return portionSchema;
+namespace {
+
+bool NeedsTierChange(const TString& current, const TString& target, const TTiering& tiering, const bool tieringNeedActualization) {
+    if (current == target) {
+        return false;
     }
-    if (portionSchema->GetVersion() < TargetCriticalSchema->GetVersion()) {
-        return TargetCriticalSchema;
+
+    if (tieringNeedActualization || current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
+        target == NTiering::NCommon::DeleteTierName) {
+        return true;
     }
-    return portionSchema;
+
+    using NColumnShard::NTiers::TExternalStorageId;
+    const auto currentStorage = TExternalStorageId::FromString(current);
+    if (currentStorage.GetConfigPath() != TExternalStorageId::FromString(target).GetConfigPath()) {
+        return true;
+    }
+
+    for (auto&& tier : tiering.GetOrderedTiers()) {
+        if (tier.Get().GetExternalStorageId() == currentStorage) {
+            return true;
+        }
+    }
+
+    return false;
 }
+
+}   // namespace
 
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(
     const TPortionInfo& portion, const TInstant now) const {
     std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-    std::shared_ptr<ISnapshotSchema> targetSchema = GetTargetSchema(portionSchema);
+    std::shared_ptr<ISnapshotSchema> targetSchema = portion.GetRewriteSchema(VersionedIndex);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
 
     if (Tiering) {
@@ -221,8 +239,8 @@ void TTieringActualizer::DoExtractTasks(
                     continue;
                 }
                 auto portionScheme = portion->GetSchema(VersionedIndex);
-                TPortionEvictionFeatures features(
-                    portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+                TPortionEvictionFeatures features(portion->GetSchemaVersionVerified(), portionScheme, info->GetTargetScheme(),
+                    portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
                 switch (tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
@@ -287,7 +305,6 @@ void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAdd
     if (Tiering) {
         newTieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     }
-    TargetCriticalSchema = VersionedIndex.GetLastCriticalSchema();
     PortionsInfo.clear();
     NewPortionIds.clear();
     PortionIdByWaitDuration.clear();

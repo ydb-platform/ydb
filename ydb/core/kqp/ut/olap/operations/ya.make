@@ -11,6 +11,8 @@ ELSE()
 ENDIF()
 
 SRCS(
+    cache_blobs_after_write_ut.cpp
+    compact_ut.cpp
     delete_ut.cpp
     write_ut.cpp
 )

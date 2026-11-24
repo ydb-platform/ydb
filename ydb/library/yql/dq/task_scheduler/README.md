@@ -1,5 +1,7 @@
 # Experimental task scheduling
 
+Measured kqprun runs and what to do next are in [sched-runs/README.md](../../../../../sched-runs/README.md). The paragraphs below describe the original design. Later commits also run datashard range reads on workers, and S3 sources only when `YDB_DQ_TASK_S3_SOURCES=1`.
+
 This PoC has a [pool of reusable anonymous compute workers](worker_pool_design.md)
 with ready-query and per-query ready-task queues. The older dispatcher mode is
 retained as a comparison baseline. Task scheduling is disabled by default and

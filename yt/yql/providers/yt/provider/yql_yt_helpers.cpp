@@ -2487,6 +2487,19 @@ bool HasYtRowNumber(const TExprNode& node) {
     return hasRowNumber;
 }
 
+bool HasYtTableIndex(const TExprNode& node) {
+    bool hasTableIndex = false;
+    VisitExpr(node, [&hasTableIndex](const TExprNode& n) {
+        if (TYtTableIndex::Match(&n)) {
+            hasTableIndex = true;
+        } else if (TYtOutput::Match(&n)) {
+            return false;
+        }
+        return !hasTableIndex;
+    });
+    return hasTableIndex;
+}
+
 bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<void(const TString&)> unsupportedHandler) {
     auto meta = TYtTableBaseInfo::GetMeta(tableNode);
     if (meta->InferredScheme) {

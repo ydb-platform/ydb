@@ -475,6 +475,7 @@ public:
     }
 
     mutable NKikimrKqp::TEvQueryRequest Record;
+    std::optional<bool> DisablePgCompatibility;
 
 private:
     void PrepareRemote() const;

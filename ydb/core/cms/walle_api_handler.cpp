@@ -95,7 +95,12 @@ private:
         if (params.contains("dry_run"))
             request->Record.SetDryRun(params.find("dry_run")->second == "true");
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        if (request->Record.GetDrainData()) {
+            CreateTaskRequest = request.Release();
+        } else {
+            NTabletPipe::SendData(ctx, CmsPipe, request.Release());
+        }
         Become(&TThis::StateCreateTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -139,7 +144,8 @@ private:
     void ProcessListTasksRequest(const TActorContext &ctx) {
         TAutoPtr<TEvCms::TEvWalleListTasksRequest> request = new TEvCms::TEvWalleListTasksRequest;
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateListTasks, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -187,7 +193,8 @@ private:
         TAutoPtr<TEvCms::TEvWalleCheckTaskRequest> request = new TEvCms::TEvWalleCheckTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateCheckTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -232,7 +239,8 @@ private:
         TAutoPtr<TEvCms::TEvWalleRemoveTaskRequest> request = new TEvCms::TEvWalleRemoveTaskRequest;
         request->Record.SetTaskId(id);
 
-        SendToCms(request.Release(), ctx);
+        CreateCmsPipe(ctx);
+        NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         Become(&TThis::StateRemoveTask, ctx, TDuration::Seconds(60), new TEvents::TEvWakeup());
     }
 
@@ -326,7 +334,7 @@ private:
         ReplyWithError(TString("HTTP/1.1 408 Request Timeout\r\n\r\nCMS request timeout"), ctx);
     }
 
-    void SendToCms(IEventBase *ev, const TActorContext &ctx) {
+    void CreateCmsPipe(const TActorContext &ctx) {
         Y_ABORT_UNLESS(!CmsPipe);
 
         NTabletPipe::TClientConfig pipeConfig;
@@ -335,17 +343,28 @@ private:
             .MaxRetryTime = TDuration::Seconds(10),
         };
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
-        NTabletPipe::SendData(ctx, CmsPipe, ev);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        if (msg->ClientId != CmsPipe || msg->Status == NKikimrProto::OK) {
+        if (msg->ClientId != CmsPipe) {
             return;
         }
 
-        HandlePipeDestroyed(ctx);
+        if (msg->Status != NKikimrProto::OK) {
+            HandlePipeDestroyed(ctx);
+            return;
+        }
+
+        if (CreateTaskRequest) {
+            NKikimrCms::TVersionInfo versionInfo;
+            if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportWalleDrainData()) {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\nCMS does not support drain_data", ctx);
+                return;
+            }
+            NTabletPipe::SendData(ctx, CmsPipe, CreateTaskRequest.Release());
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
@@ -366,6 +385,7 @@ private:
     }
 
     NMon::TEvHttpInfo::TPtr RequestEvent;
+    TAutoPtr<TEvCms::TEvWalleCreateTaskRequest> CreateTaskRequest;
     TActorId CmsPipe;
 };
 

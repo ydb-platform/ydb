@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blobstorage_hullcompactworker.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events_quoter.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -219,6 +220,10 @@ namespace NKikimr {
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
                 ui64 bytes = GetMsgSize(msg);
+                if (msg->Type() == TEvBlobStorage::EvChunkWrite) {
+                    // Seal the sectors here, in the compaction actor, rather than in the PDisk thread.
+                    PrepareChunkWriteSectors(*static_cast<NPDisk::TEvChunkWrite*>(msg.get()), *PDiskCtx);
+                }
                 TEventsQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
                             PDiskCtx->PDiskId, ctx.SelfID, msg.release()), bytes, HullCtx->VCfg->HullCompThrottlerBytesRate);
                 ++PendingResponses;

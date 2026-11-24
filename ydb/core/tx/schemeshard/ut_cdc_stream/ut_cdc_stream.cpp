@@ -569,6 +569,49 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
+    Y_UNIT_TEST(TopicAutoPartitioningMinGreaterThanMax) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+            TopicPartitions: 64
+            TopicAutoPartitioning: true
+            MaxPartitionCount: 10
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid min and max partition count"}});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+            TopicPartitions: 10
+            TopicAutoPartitioning: true
+            MaxPartitionCount: 10
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathExist});
+    }
+
     Y_UNIT_TEST(Attributes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
@@ -841,7 +884,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
     }
 
-    Y_UNIT_TEST(ShouldNotPartitionTopicByHashWhenStreamSendsPeriodicResolvedHeartbeats) {
+    Y_UNIT_TEST(ShouldPartitionTopicByHashWhenKeyRangeFlagDisabledAndStreamSendsResolvedHeartbeats) {
         // given
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
         const auto stream = GlobalReplicationStream(true, true);
@@ -850,8 +893,59 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         const auto params = NCdc::MakeCdcPqPartParams(stream, 50'000, maxShardsInPath, TFeatureFlags());
 
         // then
-        UNIT_ASSERT(!params.ReplicationAutoPartitioning);
-        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000 / 16);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(CdcStreamTopicUnsetMaxDefaults) {
+        // An unset max defaults to max(min, 50) in DoCreatePqPart: a min above 50
+        // is always covered (min=64 -> max=64), a small one keeps the historical
+        // ceiling of 50 (min=10 -> max=50). Without the default, min > max used
+        // to hit "Invalid min and max partition count specified: 64 > 50", which
+        // was silently accepted and left the stream without a topic.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        ui64 txId = 100;
+
+        for (const TString name : {"Table64", "Table10"}) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", name.data()));
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "%s"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+                TopicPartitions: %u
+                TopicAutoPartitioning: true
+            )", name.data(), name == "Table64" ? 64 : 10));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        {
+            const auto topicDescribe = DescribePrivatePath(runtime, "/MyRoot/Table64/Stream/streamImpl");
+            TestDescribeResult(topicDescribe, {NLs::PathExist});
+            const auto& strategy = topicDescribe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMinPartitionCount(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMaxPartitionCount(), 64);
+        }
+        {
+            const auto topicDescribe = DescribePrivatePath(runtime, "/MyRoot/Table10/Stream/streamImpl");
+            TestDescribeResult(topicDescribe, {NLs::PathExist});
+            const auto& strategy = topicDescribe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMinPartitionCount(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMaxPartitionCount(), 50);
+        }
     }
 
     Y_UNIT_TEST(DocApi) {

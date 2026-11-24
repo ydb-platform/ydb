@@ -70,8 +70,27 @@ message ConnectionInternal {
     string cloud_id = 2;
 }
 
+message BindingRename {
+    enum State {
+        PREPARED = 0;
+        COMMITTED = 1;
+        ABORTED = 2;
+        FINISHED = 3;
+    }
+    string operation_id = 1;
+    State state = 2;
+    string source_name = 3;
+    int64 source_revision = 4;
+    string source_identity = 5;
+    FederatedQuery.BindingContent destination = 6;
+    string idempotency_key = 7;
+    string user = 8;
+    string candidate_identity = 9;
+}
+
 message BindingInternal {
     string cloud_id = 2;
+    BindingRename rename = 3;
 }
 
 message ComputeDatabaseInternal {

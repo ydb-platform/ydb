@@ -49,6 +49,26 @@ bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
+std::optional<TWriteModeError> GetWriteModeError(const NKikimrPQ::TPQTabletConfig& config) {
+    switch (config.GetWriteMode()) {
+        case NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE:
+            return std::nullopt;
+        case NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::ERROR,
+                .Status = Ydb::StatusIds::UNAVAILABLE,
+                .Reason = "Write to topic is temporarily disabled",
+            };
+        case NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED:
+            return TWriteModeError{
+                .Code = NPersQueue::NErrorCode::BAD_REQUEST,
+                .Status = Ydb::StatusIds::BAD_REQUEST,
+                .Reason = "Write to topic is prohibited",
+            };
+    }
+    return std::nullopt;
+}
+
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
     return std::count_if(partitions.begin(), partitions.end(), [](const auto& p) {
         return p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active;

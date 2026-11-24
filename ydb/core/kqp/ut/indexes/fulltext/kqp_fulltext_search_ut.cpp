@@ -3614,6 +3614,217 @@ Y_UNIT_TEST(SubstringSuggest) {
     }
 }
 
+Y_UNIT_TEST(SubstringSuggestRefs) {
+    auto kikimr = KikimrWithCompact(true);
+    auto db = kikimr.GetQueryClient();
+
+    auto create = db.ExecuteQuery(R"sql(
+        CREATE TABLE refs (
+            name Utf8,
+            commit String,
+            changed_timestamp Uint64,
+            generation Uint64,
+            `default` Bool,
+            PRIMARY KEY (name)
+        );
+    )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO refs (name, commit, changed_timestamp, generation, `default`) VALUES
+            (NULL, "null-key", 9u, 0u, false),
+            ("topic/fix_1"u, "a", 10u, 1u, false),
+            ("fix_1/z"u, "b", 11u, 2u, false),
+            ("feature/prefix_1"u, "c", 12u, 3u, false),
+            ("fix_1/a"u, "d", 13u, 4u, false),
+            ("fix_1"u, "e", 14u, 5u, true),
+            ("topic/fix-1"u, "f", 15u, 6u, false),
+            ("topic/FIX_1"u, "g", 16u, 7u, false),
+            ("topic/100%"u, "h", 17u, 8u, false),
+            ("topic/100x"u, "i", 18u, 9u, false),
+            ("topic/é!_%"u, "j", 19u, 10u, false),
+            ("topic/é!XY"u, "k", 20u, 11u, false),
+            ("topic/ёж/я"u, "l", 21u, 12u, false),
+            ("topic/null-metadata"u, NULL, NULL, NULL, NULL),
+            ("topic/abcdefghijklmnopqrstu"u, "m", 22u, 13u, false),
+            -- Both 20-character grams occur, in reverse order on either side of the slash.
+            ("topic/bcdefghijklmnopqrstu/abcdefghijklmnopqrst"u, "n", 23u, 14u, false);
+
+        UPSERT INTO refs (name) VALUES
+            ("!"u), ("!!"u), ("!_%/tail"u), ("%"u), ("%/tail"u), ("_"u), ("_/tail"u),
+            ("sym%tag"u), ("sym%tag/v2"u), ("topic/sym%tag"u),
+            ("sym_tag"u), ("sym_tag/v2"u), ("topic/sym_tag"u),
+            ("sym!tag"u), ("sym!tag/v2"u), ("topic/sym!tag"u),
+            ("topic/symtag"u), ("topic/symXtag"u), ("topic/symXYZtag"u),
+            ("topic/!%tag"u), ("topic/sym!!_%%tag"u), ("topic/sym!!XYYtag"u);
+
+        -- These 64 rows sort before every gate%key, gate_key, x%q and x_q match.
+        -- All pass the four LIKE patterns and fail all four literal checks.
+        $lookalikes = ListMap(ListFromRange(0u, 64u), ($i) -> (
+            AsStruct(("a/"u || CAST($i AS Utf8) || "/gateXkey/xXq"u) AS name)
+        ));
+        UPSERT INTO refs SELECT * FROM AS_TABLE($lookalikes);
+        UPSERT INTO refs (name) VALUES
+            ("gate%key"u), ("gate%key/next"u), ("x%q/prefix"u),
+            ("z3/gate%key/x%q"u), ("z1/gate%key/x%q"u), ("z2/gate%key/x%q"u),
+            ("z2/gate_key/x_q"u), ("z1/gate_key/x_q"u);
+    )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    auto add = db.ExecuteQuery(R"sql(
+        ALTER TABLE refs ADD INDEX name_index GLOBAL USING fulltext_plain ON (name)
+        WITH (tokenizer=keyword, use_filter_ngram=true,
+              filter_ngram_min_length=3, filter_ngram_max_length=20);
+    )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(add.GetStatus(), EStatus::SUCCESS, add.GetIssues().ToString());
+
+    const TString query = R"__(
+        $prefixes = (
+            SELECT name, commit, changed_timestamp, generation, `default`
+            FROM refs
+            WHERE StartsWith(name, $target)
+            ORDER BY name
+            LIMIT $limit
+        );
+        -- Reuse these rows for the prefix results and the remaining-slot count.
+        $prefixRows = (SELECT AGGREGATE_LIST(TableRow()) FROM $prefixes) ?? [];
+
+        SELECT name, commit, changed_timestamp, generation, `default`
+        FROM (
+            SELECT p.*, 1 AS rank
+            FROM AS_TABLE($prefixRows) AS p
+
+            UNION ALL
+
+            SELECT name, commit, changed_timestamp, generation, `default`, 2 AS rank
+            FROM refs
+            WHERE name IN (
+                -- LIKE supplies index candidates. A positive FIND offset is a literal, non-prefix match.
+                SELECT name
+                FROM refs VIEW name_index
+                WHERE (
+                    name LIKE ('%'u || $target || '%'u) AND
+                    FIND(name, $target) > 0
+                )
+                ORDER BY name
+                LIMIT $limit - ListLength($prefixRows)
+            )
+        )
+        ORDER BY rank, name
+        LIMIT $limit;
+    )__";
+
+    const TString referenceQuery = R"sql(
+        SELECT name, commit, changed_timestamp, generation, `default`
+        FROM refs VIEW PRIMARY KEY
+        WHERE String::Contains(name, $target)
+        ORDER BY StartsWith(name, $target) DESC, name
+        LIMIT $limit;
+    )sql";
+
+    struct TCase {
+        const char* Target;
+        ui64 Limit;
+        std::vector<std::string> Names;
+        ui64 ExpectedBaseReads;
+        // Upper bound when prefixes fill the limit and can cancel the posting reads.
+        ui64 ExpectedIndexTableReads;
+    };
+    // A fallback scans the 110 keys in name order until it fills the remaining slots or reaches the end.
+    // In this compact index each search term present in the fixture fits in one posting row.
+    const TCase cases[] = {
+        {"fix_1", 0, {}, 0, 1},
+        {"fix_1", 1, {"fix_1"}, 1, 1},
+        {"fix_1", 2, {"fix_1", "fix_1/a"}, 2, 1},
+        {"fix_1", 3, {"fix_1", "fix_1/a", "fix_1/z"}, 3, 1},
+        {"fix_1", 4, {"fix_1", "fix_1/a", "fix_1/z", "feature/prefix_1"}, 4, 1},
+        {"fix_1", 10, {"fix_1", "fix_1/a", "fix_1/z", "feature/prefix_1", "topic/fix_1"}, 5, 1},
+        {"ix_1", 1, {"feature/prefix_1"}, 74, 0},
+        {"100%", 10, {"topic/100%"}, 1, 1},
+        {"0%", 10, {"topic/100%"}, 111, 0},
+        {"%", 3, {"%", "%/tail", "!_%/tail"}, 7, 0},
+        {"_", 3, {"_", "_/tail", "!_%/tail"}, 7, 0},
+        {"!", 4, {"!", "!!", "!_%/tail", "sym!tag"}, 83, 0},
+        // Each target has an exact match, a prefix and an interior match.
+        // The wildcard lookalikes also pass LIKE for the first two targets.
+        {"sym%tag", 10, {"sym%tag", "sym%tag/v2", "topic/sym%tag"}, 3, 2},
+        {"sym_tag", 10, {"sym_tag", "sym_tag/v2", "topic/sym_tag"}, 3, 2},
+        {"sym!tag", 10, {"sym!tag", "sym!tag/v2", "topic/sym!tag"}, 3, 1},
+        {"%tag", 10, {"sym%tag", "sym%tag/v2", "topic/!%tag", "topic/sym!!_%%tag", "topic/sym%tag"}, 5, 1},
+        {"_tag", 10, {"sym_tag", "sym_tag/v2", "topic/sym_tag"}, 3, 1},
+        {"!tag", 10, {"sym!tag", "sym!tag/v2", "topic/sym!tag"}, 3, 1},
+        {"!!", 10, {"!!", "topic/sym!!XYYtag", "topic/sym!!_%%tag"}, 113, 0},
+        {"%%", 10, {"topic/sym!!_%%tag"}, 111, 0},
+        {"__", 10, {}, 110, 0},
+        {"!%", 10, {"topic/!%tag"}, 111, 0},
+        {"!_%", 10, {"!_%/tail", "topic/sym!!_%%tag", "topic/é!_%"}, 113, 0},
+        {"%_", 10, {}, 110, 0},
+        {"!!_%%tag", 10, {"topic/sym!!_%%tag"}, 1, 1},
+        {R"(\_)", 10, {}, 110, 0},
+        {"é!_%", 10, {"topic/é!_%"}, 111, 0},
+        {"ёж", 10, {"topic/ёж/я"}, 111, 0},
+        {"ёж/", 10, {"topic/ёж/я"}, 1, 1},
+        {"abcdefghijklmnopqrstu", 10, {"topic/abcdefghijklmnopqrstu"}, 1, 2},
+        {"topic/null", 1, {"topic/null-metadata"}, 1, 1},
+        {"null-metadata", 1, {"topic/null-metadata"}, 1, 1},
+        {"", 2, {"!", "!!"}, 2, 0},
+        {"missing", 10, {}, 0, 0},
+        // The n-gram index supplies the gate candidates. Only winning rows need payload reads.
+        {"gate_key", 1, {"z1/gate_key/x_q"}, 1, 2},
+        {"gate_key", 2, {"z1/gate_key/x_q", "z2/gate_key/x_q"}, 2, 2},
+        {"gate%key", 2, {"gate%key", "gate%key/next"}, 2, 2},
+        {"gate%key", 3, {"gate%key", "gate%key/next", "z1/gate%key/x%q"}, 3, 2},
+        {"gate%key", 4, {"gate%key", "gate%key/next", "z1/gate%key/x%q", "z2/gate%key/x%q"}, 4, 2},
+        // With no three-character literal run, the same LIMIT boundaries exercise the scan fallback.
+        {"x_q", 1, {"z1/gate_key/x_q"}, 108, 0},
+        {"x_q", 2, {"z1/gate_key/x_q", "z2/gate_key/x_q"}, 111, 0},
+        {"x%q", 1, {"x%q/prefix"}, 1, 0},
+        {"x%q", 2, {"x%q/prefix", "z1/gate%key/x%q"}, 108, 0},
+        {"x%q", 3, {"x%q/prefix", "z1/gate%key/x%q", "z2/gate%key/x%q"}, 111, 0},
+        {"x%q", 5, {"x%q/prefix", "z1/gate%key/x%q", "z2/gate%key/x%q", "z3/gate%key/x%q"}, 114, 0},
+    };
+    for (const auto& test : cases) {
+        const auto params = TParamsBuilder()
+            .AddParam("$target").Utf8(test.Target).Build()
+            .AddParam("$limit").Uint64(test.Limit).Build()
+            .Build();
+        const auto settings = NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic);
+        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!HasIssue(result.GetIssues(), NYql::TIssuesIds::YQL_S_EXPRESSIONS_CALL), result.GetIssues().ToString());
+        const auto& stats = TProtoAccessor::GetProto(*result.GetStats());
+        AssertTableStats(stats, "/Root/refs", {.ExpectedReads = test.ExpectedBaseReads});
+        ui64 indexTableReads = 0;
+        for (const auto& phase : stats.query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (access.name() == "/Root/refs/name_index/indexImplTable") {
+                    indexTableReads += access.reads().rows();
+                }
+            }
+        }
+        const bool prefixesFillLimit = test.Names.size() == test.Limit &&
+            (test.Names.empty() || test.Names.back().starts_with(test.Target));
+        UNIT_ASSERT_C(prefixesFillLimit ? indexTableReads <= test.ExpectedIndexTableReads
+                                        : indexTableReads == test.ExpectedIndexTableReads,
+            "target=" << test.Target << ", limit=" << test.Limit << ", posting rows read=" << indexTableReads
+                << ", expected " << (prefixesFillLimit ? "at most " : "") << test.ExpectedIndexTableReads);
+
+        auto reference = db.ExecuteQuery(referenceQuery, NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(reference.GetStatus(), EStatus::SUCCESS, reference.GetIssues().ToString());
+        const auto expectedRows = reference.GetResultSet(0);
+        const auto actualRows = result.GetResultSet(0);
+        UNIT_ASSERT_C(actualRows.GetColumnsMeta() == expectedRows.GetColumnsMeta(), test.Target);
+        CompareYson(FormatResultSetYson(expectedRows), FormatResultSetYson(actualRows), test.Target);
+
+        std::vector<std::string> names;
+        TResultSetParser parser(actualRows);
+        while (parser.TryNextRow()) {
+            names.push_back(parser.ColumnParser("name").GetOptionalUtf8().value());
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(names, test.Names, "target=" << test.Target << ", limit=" << test.Limit);
+    }
+}
+
 Y_UNIT_TEST(FulltextMatchReadBatches) {
     const auto oldMaxSegment = NDataShard::gFulltextMaxSegment;
     const auto oldRead = GetDefaultReadSettings();

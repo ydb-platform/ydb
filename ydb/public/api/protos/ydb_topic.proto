@@ -1393,10 +1393,6 @@ message DescribeTopicResult {
     // Read speed for reading a single partition without a consumer, in messages per second.
     // Zero value means no limit.
     int64 partition_read_without_consumer_speed_messages_per_second = 22;
-
-    // Whether the total byte read rate is stored explicitly in the topic configuration.
-    // Unset when the server does not report quota provenance.
-    optional bool partition_total_read_speed_bytes_per_second_is_explicit = 23;
 }
 
 // Describe partition request sent from client to server.

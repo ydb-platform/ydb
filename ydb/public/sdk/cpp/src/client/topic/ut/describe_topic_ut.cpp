@@ -1,6 +1,5 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
-#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/sdk/cpp/tests/integration/topic/utils/describe.h>
@@ -12,15 +11,11 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(Describe) {
 
-        Y_UNIT_TEST_TWIN(SerializeToCreateTopicRequest, WithExplicitReadQuotaMarker) {
+        Y_UNIT_TEST(SerializeToCreateTopicRequest) {
             Ydb::Topic::DescribeTopicResult result;
             result.set_partition_write_speed_messages_per_second(100);
             result.set_partition_write_burst_messages(200);
             result.set_partition_total_read_speed_bytes_per_second(300);
-            if (WithExplicitReadQuotaMarker) {
-                result.set_partition_consumer_read_speed_bytes_per_second(150);
-                result.set_partition_total_read_speed_bytes_per_second_is_explicit(true);
-            }
             result.set_partition_total_read_speed_messages_per_second(400);
             result.set_partition_read_without_consumer_speed_bytes_per_second(500);
             result.set_partition_read_without_consumer_speed_messages_per_second(600);
@@ -37,33 +32,6 @@ namespace NYdb::inline Dev::NTopic::NTests {
             UNIT_ASSERT_VALUES_EQUAL(request.partition_read_without_consumer_speed_bytes_per_second(), 500);
             UNIT_ASSERT_VALUES_EQUAL(request.partition_read_without_consumer_speed_messages_per_second(), 600);
             UNIT_ASSERT(request.content_based_deduplication());
-        }
-
-        Y_UNIT_TEST_TWIN(SerializeToCreateTopicRequestWithInheritedReadQuota, WithExplicitReadQuotaMarker) {
-            Ydb::Topic::DescribeTopicResult result;
-            result.set_partition_total_read_speed_bytes_per_second(300);
-            result.set_partition_consumer_read_speed_bytes_per_second(150);
-            if (WithExplicitReadQuotaMarker) {
-                result.set_partition_total_read_speed_bytes_per_second_is_explicit(false);
-            }
-
-            TTopicDescription description(std::move(result));
-            Ydb::Topic::CreateTopicRequest request;
-            description.SerializeTo(request);
-
-            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), 0);
-        }
-
-        Y_UNIT_TEST(SerializeToCreateTopicRequestWithUnambiguousLegacyReadQuota) {
-            Ydb::Topic::DescribeTopicResult result;
-            result.set_partition_total_read_speed_bytes_per_second(100);
-            result.set_partition_consumer_read_speed_bytes_per_second(150);
-
-            TTopicDescription description(std::move(result));
-            Ydb::Topic::CreateTopicRequest request;
-            description.SerializeTo(request);
-
-            UNIT_ASSERT_VALUES_EQUAL(request.partition_total_read_speed_bytes_per_second(), 100);
         }
 
         void DescribeTopicWithKillTablets(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation)

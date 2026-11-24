@@ -243,13 +243,7 @@ void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) con
     request.set_partition_write_burst_bytes(Proto_.partition_write_burst_bytes());
     request.set_partition_write_speed_messages_per_second(Proto_.partition_write_speed_messages_per_second());
     request.set_partition_write_burst_messages(Proto_.partition_write_burst_messages());
-    const auto totalReadSpeed = Proto_.partition_total_read_speed_bytes_per_second();
-    const auto consumerReadSpeed = Proto_.partition_consumer_read_speed_bytes_per_second();
-    // A legacy derived total rate is a multiple of the reported per-consumer rate.
-    const bool copyTotalReadSpeed = Proto_.has_partition_total_read_speed_bytes_per_second_is_explicit()
-        ? Proto_.partition_total_read_speed_bytes_per_second_is_explicit()
-        : consumerReadSpeed <= 0 || totalReadSpeed % consumerReadSpeed != 0;
-    request.set_partition_total_read_speed_bytes_per_second(copyTotalReadSpeed ? totalReadSpeed : 0);
+    request.set_partition_total_read_speed_bytes_per_second(Proto_.partition_total_read_speed_bytes_per_second());
     request.set_partition_total_read_speed_messages_per_second(Proto_.partition_total_read_speed_messages_per_second());
     request.set_partition_read_without_consumer_speed_bytes_per_second(Proto_.partition_read_without_consumer_speed_bytes_per_second());
     request.set_partition_read_without_consumer_speed_messages_per_second(Proto_.partition_read_without_consumer_speed_messages_per_second());

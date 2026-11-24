@@ -1177,8 +1177,11 @@ private:
                 ev->Get()->ResultSet->mutable_rows()->Truncate(rowsAvailable);
                 ev->Get()->ResultSet->set_truncated(true);
             }
-            TotalRows += ev->Get()->ResultSet->rows_size();
-            FetchResultRowsOffset += ev->Get()->ResultSet->rows_size();
+
+            const auto rows = ev->Get()->ResultSet->rows_size();
+            TotalRows += rows;
+            FetchResultRowsOffset += rows;
+
             if (Streaming != EStreamingType::None) {
                 StreamJsonResponse(*ev->Get(), FetchResultSetIndex);
             } else {
@@ -1200,7 +1203,7 @@ private:
                     OutputChunkMaxSize,
                     Deadline), IEventHandle::FlagTrackDelivery);
                 return;
-            } else if (FetchResultSetIndex + 1 < FetchResultSets) {
+            } else if (FetchResultSetIndex + 1 < FetchResultSets || ev->Get()->HasNextResultSet) {
                 ++FetchResultSetIndex;
                 FetchResultRowsOffset = 0;
                 Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(

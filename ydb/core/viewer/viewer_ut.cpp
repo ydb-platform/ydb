@@ -6667,21 +6667,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(!executionId.empty(), NJson::WriteJson(response));
         UNIT_ASSERT_VALUES_EQUAL_C(response["result"].GetArray().size(), 1002,
             NJson::WriteJson(response) << " operation: " << GetOperation(httpClient, operationId));
-        UNIT_ASSERT(response["result"][1001].GetMap().contains("OtherValue"));
+
+        for (size_t i = 0; i < 1001; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(response["result"][i]["Value"].GetIntegerSafe(), i);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(response["result"][1001]["OtherValue"].GetIntegerSafe(), 42);
 
         const auto byOperation = PostQuery(httpClient, {
             .Action = "fetch-long-query",
             .OperationId = operationId,
         });
-        UNIT_ASSERT_VALUES_EQUAL_C(byOperation["result"].GetArray().size(), 1002, NJson::WriteJson(byOperation));
-        UNIT_ASSERT(byOperation["result"][1001].GetMap().contains("OtherValue"));
+        UNIT_ASSERT_VALUES_EQUAL(byOperation["result"], response["result"]);
 
         const auto byExecution = PostQuery(httpClient, {
             .Action = "fetch-long-query",
             .ExecutionId = executionId,
         });
-        UNIT_ASSERT_VALUES_EQUAL_C(byExecution["result"].GetArray().size(), 1001, NJson::WriteJson(byExecution));
-        UNIT_ASSERT(byExecution["result"][1000].GetMap().contains("Value"));
+        UNIT_ASSERT_VALUES_EQUAL(byExecution["result"], response["result"]);
     }
 
     Y_UNIT_TEST(QueryExecuteScript) {

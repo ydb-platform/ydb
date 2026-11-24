@@ -3701,6 +3701,15 @@ private:
             NumberOfSavedRows = meta.number_rows();
         }
 
+        const size_t nextIndex = static_cast<size_t>(ResultSetIndex) + 1;
+        HasNextResultSet = !HasMoreResults && nextIndex < value.GetArray().size();
+
+        if (HasNextResultSet && !operationStatus) {
+            Ydb::Query::Internal::ResultSetMeta nextMeta;
+            NProtobufJson::Json2Proto(value[nextIndex], nextMeta);
+            HasNextResultSet = nextMeta.enabled_runtime_results();
+        }
+
         *ResultSet.mutable_columns() = meta.columns();
         ResultSet.set_truncated(meta.truncated());
         ResultSetSize = ResultSet.ByteSizeLong();
@@ -3825,7 +3834,9 @@ private:
                 {"logPrefix", LogPrefix()},
                 {"rowCount", ResultSet.rows_size()},
                 {"hasMoreResults", HasMoreResults});
-            Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
+            auto* response = new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues));
+            response->HasNextResultSet = HasNextResultSet;
+            Send(Owner, response);
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
         }
@@ -3848,6 +3859,7 @@ private:
     i64 AdditionalRowSize = 0;
     Ydb::ResultSet ResultSet;
     bool HasMoreResults = false;
+    bool HasNextResultSet = false;
 };
 
 // Save information about query effects like S3 writes in order to commit / rollback after operation finish, saved after query compilation in DataExecuter

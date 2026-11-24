@@ -282,14 +282,10 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
             if nodejs_version.major >= 25:
-                target_needs_libatomic = unit.get("OS_LINUX") == "yes"
-                host_needs_libatomic = unit.get("HOST_OS_LINUX") == "yes"
-                if target_needs_libatomic or host_needs_libatomic:
-                    dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
-                if target_needs_libatomic:
+                if unit.get("OS_LINUX") == "yes":
                     unit.set(["_TARGET_NEEDS_LIBATOMIC", "yes"])
-                if host_needs_libatomic:
-                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+                if unit.get("HOST_OS_LINUX") == "yes":
+                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $NODEJS_ROOT/libs"])
 
         elif erm_json.is_resource_multiplatform(tool):
             v = erm_json.select_version_of(tool)
@@ -332,7 +328,7 @@ def _TS_RUNTIME_BIN_CONFIGURE(unit: ymake.Unit) -> None:
             unit.set(
                 [
                     "COPY_LIBATOMIC_CMD",
-                    '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:".nots-runtime/libatomic.so.1"}',
+                    '$COPY_CMD $WITH_NODEJS_ROOT/libs/libatomic.so.1 ${output:".nots-runtime/libatomic.so.1"}',
                 ]
             )
     if unit.get("_WITH_BUN_BIN") == "yes":
@@ -884,7 +880,8 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 
     if unit.get("_LD_LIBRARY_PATH_ARGS"):
         declared_env = unit.get_subst("TEST_ENV_VALUE")
-        test_env_value = df.prepare_env(f'{declared_env} "LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"')
+        nodejs_resource = unit.get("NODEJS-ROOT-VAR-NAME")
+        test_env_value = df.prepare_env(f'{declared_env} "LD_LIBRARY_PATH=${nodejs_resource}/libs"')
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 

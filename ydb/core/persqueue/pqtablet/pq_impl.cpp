@@ -372,14 +372,6 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
-bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
-    if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
-        return false;
-    }
-    const auto* consumer = GetConsumer(Config, consumerName);
-    return !consumer || consumer->GetReplicateOffsets();
-}
-
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession)
 {
     ReplyPersQueueError(
@@ -3070,13 +3062,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
-        return;
-    }
-
-    if (req.HasCmdSetClientOffset()
-        && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                   "Commits for consumer are disabled");
         return;
     }
 

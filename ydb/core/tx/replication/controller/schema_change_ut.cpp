@@ -5739,6 +5739,26 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 Y_UNIT_TEST_SUITE(IndexBuild) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST(ReportsRequestedIntervalsWhenIndexWritesShareOneTransaction) {
+        TIndexBuildTestEnv env;
+        const auto worker = env.StartIndexBuild();
+        env.ReportProgress(worker, 1, TRowVersion(200, 8));
+        auto request = [&](ui64 step) {
+            auto ev = MakeHolder<TEvService::TEvGetTxId>(TVector<TRowVersion>{TRowVersion(step, 0)});
+            worker.Serialize(*ev->Record.MutableWorker());
+            return env.Send<TEvService::TEvTxIdResult>(env.Info.ControllerId, std::move(ev));
+        };
+        const auto later = request(55000);
+        const auto earlier = request(35000);
+        const auto& a = earlier->Get()->Record.GetVersionTxIds(0);
+        const auto& b = later->Get()->Record.GetVersionTxIds(0);
+        UNIT_ASSERT_VALUES_EQUAL(a.GetTxId(), b.GetTxId());
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(a.GetBegin()), TRowVersion(30000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(a.GetVersion()), TRowVersion(40000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(b.GetBegin()), TRowVersion(50000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(b.GetVersion()), TRowVersion(60000, 0));
+    }
+
     void CheckSyncIndexJoinBoundaryAndScopedAssignmentsSurviveRestart(bool committedBase) {
         TIndexBuildTestEnv env;
         const auto& info = env.Info;

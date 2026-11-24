@@ -4,6 +4,6 @@
 
 namespace NKikimr::NKqp {
 
-NSQLTranslation::TTranslatorPtr MakeKqpSqlV1Translator(bool isAmbiguityError);
+NSQLTranslation::TTranslatorPtr MakeKqpSqlV1Translator(bool isAmbiguityError, bool enableRemoteEmbedderAlias = true);
 
 } // namespace NKikimr::NKqp

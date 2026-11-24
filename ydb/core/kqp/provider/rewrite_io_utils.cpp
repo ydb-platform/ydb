@@ -30,7 +30,7 @@ TExprNode::TPtr CompileViewQuery(
 
     NSQLTranslation::TTranslators translators(
         nullptr,
-        NKikimr::NKqp::MakeKqpSqlV1Translator(settingsBuilder.GetIsAmbiguityError()),
+        NKikimr::NKqp::MakeKqpSqlV1Translator(settingsBuilder.GetIsAmbiguityError(), /*enableRemoteEmbedderAlias=*/false),
         nullptr
     );
 

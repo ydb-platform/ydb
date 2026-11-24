@@ -4,6 +4,8 @@ Implements the [remote embedder RFC](https://wiki.yandex-team.ru/kikimr/develope
 using the [OpenAI-compatible embeddings API](https://developers.openai.com/api/reference/resources/embeddings/methods/create).
 
 The SQL name `ApplyRemoteEmbedder` is an alias for `Knn::ApplyRemoteEmbedder`.
+Use the qualified name in view definitions and in SQL declarations captured by
+views. Generated columns cannot call the UDF.
 The first argument selects the scalar or streaming form.
 
 ```text

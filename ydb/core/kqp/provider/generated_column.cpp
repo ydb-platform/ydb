@@ -25,7 +25,9 @@ TExprNode::TPtr CompileText(const TString& sqlText, TExprContext& ctx, NKikimr::
     auto translationSettings = settingsBuilder.Build(ctx);
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
-    NSQLTranslation::TTranslators translators(nullptr, NKikimr::NKqp::MakeKqpSqlV1Translator(settingsBuilder.GetIsAmbiguityError()), nullptr);
+    NSQLTranslation::TTranslators translators(nullptr,
+        NKikimr::NKqp::MakeKqpSqlV1Translator(settingsBuilder.GetIsAmbiguityError(), /*enableRemoteEmbedderAlias=*/false),
+        nullptr);
 
     auto queryAst = NSQLTranslation::SqlToYql(translators, sqlText, translationSettings);
     ctx.IssueManager.AddIssues(queryAst.Issues);

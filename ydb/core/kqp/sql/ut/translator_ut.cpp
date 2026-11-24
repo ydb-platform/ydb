@@ -4,6 +4,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <google/protobuf/arena.h>
+#include <google/protobuf/message.h>
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -82,6 +85,50 @@ Y_UNIT_TEST_SUITE(KqpSqlTranslator) {
         UNIT_ASSERT_STRING_CONTAINS(ast, "ApplyRemoteEmbedder()");
         UNIT_ASSERT_STRING_CONTAINS(ast, "Other.ApplyRemoteEmbedder");
         UNIT_ASSERT(!TStringBuf(ast).Contains("Knn.ApplyRemoteEmbedder"));
+    }
+
+    Y_UNIT_TEST(RemoteEmbedderAliasSkipsStoredSqlSubtrees) {
+        NSQLTranslation::TTranslators aliases(nullptr, MakeKqpSqlV1Translator(false), nullptr);
+        NSQLTranslation::TTranslators standard(nullptr, MakeKqpSqlV1Translator(false, /*enableRemoteEmbedderAlias=*/false), nullptr);
+        google::protobuf::Arena arena;
+        auto settings = MakeSettings();
+        settings.Arena = &arena;
+        for (const auto* ddl : {
+            "CREATE VIEW v AS SELECT ApplyRemoteEmbedder('text', 'model', 'url', 'secret') AS embedding;",
+            "CREATE VIEW v AS DO BEGIN SELECT ApplyRemoteEmbedder('text', 'model', 'url', 'secret') AS embedding; END DO;",
+            "CREATE TABLE t (id Int32, v Uint32 GENERATED ALWAYS AS (ApplyRemoteEmbedder('text', 'model', 'url', 'secret').Status) STORED, PRIMARY KEY (id));",
+            "ALTER TABLE t ADD COLUMN v Uint32 AS (ApplyRemoteEmbedder('text', 'model', 'url', 'secret').Status) VIRTUAL;",
+            "$value = ApplyRemoteEmbedder('text', 'model', 'url', 'secret'); CREATE VIEW v AS SELECT $value AS embedding;",
+        }) {
+            NYql::TIssues issues;
+            const auto* actual = NSQLTranslation::SqlAST(aliases, ddl, "test", issues, 10, settings);
+            UNIT_ASSERT_C(actual, issues.ToString());
+            const auto* expected = NSQLTranslation::SqlAST(standard, ddl, "test", issues, 10, settings);
+            UNIT_ASSERT_C(expected, issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(actual->SerializeAsString(), expected->SerializeAsString());
+        }
+
+        const auto sibling = NSQLTranslation::SqlToYql(aliases, R"(
+            $value = ApplyRemoteEmbedder('text', 'model', 'url', 'secret');
+            SELECT $value;
+            CREATE TABLE t (id Int32, v Int32 AS (id + 1) STORED, PRIMARY KEY (id));
+        )", settings);
+        UNIT_ASSERT_C(sibling.IsOk(), sibling.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(sibling.Root->ToString(), "Knn.ApplyRemoteEmbedder");
+    }
+
+    Y_UNIT_TEST(RemoteEmbedderStoredSqlRequiresQualifiedName) {
+        NSQLTranslation::TTranslators standard(nullptr, MakeKqpSqlV1Translator(false, /*enableRemoteEmbedderAlias=*/false), nullptr);
+        auto settings = MakeSettings();
+        settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+        const auto bare = NSQLTranslation::SqlToYql(standard,
+            "SELECT ApplyRemoteEmbedder('text', 'model', 'url', 'secret') AS embedding;", settings);
+        UNIT_ASSERT(!bare.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(bare.Issues.ToString(), "Unknown builtin: ApplyRemoteEmbedder");
+        const auto qualified = NSQLTranslation::SqlToYql(standard,
+            "SELECT Knn::ApplyRemoteEmbedder('text', 'model', 'url', 'secret') AS embedding;", settings);
+        UNIT_ASSERT_C(qualified.IsOk(), qualified.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(qualified.Root->ToString(), "Knn.ApplyRemoteEmbedder");
     }
 }
 

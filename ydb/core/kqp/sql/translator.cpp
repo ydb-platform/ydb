@@ -12,6 +12,7 @@
 #include <util/stream/str.h>
 #include <util/string/ascii.h>
 
+#include <optional>
 #include <vector>
 
 namespace NKikimr::NKqp {
@@ -178,19 +179,52 @@ void QualifyCall(TRule_using_call_expr& expr, bool ansi) {
     }
 }
 
+void QualifyFunctionCall(google::protobuf::Message& node, bool ansi) {
+    const auto* type = node.GetDescriptor();
+    if (type == TRule_unary_casual_subexpr::descriptor()) {
+        QualifyCall(static_cast<TRule_unary_casual_subexpr&>(node), ansi);
+    } else if (type == TRule_in_unary_casual_subexpr::descriptor()) {
+        QualifyCall(static_cast<TRule_in_unary_casual_subexpr&>(node), ansi);
+    } else if (type == TRule_using_call_expr::descriptor()) {
+        QualifyCall(static_cast<TRule_using_call_expr&>(node), ansi);
+    }
+}
+
 void QualifyCalls(google::protobuf::Message& message, bool ansi) {
-    TVector<google::protobuf::Message*> pending{&message};
+    struct TVisit {
+        google::protobuf::Message* Node;
+        std::optional<ui32> SharedStatementStart;
+    };
+    TVector<TVisit> pending{{&message, std::nullopt}};
+    TVector<TVisit> sharedCalls;
+    ui32 lastViewStart = 0;
     std::vector<const google::protobuf::FieldDescriptor*> fields;
     while (!pending.empty()) {
-        auto* node = pending.back();
+        auto [node, sharedStatementStart] = pending.back();
         pending.pop_back();
         const auto* type = node->GetDescriptor();
-        if (type == TRule_unary_casual_subexpr::descriptor()) {
-            QualifyCall(static_cast<TRule_unary_casual_subexpr&>(*node), ansi);
-        } else if (type == TRule_in_unary_casual_subexpr::descriptor()) {
-            QualifyCall(static_cast<TRule_in_unary_casual_subexpr&>(*node), ansi);
-        } else if (type == TRule_using_call_expr::descriptor()) {
-            QualifyCall(static_cast<TRule_using_call_expr&>(*node), ansi);
+        // Stored SQL uses the standard function names at both creation and recompilation.
+        if (type == TRule_create_view_stmt::descriptor()) {
+            const auto& view = static_cast<const TRule_create_view_stmt&>(*node);
+            if (view.GetBlock7().HasAlt1()) {
+                lastViewStart = Max(lastViewStart, view.GetStartTokenIndex());
+            }
+            continue;
+        }
+        if (type == TRule_generated_always::descriptor()) {
+            continue;
+        }
+        if (!sharedStatementStart && type == TRule_sql_stmt_core::descriptor()) {
+            const auto& stmt = static_cast<const TRule_sql_stmt_core&>(*node);
+            if (NSQLTranslationV1::NeedUseForAllStatements(stmt.Alt_case())) {
+                sharedStatementStart = stmt.GetStartTokenIndex();
+            }
+        }
+        if (!sharedStatementStart) {
+            QualifyFunctionCall(*node, ansi);
+        } else if (type == TRule_unary_casual_subexpr::descriptor()
+            || type == TRule_in_unary_casual_subexpr::descriptor() || type == TRule_using_call_expr::descriptor()) {
+            sharedCalls.push_back({node, sharedStatementStart});
         }
 
         const auto* reflection = node->GetReflection();
@@ -201,11 +235,17 @@ void QualifyCalls(google::protobuf::Message& message, bool ansi) {
             }
             if (field->is_repeated()) {
                 for (int i = 0; i < reflection->FieldSize(*node, field); ++i) {
-                    pending.push_back(reflection->MutableRepeatedMessage(node, field, i));
+                    pending.push_back({reflection->MutableRepeatedMessage(node, field, i), sharedStatementStart});
                 }
             } else {
-                pending.push_back(reflection->MutableMessage(node, field));
+                pending.push_back({reflection->MutableMessage(node, field), sharedStatementStart});
             }
+        }
+    }
+    // CREATE VIEW AS SELECT stores preceding named expressions and other shared statements.
+    for (const auto& [node, start] : sharedCalls) {
+        if (!lastViewStart || *start >= lastViewStart) {
+            QualifyFunctionCall(*node, ansi);
         }
     }
 }
@@ -251,14 +291,18 @@ private:
 
 } // namespace
 
-NSQLTranslation::TTranslatorPtr MakeKqpSqlV1Translator(bool isAmbiguityError) {
+NSQLTranslation::TTranslatorPtr MakeKqpSqlV1Translator(bool isAmbiguityError, bool enableRemoteEmbedderAlias) {
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
 
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = MakeIntrusive<TKqpSqlParserFactory>(NSQLTranslationV1::MakeAntlr4ParserFactory(isAmbiguityError), /*ansi=*/false);
-    parsers.Antlr4Ansi = MakeIntrusive<TKqpSqlParserFactory>(NSQLTranslationV1::MakeAntlr4AnsiParserFactory(), /*ansi=*/true);
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(isAmbiguityError);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    if (enableRemoteEmbedderAlias) {
+        parsers.Antlr4 = MakeIntrusive<TKqpSqlParserFactory>(std::move(parsers.Antlr4), /*ansi=*/false);
+        parsers.Antlr4Ansi = MakeIntrusive<TKqpSqlParserFactory>(std::move(parsers.Antlr4Ansi), /*ansi=*/true);
+    }
     return NSQLTranslationV1::MakeTranslator(lexers, parsers);
 }
 

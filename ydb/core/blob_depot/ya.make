@@ -28,6 +28,7 @@ LIBRARY()
         config.cpp
         s3_put_timeout.h
         defs.h
+        config.h
         types.h
         wakeup_timer.h
         events.h

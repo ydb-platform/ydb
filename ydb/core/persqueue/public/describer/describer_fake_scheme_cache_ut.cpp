@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -286,7 +287,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
                 FillCdcStream(entry);
                 return;
             }
-            // streamImpl miss → sync retry → still miss → NOT_FOUND
+            // streamImpl miss → sync retry → still miss → UNAVAILABLE
             entry.Status = TNavigate::EStatus::PathErrorUnknown;
         });
 
@@ -294,7 +295,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT(ev->UsedSyncVersion);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::NotFound);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::Unavailable);
     }
 
     Y_UNIT_TEST(CdcStreamImplNotFoundSkipsFederation) {
@@ -318,7 +319,45 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(requests, 3u); // feed + streamImpl + sync streamImpl
         UNIT_ASSERT(ev->UsedSyncVersion);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::NotFound);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/table1/feed"].Status, NDescriber::EStatus::Unavailable);
+    }
+
+    Y_UNIT_TEST_TWIN(CdcStreamImplIncomplete, missingDescription) {
+        TDescribeEnv env([](ui32 requestIndex, TNavigate&, TNavigate::TEntry& entry) {
+            if (requestIndex == 0) {
+                FillCdcStream(entry);
+                return;
+            }
+            FillOkTopic(entry, 0);
+            if (missingDescription) {
+                entry.PQGroupInfo = nullptr;
+            }
+        });
+
+        env.StartDescribe({"/Root/table1/feed"});
+        auto ev = env.WaitResponse();
+        UNIT_ASSERT(ev->UsedSyncVersion);
+        const auto status = ev->Topics.at("/Root/table1/feed").Status;
+        UNIT_ASSERT_VALUES_EQUAL(status, NDescriber::EStatus::Unavailable);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(status), Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(CdcStreamImplAppearsAfterSync) {
+        TDescribeEnv env([](ui32 requestIndex, TNavigate&, TNavigate::TEntry& entry) {
+            if (requestIndex == 0) {
+                FillCdcStream(entry);
+            } else if (requestIndex == 1) {
+                entry.Status = TNavigate::EStatus::PathErrorUnknown;
+            } else {
+                UNIT_ASSERT(entry.SyncVersion);
+                FillOkTopic(entry, 99);
+            }
+        });
+
+        env.StartDescribe({"/Root/table1/feed"});
+        auto ev = env.WaitResponse();
+        UNIT_ASSERT(ev->UsedSyncVersion);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics.at("/Root/table1/feed").Status, NDescriber::EStatus::Success);
     }
 
     Y_UNIT_TEST(CdcWithEmptyDatabase) {

@@ -204,6 +204,12 @@ public:
                     topicInfo.RealPath = std::move(info.RealPath);
                     break;
                 }
+                case NDescriber::EStatus::Unavailable:
+                    return SendReplyAndDie(
+                        CreateErrorReply(
+                            Ydb::StatusIds::UNAVAILABLE,
+                            NDescriber::Description(topicPath, info.Status)),
+                        ctx);
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(

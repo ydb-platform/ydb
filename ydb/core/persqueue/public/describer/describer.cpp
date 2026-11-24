@@ -140,7 +140,8 @@ public:
                             LOG_D("Path not found",
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::NotFound);
+                            // A resolved CDC stream with a missing implementation topic may be transient.
+                            SetErrorResults(originals, isCDCStream ? EStatus::Unavailable : EStatus::NotFound);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -173,7 +174,7 @@ public:
                             if (RetryWithSyncVersion) {
                                 LOG_D("Path not found",
                                     {"realPath", realPath});
-                                SetErrorResults(originals, EStatus::NotFound);
+                                SetErrorResults(originals, isCDCStream ? EStatus::Unavailable : EStatus::NotFound);
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -374,6 +375,8 @@ Ydb::StatusIds::StatusCode Convert(const EStatus status) {
             return Ydb::StatusIds::UNAUTHORIZED;
         case EStatus::BadRequest:
             return Ydb::StatusIds::BAD_REQUEST;
+        case EStatus::Unavailable:
+            return Ydb::StatusIds::UNAVAILABLE;
         case EStatus::UnknownError:
             return Ydb::StatusIds::INTERNAL_ERROR;
     }
@@ -392,6 +395,8 @@ TString Description(const TString& topicPath, const EStatus status) {
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
         case EStatus::BadRequest:
             return TStringBuilder() << "Invalid topic name '" << topicPath << "'";
+        case EStatus::Unavailable:
+            return TStringBuilder() << "The implementation topic for CDC stream '" << topicPath << "' is temporarily unavailable";
         case EStatus::UnknownError:
             return TStringBuilder() << "Error describing the path '" << topicPath << "'";
     }

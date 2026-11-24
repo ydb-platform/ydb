@@ -168,6 +168,11 @@ private:
                     Ydb::StatusIds::BAD_REQUEST,
                     NDescriber::Description(path, info.Status)
                 };
+            case NDescriber::EStatus::Unavailable:
+                return TStatusAndMessage{
+                    Ydb::StatusIds::UNAVAILABLE,
+                    NDescriber::Description(path, info.Status)
+                };
             case NDescriber::EStatus::UnknownError:
                 return TStatusAndMessage{
                     Ydb::StatusIds::INTERNAL_ERROR,

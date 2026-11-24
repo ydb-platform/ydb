@@ -24,6 +24,7 @@ namespace NKikimr::NSqsTopic::V1 {
             case BadRequest:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::INVALID_PARAMETER_VALUE, NPQ::NDescriber::Description(topicPath, status));
                 break;
+            case Unavailable:
             case UnknownError:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::INTERNAL_FAILURE, NPQ::NDescriber::Description(topicPath, status));
                 break;
@@ -115,6 +116,7 @@ namespace NKikimr::NSqsTopic::V1 {
             case BadRequest:
                 return MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
                     NPQ::NDescriber::Description(topicPath, info.Status));
+            case Unavailable:
             case UnknownError:
                 if (!policy.UnknownErrorMessage.empty()) {
                     return MakeError(NSQS::NErrors::INTERNAL_FAILURE, policy.UnknownErrorMessage);

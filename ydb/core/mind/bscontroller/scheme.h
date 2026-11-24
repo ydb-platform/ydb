@@ -540,8 +540,12 @@ struct Schema : NIceDb::Schema {
         struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
         struct BlobDepotId : Column<2, NScheme::NTypeIds::Uint64> {};
         struct S3Config : Column<3, NScheme::NTypeIds::String> {};
+        struct NextS3Sweep : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+        enum ESweepPhase : ui32 { AwaitingOwnership, FirstSweep, Periodic, FinalSweep, Reserved };
+        struct SweepPhase : Column<5, NScheme::NTypeIds::Uint32> { using Type = ESweepPhase; };
+
         using TKey = TableKey<GroupId>;
-        using TColumns = TableColumns<GroupId, BlobDepotId, S3Config>;
+        using TColumns = TableColumns<GroupId, BlobDepotId, S3Config, NextS3Sweep, SweepPhase>;
     };
 
     using TTables = SchemaTables<

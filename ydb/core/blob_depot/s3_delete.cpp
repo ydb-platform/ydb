@@ -1,5 +1,5 @@
 #include "s3.h"
-#include "s3_error.h"
+#include "s3_collection.h"
 #include "s3_request_timer.h"
 
 #include <ydb/core/base/counters.h>
@@ -89,7 +89,7 @@ namespace NKikimr::NBlobDepot {
             auto& msg = *ev->Get();
             if (msg.IsSuccess()) {
                 Finish(std::nullopt);
-            } else if (const auto& error = msg.GetError(); error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
+            } else if (const auto& error = msg.GetError(); IsS3MissingKey(error)) {
                 Finish(std::nullopt);
             } else if (IsS3SlowDown(error)) {
                 Finish(error.GetMessage().c_str(), /*throttled=*/true);
@@ -109,61 +109,38 @@ namespace NKikimr::NBlobDepot {
             THashMap<int, size_t> httpErrorCounts;
 
             if (msg.IsSuccess()) {
-                auto& result = msg.Result.GetResult();
-                for (const Aws::S3::Model::DeletedObject& deleted : result.GetDeleted()) {
-                    if (deleted.KeyHasBeenSet()) {
-                        if (const auto it = Locators.find(deleted.GetKey().c_str()); it != Locators.end()) {
+                VisitS3DeleteResults(msg.Result.GetResult(), [&](const auto& key, ES3DeleteStatus status, TStringBuf error) {
+                    const auto it = Locators.find(TString(key.data(), key.size()));
+                    if (it == Locators.end()) {
+                        YDB_LOG_WARN("Key not found in batch delete request",
+                            {"marker", "BDTS09"}, {"id", LogId}, {"key", key.c_str()});
+                        return;
+                    }
+                    switch (status) {
+                        case ES3DeleteStatus::Deleted:
                             YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3",
-                                {"marker", "BDEV29"},
-                                {"BDT", TabletId},
-                                {"locator", it->second});
+                                {"marker", "BDEV29"}, {"BDT", TabletId}, {"locator", it->second});
                             locatorsOk.push_back(it->second);
-                            Locators.erase(it);
-                        } else {
-                            YDB_LOG_WARN("Key not found",
-                                {"marker", "BDTS09"},
-                                {"id", LogId},
-                                {"key", deleted.KeyHasBeenSet() ? std::make_optional<TString>(deleted.GetKey().c_str()) : std::nullopt});
-                        }
-                    } else {
-                        YDB_LOG_WARN("Key not set",
-                            {"marker", "BDTS10"},
-                            {"id", LogId});
-                    }
-                }
-                for (const Aws::S3::Model::Error& error : result.GetErrors()) {
-                    if (error.KeyHasBeenSet() && error.GetCode() == "NoSuchKey") { // this key has already been deleted
-                        if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
+                            break;
+                        case ES3DeleteStatus::Missing:
                             YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:NoSuchKey",
-                                {"marker", "BDEV30"},
-                                {"BDT", TabletId},
-                                {"locator", it->second});
+                                {"marker", "BDEV30"}, {"BDT", TabletId}, {"locator", it->second});
                             locatorsOk.push_back(it->second);
-                            Locators.erase(it);
-                        }
-                    } else if (error.KeyHasBeenSet() && IsS3SlowDownCode(error.GetCode())) {
-                        if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
-                            YDB_LOG_WARN("S3 SlowDown for object",
-                                {"marker", "BDTS19"},
-                                {"id", LogId},
-                                {"locator", it->second},
-                                {"code", error.GetCode().c_str()},
-                                {"error", error.GetMessage().c_str()});
+                            break;
+                        case ES3DeleteStatus::SlowDown:
+                            YDB_LOG_WARN("S3 SlowDown for object", {"marker", "BDTS19"}, {"id", LogId},
+                                {"locator", it->second}, {"error", error});
                             YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:SlowDown",
-                                {"marker", "BDEV39"},
-                                {"BDT", TabletId},
-                                {"locator", it->second});
+                                {"marker", "BDEV39"}, {"BDT", TabletId}, {"locator", it->second});
                             locatorsThrottled.push_back(it->second);
-                            Locators.erase(it);
-                        }
-                    } else {
-                        YDB_LOG_WARN("Failed to delete object from S3",
-                            {"marker", "BDTS11"},
-                            {"id", LogId},
-                            {"key", error.KeyHasBeenSet() ? std::make_optional<TString>(error.GetKey().c_str()) : std::nullopt},
-                            {"error", error.GetMessage().c_str()});
+                            break;
+                        case ES3DeleteStatus::Failed:
+                            YDB_LOG_WARN("Failed to delete object from S3", {"marker", "BDTS11"},
+                                {"id", LogId}, {"key", key.c_str()}, {"error", error});
+                            return; // failures and omitted keys are handled below
                     }
-                }
+                    Locators.erase(it);
+                });
             } else if (IsS3SlowDown(msg.GetError())) {
                 requestThrottled = true;
                 YDB_LOG_WARN("S3 SlowDown for batch delete",

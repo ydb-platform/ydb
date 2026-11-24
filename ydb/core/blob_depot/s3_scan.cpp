@@ -1,4 +1,6 @@
 #include "s3.h"
+#include "s3_collection.h"
+#include "s3_request_timer.h"
 
 #include <ydb/core/wrappers/abstract.h>
 
@@ -24,21 +26,19 @@ namespace NKikimr::NBlobDepot {
     class TS3Manager::TScannerActor : public TActorBootstrapped<TScannerActor> {
         const TActorId ParentId;
         const TActorId WrapperId;
-        TString Prefix;
+        TS3Listing Listing;
         const TString Bucket;
         const TString LogId;
-        std::optional<TString> Marker;
+        TS3RequestTimer Timer;
 
     public:
         TScannerActor(TActorId parentId, TActorId wrapperId, TString prefix, TString bucket, TString logId)
             : ParentId(parentId)
             , WrapperId(wrapperId)
-            , Prefix(std::move(prefix))
+            , Listing(prefix)
             , Bucket(std::move(bucket))
             , LogId(std::move(logId))
-        {
-            Prefix += '/';
-        }
+        {}
 
         void Bootstrap() {
             IssueNextRequest();
@@ -46,44 +46,27 @@ namespace NKikimr::NBlobDepot {
         }
 
         void IssueNextRequest() {
-            auto request = Aws::S3::Model::ListObjectsRequest()
-                .WithBucket(Bucket)
-                .WithPrefix(Prefix)
-            ;
-            if (Marker) {
-                request.SetMarker(*Marker);
-            }
-            request.SetMaxKeys(100);
-
             YDB_LOG_DEBUG("TScannerActor::IssueNextRequest",
                 {"marker", "BDTS18"},
                 {"id", LogId},
-                {"prefix", Prefix},
-                {"requestMarker", Marker});
+                {"prefix", Listing.GetPrefix()},
+                {"requestMarker", Listing.GetMarker()});
 
-            Send(WrapperId, new TEvExternalStorage::TEvListObjectsRequest(request), IEventHandle::FlagTrackDelivery);
+            Timer.SendWithTimeout(WrapperId, new TEvExternalStorage::TEvListObjectsRequest(Listing.MakeRequest(Bucket)));
         }
 
         void Handle(TEvExternalStorage::TEvListObjectsResponse::TPtr ev) {
+            Timer.Clear();
             auto& msg = *ev->Get();
             if (!msg.IsSuccess()) {
                 FinishWithError(msg.GetError().GetMessage().c_str());
             } else {
                 const auto& result = msg.Result.GetResult();
-                TString lastKey;
                 std::vector<std::tuple<TString, ui64>> keysWithoutPrefix;
-
-                for (const auto& item : result.GetContents()) {
-                    if (!item.KeyHasBeenSet()) {
-                        return FinishWithError("invalid response: no key set in listing");
-                    } else if (!item.SizeHasBeenSet()) {
-                        return FinishWithError(TStringBuilder() << "invalid response: no size for key " << item.GetKey());
-                    }
-                    lastKey = item.GetKey();
-                    if (!lastKey.StartsWith(Prefix)) {
-                        return FinishWithError("returned key does not start with specified prefix");
-                    }
-                    keysWithoutPrefix.emplace_back(lastKey.substr(Prefix.length()), item.GetSize());
+                if (auto error = Listing.ReadPage(result, [&](const TString&, TStringBuf name, ui64 len) {
+                    keysWithoutPrefix.emplace_back(TString(name), len);
+                })) {
+                    return FinishWithError(std::move(*error));
                 }
 
                 const bool isFinal = !result.GetIsTruncated();
@@ -92,14 +75,18 @@ namespace NKikimr::NBlobDepot {
 
                 if (isFinal) {
                     PassAway();
-                } else {
-                    Marker.emplace(std::move(lastKey));
                 }
             }
         }
 
         void HandleUndelivered() {
             FinishWithError("event undelivered");
+        }
+
+        void HandleTimeout() {
+            if (Timer.OnWakeup()) {
+                FinishWithError("S3 listing timed out");
+            }
         }
 
         void FinishWithError(TString error) {
@@ -111,6 +98,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvExternalStorage::TEvListObjectsResponse, Handle)
             cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
             cFunc(TEvPrivate::EvScanContinue, IssueNextRequest)
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
     };

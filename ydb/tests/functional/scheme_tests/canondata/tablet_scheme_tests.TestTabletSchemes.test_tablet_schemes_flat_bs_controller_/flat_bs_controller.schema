@@ -2341,6 +2341,16 @@
                 "ColumnId": 3,
                 "ColumnName": "S3Config",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "NextS3Sweep",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "SweepPhase",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -2349,7 +2359,9 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -12,6 +12,7 @@ SRCS(
     kqp_planner_strategy.cpp
     kqp_scan_executer.cpp
     kqp_scheme_executer.cpp
+    kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp

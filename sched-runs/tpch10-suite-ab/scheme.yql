@@ -1,0 +1,122 @@
+CREATE EXTERNAL DATA SOURCE tpch WITH (
+    SOURCE_TYPE = "ObjectStorage",
+    LOCATION = "file:///home/mfilitov/tpch10-kqprun/data32/",
+    AUTH_METHOD = "NONE"
+);
+
+CREATE EXTERNAL TABLE customer (
+    c_acctbal Double,
+    c_address String,
+    c_comment String,
+    c_custkey Int64,
+    c_mktsegment String,
+    c_name String,
+    c_nationkey Int32,
+    c_phone String
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/customer.parquet",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE lineitem (
+    l_comment String,
+    l_commitdate Date,
+    l_discount Double,
+    l_extendedprice Double,
+    l_linenumber Int32,
+    l_linestatus String,
+    l_orderkey Int64,
+    l_partkey Int64,
+    l_quantity Double,
+    l_receiptdate Date,
+    l_returnflag String,
+    l_shipdate Date,
+    l_shipinstruct String,
+    l_shipmode String,
+    l_suppkey Int64,
+    l_tax Double
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/lineitem/",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE nation (
+    n_comment String,
+    n_name String,
+    n_nationkey Int32,
+    n_regionkey Int32
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/nation.parquet",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE orders (
+    o_clerk String,
+    o_comment String,
+    o_custkey Int64,
+    o_orderdate Date,
+    o_orderkey Int64,
+    o_orderpriority String,
+    o_orderstatus String,
+    o_shippriority Int32,
+    o_totalprice Double
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/orders/",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE part (
+    p_brand String,
+    p_comment String,
+    p_container String,
+    p_mfgr String,
+    p_name String,
+    p_partkey Int64,
+    p_retailprice Double,
+    p_size Int32,
+    p_type String
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/part.parquet",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE partsupp (
+    ps_availqty Int32,
+    ps_comment String,
+    ps_partkey Int64,
+    ps_suppkey Int64,
+    ps_supplycost Double
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/partsupp.parquet",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE region (
+    r_comment String,
+    r_name String,
+    r_regionkey Int32
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/region.parquet",
+    FORMAT = "parquet"
+);
+
+CREATE EXTERNAL TABLE supplier (
+    s_acctbal Double,
+    s_address String,
+    s_comment String,
+    s_name String,
+    s_nationkey Int32,
+    s_phone String,
+    s_suppkey Int64
+) WITH (
+    DATA_SOURCE = "tpch",
+    LOCATION = "/supplier/",
+    FORMAT = "parquet"
+);

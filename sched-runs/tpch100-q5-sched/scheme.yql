@@ -1,0 +1,24 @@
+
+CREATE EXTERNAL DATA SOURCE tpch WITH (
+    SOURCE_TYPE = "ObjectStorage",
+    LOCATION = "file:///home/mfilitov/tpch100-q5-ab/data/",
+    AUTH_METHOD = "NONE"
+);
+CREATE EXTERNAL TABLE lineitem (
+    l_orderkey Int64, l_suppkey Int64, l_extendedprice Double, l_discount Double
+) WITH (DATA_SOURCE="tpch", LOCATION="/lineitem/", FORMAT="parquet");
+CREATE EXTERNAL TABLE orders (
+    o_orderkey Int64, o_custkey Int64, o_orderdate Date
+) WITH (DATA_SOURCE="tpch", LOCATION="/orders/", FORMAT="parquet");
+CREATE EXTERNAL TABLE customer (
+    c_custkey Int64, c_nationkey Int32
+) WITH (DATA_SOURCE="tpch", LOCATION="/customer/", FORMAT="parquet");
+CREATE EXTERNAL TABLE supplier (
+    s_suppkey Int64, s_nationkey Int32
+) WITH (DATA_SOURCE="tpch", LOCATION="/supplier/", FORMAT="parquet");
+CREATE EXTERNAL TABLE nation (
+    n_name String, n_nationkey Int32, n_regionkey Int32
+) WITH (DATA_SOURCE="tpch", LOCATION="/nation.parquet", FORMAT="parquet");
+CREATE EXTERNAL TABLE region (
+    r_name String, r_regionkey Int32
+) WITH (DATA_SOURCE="tpch", LOCATION="/region.parquet", FORMAT="parquet");

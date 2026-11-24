@@ -814,6 +814,9 @@ void CheckDeleteConfigMismatch(bool newerGeneration) {
     constexpr ui64 guid = 42;
     TTestActorRuntimeBase runtime{1};
     runtime.Initialize();
+    runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
     runtime.SetDispatchTimeout(TDuration::Seconds(5));
     const TActorId edge = runtime.AllocateEdgeActor();
 

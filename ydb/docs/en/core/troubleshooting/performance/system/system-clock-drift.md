@@ -8,12 +8,7 @@ It is important to keep system clocks on the {{ ydb-short-name }} servers in syn
 
 {% endnote %}
 
-<<<<<<< HEAD
-=======
 For clock skew on client application hosts and related authentication errors, see [{#T}](../../client-clock-skew.md).
-
-## Symptoms and thresholds {#symptoms-thresholds}
->>>>>>> e2a95b55c53 ([DOCORG-19503] Интегрировать в документацию информацию (#55378))
 
 If the system clocks of the nodes running the [coordinator](../../../concepts/glossary.md#coordinator) tablets differ, transaction latencies increase by the time difference between the fastest and slowest system clocks. This occurs because a transaction planned on a node with a faster system clock can only be executed once the coordinator with the slowest clock reaches the same time.
 

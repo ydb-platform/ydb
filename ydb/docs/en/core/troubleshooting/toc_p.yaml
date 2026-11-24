@@ -4,17 +4,5 @@ items:
   include:
     mode: link
     path: performance/toc_p.yaml
-<<<<<<< HEAD
-=======
-- name: Spilling issues
-  href: spilling/index.md
-  include:
-    mode: link
-    path: spilling/toc_p.yaml
-- name: Diagnostic examples
-  items:
-    - name: Overloaded shard
-      href: examples/schemas/overloaded-shard-simple-case.md
 - name: Clock skew between client hosts and the cluster
   href: client-clock-skew.md
->>>>>>> e2a95b55c53 ([DOCORG-19503] Интегрировать в документацию информацию (#55378))

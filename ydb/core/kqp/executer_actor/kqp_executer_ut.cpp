@@ -24,8 +24,7 @@ namespace {
 enum class ELateRemoteTaskStart {
     ComputeState,
     StartResponse,
-    LegacyInternalError,
-    CompleteInternalError,
+    InternalError,
     NotStarted,
     Undelivered,
 };
@@ -60,9 +59,8 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
     using NYql::NDqProto::StatusIds;
     constexpr auto failureStatus = StatusIds::PRECONDITION_FAILED;
     const TString failureMessage = "Local compute actor failed";
-    const bool legacyInternalError = outcome == ELateRemoteTaskStart::LegacyInternalError;
     const bool startsRemoteActors = outcome == ELateRemoteTaskStart::ComputeState
-        || outcome == ELateRemoteTaskStart::StartResponse || legacyInternalError;
+        || outcome == ELateRemoteTaskStart::StartResponse;
 
     TKikimrRunner kikimr(RemoteTaskSettings(channelVersion));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -77,7 +75,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
         return ev->Sender.NodeId() != ev->GetRecipientRewrite().NodeId();
     });
     TBlockEvents<TEvKqpNode::TEvStartKqpTasksResponse> startResponses(runtime, [&](const auto& ev) {
-        return (outcome == ELateRemoteTaskStart::ComputeState || legacyInternalError) && ev->GetRecipientRewrite() == executer
+        return outcome == ELateRemoteTaskStart::ComputeState && ev->GetRecipientRewrite() == executer
             && ev->Sender.NodeId() != executer.NodeId();
     });
     const auto stateObserver = runtime.AddObserver<TEvState>([&](auto& ev) {
@@ -89,7 +87,7 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
         }
     });
     TBlockEvents<TEvState> remoteHellos(runtime, [&](const auto& ev) {
-        return (outcome == ELateRemoteTaskStart::StartResponse || legacyInternalError) && ev->GetRecipientRewrite() == executer
+        return outcome == ELateRemoteTaskStart::StartResponse && ev->GetRecipientRewrite() == executer
             && ev->Sender.NodeId() != executer.NodeId()
             && ev->Get()->Record.GetState() == NYql::NDqProto::COMPUTE_STATE_EXECUTING;
     });
@@ -146,46 +144,17 @@ void TestLateRemoteTaskStart(ui32 channelVersion, ELateRemoteTaskStart outcome) 
         case ELateRemoteTaskStart::StartResponse:
             startRequests.Stop().Unblock();
             break;
-        case ELateRemoteTaskStart::LegacyInternalError: {
-            const auto requestId = heldRequest->Cookie;
-            startRequests.Stop().Unblock();
-            runtime.WaitFor("remote start response", [&] { return !startResponses.empty(); }, TDuration::Seconds(5));
-            auto& record = startResponses.front()->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), remoteTaskCount);
-            // Older nodes could report started tasks as INTERNAL_ERROR when creating another actor failed.
-            for (const auto& started : record.GetStartedTasks()) {
-                auto* notStarted = record.AddNotStartedTasks();
-                notStarted->SetTaskId(started.GetTaskId());
-                notStarted->SetReason(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
-                notStarted->SetRequestId(requestId);
-            }
-            record.ClearStartedTasks();
-            record.ClearTaskStartOutcomeComplete();
-
-            startResponses.Stop().Unblock();
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back([&](IEventHandle& ev) {
-                return ev.GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType
-                    && ev.GetRecipientRewrite() == executer;
-            });
-            UNIT_ASSERT(runtime.DispatchEvents(options, shutdownDeadline));
-            remoteHellos.Stop().Unblock();
-            break;
-        }
-        case ELateRemoteTaskStart::CompleteInternalError:
+        case ELateRemoteTaskStart::InternalError:
         case ELateRemoteTaskStart::NotStarted: {
             auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
             reply->Record.SetTxId(start.GetTxId());
-            const bool internalError = outcome == ELateRemoteTaskStart::CompleteInternalError;
-            if (internalError) {
-                reply->Record.SetTaskStartOutcomeComplete(true);
-            }
+            const auto reason = outcome == ELateRemoteTaskStart::InternalError
+                ? NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR : NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN;
             for (const auto& task : start.GetTasks()) {
                 auto* notStarted = reply->Record.AddNotStartedTasks();
                 notStarted->SetTaskId(task.GetId());
                 notStarted->SetRequestId(heldRequest->Cookie);
-                notStarted->SetReason(internalError ? NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR
-                    : NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN);
+                notStarted->SetReason(reason);
             }
             runtime.Send(new IEventHandle(executer, heldRequest->Recipient, reply.Release(), 0, heldRequest->Cookie),
                 remoteNodeIndex, true);
@@ -223,12 +192,8 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         TestLateRemoteTaskStart(2, ELateRemoteTaskStart::StartResponse);
     }
 
-    Y_UNIT_TEST(LateRemoteTaskLegacyInternalErrorDuringShutdown) {
-        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::LegacyInternalError);
-    }
-
-    Y_UNIT_TEST(LateRemoteTaskCompleteInternalErrorDuringShutdown) {
-        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::CompleteInternalError);
+    Y_UNIT_TEST(LateRemoteTaskInternalErrorDuringShutdown) {
+        TestLateRemoteTaskStart(2, ELateRemoteTaskStart::InternalError);
     }
 
     Y_UNIT_TEST(LateRemoteTaskNotStartedDuringShutdown) {
@@ -256,7 +221,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         const auto computeActor = runtime.AllocateEdgeActor(nodeIndex);
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(request->Get()->Record.GetTxId());
-        reply->Record.SetTaskStartOutcomeComplete(true);
         auto* started = reply->Record.AddStartedTasks();
         started->SetTaskId(tasks[0].GetId());
         ActorIdToProto(computeActor, started->MutableActorId());

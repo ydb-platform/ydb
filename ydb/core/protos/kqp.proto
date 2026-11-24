@@ -808,8 +808,6 @@ message TEvStartKqpTasksResponse {
     optional uint64 TxId = 1;
     repeated TStartedTask StartedTasks = 2;
     repeated TNotStartedTask NotStartedTasks = 3;
-    // Both lists together account for every task in this request, including on error.
-    optional bool TaskStartOutcomeComplete = 4;
 }
 
 message TEvCancelKqpTasksRequest {

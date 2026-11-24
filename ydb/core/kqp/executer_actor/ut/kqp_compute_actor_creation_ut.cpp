@@ -128,7 +128,6 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
             UNIT_ASSERT(reply);
             UNIT_ASSERT_VALUES_EQUAL(reply->Sender, sender);
             const auto& record = reply->Get()->Record;
-            UNIT_ASSERT(record.GetTaskStartOutcomeComplete());
             UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(record.NotStartedTasksSize(), 1);
             const auto& task = record.GetNotStartedTasks(0);
@@ -187,7 +186,6 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
             auto reply = runtime.GrabEdgeEventRethrow<TEvKqpNode::TEvStartKqpTasksResponse>(executer);
             const auto& record = reply->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), TxId);
-            UNIT_ASSERT(record.GetTaskStartOutcomeComplete());
             const ui32 startedTasks = failOnAttempt == 3 ? 0 : failOnAttempt - 1;
             UNIT_ASSERT_VALUES_EQUAL(record.StartedTasksSize(), startedTasks);
             for (ui32 i = 0; i < startedTasks; ++i) {

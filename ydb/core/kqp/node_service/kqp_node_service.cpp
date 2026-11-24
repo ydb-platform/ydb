@@ -484,7 +484,6 @@ private:
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(request.GetTxId());
-        ev->Record.SetTaskStartOutcomeComplete(true);
         for (auto& task : request.GetTasks()) {
             auto* resp = ev->Record.AddNotStartedTasks();
             resp->SetTaskId(task.GetId());

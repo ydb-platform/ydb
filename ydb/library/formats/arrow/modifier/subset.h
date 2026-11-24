@@ -36,19 +36,19 @@ public:
         const ui64 size = end - begin;
         if (!Exclude) {
             for (auto&& i : FieldIdx) {
-                AFL_VERIFY(i < size);
+                YDB_LOG_VERIFY(i < size);
                 fields.emplace_back(*(begin + i));
             }
         } else {
             auto it = FieldIdx.begin();
             for (ui32 i = 0; i < size; ++i) {
                 if (it == FieldIdx.end() || i < *it) {
-                    AFL_VERIFY(i < size);
+                    YDB_LOG_VERIFY(i < size);
                     fields.emplace_back(*(begin + i));
                 } else if (i == *it) {
                     ++it;
                 } else {
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
                 }
             }
         }

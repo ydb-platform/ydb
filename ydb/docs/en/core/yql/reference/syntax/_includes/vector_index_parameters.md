@@ -8,5 +8,6 @@
     * `levels` - number of levels in the tree (should be between 1 and 16)
     * `overlap_clusters` - the maximum number of nearest leaf clusters to add each vector to; it must not exceed `clusters`. If omitted, {{ ydb-short-name }} can enable overlap automatically for large datasets. When overlap is not enabled, each vector is assigned to one cluster.
     * `adaptive_clusters` - for [filtered indexes](../../../../dev/vector-indexes.md#filtered), automatically choose the number of clusters per filtering-column value based on how many vectors that value has (`true` or `false`, default `false`; enabled during automatic parameter selection). See [Adaptive clusters](../../../../dev/vector-indexes-kmeans-tree-type.md#adaptive-clusters).
+    * `autoupdate` - maintain the index when table data changes (`true` or `false`, default `true`). When `false`, changes are reflected only after rebuilding the index. See [Disabling automatic updates](../../../../dev/vector-indexes.md#autoupdate).
     * the total number of nodes in the tree, calculated as `clusters` raised to the power of `levels`, should be no more than 1073741824
     * the product of `vector_dimension` and `clusters` should be no more than 4194304

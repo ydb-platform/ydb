@@ -32,6 +32,8 @@ Supports named arguments:
 
 `Mode` and `DefaultOperator` values are case-insensitive.
 
+The query text can be a literal, a query parameter, or an expression that is independent of table rows and remains constant during query execution.
+
 ### `Wildcard` example {#wildcard}
 
 If the index is created with n-gram filtering, you can use `%` and `_` patterns similar to `LIKE`.
@@ -43,7 +45,9 @@ WHERE FulltextMatch(body, "mach% learn%", "Wildcard" AS Mode)
 LIMIT 20;
 ```
 
-A pattern must contain a searchable fragment at least as long as `filter_ngram_min_length`; `%` or a shorter fragment cannot be used for an index search.
+With `use_filter_lowercase=true`, `Wildcard` matching is case-insensitive.
+
+If the text fragment is shorter than the minimum n-gram length, the search may read the main table and run more slowly. See [Searching with short patterns](../syntax/select/fulltext_index.md#scan-fallback).
 
 ### MinimumShouldMatch example {#minimum-should-match-example}
 

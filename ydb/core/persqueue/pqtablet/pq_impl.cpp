@@ -2738,6 +2738,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
+    // Write sessions and MLP reject earlier, but late requests and protocols without
+    // that check (e.g. kafka_proxy) must still be stopped here.
+    if (req.CmdWriteSize() > 0) {
+        if (const auto error = GetWriteModeError(Config)) {
+            ReplyError(ctx, responseCookie, error->Code, error->Reason);
+            return;
+        }
+    }
+
     if (IsTopicMutateDisabled(ctx)
         && (req.CmdWriteSize() > 0 || req.HasCmdEmitHeartbeat()))
     {

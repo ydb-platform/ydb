@@ -3,6 +3,8 @@
 
 #include <yql/essentials/public/udf/udf_registrator.h>
 
+#include <arrow/memory_pool.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
@@ -157,6 +159,10 @@ Y_UNIT_TEST(ZeroSizeAllocationOnEmptyPool) {
 
 #if !defined(_asan_enabled_)
 Y_UNIT_TEST(ArrowAllocateZeroSize) {
+    if (IsDefaultAllocatorUsed() || GetArrowAllocator() != nullptr) {
+        return;
+    }
+
     // Choose small enough pieces to hit arena (using some internal knowledge)
     const auto pieceSize = AlignUp<size_t>(1, ArrowAlignment);
     UNIT_ASSERT_EQUAL(0, (TAllocState::POOL_PAGE_SIZE - sizeof(TMkqlArrowHeader)) % pieceSize);
@@ -206,13 +212,14 @@ Y_UNIT_TEST(ArrowFreeWithWrongSizeIsDetected) {
     constexpr ui64 smallSize = 1_KB;
     void* onArena = MKQLArrowAllocate(smallSize);
 
-    UNIT_ASSERT_EXCEPTION(MKQLArrowFree(onArena, 32_KB), yexception);
+    const ui64 wrongSize = IsDefaultAllocatorUsed() ? smallSize / 2 : 32_KB;
+    UNIT_ASSERT_EXCEPTION(MKQLArrowFree(onArena, wrongSize), yexception);
 
     MKQLArrowFree(onArena, smallSize);
 }
 
 Y_UNIT_TEST(ArrowArenaPageOutlivesAllocator) {
-    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+    if (IsDefaultAllocatorUsed() || GetArrowAllocator() != nullptr) {
         return;
     }
 
@@ -244,7 +251,7 @@ Y_UNIT_TEST(ArrowArenaPageOutlivesAllocator) {
 }
 
 Y_UNIT_TEST(ArrowArenaPageIsReleasedOnce) {
-    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+    if (IsDefaultAllocatorUsed() || GetArrowAllocator() != nullptr) {
         return;
     }
 
@@ -265,14 +272,16 @@ Y_UNIT_TEST(ArrowArenaPageIsReleasedOnce) {
     UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePool::GetGlobalPagePoolSize(), arenaPool);
     UNIT_ASSERT_VALUES_EQUAL(GetTotalFreeListBytes(), allPools);
 
+    const auto mmapedBytes = GetTotalMmapedBytes();
     MKQLArrowFree(escaped, size);
 
     UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePool::GetGlobalPagePoolSize(), arenaPool + pageSize);
     UNIT_ASSERT_VALUES_EQUAL(GetTotalFreeListBytes(), allPools + static_cast<i64>(pageSize));
+    UNIT_ASSERT_VALUES_EQUAL(GetTotalMmapedBytes(), mmapedBytes);
 }
 
 Y_UNIT_TEST(ArrowArenaBuffersAreFreedByForeignThread) {
-    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+    if (IsDefaultAllocatorUsed() || GetArrowAllocator() != nullptr) {
         return;
     }
 
@@ -311,7 +320,7 @@ Y_UNIT_TEST(ArrowArenaBuffersAreFreedByForeignThread) {
 }
 
 Y_UNIT_TEST(ArrowArenaPageIsReleasedByForeignThread) {
-    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+    if (IsDefaultAllocatorUsed() || GetArrowAllocator() != nullptr) {
         return;
     }
 
@@ -335,6 +344,7 @@ Y_UNIT_TEST(ArrowArenaPageIsReleasedByForeignThread) {
     }
 
     const auto arenaPool = TAlignedPagePool::GetGlobalPagePoolSize();
+    const auto mmapedBytes = GetTotalMmapedBytes();
 
     std::thread foreign([escaped] {
         MKQLArrowFree(escaped, size);
@@ -342,14 +352,17 @@ Y_UNIT_TEST(ArrowArenaPageIsReleasedByForeignThread) {
     foreign.join();
 
     UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePool::GetGlobalPagePoolSize(), arenaPool + TAllocState::POOL_PAGE_SIZE);
+    UNIT_ASSERT_VALUES_EQUAL(GetTotalMmapedBytes(), mmapedBytes);
 
     MKQLArrowFree(next, size);
 }
 
 Y_UNIT_TEST(ArrowAllocateWithDefaultArrowAllocator) {
-    TScopedAlloc alloc(__LOCATION__);
-    UseDefaultArrowAllocator();
+    SetArrowAllocator(arrow::default_memory_pool());
+    UNIT_ASSERT(GetArrowAllocator() != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(GetArrowAllocator(), arrow::default_memory_pool());
 
+    TScopedAlloc alloc(__LOCATION__);
     constexpr ui64 size = 1_KB;
     auto* ptr = MKQLArrowAllocate(size);
     UNIT_ASSERT(ptr);

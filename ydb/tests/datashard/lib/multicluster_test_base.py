@@ -30,6 +30,7 @@ class MulticlusterTestBase():
     def build_cluster(cls):
         cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                extra_feature_flags=cls.get_extra_feature_flags(),
+                                               disabled_feature_flags=cls.get_disabled_feature_flags(),
                                                extra_grpc_services=cls.get_extra_grpc_services(),
                                                column_shard_config={
             'disabled_on_scheme_shard': False,
@@ -64,6 +65,10 @@ class MulticlusterTestBase():
             "enable_external_data_sources",
             "enable_tiering_in_column_shard",
         ]
+
+    @classmethod
+    def get_disabled_feature_flags(cls):
+        return []
 
     @classmethod
     def get_extra_grpc_services(cls):

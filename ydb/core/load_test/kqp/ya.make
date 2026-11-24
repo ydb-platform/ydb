@@ -12,7 +12,8 @@ PEERDIR(
     library/cpp/time_provider
     ydb/core/base
     ydb/core/blobstorage/base
-    ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/load_test/common
     ydb/core/protos
     ydb/library/actors/core

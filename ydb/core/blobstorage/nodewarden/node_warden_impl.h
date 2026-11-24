@@ -344,6 +344,7 @@ namespace NKikimr::NStorage {
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
         TControlWrapper EnableChecksumReadValidationOnVDisk;
         TControlWrapper EnableChecksumWriteValidationOnVDisk;
+        TControlWrapper EnableVDiskSectorPreparation;
 
         TControlWrapper EnableChunkKeeper;
         TControlWrapper SpaceReportPeriodSeconds;

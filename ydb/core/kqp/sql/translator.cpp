@@ -79,6 +79,28 @@ void SetToken(TToken& token, const TToken& source, ui32 id, ui32 element, TStrin
     token.SetValue(TString(value));
 }
 
+// The synthetic qualified name represents the single alias token in the SQL text.
+void SetAliasTokenRange(google::protobuf::Message& node, ui32 index) {
+    using google::protobuf::FieldDescriptor;
+    const auto* descriptor = node.GetDescriptor();
+    const auto* start = descriptor->FindFieldByName("StartTokenIndex");
+    const auto* end = descriptor->FindFieldByName("EndTokenIndex");
+    if (!start || !end) {
+        return;
+    }
+
+    const auto* reflection = node.GetReflection();
+    reflection->SetUInt32(&node, start, index);
+    reflection->SetUInt32(&node, end, index);
+    std::vector<const FieldDescriptor*> fields;
+    reflection->ListFields(node, &fields);
+    for (const auto* field : fields) {
+        if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+            SetAliasTokenRange(*reflection->MutableMessage(&node, field), index);
+        }
+    }
+}
+
 TToken& IdentifierToken(TRule_id_or_type& id) {
     return *id.MutableAlt_id_or_type1()->MutableRule_id1()->MutableAlt_id1()->MutableRule_identifier1()->MutableToken1();
 }
@@ -132,10 +154,12 @@ void QualifyCall(TExpression& expr, bool ansi) {
         return;
     }
     if (const auto alias = GetAlias(token.GetValue(), /*normalize=*/true); !alias.empty()) {
+        const auto index = expr.GetBlock1().GetStartTokenIndex();
         const TToken source = token; // Switching alternatives invalidates the original token.
         auto& name = QualifiedName(expr);
         auto& function = IdentifierToken(*name.MutableBlock3()->MutableAlt1()->MutableRule_id_or_type1());
         SetQualifiedName(name, function, source, alias);
+        SetAliasTokenRange(*expr.MutableBlock1(), index);
     }
 }
 
@@ -152,10 +176,12 @@ void QualifyCall(TRule_using_call_expr& expr, bool ansi) {
         return;
     }
     if (const auto alias = GetAlias(token.GetValue(), /*normalize=*/false); !alias.empty()) {
+        const auto index = block.GetStartTokenIndex();
         const TToken source = token;
         auto& name = *expr.MutableBlock1()->MutableAlt1();
         auto& function = IdentifierToken(*name.MutableRule_an_id_or_type3());
         SetQualifiedName(name, function, source, alias);
+        SetAliasTokenRange(*expr.MutableBlock1(), index);
     }
 }
 

@@ -1,3 +1,5 @@
+ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
+ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/persqueue/ut TPartitionTests.ReadLagClampsWhenFirstUnreadWrittenAfterLastRead
@@ -26,6 +28,8 @@ ydb/tests/compatibility/topics test_topic.py.TestTopicRollingDowngrade.test_writ
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc_external_recovery
+ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/sdk/cpp/path_aliasing TPathAliasing.DiscoveryAndSchemeResources
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

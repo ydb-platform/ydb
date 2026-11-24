@@ -409,7 +409,8 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     test_success_rates = {}
     
     print(f"Processing history for {len(history)} tests with history data")
-    print(f"Total tests in statuses: {len(tests_in_statuses)}")
+    print(f"Total report results: {len(all_tests)}")
+    print(f"Results requiring history (FAIL/MUTE/ERROR): {len(tests_in_statuses)}")
     
     for test in tests_in_statuses:
         if test.full_name in history:

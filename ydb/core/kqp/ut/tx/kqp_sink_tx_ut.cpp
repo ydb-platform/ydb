@@ -2382,6 +2382,109 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    template<bool EnableLockTransfer>
+    class TQuietSplitAfterIndexedDeleteLookup : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            auto& featureFlags = *settings.AppConfig.MutableFeatureFlags();
+            featureFlags.SetEnableDataShardUncommittedWriteSeqNum(EnableLockTransfer);
+            featureFlags.SetEnableDataShardLocksTransferOnSplit(EnableLockTransfer);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        }
+
+        void DoExecute() override {
+            auto& server = Kikimr->GetTestServer();
+            auto& runtime = *server.GetRuntime();
+            const auto edge = runtime.AllocateEdgeActor();
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto execute = [&](const TString& query, const TTxControl& control) {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(query, control).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result;
+            };
+            execute(Q_(R"(
+                CREATE TABLE `/Root/IndexedDelete` (
+                    Key Uint32 NOT NULL, Value Int64 NOT NULL,
+                    PRIMARY KEY (Key), INDEX ByValue GLOBAL SYNC ON (Value)
+                ) WITH (AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                    UNIFORM_PARTITIONS = 2);
+            )"), TTxControl::NoTx());
+            execute(Q_(R"(
+                UPSERT INTO `/Root/IndexedDelete` (Key, Value) VALUES (3000000000u, 10l), (3000000001u, 20l);
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+
+            const auto shards = GetTableShards(&server, edge, "/Root/IndexedDelete");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+            const auto lookupShard = shards.front();
+            const auto writeShard = shards.back();
+            const auto indexShard = GetTableShards(&server, edge, "/Root/IndexedDelete/ByValue/indexImplTable").at(0);
+            TActorId lookupActor;
+            ui64 lookupReadId = 0;
+            bool sawEmptyLookup = false;
+            THashSet<ui64> preparedShards;
+            auto forwardObserver = runtime.AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
+                const auto& forward = *ev->Get();
+                if (!forward.Ev) {
+                    return;
+                }
+                if (forward.TabletId == lookupShard && forward.Ev->Type() == TEvDataShard::TEvRead::EventType) {
+                    const auto& read = static_cast<const TEvDataShard::TEvRead&>(*forward.Ev).Record;
+                    UNIT_ASSERT_VALUES_EQUAL(read.GetLockMode(), NKikimrDataEvents::PESSIMISTIC_NONE);
+                    lookupReadId = read.GetReadId();
+                    lookupActor = ev->Sender;
+                }
+                if (forward.Ev->Type() == NEvents::TDataEvents::TEvWrite::EventType) {
+                    const auto& write = static_cast<const NEvents::TDataEvents::TEvWrite&>(*forward.Ev).Record;
+                    if (write.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE
+                            || write.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE) {
+                        preparedShards.insert(forward.TabletId);
+                    }
+                }
+            });
+            auto readObserver = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+                const auto& read = ev->Get()->Record;
+                if (lookupActor && ev->GetRecipientRewrite() == lookupActor && read.GetReadId() == lookupReadId
+                        && read.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS && read.GetFinished()) {
+                    UNIT_ASSERT_VALUES_EQUAL(read.GetRowCount(), 0);
+                    UNIT_ASSERT(read.GetTxLocks().empty() && read.GetBrokenTxLocks().empty());
+                    sawEmptyLookup = true;
+                }
+            });
+
+            auto deleted = execute(Q_(R"(
+                PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                DELETE FROM `/Root/IndexedDelete` ON (Key) VALUES (1u), (3000000000u);
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()));
+            UNIT_ASSERT(sawEmptyLookup);
+            UNIT_ASSERT(preparedShards.empty());
+            auto tx = deleted.GetTransaction();
+            UNIT_ASSERT(tx);
+
+            // The first shard only looked up the missing key. Split it after
+            // the statement finishes so the writer resolves fresh partitioning at commit.
+            SetSplitMergePartCountLimit(&runtime, -1);
+            WaitTxNotification(server, edge, AsyncSplitTable(server, edge, "/Root/IndexedDelete", lookupShard, 10u));
+            const auto commit = Kikimr->RunCall([&] { return tx->Commit().ExtractValueSync(); });
+            const THashSet<ui64> expected{writeShard, indexShard};
+            UNIT_ASSERT_VALUES_EQUAL(preparedShards, expected);
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+
+            auto checked = execute(Q_(R"(
+                SELECT Key FROM `/Root/IndexedDelete` ORDER BY Key;
+                SELECT Key FROM `/Root/IndexedDelete` VIEW ByValue ORDER BY Key;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx());
+            CompareYson("[[3000000001u]]", FormatResultSetYson(checked.GetResultSet(0)));
+            CompareYson("[[3000000001u]]", FormatResultSetYson(checked.GetResultSet(1)));
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(QuietSplitAfterIndexedDeleteLookup, EnableLockTransfer) {
+        TQuietSplitAfterIndexedDeleteLookup<EnableLockTransfer> tester;
+        tester.SetUseRealThreads(false);
+        tester.Execute(/*prepareTables=*/false);
+    }
+
     template<bool LoseEmptyCopy, bool MergeBeforeCommit = false>
     class TQuietSplitWithEmptyLockCopy : public TTableDataModificationTester {
     protected:

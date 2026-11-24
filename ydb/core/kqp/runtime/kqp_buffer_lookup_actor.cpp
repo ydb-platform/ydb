@@ -456,9 +456,13 @@ public:
         YDB_LOG_ENSURE(lookupState.Worker);
         YDB_LOG_ENSURE(lookupState.ReadsInflight > 0);
 
-        // At current time don't add shard partitioning metadata for reads. (Read Committed doesn't collect locks for reads.)
-        Settings.TxManager->AddShard(shardId, false, lookupState.Worker->GetTablePath());
-        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
+        // A Read Committed lookup without locks has nothing to validate at commit.
+        // Registering it could leave an obsolete PREPARE target after a split.
+        if (Settings.LockMode != NKikimrDataEvents::PESSIMISTIC_NONE
+                || !record.GetTxLocks().empty() || !record.GetBrokenTxLocks().empty()) {
+            Settings.TxManager->AddShard(shardId, false, lookupState.Worker->GetTablePath());
+            Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
+        }
         Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         TStringBuilder txLocks;

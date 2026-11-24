@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_local_minikql_host.h"
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -25,20 +26,36 @@ public:
         Y_UNUSED(ctx);
 
         Response.Reset(new TEvTablet::TEvLocalSchemeTxResponse);
+        Response->Record.SetOrigin(txc.Tablet);
 
-        auto &delta =  Ev->Get()->Record.GetSchemeChanges();
+        const auto& delta = Ev->Get()->Record.GetSchemeChanges();
+        const auto& currentScheme = txc.DB.GetScheme();
+        auto proposedScheme = currentScheme;
+        NTable::TSchemeModifier modifier(proposedScheme);
+        modifier.Apply(delta);
 
-        auto currentScheme = txc.DB.GetScheme();
-        NTable::TSchemeModifier(currentScheme).Apply(delta);
-        // TODO: Validate scheme change
+        for (ui32 tableId : modifier.Affects) {
+            const auto* before = currentScheme.GetTableInfo(tableId);
+            const auto* after = proposedScheme.GetTableInfo(tableId);
+            if (!before || !after || before->CompactionPolicy == after->CompactionPolicy) {
+                continue;
+            }
 
-        if (!Ev->Get()->Record.GetDryRun())
+            TString error;
+            if (!NLocalDb::ValidateCompactionPolicyChange(*before->CompactionPolicy, *after->CompactionPolicy, error)) {
+                Response->Record.SetStatus(NKikimrProto::ERROR);
+                Response->Record.SetErrorReason(error);
+                return true;
+            }
+        }
+
+        if (!Ev->Get()->Record.GetDryRun()) {
             txc.DB.Alter().Merge(delta);
+        }
 
-        auto schemeSnapshot = currentScheme.GetSnapshot();
+        auto schemeSnapshot = proposedScheme.GetSnapshot();
         Response->Record.MutableFullScheme()->Swap(schemeSnapshot.Get());
         Response->Record.SetStatus(NKikimrProto::OK);
-        Response->Record.SetOrigin(txc.Tablet);
 
         return true;
     }

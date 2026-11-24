@@ -417,19 +417,37 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 AUTH_METHOD = "NONE",
                 SHARED_READING = "{shared}"
             );
+        )", "endpoint"_a = YDB_ENDPOINT, "database"_a = YDB_DATABASE, "shared"_a = SharedReading ? "true" : "false"));
+
+        ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY lag_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
+                PRAGMA pq.Consumer = "test_consumer";
                 INSERT INTO lag_source.`{output}` SELECT Data FROM lag_source.`{input}`;
             END DO;
-        )", "endpoint"_a = YDB_ENDPOINT, "database"_a = YDB_DATABASE, "shared"_a = SharedReading ? "true" : "false", "input"_a = inputTopic,
-            "output"_a = outputTopic));
+        )", "input"_a = inputTopic, "output"_a = outputTopic));
         CheckScriptExecutionsCount(1, 1);
+        WaitFor(TDuration::Seconds(60), "streaming query topic read session", [&] {
+            const auto result = GetTopicClient()
+                                    ->DescribeConsumer(inputTopic, "test_consumer", NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true))
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
+                const auto& stats = partition.GetPartitionConsumerStats();
+                if (stats && !stats->GetReadSessionId().empty()) {
+                    return true;
+                }
+            }
+            return false;
+        });
         WriteTopicMessage(inputTopic, "message");
         ReadTopicMessage(outputTopic, "message");
 
         NMonitoring::TDynamicCounters::TCounterPtr lag;
         WaitFor(TDuration::Seconds(60), "streaming query read lag sensor", [&] {
             for (ui32 node = 0; node < GetRuntime().GetNodeCount(); ++node) {
-                auto group = GetCounters("kqp", node)->FindSubgroup("subsystem", "streaming_queries");
+                // Keep the service root: checkpoint counters add a sibling host subgroup.
+                const auto counters = NKikimr::GetServiceCounters(GetRuntime().GetAppData(node).Counters, "kqp", /* skipAddedLabels */ false);
+                auto group = counters->FindSubgroup("subsystem", "streaming_queries");
                 if (group) {
                     group = group->FindSubgroup("host", "");
                 }

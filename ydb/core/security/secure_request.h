@@ -15,6 +15,7 @@ private:
     TString RequestId;
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
     bool RequireAdminAccess = false;
+    bool AllowMissingToken = false;
     bool UserAdmin = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
@@ -134,6 +135,10 @@ public:
         RequireAdminAccess = requireAdminAccess;
     }
 
+    void SetAllowMissingToken() {
+        AllowMissingToken = true;
+    }
+
     void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
         Entries = entries;
     }
@@ -199,7 +204,8 @@ public:
             // Perform access checks
             ProcessAuthorizeTicketResult(MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(SecurityToken, InternalToken), ctx);
         } else {
-            if (IsTokenRequired() && !IsTokenExists()) {
+            // AllowMissingToken waives only a missing token. A presented token is still checked.
+            if (IsTokenRequired() && !IsTokenExists() && !AllowMissingToken) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
             }
             if (SecurityToken.empty()) {
@@ -250,6 +256,12 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
+        // Runs on actor activation, before the token requirement is checked.
+        // Derived code that needs AppData belongs here: the constructor may run
+        // without an activation context.
+        if constexpr (requires(TDerived& self) { self.PrepareAuthentication(); }) {
+            static_cast<TDerived*>(this)->PrepareAuthentication();
+        }
         TSecureRequestActor<TActorBootstrapped<TActorBootstrappedSecureRequest<TDerived>>, TDerived>::Bootstrap(ctx);
     }
 };

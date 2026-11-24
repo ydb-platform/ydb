@@ -29,7 +29,8 @@ public:
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
         auto weakState = std::weak_ptr<TDbDriverState>(DbDriverState_);
-        auto channelPoolUpdateWrapper = [weakConnections, weakState, knownEndpoints = KnownEndpoints](NYdb::NIssue::TIssues&&, EStatus status) mutable {
+        auto channelPoolUpdateWrapper = [weakConnections, weakState, knownEndpoints = KnownEndpoints](
+                                            NYdb::NIssue::TIssues&&, EStatus status) mutable {
             if (status != EStatus::SUCCESS) {
                 return false;
             }

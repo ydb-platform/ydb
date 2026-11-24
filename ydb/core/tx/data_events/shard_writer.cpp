@@ -11,6 +11,8 @@
 
 #include <ydb/library/aclib/user_context.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
+
 namespace NKikimr::NEvWrite {
 
 namespace {
@@ -100,6 +102,9 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
         if (RetryBySubscription) {
             ev->Record.SetOverloadSubscribe(++LastOverloadSeqNo);
         }
+        YDB_LOG_DEBUG("Send shard write", {"shardId", ShardId}, {"longTxId", ExternalController->GetLongTxId().ToString()},
+            {"numRetries", NumRetries}, {"timeoutSeconds", Timeout ? Timeout->Seconds() : 0},
+            {"elapsedMs", (TMonotonic::Now() - StartInstant).MilliSeconds()}, {"overloadSeqNo", LastOverloadSeqNo});
         SendToTablet(std::move(ev));
     }
 
@@ -119,6 +124,9 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
         LastResultNodeId = ev->Sender.NodeId();
 
         const auto ydbStatus = msg->GetStatus();
+        YDB_LOG_DEBUG("Shard write result", {"shardId", ShardId}, {"longTxId", ExternalController->GetLongTxId().ToString()},
+            {"status", static_cast<ui32>(ydbStatus)}, {"resultNodeId", ev->Sender.NodeId()}, {"numRetries", NumRetries},
+            {"elapsedMs", (TMonotonic::Now() - StartInstant).MilliSeconds()});
         if (ydbStatus == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
             // Sticky, even when a retry later succeeds: FCM must see that the shard pushed back.
             WasEverOverloaded = true;
@@ -149,6 +157,8 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
 
     void TShardWriter::Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev) {
         const auto& record = ev->Get()->Record;
+        YDB_LOG_DEBUG("Shard overload ready", {"shardId", ShardId}, {"longTxId", ExternalController->GetLongTxId().ToString()},
+            {"seqNo", record.GetSeqNo()}, {"numRetries", NumRetries}, {"elapsedMs", (TMonotonic::Now() - StartInstant).MilliSeconds()});
 
         AFL_VERIFY(RetryBySubscription);
         AFL_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo)("event_seq_no", record.GetSeqNo())("last_overload_seq_no", LastOverloadSeqNo);
@@ -172,6 +182,8 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "DeliveryProblem");
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->TabletId == ShardId);
+        YDB_LOG_NOTICE("Shard write delivery problem", {"shardId", ShardId}, {"longTxId", ExternalController->GetLongTxId().ToString()},
+            {"notDelivered", msg->NotDelivered}, {"numRetries", NumRetries}, {"elapsedMs", (TMonotonic::Now() - StartInstant).MilliSeconds()});
 
         ReportTabletLocationInvalidatedToFlowControl(ShardId);
 
@@ -192,6 +204,8 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
     }
 
     void TShardWriter::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        YDB_LOG_NOTICE("Shard writer wakeup", {"shardId", ShardId}, {"longTxId", ExternalController->GetLongTxId().ToString()},
+            {"tag", ev->Get()->Tag}, {"numRetries", NumRetries}, {"elapsedMs", (TMonotonic::Now() - StartInstant).MilliSeconds()});
         if (ev->Get()->Tag) {
             auto gPassAway = PassAwayGuard();
             ExternalController->OnFail(Ydb::StatusIds::TIMEOUT, TStringBuilder()
@@ -205,6 +219,8 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
     }
 
     bool TShardWriter::RetryWriteRequest(const bool delayed) {
+        YDB_LOG_DEBUG("Retry shard write", {"shardId", ShardId}, {"longTxId", ExternalController->GetLongTxId().ToString()},
+            {"delayed", delayed}, {"numRetries", NumRetries}, {"elapsedMs", (TMonotonic::Now() - StartInstant).MilliSeconds()});
         if (IsMaxRetriesReached()) {
             return false;
         }

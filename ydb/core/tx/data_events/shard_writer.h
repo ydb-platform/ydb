@@ -196,6 +196,7 @@ private:
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
     const std::optional<TDuration> Timeout;
+    const TMonotonic StartInstant = TMonotonic::Now();
     const bool RetryBySubscription;
     ui64 LastOverloadSeqNo = 0;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;

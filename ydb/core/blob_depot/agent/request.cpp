@@ -44,7 +44,6 @@ namespace NKikimr::NBlobDepot {
             const size_t num = SubrequestRelays.erase(executionRelay);
             Y_ABORT_UNLESS(num);
         }
-        requestInFlight.Unlink();
         ProcessResponse(requestInFlight.Id, std::move(requestInFlight.Context), std::move(response));
     }
 
@@ -57,6 +56,8 @@ namespace NKikimr::NBlobDepot {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, TTabletDisconnected>) {
                 return "TTabletDisconnected";
+            } else if constexpr (std::is_same_v<T, TS3PutResult>) {
+                return value.Error.value_or("OK");
             } else if constexpr (std::is_same_v<T, TKeyResolved>) {
                 return "TKeyResolved";
             } else {
@@ -122,9 +123,17 @@ namespace NKikimr::NBlobDepot {
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvCheckIntegrityResult::TPtr ev);
 
+    TBlobDepotAgent::TRequestsInFlight::node_type TBlobDepotAgent::ExtractRequest(ui64 id, TRequestsInFlight& map) {
+        auto node = map.extract(id);
+        if (node) {
+            node.value().Unlink();
+        }
+        return node;
+    }
+
     void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {
-        if (auto node = map.extract(id)) {
+        if (auto node = ExtractRequest(id, map)) {
             auto& requestInFlight = node.value();
             requestInFlight.Sender->OnRequestComplete(requestInFlight, std::move(response), std::move(executionRelay));
         }

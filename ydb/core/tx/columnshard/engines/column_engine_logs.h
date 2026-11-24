@@ -149,9 +149,15 @@ public:
     bool LoadCounters(IDbWrapper& db);
 
 public:
-    virtual std::shared_ptr<ITxReader> BuildLoader(
-        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) override;
-    bool FinishLoading();
+    // loadPortions false: the portions stay on disk for TDeferredPortionLoader, the tables stay at Nothing
+    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
+        std::vector<TPortionAddress>&& uncommittedPortions, const bool loadPortions) override;
+    bool FinishLoading(const bool portionsLoaded = true);
+    void AddPortionLoadedOnStart(TGranuleMeta& granule, const TPortionInfo::TPtr& portion);
+    // a batch of TDeferredPortionLoader: skips the portions already in memory
+    void AddPortionsLoadedInBatch(
+        const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions, TLoadedKeyRanges&& loadedKeyRanges);
+
     void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);
     // ALTER TABLE ... COMPACT WITH (CASCADE = true): true rewrites every portion to the current schema, false stops that
@@ -287,6 +293,14 @@ private:
 
 private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
+
+    template <class TPortionPtr>
+    void RegisterPortion(const TPortionPtr& portion) {
+        Counters->AddPortion(*portion);
+        if (portion->HasRemoveSnapshot()) {
+            AddCleanupPortion(portion);
+        }
+    }
 };
 
 }   // namespace NKikimr::NOlap

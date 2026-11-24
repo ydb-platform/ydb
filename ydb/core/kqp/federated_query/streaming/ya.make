@@ -3,12 +3,10 @@ LIBRARY()
 SRCS(
     physical_graph_rescaling.cpp
     pq_topic_resolver.cpp
-    streaming_helper.cpp
     streaming_query_controller.cpp
 )
 
 PEERDIR(
-    library/cpp/monlib/dynamic_counters
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/fq/libs/checkpointing
@@ -16,7 +14,6 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/executer_actor
     ydb/core/kqp/federated_query/actors
-    ydb/core/kqp/query_data
     ydb/core/kqp/predictor
     ydb/core/kqp/script_executions/common
     ydb/core/protos

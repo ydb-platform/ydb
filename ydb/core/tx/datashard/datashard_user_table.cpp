@@ -48,13 +48,7 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
 {
-    if (descr.GetPartitionConfig().HasResetTieringPolicy()) {
-        auto schema = descr;
-        schema.MutablePartitionConfig()->ClearResetTieringPolicy();
-        SetSchema(schema);
-    } else {
-        SetSchema(descr);
-    }
+    SetSchema(descr);
     Name = ExtractBase(descr.GetPath());
     Path = descr.GetPath();
     ParseProto(descr);
@@ -763,11 +757,6 @@ void TUserTable::ApplyAlter(
             alter.SetTieringPolicy(tid, policy);
         }
         config.MutableTieringPolicy()->CopyFrom(configDelta.GetTieringPolicy());
-    } else if (configDelta.HasResetTieringPolicy()) {
-        for (ui32 tid : tids) {
-            alter.ResetTieringPolicy(tid);
-        }
-        config.ClearTieringPolicy();
     }
 
     // A column used by the old tiering policy can be dropped after updating that policy.

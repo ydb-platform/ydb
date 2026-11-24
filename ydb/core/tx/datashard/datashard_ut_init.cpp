@@ -137,8 +137,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         coldGeneration.TierId = TierId;
         compactionPolicy->Generations.push_back(coldGeneration);
 
-        enum class EPolicyUpdate { Omit, Replace, Reset };
-        auto update = EPolicyUpdate::Omit;
+        bool replacePolicy = false;
         NTable::TTieringPolicy expectedPolicy;
         auto patchScheme = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
             auto& record = ev->Get()->Record;
@@ -169,7 +168,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                 external.SetPurpose(NKikimrStorageSettings::TChannelPurpose::External);
                 external.SetChannel(channel);
             }
-            if (creating || update == EPolicyUpdate::Replace) {
+            if (creating || replacePolicy) {
                 auto& family = *config.AddColumnFamilies();
                 family.SetId(TierId);
                 family.SetRoom(RoomId);
@@ -202,8 +201,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                     range.To = NTable::TTierAbsoluteBound{2'000'000};
                 }
                 NTable::TieringPolicyToProto(expectedPolicy, *config.MutableTieringPolicy());
-            } else if (update == EPolicyUpdate::Reset) {
-                config.MutableResetTieringPolicy();
             }
             record.SetTxBody(tx.SerializeAsString());
         });
@@ -211,23 +208,18 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "tiered",
             TShardedTableOptions().ShadowData(EShadowDataMode::Enabled));
         const ui64 shard = shards.at(0);
-        auto check = [&](bool withPolicy, bool groupIndexesInDescriptor) {
+        auto check = [&](bool groupIndexesInDescriptor) {
             const auto description = ReadStoredTableDescription(runtime, sender, tableId.PathId.LocalPathId, shard);
             const auto& config = description.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(config.HasTieringPolicy(), withPolicy);
-            UNIT_ASSERT(!config.HasResetTieringPolicy());
-            if (withPolicy) {
-                UNIT_ASSERT(NTable::TieringPolicyFromProto(config.GetTieringPolicy()) == expectedPolicy);
-            }
+            UNIT_ASSERT(config.HasTieringPolicy());
+            UNIT_ASSERT(NTable::TieringPolicyFromProto(config.GetTieringPolicy()) == expectedPolicy);
 
             const auto scheme = ReadLocalScheme(runtime, shard);
             for (const TString name : {"__user__tiered", "__shadow__tiered"}) {
                 UNIT_ASSERT_C(scheme.TableNames.contains(name), name);
                 const auto& table = scheme.Tables.at(scheme.TableNames.at(name));
-                UNIT_ASSERT_VALUES_EQUAL(table.TieringPolicy.has_value(), withPolicy);
-                if (withPolicy) {
-                    UNIT_ASSERT(*table.TieringPolicy == expectedPolicy);
-                }
+                UNIT_ASSERT(table.TieringPolicy);
+                UNIT_ASSERT(*table.TieringPolicy == expectedPolicy);
                 UNIT_ASSERT_VALUES_EQUAL(table.CompactionPolicy->Generations.size(), compactionPolicy->Generations.size());
                 UNIT_ASSERT_VALUES_EQUAL(table.CompactionPolicy->Generations.back().TierId.value_or(0), TierId);
 
@@ -248,23 +240,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
             }
         };
 
-        check(true, true);
+        check(true);
         RebootTablet(runtime, shard, sender);
-        check(true, true);
+        check(true);
 
-        update = EPolicyUpdate::Replace;
+        replacePolicy = true;
         WaitTxNotification(server, sender, AsyncAlterAddExtraColumn(server, "/Root", "tiered"));
-        check(true, false);
+        check(false);
 
-        update = EPolicyUpdate::Omit;
+        replacePolicy = false;
         WaitTxNotification(server, sender, AsyncAlterDropColumn(server, "/Root", "tiered", "value"));
-        check(true, false);
-
-        update = EPolicyUpdate::Reset;
-        WaitTxNotification(server, sender, AsyncAlterDropColumn(server, "/Root", "tiered", "extra"));
-        check(false, false);
+        check(false);
         RebootTablet(runtime, shard, sender);
-        check(false, false);
+        check(false);
     }
 
     Y_UNIT_TEST(DeleteTtlDoesNotSetTieringPolicy) {

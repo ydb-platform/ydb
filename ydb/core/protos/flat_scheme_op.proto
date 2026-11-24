@@ -232,12 +232,11 @@ message TPartitionConfig {
     // For fulltext indexes - to determine if the table is an impl table of an index
     optional ESpecialTableType SpecialTableType = 30;
 
-    // SchemeShard resolves the column and family IDs before sending this update to DataShard.
-    // An omitted update preserves the existing tiering policy.
-    oneof TieringPolicyUpdate {
-        TTieringPolicySettings TieringPolicy = 32;
-        google.protobuf.Empty ResetTieringPolicy = 33;
-    }
+    // SchemeShard resolves column and family IDs before sending the policy to DataShard.
+    // ALTER replaces the policy when present and preserves it when omitted.
+    optional TTieringPolicySettings TieringPolicy = 32;
+    reserved 33;
+    reserved "ResetTieringPolicy";
 }
 
 message TByKeyFilterPrefix {

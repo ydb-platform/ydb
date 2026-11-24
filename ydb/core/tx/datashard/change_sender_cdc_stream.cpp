@@ -622,6 +622,10 @@ class TCdcChangeSenderMain
             return;
         }
 
+        if (Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !entry.PQGroupInfo->Schema) {
+            return LogCritAndRetry("Empty schema for key range heartbeats");
+        }
+
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         if (TopicVersion && TopicVersion == topicVersion) {
             CreateSenders();
@@ -643,9 +647,6 @@ class TCdcChangeSenderMain
         const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
         if (!topicAutoPartitioning && !entry.PQGroupInfo->Schema) {
             return LogWarnAndRetry("Empty schema and disabled auto-partitioning");
-        }
-        if (Stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange && !entry.PQGroupInfo->Schema) {
-            return LogCritAndRetry("Empty schema for key range heartbeats");
         }
 
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);

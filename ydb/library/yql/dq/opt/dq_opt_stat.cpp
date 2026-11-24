@@ -24,7 +24,7 @@ namespace {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
     const TVector<TString> UdfBlackList = {
-        "RemoteEmbedder.",
+        "Knn.ApplyRemoteEmbedder",
         "RandomNumber",
         "Random",
         "RandomUuid",

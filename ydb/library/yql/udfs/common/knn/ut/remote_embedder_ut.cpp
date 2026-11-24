@@ -129,7 +129,7 @@ struct TSetup {
     TFunctionTypeInfo Resolve(bool stream, TType* userType = nullptr, bool typesOnly = false) {
         TFunctionTypeInfo info;
         auto status = Registry->FindFunctionTypeInfo(NYql::UnknownLangVersion, *RuntimeSettings, Env, new TTypeInfoHelper(), nullptr,
-            stream ? "RemoteEmbedder.ApplyRemoteEmbedderStream" : "RemoteEmbedder.ApplyRemoteEmbedder", userType, {},
+            stream ? "Knn.ApplyRemoteEmbedderStream" : "Knn.ApplyRemoteEmbedder", userType, {},
             typesOnly ? NUdf::IUdfModule::TFlags::TypesOnly : 0, NUdf::TSourcePosition(), Secrets.get(), nullptr, &info);
         UNIT_ASSERT_C(status.IsOk(), status.GetError());
         return info;
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedder) {
         UNIT_ASSERT_VALUES_EQUAL(out, "Stream<Struct<'Embedding':String,'PassThrough':Uint64,'Status':Uint32>>");
         TFunctionTypeInfo invalid;
         const auto status = setup.Registry->FindFunctionTypeInfo(NYql::UnknownLangVersion, *setup.RuntimeSettings, setup.Env, new TTypeInfoHelper(), nullptr,
-            "RemoteEmbedder.ApplyRemoteEmbedderStream", setup.StreamUserType(false), {}, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, nullptr, &invalid);
+            "Knn.ApplyRemoteEmbedderStream", setup.StreamUserType(false), {}, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, nullptr, &invalid);
         UNIT_ASSERT(!status.IsOk());
         UNIT_ASSERT_STRING_CONTAINS(status.GetError(), "Text:String");
     }

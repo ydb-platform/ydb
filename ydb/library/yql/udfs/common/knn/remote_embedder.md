@@ -1,18 +1,18 @@
-# RemoteEmbedder UDF
+# Remote embedder UDFs
 
 Implements the [remote embedder RFC](https://wiki.yandex-team.ru/kikimr/developers/rfc/udf-dlja-udalennogo-jembeddera/)
 using the [OpenAI-compatible embeddings API](https://developers.openai.com/api/reference/resources/embeddings/methods/create).
 
 The bare SQL names `ApplyRemoteEmbedder` and `ApplyRemoteEmbedderStream` from
-the RFC are aliases for the functions in the `RemoteEmbedder` module.
+the RFC are aliases for the functions in the `Knn` module.
 
 ```text
-RemoteEmbedder::ApplyRemoteEmbedder(
+Knn::ApplyRemoteEmbedder(
     Model:String, BaseUrl:String, AuthSecretName:String, Text:String,
     MaxRetries:Uint32? = 5
 ) -> Struct<Embedding:String, Status:Uint32>
 
-RemoteEmbedder::ApplyRemoteEmbedderStream(
+Knn::ApplyRemoteEmbedderStream(
     Model:String, BaseUrl:String, AuthSecretName:String,
     InputStream:Stream<Struct<Text:String, PassThrough:T>>,
     BatchSize:Uint32? = 32, MaxTokensPerSecond:Uint32? = 0,
@@ -60,7 +60,7 @@ budget. This is an estimate, not an exact model token count or a cluster-wide
 quota.
 
 ```sql
-SELECT RemoteEmbedder::ApplyRemoteEmbedder(
+SELECT Knn::ApplyRemoteEmbedder(
     'text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token', 'Дом');
 
 $requests = AsList(
@@ -71,7 +71,7 @@ $requests = AsList(
 SELECT Embedding, Status, PassThrough
 FROM (
     PROCESS AS_TABLE($requests)
-    USING RemoteEmbedder::ApplyRemoteEmbedderStream(
+    USING Knn::ApplyRemoteEmbedderStream(
         'text-embedding-3-large', 'https://api.openai.com/v1', 'openai_token',
         TableRows(), 32u, 10240u, 5u)
 );

@@ -14,7 +14,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/testing/mock_server
     library/cpp/time_provider
-    ydb/library/yql/udfs/common/remote_embedder
+    ydb/library/yql/udfs/common/knn
     yql/essentials/minikql
     yql/essentials/minikql/computation
     yql/essentials/public/udf/service/exception_policy

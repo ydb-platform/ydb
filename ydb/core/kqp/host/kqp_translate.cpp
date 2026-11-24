@@ -3,15 +3,11 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/sql/translator.h>
 
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/translation/sql.h>
-#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
 namespace NKikimr::NKqp {
 
@@ -155,16 +151,9 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         auto settings = settingsBuilder.Build(ctx);
         NYql::TStmtParseInfo stmtParseInfo;
 
-        NSQLTranslationV1::TLexers lexers;
-        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-        NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
-        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-
         NSQLTranslation::TTranslators translators(
             nullptr,
-            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+            MakeKqpSqlV1Translator(settingsBuilder.GetIsAmbiguityError()),
             nullptr
         );
 

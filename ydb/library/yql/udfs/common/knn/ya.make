@@ -8,12 +8,17 @@ YQL_ABI_VERSION(
 
 SRCS(
     knn.cpp
+    remote_embedder.cpp
 )
 
 PEERDIR(
     library/cpp/dot_product
+    library/cpp/http/simple
+    library/cpp/json
     library/cpp/l1_distance
     library/cpp/l2_distance
+    library/cpp/time_provider
+    library/cpp/uri
     ydb/library/vector_distance
 )
 
@@ -21,4 +26,5 @@ END()
 
 RECURSE_FOR_TESTS(
     test
+    ut
 )

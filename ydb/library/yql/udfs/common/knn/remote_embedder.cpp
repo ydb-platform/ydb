@@ -1,6 +1,8 @@
-#include <yql/essentials/public/udf/udf_helpers.h>
+#include "remote_embedder.h"
 
-#include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
+#include "knn-serializer-shared.h"
+
+#include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
@@ -267,81 +269,79 @@ private:
     ui32 PassThroughIndex_;
 };
 
-class TRemoteEmbedderModule: public IUdfModule {
-public:
-    TStringRef Name() const {
-        return TStringRef::Of("RemoteEmbedder");
-    }
-
-    void CleanupOnTerminate() const override {
-    }
-
-    void GetAllFunctions(IFunctionsSink& sink) const override {
-        sink.Add(TStringRef::Of("ApplyRemoteEmbedder"));
-        sink.Add(TStringRef::Of("ApplyRemoteEmbedderStream"))->SetTypeAwareness();
-    }
-
-    void BuildFunctionTypeInfo(const TStringRef& name, TType* userType, const TStringRef&, ui32 flags, IFunctionTypeInfoBuilder& builder) const override try {
-        const bool stream = name == TStringRef::Of("ApplyRemoteEmbedderStream");
-        if (!stream && name != TStringRef::Of("ApplyRemoteEmbedder")) {
-            builder.SetError("RemoteEmbedder: unknown function");
+void BuildRemoteEmbedderSignature(TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly, bool stream) try {
+    const TType* inputType = nullptr;
+    const TType* passThroughType = nullptr;
+    ui32 textIndex = 0;
+    ui32 passThroughIndex = 0;
+    if (stream) {
+        const auto helper = builder.TypeInfoHelper();
+        const TTupleTypeInspector user(*helper, userType);
+        const TTupleTypeInspector args(*helper, user && user.GetElementsCount() ? user.GetElementType(0) : nullptr);
+        const auto sequenceType = args && args.GetElementsCount() > 3 ? args.GetElementType(3) : nullptr;
+        const TStreamTypeInspector input(*helper, sequenceType);
+        const TListTypeInspector listHint(*helper, sequenceType);
+        // PROCESS supplies a List hint for TableRows(), then SqlProcess
+        // adapts its input to the Stream argument declared below.
+        const auto rowType = input ? input.GetItemType() : listHint ? listHint.GetItemType() : nullptr;
+        const TStructTypeInspector row(*helper, rowType);
+        if (!row || row.GetMembersCount() != 2 ||
+            (textIndex = row.GetMemberIndex("Text")) == Max<ui32>() ||
+            (passThroughIndex = row.GetMemberIndex("PassThrough")) == Max<ui32>() ||
+            TDataTypeInspector(*helper, row.GetMemberType(textIndex)).GetTypeId() != TDataType<char*>::Id) {
+            builder.SetError("RemoteEmbedder: expected Stream<Struct<Text:String,PassThrough:T>>");
             return;
         }
-        const TType* inputType = nullptr;
-        const TType* passThroughType = nullptr;
-        ui32 textIndex = 0;
-        ui32 passThroughIndex = 0;
-        if (stream) {
-            const auto helper = builder.TypeInfoHelper();
-            const TTupleTypeInspector user(*helper, userType);
-            const TTupleTypeInspector args(*helper, user && user.GetElementsCount() ? user.GetElementType(0) : nullptr);
-            const auto sequenceType = args && args.GetElementsCount() > 3 ? args.GetElementType(3) : nullptr;
-            const TStreamTypeInspector input(*helper, sequenceType);
-            const TListTypeInspector listHint(*helper, sequenceType);
-            // PROCESS supplies a List hint for TableRows(), then SqlProcess
-            // adapts its input to the Stream argument declared below.
-            const auto rowType = input ? input.GetItemType() : listHint ? listHint.GetItemType() : nullptr;
-            const TStructTypeInspector row(*helper, rowType);
-            if (!row || row.GetMembersCount() != 2 ||
-                (textIndex = row.GetMemberIndex("Text")) == Max<ui32>() ||
-                (passThroughIndex = row.GetMemberIndex("PassThrough")) == Max<ui32>() ||
-                TDataTypeInspector(*helper, row.GetMemberType(textIndex)).GetTypeId() != TDataType<char*>::Id) {
-                builder.SetError("RemoteEmbedder: expected Stream<Struct<Text:String,PassThrough:T>>");
-                return;
-            }
-            inputType = builder.Stream()->Item(rowType).Build();
-            passThroughType = row.GetMemberType(passThroughIndex);
-            builder.UserType(userType);
-        }
-        auto result = builder.Struct(stream ? 3 : 2);
-        result->AddField<char*>("Embedding", nullptr);
-        if (stream) {
-            result->AddField("PassThrough", passThroughType, nullptr);
-        }
-        result->AddField<ui32>("Status", nullptr);
-        const auto resultType = result->Build();
-        builder.Returns(stream ? builder.Stream()->Item(resultType).Build() : resultType).OptionalArgs(stream ? 3 : 1);
-        auto args = builder.Args(stream ? 7 : 5);
-        args->Add<char*>().Name("Model");
-        args->Add<char*>().Name("BaseUrl");
-        args->Add<char*>().Name("AuthSecretName");
-        if (stream) {
-            args->Add(inputType).Name("InputStream");
-            args->Add<TOptional<ui32>>().Name("BatchSize");
-            args->Add<TOptional<ui32>>().Name("MaxTokensPerSecond");
-        } else {
-            args->Add<char*>().Name("Text");
-        }
-        args->Add<TOptional<ui32>>().Name("MaxRetries");
-        args->Done();
-        if (!(flags & TFlags::TypesOnly)) {
-            builder.Implementation(new TApplyRemoteEmbedder(builder.GetSourcePosition(), stream, textIndex, passThroughIndex));
-        }
-    } catch (const std::exception& e) {
-        builder.SetError(TStringBuf(e.what()));
+        inputType = builder.Stream()->Item(rowType).Build();
+        passThroughType = row.GetMemberType(passThroughIndex);
+        builder.UserType(userType);
     }
-};
+    auto result = builder.Struct(stream ? 3 : 2);
+    result->AddField<char*>("Embedding", nullptr);
+    if (stream) {
+        result->AddField("PassThrough", passThroughType, nullptr);
+    }
+    result->AddField<ui32>("Status", nullptr);
+    const auto resultType = result->Build();
+    builder.Returns(stream ? builder.Stream()->Item(resultType).Build() : resultType).OptionalArgs(stream ? 3 : 1);
+    auto args = builder.Args(stream ? 7 : 5);
+    args->Add<char*>().Name("Model");
+    args->Add<char*>().Name("BaseUrl");
+    args->Add<char*>().Name("AuthSecretName");
+    if (stream) {
+        args->Add(inputType).Name("InputStream");
+        args->Add<TOptional<ui32>>().Name("BatchSize");
+        args->Add<TOptional<ui32>>().Name("MaxTokensPerSecond");
+    } else {
+        args->Add<char*>().Name("Text");
+    }
+    args->Add<TOptional<ui32>>().Name("MaxRetries");
+    args->Done();
+    if (!typesOnly) {
+        builder.Implementation(new TApplyRemoteEmbedder(builder.GetSourcePosition(), stream, textIndex, passThroughIndex));
+    }
+} catch (const std::exception& e) {
+    builder.SetError(TStringBuf(e.what()));
+}
 
 } // namespace
 
-REGISTER_MODULES(TRemoteEmbedderModule)
+namespace NKnn {
+
+bool TRemoteEmbedder::DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+    if (name != Name()) {
+        return false;
+    }
+    BuildRemoteEmbedderSignature(userType, builder, typesOnly, false);
+    return true;
+}
+
+bool TRemoteEmbedderStream::DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+    if (name != Name()) {
+        return false;
+    }
+    BuildRemoteEmbedderSignature(userType, builder, typesOnly, true);
+    return true;
+}
+
+} // namespace NKnn

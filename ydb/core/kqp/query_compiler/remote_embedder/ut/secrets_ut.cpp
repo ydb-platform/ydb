@@ -24,8 +24,8 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
         NYql::TExprContext ctx;
         const auto pos = ctx.AppendPosition({});
         const auto secret = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "/Root/openai_token")});
-        const auto scalar = Apply(ctx, "RemoteEmbedder.ApplyRemoteEmbedder", secret);
-        const auto stream = Apply(ctx, "RemoteEmbedder.ApplyRemoteEmbedderStream", secret);
+        const auto scalar = Apply(ctx, "Knn.ApplyRemoteEmbedder", secret);
+        const auto stream = Apply(ctx, "Knn.ApplyRemoteEmbedderStream", secret);
         const auto program = ctx.NewList(pos, {scalar, stream});
         THashMap<TString, TString> params;
         FillRemoteEmbedderSecureParams(program, params);
@@ -57,10 +57,10 @@ Y_UNIT_TEST_SUITE(TRemoteEmbedderSecrets) {
         const auto parameter = ctx.NewCallable(pos, "Parameter", {ctx.NewAtom(pos, "dynamic")});
         const auto empty = ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "")});
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            FillRemoteEmbedderSecureParams(Apply(ctx, "RemoteEmbedder.ApplyRemoteEmbedder", parameter), params),
+            FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedder", parameter), params),
             yexception, "AuthSecretName must be a non-empty String literal");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            FillRemoteEmbedderSecureParams(Apply(ctx, "RemoteEmbedder.ApplyRemoteEmbedderStream", empty), params),
+            FillRemoteEmbedderSecureParams(Apply(ctx, "Knn.ApplyRemoteEmbedderStream", empty), params),
             yexception, "AuthSecretName must be a non-empty String literal");
     }
 }

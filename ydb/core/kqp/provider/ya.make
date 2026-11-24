@@ -37,6 +37,7 @@ PEERDIR(
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/query_data
+    ydb/core/kqp/sql
     ydb/core/kqp/tracing
     ydb/core/local_indexes/bloom
     ydb/core/protos
@@ -78,11 +79,6 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/sql
     yql/essentials/sql/settings
-    yql/essentials/sql/v1/lexer/antlr4
-    yql/essentials/sql/v1/lexer/antlr4_ansi
-    yql/essentials/sql/v1/proto_parser/antlr4
-    yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    yql/essentials/sql/v1/translation
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/utils/log

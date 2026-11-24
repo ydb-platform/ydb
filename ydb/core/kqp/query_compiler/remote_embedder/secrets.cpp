@@ -11,7 +11,7 @@ void FillRemoteEmbedderSecureParams(const NYql::TExprNode::TPtr& node, THashMap<
             return true;
         }
         const auto name = expr->Head().Head().Content();
-        if (name != "RemoteEmbedder.ApplyRemoteEmbedder" && name != "RemoteEmbedder.ApplyRemoteEmbedderStream") {
+        if (name != "Knn.ApplyRemoteEmbedder" && name != "Knn.ApplyRemoteEmbedderStream") {
             return true;
         }
         const auto& secret = *expr->Child(3);

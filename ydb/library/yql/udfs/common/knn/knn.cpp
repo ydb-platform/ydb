@@ -1,5 +1,6 @@
 #include "knn-distance.h"
 #include "knn-serializer.h"
+#include "remote_embedder.h"
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
@@ -508,6 +509,8 @@ SIMPLE_MODULE(TKnnModule,
               TCosineSimilarity,
               TCosineDistance,
               TManhattanDistance,
-              TEuclideanDistance)
+              TEuclideanDistance,
+              NKnn::TRemoteEmbedder,
+              NKnn::TRemoteEmbedderStream)
 
 REGISTER_MODULES(TKnnModule)

@@ -43,6 +43,11 @@ void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKi
     LOG_D("Handle HandleScaleStatusChange. Scale", {"status", NKikimrPQ::EScaleStatus_Name(scaleStatus)});
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         LOG_D("::HandleScaleStatusChange need to split partition", {"partitionId", partitionId});
+        if (IsRejectedKeyRangeSplit(partitionId, splitBoundary)) {
+            LOG_D("Skip split already rejected by SchemeShard", {"partitionId", partitionId});
+            PartitionsToSplit.erase(partitionId);
+            return;
+        }
         TPartitionScaleOperationInfo op{
             .PartitionId = partitionId,
             .PartitionScaleParticipants = std::move(participants),
@@ -68,6 +73,14 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     }
 
     RequestInflight = true;
+    if (BalancerConfig.HasKeySchema && splitMergeRequest.Split.size() == 1) {
+        const auto& split = splitMergeRequest.Split.front();
+        InflightKeyRangeSplit = TKeyRangeSplit{
+            .PartitionId = split.GetPartition(),
+            .SplitBoundary = split.GetSplitBoundary(),
+            .PathVersion = BalancerConfig.PathVersion,
+        };
+    }
     LOG_D("Send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
@@ -80,6 +93,16 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         splitMergeRequest.SetBoundary,
         ctx.SelfID
     ));
+}
+
+bool TPartitionScaleManager::IsRejectedKeyRangeSplit(ui32 partitionId, const TMaybe<TString>& splitBoundary) const {
+    if (!BalancerConfig.HasKeySchema || !splitBoundary) {
+        return false;
+    }
+    const auto it = RejectedKeyRangeSplits.find(partitionId);
+    return it != RejectedKeyRangeSplits.end()
+        && it->second.SplitBoundary == *splitBoundary
+        && it->second.PathVersion == BalancerConfig.PathVersion;
 }
 
 
@@ -119,7 +142,7 @@ std::vector<ui32> TPartitionScaleManager::ReorderSplits() const {
 
 TPartitionScaleManager::TScaleRequest TPartitionScaleManager::BuildScaleRequest(const TActorContext&) {
     const size_t allowedSplitsCountLimit = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
-    size_t allowedSplitsCount = allowedSplitsCountLimit;
+    size_t allowedSplitsCount = BalancerConfig.HasKeySchema ? Min<size_t>(allowedSplitsCountLimit, 1) : allowedSplitsCountLimit;
 
     auto boundsToApply = BuildSetBoundaryRequest(allowedSplitsCount);
     if (!boundsToApply.Empty()) {
@@ -354,6 +377,7 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     CurrentScaleRequest = {};
     LastResponseTime = ctx.Now();
+    const auto keyRangeSplit = std::exchange(InflightKeyRangeSplit, std::nullopt);
     auto result = ev->Get();
     LOG_D("HandleScaleRequestResult scale request", {"result", result->Status});
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
@@ -361,6 +385,10 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
         Backoff.Reset();
         TrySendScaleRequest(ctx);
     } else {
+        if (keyRangeSplit && result->Status == TEvTxUserProxy::TResultStatus::ExecError) {
+            PartitionsToSplit.erase(keyRangeSplit->PartitionId);
+            RejectedKeyRangeSplits.insert_or_assign(keyRangeSplit->PartitionId, *keyRangeSplit);
+        }
         RequestTimeout = Backoff.Next();
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(TRY_SCALE_REQUEST_WAKE_UP_TAG));
     }
@@ -368,6 +396,7 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
 
 void TPartitionScaleManager::AbortInflightScaleRequest(const TActorContext& ctx) {
     RequestInflight = false;
+    InflightKeyRangeSplit.reset();
     if (CurrentScaleRequest) {
         ctx.Send(CurrentScaleRequest, new TEvents::TEvPoisonPill());
         CurrentScaleRequest = {};

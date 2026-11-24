@@ -217,6 +217,27 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
         UNIT_ASSERT_STRING_CONTAINS(output, "/test_database/bench");
     }
 
+    Y_UNIT_TEST_F(VectorUsesOneTablePath, TCliTestFixture) {
+        struct TCase {
+            TString Database;
+            TString Table;
+            TString Target;
+        };
+        for (const auto& testCase : TVector<TCase>{
+            {GetDatabase(), "tenant/vectors", GetDatabase() + "/tenant/vectors"},
+            {"tenant", "vectors", "./vectors"},
+            {"tenant", "tenant/vectors", "./tenant/vectors"},
+            {"tenant", "/test_database/tenant/vectors", "/test_database/tenant/vectors"},
+        }) {
+            for (const TString command : {"init", "build-index", "drop-index"}) {
+                const auto output = RunCli({"-e", GetEndpoint(), "-d", testCase.Database,
+                    "workload", "vector", command, "--table", testCase.Table, "--dry-run"});
+                const TString prefix = command == "init" ? "CREATE TABLE `" : "ALTER TABLE `";
+                UNIT_ASSERT_STRING_CONTAINS(output, prefix + testCase.Target + "`");
+            }
+        }
+    }
+
     Y_UNIT_TEST_F(TpccPreflightUsesTheSelectedDatabase, TTpccFixture) {
         struct TCase {
             TString Database;
@@ -226,6 +247,7 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
         };
         const TVector<TCase> cases = {
             {"tenant", "", ".", {}},
+            {"tenant", "tenant", "tenant", {"tenant"}},
             {"tenant", "bench/nested", "bench/nested", {"bench", "bench/nested"}},
             {"tenant", "/test_database/tenant/bench", "/test_database/tenant/bench", {"/test_database/tenant/bench"}},
             {GetDatabase(), "bench/nested", GetDatabase() + "/bench/nested", {GetDatabase() + "/bench", GetDatabase() + "/bench/nested"}},

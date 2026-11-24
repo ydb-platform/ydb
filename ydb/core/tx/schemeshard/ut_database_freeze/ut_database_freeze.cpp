@@ -1860,7 +1860,8 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
                     UNIT_ASSERT_C(commands.empty(), "A schema-only change must not contact DataShards");
                 } else {
                     UNIT_ASSERT(!commands.empty());
-                    UNIT_ASSERT_VALUES_EQUAL(commands.front(), to.second ? TStage::FENCE_WRITES : TStage::OPEN);
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(commands.front()),
+                        ui32(to.second ? TStage::FENCE_WRITES : TStage::OPEN));
                 }
                 if (to.first) {
                     env.CheckSchemaBlocked();

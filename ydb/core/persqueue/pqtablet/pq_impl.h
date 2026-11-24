@@ -44,6 +44,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     bool HandleHook(STFUNC_SIG) override;
 
     bool IsTopicMutateDisabled(const TActorContext& ctx) const;
+    bool IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession = false);
 

@@ -2,7 +2,6 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h>
 #include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>

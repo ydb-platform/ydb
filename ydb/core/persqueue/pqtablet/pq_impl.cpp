@@ -372,8 +372,6 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
-<<<<<<< HEAD
-=======
 bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, const TActorContext& ctx) const {
     if (!ReplicationEnabled(Config) || AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
         return false;
@@ -382,7 +380,6 @@ bool TPersQueue::IsConsumerOffsetCommitDisabled(const TString& consumerName, con
     return !consumer || consumer->GetReplicateOffsets();
 }
 
->>>>>>> 757fe0a7a1a (forbid read & set client offset when using write mode (#60645))
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession)
 {
     ReplyPersQueueError(
@@ -3055,9 +3052,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     // Enforce the topic mode for reads and writes, including late writes and
     // protocols without an earlier check (e.g. kafka_proxy).
-<<<<<<< HEAD
-    if (req.CmdWriteSize() > 0 || req.HasCmdRead()) {
-=======
     // MLP consumer operations fetch and enrich messages through CmdRead.
     // Those reads do not write and stay allowed in unavailable/prohibited mode.
     const bool mlpRead = req.HasCmdRead() && [&] {
@@ -3065,7 +3059,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return consumer && consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
     }();
     if (req.CmdWriteSize() > 0 || (req.HasCmdRead() && !mlpRead)) {
->>>>>>> 757fe0a7a1a (forbid read & set client offset when using write mode (#60645))
         if (const auto error = GetWriteModeError(Config)) {
             ReplyError(ctx, responseCookie, error->Code, error->Reason, /*closeSession=*/true);
             return;
@@ -3080,8 +3073,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-<<<<<<< HEAD
-=======
     if (req.HasCmdSetClientOffset()
         && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -3089,7 +3080,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
->>>>>>> 757fe0a7a1a (forbid read & set client offset when using write mode (#60645))
     if (const auto error = GetWriteModeError(Config);
         (IsTopicMutateDisabled(ctx) || error)
         && req.HasCmdSetClientOffset())

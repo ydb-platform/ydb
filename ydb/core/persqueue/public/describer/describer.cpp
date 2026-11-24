@@ -160,7 +160,7 @@ public:
 
                         if (!entry.ListNodeEntry || entry.ListNodeEntry->Children.size() != 1) {
                             SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::UnknownError,
+                                .Status = EStatus::NotFound,
                                 .CdcStream = true
                             });
                             break;

@@ -235,7 +235,7 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
                 continue;
             }
 
-            if (topicInfo.CdcStream && topicInfo.Status == NPQ::NDescriber::EStatus::UnknownError) {
+            if (topicInfo.CdcStream && topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
                 return CloseSession(
                     TStringBuilder() << "CDC stream '" << original
                         << "' describe error, reason: could not retrieve child topic description",

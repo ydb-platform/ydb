@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/json_index/json_index.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -13,6 +14,8 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
+#include <util/folder/dirut.h>
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -24,8 +27,8 @@ constexpr TStringBuf Check = "CHECK TABLE `/Root/Docs` INDEX `idx`;";
 
 class TFixture {
 public:
-    explicit TFixture(bool compact = false, bool smallBatches = false, bool newRbo = false)
-        : Kikimr(Settings(compact, smallBatches, newRbo))
+    explicit TFixture(bool compact = false, bool smallBatches = false, bool newRbo = false, bool forceSpilling = false)
+        : Kikimr(Settings(compact, smallBatches, newRbo, forceSpilling))
         , Client(Kikimr.GetQueryClient())
         , Runtime(*Kikimr.GetTestServer().GetRuntime())
         , Sender(Runtime.AllocateEdgeActor())
@@ -129,7 +132,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(Shards("/Root/Docs").size(), 2);
     }
 
-    void SplitShard(const TString& index, ui64 shard, ui64 border) {
+    void SplitShard(const TString& index, ui64 shard, ui64 border, TStringBuf nextKey = {}) {
         SetSplitMergePartCountLimit(&Runtime, -1);
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
@@ -138,7 +141,11 @@ public:
         auto* split = operation->MutableSplitMergeTablePartitions();
         split->SetTablePath(index);
         split->AddSourceTabletId(shard);
-        split->AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint64(border);
+        auto* key = split->AddSplitBoundary()->MutableKeyPrefix();
+        key->AddTuple()->MutableOptional()->SetUint64(border);
+        if (nextKey) {
+            key->AddTuple()->MutableOptional()->SetText(TString(nextKey));
+        }
         Runtime.Send(new IEventHandle(MakeTxProxyID(), Sender, request.Release()), 0, true);
         const auto response = Runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(Sender);
         const auto& proposal = response->Get()->Record;
@@ -153,7 +160,7 @@ public:
     TActorId Sender;
 
 private:
-    static TKikimrSettings Settings(bool compact, bool smallBatches, bool newRbo) {
+    static TKikimrSettings Settings(bool compact, bool smallBatches, bool newRbo, bool forceSpilling) {
         NKikimrConfig::TFeatureFlags flags;
         flags.SetEnableJsonIndex(true);
         flags.SetEnableAddUniqueIndex(true);
@@ -176,6 +183,21 @@ private:
             reads->SetMaxShardResolves(100);
             reads->SetMaxTotalRetries(100);
             reads->SetMaxRowsProcessingStreamLookup(2);
+            auto* resources = settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager();
+            resources->SetChannelBufferSize(64 * 1024);
+            resources->SetMinChannelBufferSize(64 * 1024);
+        }
+        if (forceSpilling) {
+            auto* service = settings.AppConfig.MutableTableServiceConfig();
+            service->SetEnableQueryServiceSpilling(true);
+            auto* resources = service->MutableResourceManager();
+            resources->SetMkqlLightProgramMemoryLimit(100);
+            resources->SetMkqlHeavyProgramMemoryLimit(300);
+            resources->SetSpillingPercent(0.01);
+            auto* spilling = service->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+            spilling->SetEnable(true);
+            spilling->SetRoot("./spilling/");
+            MakeDirIfNotExist("./spilling");
         }
         // The fixture uses simulated time, while script result expiration uses wall-clock time.
         settings.AppConfig.MutableQueryServiceConfig()->SetScriptResultsTtlDefaultSeconds(0);
@@ -666,7 +688,7 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         UNIT_ASSERT_VALUES_EQUAL(found.at("EXTRA"), unexpected);
     }
 
-    Y_UNIT_TEST(JsonFanoutDoesNotReverseProbeHealthyIndex) {
+    Y_UNIT_TEST_TWIN(JsonFanoutDoesNotRepeatDocumentLookups, ExtraPosting) {
         TFixture fixture;
         fixture.Exec(R"(
             CREATE TABLE Docs (
@@ -689,15 +711,97 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
             UPSERT INTO Docs (Id, Tenant, Payload) VALUES (1, 7, $payload), (101, 8, $payload);
         )", params);
 
+        if (ExtraPosting) {
+            constexpr TStringBuf unexpected = "unexpected";
+            fixture.Corrupt("/Root/Docs/idx/indexImplTable", NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {"Tenant", "__ydb_token", "Id"},
+                {TCell::Make(ui64{7}), TCell(unexpected.data(), unexpected.size()), TCell::Make(ui64{1})});
+        }
+
         const auto base = fixture.Shards("/Root/Docs");
         auto requests = fixture.Runtime.AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
             const auto* forward = ev->Get();
             if (forward->Ev->Type() == TEvDataShard::TEvRead::EventType && IsIn(base, forward->TabletId)) {
-                const auto& record = static_cast<TEvDataShard::TEvRead*>(forward->Ev.Get())->Record;
-                UNIT_ASSERT_VALUES_EQUAL(record.KeysSize(), 0);
+                const auto& read = *static_cast<TEvDataShard::TEvRead*>(forward->Ev.Get());
+                UNIT_ASSERT_C(read.Keys.empty(), "JSON validation must analyze each document from a scan, including when sampling extras");
             }
         });
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, ExtraPosting ? 1 : 0, 0);
+    }
+
+    Y_UNIT_TEST(JsonScanComparisonSpills) {
+        TFixture fixture(false, false, false, true);
+        fixture.Runtime.SetFastSimulatedTime(false);
+        fixture.Exec(R"(
+            CREATE TABLE Docs (
+                Id Uint64 NOT NULL, Payload JsonDocument, PRIMARY KEY (Id),
+                INDEX idx GLOBAL USING json ON (Payload)
+            ) WITH (PARTITION_AT_KEYS = (1024));
+        )");
+        const TString payload = TStringBuilder() << "{\"value\":\"" << TString(1024, 'x') << "\"}";
+        auto builder = TParamsBuilder();
+        auto& rows = builder.AddParam("$rows").BeginList();
+        for (ui64 id = 0; id < 2048; ++id) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("Id").Uint64(id)
+                .AddMember("Payload").JsonDocument(payload)
+                .EndStruct();
+        }
+        rows.EndList().Build();
+        fixture.Exec(R"(
+            DECLARE $rows AS List<Struct<Id: Uint64, Payload: JsonDocument>>;
+            UPSERT INTO Docs SELECT * FROM AS_TABLE($rows);
+        )", builder.Build());
+        TKqpCounters counters(fixture.Runtime.GetAppData().Counters);
+        const auto writes = counters.ComputeSpilling.WriteBlobs->Val();
+        const auto reads = counters.ComputeSpilling.ReadBlobs->Val();
+        const auto result = fixture.Runtime.WaitFuture(fixture.Client.ExecuteQuery(
+            TStringBuilder() << "PRAGMA ydb.EnableSpillingNodes=\"WideSort\";" << Check, TTxControl::NoTx(),
+            TExecuteQuerySettings().StatsMode(EStatsMode::Full)));
+        fixture.AssertResult(result, 0, 0, 0);
+        UNIT_ASSERT(result.GetStats());
+        const auto ast = result.GetStats()->GetAst().value_or("AST is not available");
+        UNIT_ASSERT_C(counters.ComputeSpilling.WriteBlobs->Val() > writes, ast);
+        UNIT_ASSERT_C(counters.ComputeSpilling.ReadBlobs->Val() > reads, ast);
+    }
+
+    Y_UNIT_TEST_TWIN(EmptyJsonIndex, RowIds) {
+        TFixture fixture;
+        fixture.Exec(TStringBuilder() << "CREATE TABLE Docs (Id Uint64 NOT NULL, Payload JsonDocument, "
+            << (RowIds ? "__ydb_row_id Uint64 NOT NULL, " : "") << "PRIMARY KEY (Id));");
+        if (RowIds) {
+            fixture.Exec("ALTER TABLE Docs ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);");
+        }
+        fixture.Exec("ALTER TABLE Docs ADD INDEX idx GLOBAL USING json ON (Payload);");
         fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(JsonScanComparisonWithNullKeys) {
+        TFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE Docs (
+                Id Uint64, Tenant Uint64, Payload Json, PRIMARY KEY (Id),
+                INDEX idx GLOBAL USING json ON (Tenant, Payload)
+            );
+        )");
+        fixture.Exec(R"(
+            UPSERT INTO Docs (Id, Tenant, Payload) VALUES
+                (NULL, NULL, Json('{"tag":"a"}')), (2, 7, Json('{"tag":"b"}'));
+        )");
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+        const auto token = FirstDocumentToken();
+        constexpr TStringBuf unexpected = "unexpected";
+        fixture.Corrupt("/Root/Docs/idx/indexImplTable", NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+            {"Tenant", "__ydb_token", "Id"}, {TCell(), TCell(token.data(), token.size()), TCell()});
+        fixture.Corrupt("/Root/Docs/idx/indexImplTable", NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {"Tenant", "__ydb_token", "Id"}, {TCell(), TCell(unexpected.data(), unexpected.size()), TCell()});
+        const auto result = fixture.Execute(TString(Check));
+        fixture.AssertResult(result, 1, 1, 0);
+        const auto keys = ReadMappedSampleKeys(result);
+        UNIT_ASSERT(!keys.at("POSTINGS:MISSING:").at("Id").Value);
+        UNIT_ASSERT(!keys.at("POSTINGS:MISSING:").at("Tenant").Value);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("POSTINGS:MISSING:").at("__ydb_token").Value.value(), token);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("POSTINGS:EXTRA:").at("__ydb_token").Value.value(), unexpected);
     }
 
     Y_UNIT_TEST(PrefixedEmptyTokenPostings) {
@@ -719,6 +823,66 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
             {TCell::Make(ui64{7}), TCell("", 0), TCell::Make(ui64{1}),
              TCell::Make(ui64{8}), TCell("", 0), TCell::Make(ui64{101})});
         fixture.AssertResult(fixture.Execute(TString(Check)), 0, 2, 0, "EXTRA", "EMPTY_TOKEN_POSTING", {}, {}, 2);
+    }
+
+    Y_UNIT_TEST(MappedJsonWithCoveredMapping) {
+        TFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE Docs (
+                Id Uint64 NOT NULL, Payload JsonDocument, Other Utf8,
+                __ydb_row_id Uint64 NOT NULL, PRIMARY KEY (Id)
+            );
+        )");
+        // Seed the base table before building the covered mapping so this test
+        // exercises validation independently of index-maintenance DML.
+        fixture.Exec("ALTER TABLE Docs ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id) COVER (Other);");
+        fixture.Exec("ALTER TABLE Docs ADD INDEX idx GLOBAL USING json ON (Payload);");
+        // Seed physical rows so this regression does not depend on the separate
+        // DML and index-build paths for covered row-ID mappings. NULL payloads
+        // have no postings; both mapping COVER values still need comparison.
+        constexpr auto upsert = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
+        constexpr ui64 rowId = 101;
+        constexpr TStringBuf original = "original";
+        fixture.Corrupt("/Root/Docs", upsert, {"Id", "__ydb_row_id", "Other"},
+            {TCell::Make(ui64{1}), TCell::Make(rowId), TCell(original.data(), original.size()),
+                TCell::Make(ui64{2}), TCell::Make(rowId + 1), TCell()});
+        fixture.Corrupt(TString(RowIdMappingPath), upsert, {"__ydb_row_id", "Id", "Other"},
+            {TCell::Make(rowId), TCell::Make(ui64{1}), TCell(original.data(), original.size()),
+                TCell::Make(rowId + 1), TCell::Make(ui64{2}), TCell()});
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+
+        constexpr TStringBuf wrong = "wrong";
+        fixture.Corrupt(TString(RowIdMappingPath), upsert,
+            {"__ydb_row_id", "Id", "Other"}, {TCell::Make(rowId), TCell::Make(ui64{1}), TCell(wrong.data(), wrong.size())});
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 1, "VALUE_MISMATCH", "", "ROW_ID_MAPPING");
+    }
+
+    Y_UNIT_TEST(MappedJsonWithPostingPrimaryKey) {
+        TFixture fixture;
+        fixture.Exec(R"(
+            CREATE TABLE Docs (
+                Posting Uint64 NOT NULL, Pk Utf8 NOT NULL, Tenant Uint64, Payload JsonDocument,
+                __ydb_row_id Uint64 NOT NULL, PRIMARY KEY (Posting, Pk)
+            );
+        )");
+        fixture.Exec("ALTER TABLE Docs ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);");
+        fixture.Exec("ALTER TABLE Docs ADD INDEX idx GLOBAL USING json ON (Tenant, Payload);");
+        fixture.Exec(R"(UPSERT INTO Docs (Posting, Pk, Tenant, Payload) VALUES (1, "a"u, 7, JsonDocument('{"tag":"a"}'));)");
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+
+        const auto row = fixture.Execute("SELECT __ydb_row_id FROM Docs;");
+        UNIT_ASSERT_C(row.IsSuccess(), row.GetIssues().ToString());
+        TResultSetParser parser(row.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto rowId = parser.ColumnParser("__ydb_row_id").GetUint64();
+        const auto token = FirstDocumentToken();
+        WriteMappedPosting(fixture, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE, 7, token, rowId);
+        WriteMappedPosting(fixture, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, 7, "unexpected", rowId);
+        const auto result = fixture.Execute(TString(Check));
+        fixture.AssertResult(result, 1, 1, 0);
+        const auto keys = ReadMappedSampleKeys(result);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("POSTINGS:MISSING:").at("__ydb_token").Value.value(), token);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("POSTINGS:EXTRA:").at("__ydb_token").Value.value(), "unexpected");
     }
 
     Y_UNIT_TEST(MappedPostingExtraSamples) {
@@ -753,9 +917,10 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         WriteMappedPosting(fixture, upsert, 7, "", rowId);
 
         const auto withBrokenMap = fixture.Execute(TString(Check));
-        fixture.AssertResult(withBrokenMap, 2, 3, 0, "EXTRA", "EMPTY_TOKEN_POSTING", "POSTINGS", 4, 1);
+        fixture.AssertResult(withBrokenMap, 2, 3, 0, "EXTRA", "EMPTY_TOKEN_POSTING", "POSTINGS", 5, 1);
         const auto brokenKeys = ReadMappedSampleKeys(withBrokenMap);
-        UNIT_ASSERT(!brokenKeys.contains("POSTINGS:EXTRA:"));
+        // The posting scan proves absence directly, even when the mapping is corrupt.
+        assertPostingKey(brokenKeys.at("POSTINGS:EXTRA:"), unexpected);
         assertPostingKey(brokenKeys.at("POSTINGS:MISSING:"), token);
         assertPostingKey(brokenKeys.at("POSTINGS:EXTRA:EMPTY_TOKEN_POSTING"), "");
         const auto assertMappingKey = [&](const TSampleFields& key, TStringBuf id) {
@@ -778,6 +943,11 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         const auto baseShards = fixture.Shards("/Root/Docs");
         const auto postingShards = fixture.Shards(TString(MappedPostingsPath));
         const auto mappingShards = fixture.Shards(TString(RowIdMappingPath));
+        const auto baseDescription = fixture.Kikimr.GetTestClient().Describe(&fixture.Runtime, "/Root/Docs", Tests::SchemeRoot, true);
+        const auto& columns = baseDescription.GetPathDescription().GetTable().GetColumns();
+        const auto payloadColumn = FindIf(columns, [](const auto& column) { return column.GetName() == "Payload"; });
+        UNIT_ASSERT(payloadColumn != columns.end());
+        const ui32 payloadTag = payloadColumn->GetId();
 
         const auto sessionResult = fixture.Runtime.WaitFuture(fixture.Client.GetSession());
         UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
@@ -822,6 +992,9 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
                 baseReads[ev->Sender].emplace(record.GetReadId(), shard);
             }
             if (committed && base) {
+                if (!read.Keys.empty()) {
+                    UNIT_ASSERT_C(!IsIn(record.GetColumns(), payloadTag), "Mapping probes must not reanalyze JSON documents");
+                }
                 readBaseByPrimaryKey |= AnyOf(read.Keys, [](const auto& key) {
                     const auto cells = key.GetCells();
                     return cells.size() == 2 && cells[0].AsBuf() == "a" && !cells[1].IsNull()
@@ -903,7 +1076,7 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         for (const auto& shards : {baseShards, postingShards, mappingShards}) {
             UNIT_ASSERT(AllOf(shards, [&](ui64 shard) { return touchedShards.contains(shard); }));
         }
-        UNIT_ASSERT(readMappingByRowId);
+        UNIT_ASSERT(!readMappingByRowId);
         UNIT_ASSERT(readBaseByPrimaryKey);
         TResultSetParser parser(result.GetResultSet(0));
         UNIT_ASSERT(parser.TryNextRow());
@@ -993,6 +1166,95 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         const auto result = fixture.Execute(TString(Check));
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Condition violated");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Stored document IDs must be unique");
+        UNIT_ASSERT(result.GetResultSets().empty());
+    }
+
+    Y_UNIT_TEST_TWIN(DuplicateRowIdsWithDistinctPostings, CompleteMapping) {
+        TFixture fixture;
+        CreateMappedJsonIndex(fixture);
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+        const auto firstId = FirstDocumentRowId(fixture);
+        const auto result = fixture.Execute(R"(SELECT __ydb_row_id FROM Docs WHERE Org = "z"u AND Id = 2;)");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto secondId = parser.ColumnParser("__ydb_row_id").GetUint64();
+
+        fixture.Corrupt("/Root/Docs", NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {"Org", "Id", "__ydb_row_id"}, {TCell("z", 1), TCell::Make(ui64{2}), TCell::Make(firstId)},
+            fixture.Shards("/Root/Docs").back());
+        if (CompleteMapping) {
+            fixture.Corrupt(TString(RowIdMappingPath), NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+                {"__ydb_row_id", "Org", "Id"}, {TCell::Make(secondId), TCell("z", 1), TCell::Make(ui64{2})});
+            fixture.Corrupt(TString(RowIdMappingPath), NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {"__ydb_row_id", "Org", "Id"}, {TCell::Make(firstId), TCell("z", 1), TCell::Make(ui64{2})});
+            // The two identical IDs are on opposite sides of an index partition boundary.
+            fixture.SplitShard(TString(RowIdMappingPath), fixture.Shards(TString(RowIdMappingPath)).front(), firstId, "m");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Shards(TString(RowIdMappingPath)).size(), 2);
+        }
+        const auto check = fixture.Execute(TString(Check));
+        UNIT_ASSERT(!check.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(check.GetIssues().ToString(), "Stored document IDs must be unique");
+        UNIT_ASSERT(check.GetResultSets().empty());
+    }
+
+    Y_UNIT_TEST_TWIN(MappedJsonWithBoundedChannels, ExtraMappings) {
+        TFixture fixture(false, true);
+        fixture.Exec(R"(
+            CREATE TABLE Docs (
+                Org Utf8 NOT NULL, Payload JsonDocument,
+                __ydb_row_id Uint64 NOT NULL, PRIMARY KEY (Org)
+            );
+        )");
+        fixture.Exec("ALTER TABLE Docs ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);");
+        fixture.Exec("ALTER TABLE Docs ADD INDEX idx GLOBAL USING json ON (Payload);");
+        auto builder = TParamsBuilder();
+        auto& rows = builder.AddParam("$rows").BeginList();
+        for (ui64 id = 0; id < 512; ++id) {
+            rows.AddListItem().BeginStruct().AddMember("Org")
+                .Utf8(TStringBuilder() << id << TString(2048, 'x')).EndStruct();
+        }
+        rows.EndList().Build();
+        fixture.Exec(R"(
+            DECLARE $rows AS List<Struct<Org: Utf8>>;
+            UPSERT INTO Docs SELECT * FROM AS_TABLE($rows);
+        )", builder.Build());
+        if (ExtraMappings) {
+            constexpr TStringBuf missing = "missing";
+            std::vector<TCell> cells;
+            for (ui64 id = 0; id < 128; ++id) {
+                cells.push_back(TCell::Make(Max<ui64>() - id));
+                cells.emplace_back(missing.data(), missing.size());
+            }
+            fixture.Corrupt(TString(RowIdMappingPath), NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {"__ydb_row_id", "Org"}, cells);
+        }
+        // The mapping stream exceeds its bounded channel buffers with spilling disabled.
+        // A sampler waiting for this same stream's final count would deadlock here.
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, ExtraMappings ? 128 : 0, 0);
+    }
+
+    Y_UNIT_TEST(DuplicateMappingRowIdWithUniqueDocuments) {
+        TFixture fixture;
+        CreateMappedJsonIndex(fixture);
+        const auto rowId = FirstDocumentRowId(fixture);
+        fixture.Corrupt(TString(RowIdMappingPath), NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {"__ydb_row_id", "Org", "Id"}, {TCell::Make(rowId), TCell("z", 1), TCell::Make(ui64{99})});
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 1, 0, "EXTRA", "", "ROW_ID_MAPPING");
+    }
+
+    Y_UNIT_TEST(DuplicateRowIdInDocumentWithoutPostings) {
+        TFixture fixture;
+        CreateMappedJsonIndex(fixture);
+        fixture.Exec(R"(UPSERT INTO Docs (Org, Id, Tenant, Payload) VALUES ("b"u, 3, NULL, NULL);)");
+        fixture.AssertResult(fixture.Execute(TString(Check)), 0, 0, 0);
+        const auto rowId = FirstDocumentRowId(fixture);
+        fixture.Corrupt("/Root/Docs", NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {"Org", "Id", "__ydb_row_id"}, {TCell("b", 1), TCell::Make(ui64{3}), TCell::Make(rowId)},
+            fixture.Shards("/Root/Docs").front());
+        const auto result = fixture.Execute(TString(Check));
+        UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Stored document IDs must be unique");
         UNIT_ASSERT(result.GetResultSets().empty());
     }
@@ -1381,6 +1643,49 @@ Y_UNIT_TEST_SUITE(KqpCheckIndex) {
         UNIT_ASSERT(secondReport.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(firstReport.ColumnParser("SnapshotStep").GetUint64(), secondReport.ColumnParser("SnapshotStep").GetUint64());
         UNIT_ASSERT_VALUES_EQUAL(firstReport.ColumnParser("SnapshotTxId").GetUint64(), secondReport.ColumnParser("SnapshotTxId").GetUint64());
+    }
+
+    Y_UNIT_TEST_TWIN(RejectSnapshotBeforeIndexGeneration, Rebuild) {
+        TFixture fixture;
+        fixture.Exec("CREATE TABLE Pin (Id Uint64 NOT NULL, PRIMARY KEY (Id));");
+        fixture.Exec("UPSERT INTO Pin (Id) VALUES (1);");
+        fixture.Exec("CREATE TABLE Docs (Id Uint64 NOT NULL, Tag Utf8, PRIMARY KEY (Id));");
+        fixture.Exec(R"(UPSERT INTO Docs (Id, Tag) VALUES (1, "A"u);)");
+        if (Rebuild) {
+            fixture.Exec("ALTER TABLE Docs ADD INDEX idx GLOBAL ON (Tag);");
+        }
+        const auto sessionResult = fixture.Runtime.WaitFuture(fixture.Client.GetSession());
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto first = fixture.Runtime.WaitFuture(session.ExecuteQuery(
+            Rebuild ? TString(Check) : "SELECT * FROM Pin;", TTxControl::BeginTx(TTxSettings::SnapshotRO())));
+        UNIT_ASSERT_C(first.IsSuccess(), first.GetIssues().ToString());
+        const auto tx = first.GetTransaction();
+        UNIT_ASSERT(tx && tx->IsActive());
+
+        fixture.Exec(R"(UPDATE Docs SET Tag = "B"u WHERE Id = 1;)");
+        if (Rebuild) {
+            fixture.Exec("ALTER TABLE Docs DROP INDEX idx;");
+        }
+        fixture.Exec("ALTER TABLE Docs ADD INDEX idx GLOBAL ON (Tag);");
+        // Distinct query text prevents a cached plan for the original index
+        // generation from hiding the transaction-snapshot check below.
+        fixture.AssertResult(fixture.Execute(TStringBuilder() << "-- current index generation\n" << Check), 0, 0, 0);
+
+        auto shards = fixture.Shards("/Root/Docs");
+        const auto indexShards = fixture.Shards("/Root/Docs/idx/indexImplTable");
+        shards.insert(shards.end(), indexShards.begin(), indexShards.end());
+        size_t reads = 0;
+        auto requests = fixture.Runtime.AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
+            const auto* forward = ev->Get();
+            reads += forward->Ev->Type() == TEvDataShard::TEvRead::EventType && IsIn(shards, forward->TabletId);
+        });
+        const auto result = fixture.Runtime.WaitFuture(session.ExecuteQuery(
+            TStringBuilder() << "-- original transaction snapshot\n" << Check, TTxControl::Tx(*tx).CommitTx()));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "cannot verify this index generation at the transaction snapshot");
+        UNIT_ASSERT(result.GetResultSets().empty());
+        UNIT_ASSERT_VALUES_EQUAL(reads, 0);
     }
 
     Y_UNIT_TEST(IndexPathIdChangedAtSameSchemaVersion) {

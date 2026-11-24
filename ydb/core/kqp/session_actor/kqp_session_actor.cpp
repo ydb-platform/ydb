@@ -1412,6 +1412,9 @@ public:
 
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
+        // Only a fresh acquisition can establish that the checked generations were
+        // Ready before the snapshot. Later CHECKs must reuse this original set.
+        QueryState->TxCtx->RememberIndexValidationSnapshot(QueryState->PreparedQuery->GetPhysicalQuery());
 
         YDB_LOG_ENSURE(QueryState->UserRequestContext);
         if (QueryState->UserRequestContext->IsStreamingQuery) {
@@ -1714,6 +1717,14 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        if (QueryState->IsIndexValidation() && QueryState->TxCtx->GetSnapshot().IsValid()
+            && !QueryState->TxCtx->HasIndexValidationSnapshot(phyQuery))
+        {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "CHECK TABLE INDEX cannot verify this index generation at the transaction snapshot; "
+                "start a new SnapshotRO transaction with CHECK TABLE INDEX");
+            return false;
+        }
 
         const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
             || AppData()->FeatureFlags.GetEnableClientModifications();

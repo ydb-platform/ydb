@@ -15,6 +15,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -147,6 +149,19 @@ public:
         return SnapshotHandle.Snapshot;
     }
 
+    void RememberIndexValidationSnapshot(const NKqpProto::TKqpPhyQuery& query) {
+        SnapshotIndexGenerations.clear();
+        for (const auto& index : query.GetIndexValidations()) {
+            SnapshotIndexGenerations.emplace_back(index);
+        }
+    }
+
+    bool HasIndexValidationSnapshot(const NKqpProto::TKqpPhyQuery& query) const {
+        return AllOf(query.GetIndexValidations(), [&](const auto& index) {
+            return IsIn(SnapshotIndexGenerations, TIndexGeneration(index));
+        });
+    }
+
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
         YQL_ENSURE(!HasUnflushedEffectsInBuffer);
@@ -156,6 +171,7 @@ public:
 
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        SnapshotIndexGenerations.clear();
 
         if (Implicit) {
             Reset();
@@ -167,6 +183,7 @@ public:
     void Invalidate() override {
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        SnapshotIndexGenerations.clear();
         TKikimrTransactionContextBase::Invalidate();
     }
 
@@ -191,6 +208,7 @@ public:
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        SnapshotIndexGenerations.clear();
         HasImmediateEffects = false;
         HasUnflushedEffectsInBuffer = false;
 
@@ -327,6 +345,26 @@ public:
     TTxAllocatorState::TPtr TxAlloc;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
+
+    struct TIndexGeneration {
+        explicit TIndexGeneration(const NKqpProto::TKqpIndexValidationInfo& index)
+            : BaseTableId(index.GetBaseTableId().GetOwnerId(), index.GetBaseTableId().GetTableId())
+            , Name(index.GetName())
+            , IndexPathId(index.GetPathOwnerId(), index.GetLocalPathId())
+            , SchemaVersion(index.GetSchemaVersion())
+        {}
+
+        NYql::TKikimrPathId BaseTableId;
+        TString Name;
+        NYql::TKikimrPathId IndexPathId;
+        ui64 SchemaVersion;
+
+        bool operator==(const TIndexGeneration& other) const = default;
+    };
+
+    // These generations were verified Ready before acquiring this transaction's snapshot.
+    // Current schema metadata cannot establish readability at an older snapshot.
+    TVector<TIndexGeneration> SnapshotIndexGenerations;
 
     bool HasOlapTable = false;
     bool HasOltpTable = false;

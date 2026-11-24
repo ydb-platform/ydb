@@ -836,12 +836,7 @@ public:
                     {"txId", txId},
                     {"taskId", taskId},
                     {"message", message});
-                const size_t startedTasks = reply->Record.StartedTasksSize();
-                for (size_t i = startedTasks; i < tasks.size(); ++i) {
-                    AddNotStartedTask(reply->Record, tasks[i],
-                        NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie, message);
-                }
-                Send(executerId, reply.Release());
+                ReplyError(msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie, message);
                 State_->MarkRequestAsCancelled(executerId);
                 for (const auto& [startedTaskId, computeActorId] : State_->GetTasksByExecuterId(executerId)) {
                     Send(computeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message));
@@ -849,7 +844,7 @@ public:
 
                 // Started actors finish their own tasks. Drop this and the remaining tasks so the query manager
                 // can terminate and return their reserved resources when the last started actor finishes.
-                for (size_t i = startedTasks; i < tasks.size(); ++i) {
+                for (size_t i = reply->Record.StartedTasksSize(); i < tasks.size(); ++i) {
                     State_->OnTaskFinished(txId, executerId, tasks[i], /* success */ false);
                 }
                 co_return;
@@ -949,23 +944,17 @@ public:
         Send(ExecuterId, ev.Release());
     }
 
-    static void AddNotStartedTask(NKikimrKqp::TEvStartKqpTasksResponse& reply, ui64 taskId,
-        NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message)
-    {
-        auto* task = reply.AddNotStartedTasks();
-        task->SetTaskId(taskId);
-        task->SetReason(reason);
-        task->SetMessage(message);
-        task->SetRequestId(requestId);
-    }
-
     void ReplyError(const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(request.GetTxId());
-        for (const auto& task : request.GetTasks()) {
-            AddNotStartedTask(ev->Record, task.GetId(), reason, requestId, message);
+        for (auto& task : request.GetTasks()) {
+            auto* resp = ev->Record.AddNotStartedTasks();
+            resp->SetTaskId(task.GetId());
+            resp->SetReason(reason);
+            resp->SetMessage(message);
+            resp->SetRequestId(requestId);
         }
         Send(ExecuterId, ev.Release());
     }

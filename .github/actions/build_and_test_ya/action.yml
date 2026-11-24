@@ -398,7 +398,7 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        printf -v YA_MAKE_COMMAND '%q ' ./ya make "${params[@]}"
+        YA_MAKE_COMMAND=$(python3 -c 'import shlex, sys; print(shlex.join(sys.argv[1:]))' ./ya make "${params[@]}")
         params+=("${profile_params[@]}")
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)

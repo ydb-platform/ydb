@@ -1,0 +1,33 @@
+name: Build profile helper checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/scripts/build_profile.py'
+      - '.github/scripts/tests/build_profiles/**'
+      - 'ydb/ci/build_profiles.yaml'
+      - '.github/workflows/build_profile_checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/build_profile.py'
+      - '.github/scripts/tests/build_profiles/**'
+      - 'ydb/ci/build_profiles.yaml'
+      - '.github/workflows/build_profile_checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install PyYAML
+      - run: python3 -m unittest discover -s .github/scripts/tests/build_profiles -p 'test_*.py' -v

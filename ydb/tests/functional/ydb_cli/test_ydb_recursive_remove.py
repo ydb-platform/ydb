@@ -158,6 +158,24 @@ class TestRecursiveRemove:
                 return True
 
             assert wait_for(backup_is_complete, timeout_seconds=60), f"Backup {operation_id} did not complete"
+            # An operator can verify which backup completed before removing the collection.
+            status = execute_ydb_cli_command(
+                ydb_cluster.nodes[1], ydb_database, ["operation", "get", operation_id],
+            )
+            header, row, *_ = [
+                [cell.strip() for cell in line.split("│")[1:-1]]
+                for line in status.splitlines() if line.startswith("│")
+            ]
+            assert dict(zip(header, row)) == {
+                "id": operation_id, "ready": "true", "status": "SUCCESS", "progress": "Done",
+            }
+            page = json.loads(execute_ydb_cli_command(
+                ydb_cluster.nodes[1], ydb_database,
+                ["operation", "list", "fullbackup", "--page-size", "1", "--format", "proto-json-base64"],
+            ))
+            operation, = page["operations"]
+            assert (operation["id"], operation["ready"], operation["status"]) == (operation_id, True, "SUCCESS")
+
             snapshots = driver.scheme_client.list_directory(f"{collections}/test_collection").children
             assert len(snapshots) == 1
             snapshot_path = f"{collections}/test_collection/{snapshots[0].name}"

@@ -17,6 +17,29 @@ Y_UNIT_TEST_SUITE(TQueryPlanPrinterTest) {
         NJson::TJsonValue stage;
         stage["Node Type"] = "Aggregate";
         stage["Operators"].AppendValue(operation);
+        // The aggregate reads recent orders and filtered archive rows.
+        NJson::TJsonValue orders;
+        UNIT_ASSERT(NJson::ReadJsonTree(R"({
+            "Node Type":"UnionAll",
+            "Operators":[{"Name":"UnionAll"}],
+            "Plans":[
+                {
+                    "Node Type":"TableRangeScan",
+                    "Operators":[{"Name":"TableRangeScan","Table":"orders","E-Rows":0.00042,"E-Size":1000000000}],
+                    "Tables":["orders"],
+                    "Stats":{"TotalTasks":2}
+                },
+                {
+                    "Node Type":"Filter",
+                    "Operators":[{"Name":"Filter","Predicate":"item.status = paid","SsaProgram":{"Program":"Read archive"}}],
+                    "Plans":[{
+                        "Node Type":"TableRangeScan",
+                        "Operators":[{"Name":"TableRangeScan","Table":"archived_orders"}]
+                    }]
+                }
+            ]
+        })", &orders));
+        stage["Plans"].AppendValue(orders);
         node["Plans"].AppendValue(stage);
         NJson::TJsonValue root;
         root["Node Type"] = "ResultSet";
@@ -52,6 +75,20 @@ Y_UNIT_TEST_SUITE(TQueryPlanPrinterTest) {
                 UNIT_ASSERT(actual.Str().Contains("b desc nulls last"));
                 UNIT_ASSERT(actual.Str().Contains("Rows[Preceding 2, CurrentRow]"));
                 UNIT_ASSERT(actual.Str().Contains(format == EDataFormat::PrettyTable ? "124" : "123.5"));
+                UNIT_ASSERT(actual.Str().Contains("archived_orders"));
+                if (format == EDataFormat::PrettyTable) {
+                    UNIT_ASSERT(actual.Str().Contains("├──> "));
+                    UNIT_ASSERT(actual.Str().Contains("└─┬> "));
+                    UNIT_ASSERT(actual.Str().Contains("4.200e-04"));
+                    UNIT_ASSERT(actual.Str().Contains("1.000e+09"));
+                    UNIT_ASSERT(actual.Str().Contains("status = paid"));
+                    UNIT_ASSERT(!actual.Str().Contains("item.status"));
+                    UNIT_ASSERT(!actual.Str().Contains("SsaProgram"));
+                } else {
+                    UNIT_ASSERT(actual.Str().Contains("├──TableRangeScan"));
+                    UNIT_ASSERT(actual.Str().Contains("└──Filter"));
+                    UNIT_ASSERT_VALUES_EQUAL(actual.Str().Contains("TotalTasks: 2"), analyze);
+                }
                 if (analyze) {
                     UNIT_ASSERT(actual.Str().Contains("42"));
                 }
@@ -64,5 +101,11 @@ Y_UNIT_TEST_SUITE(TQueryPlanPrinterTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(structured, &original));
         UNIT_ASSERT(NJson::ReadJsonTree(json.Str(), &printed));
         UNIT_ASSERT_VALUES_EQUAL(original, printed);
+
+        TStringStream simplified;
+        TQueryPlanPrinter(EDataFormat::JsonBase64Simplify, false, simplified).Print(structured);
+        NJson::TJsonValue simplifiedPlan;
+        UNIT_ASSERT(NJson::ReadJsonTree(simplified.Str(), &simplifiedPlan));
+        UNIT_ASSERT_VALUES_EQUAL(original["SimplifiedPlan"], simplifiedPlan);
     }
 }

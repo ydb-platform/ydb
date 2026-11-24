@@ -4,6 +4,7 @@ from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, BaseCliTestWit
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+import json
 import os
 import logging
 import pytest
@@ -108,6 +109,35 @@ class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
              "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]"]
         )
         return self.canonical_result(output, self.tmp_path)
+
+    def test_preview_and_analyze_update(self):
+        def read_value():
+            rows = self.session.transaction().execute(
+                f"SELECT value FROM `{self.table_path}` WHERE key = 2u;", commit_tx=True,
+            )[0].rows
+            return [row.value for row in rows]
+
+        update = f'UPDATE `{self.table_path}` SET value = "updated" WHERE key = 2u RETURNING value;'
+        args = ["sql", "-s", update]
+        preview = self.execute_ydb_cli_command_with_db(args + ["--explain-ast"])
+        assert "Query AST:" in preview
+        assert self.table_path in preview
+        assert read_value() == [b"two"]
+
+        rejected = self.execute_ydb_cli_command(args + ["--explain", "--explain-analyze"], check_exit_code=False)
+        assert rejected.exit_code != 0
+        assert 'mutually exclusive options "Explain mode"' in rejected.stderr
+        assert read_value() == [b"two"]
+
+        diagnostics_path = self.tmp_path / "update_diagnostics.json"
+        analyzed = self.execute_ydb_cli_command_with_db(
+            args + ["--explain-analyze", "--format", "json-unicode", "--diagnostics-file", str(diagnostics_path)]
+        )
+        diagnostics = json.loads(diagnostics_path.read_text())
+        assert json.loads(analyzed) == diagnostics["plan"]
+        assert diagnostics["plan"]["meta"]["type"] == "query"
+        assert diagnostics["stats"]
+        assert read_value() == [b"updated"]
 
 
 class TestExecuteSqlWithFormats(BaseTestSqlWithDatabase):
@@ -778,13 +808,33 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
         assert "1" in output and "2" in output and "3" in output
 
     def test_parameters_via_input_file(self):
-        """Test parameters passed via --param option (simulating --input-file behavior)"""
-        script = "DECLARE $a AS Int64; SELECT $a"
-
-        output = self.execute_ydb_cli_command_with_db(
-            ["sql", "-s", script, "--param", "$a=10"]
+        query = self.tmp_path / "report.yql"
+        query.write_text(
+            "DECLARE $sku AS String; DECLARE $quantity AS Uint64; DECLARE $warehouse AS Utf8; "
+            "SELECT $sku AS sku, $quantity AS quantity, $warehouse AS warehouse;"
         )
-        assert "10" in output
+        parameters = self.tmp_path / "inventory.jsonl"
+        parameters.write_text('{"sku":"QS0xNw==","quantity":8}\n{"sku":"Qi0yMw==","quantity":15}\n')
+        args = [
+            "sql", "--file", "-", "--input-file", str(parameters),
+            "--input-framing", "newline-delimited", "--input-binary-strings", "base64",
+            "--param", '$warehouse="north"', "--format", "json-unicode",
+        ]
+        with query.open("rb") as stdin:
+            output = self.execute_ydb_cli_command_with_db(args, stdin=stdin)
+        assert [json.loads(line) for line in output.splitlines()] == [
+            {"sku": "A-17", "quantity": 8, "warehouse": "north"},
+            {"sku": "B-23", "quantity": 15, "warehouse": "north"},
+        ]
+
+        # Reject a command-line override of a value already supplied by the file.
+        with query.open("rb") as stdin:
+            duplicate = self.execute_ydb_cli_command(
+                args + ["--param", "$quantity=99"], stdin=stdin, check_exit_code=False,
+            )
+        assert duplicate.exit_code != 0
+        assert "Parameter $quantity value found in more than one source" in duplicate.stderr
+        assert not duplicate.stdout
 
     def test_csv_format_parameters(self):
         """Test CSV format parameters (from documentation)"""

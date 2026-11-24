@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
+import csv
+import json
 
 import pytest
 import yaml
@@ -251,6 +253,43 @@ def test_reenable_and_disable_do_not_require_layout_migration(tmp_path):
     assert output_config(disabled)["self_management_config"]["enabled"] is False
 
 
+def test_merge_config_for_migration(tmp_path):
+    static = tmp_path / "static.yaml"
+    dynamic = tmp_path / "dynamic.yaml"
+    merged = tmp_path / "merged.yaml"
+    static_settings = {"nameservice_config": {"cluster_uuid": "static-cluster"}}
+    static.write_text(yaml.safe_dump(static_settings), encoding="utf-8")
+    dynamic_config = {
+        "metadata": {"kind": "MainConfig", "cluster": "", "version": 7},
+        "config": {"log_config": {"default_level": 4}, "nameservice_config": {"cluster_uuid": "old-cluster"}},
+    }
+    dynamic.write_text(yaml.safe_dump(dynamic_config), encoding="utf-8")
+    merge = [
+        ydb_bin(), "admin", "cluster", "config", "migration", "merge",
+        "--static-config", str(static), "--dynamic-config", "-", "--output", str(merged),
+    ]
+
+    with dynamic.open("rb") as src:
+        rejected = yatest.common.execute(merge, stdin=src, check_exit_code=False)
+    assert rejected.exit_code == 1
+    assert b"Resolve all conflict markers" in rejected.std_err
+    conflict = merged.read_text(encoding="utf-8")
+    assert f"<<<<<<< {static}" in conflict
+    assert ">>>>>>> <stdin>" in conflict
+    assert "cluster_uuid: static-cluster" in conflict
+    assert "cluster_uuid: old-cluster" in conflict
+
+    # Keep the on-disk cluster identity and carry over only the dynamic settings.
+    del dynamic_config["config"]["nameservice_config"]
+    dynamic.write_text(yaml.safe_dump(dynamic_config), encoding="utf-8")
+    with dynamic.open("rb") as src:
+        yatest.common.execute(merge, stdin=src)
+    assert yaml.safe_load(merged.read_text(encoding="utf-8")) == {
+        "metadata": dynamic_config["metadata"],
+        "config": {**static_settings, **dynamic_config["config"]},
+    }
+
+
 class TestConfigRolloutPreview(BaseCliTestWithDatabase):
     def test_review_tenant_overrides(self, tmp_path):
         draft = tmp_path / "candidate.yaml"
@@ -293,3 +332,56 @@ selector_config:
             "label_sets": [{"tenant": {"type": "COMMON", "value": "/Root/canary"}}],
             "config": {"log_config": {"default_level": 7}},
         }
+
+    def test_legacy_config_dry_run_keeps_active_config(self, tmp_path):
+        execute = self.execute_ydb_cli_command
+        cluster_config = ["admin", "cluster", "config"]
+        legacy_config = ["admin", "config"]
+
+        # Verify the cluster's configuration mode before preparing a V1 change.
+        generated = yaml.safe_load(execute(cluster_config + ["generate"]).stdout)
+        assert generated["metadata"] == {"kind": "MainConfig", "cluster": "", "version": 0}
+        node = self.cluster.nodes[1]
+        nameservice = node.read_node_config()["nameservice_config"]
+        assert generated["config"]["nameservice_config"] == nameservice
+        topology, = nameservice["node"]
+        version = cluster_config + ["version", "--list-nodes"]
+        versions = json.loads(execute(version + ["--format", "json"]).stdout)
+        assert versions == {
+            "v1_nodes_count": 1,
+            "v1_nodes_list": [{
+                "node_id": topology["node_id"], "hostname": topology["host"], "port": topology["port"],
+            }],
+            "v2_nodes_count": 0,
+            "v2_nodes_list": [],
+            "unknown_nodes_count": 0,
+            "unknown_nodes_list": [],
+        }
+        listing = execute(version + ["--format", "csv"]).stdout.splitlines()
+        assert list(csv.DictReader(listing)) == [{
+            "config_version": "v1",
+            "node_id": str(topology["node_id"]),
+            "hostname": topology["host"],
+            "port": str(topology["port"]),
+        }]
+
+        candidate = tmp_path / "config.yaml"
+        overrides = {"yaml_config_enabled": True, "log_config": {"default_level": 4}}
+        candidate.write_text(yaml.safe_dump({"metadata": generated["metadata"], "config": overrides}), encoding="utf-8")
+        execute(legacy_config + ["replace", "--filename", str(candidate), "--force"])
+
+        saved = tmp_path / "saved"
+        execute(legacy_config + ["fetch", "--output-directory", str(saved)])
+        active = yaml.safe_load((saved / "dynconfig.yaml").read_text(encoding="utf-8"))
+        assert active["metadata"]["kind"] == "MainConfig"
+        assert active["config"] == overrides
+
+        candidate.write_text(yaml.safe_dump({
+            "metadata": active["metadata"],
+            "config": {**overrides, "log_config": {"default_level": 6}},
+        }), encoding="utf-8")
+        with candidate.open("rb") as src:
+            execute(legacy_config + ["replace", "--filename", "-", "--dry-run"], stdin=src)
+
+        assert yaml.safe_load(execute(legacy_config + ["fetch"]).stdout) == active
+        assert yaml.safe_load(execute(legacy_config + ["fetch", "--strip-metadata"]).stdout) == {"config": overrides}

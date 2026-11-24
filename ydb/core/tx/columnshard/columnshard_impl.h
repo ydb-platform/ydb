@@ -594,16 +594,22 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
-    // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
-    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    // The held forced compaction request (ALTER TABLE ... COMPACT), at most one: the shard hosts a single standalone
+    // table and a repeated request supersedes the held one. In memory only, the schemeshard re-sends the request after
+    // a restart. Answered OK once nothing is left to compact and, for CASCADE, to rewrite.
     struct TForcedCompactionWaiter {
+        TInternalPathId InternalPathId;
         TActorId Sender;
         ui64 Cookie = 0;
         TPathId SchemePathId;
     };
 
-    THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
+    std::optional<TForcedCompactionWaiter> ForcedCompactionWaiter;
+    // the forced compaction served (TEvCompactTable::TxId): the same id again is a retry, another one a new forced
+    // compaction
+    std::optional<ui64> ForcedCompactionTxId;
+    bool ForcedCompactionActualizeSchema = false;   // its Cascade: the reply also waits for the rewrite
+    void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;

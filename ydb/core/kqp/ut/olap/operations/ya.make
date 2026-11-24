@@ -11,6 +11,11 @@ ELSE()
 ENDIF()
 
 SRCS(
+<<<<<<< HEAD
+=======
+    cache_blobs_after_write_ut.cpp
+    compact_ut.cpp
+>>>>>>> 594ef54c898 (Schema actualization on ATC (#57961))
     delete_ut.cpp
     write_ut.cpp
 )

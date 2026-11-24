@@ -277,6 +277,20 @@ struct TConsumerPreparationParameters {
     std::optional<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
 };
 
+NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
+    const TTabletPreparationParameters& parameters,
+    TConstArrayRef<TConsumerPreparationParameters> users,
+    TTestActorRuntime& runtime,
+    ui32 version);
+
+void SendPQTabletConfig(
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    const TActorId& edge,
+    const NKikimrPQ::TPQTabletConfig& tabletConfig,
+    ui64 txId,
+    ui64 planStep);
+
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TConstArrayRef<TConsumerPreparationParameters> users,

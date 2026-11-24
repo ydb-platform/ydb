@@ -221,6 +221,9 @@ public:
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         Response->Record.SetErrorCode(ev->ErrorCode);
         Response->Record.SetErrorReason(ev->Error);
+        if (ev->CloseSession) {
+            Response->Record.MutablePartitionResponse()->SetCloseSession(true);
+        }
         ctx.Send(Sender, Response.Release());
         return true;
     }
@@ -369,11 +372,11 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
-void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
+void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession)
 {
     ReplyPersQueueError(
         ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
-        responseCookie, errorCode, error
+        responseCookie, errorCode, error, /*logDebug=*/false, /*isInternal=*/false, closeSession
     );
 }
 
@@ -3039,11 +3042,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    // Write sessions and MLP reject earlier, but late requests and protocols without
-    // that check (e.g. kafka_proxy) must still be stopped here.
-    if (req.CmdWriteSize() > 0) {
+    // Enforce the topic mode for reads and writes, including late writes and
+    // protocols without an earlier check (e.g. kafka_proxy).
+    if (req.CmdWriteSize() > 0 || req.HasCmdRead()) {
         if (const auto error = GetWriteModeError(Config)) {
-            ReplyError(ctx, responseCookie, error->Code, error->Reason);
+            ReplyError(ctx, responseCookie, error->Code, error->Reason, /*closeSession=*/true);
             return;
         }
     }
@@ -3056,17 +3059,14 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    if (IsTopicMutateDisabled(ctx)
+    if (const auto error = GetWriteModeError(Config);
+        (IsTopicMutateDisabled(ctx) || error)
         && req.HasCmdSetClientOffset())
     {
-        const auto& allowedClientIds = AppData(ctx)->PQConfig.GetClientIdsAllowCommitWhenTopicMutateDisabled();
-        const auto& clientId = req.GetCmdSetClientOffset().GetClientId();
-        const bool allowCommit = AnyOf(allowedClientIds, [&](const auto& allowedClientId) {
-            return NPersQueue::ConvertNewConsumerName(allowedClientId, ctx) == clientId;
-        });
-        if (!allowCommit) {
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
-                       "Topic mutations are temporarily disabled");
+        const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
+        if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            ReplyError(ctx, responseCookie, error ? error->Code : NPersQueue::NErrorCode::ERROR,
+                       error ? error->Reason : "Topic mutations are temporarily disabled", /*closeSession=*/error.has_value());
             return;
         }
     }
@@ -3560,14 +3560,15 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
-        if (IsTopicMutateDisabled(ctx)
+        if (const auto error = GetWriteModeError(Config);
+            (IsTopicMutateDisabled(ctx) || error)
             && !Txs.contains(event.GetTxId())
             && !AnyOf(EvProposeTransactionQueue, [&](const auto& pending) {
                 return pending->GetRecord().GetTxId() == event.GetTxId();
             }))
         {
             // Retries of accepted proposals must continue the transaction protocol.
-            const TString reason = "Topic mutations are temporarily disabled";
+            const TString reason = error ? error->Reason : "Topic mutations are temporarily disabled";
             ev->Get()->ExecuteSpan.EndError(reason);
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                        event.GetTxId(),

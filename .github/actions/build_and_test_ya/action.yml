@@ -337,47 +337,15 @@ runs:
         IS_TEST_RESULT_IGNORED=0
         DASHBOARD_SANITIZER=""
 
-        case "$BUILD_PRESET" in
-          debug)
-            params+=(--build "debug")
-            ;;
-          relwithdebinfo)
-            params+=(--build "relwithdebinfo")
-            ;;
-          release)
-            params+=(--build "release")
-            ;;
-          release-asan)
-            params+=(
-              --build "release" --sanitize="address"
-            )
-            DASHBOARD_SANITIZER="address"
-            ;;
-          release-tsan)
-            params+=(
-              --build "release" --sanitize="thread"
-            )
-            DASHBOARD_SANITIZER="thread"
-            if [ -z "$TEST_RETRY_COUNT" ]; then
-              TEST_RETRY_COUNT=1
-            fi
-            IS_TEST_RESULT_IGNORED=1
-            ;;
-          release-msan)
-            params+=(
-              --build "release" --sanitize="memory"
-            )
-            DASHBOARD_SANITIZER="memory"
-            if [ -z "$TEST_RETRY_COUNT" ]; then
-              TEST_RETRY_COUNT=1
-            fi
-            IS_TEST_RESULT_IGNORED=1
-            ;;
-          *)
-            echo "Invalid preset: $BUILD_PRESET"
-            exit 1
-            ;;
-        esac
+        python3 .github/scripts/build_profile.py "$BUILD_PRESET" --output-dir "$TMP_DIR/build-profile"
+        mapfile -t profile_params < "$TMP_DIR/build-profile/args"
+        DASHBOARD_SANITIZER=$(cat "$TMP_DIR/build-profile/sanitize")
+        if [[ "$DASHBOARD_SANITIZER" == thread || "$DASHBOARD_SANITIZER" == memory ]]; then
+          if [ -z "$TEST_RETRY_COUNT" ]; then
+            TEST_RETRY_COUNT=1
+          fi
+          IS_TEST_RESULT_IGNORED=1
+        fi
 
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
@@ -430,7 +398,8 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        printf -v YA_MAKE_COMMAND '%q ' ./ya make "${params[@]}"
+        params+=("${profile_params[@]}")
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
@@ -439,7 +408,7 @@ runs:
 
           analytics start graph_compare
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --build-profile="$BUILD_PRESET" --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
           analytics end graph_compare --rc "$RC"
@@ -465,9 +434,9 @@ runs:
              fi
           done
           if [ true = ${{ inputs.run_tests }} ]; then
-            YA_MAKE_COMMAND+=" --retest"
+            params+=(--retest)
           fi
-          $YA_MAKE_COMMAND -k --cache-tests \
+          ./ya make "${params[@]}" -k --cache-tests \
             --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
             $YA_MAKE_TARGET
         fi

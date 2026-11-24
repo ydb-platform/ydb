@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import shlex
 import sys
 import traceback
 from enum import Enum
@@ -18,6 +19,11 @@ from error_type_utils import (
     is_xfailed_issue,
     source_has_tag,
 )
+
+_SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from build_profile import resolve_profile  # noqa: E402
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -426,16 +432,8 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    build_preset_params = '--build unknown_build_type'
-    if build_preset == 'release-asan' :
-        build_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-msan':
-        build_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-tsan':   
-        build_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'relwithdebinfo':
-        build_preset_params = '--build "relwithdebinfo"'
-    
+    build_preset_params = shlex.join(resolve_profile(build_preset)["args"])
+
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")

@@ -1,0 +1,52 @@
+# Shared compilation profiles. definition_flags are ya -D variables.
+release: &release
+  build_type: release
+  thinlto: true
+  definition_flags:
+    DEBUGINFO_LINES_ONLY: "yes"
+    HARDENING: "yes"
+    CFLAGS: "-fno-omit-frame-pointer -fdebug-info-for-profiling"
+  sanitize: ""
+  profile_memory: false
+  collect_flamegraphs: false
+release_no_lto:
+  <<: *release
+  thinlto: false
+
+relwithdebinfo:
+  <<: *release
+  build_type: relwithdebinfo
+  thinlto: false
+asan:
+  <<: *release
+  build_type: relwithdebinfo
+  thinlto: false
+  sanitize: address
+tsan:
+  <<: *release
+  build_type: relwithdebinfo
+  thinlto: false
+  sanitize: thread
+profile:
+  <<: *release
+  build_type: profile
+  thinlto: false
+  collect_flamegraphs: true
+
+# Names used by the GitHub CI build matrix.
+debug:
+  <<: *release
+  build_type: debug
+  thinlto: false
+release-asan:
+  <<: *release
+  thinlto: false
+  sanitize: address
+release-tsan:
+  <<: *release
+  thinlto: false
+  sanitize: thread
+release-msan:
+  <<: *release
+  thinlto: false
+  sanitize: memory

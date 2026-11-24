@@ -21,17 +21,17 @@
  namespace grpc_event_engine {
  namespace experimental {
  
-@@ -72,8 +86,9 @@ void ObjectGroupForkHandler::RegisterForkable(
-   GPR_ASSERT(!is_forking_);
-   forkables_.emplace_back(forkable);
+@@ -87,8 +87,9 @@
+     GPR_ASSERT(!is_forking_);
+     forkables_.emplace_back(forkable);
  #ifdef GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
-+  grpc_core::MutexLock lock(g_mu.get());
-   if (!std::exchange(registered_, true)) {
--    pthread_atfork(prepare, parent, child);
-+    g_forkables->push_back(this);
-   }
++    grpc_core::MutexLock lock(g_mu.get());
+     if (!std::exchange(registered_, true)) {
+-      pthread_atfork(prepare, parent, child);
++      g_forkables->push_back(this);
+     }
  #endif  // GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
- }
+   }
 @@ -134,3 +149,47 @@ void ObjectGroupForkHandler::PostforkChild() {
  
  }  // namespace experimental

@@ -6,9 +6,14 @@
 #include <util/string/split.h>
 
 #include "kqp_opt_make_join_hypergraph.h"
+#include "kqp_opt_join_condition_completion.h"
 #include "kqp_opt_join_cost_based.h"
 
 #include <memory>
+#include <map>
+#include <optional>
+#include <set>
+#include <tuple>
 
 using namespace NKikimr::NKqp;
 
@@ -47,13 +52,31 @@ struct TTestContext : public TBaseProviderContext {
 };
 
 template <typename TProviderContext = TTestContext>
-std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
+std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}, bool shuffleElimination = false) {
     auto ctx = TProviderContext();
     NYql::TExprContext dummyCtx;
 
+    TSimpleSharedPtr<TOrderingsStateMachine> orderings;
+    if (shuffleElimination) {
+        auto graph = MakeJoinHypergraph<std::bitset<64>>(root);
+        TFDStorage storage;
+        for (const auto& edge : graph.GetEdges()) {
+            if (edge.JoinKind == EJoinKind::Cross) {
+                continue;
+            }
+            storage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, nullptr);
+            for (const auto& [lhs, rhs] : Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+                storage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, nullptr);
+            }
+        }
+        orderings = MakeSimpleShared<TOrderingsStateMachine>(std::move(storage), TOrdering::EShuffle);
+        for (const auto& node : graph.GetNodes()) {
+            node.RelationOptimizerNode->Stats.LogicalOrderings = orderings->CreateState();
+        }
+    }
     TCBOSettings settings{};
     auto optimizer =
-        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, settings, dummyCtx, shuffleElimination, orderings));
 
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
     auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);
@@ -63,39 +86,81 @@ std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimiz
     return res;
 }
 
-TVector<TJoinColumn> CollectConditions(const std::shared_ptr<IBaseOptimizerNode>& node) {
+using TTestCondition = std::tuple<TJoinColumn, TJoinColumn, bool>;
+
+std::set<TTestCondition> CollectConditions(const std::shared_ptr<IBaseOptimizerNode>& node) {
     if (node->Kind != EOptimizerNodeKind::JoinNodeType) {
         return {};
     }
-
-    auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(node);
-    auto lhsConds = CollectConditions(joinNode->LeftArg);
-    auto rhsConds = CollectConditions(joinNode->RightArg);
-    lhsConds.insert(lhsConds.end(), rhsConds.begin(), rhsConds.end());
-    for (const auto& [lhsCond, rhsCond]: Zip(joinNode->LeftJoinKeys, joinNode->RightJoinKeys)) {
-        lhsConds.push_back(lhsCond);
-        lhsConds.push_back(rhsCond);
+    auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
+    auto result = CollectConditions(join->LeftArg);
+    const auto rightConditions = CollectConditions(join->RightArg);
+    result.insert(rightConditions.begin(), rightConditions.end());
+    auto add = [&](const TJoinColumn& left, const TJoinColumn& right) {
+        const bool equalNulls = IsEqualNullsKey(left, right);
+        result.emplace(right < left ? right : left, right < left ? left : right, equalNulls);
+    };
+    for (const auto& [left, right] : Zip(join->LeftJoinKeys, join->RightJoinKeys)) {
+        add(left, right);
     }
-
-    return lhsConds;
+    for (const auto& [left, right] : join->PostJoinConditions) {
+        add(left, right);
+    }
+    return result;
 }
 
-bool HaveSameConditions(const std::shared_ptr<IBaseOptimizerNode>& actual, std::shared_ptr<IBaseOptimizerNode> expected) {
-    auto actualConds = CollectConditions(actual);
-    auto expectedConds = CollectConditions(expected);
-
-    return
-        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()) ==
-        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end());
+bool HasAllConditions(const std::shared_ptr<IBaseOptimizerNode>& actual, const std::shared_ptr<IBaseOptimizerNode>& expected) {
+    const auto actualConditions = CollectConditions(actual);
+    const auto expectedConditions = CollectConditions(expected);
+    return std::includes(actualConditions.begin(), actualConditions.end(), expectedConditions.begin(), expectedConditions.end());
 }
 
-bool HaveSameConditionCount(const std::shared_ptr<IBaseOptimizerNode>& actual, std::shared_ptr<IBaseOptimizerNode> expected) {
-    auto actualConds = CollectConditions(actual);
-    auto expectedConds = CollectConditions(expected);
+// Small bag-semantics interpreter for checking predicate placement independently
+// of the enumerator. Absent columns denote null-extended values.
+using TTestRow = std::map<TString, std::optional<int>>;
+using TTestBag = TVector<TTestRow>;
+using TTestTables = std::map<TString, TTestBag>;
 
-    return actualConds.size() == expectedConds.size() &&
-        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()).size() ==
-        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end()).size();
+TTestBag EvaluateJoin(const std::shared_ptr<IBaseOptimizerNode>& node, const TTestTables& tables) {
+    if (node->Kind == RelNodeType) {
+        return tables.at(node->Labels().front());
+    }
+    const auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
+    UNIT_ASSERT(join->JoinType == EJoinKind::InnerJoin || join->JoinType == EJoinKind::LeftJoin);
+    const auto left = EvaluateJoin(join->LeftArg, tables);
+    const auto right = EvaluateJoin(join->RightArg, tables);
+    auto matches = [](const TTestRow& row, const auto& conditions) {
+        auto value = [&](const TJoinColumn& column) -> std::optional<int> {
+            const auto it = row.find(column.RelName + "." + column.AttributeName);
+            return it == row.end() ? std::nullopt : it->second;
+        };
+        for (const auto& [lhs, rhs] : conditions) {
+            const auto l = value(lhs), r = value(rhs);
+            if (l != r || (!IsEqualNullsKey(lhs, rhs) && (!l || !r))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    TTestBag result;
+    for (const auto& l : left) {
+        bool matched = false;
+        for (const auto& r : right) {
+            auto row = l;
+            row.insert(r.begin(), r.end());
+            if (matches(row, Zip(join->LeftJoinKeys, join->RightJoinKeys))) {
+                matched = true;
+                if (matches(row, join->PostJoinConditions)) {
+                    result.push_back(std::move(row));
+                }
+            }
+        }
+        if (!matched && join->JoinType == EJoinKind::LeftJoin && matches(l, join->PostJoinConditions)) {
+            result.push_back(l);
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
@@ -392,6 +457,325 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         Enumerate(join);
     }
 
+    Y_UNIT_TEST(SplitInnerJoinRestoresPostJoinFilter) {
+        for (bool shuffle : {false, true}) {
+            for (bool equalNulls : {false, true}) {
+                auto a = GetJoinArg("A");
+                auto b = GetJoinArg("B");
+                auto c = GetJoinArg("C");
+                a->Stats.Nrows = 100;
+                b->Stats.Nrows = 1000;
+                c->Stats.Nrows = 1;
+                auto original = Join(LeftJoin(a, b, "A.id=B.a"), c, "A.id=C.a,B.x=C.x");
+                auto source = std::static_pointer_cast<TJoinOptimizerNode>(original);
+                source->LeftJoinKeys.back().EqualNulls = source->RightJoinKeys.back().EqualNulls = equalNulls;
+                auto optimized = Enumerate(original, {}, shuffle);
+                auto result = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+                UNIT_ASSERT_VALUES_EQUAL(result->JoinType, EJoinKind::LeftJoin);
+                UNIT_ASSERT(result->RightArg == b);
+                UNIT_ASSERT_VALUES_EQUAL(result->LeftJoinKeys.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(result->PostJoinConditions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(result->PostJoinConditions.front().first.EqualNulls, equalNulls);
+                UNIT_ASSERT(HasAllConditions(optimized, original));
+
+                const TVector<TVector<std::optional<int>>> bags{
+                    {}, {std::nullopt}, {0}, {1}, {0, 0}, {std::nullopt, 1}, {std::nullopt, std::nullopt}
+                };
+                for (const auto& bValues : bags) {
+                    for (const auto& cValues : bags) {
+                        TTestTables tables{{"A", {{{"A.id", 1}}}}, {"B", {}}, {"C", {}}};
+                        for (const auto& x : bValues) {
+                            tables["B"].push_back({{"B.a", 1}, {"B.x", x}});
+                        }
+                        for (const auto& x : cValues) {
+                            tables["C"].push_back({{"C.a", 1}, {"C.x", x}});
+                        }
+                        UNIT_ASSERT(EvaluateJoin(original, tables) == EvaluateJoin(optimized, tables));
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PostJoinFiltersStayInsideNullableInput) {
+        for (bool shuffle : {false, true}) {
+            auto abc = Join(LeftJoin("A", "B", "A.id=B.a"), "C", "A.id=C.a,B.x=C.x");
+            auto abcde = Join(LeftJoin(abc, "D", "A.id=D.a"), "E", "A.id=E.a,D.y=E.y");
+            for (auto node : {abc, abcde}) {
+                auto join = std::static_pointer_cast<TJoinOptimizerNode>(node);
+                join->LeftJoinKeys.back().EqualNulls = join->RightJoinKeys.back().EqualNulls = true;
+            }
+            auto original = LeftJoin("F", abcde, "F.id=A.id");
+            auto optimized = Enumerate(original,
+                TOptimizerHints::Parse("JoinOrder(F ((((A C) B) E) D))"), shuffle);
+            UNIT_ASSERT(optimized != original);
+            UNIT_ASSERT(HasAllConditions(optimized, original));
+            auto root = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+            UNIT_ASSERT(root->PostJoinConditions.empty());
+            auto dJoin = std::static_pointer_cast<TJoinOptimizerNode>(root->RightArg);
+            UNIT_ASSERT_VALUES_EQUAL(dJoin->JoinType, EJoinKind::LeftJoin);
+            UNIT_ASSERT_VALUES_EQUAL(dJoin->PostJoinConditions.size(), 1);
+            auto eJoin = std::static_pointer_cast<TJoinOptimizerNode>(dJoin->LeftArg);
+            auto bJoin = std::static_pointer_cast<TJoinOptimizerNode>(eJoin->LeftArg);
+            UNIT_ASSERT_VALUES_EQUAL(bJoin->JoinType, EJoinKind::LeftJoin);
+            UNIT_ASSERT_VALUES_EQUAL(bJoin->PostJoinConditions.size(), 1);
+
+            const TTestTables tables{
+                {"A", {{{"A.id", 1}}, {{"A.id", 2}}, {{"A.id", 3}}}},
+                {"F", {{{"F.id", 1}}, {{"F.id", 2}}, {{"F.id", 3}}}},
+                {"B", {{{"B.a", 2}, {"B.x", 7}}}},
+                {"C", {{{"C.a", 1}, {"C.x", std::nullopt}}, {{"C.a", 2}, {"C.x", 8}}, {{"C.a", 3}, {"C.x", std::nullopt}}}},
+                {"D", {{{"D.a", 3}, {"D.y", 9}}}},
+                {"E", {{{"E.a", 1}, {"E.y", std::nullopt}}, {{"E.a", 2}, {"E.y", std::nullopt}}, {{"E.a", 3}, {"E.y", 10}}}}
+            };
+            const auto expected = EvaluateJoin(original, tables);
+            UNIT_ASSERT_VALUES_EQUAL(expected.size(), 3);
+            UNIT_ASSERT(expected == EvaluateJoin(optimized, tables));
+
+            // Moving either residual to the final LEFT join's output is wrong.
+            for (auto join : {bJoin, dJoin}) {
+                root->PostJoinConditions.swap(join->PostJoinConditions);
+                UNIT_ASSERT(expected != EvaluateJoin(optimized, tables));
+                root->PostJoinConditions.swap(join->PostJoinConditions);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PostJoinFilterCanBeDelayedAcrossInnerJoins) {
+        auto original = Join(Join(LeftJoin("A", "B", "A.id=B.a"), "C", "A.c=C.a,B.x=C.x"),
+            "D", "A.d=D.a");
+        auto optimized = Enumerate(original, TOptimizerHints::Parse("JoinOrder(((A C) D) B)"), false);
+        UNIT_ASSERT(optimized != original);
+        UNIT_ASSERT(HasAllConditions(optimized, original));
+        UNIT_ASSERT_VALUES_EQUAL(std::static_pointer_cast<TJoinOptimizerNode>(optimized)->PostJoinConditions.size(), 1);
+    }
+
+    Y_UNIT_TEST(PostJoinFilterCanCrossAPreservedOuterInput) {
+        auto abc = Join(LeftJoin("A", "B", "A.id=B.a"), "C", "A.id=C.a,B.x=C.x");
+        auto source = std::static_pointer_cast<TJoinOptimizerNode>(abc);
+        source->LeftJoinKeys.back().EqualNulls = source->RightJoinKeys.back().EqualNulls = true;
+        auto original = LeftJoin(abc, "D", "A.d=D.a");
+        auto optimized = Enumerate(original, TOptimizerHints::Parse("JoinOrder(((A C) D) B)"), false);
+        UNIT_ASSERT(optimized != original);
+        UNIT_ASSERT(HasAllConditions(optimized, original));
+        auto root = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+        UNIT_ASSERT_VALUES_EQUAL(root->PostJoinConditions.size(), 1);
+        TTestTables tables{
+            {"A", {{{"A.id", 1}, {"A.d", 1}}}}, {"B", {}},
+            {"C", {{{"C.a", 1}, {"C.x", std::nullopt}}}},
+            {"D", {{{"D.a", 1}, {"D.id", 10}}, {{"D.a", 1}, {"D.id", 11}}}}
+        };
+        UNIT_ASSERT_VALUES_EQUAL(EvaluateJoin(original, tables).size(), 2);
+        UNIT_ASSERT(EvaluateJoin(original, tables) == EvaluateJoin(optimized, tables));
+        tables["B"] = {{{"B.a", 1}, {"B.x", 7}}};
+        UNIT_ASSERT(EvaluateJoin(original, tables).empty());
+        UNIT_ASSERT(EvaluateJoin(optimized, tables).empty());
+    }
+
+    Y_UNIT_TEST(PostJoinFilterRestoresAnEarlierUnsplitPredicate) {
+        auto abc = Join(LeftJoin("A", "B", "A.id=B.a"), "C", "B.x=C.x");
+        auto source = std::static_pointer_cast<TJoinOptimizerNode>(abc);
+        source->LeftJoinKeys.front().EqualNulls = source->RightJoinKeys.front().EqualNulls = true;
+        auto original = Join(abc, "D", "A.d=D.a,C.d=D.c");
+        auto optimized = Enumerate(original, TOptimizerHints::Parse("JoinOrder(((A D) C) B)"), false);
+        UNIT_ASSERT(optimized != original);
+        UNIT_ASSERT(HasAllConditions(optimized, original));
+        auto root = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+        UNIT_ASSERT_VALUES_EQUAL(root->JoinType, EJoinKind::LeftJoin);
+        UNIT_ASSERT_VALUES_EQUAL(root->PostJoinConditions.size(), 1);
+        UNIT_ASSERT(root->PostJoinConditions.front().first.EqualNulls);
+    }
+
+    Y_UNIT_TEST(PostJoinFilterWithReassociatedLeftJoins) {
+        // Strict B.x=C.x rejects an unmatched B. The two LEFT joins can
+        // reassociate, and the displaced INNER key B.y=D.y still needs a filter.
+        auto abc = LeftJoin(LeftJoin("A", "B", "A.id=B.a"), "C", "B.x=C.x");
+        auto original = Join(abc, "D", "A.id=D.a,B.y=D.y");
+        auto source = std::static_pointer_cast<TJoinOptimizerNode>(original);
+        source->LeftJoinKeys.back().EqualNulls = source->RightJoinKeys.back().EqualNulls = true;
+        const TTestTables tables{
+            {"A", {{{"A.id", 1}}, {{"A.id", 2}}, {{"A.id", 3}}}},
+            {"B", {{{"B.a", 1}, {"B.x", 7}, {"B.y", 10}}, {{"B.a", 2}, {"B.x", 7}, {"B.y", 20}}}},
+            {"C", {{{"C.x", 7}, {"C.id", 8}}, {{"C.x", std::nullopt}, {"C.id", 9}}}},
+            {"D", {{{"D.a", 1}, {"D.y", 10}}, {{"D.a", 2}, {"D.y", 0}}, {{"D.a", 3}, {"D.y", std::nullopt}}}}
+        };
+        const auto expected = EvaluateJoin(original, tables);
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), 2);
+        for (bool shuffle : {false, true}) {
+            auto optimized = Enumerate(original, TOptimizerHints::Parse("JoinOrder((A D) (B C))"), shuffle);
+            const auto root = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+            UNIT_ASSERT(optimized != original);
+            UNIT_ASSERT_VALUES_EQUAL(root->RightArg->Labels().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(root->PostJoinConditions.size(), 1);
+            UNIT_ASSERT(HasAllConditions(optimized, original));
+            UNIT_ASSERT(expected == EvaluateJoin(optimized, tables));
+        }
+    }
+
+    Y_UNIT_TEST(OnlyOrdinaryInnerPredicatesCanBecomeFilters) {
+        for (bool any : {false, true}) {
+            auto original = Join(LeftJoin("A", "B", "A.id=B.a"), "C", "A.c=C.a,B.x=C.x");
+            auto join = std::static_pointer_cast<TJoinOptimizerNode>(original);
+            join->RightAny = any;
+            join->IsReorderable = any;
+            auto graph = MakeJoinHypergraph<TNodeSet64>(original);
+            auto candidate = LeftJoin(Join("A", "C", "A.c=C.a"), "B", "A.id=B.a");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(AddMissingConditions(graph, candidate), yexception, "Cannot place");
+            UNIT_ASSERT(std::static_pointer_cast<TJoinOptimizerNode>(candidate)->PostJoinConditions.empty());
+        }
+    }
+
+    Y_UNIT_TEST(SplitInnerJoinAboveLeftJoinStillReorders) {
+        for (bool shuffleElimination : {false, true}) {
+            auto join = Join(
+                Join(LeftJoin("A", "B", "A.id=B.a_id"), "C", "A.x=C.x"),
+                "D", "A.z=D.z,C.w=D.w");
+
+            // Splitting above a left join remains useful: C-D can be joined
+            // first, and the left join can move above both inner joins.
+            auto optimized = Enumerate(join,
+                TOptimizerHints::Parse("JoinOrder(((C D) A) B)"), shuffleElimination);
+            UNIT_ASSERT(optimized != join);
+            UNIT_ASSERT(HasAllConditions(optimized, join));
+            auto root = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+            UNIT_ASSERT_VALUES_EQUAL(root->JoinType, EJoinKind::LeftJoin);
+            UNIT_ASSERT_VALUES_EQUAL(root->RightArg->Labels().front(), "B");
+            auto inner = std::static_pointer_cast<TJoinOptimizerNode>(root->LeftArg);
+            UNIT_ASSERT_VALUES_EQUAL(inner->RightArg->Labels().front(), "A");
+            UNIT_ASSERT_VALUES_EQUAL(inner->LeftArg->Labels().size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(ConditionCompletionDoesNotDeduplicateDifferentRightKeys) {
+        auto original = LeftJoin("A", "B", "A.k=B.x,A.k=B.y");
+        auto graph = MakeJoinHypergraph<TNodeSet64>(original);
+        auto candidate = LeftJoin("A", "B", "A.k=B.x");
+        AddMissingConditions(graph, candidate);
+
+        auto join = std::static_pointer_cast<TJoinOptimizerNode>(candidate);
+        UNIT_ASSERT_VALUES_EQUAL(join->LeftJoinKeys.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(join->RightJoinKeys.size(), 2);
+        UNIT_ASSERT(HasAllConditions(candidate, original));
+        UNIT_ASSERT(join->PostJoinConditions.empty());
+    }
+
+    Y_UNIT_TEST(ConditionCompletionPreservesTransitiveReordering) {
+        for (bool shuffleElimination : {false, true}) {
+            auto join = Join(Join("A", "B", "A.k=B.k"), "C", "B.k=C.k");
+
+            // A-C is inferred. Completion keeps the reordered tree and
+            // explicitly restores both original equalities.
+            auto optimized = Enumerate(join,
+                TOptimizerHints::Parse("JoinOrder((A C) B)"), shuffleElimination);
+            UNIT_ASSERT(optimized != join);
+            UNIT_ASSERT(HasAllConditions(optimized, join));
+            auto root = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+            UNIT_ASSERT_VALUES_EQUAL(root->LeftArg->Labels().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(root->RightArg->Labels().front(), "B");
+        }
+    }
+
+    Y_UNIT_TEST(ConditionCompletionMustEstablishOriginalEqualities) {
+        for (bool shuffle : {false, true}) {
+            auto original = Join(Join("A", "B", "A.x=B.x,A.y=B.y"), "C", "A.x=C.x,A.y=C.y,B.x=C.y");
+            auto optimized = Enumerate(original, TOptimizerHints::Parse("JoinOrder((A B) C)"), shuffle);
+            UNIT_ASSERT(optimized != original);
+            UNIT_ASSERT(HasAllConditions(optimized, original));
+
+            // All columns share an original equivalence class, but the chosen
+            // A-B and A-C keys alone only establish separate x and y groups.
+            TTestTables tables{
+                {"A", {{{"A.x", 1}, {"A.y", 2}}}},
+                {"B", {{{"B.x", 1}, {"B.y", 2}}}},
+                {"C", {{{"C.x", 1}, {"C.y", 2}}}}
+            };
+            UNIT_ASSERT(EvaluateJoin(original, tables).empty());
+            UNIT_ASSERT(EvaluateJoin(optimized, tables).empty());
+            for (auto& [name, rows] : tables) {
+                rows.front()[name + ".y"] = 1;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(EvaluateJoin(optimized, tables).size(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(ConditionCompletionIncludesInferredEqualities) {
+        auto original = Join(Join("A", "B", "A.x=B.x"), "C", "B.x=C.x");
+        auto graph = MakeJoinHypergraph<TNodeSet64>(original);
+        UNIT_ASSERT(graph.FindEdgeBetween(graph.GetNodesByRelNames({"A"}), graph.GetNodesByRelNames({"C"})));
+
+        // Completion also restores the inferred A.x=C.x from the live graph.
+        AddMissingConditions(graph, original);
+        UNIT_ASSERT_VALUES_EQUAL(CollectConditions(original).size(), 3);
+    }
+
+    Y_UNIT_TEST(ConditionCompletionRestoresMissingColumnPair) {
+        auto original = Join(Join("A", "B", "A.x=B.x,A.y=B.y"), "C", "A.x=C.x,A.y=C.y,B.x=C.y");
+        auto graph = MakeJoinHypergraph<TNodeSet64>(original);
+        auto incomplete = Join(Join("A", "B", "A.x=B.x,A.y=B.y"), "C", "A.x=C.x,A.y=C.y");
+
+        // Every column occurs, but B.x=C.y is absent.
+        UNIT_ASSERT(!HasAllConditions(incomplete, original));
+        AddMissingConditions(graph, incomplete);
+        UNIT_ASSERT(HasAllConditions(incomplete, original));
+    }
+
+    Y_UNIT_TEST(ConditionCompletionDistinguishesNullSafeEquality) {
+        auto original = Join("A", "B", "A.x=B.x,A.x=B.x");
+        auto source = std::static_pointer_cast<TJoinOptimizerNode>(original);
+        source->LeftJoinKeys.back().EqualNulls = source->RightJoinKeys.back().EqualNulls = true;
+        auto graph = MakeJoinHypergraph<TNodeSet64>(original);
+        auto candidate = Join("A", "B", "A.x=B.x");
+        AddMissingConditions(graph, candidate);
+        UNIT_ASSERT(HasAllConditions(candidate, original));
+    }
+
+    Y_UNIT_TEST(ConditionCompletionRejectsMissingOuterJoin) {
+        auto original = LeftJoin("A", "B", "A.x=B.x");
+        auto graph = MakeJoinHypergraph<TNodeSet64>(original);
+        auto candidate = Join("A", "B", "A.x=B.x");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(AddMissingConditions(graph, candidate), yexception, "Cannot place");
+    }
+
+    Y_UNIT_TEST(ConditionCompletionRestoresNullSafePredicatesSharingAColumn) {
+        for (bool shuffleElimination : {false, true}) {
+            auto join = Join(Join("B", "C", "B.x=C.x"), "A", "B.k=A.k,C.k=A.k");
+            auto root = std::static_pointer_cast<TJoinOptimizerNode>(join);
+            for (auto& key : root->LeftJoinKeys) {
+                key.EqualNulls = true;
+            }
+            for (auto& key : root->RightJoinKeys) {
+                key.EqualNulls = true;
+            }
+
+            // These predicates share A.k, but neither implies the other.
+            // The chosen edge supplies one; completion must restore the second.
+            auto optimized = Enumerate(join,
+                TOptimizerHints::Parse("JoinOrder(A (B C))"), shuffleElimination);
+            UNIT_ASSERT(optimized != join);
+            UNIT_ASSERT(HasAllConditions(optimized, join));
+            auto result = std::static_pointer_cast<TJoinOptimizerNode>(optimized);
+            UNIT_ASSERT_VALUES_EQUAL(result->LeftJoinKeys.size(), 2);
+            UNIT_ASSERT(result->LeftJoinKeys[0].EqualNulls && result->LeftJoinKeys[1].EqualNulls);
+            UNIT_ASSERT(result->RightJoinKeys[0].EqualNulls && result->RightJoinKeys[1].EqualNulls);
+        }
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationRespectsCrossJoinOrderHint) {
+        auto small = GetJoinArg("Small");
+        auto big = GetJoinArg("Big");
+        small->Stats.Nrows = 10;
+        big->Stats.Nrows = 1000000;
+        auto query = CrossJoin(small, big);
+
+        auto unhinted = std::static_pointer_cast<TJoinOptimizerNode>(Enumerate(query, {}, true));
+        UNIT_ASSERT_VALUES_EQUAL(unhinted->RightArg->Labels().front(), "Small");
+
+        auto hinted = std::static_pointer_cast<TJoinOptimizerNode>(
+            Enumerate(query, TOptimizerHints::Parse("JoinOrder(Small Big)"), true));
+        UNIT_ASSERT(hinted != query);
+        UNIT_ASSERT_VALUES_EQUAL(hinted->RightArg->Labels().front(), "Big");
+    }
+
     Y_UNIT_TEST(CrossJoinEliminationSimple) {
         // A simple tree A - C - B. The inner join A=C,B=C will be split
         // into two inner joins. And cross join {A}->{B} should be
@@ -516,7 +900,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         }
 
         auto optimizedJoin = Enumerate(join);
-        UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+        UNIT_ASSERT(HasAllConditions(optimizedJoin, join));
     }
 
     /* We shouldn't have complex edges in inner equijoins */
@@ -534,7 +918,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         UNIT_ASSERT(graph.FindEdgeBetween(A, C));
 
         auto optimizedJoin = Enumerate(join);
-        UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
+        UNIT_ASSERT(HasAllConditions(optimizedJoin, join));
     }
 
     Y_UNIT_TEST(CondsThatMayCauseATransitiveClosureButTheyMustNot) {
@@ -547,7 +931,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         }
 
         auto optimizedJoin = Enumerate(join);
-        UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+        UNIT_ASSERT(HasAllConditions(optimizedJoin, join));
     }
 
     Y_UNIT_TEST(TransitiveClosureManyCondsBetweenJoin) {
@@ -562,11 +946,11 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
 
         {
             auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
-            UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
+            UNIT_ASSERT(HasAllConditions(optimizedJoin, join));
         }
         {
             auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("JoinOrder((A B) C)"));
-            UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
+            UNIT_ASSERT(HasAllConditions(optimizedJoin, join));
         }
     }
 
@@ -582,7 +966,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
 
         {
             auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
-            UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
+            UNIT_ASSERT(HasAllConditions(optimizedJoin, join));
         }
     }
 

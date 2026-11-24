@@ -12,6 +12,7 @@ PY3_LIBRARY()
     )
     PEERDIR(
         contrib/python/requests
+        ydb/public/sdk/python
     )
 
 END()

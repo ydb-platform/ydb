@@ -24,6 +24,7 @@ LIBRARY()
         blob_depot.h
         defs.h
         types.h
+        wakeup_timer.h
         events.h
         schema.h
 

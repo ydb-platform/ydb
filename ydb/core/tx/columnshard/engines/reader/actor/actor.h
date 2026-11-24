@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>

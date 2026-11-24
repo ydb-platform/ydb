@@ -135,6 +135,82 @@ bool TIndexBuildInfo::HasPartitionSettings() const {
         ImplTableDescriptions[0].GetPartitionConfig().HasPartitioningPolicy());
 }
 
+void TIndexBuildInfo::RestoreSpecializedIndexDescription(const NKikimrSchemeOp::TIndexCreationConfig& config) {
+    SpecializedIndexDescription.emplace<std::monostate>();
+    switch (config.GetSpecializedIndexDescriptionCase()) {
+        case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
+            SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+            break;
+        case NKikimrSchemeOp::TIndexCreationConfig::kHnswIndexDescription:
+            SpecializedIndexDescription = config.GetHnswIndexDescription();
+            break;
+        case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription:
+            SpecializedIndexDescription = config.GetFulltextIndexDescription();
+            break;
+        case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
+        case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
+        case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
+            break;
+    }
+
+    // Keep the variant consistent with IndexType even for broken builds:
+    // diagnostics serialize them, and cancellation clears IsBroken.
+    decltype(SpecializedIndexDescription) expected;
+    switch (IndexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            expected.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>();
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            expected.emplace<NKikimrSchemeOp::THnswIndexDescription>();
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            expected.emplace<NKikimrSchemeOp::TFulltextIndexDescription>();
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            // JSON row-id mode also carries a fulltext description.
+            if (std::holds_alternative<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription)) {
+                expected.emplace<NKikimrSchemeOp::TFulltextIndexDescription>();
+            }
+            break;
+        default:
+            break;
+    }
+    if (SpecializedIndexDescription.index() != expected.index()) {
+        IsBroken = true;
+        AddIssue("Persisted index type and description do not match");
+        SpecializedIndexDescription = std::move(expected);
+        return;
+    }
+
+    const auto* settings = TryGetVectorSettings();
+    if (!settings) {
+        return;
+    }
+    TString createError;
+    const bool valid = IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(*settings, createError)
+        : NKikimr::NKMeans::ValidateSettingsPartial(*settings, createError);
+    if (!valid) {
+        IsBroken = true;
+        AddIssue(createError);
+        return;
+    }
+    KMeans.K = settings->clusters();
+    KMeans.Levels = IsBuildPrefixedVectorIndex() + settings->levels();
+    KMeans.IsPrefixed = IsBuildPrefixedVectorIndex();
+    KMeans.Adaptive = settings->adaptive_clusters() && IsBuildPrefixedVectorIndex();
+    KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+    KMeans.OverlapClusters = settings->overlap_clusters()
+        ? settings->overlap_clusters() : NTableIndex::NKMeans::DefaultOverlapClusters;
+    KMeans.OverlapRatio = settings->has_overlap_ratio()
+        ? settings->overlap_ratio() : NTableIndex::NKMeans::DefaultOverlapRatio;
+    Clusters = NKikimr::NKMeans::CreateClusters(GetKMeansVectorSettings(), KMeans.Rounds, createError);
+}
+
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
     Y_ENSURE(IsBuildIndex());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());

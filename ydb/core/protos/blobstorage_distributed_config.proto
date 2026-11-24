@@ -40,6 +40,7 @@ message TStorageConfig { // contents of storage metadata
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
     NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
     NKikimrBridge.TBridgeRollbackRecord BridgeRollback = 18; // set when the bridged cluster has been rolled back
+    TDataCenterStates DataCenterStates = 19;
 }
 
 message TPDiskMetadataRecord {
@@ -445,6 +446,7 @@ message TEvNodeConfigInvokeOnRoot {
         TQueryPileConnectivity QueryPileConnectivity = 31;
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
         TRollbackBridge RollbackBridge = 33;
+        TDataCenterStates ApplyDataCenterStates = 34;
     }
 }
 
@@ -529,6 +531,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TValidateTargetedProposition ValidateTargetedProposition = 14;
         TPileConnectivity PileConnectivity = 15;
         TBridgeRollbackStatus BridgeRollbackStatus = 16;
+        TDataCenterStates AppliedDataCenterStates = 17; // DC policy acknowledged by BSC
     }
 }
 

@@ -2063,6 +2063,8 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
 
     NKikimrSchemeOp::TTableDescription schema;
     newTableInfo->GetSchema(schema);
+    newId.ToProto(schema.MutablePathId());
+    schema.SetId_Deprecated(newId.LocalPathId);
     for (auto& indexDesc: *schema.MutableTableIndexes()) {
         Y_ENSURE(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
         auto prevPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
@@ -2073,8 +2075,22 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
         auto node = newTableInfo->Indexes.extract(prevPathId);
+        Y_ENSURE(!node.empty());
         node.key() = newPathId;
         newTableInfo->Indexes.insert(std::move(node));
+    }
+    if (schema.HasLocalHnswIndex() && schema.GetLocalHnswIndex().HasIndexId()) {
+        auto& indexDesc = *schema.MutableLocalHnswIndex();
+        const auto prevPathId = TPathId::FromProto(indexDesc.GetIndexId());
+        if (const auto it = remap.find(prevPathId); it != remap.end()) {
+            const auto& newPathId = it->second;
+            newPathId.ToProto(indexDesc.MutableIndexId());
+            auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
+            if (!hnswNode.empty()) {
+                hnswNode.key() = newPathId;
+                newTableInfo->HnswIndexes.insert(std::move(hnswNode));
+            }
+        }
     }
     newTableInfo->SetSchema(schema);
 

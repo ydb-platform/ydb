@@ -822,6 +822,13 @@ const NKikimrSchemeOp::TTableDescription* FindCreateTable(
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
             DataType: "Int16"
+        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (2147483647) is out of range for sequence data type Int16"}});
+
+        // The type may only be narrowed together with an explicit MAXVALUE that fits it.
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            DataType: "Int16"
+            MaxValue: 32767
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -856,6 +863,12 @@ const NKikimrSchemeOp::TTableDescription* FindCreateTable(
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
             DataType: "Int16"
+        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (9223372036854775807) is out of range for sequence data type Int16"}});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            DataType: "Int16"
+            MaxValue: 32767
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -867,6 +880,14 @@ const NKikimrSchemeOp::TTableDescription* FindCreateTable(
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        // Nothing was asked to change, so the bounds must stay untouched.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
+            {
+                NLs::SequenceMaxValue(32767),
+                NLs::SequenceMinValue(1)
+            }
+        );
 
         value = DoNextVal(runtime, "/MyRoot/seq");
         UNIT_ASSERT_VALUES_EQUAL(value, 77);
@@ -901,6 +922,56 @@ const NKikimrSchemeOp::TTableDescription* FindCreateTable(
         env.TestWaitNotification(runtime, txId);
 
         DoNextVal(runtime, "/MyRoot/seq", Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    // A serial column sequence is created with the column's type bounds as an explicit MAXVALUE but
+    // without a sequence data type, so the stored type defaults to Int64 (see GetDefaultFromSequences
+    // in the KQP gateway). An ALTER SEQUENCE that does not ask to change the bounds must not replace
+    // them with the stored type defaults.
+    Y_UNIT_TEST(AlterSequenceKeepsSerialColumnBounds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "myseq"
+            MinValue: 1
+            MaxValue: 32767
+            Cycle: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "myseq"
+            StartValue: 5
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/myseq", true),
+            {
+                NLs::SequenceMinValue(1),
+                NLs::SequenceMaxValue(32767),
+                NLs::SequenceStartValue(5)
+            }
+        );
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "myseq"
+            Increment: 2
+            Restart: true
+            SetVal {
+                NextValue: 10
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/myseq", true),
+            {
+                NLs::SequenceMinValue(1),
+                NLs::SequenceMaxValue(32767),
+                NLs::SequenceIncrement(2)
+            }
+        );
     }
 
     Y_UNIT_TEST(AlterTableSetDefaultFromSequence) {

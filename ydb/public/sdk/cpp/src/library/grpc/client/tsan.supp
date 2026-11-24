@@ -1,3 +1,6 @@
-# gRPC may join its process-global executor threads asynchronously at process exit.
-# https://st.yandex-team.ru/YDBBUGS-477
+# gRPC may join its process-global executor and timer threads asynchronously at process exit.
+# https://github.com/ydb-platform/ydb/issues/42195
+# https://github.com/ydb-platform/ydb/issues/48907
 thread:grpc_core::Executor::SetThreading
+thread:grpc_core::Executor::Enqueue
+thread:start_timer_thread_and_unlock

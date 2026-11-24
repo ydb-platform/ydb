@@ -65,11 +65,10 @@ ui32 OutputIndex(const IOperator& input, TStageGraph& graph) {
 }
 
 void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
-    const auto nodeName = input->ToString(ctx.ExprCtx, props.InfoUnitRegistry);
-    YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
+    YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << input->ToString(ctx.ExprCtx, props.InfoUnitRegistry);
 
     if (input->Props.StageId.has_value()) {
-        YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " stage assigned already";
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << input->ToString(ctx.ExprCtx, props.InfoUnitRegistry) << " stage assigned already";
         return;
     }
 

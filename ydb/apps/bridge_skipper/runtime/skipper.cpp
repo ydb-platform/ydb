@@ -83,7 +83,7 @@ struct TEndpointData {
 bool ShouldPollPile(const TClusterView& view, const TString& name) {
     const auto pile = view.Piles.find(name);
     return pile != view.Piles.end() && pile->second != EPileState::Inactive
-        && pile->second != EPileState::Disconnected;
+        && pile->second != EPileState::Disconnected && pile->second != EPileState::HotStandby;
 }
 
 void SetEndpointError(TEndpointData& endpoint, EYdbMethod method, TString error) {

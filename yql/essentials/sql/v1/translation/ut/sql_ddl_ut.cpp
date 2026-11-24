@@ -721,7 +721,7 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )sql", "<main>:5:33: Error: SOURCE_TYPE requires key\n");
+            )sql", "<main>:3:58: Error: SOURCE_TYPE requires key\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;

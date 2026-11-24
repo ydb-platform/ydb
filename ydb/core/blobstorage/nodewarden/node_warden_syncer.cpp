@@ -68,11 +68,52 @@ namespace NKikimr::NStorage {
         RepairSyncerGroups.erase(actor);
     }
 
+    TNodeWarden::TBridgeSyncNodeCounters::TBridgeSyncNodeCounters(const ::NMonitoring::TDynamicCounterPtr& root) {
+        for (const bool reconcile : {false, true}) {
+            const auto mode = root->GetSubgroup("mode", reconcile ? "reconcile" : "sync");
+            Modes[reconcile] = {
+                .Running = mode->GetCounter("RunningSyncers"),
+                .WaitingForConfig = mode->GetCounter("SyncersWaitingForConfig"),
+                .NodeActive = mode->GetCounter("SyncNodeActive"),
+            };
+        }
+        AnyNodeActive = root->GetSubgroup("mode", "any")->GetCounter("SyncNodeActive");
+        RateLimit = root->GetCounter("SyncRateLimitBytesPerSecond");
+    }
+
     void TNodeWarden::UpdateSyncRateQuoter() {
         const ui64 rate = !SyncRateConfigLimit ? SyncRateControllerLimit
             : !SyncRateControllerLimit ? SyncRateConfigLimit
             : Min(SyncRateConfigLimit, SyncRateControllerLimit);
         SyncRateQuoter->UpdateBytesPerSecond(rate);
+        if (BridgeSyncNodeCounters) {
+            BridgeSyncNodeCounters->RateLimit->Set(rate);
+        }
+    }
+
+    void TNodeWarden::UpdateSyncerCounters() {
+        if (!BridgeSyncNodeCounters) {
+            if (!AppData()->BridgeModeEnabled && WorkingSyncers.empty()) {
+                return;
+            }
+            BridgeSyncNodeCounters.emplace(GetServiceCounters(AppData()->Counters, "bridge|nodewarden"));
+            UpdateSyncRateQuoter();
+        }
+        std::array<ui32, 2> running{}, waiting{};
+        for (const auto& syncer : WorkingSyncers) {
+            if (syncer.ActorId) {
+                ++running[syncer.Reconcile];
+            } else if (!syncer.Finished || syncer.BridgeProxyGroupGeneration != syncer.PendingBridgeProxyGroupGeneration) {
+                ++waiting[syncer.Reconcile];
+            }
+        }
+        for (const bool reconcile : {false, true}) {
+            const auto& mode = BridgeSyncNodeCounters->Modes[reconcile];
+            mode.Running->Set(running[reconcile]);
+            mode.WaitingForConfig->Set(waiting[reconcile]);
+            mode.NodeActive->Set(running[reconcile] != 0);
+        }
+        BridgeSyncNodeCounters->AnyNodeActive->Set(running[0] || running[1]);
     }
 
     void TNodeWarden::ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {
@@ -109,16 +150,17 @@ namespace NKikimr::NStorage {
             }
             WorkingSyncers.erase(syncer);
         }
+        UpdateSyncerCounters();
     }
 
-    void TNodeWarden::StartSyncerIfNeeded(TWorkingSyncer& syncer) {
+    bool TNodeWarden::StartSyncerIfNeeded(TWorkingSyncer& syncer) {
         if (syncer.Finished && syncer.AssignmentId &&
                 syncer.BridgeProxyGroupGeneration == syncer.PendingBridgeProxyGroupGeneration) {
             // The attempt that is over is not started again with the same group generation, neither by an assignment list
             // made before BSC got its result, nor by the group configuration coming with it (or on its own): the result
             // is reported already, and BSC makes a new attempt if it needs one. BSC drops the result of the generation
             // older than the one it has, and keeps the assignment, so the attempt is run with the newer one.
-            return;
+            return false;
         }
 
         auto& group = Groups[syncer.BridgeProxyGroupId.GetRawId()];
@@ -166,6 +208,7 @@ namespace NKikimr::NStorage {
                 {"stopCurrent", stopCurrent},
                 {"startNew", startNew});
         }
+        return stopCurrent || startNew;
     }
 
     void TNodeWarden::Handle(TEvNodeWardenNotifySyncerFinished::TPtr ev) {
@@ -184,6 +227,7 @@ namespace NKikimr::NStorage {
         syncer.LastErrorReason = syncer.ErrorReason;
         syncer.ActorId = {};
         ++(syncer.ErrorReason ? syncer.NumFinishError : syncer.NumFinishOK);
+        UpdateSyncerCounters();
 
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
         FillInWorkingSyncer(&notify->Record, syncer, true);

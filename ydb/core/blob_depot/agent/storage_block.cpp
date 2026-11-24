@@ -28,6 +28,9 @@ namespace NKikimr::NBlobDepot {
                     block.SetVersion(*Request.Version);
                 }
                 block.SetWriteSourceOp(WriteSourceToProto(Request.WriteSource));
+                if (ShouldSkipBridgeAccountingForSubrequests()) {
+                    block.SetSkipBridgeAccountingForSubrequests(true);
+                }
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
             }
 

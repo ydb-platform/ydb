@@ -13,6 +13,7 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/common/sys.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/compatibility/compatibility.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>

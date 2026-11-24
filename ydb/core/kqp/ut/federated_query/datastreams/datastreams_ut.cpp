@@ -2,7 +2,9 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
@@ -459,6 +461,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_TWIN_F(RestoreScriptPhysicalGraphBasic, ModernChannels, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(true);
         DqChannelsVersion = ModernChannels ? 2 : 1;
         const auto writeBucket = TStringBuilder() << Name_ << "test_bucket";
         CreateBucket(writeBucket);
@@ -499,7 +502,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             DROP EXTERNAL DATA SOURCE `{s3_sink}`;
             DROP EXTERNAL DATA SOURCE `{pq_source}`;)", "s3_sink"_a = s3SinkName, "pq_source"_a = pqSourceName));
 
-        executeQuery({ .SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId) });
+        auto graph = LoadPhysicalGraph(executionId);
+        UNIT_ASSERT(graph.GetCompiledWithPgCompatibilityDisabled());
+        executeQuery({ .SaveState = true, .PhysicalGraph = std::move(graph) });
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
@@ -600,6 +605,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetDisablePgCompatibility(false);
         const auto pqGateway = SetupMockPqGateway();
 
         const auto inputTopicName = MakeExternalName("inputTopicName");
@@ -610,6 +616,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        auto& runtime = GetRuntime();
         const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
@@ -636,6 +643,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
         WaitCheckpointUpdate(checkpointId);
+
+        auto graph = LoadPhysicalGraph(executionId);
+        UNIT_ASSERT(graph.GetZeroCheckpointSaved());
+        graph.ClearCompiledWithPgCompatibilityDisabled();
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(CreateSaveScriptExecutionPhysicalGraphActor(
+            edge, TEST_DATABASE, TString{ executionId }, std::move(graph), 1, runtime.GetAppData().QueryServiceConfig));
+        const auto saved = runtime.GrabEdgeEvent<TEvSaveScriptPhysicalGraphResponse>(edge, TEST_OPERATION_TIMEOUT);
+        UNIT_ASSERT(saved);
+        UNIT_ASSERT_VALUES_EQUAL_C(saved->Get()->Status, Ydb::StatusIds::SUCCESS, saved->Get()->Issues.ToString());
+        UNIT_ASSERT(!LoadPhysicalGraph(executionId).HasCompiledWithPgCompatibilityDisabled());
+
+        NKikimrConfig::TFeatureFlags flags = runtime.GetAppData().FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        runtime.GetAppData().UpdateRuntimeFlags(flags);
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
 
         WaitScriptExecution(operationId, EExecStatus::Failed, true);

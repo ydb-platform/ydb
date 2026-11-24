@@ -18,17 +18,20 @@ struct TSchedulableRead : TSchedulableTask {
         void Refill();
     };
 
-    TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query, std::shared_ptr<TQuotaState> quota);
+    explicit TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query,
+        std::shared_ptr<TQuotaState> quota = std::make_shared<TQuotaState>());
 
     bool TryConsumeQuota(TDuration expectedQuota);
     // An admitted first read must finish without quota waits while it holds
     // pipeline dependencies. Reserve and charge its attempts even over quota.
-    void ConsumeQuotaForAdmittedRead(TDuration expectedQuota);
+    // Returns false only if the current policy prohibits reading.
+    bool ConsumeQuotaForAdmittedRead(TDuration expectedQuota);
     void ReturnQuota(NHPTimer::STime elapsedCycles = 0);
 
     // Estimate delay until quota becomes available.
     // Must be called only after refilling is already done, i.e. TryConsumeQuota or HasAvailableQuota fails.
-    TDuration EstimateQuotaDelay(TDuration expectedQuota) const;
+    // No delay means that the observed policy prohibits reading: fail the iterator instead of retrying.
+    TMaybe<TDuration> EstimateQuotaDelay(TDuration expectedQuota) const;
 
     // Non-consuming availability check: refills the bucket and reports whether any
     // quota is left, without reserving it or touching fair-share usage.
@@ -36,11 +39,10 @@ struct TSchedulableRead : TSchedulableTask {
 
     // Returns false if the MaxQuotaMs is zero. It's possible if the resource pool
     // also has TOTAL_CPU_LIMIT_PERCENT = 0.
-    bool IsValid() const {
-        return Quota->MaxQuotaMs != 0;
-    }
+    bool IsValid() const;
 
 private:
+    void RefreshQuota();
     void ReserveQuota(ui64 expectedQuotaMs);
 
     // Milliseconds precision - because THPTimer::STime to TDuration has the same precision

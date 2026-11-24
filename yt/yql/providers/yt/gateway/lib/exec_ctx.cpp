@@ -6,6 +6,9 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+
+#include <yt/yql/providers/yt/lib/qlfilter/qlfilter.h>
+
 #include <yt/yql/providers/yt/lib/schema/schema.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>

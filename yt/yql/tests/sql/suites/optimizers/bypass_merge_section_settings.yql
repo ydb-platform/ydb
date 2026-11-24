@@ -1,0 +1,16 @@
+USE plato;
+
+PRAGMA yt.DisableOptimizers = "PhysicalOptimizer-FuseInnerMap";
+PRAGMA config.flags("OptimizerFlags", "DisableKeepPruneKeysOnInputTables");
+
+$count = (SELECT COUNT(*) FROM Input);
+$limit = ($count / 2) ?? 0;
+$prune = ($world, $rows) -> {
+    RETURN YQL::PruneKeys($rows($world), ($row) -> ($row.key));
+};
+
+DEFINE SUBQUERY $limited() AS
+    SELECT key FROM Input ORDER BY key LIMIT $limit OFFSET 1;
+END DEFINE;
+
+SELECT key || "!" AS key FROM $prune($limited);

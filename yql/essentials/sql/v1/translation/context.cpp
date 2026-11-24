@@ -645,7 +645,7 @@ bool TContext::UseUnordered(const TTableRef& table) const {
     return YtProviderName == table.Service;
 }
 
-TScopedStatePtr TContext::CreateScopedState() const {
+TScopedStatePtr TContext::CreateScopedState() {
     auto state = MakeIntrusive<TScopedState>();
     state->UnicodeLiterals = Settings.UnicodeLiterals;
 
@@ -653,8 +653,11 @@ TScopedStatePtr TContext::CreateScopedState() const {
         state->CurrCluster = TDeferredAtom({}, Settings.DefaultCluster);
 
         const auto provider = GetClusterProvider(Settings.DefaultCluster);
-        YQL_ENSURE(provider);
-        state->CurrService = *provider;
+        if (provider) {
+            state->CurrService = *provider;
+        } else {
+            Error() << "Unknown default cluster: " << Settings.DefaultCluster;
+        }
     }
 
     return state;

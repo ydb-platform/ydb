@@ -51,7 +51,17 @@ public:
         Y_ABORT_UNLESS(!Port.Defined());
         Port = PortManager.GetPort();
 
-        S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port));
+        TS3Mock::TSettings settings(*Port);
+        settings.ErrorResponse = [](TStringBuf method, TStringBuf path) -> TString {
+            if (method == "GET" && path.EndsWith("/short-range")) {
+                return "HTTP/1.1 206 Partial Content\r\nContent-Length: 2\r\nContent-Range: bytes 0-1/2\r\n\r\nab";
+            }
+            if (method == "GET" && path.EndsWith("/oversized-range")) {
+                return "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nabcdefgh";
+            }
+            return {};
+        };
+        S3Mock = MakeHolder<TS3Mock>(settings);
         Y_ABORT_UNLESS(S3Mock->Start());
 
         Runtime = MakeHolder<TTestBasicRuntime>();
@@ -223,6 +233,16 @@ public:
         }
     }
 
+    void RejectsInvalidRangeResponseLength() {
+        for (const char *key : {"short-range", "oversized-range"}) {
+            auto [result, body] = GetObject(key, 4);
+            UNIT_ASSERT_C(!result.IsSuccess(), key);
+            UNIT_ASSERT_VALUES_EQUAL(TString(result.GetError().GetExceptionName()), "InvalidRangeResponse");
+            UNIT_ASSERT(result.GetError().ShouldRetry());
+            UNIT_ASSERT(body.empty());
+        }
+    }
+
     void MultipartUpload() {
         const TString body = "body";
         TString uploadId;
@@ -340,6 +360,7 @@ private:
     UNIT_TEST(PutObject);
     UNIT_TEST(HeadObject);
     UNIT_TEST(GetObject);
+    UNIT_TEST(RejectsInvalidRangeResponseLength);
     UNIT_TEST(MultipartUpload);
     UNIT_TEST(AbortMultipartUpload);
     UNIT_TEST(HeadUnknownObject);

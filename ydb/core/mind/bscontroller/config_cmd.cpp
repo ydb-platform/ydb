@@ -2,6 +2,8 @@
 #include "config.h"
 #include "select_groups.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
@@ -335,6 +337,7 @@ namespace NKikimr::NBsController {
 
                 const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
                 const TValidateConfigUpdatesParameters validationParameters{
+                    .FromGroupStateActor = NotifyId == Self->GroupStateActorId,
                     .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
@@ -485,10 +488,32 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
-                TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                *Ev->Record.MutableResponse()->MutableAppliedDataCenterStates() = SerializeDataCenterStates(Self->DataCenterStates);
+                if (NotifyId == Self->GroupStateActorId) {
+                    Self->Send(NotifyId, new NGroupSyncer::TEvGroupState::TEvProposalResult, 0, Cookie);
+                } else {
+                    TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                }
                 Self->UpdatePDisksCounters();
             }
         };
+
+        void TBlobStorageController::Handle(NGroupSyncer::TEvGroupState::TEvPropose::TPtr& ev) {
+            if (ev->Sender != GroupStateActorId) {
+                return;
+            }
+            const auto& proposal = *ev->Get();
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* group = request.AddCommand()->MutableDefineGroupState()->AddGroups();
+            group->SetGroupId(proposal.GroupId);
+            group->SetExpectedGroupGeneration(proposal.Generation);
+            group->SetGroupState(proposal.Next.State);
+            for (EMirror3dcFailRealmState state : proposal.Next.Realms) {
+                group->AddFailRealmStates(state);
+            }
+            TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, false, false, std::nullopt, this));
+        }
 
         void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev) {
             TabletCounters->Cumulative()[NBlobStorageController::COUNTER_CONFIG_COUNT].Increment(1);

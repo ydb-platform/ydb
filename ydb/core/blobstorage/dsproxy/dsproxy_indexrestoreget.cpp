@@ -245,7 +245,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
-            true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
+            true /*mustRestoreFirst*/, true /*isIndexOnly*/, ForceBlockTabletData, IsInternal);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         ev->DoNotReportIndexRestoreGetMissingBlobs = DoNotReportIndexRestoreGetMissingBlobs;
@@ -311,9 +311,12 @@ public:
             << " ForceBlockTabletId# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Id) : "")
             << " ForceBlockTabletGeneration# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Generation) : ""));
 
+        using EQuorum = TGroupQuorumTracker::EQuorum;
+        const EQuorum quorum = ForceBlockTabletData && ForceBlockTabletData->Generation
+            ? EQuorum::Startup : EQuorum::Read;
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+            if (!Info->IsFailRealmReadable(vd.FailRealm)) {
                 continue;
             }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
@@ -335,7 +338,7 @@ public:
                 if (Info->BelongsToSubgroup(vd, id.Hash())) {
                     if (!vget) {
                         const ui64 cookie = queueId++;
-                        QuorumTracker.try_emplace(cookie, Info.Get());
+                        QuorumTracker.try_emplace(cookie, Info.Get(), quorum);
 
                         vget = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                                     vd,

@@ -4,8 +4,8 @@
 namespace NKikimr::NArrow {
 
 TSchemaSubset::TSchemaSubset(const std::set<ui32>& fieldsIdx, const ui32 fieldsCount) {
-    AFL_VERIFY(fieldsIdx.size() <= fieldsCount);
-    AFL_VERIFY(fieldsIdx.size());
+    YDB_LOG_VERIFY(fieldsIdx.size() <= fieldsCount);
+    YDB_LOG_VERIFY(fieldsIdx.size());
     if (fieldsCount == fieldsIdx.size()) {
         return;
     }
@@ -20,7 +20,7 @@ TSchemaSubset::TSchemaSubset(const std::set<ui32>& fieldsIdx, const ui32 fieldsC
             } else if (*it == i) {
                 ++it;
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
         }
     }

@@ -154,7 +154,6 @@ private:
             Remote->Record.SetPageFaults(PageFaults);
             Remote->Record.SetFinished(Finished);
             Remote->Record.SetRequestedBytesLimitReached(RequestedBytesLimitReached);
-            Remote->Record.SetPageFaults(PageFaults);
             Remote->Record.SetPageFault(PageFault);
             Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));
             *Remote->Record.MutableLastCursor() = LastCursorProto;

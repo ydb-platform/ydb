@@ -37,9 +37,7 @@ void ValidateShuffleHandleCodec(
     auto handle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(signedHandle.Underlying()->Payload()));
     THROW_ERROR_EXCEPTION_IF(
         handle->Codec != requestedCodec,
-        "Shuffle handle has codec %Qlv instead of the requested %Qlv; the coordinator or proxy is "
-        "too old to support the codec option; the shuffle has already been started and will be "
-        "released when the parent transaction ends",
+        "Shuffle handle has codec %Qlv instead of the requested %Qlv",
         handle->Codec,
         requestedCodec);
 }

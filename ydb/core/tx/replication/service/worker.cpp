@@ -961,7 +961,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (ev->Get()->Tag == LagReportWakeupTag) {
             return ReportLag();
         }
-        AFL_VERIFY(ev->Get()->Tag == SourceOffsetCommitWakeupTag);
+        YDB_LOG_VERIFY(ev->Get()->Tag == SourceOffsetCommitWakeupTag);
         Schedule(SourceOffsetCommitInterval, new TEvents::TEvWakeup(SourceOffsetCommitWakeupTag));
         if (!IsReaderValidated() || PendingSchemaChange || PendingWriterCheckpoint
             || !CompletedSourceOffset || *CompletedSourceOffset <= ReaderCommittedOffset.GetOrElse(0))

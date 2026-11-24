@@ -21,6 +21,14 @@
 
 
 ====================COPYRIGHT====================
+  return IsAsciiAlpha(c) || IsAsciiDigit(c);
+
+
+====================COPYRIGHT====================
+  return IsAsciiLower(c) || IsAsciiUpper(c);
+
+
+====================COPYRIGHT====================
 // Copyright 2017 The Abseil Authors.
 
 

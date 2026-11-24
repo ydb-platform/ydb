@@ -6,6 +6,9 @@
 @@ -355,1 +355,1 @@ std::shared_ptr<grpc::Channel> OtlpGrpcClient::MakeChannel(const OtlpGrpcClientO
 -  grpc_arguments.SetUserAgentPrefix(options.user_agent);
 +  grpc_arguments.SetUserAgentPrefix(TString{options.user_agent});
+@@ -450,1 +450,1 @@ void OtlpGrpcClient::PopulateChannelArguments(const OtlpGrpcClientOptions &optio
+-    grpc_arguments.SetServiceConfigJSON(service_config);
++    grpc_arguments.SetServiceConfigJSON(TString{service_config});
 @@ -453,5 +453,5 @@ std::unique_ptr<grpc::ClientContext> OtlpGrpcClient::MakeClientContext(
    for (auto &header : options.metadata)
    {
@@ -34,14 +37,3 @@
        if (field_descriptor->type() == google::protobuf::FieldDescriptor::TYPE_BYTES)
        {
          for (int i = 0; i < field_size; ++i)
---- contrib/libs/opentelemetry-cpp/exporters/otlp/src/otlp_grpc_client.cc	(index)
-+++ contrib/libs/opentelemetry-cpp/exporters/otlp/src/otlp_grpc_client.cc	(working tree)
-@@ -453,7 +453,7 @@ void OtlpGrpcClient::PopulateChannelArguments(const OtlpGrpcClientOptions &optio
-         std::min(std::max(options.retry_policy_max_backoff.count(), 0.f), 999999999.f),
-         std::min(std::max(options.retry_policy_backoff_multiplier, 0.f), 999999999.f));
- 
--    grpc_arguments.SetServiceConfigJSON(service_config);
-+    grpc_arguments.SetServiceConfigJSON(TString{service_config});
-   }
- #endif  // ENABLE_OTLP_RETRY_PREVIEW
- }

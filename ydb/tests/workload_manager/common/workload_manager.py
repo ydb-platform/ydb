@@ -611,10 +611,11 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
         cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
 
     @classmethod
-    def after_workload(cls, result: WorkloadRunResult):
+    def before_stop_checking(cls):
+        # Keep signal checks and scheduler metrics active until TPC-C finishes.
         if cls._tpcc_thread is not None:
             cls.wait_tpcc()
-        super().after_workload(result)
+        super().before_stop_checking()
 
     @classmethod
     def benchmark_setup(cls) -> None:

@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 class TestSnapshotRetentionWorkload(unittest.TestCase):
     read_kinds = ("point", "range", "index")
 
-    # YDB-59537: muted in CI because snapshot registration may race with history cleanup.
     def test_concurrent_writes_and_retained_reads(self):
         self._start_workload()
         readers = 4

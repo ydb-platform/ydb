@@ -362,8 +362,15 @@ public:
             return;
         }
         DrainQueue();
+        if (LastState == NTable::EScan::Final) {
+            SendFinalResult();
+            return;
+        }
         SendIntermediateResult();
         MarkAsLast();
+        if (LastState == NTable::EScan::Final) {
+            SendFinalResult();
+        }
     }
 
     void SendIntermediateResult() {
@@ -452,7 +459,7 @@ public:
             }
 
             FeedRowsToExporter();
-            if (LastState == NTable::EScan::Sleep) {
+            if (LastState == NTable::EScan::Sleep || LastState == NTable::EScan::Final) {
                 return;
             }
         }
@@ -473,6 +480,12 @@ public:
             if (result == NTable::EScan::Sleep) {
                 LastState = NTable::EScan::Sleep;
                 Counters.OnSleep();
+                TotalRowsFed += rowsFedInBatch;
+                Counters.OnRowsFed(rowsFedInBatch);
+                return;
+            }
+            if (result == NTable::EScan::Final) {
+                LastState = NTable::EScan::Final;
                 TotalRowsFed += rowsFedInBatch;
                 Counters.OnRowsFed(rowsFedInBatch);
                 return;

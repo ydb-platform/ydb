@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_rbo_cbo_filters_ut.cpp
     kqp_rbo_copy_ut.cpp
     kqp_rbo_global_ut.cpp
 )

@@ -3090,6 +3090,8 @@ private:
             vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
             vectorResolveProto.SetHnswAllowEmptyRouting(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
                 && indexDesc->KeyColumns.size() == 1);
+            vectorResolveProto.SetValidateDirectHnswLeaves(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && indexDesc->KeyColumns.size() > 1 && vectorResolve.WithData().Value() == "true");
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

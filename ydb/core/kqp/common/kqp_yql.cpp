@@ -226,6 +226,9 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
         } else if (name == TKqpReadTableSettings::VectorTopKLimitSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.VectorTopKLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableSettings::DisableVectorTopKSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.DisableVectorTopK = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -495,6 +498,12 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Value<TCoAtom>().Build(value)
                 .Done());
         }
+    }
+
+    if (DisableVectorTopK) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(DisableVectorTopKSettingName)
+            .Done());
     }
 
     if (VectorTopKColumn) {

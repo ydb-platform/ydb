@@ -221,6 +221,22 @@ private:
                             if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
                                 LevelClusters[rootClusterId].push_back(i);
                             } else {
+                                if (Settings.GetValidateDirectHnswLeaves()) {
+                                    if (!DirectLeafValidator) {
+                                        TString error;
+                                        DirectLeafValidator = NKMeans::CreateClusters(
+                                            NKMeans::MakeDistanceSettings(Settings.GetIndexSettings()), 0, error);
+                                        if (!DirectLeafValidator) {
+                                            RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                                            return;
+                                        }
+                                    }
+                                    const auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
+                                    if ((!embedding.IsString() && !embedding.IsEmbedded())
+                                            || !DirectLeafValidator->IsExpectedFormat(embedding.AsStringRef())) {
+                                        continue;
+                                    }
+                                }
                                 // Add leaf clusters directly to NextClusters
                                 NextClusters[i] = {std::make_pair(rootClusterId, (double)0.0)};
                             }
@@ -642,6 +658,7 @@ private:
     TVector<TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>> NextClusters;
     TMap<NTableIndex::NKMeans::TClusterId, TVector<size_t>> LevelClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
+    std::unique_ptr<NKikimr::NKMeans::IClusters> DirectLeafValidator;
     TVector<NTableIndex::NKMeans::TClusterId> RootClusterIds;
     bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;

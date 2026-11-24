@@ -1116,8 +1116,8 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         const auto ddl = session.ExecuteSchemeQuery(R"(
             CREATE TABLE Projected (
-                id Uint64 NOT NULL, emb String NOT NULL, other_emb String NOT NULL, PRIMARY KEY(id),
-                INDEX idx GLOBAL USING hnsw ON (emb) COVER (other_emb)
+                id Uint64 NOT NULL, emb String NOT NULL, other_emb String NOT NULL, tag String, PRIMARY KEY(id),
+                INDEX idx GLOBAL USING hnsw ON (emb) COVER (other_emb, tag)
                 WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=1)
             );
         )").ExtractValueSync();
@@ -1125,15 +1125,29 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         const auto write = ExecuteDataQuery(session, R"(
             $near = Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector");
             $far = Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector");
-            UPSERT INTO Projected (id, emb, other_emb) VALUES (1u, $near, $far), (2u, $far, $near);
+            $near3 = Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f, 0.0f]), "FloatVector");
+            $far3 = Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f, 0.0f]), "FloatVector");
+            UPSERT INTO Projected (id, emb, other_emb, tag)
+                VALUES (1u, $near, $far3, "present"), (2u, $far, $near3, NULL);
         )");
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         const auto projected = ExecuteDataQuery(session, R"(
             SELECT id FROM (SELECT id, other_emb AS emb FROM Projected VIEW idx)
-            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
+            ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f, 0.0f])) LIMIT 1;
         )");
         UNIT_ASSERT_C(projected.IsSuccess(), projected.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(projected.GetResultSet(0)), "[[2u]]");
+
+        const auto guarded = ExecuteDataQuery(session, R"(
+            $target = Knn::ToBinaryStringFloat([0.0f, 0.0f]);
+            $score = ($embedding, $present) -> {
+                RETURN YQL::FlatMap($present, ($tag) -> { RETURN Knn::EuclideanDistance($embedding, $target); });
+            };
+            SELECT id FROM Projected VIEW idx
+            ORDER BY $score(emb, tag) LIMIT 1;
+        )");
+        UNIT_ASSERT_C(guarded.IsSuccess(), guarded.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(guarded.GetResultSet(0)), "[[2u]]");
 
         auto params = kikimr.GetTableClient().GetParamsBuilder();
         params.AddParam("$coords").BeginOptional().BeginList()
@@ -1193,6 +1207,7 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         write = ExecuteDataQuery(session, "DELETE FROM Frozen WHERE id = 1u;");
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         const auto read = ExecuteDataQuery(session, R"(
+            PRAGMA ydb.EnableOrderPreservingLookupJoin = "true";
             SELECT id, payload FROM Frozen VIEW idx
             ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;
         )");

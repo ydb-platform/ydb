@@ -620,6 +620,9 @@ public:
         , InputRowSeqNoLast((taskId + 1) << SEQNO_SPACE)
     {
         YQL_ENSURE(taskId < MaxTaskIdForCookieVersion(Settings.CookieFormatVersion));
+        if (KeepRowsOrder() && !IsInputTriplet()) {
+            CurrentResultSeqNo = InputRowSeqNo;
+        }
         // read columns should contain join key and result columns
         for (const auto& joinKey : Settings.InputColumns) {
             ReadColumns.emplace(joinKey.Name, joinKey);

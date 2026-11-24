@@ -562,8 +562,8 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
         return node;
     }
 
-    if (settings.VectorTopKColumn) {
-        return node; // already set
+    if (settings.DisableVectorTopK || settings.VectorTopKColumn) {
+        return node;
     }
 
     // Check sort direction
@@ -826,7 +826,7 @@ TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx,
     }
 
     // Skip if already has VectorTopK or not a full table scan
-    if (settings.VectorTopKColumn || !TCoVoid::Match(sourceSettings.RangesExpr().Raw())) {
+    if (settings.DisableVectorTopK || settings.VectorTopKColumn || !TCoVoid::Match(sourceSettings.RangesExpr().Raw())) {
         return node;
     }
 

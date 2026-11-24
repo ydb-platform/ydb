@@ -544,6 +544,13 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 (1u, NULL, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector")),
                 (2u, NULL, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
         )");
+        const auto inserted = execute(R"(
+            INSERT INTO NullPrefix (id, tenant, emb) VALUES (3u, "missing", NULL), (4u, "empty", "");
+            SELECT id FROM `/Root/NullPrefix/idx/indexImplPostingTable` WHERE id IN (3u, 4u);
+            SELECT tenant FROM `/Root/NullPrefix/idx/indexImplPrefixTable` WHERE tenant = "missing";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(inserted.GetResultSet(0)), "[]");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(inserted.GetResultSet(1)), R"([[["missing"]]])");
         const TString query = R"(
             SELECT id FROM NullPrefix VIEW idx WHERE tenant IS NULL
             ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([0.0f, 0.0f])) LIMIT 1;

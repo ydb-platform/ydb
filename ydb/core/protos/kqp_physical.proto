@@ -356,6 +356,7 @@ message TKqpPhyCnVectorResolve {
     optional double OverlapRatio = 12;
     // Inline unprefixed HNSW indexes can accept rows before any centroids exist.
     bool HnswAllowEmptyRouting = 13;
+    bool ValidateDirectHnswLeaves = 14;
 }
 
 message TKqpPhyCnVectorSearch {

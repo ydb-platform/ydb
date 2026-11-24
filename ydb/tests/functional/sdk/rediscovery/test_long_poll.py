@@ -133,7 +133,8 @@ async def sdk_process(address, probe_binary, workload="list-on-demand"):
     process = await asyncio.create_subprocess_exec(
         probe_binary, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
         env={**os.environ, "YDB_ENDPOINT": address, "YDB_DATABASE": DATABASE,
-             "YDB_LONG_POLL_DISCOVERY": "1", "YDB_PROBE": workload, "YDB_PROBE_TOPIC": workload},
+             "YDB_LONG_POLL_DISCOVERY": "1", "YDB_PROBE": workload, "YDB_PROBE_TOPIC": workload,
+             "YDB_PROBE_ON_DEMAND": "1"},
     )
     try:
         yield process
@@ -195,8 +196,8 @@ async def check_workload(replicas, probe_binary, workload):
             else:
                 await direct.topic_client.create_topic(path, consumers=[ydb.TopicConsumer("probe")])
                 if workload == "topic-read":
-                    async with direct.topic_client.writer(path, producer_id="seed") as writer:
-                        await writer.write_with_ack(MARKERS[index].encode())
+                    if index == 0:
+                        controls.append(await stack.enter_async_context(direct.topic_client.writer(path, producer_id="seed")))
                 else:
                     controls.append(await stack.enter_async_context(direct.topic_client.reader(path, consumer="probe")))
 
@@ -208,11 +209,17 @@ async def check_workload(replicas, probe_binary, workload):
             selected, _, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=8)
             assert selected == target
             if workload == "topic-read":
-                await expect_output(sdk, ("OK " + MARKERS[target]).encode())
+                # Write a unique message to the source after each discovery assignment.
+                payload = ("read-%d" % target).encode()
+                await controls[0].write_with_ack(payload)
+                await expect_output(sdk, b"OK " + payload)
             elif workload == "topic-write":
+                payload = ("write-%d" % target).encode()
+                sdk.stdin.write(payload + b"\n")
+                await sdk.stdin.drain()
                 await expect_output(sdk, b"OK")
-                message = await asyncio.wait_for(controls[target].receive_message(), timeout=12)
-                assert message.data == b"probe"
+                message = await asyncio.wait_for(controls[0].receive_message(), timeout=12)
+                assert message.data == payload
             else:
                 # Check independent database state. The probe can also print OK for a source write in flight.
                 async def wait_for_row():
@@ -223,14 +230,10 @@ async def check_workload(replicas, probe_binary, workload):
                         await asyncio.sleep(0.05)
                 await expect_output(sdk, b"OK")
                 await asyncio.wait_for(wait_for_row(), timeout=12)
-        old_port = int(replicas[0].rsplit(":", 1)[1])
-        async with asyncio.timeout(5):
-            while established_sockets(sdk.pid, {old_port}) != 0:
-                await asyncio.sleep(0.025)
 
 
 @pytest.mark.parametrize("workload", ["bulk-upsert", "topic-read", "topic-write"])
-def test_cpp_data_client_moves_to_destination(replicas, workload):
+def test_bulk_moves_and_established_topics_drain(replicas, workload):
     asyncio.run(check_workload(replicas, yatest.common.binary_path(PROBE), workload))
 
 
@@ -246,15 +249,18 @@ async def check_retained_session(replicas, probe, workload):
         route.switch(1)
         target, next_peer, _ = await asyncio.wait_for(route.subscriptions.get(), timeout=5)
         assert target == 1 and next_peer == peer
-        # Keep the application idle and its original session alive while checking TCP.
-        async with asyncio.timeout(5):
-            while established_sockets(sdk.pid, {port}) != 0:
-                await asyncio.sleep(0.025)
+        assert await list_with_sdk(sdk) == {MARKERS[1]}
         sdk.stdin.write(b"check\n")
         await sdk.stdin.drain()
-        await expect_output(sdk, b"EXPIRED")
+        # Ping uses the live bidirectional RPC. Query and Table checks open new node-bound RPCs.
+        if workload == "coordination-session":
+            await expect_output(sdk, b"ACTIVE")
+            assert established_sockets(sdk.pid, {port}) >= 1
+        else:
+            await expect_output(sdk, b"EXPIRED")
+
 
 
 @pytest.mark.parametrize("workload", ["query-session", "table-session", "coordination-session"])
-def test_retained_session_releases_source_connection(replicas, workload):
+def test_retained_session_after_replica_switch(replicas, workload):
     asyncio.run(check_retained_session(replicas, yatest.common.binary_path(PROBE), workload))

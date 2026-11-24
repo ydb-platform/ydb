@@ -1,8 +1,8 @@
 diff --git a/README.md b/README.md
-index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..63bfd4fe4951841bd10882c42b2c62172964d74c 100644
+index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..53915704b10ab559bdc87f1ece65a81cddeb9198 100644
 --- a/README.md
 +++ b/README.md
-@@ -651,3 +651,34 @@ $config = [
+@@ -651,3 +651,31 @@ $config = [
  ];
  $ydb = new \YdbPlatform\Ydb\Ydb($config);
  ```
@@ -11,16 +11,13 @@ index c2e05e17cbb9fe1b0dda1a53b293eda68cd96f2c..63bfd4fe4951841bd10882c42b2c6217
 +
 +Enable both `discovery` and `discoveryLongPoll` to keep one conditional
 +`ListEndpoints` request on the bootstrap connection. The synchronous driver
-+processes completed polls before dispatch and while consuming streaming results.
-+A new route closes the previous data channel shared by the driver's service
-+clients. For idle workers, pass the running ReactPHP `LoopInterface` as
-+`discoveryLoop` (requires PHP 7.4+). The loop checks for a completed poll every
-+100 ms using the same bootstrap connection. A synchronous process without a
-+running loop processes the update on its next SDK call or stream read. A
-+blocking native gRPC receive also pauses the loop until a message, error, or
-+RPC deadline arrives. During that pause the old socket stays open. On return the SDK checks for an
-+available discovery response before yielding data. Once a response has started
-+it waits for its generation trailers within the discovery timeout.
++processes completed polls before dispatch. Each new request uses the current
++route. Streams already accepted by the previous replica can finish on their
++original channel. For idle workers, pass the running ReactPHP `LoopInterface`
++as `discoveryLoop` (requires PHP 7.4+). The loop checks for a completed poll
++every 100 ms on the same bootstrap connection. A synchronous process without
++a running loop processes the update on its next SDK call. Blocking native
++gRPC receives pause the loop until a message, error or deadline arrives.
 +After a switch, acquire a fresh session with `Table::session()`. A retained
 +session raises `BadSessionException`. A file pool can reuse idle sessions after
 +restart when the bootstrap, database, selected endpoint and managed generation
@@ -1037,7 +1034,7 @@ index cc77362494d311f99c6a8f3dcf8c1728af2ddbe1..26fb5d55c30567055d151a83f8ef9926
                  }
                  throw $exception;
 diff --git a/src/Traits/RequestTrait.php b/src/Traits/RequestTrait.php
-index 500b3c3e6d3c9938eced88caeac997ba00376db8..0ba63c037fcf789387aa8266dc680e11ac342e10 100644
+index 500b3c3e6d3c9938eced88caeac997ba00376db8..4f57636f3b104d2c4c789b4ba694b61d0688919f 100644
 --- a/src/Traits/RequestTrait.php
 +++ b/src/Traits/RequestTrait.php
 @@ -49,6 +49,7 @@ trait RequestTrait
@@ -1089,7 +1086,9 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..0ba63c037fcf789387aa8266dc680e11
 -        $options = $this->buildGrpcOptions();
 -        $call = $this->client->$method($request, $this->meta, $options);
 +            $options = $this->buildGrpcOptions();
-+            $call = $this->client->$method($request, $this->meta, $options);
++            // Hold the selected channel until this response generator finishes.
++            $client = $this->client;
++            $call = $client->$method($request, $this->meta, $options);
  
 -        if (method_exists($call, 'responses')) {
 -            // $status = $call->getStatus();
@@ -1101,9 +1100,7 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..0ba63c037fcf789387aa8266dc680e11
 -            foreach ($call->responses() as $response) {
 -                $result = $this->processResponse($service, $method, $response, $resultClass);
 -                yield $result ? new QueryResult($result) : true;
-+                $responses = $this->routeEpoch === null ? $call->responses() : $this->ydb->dataResponses($call);
-+                unset($call);
-+                foreach ($responses as $response) {
++                foreach ($call->responses() as $response) {
 +                    $result = $this->processResponse($service, $method, $response, $resultClass);
 +                    yield $result ? new QueryResult($result) : true;
 +                }
@@ -1148,10 +1145,10 @@ index 500b3c3e6d3c9938eced88caeac997ba00376db8..0ba63c037fcf789387aa8266dc680e11
          $interval = $this->ydb->discoveryInterval();
  
 diff --git a/src/Ydb.php b/src/Ydb.php
-index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b384e335fd 100644
+index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..18bead5132e552840b9bccc83cbeb17c431ec9db 100644
 --- a/src/Ydb.php
 +++ b/src/Ydb.php
-@@ -115,6 +115,15 @@ class Ydb
+@@ -115,6 +115,14 @@ class Ydb
       * @var \YdbPlatform\Ydb\Internal\Discovery
       */
      protected $internalDiscovery;
@@ -1161,13 +1158,12 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
 +    private $routeSnapshot;
 +    private $pollTimeoutMs;
 +    private $routeDataChannel;
-+    private $routeStreams;
 +    private $discoveryLoop;
 +    private $discoveryTimer;
  
      /**
       * @param array $config
-@@ -123,7 +132,7 @@ class Ydb
+@@ -123,7 +131,7 @@ class Ydb
       */
      public function __construct($config = [], LoggerInterface $logger = null)
      {
@@ -1176,14 +1172,13 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
          $this->database = $config['database'] ?? null;
          $this->iam_config = $config['iam_config'] ?? [];
          $this->grpc_config = (array) ($config['grpc'] ?? []);
-@@ -165,7 +174,17 @@ class Ydb
+@@ -165,7 +173,16 @@ class Ydb
                  $this->discoveryInterval = $config['discoveryInterval'];
              }
  
 -            $this->applyDiscoveryResult($this->internalDiscovery->initialListEndpoints());
 +            if (!empty($config['discoveryLongPoll'])) {
 +                $this->pollTimeoutMs = $config['discoveryTimeoutMs'] ?? Internal\Discovery::DEFAULT_TIMEOUT_MS;
-+                $this->routeStreams = new \SplObjectStorage();
 +                $this->longPoll = new Internal\LongPoll($this, $this->endpoint, $this->grpc_config['opts'] ?? []);
 +                $this->refreshLongPoll($config['discoveryInitialTimeoutMs'] ?? Internal\Discovery::DEFAULT_INITIAL_TIMEOUT_MS);
 +                if (isset($config['discoveryLoop'])) {
@@ -1195,7 +1190,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
          }
  
          $this->logger()->info('YDB: Initialized');
-@@ -233,7 +252,143 @@ class Ydb
+@@ -233,7 +250,108 @@ class Ydb
       */
      public function discover()
      {
@@ -1217,7 +1212,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
 +                throw new \RuntimeException('Current endpoint assignment has no endpoints');
 +            }
 +        } catch (\Throwable $error) {
-+            $this->closeRouteChannel();
++            $this->retireRoute();
 +            $this->routeSnapshot = null;
 +            $this->cluster()->sync([]);
 +            throw $error;
@@ -1227,7 +1222,7 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
 +            $previous = $this->endpoint;
 +            $this->applyDiscoveryResult($snapshot);
 +            if ($this->routeSnapshot === null || $this->routeSnapshot[0] !== $generation || $this->endpoint !== $previous) {
-+                $this->closeRouteChannel();
++                $this->retireRoute();
 +                ++$this->routeEpoch;
 +            }
 +            $this->routeSnapshot = $state;
@@ -1289,32 +1284,6 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
 +        });
 +    }
 +
-+    /** @internal Release the native gRPC call even while the application holds its generator. */
-+    public function dataResponses($call)
-+    {
-+        $stream = (object)['call' => $call, 'responses' => $call->responses()];
-+        unset($call);
-+        $this->routeStreams->attach($stream);
-+        try {
-+            while ($stream->responses && $stream->responses->valid()) {
-+                $this->refreshLongPoll();
-+                if (!$stream->responses) {
-+                    break;
-+                }
-+                yield $stream->responses->current();
-+                $this->refreshLongPoll();
-+                if ($stream->responses) {
-+                    $stream->responses->next();
-+                }
-+            }
-+            if (!$stream->responses) {
-+                throw new \RuntimeException('Data stream belongs to a retired replica');
-+            }
-+        } finally {
-+            $this->routeStreams->detach($stream);
-+        }
-+    }
-+
 +    public function __destruct()
 +    {
 +        if ($this->discoveryTimer) {
@@ -1322,30 +1291,21 @@ index b96390c9c0a9975b889fc37dd4532f5f0a9b2b57..76853b12da0088a961d02ca2b50809b3
 +        }
 +    }
 +
-+    private function closeRouteChannel()
++    private function retireRoute()
 +    {
 +        if ($this->table) {
 +            $this->table->retireSessions();
 +        }
-+        foreach ($this->routeStreams as $stream) {
-+            if ($stream->call) {
-+                $stream->call->cancel();
-+                $stream->call = $stream->responses = null;
-+            }
-+        }
-+        if ($this->routeDataChannel) {
-+            $this->routeDataChannel->close();
-+            $this->routeDataChannel = null;
-+        }
++        $this->routeDataChannel = null;
      }
  
      /**
 diff --git a/tests/Internal/LongPollTest.php b/tests/Internal/LongPollTest.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18d6eaf877
+index 0000000000000000000000000000000000000000..74f9eea84c39932c41ee3b23fe82f4c9247e03e4
 --- /dev/null
 +++ b/tests/Internal/LongPollTest.php
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,343 @@
 +<?php
 +
 +namespace YdbPlatform\Ydb\Test\Internal;
@@ -1355,6 +1315,42 @@ index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18
 +
 +class LongPollTest extends TestCase
 +{
++    public function testNewScanUsesReplacementWhileDispatchedScanFinishes()
++    {
++        $source = new class('A') {
++            private $name;
++            public function __construct($name) { $this->name = $name; }
++            public function StreamReadTable($request, $meta, $options) { return $this; }
++            public function responses() { yield $this->name . '1'; yield $this->name . '2'; }
++        };
++        $driver = new class($source) {
++            public $epoch = 1;
++            public $stub;
++            public function __construct($stub) { $this->stub = $stub; }
++            public function needDiscovery() { return true; }
++            public function refreshLongPoll() { return $this->epoch; }
++            public function serviceClient($class) { return $this->stub; }
++        };
++        $table = new class($driver) {
++            use \YdbPlatform\Ydb\Traits\RequestTrait;
++            public $meta = [];
++            public $frames = [];
++            private $client;
++            public function __construct($driver) { $this->ydb = $driver; $this->client = $driver->stub; }
++            public function read() { return $this->doStreamRequest('Table', 'StreamReadTable', ['skip_get_token'=>true]); }
++            protected function buildGrpcOptions() { return []; }
++            protected function processResponse($service, $method, $response, $resultClass) { $this->frames[] = $response; }
++        };
++        $held = $table->read();
++        $held->current();
++        ++$driver->epoch;
++        $class = get_class($source);
++        $driver->stub = new $class('B');
++        iterator_to_array($table->read());
++        $held->next();
++        self::assertSame(['A1', 'B1', 'B2', 'A2'], $table->frames);
++    }
++
 +    public function testSupportsLegacyAtStartup()
 +    {
 +        self::assertNull(LongPoll::generation([], null));
@@ -1364,30 +1360,6 @@ index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18
 +    {
 +        self::assertSame('18446744073709551615', LongPoll::generation(['18446744073709551615'], '1'));
 +        self::assertSame('0', LongPoll::generation(['0'], null));
-+    }
-+
-+    public function testReleasesNativeCallWhileGeneratorIsHeld()
-+    {
-+        $driver = new class extends \YdbPlatform\Ydb\Ydb {
-+            public function __construct() {}
-+            public function refreshLongPoll(?int $timeoutMs = null) { return 1; }
-+        };
-+        $streams = new \ReflectionProperty(\YdbPlatform\Ydb\Ydb::class, 'routeStreams');
-+        $streams->setAccessible(true);
-+        $streams->setValue($driver, new \SplObjectStorage());
-+        $call = new class {
-+            public $cancelled = false;
-+            public function responses() { yield 1; yield 2; }
-+            public function cancel() { $this->cancelled = true; }
-+        };
-+        $held = $driver->dataResponses($call);
-+        self::assertSame(1, $held->current());
-+        $close = new \ReflectionMethod(\YdbPlatform\Ydb\Ydb::class, 'closeRouteChannel');
-+        $close->setAccessible(true);
-+        $close->invoke($driver);
-+        self::assertTrue($call->cancelled);
-+        $this->expectException(\RuntimeException::class);
-+        $held->next();
 +    }
 +
 +    public function testSessionReleasedOnInterruptedStream()
@@ -1536,7 +1508,7 @@ index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18
 +        }
 +    }
 +
-+    public function testTwoDriversShareDataSocketUntilLastRouteRetires()
++    public function testTwoDriversShareDataSocketUntilLastStubIsReleased()
 +    {
 +        $listener = stream_socket_server('tcp://127.0.0.1:0');
 +        $endpoint = stream_socket_get_name($listener, false);
@@ -1548,7 +1520,7 @@ index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18
 +                'iam_config' => ['anonymous' => true, 'insecure' => true],
 +            ]);
 +            // Both drivers have received an assignment for this node.
-+            foreach (['longPoll' => true, 'routeSnapshot' => ['1', []], 'routeStreams' => new \SplObjectStorage()] as $key => $value) {
++            foreach (['longPoll' => true, 'routeSnapshot' => ['1', []]] as $key => $value) {
 +                $field = new \ReflectionProperty($driver, $key);
 +                $field->setAccessible(true);
 +                $field->setValue($driver, $value);
@@ -1565,14 +1537,17 @@ index 0000000000000000000000000000000000000000..83b1564b5d3d899ce43a81ce53cd5c18
 +        try {
 +            self::assertTrue($clients[0]->waitForReady(3000000));
 +            self::assertTrue($clients[1]->waitForReady(3000000), 'Sibling should reuse the established data socket');
-+            $close = new \ReflectionMethod($driver, 'closeRouteChannel');
++            $close = new \ReflectionMethod($driver, 'retireRoute');
 +            $close->setAccessible(true);
 +            $close->invoke($drivers[0]);
 +            self::assertSame(\Grpc\CHANNEL_READY, $clients[1]->getConnectivityState());
 +            $close->invoke($drivers[1]);
++            self::assertSame(\Grpc\CHANNEL_READY, $clients[0]->getConnectivityState());
++            self::assertSame(\Grpc\CHANNEL_READY, $clients[1]->getConnectivityState());
++            $clients = [];
 +            stream_set_timeout($peer, 3);
 +            stream_get_contents($peer);
-+            self::assertTrue(feof($peer), 'Last route retirement should close the TCP socket');
++            self::assertTrue(feof($peer), 'Releasing the last stub should close the TCP socket');
 +        } finally {
 +            fclose($peer);
 +            fclose($listener);

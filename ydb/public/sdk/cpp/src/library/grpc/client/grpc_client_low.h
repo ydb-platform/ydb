@@ -239,13 +239,11 @@ using TAdvancedResponseCallback = std::function<void (const grpc::ClientContext&
 // keep their retired guard even when the same address appears after failback.
 class TEndpointAdmission {
 public:
-    std::shared_lock<std::shared_mutex> Acquire(const IQueueClientContextPtr& call = {});
+    std::shared_lock<std::shared_mutex> Acquire();
     void Retire();
 
 private:
     std::shared_mutex Mutex_;
-    std::mutex CallsMutex_;
-    std::vector<std::weak_ptr<IQueueClientContext>> Calls_;
     bool Open_ = true;
 };
 
@@ -339,7 +337,7 @@ private:
                const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        auto dispatch = admission && context ? admission->Acquire(context) : std::shared_lock<std::shared_mutex>{};
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
         if (!context || (admission && !dispatch)) {
             auto status = context
                 ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
@@ -432,7 +430,7 @@ private:
                const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        auto dispatch = admission && context ? admission->Acquire(context) : std::shared_lock<std::shared_mutex>{};
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
         if (!context || (admission && !dispatch)) {
             auto status = context
                 ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
@@ -830,7 +828,7 @@ private:
                const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        auto dispatch = admission && context ? admission->Acquire(context) : std::shared_lock<std::shared_mutex>{};
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
         if (!context || (admission && !dispatch)) {
             auto status = context
                 ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")
@@ -1246,7 +1244,7 @@ private:
                const std::shared_ptr<TEndpointAdmission>& admission = {}) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        auto dispatch = admission && context ? admission->Acquire(context) : std::shared_lock<std::shared_mutex>{};
+        auto dispatch = admission && context ? admission->Acquire() : std::shared_lock<std::shared_mutex>{};
         if (!context || (admission && !dispatch)) {
             auto status = context
                 ? TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Endpoint retired before RPC dispatch")

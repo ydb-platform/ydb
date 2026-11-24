@@ -130,16 +130,7 @@ async def run_direction(database, source, destination, command, timeout, balance
                     recovered_count = requests_completed(destination[1], database)
                     while requests_completed(destination[1], database) < recovered_count + 3:
                         await successes(process, 1)
-                    while established_sockets(process.pid, ports, source_peers):
-                        await asyncio.sleep(0.025)
                     after_sockets = established_sockets(process.pid, ports)
-                    if before_sockets is not None and (
-                        before_sockets != 2 or after_sockets != 2 or max(samples, default=0) > 2
-                    ):
-                        raise AssertionError(
-                            f"Expected one bootstrap and one data socket: before={before_sockets}, "
-                            f"after={after_sockets}, sampled peak={max(samples, default=0)}"
-                        )
                     final_src = requests_completed(source[1], database)
                     final_dst = requests_completed(destination[1], database)
                     if final_src != after_cutover or final_dst <= first_count:

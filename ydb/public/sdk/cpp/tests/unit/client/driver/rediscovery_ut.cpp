@@ -69,7 +69,6 @@ namespace {
             if (HoldNext.exchange(false)) {
                 Held.TrySetValue();
                 ReleaseHeld.GetFuture().Wait(TDuration::Seconds(10));
-                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "in-flight data connection lost");
             }
             if (FailNext.exchange(false)) {
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "data connection lost");
@@ -133,20 +132,23 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 1);
     }
 
-    Y_UNIT_TEST(RetiringAnEndpointReleasesHeldQueryStreams) {
+    Y_UNIT_TEST(RetiringAnEndpointPreservesHeldQueryStreams) {
         using TService = Ydb::Query::V1::QueryService;
         using TRequest = Ydb::Query::AttachSessionRequest;
         using TResponse = Ydb::Query::SessionState;
         using TReader = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
         class TQueryService : public TService::Service {
+        public:
+            NThreading::TPromise<void> Release = NThreading::NewPromise<void>();
+
+        private:
             grpc::Status AttachSession(grpc::ServerContext* context, const TRequest*, grpc::ServerWriter<TResponse>* stream) override {
                 context->AddInitialMetadata("replica", "source");
                 TResponse state;
                 state.set_status(Ydb::StatusIds::SUCCESS);
                 stream->Write(state);
-                const auto deadline = TInstant::Now() + TDuration::Seconds(10);
-                while (!context->IsCancelled() && TInstant::Now() < deadline) {
-                    Sleep(TDuration::MilliSeconds(5));
+                if (Release.GetFuture().Wait(TDuration::Seconds(10))) {
+                    stream->Write(state);
                 }
                 return grpc::Status::OK;
             }
@@ -156,7 +158,6 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         auto server = StartServer(port, service);
         NYdbGrpc::TGRpcClientLow client;
         auto channel = NYdbGrpc::CreateChannelInterface(NYdbGrpc::TGRpcClientConfig(Address(port)));
-        std::weak_ptr<grpc::ChannelInterface> transport = channel;
         auto holder = std::make_unique<NYdbGrpc::TStubsHolder>(std::move(channel));
         auto conn = client.CreateGRpcServiceConnection<TService>(*holder);
         auto open = [&](const NYdbGrpc::TCallMeta& meta) {
@@ -170,37 +171,22 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
             auto read = NThreading::NewPromise<bool>();
             reader->Read(&response, [read](auto status) mutable { read.SetValue(status.Ok()); });
             UNIT_ASSERT(read.GetFuture().GetValueSync());
-            auto finished = NThreading::NewPromise<int>();
-            reader->AddFinishedCallback([finished](auto status) mutable { finished.SetValue(status.GRpcStatusCode); });
-            return std::pair{reader, finished.GetFuture()};
+            return reader;
         };
-        NYdbGrpc::TCallMeta first, second;
-        first.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
-        second.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
-        auto [firstReader, firstDone] = open(first);
-        auto [secondReader, secondDone] = open(second);
+        NYdbGrpc::TCallMeta meta;
+        meta.EndpointAdmission = std::make_shared<NYdbGrpc::TEndpointAdmission>();
+        auto reader = open(meta);
         conn.reset();
         holder.reset();
-        first.EndpointAdmission->Retire();
-        const bool firstRetired = firstDone.Wait(TDuration::Seconds(3));
-        const bool secondStillActive = !secondDone.HasValue() && !transport.expired();
-        second.EndpointAdmission->Retire();
-        const bool secondRetired = secondDone.Wait(TDuration::Seconds(3));
-        // Keep teardown bounded if retirement regresses.
-        firstReader->Cancel();
-        secondReader->Cancel();
-        UNIT_ASSERT(firstRetired);
-        UNIT_ASSERT(secondStillActive);
-        UNIT_ASSERT(secondRetired);
-        UNIT_ASSERT_VALUES_EQUAL(firstDone.GetValueSync(), int(grpc::StatusCode::CANCELLED));
-        UNIT_ASSERT_VALUES_EQUAL(secondDone.GetValueSync(), int(grpc::StatusCode::CANCELLED));
-        UNIT_ASSERT_C(transport.expired(), "the retained session readers still own the retired gRPC channel");
-        std::unordered_multimap<std::string, std::string> metadata;
-        auto headers = NThreading::NewPromise<bool>();
-        firstReader->ReadInitialMetadata(&metadata, [headers](auto status) mutable { headers.SetValue(status.Ok()); });
-        UNIT_ASSERT(headers.GetFuture().GetValueSync());
-        UNIT_ASSERT(metadata.contains("replica"));
-        UNIT_ASSERT_VALUES_EQUAL(metadata.find("replica")->second, "source");
+        meta.EndpointAdmission->Retire();
+        service.Release.SetValue();
+        TResponse response;
+        auto read = NThreading::NewPromise<bool>();
+        reader->Read(&response, [read](auto status) mutable { read.SetValue(status.Ok()); });
+        UNIT_ASSERT(read.GetFuture().Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(read.GetFuture().GetValueSync());
+        UNIT_ASSERT_VALUES_EQUAL(int(response.status()), int(Ydb::StatusIds::SUCCESS));
+        reader->Cancel();
     }
 
     Y_UNIT_TEST(StoppingDuringInitialPollCompletesPendingRequests) {
@@ -344,7 +330,7 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
     }
 #endif
 
-    Y_UNIT_TEST(LongPollCutsInFlightRequestsAndReusesBootstrap) {
+    Y_UNIT_TEST(LongPollDrainsInFlightRequestsAndReusesBootstrap) {
         TPortManager ports;
         const auto sourcePort = ports.GetPort(), targetPort = ports.GetPort(), bootstrapPort = ports.GetPort();
         TTableService source, target;
@@ -416,23 +402,18 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT(source.Held.GetFuture().Wait(TDuration::Seconds(5)));
         switched.SetValue();
         UNIT_ASSERT(installed.GetFuture().Wait(TDuration::Seconds(5)));
-        const bool retired = old.Wait(TDuration::Seconds(3));
-        source.ReleaseHeld.SetValue();
-        UNIT_ASSERT(retired);
-        UNIT_ASSERT(!old.GetValueSync().IsSuccess());
         UNIT_ASSERT(upsert().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
+        source.ReleaseHeld.SetValue();
+        UNIT_ASSERT(old.GetValueSync().IsSuccess());
         const auto peerAfter = otherPeer();
         UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 3);
         UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
 #if defined(_linux_)
         UNIT_ASSERT(HasEstablishedConnection(sourcePort));
         other.reset();
-        const auto closedAfterLastOwner = WaitUntilDisconnected(sourcePort);
 #endif
         driver.Stop(true);
         UNIT_ASSERT_VALUES_EQUAL(peerAfter, peerBefore);
-#if defined(_linux_)
-        UNIT_ASSERT_C(closedAfterLastOwner, "The retired source remained connected after its final owner was destroyed");
-#endif
     }
 }

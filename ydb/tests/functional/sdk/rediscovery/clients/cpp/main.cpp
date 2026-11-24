@@ -36,22 +36,24 @@ namespace {
         }
     }
 
-    // One request per input line lets the fixture switch while the driver is idle.
+    void PrintDirectory(NYdb::NScheme::TSchemeClient& client, const std::string& database) {
+        const auto settings = NYdb::NScheme::TListDirectorySettings().ClientTimeout(TDuration::Seconds(3));
+        const auto result = client.ListDirectory(database, settings).GetValueSync();
+        if (!result.IsSuccess()) {
+            std::cout << "ERROR " << result.GetIssues().ToString() << std::endl;
+            return;
+        }
+        std::cout << "ENTRIES";
+        for (const auto& child : result.GetChildren()) {
+            std::cout << ' ' << child.Name;
+        }
+        std::cout << std::endl;
+    }
+
     void ListOnDemand(const NYdb::TDriver& driver, const std::string& database) {
         NYdb::NScheme::TSchemeClient client(driver);
-        const auto settings = NYdb::NScheme::TListDirectorySettings().ClientTimeout(TDuration::Seconds(3));
-        std::string command;
-        while (std::getline(std::cin, command)) {
-            const auto result = client.ListDirectory(database, settings).GetValueSync();
-            if (!result.IsSuccess()) {
-                std::cout << "ERROR " << result.GetIssues().ToString() << std::endl;
-                continue;
-            }
-            std::cout << "ENTRIES";
-            for (const auto& child : result.GetChildren()) {
-                std::cout << ' ' << child.Name;
-            }
-            std::cout << std::endl;
+        for (std::string command; std::getline(std::cin, command);) {
+            PrintDirectory(client, database);
         }
     }
 
@@ -74,9 +76,14 @@ namespace {
     }
 
     template<class TCall>
-    void HoldSession(TCall call) {
+    void HoldSession(const NYdb::TDriver& driver, const std::string& database, TCall call) {
+        NYdb::NScheme::TSchemeClient scheme(driver);
         std::cout << "READY" << std::endl;
         for (std::string command; std::getline(std::cin, command);) {
+            if (command == "list") {
+                PrintDirectory(scheme, database);
+                continue;
+            }
             const auto status = call();
             std::cout << (status.IsSuccess() ? "ACTIVE" : "EXPIRED") << std::endl;
         }
@@ -113,7 +120,11 @@ namespace {
             }
 
             if (token && !awaitingAck) {
-                writer->Write(std::move(*token), TWriteMessage("probe"));
+                std::string payload = "probe";
+                if (std::getenv("YDB_PROBE_ON_DEMAND") && !std::getline(std::cin, payload)) {
+                    return;
+                }
+                writer->Write(std::move(*token), TWriteMessage(payload));
                 token.reset();
                 awaitingAck = true;
             }
@@ -170,20 +181,20 @@ int main() {
         auto acquired = client.GetSession().GetValueSync();
         if (!acquired.IsSuccess()) { return 1; }
         auto session = acquired.GetSession();
-        HoldSession([&] { return session.ExecuteQuery("SELECT 1", NYdb::NQuery::TTxControl::NoTx()).GetValueSync(); });
+        HoldSession(driver, database, [&] { return session.ExecuteQuery("SELECT 1", NYdb::NQuery::TTxControl::NoTx()).GetValueSync(); });
     } else if (probe == "table-session") {
         NYdb::NTable::TTableClient client(driver);
         auto acquired = client.CreateSession().GetValueSync();
         if (!acquired.IsSuccess()) { return 1; }
         auto session = acquired.GetSession();
-        HoldSession([&] { return session.KeepAlive().GetValueSync(); });
+        HoldSession(driver, database, [&] { return session.KeepAlive().GetValueSync(); });
     } else if (probe == "coordination-session") {
         NYdb::NCoordination::TClient client(driver);
         auto result = client.StartSession(std::string(database) + "/coordination",
             NYdb::NCoordination::TSessionSettings().Timeout(TDuration::Seconds(3))).GetValueSync();
         if (!result.IsSuccess()) { return 1; }
         auto session = result.ExtractResult();
-        HoldSession([&] { return session.Ping().GetValueSync(); });
+        HoldSession(driver, database, [&] { return session.Ping().GetValueSync(); });
     } else if (probe == "scheme") {
         ListDirectory(driver, database);
     } else if (probe == "list-on-demand") {

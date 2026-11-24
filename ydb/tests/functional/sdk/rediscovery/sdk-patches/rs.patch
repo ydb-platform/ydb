@@ -1,29 +1,3 @@
-diff --git a/Cargo.lock b/Cargo.lock
-index 55fa4dfc9f724c2be17b006f71cd1f0c73c15637..55d61dfd535aeaaad98d25f538d31bd0df860d3f 100644
---- a/Cargo.lock
-+++ b/Cargo.lock
-@@ -3942,6 +3942,8 @@ dependencies = [
-  "flate2",
-  "futures-util",
-  "http 1.3.1",
-+ "http-body 1.0.1",
-+ "hyper 1.7.0",
-  "itertools 0.10.5",
-  "jsonwebtoken",
-  "lazy_static",
-diff --git a/ydb/Cargo.toml b/ydb/Cargo.toml
-index 21e35ae4bd0341d5cfc3b7015296f368037a4a31..4e11a9939bd2a9c2af8f30c616df94052c4ee81d 100644
---- a/ydb/Cargo.toml
-+++ b/ydb/Cargo.toml
-@@ -34,6 +34,8 @@ bon = "3"
- derive_builder = "0.12.0"
- futures-util = "0.3"
- http = "1.1.0"
-+http-body = "1"
-+hyper = "1"
- itertools = "0.10"
- jsonwebtoken = "9.3"
- time = "0.3"
 diff --git a/ydb/src/client_builder.rs b/ydb/src/client_builder.rs
 index a5ebebabe6c207d92198218cdc974f6c5a439ffa..276194a37a3d4e83f22d31009f8a9662af8b8d5f 100644
 --- a/ydb/src/client_builder.rs
@@ -447,23 +421,20 @@ index 8ff0aa090785ad677c973ab8a3e928930e4b4ef7..dce47533e76b07416cc98712e41c626e
  
 diff --git a/ydb/src/grpc_wrapper/endpoint_routes.rs b/ydb/src/grpc_wrapper/endpoint_routes.rs
 new file mode 100644
-index 0000000000000000000000000000000000000000..c3eb2680500db80715674ab00403ca5ebc4e982f
+index 0000000000000000000000000000000000000000..f4fe2c637a49a2d76eafbd722e877f383f21e197
 --- /dev/null
 +++ b/ydb/src/grpc_wrapper/endpoint_routes.rs
-@@ -0,0 +1,223 @@
-+//! Each admitted authority owns one data channel and cancellation token. A cut
-+//! retires these together. Cached service handles keep their original token.
+@@ -0,0 +1,207 @@
++//! Removed routes reject new calls. Calls already admitted retain their Tonic transport.
 +use crate::connection_pool::{endpoint, normalize_uri_scheme};
 +use crate::discovery::NodeInfo;
 +use crate::{GrpcOptions, YdbResult};
 +use http::Uri;
 +use std::collections::{HashMap, HashSet};
-+use std::pin::Pin;
 +use std::sync::Arc;
-+use std::task::{Context, Poll};
 +use tokio::sync::{OnceCell, watch};
-+use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
-+use tonic::{Status, body::Body, codegen::Bytes, transport::Channel};
++use tokio_util::sync::CancellationToken;
++use tonic::{Status, transport::Channel};
 +
 +#[derive(Debug, Default)]
 +pub(crate) struct RouteEndpoint {
@@ -512,9 +483,7 @@ index 0000000000000000000000000000000000000000..c3eb2680500db80715674ab00403ca5e
 +            .channel
 +            .get_or_try_init(|| async {
 +                Ok::<_, crate::YdbError>(
-+                    endpoint(normalize_uri_scheme(uri.clone())?, None, opts)?
-+                        .executor(RouteExecutor(route.cancelled.clone()))
-+                        .connect_lazy(),
++                    endpoint(normalize_uri_scheme(uri.clone())?, None, opts)?.connect_lazy(),
 +                )
 +            })
 +            .await?;
@@ -522,56 +491,8 @@ index 0000000000000000000000000000000000000000..c3eb2680500db80715674ab00403ca5e
 +    }
 +}
 +
-+// Tonic runs both its request queue and HTTP/2 I/O on the endpoint executor.
-+// Dropping those tasks closes the socket even when a client still owns a Channel.
-+struct RouteExecutor(CancellationToken);
-+
-+impl<F: Future<Output = ()> + Send + 'static> hyper::rt::Executor<F> for RouteExecutor {
-+    fn execute(&self, task: F) {
-+        let cancelled = self.0.clone();
-+        tokio::spawn(async move {
-+            tokio::select! {
-+                biased;
-+                _ = cancelled.cancelled() => (),
-+                _ = task => (),
-+            }
-+        });
-+    }
-+}
-+
 +pub(crate) fn retired() -> Status {
 +    Status::unavailable("Discovery retired the data endpoint")
-+}
-+
-+// Watching both bodies wakes an idle reader and stops a writer with queued
-+// batches. The existing Topic reconnectors own redelivery and acknowledgement.
-+pub(crate) struct RouteBody {
-+    inner: Body,
-+    cancelled: Pin<Box<WaitForCancellationFutureOwned>>,
-+}
-+
-+impl RouteBody {
-+    pub(crate) fn wrap(body: Body, token: CancellationToken) -> Body {
-+        Body::new(Self {
-+            inner: body,
-+            cancelled: Box::pin(token.cancelled_owned()),
-+        })
-+    }
-+}
-+
-+impl http_body::Body for RouteBody {
-+    type Data = Bytes;
-+    type Error = Status;
-+
-+    fn poll_frame(
-+        mut self: Pin<&mut Self>,
-+        cx: &mut Context<'_>,
-+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-+        if self.cancelled.as_mut().poll(cx).is_ready() {
-+            return Poll::Ready(Some(Err(retired())));
-+        }
-+        Pin::new(&mut self.inner).poll_frame(cx)
-+    }
 +}
 +
 +const GENERATION: &str = "x-ydb-route-generation";
@@ -608,58 +529,95 @@ index 0000000000000000000000000000000000000000..c3eb2680500db80715674ab00403ca5e
 +    use tonic::metadata::MetadataMap;
 +
 +    #[tokio::test]
-+    async fn a_cut_revokes_live_data_streams_and_cached_clients_even_after_failback() {
-+        let uri = Uri::from_static("http://localhost:2136/");
-+        let node = NodeInfo::new(uri.clone(), String::new());
-+        let routes = EndpointRoutes::default();
-+        routes.install(std::slice::from_ref(&node));
-+        let original = routes.endpoint(&uri).unwrap();
-+        routes.install(std::slice::from_ref(&node));
-+        assert!(!original.cancelled.is_cancelled());
-+        routes.install(&[]);
-+        assert!(original.cancelled.is_cancelled());
-+        assert!(routes.endpoint(&uri).is_err());
-+        routes.install(&[node]);
-+        assert!(!routes.endpoint(&uri).unwrap().cancelled.is_cancelled());
-+        assert!(original.cancelled.is_cancelled());
-+    }
-+
-+    #[tokio::test]
-+    async fn removing_an_endpoint_closes_tcp_with_a_retained_channel() {
-+        use tokio::io::AsyncReadExt;
++    async fn cut_drains_admitted_rpc_and_new_calls_use_destination() {
++        use crate::grpc_wrapper::runtime_interceptors::{InterceptedChannel, MultiInterceptor};
 +        use tokio::net::TcpListener;
++        use tokio::sync::Notify;
 +        use tokio::time::{Duration, timeout};
-+        use tonic::body::Body;
-+        use tower::Service;
++        use ydb_grpc::ydb_proto::auth::v1::{
++            auth_service_client::AuthServiceClient,
++            auth_service_server::{AuthService, AuthServiceServer},
++        };
++        use ydb_grpc::ydb_proto::auth::{LoginRequest, LoginResponse};
 +
-+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-+        let uri = format!("http://{}/", listener.local_addr().unwrap())
-+            .parse::<Uri>()
-+            .unwrap();
-+        let routes = EndpointRoutes::default();
-+        routes.install(&[NodeInfo::new(uri.clone(), String::new())]);
-+        let (mut channel, _) = routes.connection(&uri, &Default::default()).await.unwrap();
-+        std::future::poll_fn(|cx| channel.poll_ready(cx))
-+            .await
-+            .unwrap();
-+        let pending = channel.call(http::Request::new(Body::empty()));
++        #[derive(Default)]
++        struct Service {
++            accepted: Notify,
++            release: Notify,
++        }
 +
-+        timeout(Duration::from_secs(3), async {
-+            let (mut peer, _) = listener.accept().await.unwrap();
-+            let mut preface = [0; 24];
-+            peer.read_exact(&mut preface).await.unwrap();
-+            assert_eq!(&preface, b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-+            routes.install(&[]);
-+            peer.read_to_end(&mut Vec::new()).await.unwrap();
-+            assert!(pending.await.is_err());
++        #[tonic::async_trait]
++        impl AuthService for Service {
++            async fn login(
++                &self,
++                _: tonic::Request<LoginRequest>,
++            ) -> Result<tonic::Response<LoginResponse>, tonic::Status> {
++                self.accepted.notify_one();
++                self.release.notified().await;
++                Ok(tonic::Response::new(LoginResponse::default()))
++            }
++        }
++
++        async fn server() -> (NodeInfo, std::sync::Arc<Service>) {
++            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++            let uri: Uri = format!("http://{}/", listener.local_addr().unwrap())
++                .parse()
++                .unwrap();
++            let service = std::sync::Arc::new(Service::default());
++            let incoming = futures_util::stream::unfold(listener, |listener| async {
++                Some((listener.accept().await.map(|(stream, _)| stream), listener))
++            });
++            tokio::spawn(
++                tonic::transport::Server::builder()
++                    .add_service(AuthServiceServer::from_arc(service.clone()))
++                    .serve_with_incoming(incoming),
++            );
++            (NodeInfo::new(uri, String::new()), service)
++        }
++
++        timeout(Duration::from_secs(10), async {
++            let (source, a) = server().await;
++            let (destination, b) = server().await;
++            let routes = EndpointRoutes::default();
++            routes.install(std::slice::from_ref(&source));
++            let (channel, token) = routes
++                .connection(&source.uri, &Default::default())
++                .await
++                .unwrap();
++            let mut old = AuthServiceClient::new(
++                InterceptedChannel::new(channel, MultiInterceptor::new()).with_route(token),
++            );
++            let mut held = old.clone();
++            let call = tokio::spawn(async move { held.login(LoginRequest::default()).await });
++            a.accepted.notified().await;
++            routes.install(std::slice::from_ref(&destination));
 +            assert!(
-+                std::future::poll_fn(|cx| channel.poll_ready(cx))
++                routes
++                    .connection(&source.uri, &Default::default())
 +                    .await
 +                    .is_err()
 +            );
++            assert_eq!(
++                old.login(LoginRequest::default()).await.unwrap_err().code(),
++                tonic::Code::Unavailable
++            );
++            b.release.notify_one();
++            let (channel, token) = routes
++                .connection(&destination.uri, &Default::default())
++                .await
++                .unwrap();
++            AuthServiceClient::new(
++                InterceptedChannel::new(channel, MultiInterceptor::new()).with_route(token),
++            )
++            .login(LoginRequest::default())
++            .await
++            .unwrap();
++            b.accepted.notified().await;
++            a.release.notify_one();
++            call.await.unwrap().unwrap();
 +        })
 +        .await
-+        .expect("the retired TCP transport stayed open");
++        .expect("cutover did not drain the admitted call");
 +    }
 +
 +    #[test]
@@ -755,11 +713,11 @@ index a91e11fcccfd50ea9fbbfd1e00a83001c1854c4a..3b39050373e9eb4640392b44b72d6084
  }
  
 diff --git a/ydb/src/grpc_wrapper/runtime_interceptors.rs b/ydb/src/grpc_wrapper/runtime_interceptors.rs
-index fed44665f0009ea872c37f25781d91dbea1937ca..df218f05d10374cd3bd982db8139856ab9716443 100644
+index fed44665f0009ea872c37f25781d91dbea1937ca..a5cde3278bae9ccac0921ec606f0908f7a737ccc 100644
 --- a/ydb/src/grpc_wrapper/runtime_interceptors.rs
 +++ b/ydb/src/grpc_wrapper/runtime_interceptors.rs
 @@ -1,3 +1,4 @@
-+use super::endpoint_routes::{RouteBody, retired};
++use super::endpoint_routes::retired;
  use itertools::enumerate;
  use std::any::Any;
  use std::fmt::{Debug, Display, Formatter};
@@ -792,7 +750,7 @@ index fed44665f0009ea872c37f25781d91dbea1937ca..df218f05d10374cd3bd982db8139856a
              interceptor,
          }
      }
-@@ -43,7 +52,14 @@ impl tower::Service<InterceptorRequest> for InterceptedChannel {
+@@ -43,6 +52,11 @@ impl tower::Service<InterceptorRequest> for InterceptedChannel {
              Err(err) => return ChannelFuture::Error(Some(err)),
          };
  
@@ -800,14 +758,11 @@ index fed44665f0009ea872c37f25781d91dbea1937ca..df218f05d10374cd3bd982db8139856a
 +            if token.is_cancelled() {
 +                return ChannelFuture::Retired;
 +            }
-+            req = req.map(|body| RouteBody::wrap(body, token.clone()));
 +        }
          ChannelFuture::Future(ChannelFutureState {
-+            route: self.route.clone(),
              channel_future: self.inner.call(req),
              interceptor: self.interceptor.clone(),
-             metadata,
-@@ -65,11 +81,13 @@ impl Debug for InterceptedChannel {
+@@ -65,6 +79,7 @@ impl Debug for InterceptedChannel {
  pub(crate) type ChannelResponse = <Channel as tower::Service<InterceptorRequest>>::Response;
  
  pub(crate) enum ChannelFuture {
@@ -815,13 +770,7 @@ index fed44665f0009ea872c37f25781d91dbea1937ca..df218f05d10374cd3bd982db8139856a
      Error(Option<InterceptorError>),
      Future(ChannelFutureState),
  }
- 
- pub(crate) struct ChannelFutureState {
-+    route: Option<CancellationToken>,
-     channel_future: <Channel as tower::Service<InterceptorRequest>>::Future,
-     interceptor: MultiInterceptor,
-     metadata: RequestMetadata,
-@@ -80,6 +98,7 @@ impl Future for ChannelFuture {
+@@ -80,6 +95,7 @@ impl Future for ChannelFuture {
  
      fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
          let res: Poll<Self::Output> = match self.get_mut() {
@@ -829,24 +778,6 @@ index fed44665f0009ea872c37f25781d91dbea1937ca..df218f05d10374cd3bd982db8139856a
              ChannelFuture::Error(None) => Poll::Ready(Err(InterceptorError::internal(
                  "interceptor error is empty",
              ))),
-@@ -95,7 +114,16 @@ impl Future for ChannelFuture {
- 
-                 match poll_res {
-                     Poll::Ready(res) => {
--                        let mut res = res.map_err(InterceptorError::Transport);
-+                        let mut res = res.map_err(InterceptorError::Transport).map(|response| {
-+                            if let Some(token) = &state.route {
-+                                if token.is_cancelled() {
-+                                    return retired().into_http();
-+                                }
-+                                response.map(|body| RouteBody::wrap(body, token.clone()))
-+                            } else {
-+                                response
-+                            }
-+                        });
-                         res = state
-                             .interceptor
-                             .on_feature_poll_ready(&mut state.metadata, res);
 diff --git a/ydb/src/load_balancer/balancer_test.rs b/ydb/src/load_balancer/balancer_test.rs
 index 853a114062c5cf5abe1c076bcc1075267cecc886..8ecb0a5efcc2216711700fbbafd901e740f016ed 100644
 --- a/ydb/src/load_balancer/balancer_test.rs

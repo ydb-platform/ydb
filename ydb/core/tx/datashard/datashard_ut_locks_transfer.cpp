@@ -1,9 +1,14 @@
 #include "datashard_ut_common_kqp.h"
+#include "datashard_locks_db.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common_tx.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tablet_flat/flat_boot_cookie.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
+#include <ydb/core/tablet_flat/flat_redo_player.h>
+#include <ydb/core/tablet_flat/flat_sausage_slicer.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
@@ -28,14 +33,14 @@ struct TTestEnv {
 
     TTestActorRuntime& GetRuntime() { return *Server->GetRuntime(); }
 
-    TTestEnv(const TVector<ui32>& splitPoints, bool transferEnabled = true) {
+    TTestEnv(const TVector<ui32>& splitPoints, bool transferEnabled = true, bool wsnEnabled = true) {
         NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(PortManager.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
         serverSettings.FeatureFlags.SetEnableDataShardLocksTransferOnSplit(transferEnabled);
-        serverSettings.FeatureFlags.SetEnableDataShardUncommittedWriteSeqNum(true);
+        serverSettings.FeatureFlags.SetEnableDataShardUncommittedWriteSeqNum(wsnEnabled);
 
         Server = new TServer(serverSettings);
         auto& runtime = GetRuntime();
@@ -187,6 +192,145 @@ Y_UNIT_TEST_TWIN(RemovedTransactionInvalidatesAllRestoredLocks, AbortFirst) {
     RebootTablet(runtime, destination, env.Sender);
     UNIT_ASSERT_VALUES_EQUAL(tx.WriteCommit(env.TableId, destination), "ERROR: STATUS_LOCKS_BROKEN");
     UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT * FROM `/Root/table`;"), "");
+}
+
+struct TSnapshotReceiptRedo {
+    using TSchema = NDataShard::TDataShardLocksDb::TSchema;
+    using TKeys = TArrayRef<const TRawTypeValue>;
+    using TOps = TArrayRef<const NTable::TUpdateOp>;
+
+    const ui64 Source;
+    bool Received = false;
+    std::optional<ui64> State;
+
+    bool NeedIn(ui32 table) const {
+        return table == TSchema::SplitDstReceivedSnapshots::TableId || table == TSchema::Sys::TableId;
+    }
+
+    void DoUpdate(ui32 table, NTable::ERowOp, TKeys keys, TOps ops, TRowVersion) {
+        const ui64 key = TCell(&keys[0]).AsValue<ui64>();
+        if (table == TSchema::SplitDstReceivedSnapshots::TableId) {
+            Received |= key == Source;
+        } else if (key == TSchema::Sys_State) {
+            for (const auto& op : ops) {
+                if (op.Tag == TSchema::Sys::Uint64::ColumnId) {
+                    State = op.AsCell().AsValue<ui64>();
+                }
+            }
+        }
+    }
+
+    // Receipt and Sys_State are ordinary row updates. Ignore other redo operations.
+    void DoBegin(ui32, ui32, ui64, ui64) {}
+    void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>>) {}
+    void DoFlush(ui32, ui64, NTable::TEpoch) {}
+    void DoUpdateTx(ui32, NTable::ERowOp, TKeys, TOps, ui64, ui32) {}
+    void DoCommitTx(ui32, ui64, TRowVersion) {}
+    void DoRemoveTx(ui32, ui64) {}
+    void DoLockRowTx(ui32, NTable::ELockMode, TKeys, ui64) {}
+};
+
+Y_UNIT_TEST_TWIN(RestartAfterLastSnapshotCommit, WithLocks) {
+    using NDataShard::TShardState;
+    TTestEnv env({}, WithLocks, WithLocks);
+    auto& runtime = env.GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+    // Start with one partition so the default minimum permits merging back to one.
+    env.Split(0, 10);
+    const auto sources = env.Shards;
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    if (WithLocks) {
+        tx.WriterIndex = 123;
+        WriteAt(env, tx, sources[0], {}, 1, TWriteOperation::Upsert(1, 100));
+        WriteAt(env, tx, sources[1], {}, 1, TWriteOperation::Upsert(15, 1500));
+        // Preserve the abort separately from the borrowed rows.
+        UNIT_ASSERT_VALUES_EQUAL(CompactTable(runtime, sources[1], env.TableId, true).GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(tx.Rollback(sources[1]), "OK");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExecSuccess(runtime, "UPSERT INTO `/Root/table` (key, value) VALUES (1u, 100);"), "<empty>");
+    }
+
+    ui64 destination = 0;
+    auto init = runtime.AddObserver<TEvDataShard::TEvInitSplitMergeDestination>([&](auto& ev) {
+        destination = ev->Get()->Record.GetSplitDescription().GetDestinationRanges(0).GetTabletID();
+    });
+    TBlockEvents<TTransferSnapshot> snapshots(runtime);
+    const ui64 merge = AsyncMergeTable(env.Server, env.Sender, "/Root/table", sources);
+    runtime.WaitFor("both merge snapshots", [&] { return snapshots.size() >= 2; });
+    UNIT_ASSERT_VALUES_EQUAL(snapshots.size(), 2);
+    if (snapshots[0]->Get()->Record.GetSrcTabletId() != sources[0]) {
+        std::swap(snapshots[0], snapshots[1]);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(snapshots[0]->Get()->Record.LocksSize(), WithLocks ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(snapshots[1]->Get()->Record.GetSrcTabletId(), sources[1]);
+    UNIT_ASSERT_VALUES_EQUAL(snapshots[1]->Get()->Record.LocksSize(), 0);
+
+    size_t acknowledgements = 0;
+    auto ack = runtime.AddObserver<TEvDataShard::TEvSplitTransferSnapshotAck>([&](auto& ev) {
+        acknowledgements += ev->Get()->Record.GetTabletId() == destination;
+    });
+    snapshots.Unblock(1);
+    runtime.WaitFor("first snapshot committed", [&] { return acknowledgements == 1; });
+    // Drain the first LoanTable before blocking executor activations for the last snapshot.
+    runtime.SendToPipe(destination, env.Sender, new TEvDataShard::TEvGetOpenTxs(env.TableId.PathId));
+    const auto open = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(env.Sender);
+    UNIT_ASSERT_VALUES_EQUAL(open->Get()->OpenTxs.contains(tx.LockTxId), WithLocks);
+    auto* tablet = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, destination)));
+    UNIT_ASSERT(tablet);
+    UNIT_ASSERT_VALUES_EQUAL(tablet->GetState(), TShardState::SplitDstReceivingSnapshot);
+    UNIT_ASSERT_VALUES_EQUAL(tablet->SysLocksTable().GetLocks().size(), WithLocks ? 1u : 0u);
+
+    TSnapshotReceiptRedo receipt{sources[1]};
+    auto commits = runtime.AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+        const auto& commit = *ev->Get();
+        if (commit.TabletID != destination || receipt.Received) {
+            return;
+        }
+        TString encoded = commit.EmbeddedLogBody;
+        for (const auto& ref : commit.References) {
+            using TCookie = NTabletFlatExecutor::NBoot::TCookie;
+            if (TCookie(ref.Id.Cookie()).Index() == TCookie::EIdx::RedoLz4) {
+                encoded += ref.Buffer;
+            }
+        }
+        if (encoded) {
+            TSnapshotReceiptRedo redo{sources[1]};
+            const auto plain = NPageCollection::TSlicer::Lz4()->Decode(encoded);
+            NTable::NRedo::TPlayer(redo).Replay(plain);
+            if (redo.Received) {
+                receipt.Received = true;
+                receipt.State = redo.State;
+            }
+        }
+    });
+    // The receipt must commit, but the queued final transaction must not run.
+    const auto executor = tablet->ExecutorID();
+    TBlockEvents<IEventHandle> finalize(runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == executor
+            && ev->GetTypeName().Contains("TEvActivateExecution");
+    });
+    snapshots.Unblock(1);
+    runtime.WaitFor("last receipt committed with finalization blocked", [&] {
+        return acknowledgements == 2 && !finalize.empty();
+    }, TDuration::Seconds(30));
+    UNIT_ASSERT(receipt.Received);
+    UNIT_ASSERT_VALUES_EQUAL(tablet->GetState(), TShardState::SplitDstReceivingSnapshot);
+    if (WithLocks) {
+        UNIT_ASSERT(!receipt.State || *receipt.State == TShardState::SplitDstReceivingSnapshot);
+    } else {
+        UNIT_ASSERT(receipt.State && *receipt.State == TShardState::Ready);
+    }
+
+    RebootTablet(runtime, destination, env.Sender);
+    WaitTxNotification(env.Server, env.Sender, merge);
+    CheckNoOpenTxs(env, destination);
+    if (WithLocks) {
+        tx.MapAncestorShard(destination, sources[0]);
+        UNIT_ASSERT_VALUES_EQUAL(tx.WriteCommit(env.TableId, destination), "ERROR: STATUS_LOCKS_BROKEN");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table`;"),
+        WithLocks ? "" : "{ items { uint32_value: 1 } items { int32_value: 100 } }");
 }
 
 Y_UNIT_TEST_TWIN(OrphanedWritesUseOrdinaryCleanup, Restart) {

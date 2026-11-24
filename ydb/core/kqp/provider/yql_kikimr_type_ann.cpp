@@ -643,7 +643,7 @@ namespace {
         }
 
         // The same YQL rule protects classification and coercion from DDL-time evaluation.
-        return !CanEvaluateAtCompileTime(expression.Ref()) || !!FindNode(expression.Ptr(), [](const TExprNode::TPtr& node) {
+        return !CanEvaluateDefaultAtCompileTime(expression.Ref()) || !!FindNode(expression.Ptr(), [](const TExprNode::TPtr& node) {
             return IsNonRowColumnNode(*node);
         });
     }
@@ -889,6 +889,14 @@ namespace {
                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Pos()),
                         "DEFAULT expressions are not supported in external tables"));
                     return IGraphTransformer::TStatus::Error;
+                }
+
+                if (sessionCtx.Query().TranslationSettings.AnsiLexer) {
+                    auto expression = NormalizeDefaultExprText(columnMeta.DefaultExpression->ExprText, true, ctx);
+                    if (!expression) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    columnMeta.DefaultExpression->ExprText = std::move(*expression);
                 }
 
                 const auto* columnAnnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -2670,7 +2678,8 @@ private:
                             return TStatus::Error;
                         }
 
-                        auto defaultExpr = alterColumnList.Cast<TCoSetDefaultValue>().Expression();
+                        const auto setDefault = alterColumnList.Cast<TKiSetDefaultValue>();
+                        auto defaultExpr = setDefault.Expression();
                         const auto defaultType = defaultExpr.Ref().GetTypeAnn();
 
                         if (!defaultType) {
@@ -2690,7 +2699,7 @@ private:
 
                         // Fold constants first, preserving nonconstant SQL for expression defaults.
                         if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
-                            alterColumnList.Ptr()->ChildRef(TCoSetDefaultValue::idx_Expression) = std::move(expr);
+                            setDefault.Ptr()->ChildRef(TKiSetDefaultValue::idx_Expression) = std::move(expr);
                             ctx.Step.Repeat(TExprStep::ExprEval);
                         }, columnNotNull, ShouldPreserveDefaultExpression(defaultExpr)))
                         {
@@ -2703,7 +2712,7 @@ private:
                                     << "DEFAULT expressions are disabled. Column: " << name));
                                 return TStatus::Error;
                             }
-                            if (!alterColumnList.Cast<TCoSetDefaultValue>().SqlText()) {
+                            if (!setDefault.SqlText()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), "DEFAULT expression SQL text is missing"));
                                 return TStatus::Error;
                             }
@@ -2713,9 +2722,15 @@ private:
                                 return TStatus::Error;
                             }
 
+                            auto expression = NormalizeDefaultExprText(setDefault.SqlText().Cast().Value(),
+                                SessionCtx->Query().TranslationSettings.AnsiLexer, ctx);
+                            if (!expression) {
+                                return TStatus::Error;
+                            }
+
                             auto expressionColumn = *column;
                             expressionColumn.DefaultExpression = TDefaultExpressionColumnInfo{};
-                            expressionColumn.DefaultExpression->ExprText = TString(alterColumnList.Cast<TCoSetDefaultValue>().SqlText().Cast().Value());
+                            expressionColumn.DefaultExpression->ExprText = std::move(*expression);
                             expressionColumn.DefaultExpression->Stored = true;
                             expressionColumn.DefaultExpression->Writable = true;
                             expressionColumn.SetDefaultFromExpression();

@@ -2,6 +2,8 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -12,6 +14,8 @@
 
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
+#include <util/string/escape.h>
+#include <util/string/subst.h>
 
 namespace NYql {
 
@@ -21,6 +25,87 @@ TString AssembleGeneratedQuery(const TString& exprBody) {
 
 TString AssembleDefaultQuery(const TString& exprBody) {
     return TStringBuilder() << "SELECT " << exprBody << ";";
+}
+
+TMaybe<TString> NormalizeDefaultExprText(TStringBuf exprBody, bool ansiLexer, TExprContext& ctx) {
+    if (!ansiLexer) {
+        return TString(exprBody);
+    }
+
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, ansiLexer);
+
+    TString normalized;
+    normalized.reserve(exprBody.size());
+    const auto appendToken = [&](NSQLTranslation::TParsedToken&& token) {
+        if (token.Name == "EOF") {
+            return;
+        }
+
+        const TStringBuf text = token.Content;
+        if (token.Name != "STRING_VALUE" || (!text.StartsWith('\'') && !text.StartsWith('"'))) {
+            normalized += text;
+            return;
+        }
+
+        const char quote = text.front();
+        const auto end = text.rfind(quote);
+        YQL_ENSURE(end > 0);
+        TString content(text.SubStr(1, end - 1));
+        SubstGlobal(content, TString(2, quote), TString(1, quote));
+        if (quote == '\'') {
+            // Raw string literals preserve ANSI backslashes and can carry the original type suffix.
+            SubstGlobal(content, "@@", "@@@@");
+            normalized += "@@";
+            normalized += content;
+            normalized += "@@";
+            normalized += text.SubStr(end + 1);
+        } else {
+            content = EscapeC(content);
+            SubstGlobal(content, "`", "\\`");
+            normalized += '`';
+            normalized += content;
+            normalized += '`';
+        }
+    };
+
+    TIssues issues;
+    const bool success = lexer->Tokenize(TString(exprBody), "", appendToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
+    ctx.IssueManager.AddIssues(issues);
+    if (!success) {
+        return {};
+    }
+    return normalized;
+}
+
+bool CanEvaluateDefaultAtCompileTime(const TExprNode& expression) {
+    if (expression.HasSideEffects() || !IsPureIsolatedLambda(expression)) {
+        return false;
+    }
+
+    TNodeSet boundArguments;
+    bool hasRuntimeInput = false;
+    VisitExpr(expression, [&](const TExprNode& node) {
+        if (node.IsLambda()) {
+            for (const auto& argument : node.Head().Children()) {
+                boundArguments.insert(argument.Get());
+            }
+        }
+        hasRuntimeInput |= node.HasSideEffects() || NNodes::TCoNonDeterministicBase::Match(&node)
+            || node.IsCallable({"Parameter", "CurrentActorId", "HostRuntimeSetting", "UdfRuntimeSetting"});
+        return true;
+    });
+    if (hasRuntimeInput) {
+        return false;
+    }
+
+    bool hasFreeArgument = false;
+    VisitExpr(expression, [&](const TExprNode& node) {
+        hasFreeArgument |= node.IsArgument() && !boundArguments.contains(&node);
+        return true;
+    });
+    return !hasFreeArgument;
 }
 
 namespace {

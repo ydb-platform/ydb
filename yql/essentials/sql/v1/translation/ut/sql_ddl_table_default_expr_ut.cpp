@@ -1059,17 +1059,7 @@ Y_UNIT_TEST(DefaultSourceWithAnsiLexer) {
     const auto res = SqlToYqlWithAnsiLexer(
         "USE ydb; ALTER TABLE \"table\" ADD COLUMN \"value\" String DEFAULT " + expression + ";");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    UNIT_ASSERT_C(FindNodeByChildAtomContent(res.Root, 1, "(@@it's a DEFAULT, value@@ || @@x@@)"), GetPrettyPrint(res));
-}
-
-Y_UNIT_TEST(DefaultSourceNormalizesAnsiBackslashesAndDelimiters) {
-    for (const TString statement : {
-        R"sql(CREATE TABLE tbl (key Int32, value String DEFAULT ('\n' || 'it''s@@'), PRIMARY KEY(key));)sql",
-        R"sql(ALTER TABLE tbl ALTER COLUMN value SET DEFAULT ('\n' || 'it''s@@');)sql"})
-    {
-        const auto result = SqlToYql("--!ansi_lexer\nUSE ydb;\n" + statement);
-        AssertColumnDefaultSource(result, "value", "--!ansi_lexer\nUSE ydb;\n", R"sql((@@\n@@ || @@it's@@@@@@))sql");
-    }
+    UNIT_ASSERT_C(FindNodeByChildAtomContent(res.Root, 1, expression), GetPrettyPrint(res));
 }
 
 Y_UNIT_TEST(MultipleStatementsKeepIndependentDefaultSources) {
@@ -1160,7 +1150,7 @@ Y_UNIT_TEST(DefaultContextRestoredAfterInlineAction) {
 Y_UNIT_TEST(DefaultContextPreservesCommentsAndAnsiLexer) {
     const TString context = "--!ansi_lexer\nUSE ydb;\n/* комментарий */ $a = 'it''s';\n";
     const auto result = SqlToYql(context + "ALTER TABLE tbl ALTER COLUMN value SET DEFAULT $a || 'it''s';");
-    AssertColumnDefaultSource(result, "value", context, "$a || @@it's@@");
+    AssertColumnDefaultSource(result, "value", context, "$a || 'it''s'");
 }
 
 Y_UNIT_TEST(DefaultContextDoesNotPromoteTrailingComments) {

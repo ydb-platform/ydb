@@ -4,9 +4,6 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <util/string/escape.h>
-#include <util/string/subst.h>
-
 namespace NSQLTranslationV1 {
 
 namespace {
@@ -84,25 +81,7 @@ TString RenderQueryText(const TParsedTokenList& tokens, TTokenSpan span, TQueryT
             }
         }
 
-        if (options.NormalizeAnsiQuotes && !token.Content.empty() && (token.Content.front() == '\'' || token.Content.front() == '"'))
-        {
-            const char quote = token.Content.front();
-            const auto end = token.Content.rfind(quote);
-            YQL_ENSURE(end > 0);
-            TString content = token.Content.substr(1, end - 1);
-            SubstGlobal(content, TString(2, quote), TString(1, quote));
-            if (quote == '\'') {
-                // Raw strings have identical semantics in both lexers, including backslashes.
-                SubstGlobal(content, "@@", "@@@@");
-                text += "@@" + content + "@@" + token.Content.substr(end + 1);
-            } else {
-                content = EscapeC(content);
-                SubstGlobal(content, "`", "\\`");
-                text += "`" + content + "`";
-            }
-        } else {
-            text += token.Content;
-        }
+        text += token.Content;
     }
 
     return text;

@@ -1,3 +1,4 @@
+#include "generated_column.h"
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/core/base/fulltext.h>
@@ -2412,7 +2413,8 @@ public:
                                 return SyncError();
                             }
 
-                            auto defaultExpr = alterColumnList.Cast<TCoSetDefaultValue>().Expression();
+                            const auto setDefault = alterColumnList.Cast<TKiSetDefaultValue>();
+                            auto defaultExpr = setDefault.Expression();
 
                             if (IsYqlNullExprNode(defaultExpr)) {
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
@@ -2423,10 +2425,16 @@ public:
                                 }
 
                                 if (!IsLiteralDefaultValue(defaultExpr)) {
-                                    YQL_ENSURE(alterColumnList.Cast<TCoSetDefaultValue>().SqlText());
+                                    YQL_ENSURE(setDefault.SqlText());
+                                    auto expressionText = NormalizeDefaultExprText(setDefault.SqlText().Cast().Value(),
+                                        SessionCtx->Query().TranslationSettings.AnsiLexer, ctx);
+                                    if (!expressionText) {
+                                        return SyncError();
+                                    }
+
                                     alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
                                     auto* expression = alter_columns->MutableDefaultFromExpression();
-                                    expression->SetExprText(TString(alterColumnList.Cast<TCoSetDefaultValue>().SqlText().Cast().Value()));
+                                    expression->SetExprText(std::move(*expressionText));
                                     expression->SetStored(true);
                                     expression->SetWritable(true);
                                 } else {

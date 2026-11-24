@@ -324,8 +324,6 @@ EDataSlot GetNumericDataTypeByLevel(ui32 level);
 ui32 GetDateTypeLevel(EDataSlot dataSlot);
 EDataSlot GetDateTypeByLevel(ui32 level);
 bool IsPureIsolatedLambda(const TExprNode& lambdaBody, TSyncMap* syncList = nullptr);
-// A closed pure expression without execution-time inputs, safe to evaluate for a schema literal.
-bool CanEvaluateAtCompileTime(const TExprNode& expression);
 TString GetIntegralAtomValue(ui64 value, bool hasSign);
 bool AllowIntegralConversion(NNodes::TCoIntegralCtor node, bool negate, EDataSlot toType,
                              TString* atomValue = nullptr);

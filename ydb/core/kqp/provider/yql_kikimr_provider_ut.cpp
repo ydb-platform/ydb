@@ -1,3 +1,4 @@
+#include "generated_column.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
@@ -6,6 +7,9 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/sql/v1/translation/context.h>
@@ -66,6 +70,39 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
+    Y_UNIT_TEST(NormalizeDefaultExprTextPreservesAnsiLiterals) {
+        TExprContext ctx;
+        const TString expression = R"sql('\n' || 'it''s@@'u /* comment */ || "column name")sql";
+
+        const auto native = NormalizeDefaultExprText(expression, false, ctx);
+        UNIT_ASSERT(native);
+        UNIT_ASSERT_VALUES_EQUAL(*native, expression);
+
+        const auto ansi = NormalizeDefaultExprText(expression, true, ctx);
+        UNIT_ASSERT_C(ansi, ctx.IssueManager.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(*ansi, R"sql(@@\n@@ || @@it's@@@@@@u /* comment */ || `column name`)sql");
+    }
+
+    Y_UNIT_TEST(DefaultCompileTimeEvaluationRejectsRuntimeInputs) {
+        TExprContext ctx;
+        TTypeAnnotationContext types;
+        const auto pos = TPositionHandle();
+        const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        auto argument = ctx.NewArgument(pos, "x");
+        auto identity = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), argument);
+        UNIT_ASSERT(UpdateLambdaAllArgumentsTypes(identity, {type}, ctx));
+        UNIT_ASSERT(InstantAnnotateTypes(identity, ctx, false, types));
+        UNIT_ASSERT(CanEvaluateDefaultAtCompileTime(*identity));
+        UNIT_ASSERT(!CanEvaluateDefaultAtCompileTime(identity->Head().Head()));
+        for (const TStringBuf callable : {"RandomNumber", "CurrentUtcTimestamp", "CurrentActorId",
+                "HostRuntimeSetting", "UdfRuntimeSetting", "Parameter"})
+        {
+            auto node = ctx.NewCallable(pos, callable, {});
+            node->SetTypeAnn(type);
+            UNIT_ASSERT_C(!CanEvaluateDefaultAtCompileTime(*node), callable);
+        }
+    }
+
     Y_UNIT_TEST(LegacySyntaxVersionIsNormalized) {
         NYql::NProto::TTranslationSettings serializedSettings;
         serializedSettings.SetSyntaxVersion(0);

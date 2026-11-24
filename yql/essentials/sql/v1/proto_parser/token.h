@@ -13,7 +13,6 @@ struct TQueryTextOptions {
     bool AreCommentSkipped = false;
     bool IsWhitespaceNormalized = false;
     bool IsSurroundingTriviaIncluded = false;
-    bool NormalizeAnsiQuotes = false;
 };
 
 TString QueryText(const NSQLTranslation::TParsedTokenList& tokens, const TTokenIndexRange& range, TQueryTextOptions options = {});

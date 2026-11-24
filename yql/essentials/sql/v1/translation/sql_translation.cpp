@@ -1851,7 +1851,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
                     }
 
                     defaultValue.ContextPrefix = ctx.Context().ContextRecreationQuery();
-                    defaultValue.ExprText = ctx.Context().QueryText(opt.GetRule_expr2(), {.NormalizeAnsiQuotes = ctx.Context().Settings.AnsiLexer});
+                    defaultValue.ExprText = ctx.Context().QueryText(opt.GetRule_expr2());
 
                     break;
                 }

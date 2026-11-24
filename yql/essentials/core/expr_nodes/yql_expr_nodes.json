@@ -35,17 +35,6 @@
             "ListBase": "TCoNameValueTuple"
         },
         {
-            "Name": "TCoSetDefaultValue",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Expression", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Context", "Type": "TCoAtom", "Optional": true},
-                {"Index": 3, "Name": "SqlText", "Type": "TCoAtom", "Optional": true}
-            ]
-        },
-        {
             "Name": "TCoIndex",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},

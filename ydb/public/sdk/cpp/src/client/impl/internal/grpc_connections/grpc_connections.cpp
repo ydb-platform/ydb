@@ -162,7 +162,8 @@ NThreading::TFuture<TEndpointUpdateResult> TGRpcConnectionsImpl::WithPooledChann
     }
     std::shared_ptr<TObservedChannel> observed, broken;
     bool startWatch = false;
-    ChannelPool_.GetStubsHolderLocked(config.Locator, config, [&](auto& holder) {
+    const auto& key = admission ? admission->PoolKey(config.Locator) : config.Locator;
+    ChannelPool_.GetStubsHolderLocked(key, config, [&](auto& holder) {
         makeConnection(holder);
         if (discoveredState) {
             observed = holder.template GetOrCreateStub<TObservedChannel>();

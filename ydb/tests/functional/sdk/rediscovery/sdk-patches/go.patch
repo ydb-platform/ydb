@@ -119,7 +119,7 @@ index 1e8bb65f6f57cc4e6819c9d555244a1977ce1cef..e4dbc361d802e3503031ee5d1347bc45
  google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217/go.mod h1:7i2o+ce6H/6BluujYR+kqX3GKH+dChPTQU19wjRPiGk=
  google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
 diff --git a/internal/balancer/balancer.go b/internal/balancer/balancer.go
-index f7652c625c8426b765e1cf0fa22813a411b79a2b..8441874591bf1ba87806ceda8838bae8cd7daa22 100644
+index f7652c625c8426b765e1cf0fa22813a411b79a2b..71fc40f245e6a2a241f30485cf0f0180e3dcb74e 100644
 --- a/internal/balancer/balancer.go
 +++ b/internal/balancer/balancer.go
 @@ -73,8 +73,10 @@ type Balancer struct {
@@ -144,7 +144,17 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..8441874591bf1ba87806ceda8838bae8
  
  	if b.policy.MaxConnections() > 0 {
  		b.lastDiscovered = append(b.lastDiscovered[:0], endpoints...)
-@@ -351,6 +356,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+@@ -343,6 +348,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+ 	}
+ 
+ 	b.closed = true
++	if watched, ok := b.pool.(*watchedPool); ok {
++		watched.stop()
++	}
+ 	b.lastDiscovered = nil
+ 
+ 	oldState := b.connectionsState.Swap(nil)
+@@ -351,6 +359,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
  	b.discoveryRepeater = nil
  
  	discoveryCC := b.cc.Swap(nil)
@@ -154,7 +164,7 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..8441874591bf1ba87806ceda8838bae8
  
  	b.closeMu.Unlock()
  
-@@ -362,6 +370,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
+@@ -362,6 +373,9 @@ func (b *Balancer) Close(ctx context.Context) (err error) {
  		onDone(err)
  	}()
  
@@ -164,7 +174,7 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..8441874591bf1ba87806ceda8838bae8
  	if discoveryRepeater != nil {
  		discoveryRepeater.Stop()
  	}
-@@ -457,6 +468,11 @@ func New(ctx context.Context, driverConfig *config.Config, pool *conn.Pool, opts
+@@ -457,6 +471,11 @@ func New(ctx context.Context, driverConfig *config.Config, pool *conn.Pool, opts
  		b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{
  			endpoint.New(b.driverConfig.Endpoint()),
  		}, "")
@@ -178,10 +188,10 @@ index f7652c625c8426b765e1cf0fa22813a411b79a2b..8441874591bf1ba87806ceda8838bae8
  			return nil, xerrors.WithStackTrace(err)
 diff --git a/internal/balancer/eds.go b/internal/balancer/eds.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80becc9b7025f
+index 0000000000000000000000000000000000000000..b14595e1d14de05a5a79e72ab57fb6a92b73a493
 --- /dev/null
 +++ b/internal/balancer/eds.go
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,264 @@
 +package balancer
 +
 +import (
@@ -197,6 +207,7 @@ index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80bec
 +	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 +	edsv3 "github.com/envoyproxy/go-control-plane/envoy/service/endpoint/v3"
 +	"github.com/ydb-platform/ydb-go-genproto/Ydb_Discovery_V1"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/discovery"
 +	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 +	"google.golang.org/grpc"
@@ -273,6 +284,9 @@ index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80bec
 +		return
 +	}
 +	old := b.connectionsState.Swap(newConnectionsStateWithPriorities(nil, nil, nil, nil))
++	if old != nil && len(old.all) > 0 {
++		b.pool.(*watchedPool).scope.Store(&conn.RouteScope{Revision: new(byte)})
++	}
 +	b.lastDiscovered = nil
 +	b.closeMu.Unlock()
 +	b.releaseStateConns(ctx, old)
@@ -390,6 +404,9 @@ index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80bec
 +			if !assigned && handshake != nil && !handshake.Stop() {
 +				return assigned, context.DeadlineExceeded
 +			}
++			if floor.managed {
++				b.enroll(floor.generation)
++			}
 +			b.applyDiscoveredEndpoints(ctx, eps, location)
 +			req.VersionInfo = r.VersionInfo
 +			assigned = true
@@ -420,6 +437,7 @@ index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80bec
 +	if err != nil {
 +		return err
 +	}
++	previous := *floor
 +	if *floor, err = routeGeneration(md, *floor); err != nil {
 +		return err
 +	}
@@ -429,15 +447,21 @@ index 0000000000000000000000000000000000000000..68f3701c3d8022c7b6cb31bac3e80bec
 +			return err
 +		}
 +	}
++	if floor.generation != previous.generation || floor.managed != previous.managed {
++		b.clearEDS(ctx)
++	}
++	if floor.managed {
++		b.enroll(floor.generation)
++	}
 +	b.applyDiscoveredEndpoints(ctx, eps, location)
 +	return nil
 +}
 diff --git a/internal/balancer/eds_connection_test.go b/internal/balancer/eds_connection_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..219b232e8e36a1ee8b076c4b930bc740badb9efe
+index 0000000000000000000000000000000000000000..701882283482b607d5f3615b4d0136fc3677e63b
 --- /dev/null
 +++ b/internal/balancer/eds_connection_test.go
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,97 @@
 +package balancer
 +
 +import (
@@ -455,7 +479,9 @@ index 0000000000000000000000000000000000000000..219b232e8e36a1ee8b076c4b930bc740
 +
 +	"github.com/ydb-platform/ydb-go-sdk/v3/config"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn/state"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xerrors"
 +)
 +
 +func TestCutoverDrainsSourceStream(t *testing.T) {
@@ -475,13 +501,26 @@ index 0000000000000000000000000000000000000000..219b232e8e36a1ee8b076c4b930bc740
 +	}
 +	source, service, sockets := node(healthpb.HealthCheckResponse_SERVING)
 +	destination, _, _ := node(healthpb.HealthCheckResponse_NOT_SERVING)
-+	cfg := config.New(config.WithGrpcOptions(grpc.WithTransportCredentials(insecure.NewCredentials())))
++	// A stable advertised address now sends new TCP dials to another replica.
++	var backend atomic.Pointer[string]
++	dial := func(ctx context.Context, _ string) (net.Conn, error) {
++		return (&net.Dialer{}).DialContext(ctx, "tcp", *backend.Load())
++	}
++	before, after := source.Address(), destination.Address()
++	backend.Store(&before)
++	cfg := config.New(config.WithGrpcOptions(grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dial)))
 +	pool := conn.NewPool(ctx, cfg)
 +	defer func() { require.NoError(t, pool.RemoveRef(ctx)) }()
 +	watched := newWatchedPool(pool)
 +
 +	b := &Balancer{driverConfig: cfg, pool: watched}
++	b.enroll(1)
 +	b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{source}, "")
++	oldSelection := b.connections().All()[0]
++	sibling := &Balancer{driverConfig: cfg, pool: newWatchedPool(pool)}
++	sibling.enroll(1)
++	sibling.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{source}, "")
++	siblingClient := healthpb.NewHealthClient(sibling)
 +	client := healthpb.NewHealthClient(b)
 +	streamCtx, stop := context.WithCancel(ctx)
 +	defer stop()
@@ -491,15 +530,33 @@ index 0000000000000000000000000000000000000000..219b232e8e36a1ee8b076c4b930bc740
 +	require.NoError(t, err)
 +	require.Equal(t, healthpb.HealthCheckResponse_SERVING, first.Status)
 +	b.clearEDS(ctx)
-+	b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{destination}, "")
++	backend.Store(&after)
++	b.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{source}, "")
 +	fresh, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
 +	require.NoError(t, err)
 +	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, fresh.Status)
++	late := &Balancer{driverConfig: cfg, pool: newWatchedPool(pool)}
++	late.enroll(2)
++	late.applyDiscoveredEndpoints(ctx, []endpoint.Endpoint{source}, "")
++	newDriver, err := healthpb.NewHealthClient(late).Check(ctx, &healthpb.HealthCheckRequest{})
++	require.NoError(t, err)
++	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, newDriver.Status)
++	require.NoError(t, late.Close(ctx))
 +	service.SetServingStatus("", healthpb.HealthCheckResponse_UNKNOWN)
 +	held, err := stream.Recv()
 +	require.NoError(t, err)
 +	require.Equal(t, healthpb.HealthCheckResponse_UNKNOWN, held.Status)
-+	stop()
++	require.NoError(t, b.Close(ctx))
++	_, err = stream.Recv()
++	require.Error(t, err)
++	_, err = healthpb.NewHealthClient(oldSelection).Check(ctx, &healthpb.HealthCheckRequest{})
++	require.True(t, xerrors.IsRetryableError(err))
++	oldSelection.Ban(ctx)
++	require.NotEqual(t, state.Banned, sibling.connections().All()[0].State())
++	fresh, err = siblingClient.Check(ctx, &healthpb.HealthCheckRequest{})
++	require.NoError(t, err)
++	require.Equal(t, healthpb.HealthCheckResponse_UNKNOWN, fresh.Status)
++	require.NoError(t, sibling.Close(ctx))
 +	require.Eventually(t, func() bool { return sockets.Load() == 0 }, 2*time.Second, time.Millisecond)
 +}
 diff --git a/internal/balancer/eds_test.go b/internal/balancer/eds_test.go
@@ -569,15 +626,16 @@ index 0000000000000000000000000000000000000000..5a71256ad14be0272e1b53e7ba603b02
 +}
 diff --git a/internal/balancer/watched_conn.go b/internal/balancer/watched_conn.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337a0c3720b
+index 0000000000000000000000000000000000000000..3836ebf95c81ebdd2c285e6a2056614e67333f29
 --- /dev/null
 +++ b/internal/balancer/watched_conn.go
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,132 @@
 +package balancer
 +
 +import (
 +	"context"
 +	"sync"
++	"sync/atomic"
 +
 +	"google.golang.org/grpc"
 +	"google.golang.org/grpc/codes"
@@ -585,6 +643,7 @@ index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337
 +
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/conn"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/internal/endpoint"
++	"github.com/ydb-platform/ydb-go-sdk/v3/internal/xerrors"
 +	"github.com/ydb-platform/ydb-go-sdk/v3/pkg/xslices"
 +)
 +
@@ -597,6 +656,9 @@ index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337
 +
 +// Routing and in-flight RPCs hold independent references on the same channel.
 +type watchedPool struct {
++	scope  atomic.Pointer[conn.RouteScope]
++	closed context.Context
++	stop   context.CancelFunc
 +	*conn.Pool
 +}
 +
@@ -604,21 +666,24 @@ index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337
 +// call then owns a reference to the underlying connection until it finishes.
 +type watchedConn struct {
 +	conn.Conn
-+	pool     *conn.Pool
++	pool     *watchedPool
++	scope    *conn.RouteScope
 +	mu       sync.Mutex
 +	released bool
 +}
 +
 +func newWatchedPool(pool *conn.Pool) *watchedPool {
-+	return &watchedPool{Pool: pool}
++	closed, stop := context.WithCancel(context.Background())
++	return &watchedPool{Pool: pool, closed: closed, stop: stop}
 +}
 +
 +func (p *watchedPool) Get(e endpoint.Endpoint) conn.Conn {
-+	cc := p.Pool.Get(e)
++	scope := p.scope.Load()
++	cc := p.Pool.GetScoped(e, scope)
 +	if cc == nil {
 +		return nil
 +	}
-+	return &watchedConn{Conn: cc, pool: p.Pool}
++	return &watchedConn{Conn: cc, pool: p, scope: scope}
 +}
 +
 +func (p *watchedPool) Put(ctx context.Context, c conn.Conn) {
@@ -632,23 +697,43 @@ index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337
 +func (c *watchedConn) acquire() bool {
 +	c.mu.Lock()
 +	defer c.mu.Unlock()
-+	return !c.released && c.pool.Get(c.Endpoint()) != nil
++	return !c.released && c.pool.closed.Err() == nil && c.pool.scope.Load() == c.scope && c.pool.GetScoped(c.Endpoint(), c.scope) != nil
++}
++
++// A rejected local selection never sent the request and can always be retried.
++func removedEndpoint(ctx context.Context) error {
++	err := status.Error(codes.Unavailable, "discovery removed endpoint")
++	if conn.UseWrapping(ctx) {
++		return xerrors.Retryable(xerrors.Transport(err))
++	}
++	return err
++}
++
++func (c *watchedConn) Ban(ctx context.Context) {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	if !c.released && c.pool.scope.Load() == c.scope {
++		c.Conn.Ban(ctx)
++	}
 +}
 +
 +func (c *watchedConn) Invoke(ctx context.Context, method string, req, reply any, opts ...grpc.CallOption) error {
 +	if !c.acquire() {
-+		return status.Error(codes.Unavailable, "discovery removed endpoint")
++		return removedEndpoint(ctx)
 +	}
-+	defer c.pool.Put(ctx, c.Conn)
++	defer c.pool.Pool.Put(ctx, c.Conn)
++	ctx, cancel := context.WithCancel(ctx)
++	stop := context.AfterFunc(c.pool.closed, cancel)
++	defer func() { stop(); cancel() }()
 +	return c.Conn.Invoke(ctx, method, req, reply, opts...)
 +}
 +
 +func (c *watchedConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 +	if !c.acquire() {
-+		return nil, status.Error(codes.Unavailable, "discovery removed endpoint")
++		return nil, removedEndpoint(ctx)
 +	}
-+	release := sync.OnceFunc(func() { c.pool.Put(ctx, c.Conn) })
-+	stream, err := c.Conn.NewStream(ctx, desc, method, append(opts, grpc.OnFinish(func(error) { release() }))...)
++	release := sync.OnceFunc(func() { c.pool.Pool.Put(ctx, c.Conn) })
++	stream, err := c.Conn.NewStream(conn.WithStreamShutdown(ctx, c.pool.closed), desc, method, append(opts, grpc.OnFinish(func(error) { release() }))...)
 +	if err != nil {
 +		release()
 +	}
@@ -668,6 +753,230 @@ index 0000000000000000000000000000000000000000..4e58eb8653a13a65a2e31222089fa337
 +		return false
 +	})
 +}
++
++// Drivers entering the same managed route may share a channel. A driver entering
++// a newer generation must never borrow a live socket from the previous one.
++func (b *Balancer) enroll(generation uint64) {
++	p := b.pool.(*watchedPool)
++	if p.scope.Load() == nil {
++		p.scope.CompareAndSwap(nil, &conn.RouteScope{Bootstrap: b.driverConfig.Endpoint(), Database: b.driverConfig.Database(), Generation: generation})
++	}
++}
+diff --git a/internal/conn/conn.go b/internal/conn/conn.go
+index 62418e013d502ae679fe1fdf4369e9054a38c17e..705c3a14597a6aab0e3327822e58b1a31e90a2a7 100644
+--- a/internal/conn/conn.go
++++ b/internal/conn/conn.go
+@@ -59,6 +59,7 @@ type (
+ 		GetState() connectivity.State
+ 	}
+ 	conn struct {
++		scope                   RouteScope
+ 		mtx                     sync.RWMutex
+ 		config                  connConfig // ro access
+ 		grpcConn                grpcClientConnInterface
+@@ -487,6 +488,16 @@ func (c *conn) NewStream(
+ 	ctx, sentMark := markContext(meta.WithTraceID(ctx, traceID))
+ 
+ 	grpcCtx, cancel := c.childStreams.WithCancel(ctx)
++	if shutdown, ok := ctx.Value(streamShutdownKey{}).(context.Context); ok {
++		stop := context.AfterFunc(shutdown, cancel)
++		opts = append(opts, grpc.OnFinish(func(error) { stop() }))
++		defer func() {
++			if finalErr != nil {
++				stop()
++			}
++		}()
++	}
++
+ 	defer func() {
+ 		if finalErr != nil {
+ 			cancel()
+diff --git a/internal/conn/context.go b/internal/conn/context.go
+index 3f959761bac5a8629e99d5f051bafc599ee0ef75..6d3a125bbe6a453dae9f197294783a0461aa8539 100644
+--- a/internal/conn/context.go
++++ b/internal/conn/context.go
+@@ -31,3 +31,10 @@ func Ban(ctx context.Context, cause error) {
+ 		onBan(cause)
+ 	}
+ }
++
++type streamShutdownKey struct{}
++
++// WithStreamShutdown also cancels the native stream when the owning driver closes.
++func WithStreamShutdown(ctx, shutdown context.Context) context.Context {
++	return context.WithValue(ctx, streamShutdownKey{}, shutdown)
++}
+diff --git a/internal/conn/pool.go b/internal/conn/pool.go
+index 6a867ccecbca51e6914d185682f860a21a280221..a575b67418cdb5031c9062b9cc802a6108b59d1f 100644
+--- a/internal/conn/pool.go
++++ b/internal/conn/pool.go
+@@ -21,7 +21,19 @@ import (
+ 	"github.com/ydb-platform/ydb-go-sdk/v3/trace"
+ )
+ 
++// RouteScope identifies transports allocated after one balancer invalidates its assignment.
++type RouteScope struct {
++	Bootstrap  string
++	Database   string
++	Generation uint64
++	Revision   *byte // unique after a watch reset without a new generation
++}
++
+ type (
++	poolKey struct {
++		endpoint.Key
++		scope RouteScope
++	}
+ 	connValue struct {
+ 		cc       *conn
+ 		useCount int64
+@@ -34,7 +46,7 @@ type (
+ 
+ 		mu     sync.Mutex
+ 		usages int64
+-		conns  map[endpoint.Key]*connValue
++		conns  map[poolKey]*connValue
+ 		closed atomic.Bool
+ 	}
+ )
+@@ -57,6 +69,10 @@ func (p *Pool) GrpcDialOptions() []grpc.DialOption {
+ // count. The gRPC connection is established lazily on the first Invoke or
+ // NewStream. Call [Pool.Put] when the endpoint is no longer needed.
+ func (p *Pool) Get(e endpoint.Endpoint) Conn {
++	return p.GetScoped(e, nil)
++}
++
++func (p *Pool) GetScoped(e endpoint.Endpoint, scope *RouteScope) Conn {
+ 	p.mu.Lock()
+ 	defer p.mu.Unlock()
+ 
+@@ -64,18 +80,21 @@ func (p *Pool) Get(e endpoint.Endpoint) Conn {
+ 		return nil
+ 	}
+ 
+-	cv := p.get(e)
++	cv := p.get(e, scope)
+ 	cv.useCount++
+ 
+ 	return cv.cc
+ }
+ 
+-func (p *Pool) get(e endpoint.Endpoint) *connValue {
++func (p *Pool) get(e endpoint.Endpoint, scope *RouteScope) *connValue {
+ 	if p.conns == nil {
+ 		return nil
+ 	}
+ 
+-	key := e.Key()
++	key := poolKey{Key: e.Key()}
++	if scope != nil {
++		key.scope = *scope
++	}
+ 
+ 	if value, ok := p.conns[key]; ok {
+ 		value.cc.lastClusterAnnouncement.Store(time.Now().Unix())
+@@ -87,6 +106,7 @@ func (p *Pool) get(e endpoint.Endpoint) *connValue {
+ 		cc: newConn(e, p, withUsageTracker(p.clock, p.config.ConnectionTTL() > 0)),
+ 	}
+ 
++	value.cc.scope = key.scope
+ 	p.conns[key] = value
+ 
+ 	return value
+@@ -113,7 +133,7 @@ func (p *Pool) tryPut(c *conn) bool {
+ 		return false
+ 	}
+ 
+-	key := c.endpoint.Key()
++	key := poolKey{c.endpoint.Key(), c.scope}
+ 
+ 	value, ok := p.conns[key]
+ 	if !ok || value == nil || value.cc != c {
+@@ -353,7 +373,7 @@ func NewPool(ctx context.Context, config Config, opts ...poolOption) *Pool {
+ 		dialOptions: config.GrpcDialOptions(),
+ 		clock:       clockwork.NewRealClock(),
+ 		done:        make(chan struct{}),
+-		conns:       make(map[endpoint.Key]*connValue),
++		conns:       make(map[poolKey]*connValue),
+ 	}
+ 
+ 	for _, opt := range opts {
+diff --git a/internal/conn/pool_test.go b/internal/conn/pool_test.go
+index 7b004039e08431529e700ec932acdd057354f4a8..b7a921068f274a6c3b35db4fc59183685494cdc9 100644
+--- a/internal/conn/pool_test.go
++++ b/internal/conn/pool_test.go
+@@ -67,7 +67,7 @@ func testPoolHasConn(p *Pool, key endpoint.Key) bool {
+ 	p.mu.Lock()
+ 	defer p.mu.Unlock()
+ 
+-	_, ok := p.conns[key]
++	_, ok := p.conns[poolKey{Key: key}]
+ 
+ 	return ok
+ }
+@@ -76,7 +76,7 @@ func testPoolConnValue(p *Pool, key endpoint.Key) (*connValue, bool) {
+ 	p.mu.Lock()
+ 	defer p.mu.Unlock()
+ 
+-	v, ok := p.conns[key]
++	v, ok := p.conns[poolKey{Key: key}]
+ 
+ 	return v, ok
+ }
+@@ -87,7 +87,7 @@ func endpointsToConnections(p *Pool, endpoints []endpoint.Endpoint) []Conn {
+ 
+ 	conns := make([]Conn, 0, len(endpoints))
+ 	for _, e := range endpoints {
+-		cv := p.get(e)
++		cv := p.get(e, nil)
+ 		if cv != nil {
+ 			conns = append(conns, cv.cc)
+ 		}
+@@ -100,7 +100,7 @@ func testPoolConnUseCount(p *Pool, key endpoint.Key) (int64, bool) {
+ 	p.mu.Lock()
+ 	defer p.mu.Unlock()
+ 
+-	value, ok := p.conns[key]
++	value, ok := p.conns[poolKey{Key: key}]
+ 	if !ok || value == nil {
+ 		return 0, false
+ 	}
+@@ -653,7 +653,7 @@ func TestPool_GetPut(t *testing.T) {
+ 		pool.mu.Lock()
+ 		value := &connValue{cc: cc}
+ 		value.useCount = 1
+-		pool.conns[e.Key()] = value
++		pool.conns[poolKey{Key: e.Key()}] = value
+ 		pool.mu.Unlock()
+ 
+ 		done := make(chan struct{})
+@@ -857,7 +857,7 @@ func TestPool_GetPut(t *testing.T) {
+ 		pool.mu.Lock()
+ 		value := &connValue{cc: cc}
+ 		value.useCount = 1
+-		pool.conns[e.Key()] = value
++		pool.conns[poolKey{Key: e.Key()}] = value
+ 		pool.mu.Unlock()
+ 
+ 		putDone := make(chan struct{})
+@@ -1150,7 +1150,7 @@ func TestPool_RemoveRefReturnsCloseErrors(t *testing.T) {
+ 	cc.mtx.Unlock()
+ 
+ 	pool.mu.Lock()
+-	pool.conns[e.Key()] = &connValue{cc: cc}
++	pool.conns[poolKey{Key: e.Key()}] = &connValue{cc: cc}
+ 	pool.mu.Unlock()
+ 
+ 	err := pool.RemoveRef(ctx)
+@@ -1193,7 +1193,7 @@ func TestPool_CloseConnsForFailedResolveSkipsAlreadyClosed(t *testing.T) {
+ 	cc.mtx.Unlock()
+ 
+ 	pool.mu.Lock()
+-	pool.conns[e.Key()] = &connValue{cc: cc}
++	pool.conns[poolKey{Key: e.Key()}] = &connValue{cc: cc}
+ 	pool.mu.Unlock()
+ 
+ 	require.NotPanics(t, func() {
 diff --git a/internal/discovery/config/config.go b/internal/discovery/config/config.go
 index 3ba36f7d733ce182f5205e08979d9cda3a0bf5c4..49455c9b4c1b294b643a02df777e6a6cfe6eceb4 100644
 --- a/internal/discovery/config/config.go

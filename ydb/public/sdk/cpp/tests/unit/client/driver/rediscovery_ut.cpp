@@ -172,6 +172,13 @@ namespace {
         std::atomic_uint Attempts = 0;
     };
 
+    std::string RpcPeer(const TStatus& status) {
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        const auto& headers = status.GetResponseMetadata();
+        UNIT_ASSERT(headers.contains("test-peer"));
+        return headers.find("test-peer")->second;
+    }
+
     class TTableService: public Ydb::Table::V1::TableService::Service {
     public:
         grpc::Status BulkUpsert(grpc::ServerContext* context, const Ydb::Table::BulkUpsertRequest*,
@@ -458,6 +465,56 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
         UNIT_ASSERT_VALUES_EQUAL(otherPeer(), peerBefore);
         UNIT_ASSERT_VALUES_EQUAL(source.Calls.load(), 4);
         UNIT_ASSERT_VALUES_EQUAL(target.Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST(ReopenedWatchGetsNewDataPeerAtSameAddress) {
+        TPortManager ports;
+        const auto dataPort = ports.GetPort();
+        const auto bootstrapPort = ports.GetPort();
+        TTableService data;
+        auto dataServer = StartServer(dataPort, data);
+        auto switched = NThreading::NewPromise<void>();
+        auto installed = NThreading::NewPromise<void>();
+        std::atomic_uint attempt = 0;
+        TWatchService eds([&](auto* context, auto* stream) {
+            const auto generation = ToString(++attempt);
+            context->AddInitialMetadata("x-ydb-route-generation", generation);
+            context->AddInitialMetadata("x-ydb-route-mode", "managed");
+            Ydb::Xds::DiscoveryRequest request;
+            if (!stream->Read(&request)) {
+                return grpc::Status::CANCELLED;
+            }
+            Ydb::Discovery::ListEndpointsResult result;
+            auto* endpoint = result.add_endpoints();
+            endpoint->set_address("127.0.0.1");
+            endpoint->set_port(dataPort);
+            endpoint->set_node_id(1);
+            Ydb::Xds::DiscoveryResponse response;
+            NEds::Encode(result, "/Root", generation, generation, response);
+            if (!stream->Write(response) || !stream->Read(&request) || request.response_nonce() != generation) {
+                return grpc::Status::CANCELLED;
+            }
+            if (generation == "1") {
+                switched.GetFuture().Wait(TDuration::Seconds(10));
+                context->AddTrailingMetadata("x-ydb-route-generation", "2");
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "replica switched");
+            }
+            installed.TrySetValue();
+            stream->Read(&request);
+            return grpc::Status::OK;
+        });
+        auto bootstrap = StartServer(bootstrapPort, eds);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(bootstrapPort)).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Eds));
+        NTable::TTableClient client(driver);
+        const auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}); };
+        data.HoldNext = true;
+        auto old = upsert();
+        UNIT_ASSERT(data.Held.GetFuture().Wait(TDuration::Seconds(5)));
+        switched.SetValue();
+        UNIT_ASSERT(installed.GetFuture().Wait(TDuration::Seconds(5)));
+        const auto freshPeer = RpcPeer(upsert().GetValueSync());
+        data.ReleaseHeld.SetValue();
+        UNIT_ASSERT_UNEQUAL(freshPeer, RpcPeer(old.GetValueSync()));
     }
 
     Y_UNIT_TEST(BulkUpsertTransportLoss) {

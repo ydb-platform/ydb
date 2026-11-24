@@ -1412,10 +1412,27 @@ index 0000000000000000000000000000000000000000..08bc462cfa7edce963ed412ab7467e07
 +export const ClusterLoadAssignmentSchema: GenMessage<ClusterLoadAssignment> = /*@__PURE__*/
 +  messageDesc(file_eds, 11);
 diff --git a/packages/core/src/routing.test.ts b/packages/core/src/routing.test.ts
-index d97b520aa01fa73f6190b127e99f423453840645..cdfda394c8cf20e2884b145320bc5d3179b6ef8e 100644
+index d97b520aa01fa73f6190b127e99f423453840645..05e3a193ac7c7d38c84a60537c0ae1ac6a12ed59 100644
 --- a/packages/core/src/routing.test.ts
 +++ b/packages/core/src/routing.test.ts
-@@ -71,11 +71,14 @@ function fixture(state: EndpointRef['state'] = 'active') {
+@@ -26,7 +26,7 @@ let method: MethodDefinition<Record<string, never>, never> = {
+ }
+ 
+ // A controllable endpoint fixes terminal-status races independently of network timing.
+-function fixture(state: EndpointRef['state'] = 'active') {
++function fixture(state: EndpointRef['state'] = 'active', pausedResponse = false) {
+ 	let started: bigint[] = []
+ 	let ended: bigint[] = []
+ 	let reports: Array<{ nodeId: bigint; ok: boolean }> = []
+@@ -41,6 +41,7 @@ function fixture(state: EndpointRef['state'] = 'active') {
+ 			async connect() {},
+ 			async *call(_method, _input, options = {}) {
+ 				entered.resolve(options)
++				if (pausedResponse) yield undefined as never
+ 				let status = await terminal.promise
+ 				options.onStatus?.(status)
+ 				if (status.code !== Status.OK) {
+@@ -71,11 +72,14 @@ function fixture(state: EndpointRef['state'] = 'active') {
  			selections.push({ nodeId, hard: true })
  			return connection
  		},
@@ -1434,11 +1451,99 @@ index d97b520aa01fa73f6190b127e99f423453840645..cdfda394c8cf20e2884b145320bc5d31
  		},
  		penalize(nodeId: bigint) {
  			reports.push({ nodeId, ok: false })
+@@ -153,7 +157,7 @@ test('does not emit a recovery event for a healthy endpoint', async () => {
+ 	expect(f.reports).toEqual([])
+ })
+ 
+-test('reports terminal status once and releases the slot after iteration ends', async () => {
++test('reports terminal errors and releases the slot once', async () => {
+ 	let f = fixture()
+ 	let observed: unknown
+ 	let callback = vi.fn(() => {
+@@ -164,7 +168,7 @@ test('reports terminal status once and releases the slot after iteration ends',
+ 	let options = await f.entered.promise
+ 	let status = { code: Status.UNAVAILABLE, details: 'offline', metadata: {} }
+ 	options.onStatus?.(status)
+-	expect(f.ended).toEqual([])
++	expect(f.ended).toEqual([7n])
+ 	expect(observed).toEqual({ ended: [], reports: [{ nodeId: 7n, ok: false }] })
+ 	f.terminal.resolve(status)
+ 	await expect(pending).rejects.toMatchObject({ code: Status.UNAVAILABLE })
+@@ -310,3 +314,41 @@ test('runs completion hooks in the original async context', async () => {
+ 	expect(contexts).toEqual(['caller', 'caller'])
+ 	expect(completion).toHaveBeenCalledOnce()
+ })
++
++test('cancelling a paused response releases its connection without another read', async () => {
++	let f = fixture('active', true)
++	let ac = new AbortController()
++	let parent = new AbortController()
++	let t = createRoutingTransport(f.pool, metadata, { signal: parent.signal })
++	let iter = t.call(method, {}, { signal: ac.signal })[Symbol.asyncIterator]()
++	await iter.next()
++	expect(f.started).toEqual([7n])
++	ac.abort()
++	await Promise.resolve()
++	expect(getEventListeners(parent.signal, 'abort')).toHaveLength(0)
++	expect(f.ended).toEqual([7n])
++	await iter.return?.()
++	expect(f.ended).toEqual([7n])
++})
++
++test('terminal error releases a paused response while buffered successes stay readable', async () => {
++	let f = fixture('active', true)
++	let t = createRoutingTransport(f.pool, metadata)
++	let iter = t.call(method, {})[Symbol.asyncIterator]()
++	await iter.next()
++	let options = await f.entered.promise
++	options.onStatus?.({ code: Status.UNAVAILABLE, details: 'lost', metadata: {} })
++	expect(f.ended).toEqual([7n])
++	await iter.return?.()
++	expect(f.ended).toEqual([7n])
++	let success = fixture('active', true)
++	let accepted = createRoutingTransport(success.pool, metadata)
++		.call(method, {})
++		[Symbol.asyncIterator]()
++	await accepted.next()
++	let successOptions = await success.entered.promise
++	successOptions.onStatus?.({ code: Status.OK, details: '', metadata: {} })
++	expect(success.ended).toEqual([])
++	await accepted.return?.()
++	expect(success.ended).toEqual([7n])
++})
 diff --git a/packages/core/src/routing.ts b/packages/core/src/routing.ts
-index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..6e5d65b85244e1d0b3d513f4f66d7795612ecef9 100644
+index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..93449cfd91e9a01fbe1ec91cb3c5c15b0bcd9a73 100644
 --- a/packages/core/src/routing.ts
 +++ b/packages/core/src/routing.ts
-@@ -63,7 +63,7 @@ export function createRoutingTransport(
+@@ -50,20 +50,34 @@ export function createRoutingTransport(
+ 				throw new Error('Client is closed')
+ 			}
+ 
+-			using linked = linkSignals(options.signal, routing.signal, closedController.signal)
++			let signal = AbortSignal.any(
++				[options.signal, routing.signal, closedController.signal].filter(
++					(s): s is AbortSignal => !!s
++				)
++			)
+ 			let connection: Connection | undefined
+ 			let registeredWithPool = false
+ 			let statusReported = false
+ 			let startedAt = 0
+ 			let onComplete: ((event: CallCompleteEvent) => void) | undefined
+ 			let restore = routing.hooks?.onCall ? AsyncLocalStorage.snapshot() : undefined
++			let releaseConnection = () => {
++				if (!registeredWithPool) return
++				registeredWithPool = false
++				signal.removeEventListener('abort', abandonConnection)
++				pool!.callEnded(connection!)
++			}
++			let abandonConnection = () => {
++				// Let the native transport observe the caller's abort before retiring its socket.
++				queueMicrotask(releaseConnection)
++			}
+ 			let reportStatus = (status: RpcStatus) => {
+ 				if (statusReported) {
+ 					return
  				}
  
  				statusReported = true
@@ -1447,34 +1552,77 @@ index 4529cdd18bb38f6b12036d5c6060b7a8b9c8385a..6e5d65b85244e1d0b3d513f4f66d7795
  					let nodeId = connection.endpoint.nodeId
  					if (
  						status.code === Status.UNAVAILABLE ||
-@@ -99,6 +99,12 @@ export function createRoutingTransport(
- 						options.metadata,
- 						auth?.signal ?? linked.signal
- 					)
+@@ -87,20 +101,26 @@ export function createRoutingTransport(
+ 				}
+ 				dbg.log('%s status=%d: %s', method.path, status.code, status.details)
+ 				safeHook('onStatus', options.onStatus, status)
++				// A suspended response iterator may never be resumed after a terminal error.
++				// Successful trailers can precede buffered messages the caller still owns.
++				if (status.code !== Status.OK) releaseConnection()
+ 			}
+ 
+ 			try {
+-				linked.signal.throwIfAborted()
++				signal.throwIfAborted()
+ 				let metadata: Metadata
+ 				{
+ 					using deadline = createDeadline(options.deadline)
+-					using auth = deadline ? linkSignals(linked.signal, deadline.signal) : undefined
+-					metadata = await prepareMetadata(
+-						options.metadata,
+-						auth?.signal ?? linked.signal
+-					)
++					using auth = deadline ? linkSignals(signal, deadline.signal) : undefined
++					metadata = await prepareMetadata(options.metadata, auth?.signal ?? signal)
 +					for (;;) {
 +						if (!pool?.watchPending) break
 +						// A second cut can arrive while the caller resumes from the first one.
 +						// oxlint-disable-next-line no-await-in-loop
-+						await pool.ready(auth?.signal ?? linked.signal)
++						await pool.ready(auth?.signal ?? signal)
 +					}
  				}
- 				linked.signal.throwIfAborted()
+-				linked.signal.throwIfAborted()
++				signal.throwIfAborted()
  				if (closed || pool?.closed) {
-@@ -113,7 +119,7 @@ export function createRoutingTransport(
+ 					throw new Error('Client is closed')
+ 				}
+@@ -113,8 +133,9 @@ export function createRoutingTransport(
  					connection = pool.acquire(routing.nodeId)
  				}
  				if (pool) {
 -					pool.callStarted(connection.endpoint.nodeId)
 +					pool.callStarted(connection)
  					registeredWithPool = true
++					signal.addEventListener('abort', abandonConnection, { once: true })
  				}
  				if (routing.hooks?.onCall) {
-@@ -164,7 +170,7 @@ export function createRoutingTransport(
+ 					startedAt = performance.now()
+@@ -140,7 +161,7 @@ export function createRoutingTransport(
+ 				yield* connection.client.call(method, input, {
+ 					...options,
+ 					metadata,
+-					signal: linked.signal,
++					signal,
+ 					onStatus: reportStatus,
+ 				})
+ 				reportStatus({ code: Status.OK, details: '', metadata: {} })
+@@ -150,7 +171,7 @@ export function createRoutingTransport(
+ 					status = error
+ 				} else {
+ 					status = {
+-						code: linked.signal.aborted ? Status.CANCELLED : Status.UNKNOWN,
++						code: signal.aborted ? Status.CANCELLED : Status.UNKNOWN,
+ 						details: error instanceof Error ? error.message : String(error),
+ 						metadata: {},
+ 					}
+@@ -163,9 +184,7 @@ export function createRoutingTransport(
+ 					details: 'Response iterator closed',
  					metadata: {},
  				})
- 				if (registeredWithPool) {
+-				if (registeredWithPool) {
 -					pool!.callEnded(connection!.endpoint.nodeId)
-+					pool!.callEnded(connection!)
- 				}
+-				}
++				releaseConnection()
  			}
  		},
+ 	}

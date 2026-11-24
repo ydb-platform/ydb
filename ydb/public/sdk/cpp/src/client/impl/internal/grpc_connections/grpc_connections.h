@@ -192,6 +192,10 @@ public:
             }
         }
 
+        if (selected.Admission && !selected.Admission->ChannelKey.empty()) {
+            // gRPC also pools subchannels across channel objects. Separate the new assignment there.
+            clientConfig.StringChannelParams["ydb.sdk.assignment"] = selected.Admission->ChannelKey;
+        }
         if (UsePerChannelTcpConnection_) {
             clientConfig.IntChannelParams[GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL] = 1;
         }

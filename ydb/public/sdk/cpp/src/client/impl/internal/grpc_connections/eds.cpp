@@ -112,7 +112,7 @@ NThreading::TFuture<void> TGRpcConnectionsImpl::WatchEndpoints(std::weak_ptr<TDb
     unsigned failures = 0;
     auto publish = [&](TListEndpointsResult result) {
         if (auto state = weak.lock()) {
-            state->EndpointPool.PublishWatchResult(std::move(result));
+            state->EndpointPool.PublishWatchResult(std::move(result), route.Floor);
             state->SignalDiscoveryCompleted();
         }
     };

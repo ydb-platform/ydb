@@ -12,7 +12,9 @@ TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, IInternalC
     , BalancingPolicy_(client->GetBalancingSettings())
 {}
 
-void TEndpointPool::EnableWatch() {
+void TEndpointPool::EnableWatch(const std::string& bootstrap, const std::string& database) {
+    // Two drivers for the same managed route can share a transport within a generation.
+    WatchScope_ = "#managed:" + std::to_string(bootstrap.size()) + ":" + bootstrap + database + "#";
     UsesWatch_ = true;
     DiscoveryPromise_ = NThreading::NewPromise<TEndpointUpdateResult>();
     TransportUpdatePending_ = true;
@@ -30,7 +32,10 @@ void TEndpointPool::PauseWatch() {
     Install({}, TEndpointElectorSafe::EPenalties::Reset);
 }
 
-void TEndpointPool::PublishWatchResult(TListEndpointsResult result) {
+void TEndpointPool::PublishWatchResult(TListEndpointsResult result, std::optional<uint64_t> routeGeneration) {
+    if (routeGeneration) {
+        WatchChannelSuffix_ = WatchScope_ + std::to_string(*routeGeneration);
+    }
     TEndpointUpdateResult update;
     if (result.DiscoveryStatus.Ok() && result.Result.endpoints().empty()) {
         result.DiscoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, "Discovery returned an empty endpoint assignment");
@@ -231,7 +236,12 @@ std::vector<std::string> TEndpointPool::Install(const Ydb::Discovery::ListEndpoi
             auto& admission = next[record.Endpoint];
             if (!admission) {
                 auto it = WatchAdmissions_.find(record.Endpoint);
-                admission = it == WatchAdmissions_.end() ? std::make_shared<NYdbGrpc::TEndpointAdmission>() : it->second;
+                if (it != WatchAdmissions_.end()) {
+                    admission = it->second;
+                } else {
+                    auto key = WatchChannelSuffix_.empty() ? std::string() : record.Endpoint + WatchChannelSuffix_;
+                    admission = std::make_shared<NYdbGrpc::TEndpointAdmission>(std::move(key));
+                }
             }
             record.Admission = admission;
         }
@@ -239,8 +249,13 @@ std::vector<std::string> TEndpointPool::Install(const Ydb::Discovery::ListEndpoi
         for (auto& [endpoint, admission] : WatchAdmissions_) {
             if (!next.contains(endpoint)) {
                 admission->Retire();
-                removed.push_back(endpoint);
+                removed.push_back(admission->PoolKey(endpoint));
             }
+        }
+        if (!removed.empty()) {
+            // New assignments may reuse the physical address of a still-draining stream.
+            static std::atomic<uint64_t> nextAssignment{0};
+            WatchChannelSuffix_ = "#" + std::to_string(++nextAssignment);
         }
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         Client_->DeleteChannels(removed, *this);

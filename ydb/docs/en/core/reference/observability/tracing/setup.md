@@ -10,7 +10,7 @@ Tracing is a tool that allows you to view the detailed path of a request through
 
 ![Trace Example](_images/spans.png "Trace Example")
 
-To aggregate disparate spans into traces, they are sent to a *collector*. This service aggregates and stores received spans for subsequent trace analysis. {{ ydb-short-name }} does not include this service; the administrator must set it up independently. Typically, [Jaeger](https://www.jaegertracing.io/) is used as a collector.
+To aggregate disparate spans into traces, they are sent to a *collector*. This service aggregates and stores received spans for subsequent trace analysis. {{ ydb-short-name }} does not include this service; the administrator must set it up independently. Any [OTLP](https://opentelemetry.io/docs/specs/otlp/)-compatible collector can be used.
 
 ## Minimal configuration
 

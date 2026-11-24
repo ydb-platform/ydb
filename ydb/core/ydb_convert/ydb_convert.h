@@ -74,6 +74,8 @@ struct TConversionTypeInfo {
     bool IsNotNull;
 };
 
+bool TupleContainsPgType(const Ydb::Type& type);
+
 bool CellsFromTuple(
     const Ydb::Type* tupleType, // nullptr if no type verification needed
     const Ydb::Value& tupleValue,

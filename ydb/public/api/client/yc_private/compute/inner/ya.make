@@ -6,5 +6,8 @@ SRCS(
     disk_service.proto
 )
 
-END()
+PEERDIR(
+    ydb/public/api/client/yc_private/compute
+)
 
+END()

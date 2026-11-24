@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-Commands for managing the cluster in [bridge mode](../../../../concepts/bridge.md) let you convert an ordinary cluster, view [pile](../../../../concepts/glossary.md#pile) state, add and remove piles, switch database storage modes, and perform planned or emergency pile operations.
+Commands for managing the cluster in [bridge mode](../../../../concepts/bridge.md) let you convert an ordinary cluster and return it to ordinary mode, view [pile](../../../../concepts/glossary.md#pile) state, add and remove piles, switch database storage modes, and perform planned or emergency pile operations.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -27,6 +27,7 @@ Below is the list of available subcommands for bridge cluster management. You ca
 Command / subcommand | Brief description
 --- | ---
 [admin cluster bridge convert](./convert.md) | Convert an ordinary cluster to a single-pile bridge
+[admin cluster bridge rollback](./rollback.md) | Return a converted cluster to ordinary mode
 [admin cluster bridge list](./list.md) | List pile state and operation progress
 [admin cluster bridge provision-pile](./provision-pile.md) | Prepare storage for a new pile
 [admin cluster bridge join-pile (rejoin)](./rejoin.md) | Join a provisioned pile or return it after maintenance

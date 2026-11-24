@@ -106,6 +106,10 @@ struct TDBGFixture: public NTransport::NTestLib::TStorageTransportTestFixture
     // requests count.
     size_t ReplyUpdateRequests();
 
+    // Completes PBuffer connection promises with success and starts listing.
+    static void CompleteConnectionsAndListPBuffers(
+        const std::shared_ptr<TDirectBlockGroup>& dbg);
+
     // Waits until the vchunk has restored its dirty map.
     void WaitDirtyMapReady(
         const TExecutorPtr& executor,

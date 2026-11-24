@@ -43,16 +43,19 @@ class TVersionedIndex;
 
 class TPortionEvictionFeatures {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+    YDB_READONLY(ui64, PortionSchemaVersion, 0);   // stored in the portion
+    // the portion's resolved schema, its blobs are read with it (newer than the stored version after a schema collapse)
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ReadScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);   // the rewrite writes with it
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
 
 public:
-    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
-        const TString& currentTierName)
-        : CurrentScheme(currentScheme)
+    TPortionEvictionFeatures(const ui64 portionSchemaVersion, const std::shared_ptr<ISnapshotSchema>& readScheme,
+        const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+        : PortionSchemaVersion(portionSchemaVersion)
+        , ReadScheme(readScheme)
         , TargetScheme(targetScheme)
         , CurrentTierName(currentTierName)
     {
@@ -88,8 +91,8 @@ public:
     NActualizer::TRWAddress GetRWAddress() {
         if (!RWAddress) {
             YDB_LOG_VERIFY(TargetTierName);
-            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName),
-                TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
+            RWAddress = NActualizer::TRWAddress(
+                ReadScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
         }
         return *RWAddress;
     }
@@ -101,7 +104,7 @@ public:
         if (CurrentTierName != TargetTierName) {
             return true;
         }
-        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+        if (PortionSchemaVersion != TargetScheme->GetVersion()) {
             return true;
         }
         YDB_LOG_VERIFY(false);

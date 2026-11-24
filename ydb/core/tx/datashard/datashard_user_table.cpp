@@ -94,6 +94,25 @@ bool TUserTable::ResetTableSchemaVersion()
     return false;
 }
 
+bool TUserTable::FinishColumnBuilding() {
+    NKikimrSchemeOp::TTableDescription schema;
+    GetSchema(schema);
+
+    bool changed = false;
+    for (auto& column : *schema.MutableColumns()) {
+        if (column.GetIsBuildInProgress()) {
+            Columns.at(column.GetId()).IsBuildInProgress = false;
+            column.SetIsBuildInProgress(false);
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        SetSchema(schema);
+    }
+    return changed;
+}
+
 void TUserTable::UpdateLocalHnswIndex(const NKikimrSchemeOp::TTableDescription& description) {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -320,6 +339,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
         column.SetNotNullInProgress = col.GetSetNotNullInProgress();
+        if (col.HasIsBuildInProgress()) {
+            column.IsBuildInProgress = col.GetIsBuildInProgress();
+        }
         switch (col.GetDefaultValueCase()) {
             case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
                 column.DefaultFromSequence = col.GetDefaultFromSequence();
@@ -480,6 +502,7 @@ void TUserTable::AlterSchema() {
         }
         descr->SetFamily(column.Family);
         descr->SetNotNull(column.NotNull);
+        descr->SetIsBuildInProgress(column.IsBuildInProgress);
         if (column.DefaultFromSequence) {
             descr->SetDefaultFromSequence(column.DefaultFromSequence);
         }

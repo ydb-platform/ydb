@@ -19,6 +19,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/getopt
         library/cpp/regex/pcre
         library/cpp/svnversion
+        ydb/core/grpc_services/local_rpc
         ydb/core/testlib/default
         ydb/library/testlib/backup_test_enums
         ydb/library/testlib/parquet_helpers

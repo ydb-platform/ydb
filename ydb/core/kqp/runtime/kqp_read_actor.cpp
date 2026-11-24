@@ -1,4 +1,5 @@
 #include "kqp_read_actor.h"
+#include "kqp_lock_logging.h"
 
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
@@ -1083,15 +1084,6 @@ public:
         ShardReadTrace.ReadResult(ReadActorSpan, Reads[id].Shard->TabletId,
             ev->Sender.NodeId(), id, msg.GetRowsCount(), record.GetStatus().GetCode(), record.GetFinished());
 
-        TStringBuilder txLocks;
-        for (const auto& lock : record.GetTxLocks()) {
-            txLocks << lock.ShortDebugString();
-        }
-        TStringBuilder brokenTxlocks;
-        for (const auto& lock : record.GetBrokenTxLocks()) {
-            brokenTxlocks << lock.ShortDebugString();
-        }
-
         YDB_LOG_DEBUG("Received TEvReadResult from data shard",
             {"logPrefix", this->LogPrefix},
             {"shardId", Reads[id].Shard->TabletId},
@@ -1099,8 +1091,8 @@ public:
             {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
             {"finished", record.GetFinished()},
             {"rowCount", record.GetRowCount()},
-            {"txLocks", txLocks},
-            {"brokenTxLocks", brokenTxlocks});
+            {"txLocks", FormatLocksForLog(record.GetTxLocks())},
+            {"brokenTxLocks", FormatLocksForLog(record.GetBrokenTxLocks())});
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();

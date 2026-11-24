@@ -162,12 +162,9 @@ namespace NKikimr::NBlobDepot {
             if (mustRestoreFirst != item->GetMustRestoreFirst()) {
                 item->SetMustRestoreFirst(mustRestoreFirst);
             }
-            // A pending resolve is shared with the queries that arrive while it is in flight, but a
-            // cache entry is a blob id and thus belongs to a single tablet, so every query sharing
-            // it carries the same data kind.
-            msg.SetDataKind(dataKind);
-            // queries joining this resolve share its deadline too: should it expire, they get a retryable error
-            query->SetResolveDeadline(msg);
+            // All waiters for this blob share its tablet's data kind. The query that issues the resolve
+            // supplies its deadline and bridge accounting, including when other queries join later.
+            query->SetResolveParameters(msg, dataKind);
 
             Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(TString(keyBuf), mustRestoreFirst));
             ++(mustRestoreFirst ? entry.MustRestoreFirstResolvePending : entry.OrdinaryResolvePending);

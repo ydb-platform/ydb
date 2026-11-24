@@ -1,5 +1,6 @@
 from __future__ import annotations
 from enum import StrEnum
+from contextlib import nullcontext
 from os import getenv
 from pathlib import Path
 from time import time
@@ -55,6 +56,11 @@ class TpccSuiteBase(LoadSuiteBase):
         return get_external_param(f'table-path-{cls.suite()}', f'tpcc/w{cls.warehouses}')
 
     @classmethod
+    def _tpcc_profile_phase(cls, phase: str):
+        """Allow local profiling to bracket import and legacy compaction."""
+        return nullcontext()
+
+    @classmethod
     def do_setup_class(cls):
         if cls.verify_data and getenv('NO_VERIFY_DATA', '0') != '1' and getenv('NO_VERIFY_DATA_TPCC', '0') != '1':
             # cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
@@ -75,7 +81,8 @@ class TpccSuiteBase(LoadSuiteBase):
             logging.info(f'warehouse count {wh_count} less then need {cls.warehouses}. Data will be reimport.')
             YdbCliHelper.clear_tpcc(cls.get_tpcc_path())
             YdbCliHelper.init_tpcc(cls.get_tpcc_path(), cls.warehouses)
-            YdbCliHelper.import_data_tpcc(cls._remote_cli_path, cls.get_tpcc_path(), cls.warehouses, cls.compaction_mode == CompactionMode.SDK)
+            with cls._tpcc_profile_phase("import"):
+                YdbCliHelper.import_data_tpcc(cls._remote_cli_path, cls.get_tpcc_path(), cls.warehouses, cls.compaction_mode == CompactionMode.SDK)
             if cls.compaction_mode == CompactionMode.LEGACY:
                 tables = [
                     'oorder',
@@ -91,10 +98,11 @@ class TpccSuiteBase(LoadSuiteBase):
                     'oorder/idx_order/indexImplTable'
                 ]
                 compaction_timeout = max(cls.legacy_compaction_min_timeout_s, cls.warehouses)
-                force_datashard_compact_legacy(
-                    [f'{cls.get_tpcc_path()}/{t}' for t in tables],
-                    timeout=compaction_timeout,
-                )
+                with cls._tpcc_profile_phase("compaction"):
+                    force_datashard_compact_legacy(
+                        [f'{cls.get_tpcc_path()}/{t}' for t in tables],
+                        timeout=compaction_timeout,
+                    )
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:

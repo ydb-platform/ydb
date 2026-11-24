@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют преобразовывать обычный кластер, просматривать состояние [pile](../../../../concepts/glossary.md#pile), добавлять и удалять pile, переключать режим хранения баз данных, а также выполнять плановые и аварийные операции с pile.
+Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют преобразовывать обычный кластер и возвращать его в обычный режим, просматривать состояние [pile](../../../../concepts/glossary.md#pile), добавлять и удалять pile, переключать режим хранения баз данных, а также выполнять плановые и аварийные операции с pile.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -27,6 +27,7 @@
 Команда / подкоманда | Краткое описание
 --- | ---
 [admin cluster bridge convert](./convert.md) | Преобразование обычного кластера в bridge с одним pile
+[admin cluster bridge rollback](./rollback.md) | Возврат преобразованного кластера в обычный режим
 [admin cluster bridge list](./list.md) | Вывод состояния pile и хода операций
 [admin cluster bridge provision-pile](./provision-pile.md) | Подготовка хранилища нового pile
 [admin cluster bridge join-pile (rejoin)](./rejoin.md) | Подключение подготовленного pile или возврат после обслуживания

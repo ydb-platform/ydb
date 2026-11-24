@@ -120,9 +120,6 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uin
         return;
     }
     if (auto sessionShared = callbackContext->LockShared()) {
-        if (commitOffset.has_value()) {
-            SetFirstNotReadOffset(commitOffset.value());
-        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset, maxOffset);
     }
 }
@@ -737,7 +734,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::IsActualPartitionStrea
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
     std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset) {
     TStringBuilder offsetLogStr;
     if (commitOffset) {
@@ -762,6 +759,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                 << GetPartitionStreamId(partitionStream)
         );
         return;
+    }
+
+    if (commitOffset) {
+        partitionStream->SetFirstNotReadOffset(*commitOffset);
     }
 
     TClientMessage<UseMigrationProtocol> req;

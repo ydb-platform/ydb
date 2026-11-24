@@ -187,6 +187,53 @@ Y_UNIT_TEST_SUITE(BridgeGroupDeletion) {
         RestartControllerAndCheck(env, checker);
     }
 
+    Y_UNIT_TEST(MovingGroupKeepsAdmittedRequestCountersInOriginPool) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 part = GetPileGroups(env, groupId).back();
+        CreateAnotherPool(env, 2);
+        const auto targetPool = ReadStoragePool(env, 2).GetName();
+
+        const auto origin = GetCompletedTestWrites(env, 1, env.StoragePoolName);
+        const auto target = GetCompletedTestWrites(env, 1, targetPool);
+        const auto originBefore = origin->Val();
+        const auto targetBefore = target->Val();
+
+        std::unique_ptr<IEventHandle> held;
+        bool moved = false;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 1 && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult &&
+                    ev->Get<TEvBlobStorage::TEvPutResult>()->GroupId == part) {
+                held = std::move(ev);
+                return false;
+            }
+            if (held && ev->GetRecipientRewrite() == held->GetRecipientRewrite() &&
+                    ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
+                const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                moved |= info && info->GetStoragePoolName() == targetPool;
+            }
+            return true;
+        };
+        TDataChecker checker(env);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        checker.SendPut(groupId, edge);
+        WaitUntil(env, [&] { return bool(held); }, "physical PUT reply", TDuration::MilliSeconds(10), 100);
+
+        const auto response = MoveGroups(env, 1, 2, {groupId});
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return moved; }, "same proxy configured in destination pool");
+        env.Runtime->FilterFunction = {};
+        ResendEvent(env, 1, std::move(held));
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(origin->Val(), originBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(target->Val(), targetBefore);
+
+        checker.Write(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(origin->Val(), originBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(target->Val(), targetBefore + 1);
+    }
+
     Y_UNIT_TEST(MovingPartAloneIsRefused) {
         TEnvironmentSetup env(MakeSettings());
         const ui32 proxy = CreatePoolAndGetGroup(env);

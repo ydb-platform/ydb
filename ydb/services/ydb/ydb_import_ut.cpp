@@ -127,6 +127,38 @@ Y_UNIT_TEST_SUITE(YdbImport) {
         }
     }
 
+    Y_UNIT_TEST(ImportDataPgCompatibility) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableTablePgTypes(true);
+        appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        auto builder = NYdb::NTable::TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .AddNullableColumn("Value", TPgType("pgint4"))
+            .SetPrimaryKeyColumn("Key");
+        const auto create = session.CreateTable("/Root/Table", builder.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        NYdb::NImport::TImportClient importClient(driver);
+        NYdb::NImport::TImportYdbDumpDataSettings settings;
+        settings.AppendColumns("Key");
+        settings.AppendColumns("Value");
+        const auto imported = importClient.ImportData("/Root/Table", "1,\"42\"\n", settings).ExtractValueSync();
+        UNIT_ASSERT_C(imported.IsSuccess(), imported.GetIssues().ToString());
+
+        auto& appData = server.Server_->GetRuntime()->GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+        flags.SetDisablePgCompatibility(true);
+        appData.UpdateRuntimeFlags(flags);
+
+        const auto rejected = importClient.ImportData("/Root/Table", "2,\"42\"\n", settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::BAD_REQUEST, rejected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "PostgreSQL compatibility is disabled");
+    }
+
     Y_UNIT_TEST(ImportFromS3ToExistingTable) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(

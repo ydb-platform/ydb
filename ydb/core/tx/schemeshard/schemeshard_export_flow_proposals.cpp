@@ -445,7 +445,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 columnIds.emplace(column.Name, id);
             }
         }
-        if (!ValidateTtlSettings(ttl, columns, {}, columnIds, *copyPath.DomainInfo(), error)) {
+        // Export preserves an existing TTL even if new PostgreSQL columns are disabled.
+        if (!ValidateTtlSettings(ttl, columns, {}, columnIds, *copyPath.DomainInfo(), /*disablePgCompatibility=*/false, error)) {
             error = TStringBuilder() << "TTL is incompatible with the exported table copy: " << error;
             return nullptr;
         }

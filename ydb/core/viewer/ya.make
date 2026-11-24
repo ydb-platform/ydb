@@ -97,6 +97,7 @@ SRCS(
     viewer_request.cpp
     viewer_request.h
     viewer_storage.h
+    viewer_storage_nbs.h
     viewer_storage_stats.h
     viewer_storage_usage.h
     viewer_sysinfo.h

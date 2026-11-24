@@ -302,12 +302,18 @@ namespace NKikimr::NBlobDepot {
             {"locator", locator});
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize += locator.Len;
-        DeleteQueue.push_back(locator);
-        RunDeletersIfNeeded();
+        // The TrashS3 row survives until a configuration with exclusive ownership reloads it.
+        if (GarbageCollectionEnabled) {
+            DeleteQueue.push_back(locator);
+            RunDeletersIfNeeded();
+        }
     }
 
     void TS3Manager::RunDeletersIfNeeded() {
-        // Gate on SlowDown-induced throttling cooldown.
+        if (!WrapperId) {
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_QUEUE_SIZE] = DeleteQueue.size();
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
         if (now < DeleteThrottleUntil) {
             if (!DeleteWakeupScheduled) {

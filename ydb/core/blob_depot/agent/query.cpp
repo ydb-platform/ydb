@@ -87,7 +87,7 @@ namespace NKikimr::NBlobDepot {
 
         std::unique_ptr<IEventHandle> p(ev.Release());
 
-        if (!IsConnected || !PendingEventQ.empty()) {
+        if (Mode != EMode::Connected || !PendingEventQ.empty()) {
             size_t size;
             TInstant deadline;
             switch (type) {
@@ -160,7 +160,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandleProcessPendingEvent() {
         Y_ABORT_UNLESS(ProcessPendingEventInFlight);
         ProcessPendingEventInFlight = false;
-        if (IsConnected) {
+        if (Mode == EMode::Connected) {
             HandlePendingEvent();
         }
     }

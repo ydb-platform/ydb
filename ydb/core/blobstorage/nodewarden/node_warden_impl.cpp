@@ -1543,6 +1543,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    ExpireS3EndpointHandoffs();
     const bool useFixedVDiskSlotSize = UseFixedVDiskSlotSize;
     if (useFixedVDiskSlotSize != UseFixedVDiskSlotSizeCached) {
         UseFixedVDiskSlotSizeCached = useFixedVDiskSlotSize;

@@ -22,22 +22,16 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDTS05"},
             {"settings", settings});
         if (settings) {
-            // All S3 traffic goes through the per-node router managed by NodeWarden.
-            // Acquire is fire-and-forget: NodeWarden registers the router under its
-            // well-known service id before any later event we send can be processed.
             RouterGeneration = Self->Executor()->Generation();
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
                 new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), RouterGeneration, *settings));
-            WrapperId = MakeBlobDepotS3RouterID(Self->TabletID());
             BasePath = MakeS3BasePath(settings->GetSettings(), Self->Config.GetName());
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();
             AsyncMode = settings->HasAsyncMode();
-            const TString legacyPath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern()
-                << '/' << Self->Config.GetName();
-            // Canonical LIST can reach objects a legacy scanner never saw.
-            OrphanScanEnabled = !ValidateS3BasePath(BasePath) && (Self->Config.GetS3NamespaceValidated() ||
-                (!Self->Config.GetS3NamespacePinned() && !settings->HasAsyncMode() && BasePath == legacyPath));
+            const auto prefixError = ValidateS3BasePath(BasePath);
+            // Legacy depots could share both the prefix and the tablet-local locator numbers.
+            GarbageCollectionEnabled = Self->Config.GetS3NamespaceValidated() && !prefixError;
 
             CurrentMaxWritesInFlight = MaxWritesInFlight();
             CurrentMaxDeletesInFlight = MaxDeletesInFlight();
@@ -46,7 +40,7 @@ namespace NKikimr::NBlobDepot {
         } else {
             SyncMode = false;
             AsyncMode = false;
-            OrphanScanEnabled = false;
+            GarbageCollectionEnabled = false;
         }
     }
 
@@ -60,15 +54,32 @@ namespace NKikimr::NBlobDepot {
         if (ScannerActorId) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, ScannerActorId, Self->SelfId(), nullptr, 0));
         }
-        if (WrapperId) {
+        if (RouterGeneration) {
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID(), RouterGeneration));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID(), RouterGeneration,
+                    Self->RestartingForConfigChange));
             WrapperId = {};
         }
     }
 
     void TS3Manager::Handle(TAutoPtr<IEventHandle> ev) {
         STRICT_STFUNC_BODY(
+            hFunc(NStorage::TEvNodeWardenBlobDepotS3RouterReady, [&](auto ev) {
+                const auto& msg = *ev->Get();
+                if (msg.TabletId != Self->TabletID() || msg.Generation != RouterGeneration || WrapperId) {
+                    return;
+                }
+                if (!msg.Router) {
+                    Self->Send(Self->Tablet(), new TEvents::TEvPoison);
+                    return;
+                }
+                WrapperId = msg.Router;
+                RunDeletersIfNeeded();
+                if (Self->Data->IsLoaded()) {
+                    OnDataLoaded();
+                }
+                Self->ProcessRegisterAgentQ();
+            })
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
             cFunc(TEvPrivate::EvDeleteThrottleWakeup, HandleDeleteThrottleWakeup)
@@ -77,7 +88,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::OnDataLoaded() {
-        if (OrphanScanEnabled) {
+        if (WrapperId && GarbageCollectionEnabled) {
             RunScannerActor();
         }
     }

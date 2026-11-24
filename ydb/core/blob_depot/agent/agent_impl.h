@@ -225,7 +225,7 @@ namespace NKikimr::NBlobDepot {
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
         TActorId PipeServerId;
-        bool IsConnected = false;
+        bool IsConnected = false; // tablet registration has completed on this pipe
         ui64 ConnectionInstance = 0;
 
         NMonitoring::TDynamicCounterPtr AgentCounters;
@@ -270,6 +270,10 @@ namespace NKikimr::NBlobDepot {
         };
 
         EMode Mode = EMode::None;
+
+        bool IsWaitingForS3Router() const {
+            return IsConnected && Mode == EMode::Registering;
+        }
 
         void SwitchMode(EMode mode);
 
@@ -317,6 +321,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvPrepareWriteS3Result, HandleTabletResponse);
+                hFunc(NStorage::TEvNodeWardenBlobDepotS3RouterReady, Handle);
 
                 hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
                 hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
@@ -359,11 +364,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void ReleaseS3Wrapper() {
-            if (!S3WrapperId) {
+            if (!S3RouterGeneration) {
                 return;
             }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId, BlobDepotGeneration));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId, std::exchange(S3RouterGeneration, 0)));
             S3WrapperId = {};
         }
 
@@ -447,13 +452,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
-        // S3WrapperId is always the per-node router service id obtained from NodeWarden
-        // (TEvNodeWardenAcquireBlobDepotS3Router). The agent is responsible for releasing
-        // it on shutdown / re-init via TEvNodeWardenReleaseBlobDepotS3Router.
+        // Workers keep their concrete router for the lifetime of each physical request.
         TActorId S3WrapperId;
+        ui32 S3RouterGeneration = 0;
         TString S3BasePath;
 
         void InitS3(const TString& name);
+        void Handle(NStorage::TEvNodeWardenBlobDepotS3RouterReady::TPtr ev);
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
@@ -734,6 +739,7 @@ namespace NKikimr::NBlobDepot {
         struct TS3Read : TRequestContext {
             ui64 RequestId;
             TMonotonic Deadline;
+            ui64 ConnectionInstance;
             std::optional<std::list<ui64>::iterator> Queued;
             TString Key;
             ui32 Offset;
@@ -776,6 +782,7 @@ namespace NKikimr::NBlobDepot {
         void NotifyS3GetSlowDown();
         void OnS3GetCompleted(bool success);
         void RunPendingS3ReadsIfPossible();
+        void RetirePendingS3Reads();
         void HandleS3GetThrottleWakeup();
 
         void IncS3HttpErrorCounter(const TString& operation, int httpCode);

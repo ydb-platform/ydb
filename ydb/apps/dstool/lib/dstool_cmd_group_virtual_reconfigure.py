@@ -17,8 +17,10 @@ def add_options(p):
                    help='remove the S3 route with empty S3 settings after quiescing writers, fencing and draining '
                         'outstanding writes, and verifying that no values reference S3 and no S3 deletes remain')
     p.add_argument('--migrated-s3-name', metavar='NAME',
-                   help='replacement physical suffix for a malformed legacy S3 name during a confirmed namespace migration')
-    p.add_argument('--s3-settings', type=FileType('r', encoding='utf-8'), metavar='JSON_FILE', help='path to JSON file containing S3 settings')
+                   help='physical suffix on first S3 assignment or when correcting a malformed legacy S3 name '
+                        'with --confirm-s3-namespace-migration')
+    p.add_argument('--s3-settings', type=FileType('r', encoding='utf-8'), metavar='JSON_FILE',
+                   help='path to JSON file containing S3 settings. Omit to validate the stored namespace')
 
 
 def do(args):

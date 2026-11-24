@@ -5,6 +5,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/config.h>
+#include <ydb/core/blob_depot/s3_route.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blob_depot/types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -37,6 +38,15 @@ namespace NKikimr::NBsController {
         using TClaim = TBlobStorageController::TBlobDepotClaim;
 
         template<typename TCallback>
+        void ForEachPhysicalS3Claim(const TS3Namespace& ns, EClaim kind, TCallback&& visit) {
+            visit(TClaim{kind, ns.Bucket, ns.Prefix});
+            if (const auto prefixError = NBlobDepot::ValidateS3BasePath(ns.Prefix)) {
+                // A legacy client's dot-segment handling can alias an otherwise unrelated key in the bucket.
+                visit(TClaim{EClaim::AmbiguousBucket, ns.Bucket, {}});
+            }
+        }
+
+        template<typename TCallback>
         void ForEachLiveBlobDepotClaim(const TBlobStorageController::TGroupInfo& group,
                 const NKikimrBlobDepot::TBlobDepotConfig& config, TCallback&& visit) {
             if (group.VirtualGroupName) {
@@ -44,83 +54,29 @@ namespace NKikimr::NBsController {
             }
             const auto ns = GetS3Namespace(config);
             if (!ns.Bucket.empty()) {
-                visit(TClaim{EClaim::PhysicalPrefix, ns.Bucket, ns.Prefix});
+                ForEachPhysicalS3Claim(ns, EClaim::PhysicalPrefix, visit);
                 const auto logical = GetS3Namespace(config.GetS3BackendSettings(), group.VirtualGroupName.GetOrElse(config.GetName()));
-                if (!NBlobDepot::ValidateS3BasePath(logical.Prefix)) {
+                const auto logicalError = NBlobDepot::ValidateS3BasePath(logical.Prefix);
+                if (!logicalError) {
                     visit(TClaim{EClaim::LogicalPrefix, ns.Bucket, logical.Prefix});
-                }
-                if (NBlobDepot::ValidateS3BasePath(ns.Prefix)) {
-                    visit(TClaim{EClaim::AmbiguousBucket, ns.Bucket, {}});
                 }
             }
         }
 
         void CheckS3ObjectKeyLength(const NKikimrBlobDepot::TS3BackendSettings& settings, TStringBuf storageName) {
             const auto& s3 = settings.GetSettings();
-            if (!s3.GetBucket().empty()) {
-                const NBlobDepot::TS3Locator largest{.Generation = Max<ui32>(), .KeyId = Max<ui64>()};
-                if (largest.MakeObjectName(NBlobDepot::MakeS3BasePath(s3, storageName)).size() > 1024) {
-                    throw TExError() << "S3 object keys including the depot namespace and locator must fit in 1024 bytes";
-                }
+            if (!s3.GetBucket().empty() && NBlobDepot::MakeS3BasePath(s3, storageName).size() >
+                    NBlobDepot::TS3Locator::MaxBasePathBytes()) {
+                throw TExError() << "S3 object keys including the depot namespace and locator must fit in "
+                    << NBlobDepot::TS3Locator::MaxObjectKeyBytes << " bytes";
             }
-        }
-
-        // Keep unknown and newly introduced fields in the comparison until their routing semantics are known.
-        NKikimrBlobDepot::TS3BackendSettings GetS3Route(NKikimrBlobDepot::TS3BackendSettings route) {
-            route.ClearSyncMode();
-            route.ClearAsyncMode();
-            route.ClearBalancerRefreshSecMin();
-            route.ClearBalancerRefreshSecMax();
-            route.ClearMetricsPushIntervalMs();
-            route.ClearMaxRetiringWrappers();
-            route.ClearMinRetireGracePeriodSec();
-            if (route.GetBalancerHost().empty()) {
-                route.ClearBalancerHost();
-                route.ClearBalancerProxyScheme();
-                route.ClearBalancerProxyPort();
-            } else {
-                route.SetBalancerProxyScheme(route.GetBalancerProxyScheme());
-                route.SetBalancerProxyPort(route.GetBalancerProxyPort());
-            }
-            auto& settings = *route.MutableSettings();
-            // The bucket and physical key prefix are checked separately.
-            settings.ClearBucket();
-            settings.ClearObjectKeyPattern();
-            settings.ClearAccessKey();
-            settings.ClearSecretKey();
-            settings.ClearSecretableAccessKey();
-            settings.ClearSecretableSecretKey();
-            settings.ClearVerifySSL();
-            settings.ClearStorageClass();
-            settings.ClearExportDataSettings();
-            settings.ClearLimits();
-            settings.ClearRequestTimeoutMs();
-            settings.ClearHttpRequestTimeoutMs();
-            settings.ClearConnectionTimeoutMs();
-            settings.ClearExecutorThreadsCount();
-            settings.ClearMaxConnectionsCount();
-            // Preserve region and proxy-host presence, which switches the SDK away from its defaults.
-            if (settings.GetEndpoint().empty()) {
-                settings.ClearEndpoint();
-            }
-            settings.SetScheme(settings.GetScheme());
-            settings.SetUseVirtualAddressing(settings.GetUseVirtualAddressing());
-            if (settings.HasProxyHost()) {
-                settings.SetProxyPort(settings.GetProxyPort());
-                settings.SetProxyScheme(settings.GetProxyScheme());
-            } else {
-                settings.ClearProxyPort();
-                settings.ClearProxyScheme();
-            }
-            return route;
         }
 
         void RecordS3NamespaceValidation(NKikimrBlobDepot::TBlobDepotConfig& config) {
             const auto& s3 = config.GetS3BackendSettings();
-            // Older controllers may change ownership during the flag-off rollback window.
-            if (!s3.GetSettings().GetBucket().empty() && AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
+            if (!s3.GetSettings().GetBucket().empty()) {
                 config.SetS3NamespaceValidated(true);
-                if (s3.HasAsyncMode()) {
+                if (s3.HasAsyncMode() && AppData()->FeatureFlags.GetEnableBlobDepotDataCooling()) {
                     config.SetEverAuthorizedDataCooling(true);
                 }
             }
@@ -142,8 +98,8 @@ namespace NKikimr::NBsController {
             }
         }
         for (const auto& [id, info] : RetiredS3Namespaces) {
-            const auto ns = GetS3Namespace(info.GetConfig());
-            BlobDepotOwners[{EClaim::RetiredPrefix, ns.Bucket, ns.Prefix}].insert(id);
+            ForEachPhysicalS3Claim(GetS3Namespace(info.GetConfig()), EClaim::RetiredPrefix,
+                [&](const TClaim& key) { BlobDepotOwners[key].insert(id); });
         }
     }
 
@@ -210,8 +166,8 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(inserted);
             it->second.BlobDepotId = config.GetTabletId();
             it->second.S3Config = retired.SerializeAsString();
-            const auto ns = GetS3Namespace(config);
-            ChangeBlobDepotClaim({EClaim::RetiredPrefix, ns.Bucket, ns.Prefix}, groupId, true);
+            ForEachPhysicalS3Claim(GetS3Namespace(config), EClaim::RetiredPrefix,
+                [&](const TClaim& key) { ChangeBlobDepotClaim(key, groupId, true); });
         }
     }
 
@@ -232,15 +188,10 @@ namespace NKikimr::NBsController {
         if (logicalError && !ownGroup) {
             throw TExError() << *logicalError;
         }
-        // An existing owner may keep its route while a legacy peer with the same physical
-        // namespace is being retired. Block any new claim while late PUTs can still land.
-        const auto& physicalOwners = FindBlobDepotOwners({EClaim::PhysicalPrefix, requested.Bucket, requested.Prefix});
-        if (!ownGroup || !physicalOwners.contains(*ownGroup)) {
-            const auto& retired = FindBlobDepotOwners({EClaim::RetiredPrefix, requested.Bucket, requested.Prefix});
-            if (!retired.empty()) {
-                throw TExError() << "S3 namespace is reserved for retired BlobDepot cleanup"
-                    << TErrorParams::GroupId(retired.begin()->GetRawId());
-            }
+        const auto& retired = FindBlobDepotOwners({EClaim::RetiredPrefix, requested.Bucket, requested.Prefix});
+        if (!retired.empty()) {
+            throw TExError() << "S3 namespace is reserved for retired BlobDepot cleanup"
+                << TErrorParams::GroupId(retired.begin()->GetRawId());
         }
         auto rejectOtherOwner = [&](const std::set<TGroupId>& owners, const char* error) {
             auto it = owners.begin();
@@ -254,7 +205,7 @@ namespace NKikimr::NBsController {
         rejectOtherOwner(FindBlobDepotOwners({EClaim::AmbiguousBucket, requested.Bucket, {}}),
             "Another BlobDepot in the S3 bucket has an ambiguous key prefix");
         constexpr const char* collision = "S3 bucket and effective key prefix are already used by another BlobDepot";
-        rejectOtherOwner(physicalOwners, collision);
+        rejectOtherOwner(FindBlobDepotOwners({EClaim::PhysicalPrefix, requested.Bucket, requested.Prefix}), collision);
         if (!logicalError) {
             rejectOtherOwner(FindBlobDepotOwners({EClaim::LogicalPrefix, groupNamespace.Bucket, groupNamespace.Prefix}), collision);
         }
@@ -516,22 +467,24 @@ namespace NKikimr::NBsController {
 
         const auto& previous = config.GetS3BackendSettings();
         const auto& next = cmd.HasS3BackendSettings() ? cmd.GetS3BackendSettings() : previous;
+        const bool hasExistingBucket = !previous.GetSettings().GetBucket().empty();
+        const bool hasNextBucket = !next.GetSettings().GetBucket().empty();
         const auto& storageName = cmd.HasMigratedS3Name() ? cmd.GetMigratedS3Name() : config.GetName();
         const bool storageNameChanged = storageName != config.GetName();
         if (cmd.HasMigratedS3Name()) {
-            if (!cmd.GetConfirmS3NamespaceMigration() || next.GetSettings().GetBucket().empty()) {
+            if (!cmd.GetConfirmS3NamespaceMigration() || !hasNextBucket) {
                 throw TExError() << "MigratedS3Name requires ConfirmS3NamespaceMigration and a destination bucket";
             }
             const auto normalized = NBlobDepot::MakeS3BasePath({}, storageName);
-            if (normalized != storageName || NBlobDepot::ValidateS3BasePath(normalized)) {
+            const auto nameError = NBlobDepot::ValidateS3BasePath(normalized);
+            if (normalized != storageName || nameError) {
                 throw TExError() << "MigratedS3Name must be a nonempty canonical S3 path without dot segments";
             }
-            if (storageNameChanged && !NBlobDepot::ValidateS3BasePath(NBlobDepot::MakeS3BasePath({}, config.GetName()))) {
-                throw TExError() << "MigratedS3Name may only replace a malformed legacy S3 storage name";
+            const auto previousNameError = NBlobDepot::ValidateS3BasePath(NBlobDepot::MakeS3BasePath({}, config.GetName()));
+            if (hasExistingBucket && storageNameChanged && !previousNameError) {
+                throw TExError() << "MigratedS3Name may only replace a malformed legacy name once S3 is configured";
             }
         }
-        const bool hasExistingBucket = !previous.GetSettings().GetBucket().empty();
-        const bool hasNextBucket = !next.GetSettings().GetBucket().empty();
         if (cmd.GetConfirmS3Empty() && (!cmd.HasS3BackendSettings() || hasNextBucket)) {
             throw TExError() << "ConfirmS3Empty requires explicit S3BackendSettings without a bucket";
         }
@@ -541,31 +494,28 @@ namespace NKikimr::NBsController {
         }
         const bool namespaceChanged = GetS3Namespace(config) != GetS3Namespace(next, storageName);
         const bool routeChanged = hasExistingBucket && hasNextBucket && cmd.HasS3BackendSettings() &&
-            !google::protobuf::util::MessageDifferencer::Equals(GetS3Route(previous), GetS3Route(next));
+            !google::protobuf::util::MessageDifferencer::Equals(NBlobDepot::GetS3Route(previous), NBlobDepot::GetS3Route(next));
         const bool coolingChanged = previous.HasAsyncMode() != next.HasAsyncMode() ||
             !google::protobuf::util::MessageDifferencer::Equals(previous.GetAsyncMode(), next.GetAsyncMode());
-        // A name-only reconfigure explicitly authorizes a stored AsyncMode configuration after upgrade.
-        // Editing operational settings such as credentials must leave a legacy group's authorization intact.
-        const bool needsAuthorization = !config.GetS3NamespaceValidated() || !config.GetEverAuthorizedDataCooling();
+        // A name-only command requests validation of the stored namespace, including for a legacy sync depot.
+        // Credential rotation leaves its existing authorization intact.
+        const bool validateStoredNamespace = hasNextBucket && !cmd.HasS3BackendSettings();
         const bool authorizeCooling = AppData()->FeatureFlags.GetEnableBlobDepotDataCooling() && next.HasAsyncMode() &&
-            (!previous.HasAsyncMode() || (needsAuthorization && (!cmd.HasS3BackendSettings() || coolingChanged)));
+            (!previous.HasAsyncMode() || (!config.GetEverAuthorizedDataCooling() && (!cmd.HasS3BackendSettings() || coolingChanged)));
         // Removing a redundant slash can enable legacy LIST even though point requests address the same keys.
         const bool patternChanged = previous.GetSettings().GetObjectKeyPattern() != next.GetSettings().GetObjectKeyPattern();
         const bool claimsChanged = namespaceChanged || storageNameChanged;
-        const bool checkOwnership = patternChanged || claimsChanged || routeChanged || authorizeCooling;
+        const bool checkOwnership = patternChanged || claimsChanged || routeChanged || validateStoredNamespace || authorizeCooling;
         if (checkOwnership) {
             CheckBlobDepotS3Prefix(next, cmd.GetName(), storageName, groupId);
             if (hasExistingBucket && hasNextBucket && namespaceChanged && !cmd.GetConfirmS3NamespaceMigration()) {
                 throw TExError() << "Changing the S3 bucket or key prefix requires migrating existing BlobDepot objects"
                     << " and setting ConfirmS3NamespaceMigration";
             }
-            if (namespaceChanged || (next.HasAsyncMode() && AppData()->FeatureFlags.GetEnableBlobDepotDataCooling())) {
-                CheckS3ObjectKeyLength(next, storageName);
-            }
+            CheckS3ObjectKeyLength(next, storageName);
         }
         // Moving the namespace already requires fencing old writes and copying the data to the new route.
-        if (routeChanged && !namespaceChanged && (config.GetS3NamespacePinned() || previous.HasAsyncMode() || next.HasAsyncMode()) &&
-                !cmd.GetConfirmS3RouteChange()) {
+        if (routeChanged && !namespaceChanged && !cmd.GetConfirmS3RouteChange()) {
             throw TExError() << "Changing the configured S3 route requires ConfirmS3RouteChange to confirm that "
                 "the new route accesses the same objects, including in-flight writes";
         }
@@ -1227,8 +1177,11 @@ namespace NKikimr::NBsController {
             BlobDepotPipeId = Register(NTabletPipe::CreateClient(SelfId(), tabletId,
                 NTabletPipe::TClientRetryPolicy::WithRetries()));
             auto ev = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
-            ConfigBeingApplied = *group->BlobDepotConfig;
-            ev->Record.SetTxId(++ApplyConfigTxId);
+            if (ConfigBeingApplied != *group->BlobDepotConfig || !ApplyConfigTxId) {
+                ConfigBeingApplied = *group->BlobDepotConfig;
+                ++ApplyConfigTxId;
+            }
+            ev->Record.SetTxId(ApplyConfigTxId);
             *ev->Record.MutableConfig() = std::move(config);
             NTabletPipe::SendData(SelfId(), BlobDepotPipeId, ev.release());
         }

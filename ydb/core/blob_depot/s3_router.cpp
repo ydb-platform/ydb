@@ -197,6 +197,7 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobDepot::TS3BackendSettings Settings;
         ui64 TabletId = 0;
         TString LogId;
+        const std::shared_ptr<TS3BalancerEndpoint> LastEndpoint;
         TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
@@ -660,6 +661,9 @@ namespace NKikimr::NBlobDepot {
 
                     RecordBalancerHostSelection(host, latency);
 
+                    if (LastEndpoint) {
+                        LastEndpoint->Set(host, port);
+                    }
                     const TString endpoint = TStringBuilder() << host << ':' << port;
                     if (endpoint != CurrentEndpoint) {
                         BuildInnerWrapperViaProxy(host, port);
@@ -808,10 +812,12 @@ namespace NKikimr::NBlobDepot {
             return NKikimrServices::TActivity::BLOB_DEPOT_S3_ROUTER;
         }
 
-        explicit TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId)
+        TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId,
+                std::shared_ptr<TS3BalancerEndpoint> lastEndpoint)
             : Settings(std::move(settings))
             , TabletId(tabletId)
             , LogId(TStringBuilder() << '{' << tabletId << ":s3r}")
+            , LastEndpoint(std::move(lastEndpoint))
         {}
 
         void Bootstrap() {
@@ -830,6 +836,12 @@ namespace NKikimr::NBlobDepot {
                 {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()});
 
             if (BalancerEnabled()) {
+                if (LastEndpoint) {
+                    const auto [host, port] = LastEndpoint->Get();
+                    if (!host.empty()) {
+                        BuildInnerWrapperViaProxy(host, port);
+                    }
+                }
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
             } else {
@@ -889,8 +901,9 @@ namespace NKikimr::NBlobDepot {
 
     } // anonymous
 
-    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId) {
-        return new TBlobDepotS3Router(std::move(settings), tabletId);
+    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId,
+            std::shared_ptr<TS3BalancerEndpoint> lastEndpoint) {
+        return new TBlobDepotS3Router(std::move(settings), tabletId, std::move(lastEndpoint));
     }
 
 } // NKikimr::NBlobDepot

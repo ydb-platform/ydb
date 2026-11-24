@@ -13,4 +13,5 @@ items:
   items:
     - name: Перегруженный шард
       href: examples/schemas/overloaded-shard-simple-case.md
-
+- name: Расхождение времени между клиентскими хостами и кластером
+  href: client-clock-skew.md

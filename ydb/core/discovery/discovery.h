@@ -15,6 +15,9 @@ struct TEvDiscovery {
     enum EEv {
         EvError = EventSpaceBegin(TKikimrEvents::ES_DISCOVERY),
         EvDiscoveryData,
+        EvWatch,
+        EvUnwatch,
+        EvChanged,
         EvEnd
     };
 
@@ -36,7 +39,27 @@ struct TEvDiscovery {
         }
     };
 
+    // A one-shot wait for a change since the lookup at Revision. Re-register
+    // after obtaining a new authorized snapshot.
+    struct TEvWatch : public TEventLocal<TEvWatch, EvWatch> {
+        TString Path;
+        ui64 Revision;
+
+        TEvWatch(TString path, ui64 revision)
+            : Path(std::move(path)), Revision(revision)
+        {}
+    };
+
+    struct TEvUnwatch : public TEventLocal<TEvUnwatch, EvUnwatch> {
+        TString Path;
+        explicit TEvUnwatch(TString path) : Path(std::move(path)) {}
+    };
+
+    struct TEvChanged : public TEventLocal<TEvChanged, EvChanged> {};
+
     struct TEvDiscoveryData : public TEventLocal<TEvDiscoveryData, EvDiscoveryData> {
+        TString BoardPath;
+        ui64 Revision = 0;
         TString CachedMessage;
         TString CachedMessageSsl;
 
@@ -48,10 +71,15 @@ struct TEvDiscovery {
 
 namespace NDiscovery {
 
+enum class EEndpointVersion { Omit, Include };
+
 class TCachedMessageData {
 public:
+    ui64 Revision = 0;
     TString CachedMessage;
     TString CachedMessageSsl;
+    TString EndpointVersion;
+    TString EndpointVersionSsl;
 
     TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
     TBridgeInfo::TPtr BridgeInfo;
@@ -74,12 +102,13 @@ public:
                         const TBridgeInfo::TPtr& bridgeInfo,
                         const TString& endpointId = {},
                         const TSet<TString>& services = {},
-                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
+                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok,
+                        EEndpointVersion version = EEndpointVersion::Omit)
         : InfoEntries(std::move(infoEntries))
         , BridgeInfo(bridgeInfo)
         , Status(status)
     {
-        UpdateCache(nameserviceResponse, bridgeInfo, endpointId, services);
+        UpdateCache(nameserviceResponse, bridgeInfo, endpointId, services, version);
     }
 
     void UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
@@ -87,7 +116,8 @@ public:
     void UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
                         const TBridgeInfo::TPtr& bridgeInfo,
                         const TString& endpointId = {},
-                        const TSet<TString>& services = {});
+                        const TSet<TString>& services = {},
+                        EEndpointVersion version = EEndpointVersion::Omit);
 
     TEvDiscovery::TEvDiscoveryData* ToEvent(bool returnSerializedMessage) const;
 };

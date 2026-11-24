@@ -3,7 +3,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/long_poll_list_endpoints.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
@@ -37,7 +37,12 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         Y_STRINGIZE(methodName), logger, YDB_API_DEFAULT_COUNTER_BLOCK(discovery, methodName))->Run();
 
      SETUP_LEGACY_EVENT_METHOD(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
-         ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx));
+         const auto optIn = reqCtx->GetPeerMetaValues("x-ydb-discovery-long-poll");
+         if (optIn.size() == 1 && optIn.front() == "1") {
+             ActorSystem_->Send(GRpcRequestProxyId_, new TLongPollListEndpoints(reqCtx));
+         } else {
+             ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx));
+         }
      });
 
 #undef SETUP_DISCOVERY_METHOD

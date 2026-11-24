@@ -25,7 +25,7 @@ enum class EDiscoveryMode {
     //! Do not perform discovery.
     //! This option disables database discovery and allow to use user provided endpoint for grpc connections
     Off,
-    //! Use conditional ListEndpoints calls on the bootstrap channel. Older servers use periodic discovery.
+    //! Watch YDB membership and managed replica switches with conditional ListEndpoints on the bootstrap channel.
     LongPoll
 };
 

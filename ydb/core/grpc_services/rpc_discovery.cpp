@@ -1,6 +1,6 @@
 #include "grpc_request_proxy.h"
 
-#include "rpc_calls.h"
+#include "long_poll_list_endpoints.h"
 #include "rpc_kqp_base.h"
 
 #include <ydb/core/base/appdata.h>
@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/random/shuffle.h>
 
@@ -25,7 +26,10 @@ using namespace NKqp;
 
 class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
     THolder<TEvListEndpointsRequest> Request;
+    TLongPollListEndpoints* const Poll;
+    const TActorId ProxyId;
     const TActorId CacheId;
+    TString WatchedPath;
     TActorId Discoverer;
 
     THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
@@ -38,8 +42,10 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId)
+    TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId, TActorId proxyId)
         : Request(msg->Release().Release())
+        , Poll(dynamic_cast<TLongPollListEndpoints*>(Request.Get()))
+        , ProxyId(proxyId)
         , CacheId(cacheId)
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ListEndpointsRpc")
     {}
@@ -52,7 +58,7 @@ public:
             : database;
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
             Request->NormalizePath(resolvedDatabase),
-            Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            !Poll && Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
             SelfId(), CacheId));
 
         // request self node info
@@ -62,6 +68,9 @@ public:
     }
 
     void PassAway() override {
+        if (!WatchedPath.empty()) {
+            Send(CacheId, new TEvDiscovery::TEvUnwatch(WatchedPath));
+        }
         if (Discoverer) {
             Send(Discoverer, new TEvents::TEvPoisonPill());
         }
@@ -75,6 +84,7 @@ public:
             hFunc(TEvDiscovery::TEvDiscoveryData, Handle);
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvDiscovery::TEvError, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
 
@@ -129,6 +139,25 @@ public:
         return false;
     }
 
+    void WaitForChange() {
+        WatchedPath = LookupResponse->BoardPath;
+        const auto revision = LookupResponse->Revision;
+        LookupResponse.Reset();
+        const auto self = SelfId();
+        Request->SetFinishAction([system = TActivationContext::ActorSystem(), self] {
+            system->Send(new IEventHandle(self, {}, new TEvents::TEvPoisonPill));
+        });
+        Send(CacheId, new TEvDiscovery::TEvWatch(WatchedPath, revision));
+        Schedule(Poll->HoldUntil, new TEvDiscovery::TEvChanged);
+        co_await ActorWaitForEvent<TEvDiscovery::TEvChanged>(0);
+        if (!Request->IsClientLost()) {
+            // Resolve credentials, aliases, and the current assignment again before replying.
+            Poll->UpdateAuthState(NYdbGrpc::TAuthState::AS_NOT_PERFORMED);
+            Send(ProxyId, new TLongPollListEndpoints(Poll->Transport, Poll->HoldUntil));
+        }
+        PassAway();
+    }
+
     void TryReplyAndDie() {
         if (!NameserviceResponse || !LookupResponse)
             return;
@@ -149,7 +178,19 @@ public:
             NDiscovery::TCachedMessageData cachedMessageData(
                 LookupResponse->InfoEntries,
                 NameserviceResponse, LookupResponse->BridgeInfo,
-                endpointId, services);
+                endpointId, services, LookupResponse->Status,
+                Poll ? NDiscovery::EEndpointVersion::Include : NDiscovery::EEndpointVersion::Omit);
+            if (Poll) {
+                const auto& version = Request->SslServer() ? cachedMessageData.EndpointVersionSsl : cachedMessageData.EndpointVersion;
+                const auto condition = Poll->Transport->GetPeerMetaValues("x-ydb-if-endpoint-version");
+                // Older managed workers already waited before forwarding their route condition.
+                if (condition.size() == 1 && condition.front() == version && TInstant::Now() < Poll->HoldUntil
+                        && Poll->Transport->GetPeerMetaValues("x-ydb-if-route-generation").empty()) {
+                    WaitForChange();
+                    return;
+                }
+                Poll->Transport->AddTrailingMetadata("x-ydb-endpoint-version", version);
+            }
 
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
@@ -178,7 +219,7 @@ void TGRpcRequestProxy::Handle(TEvListEndpointsRequest::TPtr& ev, const TActorCo
         DiscoveryCacheActorID = ctx.Register(CreateDiscoveryCache());
     }
 
-    ctx.Register(new TListEndpointsRPC(ev, DiscoveryCacheActorID));
+    ctx.Register(new TListEndpointsRPC(ev, DiscoveryCacheActorID, ctx.SelfID));
 }
 
 }

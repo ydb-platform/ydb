@@ -30,6 +30,7 @@ SRCS(
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
     ydb_read_rows_ut.cpp
+    ydb_discovery_long_poll_ut.cpp
     ydb_relative_database_ut.cpp
     ydb_relative_resource_ut.cpp
     ydb_relative_database_isolation_ut.cpp

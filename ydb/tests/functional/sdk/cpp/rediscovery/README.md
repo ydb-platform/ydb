@@ -1,14 +1,18 @@
 # C++ replica switch probe for long-poll discovery
 
-A managed bootstrap route can wake an idle driver after a replica switch. The SDK uses its existing bootstrap address and the ordinary authenticated `Ydb.Discovery.V1.DiscoveryService/ListEndpoints` RPC. Both replicas may continue serving traffic. The source database does not receive a switch notification.
+The C++ driver keeps one conditional unary `ListEndpoints` request on its bootstrap connection. A direct YDB server wakes that request when its database's advertised endpoints change. A managed AWACS route can also wake it when the active replica changes. Both use the existing gRPC port.
 
-| Request | Managed AWACS worker behavior |
-| --- | --- |
-| No opt-in metadata | Forward as ordinary discovery. |
-| `x-ydb-discovery-long-poll: 1` | Immediately return the selected replica's full endpoint list and `x-ydb-route-generation` response metadata. |
-| Opt-in plus `x-ydb-if-route-generation: N` | When the worker is at N, wait for a change or 30 seconds. Forward a fresh lookup using the selected route. A newer worker responds immediately. A worker behind N returns `UNAVAILABLE`. |
+| Metadata | Owner | Meaning |
+| --- | --- | --- |
+| `x-ydb-discovery-long-poll: 1` | SDK | Opts into conditional discovery. Ordinary clients receive the usual immediate reply. |
+| `x-ydb-endpoint-version` | YDB | Opaque version of the advertised endpoints and pile states. The SDK echoes it as `x-ydb-if-endpoint-version`. |
+| `x-ydb-route-generation` | Managed AWACS worker | Route generation, advanced on every replica switch including failback. The SDK echoes it as `x-ydb-if-route-generation`. |
 
-The route owner advances the generation on every switch, including failback. A successful response carries one decimal unsigned 64-bit generation in its initial or trailing metadata. The driver maintains one outstanding poll per discovery context. A worker that omits the generation on initial negotiation gets periodic ordinary discovery. Once a driver accepts a managed generation, an unstamped or older response cannot reinstall source endpoints. Rollback of an enrolled route therefore needs a worker that understands the protocol, or a driver restart to renegotiate a legacy route.
+The initial request returns a full assignment immediately. Direct YDB holds a matching endpoint version for up to 30 seconds, then returns a fresh full assignment. A board change wakes it early. A node joining or leaving only updates the affected endpoints. YDB computes the endpoint version from its filtered snapshot and keeps no durable generation counter.
+
+A managed worker owns the route condition. When the generation matches and the client supplies an endpoint version, the worker forwards the endpoint condition to YDB and watches its own route in parallel. A route change interrupts the old lookup. The driver retries on the same bootstrap connection and receives the new replica's full assignment. A route-only client gets the worker's existing conditional wait. An older worker that forwards the route condition after waiting gets an immediate answer from YDB, which avoids two successive waits.
+
+If neither side advertises support on initial negotiation, the driver refreshes about once per minute. After accepting a managed generation, it rejects missing or older generations. A rollback to a legacy worker on an enrolled route needs a driver restart. Direct YDB upgrades and downgrades negotiate support using the endpoint version alone.
 
 After the SDK installs a new assignment, fresh RPCs use the destination. An RPC already running on the healthy source can continue until it finishes or its owner closes it. This includes bidirectional Topic and Coordination streams. A node-bound handle that needs a new RPC may have to be recreated. The bootstrap connection is reused. Both data connections can coexist while source work drains.
 
@@ -26,4 +30,10 @@ The native regression tests use gRPC servers to exercise discovery and requests 
 
 ```sh
 ./ya make --build relwithdebinfo -DUSER_CXXFLAGS=-Werror -tA ydb/public/sdk/cpp/tests/unit/client/driver -F 'EndpointRediscovery::*'
+```
+
+To check the actual YDB server, the following test publishes an endpoint while a direct gRPC poll is outstanding and checks the returned version and membership.
+
+```sh
+./ya make --build relwithdebinfo -tA ydb/services/ydb/ut -F 'YdbDiscoveryLongPoll::DirectPollWakesOnBoardChange'
 ```

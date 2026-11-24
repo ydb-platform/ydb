@@ -1,4 +1,4 @@
-* Added experimental `EDiscoveryMode::LongPoll` for managed replica switches. The driver reuses its bootstrap channel and retires data connections removed by discovery.
+* Added experimental `EDiscoveryMode::LongPoll` for managed replica switches. The driver reuses its bootstrap channel and retires data connections removed by discovery. A direct YDB endpoint can also wake the poll when its database membership changes.
 
 * Fixed endpoint pessimization percentages so unhealthy endpoint pools trigger discovery correctly, including pools with more than 100 endpoints.
 

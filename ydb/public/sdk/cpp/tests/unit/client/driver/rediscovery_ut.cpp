@@ -338,6 +338,172 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
     }
 #endif
 
+    Y_UNIT_TEST(DirectEndpointVersionsPreserveCommonChannelsAndDrainRemovedEndpoints) {
+        TPortManager ports;
+        const auto bootstrapPort = ports.GetPort(), sourcePort = ports.GetPort(), targetPort = ports.GetPort();
+        TTableService source, target;
+        auto sourceServer = StartServer(sourcePort, source);
+        auto targetServer = StartServer(targetPort, target);
+        auto firstPoll = NThreading::NewPromise<void>();
+        auto updateSource = NThreading::NewPromise<void>();
+        auto secondPoll = NThreading::NewPromise<void>();
+        auto removeSource = NThreading::NewPromise<void>();
+        auto unexpectedPoll = NThreading::NewPromise<void>();
+        TDiscovery discovery;
+        discovery.Lookup = [&](auto* context, auto& result) {
+            const auto& headers = context->client_metadata();
+            auto mode = headers.find("x-ydb-discovery-long-poll");
+            if (mode == headers.end() || mode->second != "1" || headers.contains("x-ydb-if-route-generation")) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "invalid direct poll");
+            }
+            auto* endpoint = result.add_endpoints();
+            endpoint->set_address("127.0.0.1");
+            endpoint->set_port(sourcePort);
+            auto it = headers.find("x-ydb-if-endpoint-version");
+            if (it == headers.end()) {
+                if (firstPoll.GetFuture().HasValue()) {
+                    unexpectedPoll.TrySetValue();
+                }
+                context->AddInitialMetadata("x-ydb-endpoint-version", "v1/source");
+                return grpc::Status::OK;
+            }
+            const auto remaining = context->deadline() - std::chrono::system_clock::now();
+            if (remaining < std::chrono::seconds(35) || remaining > std::chrono::seconds(47)) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing direct long poll deadline");
+            }
+            if (it->second == "v1/source") {
+                firstPoll.TrySetValue();
+                if (!updateSource.GetFuture().Wait(TDuration::Seconds(5))) {
+                    return grpc::Status::CANCELLED;
+                }
+                endpoint->set_location("local");
+                context->AddTrailingMetadata("x-ydb-endpoint-version", "opaque-v2");
+            } else if (it->second == "opaque-v2") {
+                secondPoll.TrySetValue();
+                if (!removeSource.GetFuture().Wait(TDuration::Seconds(5))) {
+                    return grpc::Status::CANCELLED;
+                }
+                // A request routed to an older discovery server gets an ordinary snapshot.
+                endpoint->set_port(targetPort);
+            } else {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "unexpected endpoint version");
+            }
+            return grpc::Status::OK;
+        };
+        auto bootstrap = StartServer(bootstrapPort, discovery);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(bootstrapPort)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll).SetSocketIdleTimeout(TDuration::Max()));
+        NTable::TTableClient client(driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        auto upsert = [&] { return client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings); };
+        UNIT_ASSERT_C(firstPoll.GetFuture().Wait(TDuration::Seconds(3)), "no conditional poll to direct YDB");
+        const auto peer = RpcPeer(upsert().GetValueSync());
+        updateSource.SetValue();
+        UNIT_ASSERT(secondPoll.GetFuture().Wait(TDuration::Seconds(3)));
+        UNIT_ASSERT_VALUES_EQUAL(RpcPeer(upsert().GetValueSync()), peer);
+        source.HoldNext = true;
+        auto held = upsert();
+        UNIT_ASSERT(source.Held.GetFuture().Wait(TDuration::Seconds(3)));
+        removeSource.SetValue();
+        // Synchronize on the new assignment by observing the destination of a real request.
+        const auto deadline = TInstant::Now() + TDuration::Seconds(3);
+        while (!target.Calls.load() && TInstant::Now() < deadline) {
+            RpcPeer(upsert().GetValueSync());
+        }
+        UNIT_ASSERT(target.Calls.load());
+        UNIT_ASSERT(!held.HasValue());
+        source.ReleaseHeld.SetValue();
+        UNIT_ASSERT_VALUES_EQUAL(RpcPeer(held.GetValueSync()), peer);
+        UNIT_ASSERT_C(!unexpectedPoll.GetFuture().Wait(TDuration::MilliSeconds(300)),
+            "a server without endpoint version support triggered immediate polling");
+    }
+
+    Y_UNIT_TEST(DirectPollThrottlesServersThatReturnUnchangedVersionsImmediately) {
+        TPortManager ports;
+        auto port = ports.GetPort();
+        TDiscovery discovery;
+        std::atomic_uint calls = 0;
+        auto firstConditional = NThreading::NewPromise<TInstant>();
+        auto elapsed = NThreading::NewPromise<TDuration>();
+        discovery.Lookup = [&](auto* context, auto& result) {
+            auto* endpoint = result.add_endpoints();
+            endpoint->set_address("127.0.0.1");
+            endpoint->set_port(port);
+            context->AddInitialMetadata("x-ydb-endpoint-version", "unchanged");
+            if (context->client_metadata().contains("x-ydb-if-endpoint-version")) {
+                if (++calls == 1) {
+                    firstConditional.SetValue(TInstant::Now());
+                } else {
+                    elapsed.TrySetValue(TInstant::Now() - firstConditional.GetFuture().GetValueSync());
+                    while (!context->IsCancelled()) {
+                        Sleep(TDuration::MilliSeconds(10));
+                    }
+                    return grpc::Status::CANCELLED;
+                }
+            }
+            return grpc::Status::OK;
+        };
+        auto server = StartServer(port, discovery);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(port)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll));
+        UNIT_ASSERT(elapsed.GetFuture().Wait(TDuration::Seconds(4)));
+        UNIT_ASSERT(elapsed.GetFuture().GetValueSync() >= TDuration::MilliSeconds(500));
+    }
+
+    Y_UNIT_TEST(EndpointVersionCannotOverrideManagedRouteFence) {
+        TPortManager ports;
+        auto bootPort = ports.GetPort(), dataPort = ports.GetPort();
+        TTableService table;
+        auto node = StartServer(dataPort, table);
+        TDiscovery discovery;
+        std::atomic_uint calls = 0;
+        auto retried = NThreading::NewPromise<void>();
+        auto release = NThreading::NewPromise<void>();
+        discovery.Lookup = [&](auto* context, auto& result) {
+            auto* endpoint = result.add_endpoints();
+            endpoint->set_address("127.0.0.1");
+            endpoint->set_port(dataPort);
+            const auto call = ++calls;
+            const auto& headers = context->client_metadata();
+            if (call == 1) {
+                // Mixed response metadata can come from the worker and server.
+                context->AddTrailingMetadata("x-ydb-route-generation", "11");
+                context->AddInitialMetadata("x-ydb-endpoint-version", "ambiguous");
+                context->AddTrailingMetadata("x-ydb-endpoint-version", "duplicate");
+            } else {
+                const auto route = headers.find("x-ydb-if-route-generation");
+                if (route == headers.end() || route->second != "11" || headers.contains("x-ydb-if-endpoint-version")) {
+                    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "unsafe discovery condition");
+                }
+                if (call == 2) {
+                    context->AddInitialMetadata("x-ydb-route-generation", "10");
+                } else if (call > 3) {
+                    // The preceding response omitted route metadata entirely.
+                    retried.TrySetValue();
+                    if (!release.GetFuture().Wait(TDuration::Seconds(5))) {
+                        return grpc::Status::CANCELLED;
+                    }
+                    context->AddInitialMetadata("x-ydb-route-generation", "11");
+                }
+                context->AddTrailingMetadata("x-ydb-endpoint-version", "valid-version");
+            }
+            return grpc::Status::OK;
+        };
+        auto bootstrap = StartServer(bootPort, discovery);
+        TDriver driver(TDriverConfig().SetEndpoint(Address(bootPort)).SetDatabase("/Root")
+            .SetDiscoveryMode(EDiscoveryMode::LongPoll));
+        NTable::TTableClient client(driver);
+        NTable::TBulkUpsertSettings settings;
+        settings.RetrySettings(NTable::TRetryOperationSettings().MaxRetries(0));
+        UNIT_ASSERT(retried.GetFuture().Wait(TDuration::Seconds(3)));
+        auto rejected = client.BulkUpsert("/Root/T", NTable::EDataFormat::CSV, "1", {}, settings);
+        UNIT_ASSERT(rejected.Wait(TDuration::Seconds(3)));
+        UNIT_ASSERT(!rejected.GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(table.Calls.load(), 0);
+        release.SetValue();
+    }
+
     Y_UNIT_TEST(LongPollDrainsInFlightRequestsAndReusesBootstrap) {
         TPortManager ports;
         const auto sourcePort = ports.GetPort(), bootstrapPort = ports.GetPort();
@@ -364,6 +530,10 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
             }
             auto it = headers.find("x-ydb-if-route-generation");
             if (it != headers.end()) {
+                auto version = headers.find("x-ydb-if-endpoint-version");
+                if (version == headers.end() || version->second != "same-endpoints") {
+                    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing backend endpoint version");
+                }
                 if (it->second == "1") {
                     waiting.TrySetValue();
                     if (!switched.GetFuture().Wait(TDuration::Seconds(5))) { return grpc::Status::CANCELLED; }
@@ -373,6 +543,7 @@ Y_UNIT_TEST_SUITE(EndpointRediscovery) {
                     return grpc::Status::CANCELLED;
                 }
             }
+            context->AddInitialMetadata("x-ydb-endpoint-version", "same-endpoints");
             context->AddTrailingMetadata("x-ydb-route-generation", switched.GetFuture().HasValue() ? "2" : "1");
             auto* endpoint = result.add_endpoints();
             endpoint->set_address("127.0.0.1");

@@ -47,7 +47,7 @@ void TStartupTimeline::OnTxInitFinished() {
     TraceStageFinished("tx_init", txInit);
 }
 
-void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
+void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount, const bool portionsLoaded) {
     YDB_LOG_VERIFY(ExecutorActivatedInstant);
     const TMonotonic now = TMonotonic::Now();
     SwitchedToWorkInstant = now;
@@ -55,8 +55,10 @@ void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
     const TDuration switchToWork = now - TxInitFinishInstant;
     TraceStageFinished("switch_to_work", switchToWork);
     TraceStartupStageFinished(Orbit, TabletId, "startup", now - CreateInstant);
-    // lwtrace publishes a track only when it ends
-    Orbit.Reset();
+    // lwtrace publishes a track only when it ends; otherwise it ends in OnAllPortionsLoaded
+    if (portionsLoaded) {
+        Orbit.Reset();
+    }
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "startup_stage_finished"},
         {"stage", "startup"},
@@ -71,6 +73,8 @@ void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
 
 void TStartupTimeline::OnAllPortionsLoaded(const ui64 portionsCount, const ui32 batches) {
     const TMonotonic now = TMonotonic::Now();
+    TraceStageFinished("deferred_portion_loading", now - SwitchedToWorkInstant);
+    Orbit.Reset();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "all_portions_loaded"},
         {"duration_us", (now - CreateInstant).MicroSeconds()},

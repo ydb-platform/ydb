@@ -117,7 +117,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             portionsCount += granule->GetPortions().size();
         }
     }
-    StartupTimeline.OnSwitchedToWork(portionsCount);
+    StartupTimeline.OnSwitchedToWork(portionsCount, !DeferredPortionLoader.IsEnabled());
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
     if (DeferredPortionLoader.IsEnabled()) {
         StartDeferredPortionLoading(ctx);

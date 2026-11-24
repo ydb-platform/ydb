@@ -34,7 +34,7 @@ public:
     void OnTxInitSchemaFinished();
     void OnTxInitCreated();
     void OnTxInitFinished();
-    void OnSwitchedToWork(const ui64 portionsCount);
+    void OnSwitchedToWork(const ui64 portionsCount, const bool portionsLoaded);
     void OnAllPortionsLoaded(const ui64 portionsCount, const ui32 batches);
 };
 

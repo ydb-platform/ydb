@@ -372,14 +372,6 @@ bool TPersQueue::IsTopicMutateDisabled(const TActorContext& ctx) const {
     return AppData(ctx)->FeatureFlags.GetEnableSourceTopicMutateRestricted();
 }
 
-bool TPersQueue::IsWriteUnavailable() const {
-    return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
-}
-
-bool TPersQueue::IsWriteProhibited() const {
-    return Config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED;
-}
-
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool closeSession)
 {
     ReplyPersQueueError(
@@ -3050,18 +3042,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-<<<<<<< HEAD
-    if (req.CmdWriteSize() > 0 && IsWriteUnavailable()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
-                   "Write to topic is temporarily disabled");
-        return;
-    }
-
-    if (req.CmdWriteSize() > 0 && IsWriteProhibited()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                   "Write to topic is prohibited");
-        return;
-=======
     // Enforce the topic mode for reads and writes, including late writes and
     // protocols without an earlier check (e.g. kafka_proxy).
     if (req.CmdWriteSize() > 0 || req.HasCmdRead()) {
@@ -3069,7 +3049,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             ReplyError(ctx, responseCookie, error->Code, error->Reason, /*closeSession=*/true);
             return;
         }
->>>>>>> 39fdf42ae81 (better)
     }
 
     if (IsTopicMutateDisabled(ctx)
@@ -3080,26 +3059,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-<<<<<<< HEAD
-    if (IsTopicMutateDisabled(ctx)
-        && req.HasCmdSetClientOffset())
-    {
-        const auto& allowedClientIds = AppData(ctx)->PQConfig.GetClientIdsAllowCommitWhenTopicMutateDisabled();
-        const auto& clientId = req.GetCmdSetClientOffset().GetClientId();
-        const bool allowCommit = AnyOf(allowedClientIds, [&](const auto& allowedClientId) {
-            return NPersQueue::ConvertNewConsumerName(allowedClientId, ctx) == clientId;
-        });
-        if (!allowCommit) {
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
-                       "Topic mutations are temporarily disabled");
-=======
-    if (req.HasCmdSetClientOffset()
-        && IsConsumerOffsetCommitDisabled(req.GetCmdSetClientOffset().GetClientId(), ctx)) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                   "Commits for consumer are disabled");
-        return;
-    }
-
     if (const auto error = GetWriteModeError(Config);
         (IsTopicMutateDisabled(ctx) || error)
         && req.HasCmdSetClientOffset())
@@ -3107,12 +3066,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         const auto* consumer = GetConsumer(Config, req.GetCmdSetClientOffset().GetClientId());
         if (!consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
             ReplyError(ctx, responseCookie, error ? error->Code : NPersQueue::NErrorCode::ERROR,
-<<<<<<< HEAD
-                       error ? error->Reason : "Topic mutations are temporarily disabled");
->>>>>>> a0be66c0f6f (forbid read & set client offset)
-=======
                        error ? error->Reason : "Topic mutations are temporarily disabled", /*closeSession=*/error.has_value());
->>>>>>> 39fdf42ae81 (better)
             return;
         }
     }

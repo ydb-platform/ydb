@@ -9,6 +9,8 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_processing.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/public/lib/base/msgbus.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -25,6 +27,156 @@ void FillPQConfig(NKikimrPQ::TPQConfig& pqConfig, const TString& dbRoot, bool is
     pqConfig.SetClusterTablePath(TStringBuilder() << dbRoot << "/Config/V2/Cluster");
     pqConfig.SetVersionTablePath(TStringBuilder() << dbRoot << "/Config/V2/Versions");
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+}
+
+void SendPQTabletConfig(
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    const TActorId& edge,
+    const NKikimrPQ::TPQTabletConfig& tabletConfig,
+    ui64 txId,
+    ui64 planStep)
+{
+    auto request = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    request->Record.SetTxId(txId);
+    ActorIdToProto(edge, request->Record.MutableSourceActor());
+    *request->Record.MutableConfig()->MutableTabletConfig() = tabletConfig;
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    // Ответ оборванной попытки может прийти уже после DropPendingPqConfigReplies.
+    // Статус здесь не фильтруем: неожиданный статус текущего TxId должен дойти до ассерта.
+    const auto grabResult = [&]() {
+        return runtime.GrabEdgeEventIf<TEvPersQueue::TEvProposeTransactionResult>(handle,
+            [txId](const TEvPersQueue::TEvProposeTransactionResult& ev) {
+                return ev.Record.GetTxId() == txId;
+            });
+    };
+    auto* prepared = grabResult();
+    UNIT_ASSERT(prepared);
+    UNIT_ASSERT(prepared->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(prepared->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
+    UNIT_ASSERT(prepared->Record.HasTxId() && prepared->Record.GetTxId() == txId);
+    UNIT_ASSERT(prepared->Record.HasOrigin() && prepared->Record.GetOrigin() == tabletId);
+    // Счётчик теста не знает нижнюю границу, которую таблетка выставила в PREPARED.
+    // Шаг ниже MinStep она принимает, но координатор так планировать не должен.
+    UNIT_ASSERT(prepared->Record.HasMinStep());
+    planStep = Max(planStep, prepared->Record.GetMinStep());
+
+    auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+    plan->Record.SetStep(planStep);
+    auto* tx = plan->Record.AddTransactions();
+    tx->SetTxId(txId);
+    ActorIdToProto(edge, tx->MutableAckTo());
+    runtime.SendToPipe(tabletId, edge, plan.Release(), 0, GetPipeConfigWithRetries());
+
+    // Повтор может послать тот же шаг: MinStep не растёт, пока брошенный план не обработан.
+    // TxId в предикате, иначе заберём ACK старой попытки и упадём уже после этого.
+    auto* ack = runtime.GrabEdgeEventIf<TEvTxProcessing::TEvPlanStepAck>(handle,
+        [tabletId, planStep, txId](const TEvTxProcessing::TEvPlanStepAck& ev) {
+            if (ev.Record.GetTabletId() != tabletId || ev.Record.GetStep() != planStep) {
+                return false;
+            }
+            for (const ui64 id : ev.Record.GetTxId()) {
+                if (id == txId) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    UNIT_ASSERT(ack);
+    auto* accepted = runtime.GrabEdgeEventIf<TEvTxProcessing::TEvPlanStepAccepted>(handle,
+        [tabletId, planStep](const TEvTxProcessing::TEvPlanStepAccepted& ev) {
+            return ev.Record.GetTabletId() == tabletId && ev.Record.GetStep() == planStep;
+        });
+    UNIT_ASSERT(accepted);
+    auto* complete = grabResult();
+    UNIT_ASSERT(complete);
+    UNIT_ASSERT(complete->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(complete->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+    UNIT_ASSERT(complete->Record.HasTxId() && complete->Record.GetTxId() == txId);
+    UNIT_ASSERT(complete->Record.HasOrigin() && complete->Record.GetOrigin() == tabletId);
+}
+
+NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
+    const TTabletPreparationParameters& parameters,
+    TConstArrayRef<TConsumerPreparationParameters> users,
+    TTestActorRuntime& runtime,
+    ui32 version)
+{
+    NKikimrPQ::TPQTabletConfig tabletConfig;
+    for (ui32 i = 0; i < parameters.partitions; ++i) {
+        tabletConfig.AddPartitionIds(i);
+    }
+    tabletConfig.SetCacheSize(10_MB);
+    if (runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
+        tabletConfig.SetTopicName("topic");
+        tabletConfig.SetTopicPath(runtime.GetAppData().PQConfig.GetDatabase() + "/topic");
+        tabletConfig.SetYcCloudId(parameters.cloudId);
+        tabletConfig.SetYcFolderId(parameters.folderId);
+        tabletConfig.SetYdbDatabaseId(parameters.databaseId);
+        tabletConfig.SetYdbDatabasePath(parameters.databasePath);
+        tabletConfig.SetFederationAccount(parameters.account);
+    } else {
+        tabletConfig.SetTopicName("rt3.dc1--asdfgs--topic");
+        tabletConfig.SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
+    }
+    tabletConfig.SetTopic("topic");
+    tabletConfig.SetVersion(version);
+    tabletConfig.SetLocalDC(parameters.localDC);
+    if (parameters.AddDefaultConsumer) {
+        auto* consumer = tabletConfig.AddConsumers();
+        consumer->SetName("user");
+        consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
+    }
+    tabletConfig.SetMeteringMode(parameters.meteringMode);
+    auto partitionConfig = tabletConfig.MutablePartitionConfig();
+    if (parameters.writeSpeed > 0) {
+        partitionConfig->SetWriteSpeedInBytesPerSecond(parameters.writeSpeed);
+        partitionConfig->SetBurstSize(parameters.writeSpeed);
+    }
+    partitionConfig->SetMaxCountInPartition(parameters.maxCountInPartition);
+    partitionConfig->SetMaxSizeInPartition(parameters.maxSizeInPartition);
+    if (parameters.storageLimitBytes > 0) {
+        partitionConfig->SetStorageLimitBytes(parameters.storageLimitBytes);
+    } else {
+        partitionConfig->SetLifetimeSeconds(parameters.deleteTime);
+    }
+    partitionConfig->SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
+    if (parameters.sidMaxCount > 0)
+        partitionConfig->SetSourceIdMaxCounts(parameters.sidMaxCount);
+    partitionConfig->SetMaxWriteInflightSize(90'000'000);
+    partitionConfig->SetLowWatermark(parameters.lowWatermark);
+
+    if (parameters.enableCompactificationByKey) {
+        tabletConfig.SetEnableCompactification(true);
+    }
+
+    if (parameters.metricsLevel) {
+        tabletConfig.SetMetricsLevel(static_cast<decltype(tabletConfig.GetMetricsLevel())>(*parameters.metricsLevel));
+    }
+
+    if (parameters.monitoringProjectId) {
+        tabletConfig.SetMonitoringProjectId(*parameters.monitoringProjectId);
+    }
+
+    for (const auto& u : users) {
+        auto* consumer = tabletConfig.AddConsumers();
+        consumer->SetName(u.Name);
+        consumer->SetImportant(u.Important);
+        if (u.MonitoringProjectId.has_value()) {
+            consumer->SetMonitoringProjectId(*u.MonitoringProjectId);
+        }
+        if (u.MetricsLevel.has_value()) {
+            consumer->SetMetricsLevel(*u.MetricsLevel);
+        }
+        if (u.Type.has_value()) {
+            consumer->SetType(*u.Type);
+        }
+    }
+
+    return tabletConfig;
 }
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,
@@ -44,78 +196,8 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             runtime.ResetScheduledCount();
 
             auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
-            for (ui32 i = 0; i < parameters.partitions; ++i) {
-                request->Record.MutableTabletConfig()->AddPartitionIds(i);
-            }
-            request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
             request->Record.SetTxId(12345);
-            auto* tabletConfig = request->Record.MutableTabletConfig();
-            if (runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
-                tabletConfig->SetTopicName("topic");
-                tabletConfig->SetTopicPath(runtime.GetAppData().PQConfig.GetDatabase() + "/topic");
-                tabletConfig->SetYcCloudId(parameters.cloudId);
-                tabletConfig->SetYcFolderId(parameters.folderId);
-                tabletConfig->SetYdbDatabaseId(parameters.databaseId);
-                tabletConfig->SetYdbDatabasePath(parameters.databasePath);
-                tabletConfig->SetFederationAccount(parameters.account);
-            } else {
-                tabletConfig->SetTopicName("rt3.dc1--asdfgs--topic");
-                tabletConfig->SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
-            }
-            tabletConfig->SetTopic("topic");
-            tabletConfig->SetVersion(version);
-            tabletConfig->SetLocalDC(parameters.localDC);
-            if (parameters.AddDefaultConsumer) {
-                auto* consumer = tabletConfig->AddConsumers();
-                consumer->SetName("user");
-                consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
-            }
-            tabletConfig->SetMeteringMode(parameters.meteringMode);
-            auto partitionConfig = tabletConfig->MutablePartitionConfig();
-            if (parameters.writeSpeed > 0) {
-                partitionConfig->SetWriteSpeedInBytesPerSecond(parameters.writeSpeed);
-                partitionConfig->SetBurstSize(parameters.writeSpeed);
-            }
-
-            partitionConfig->SetMaxCountInPartition(parameters.maxCountInPartition);
-            partitionConfig->SetMaxSizeInPartition(parameters.maxSizeInPartition);
-            if (parameters.storageLimitBytes > 0) {
-                partitionConfig->SetStorageLimitBytes(parameters.storageLimitBytes);
-            } else {
-                partitionConfig->SetLifetimeSeconds(parameters.deleteTime);
-            }
-            partitionConfig->SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
-            if (parameters.sidMaxCount > 0)
-                partitionConfig->SetSourceIdMaxCounts(parameters.sidMaxCount);
-            partitionConfig->SetMaxWriteInflightSize(90'000'000);
-            partitionConfig->SetLowWatermark(parameters.lowWatermark);
-
-            if (parameters.enableCompactificationByKey) {
-                tabletConfig->SetEnableCompactification(true);
-            }
-
-            if (parameters.metricsLevel) {
-                tabletConfig->SetMetricsLevel(static_cast<decltype(tabletConfig->GetMetricsLevel())>(*parameters.metricsLevel));
-            }
-
-            if (parameters.monitoringProjectId) {
-                tabletConfig->SetMonitoringProjectId(*parameters.monitoringProjectId);
-            }
-
-            for (const auto& u : users) {
-                auto* consumer = tabletConfig->AddConsumers();
-                consumer->SetName(u.Name);
-                consumer->SetImportant(u.Important);
-                if (u.MonitoringProjectId.has_value()) {
-                    consumer->SetMonitoringProjectId(*u.MonitoringProjectId);
-                }
-                if (u.MetricsLevel.has_value()) {
-                    consumer->SetMetricsLevel(*u.MetricsLevel);
-                }
-                if (u.Type.has_value()) {
-                    consumer->SetType(*u.Type);
-                }
-            }
+            *request->Record.MutableTabletConfig() = MakePQTabletConfig(parameters, users, runtime, version);
 
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
             TEvPersQueue::TEvUpdateConfigResponse* result =

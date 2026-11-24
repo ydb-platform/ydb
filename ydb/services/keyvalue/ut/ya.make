@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/wrappers/ut_helpers
     ydb/library/aws_init
     ydb/services/keyvalue
+    yql/essentials/public/issue/protos
 )
 
 YQL_LAST_ABI_VERSION()

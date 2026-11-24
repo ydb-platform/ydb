@@ -555,6 +555,8 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
         return Ydb::StatusIds::PRECONDITION_FAILED;
     case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
         return Ydb::StatusIds::UNAVAILABLE;
+    case NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED:
+        return Ydb::StatusIds::UNAVAILABLE;
     case NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST:
         return Ydb::StatusIds::BAD_REQUEST;
     default:
@@ -1186,7 +1188,15 @@ protected:
             : PullStatus(ev->Get()->Record);
         if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
             if (status != Ydb::StatusIds::SUCCESS && !requestLimitReached) {
-                this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+                const auto& record = ev->Get()->Record;
+                if constexpr (requires { record.issues(); }) {
+                    if (!record.issues().empty()) {
+                        this->Reply(status, record.issues());
+                        return;
+                    }
+                }
+
+                this->Reply(status, record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
                 return;
             }
         }

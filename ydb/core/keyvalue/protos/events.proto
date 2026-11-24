@@ -1,6 +1,8 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
 package NKikimrKeyValue;
 option java_package = "ru.yandex.kikimr.proto";
 option java_outer_classname = "KeyValueProtos";
@@ -31,7 +33,16 @@ message Statuses {
         RSTATUS_WRONG_LOCK_GENERATION = 7;
         RSTATUS_BLOCKED = 8;
         RSTATUS_BAD_REQUEST = 9;
+        RSTATUS_DISK_QUOTA_EXCEEDED = 10;
     }
+}
+
+message StorageUsageReport {
+    uint64 tablet_id = 1;
+    uint32 generation = 2;
+    uint64 round = 3;
+    // Full snapshot. Channel 0 holds inline values, omitted channels have zero usage.
+    map<uint32, uint64> bytes_by_channel = 4;
 }
 
 message StorageStatusFlags {
@@ -188,6 +199,7 @@ message ExecuteTransactionResult {
     string msg = 3;
     uint64 cookie = 4;
     uint64 node_id = 5;
+    repeated Ydb.Issue.IssueMessage issues = 6;
 }
 
 message GetStorageChannelStatusRequest {

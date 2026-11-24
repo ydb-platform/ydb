@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -128,7 +129,7 @@ TMap<TString, EDiskUsageStatus> CheckStoragePoolsQuotas(const THashMap<TString, 
 ui64 GetTotalDiskUsage(const NKikimrSubDomains::TDiskSpaceUsage& usage) {
     const auto& tables = usage.GetTables();
     const auto& topics = usage.GetTopics();
-    return tables.GetTotalSize() + topics.GetAccountSize();
+    return tables.GetTotalSize() + usage.GetKeyValueBytes() + topics.GetAccountSize();
 }
 
 // Recomputes the effective disk space quotas and the quota-accounted usage from the raw subdomain description
@@ -159,7 +160,7 @@ NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
             UNIT_ASSERT_VALUES_EQUAL_C(NKikimrSubDomains::TDiskSpaceQuotaUsage::EMode_Name(quotaUsage.GetMode()),
                                        "MODE_OVERALL", hint);
             expected[""] = TExpectedEntry{
-                .Usage = usage.GetTables().GetTotalSize() + (topicsAccounted ? usage.GetTopics().GetAccountSize() : 0),
+                .Usage = usage.GetTables().GetTotalSize() + usage.GetKeyValueBytes() + (topicsAccounted ? usage.GetTopics().GetAccountSize() : 0),
                 .Quotas = effective(quotas.data_size_hard_quota(), quotas.data_size_soft_quota()),
             };
         } else {
@@ -4200,6 +4201,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         runtime.GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+        runtime.GetAppData().FeatureFlags.SetEnableKeyValueStorageUsageReports(true);
+        ui64 keyValueReports = 0;
+        auto observer = runtime.AddObserver<TEvKeyValue::TEvStorageUsageReport>([&](auto&) {
+            ++keyValueReports;
+        });
 
         ui64 txId = 100;
 
@@ -4256,9 +4262,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         WriteToTopic(runtime, "/MyRoot/USER_1/Topic1", ++seqNo, msg);
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),
-                           {LsCheckDiskQuotaExceeded(true, "Message 0 was written"),
-                            LsCheckDiskSpaceQuotaUsage(runtime, "Message 0 was written")});
+        const auto domain = DescribePath(runtime, "/MyRoot/USER_1");
+        TestDescribeResult(domain, {LsCheckDiskQuotaExceeded(true, "Message 0 was written"),
+                                    LsCheckDiskSpaceQuotaUsage(runtime, "Message 0 was written")});
+        const auto& usage = domain.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+        UNIT_ASSERT_GT(usage.GetTopics().GetDataSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(usage.GetKeyValueBytes(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(keyValueReports, 0);
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(true, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer after write");

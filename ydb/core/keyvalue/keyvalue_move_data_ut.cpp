@@ -3,6 +3,7 @@
 #include "keyvalue_flat_impl.h"
 #include "keyvalue_state.h"
 #include "ut/keyvalue_move_data_test_enums.h"
+#include <library/cpp/json/json_reader.h>
 #include <util/generic/serialized_enum.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
@@ -543,6 +544,13 @@ Y_UNIT_TEST(MoveDataReferencedByTwoKeys) {
     tc.StartReassignedTablet();
 
     tc.ExecuteMoveData();
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new NMon::TEvRemoteHttpInfo("/app?section=channelstat"), 0, GetPipeConfigWithRetries());
+    const auto reply = tc.Runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(tc.Edge);
+    UNIT_ASSERT(reply);
+    NJson::TJsonValue usage;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(reply->Get()->Json, &usage), reply->Get()->Json);
+    UNIT_ASSERT_VALUES_EQUAL(usage[ToString(NKeyValue::BLOB_CHANNEL)].GetUIntegerSafe(), tc.Value.size());
 
     CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
     CmdRead({"_key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);

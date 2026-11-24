@@ -18,7 +18,7 @@ struct THelpers {
     static TString GenerateKeyFor(EItemType itemType, const ui8* data, size_t size);
     static TString GenerateKeyFor(EItemType itemType, const TString &arbitraryPart);
 
-    static void DbUpdateState(TKeyValueStoredStateData &state, ISimpleDb &db);
+    static void DbUpdateState(TKeyValueStoredStateData& state, bool diskQuotaExceeded, ISimpleDb& db);
     static void DbEraseUserKey(const TString &userKey, ISimpleDb &db);
     static void DbUpdateUserKeyValue(const TString &userKey, const TString& value, ISimpleDb &db);
     static void DbEraseTrash(const TLogoBlobID &id, ISimpleDb &db);

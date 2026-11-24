@@ -112,7 +112,7 @@ void TKeyValueState::UpdateStoredState(ISimpleDb &db, const NKeyValue::THelpers:
 {
     StoredState.SetCollectGeneration(std::get<0>(genStep));
     StoredState.SetCollectStep(std::get<1>(genStep));
-    THelpers::DbUpdateState(StoredState, db);
+    PersistState(db);
 }
 
 void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &/*ctx*/) {

@@ -2198,6 +2198,11 @@
                 "ColumnId": 3,
                 "ColumnName": "PartitionId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "StorageUsage",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2206,7 +2211,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

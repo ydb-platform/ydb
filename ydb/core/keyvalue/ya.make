@@ -64,6 +64,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/util
     ydb/public/lib/base
+    yql/essentials/core/issue
 )
 
 END()

@@ -1,7 +1,7 @@
 items:
 - name: Выбор способа миграции
   href: index.md
-- name: Миграция с помощью асинхронной репликации
+- name: Миграция с использованием асинхронной репликации
   href: async-replication.md
 - name: Первоначальная синхронизация через резервную копию
   href: ../async-replication-initial-sync.md

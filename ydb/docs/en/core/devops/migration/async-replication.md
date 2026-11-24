@@ -1,4 +1,4 @@
-# Migrating a Database Using Asynchronous Replication
+# Migration Using Asynchronous Replication
 
 This recipe transfers a row-oriented table between {{ ydb-short-name }} databases using [asynchronous replication](../../concepts/async-replication.md), then switches the application to the target. The application continues using the source during the initial transfer. Writes must stop for final verification and cutover.
 
@@ -171,7 +171,7 @@ This procedure requires an available source. Otherwise, use the [source failure 
 
 ### Stop Writes {#stop-writes}
 
-Stop source writes from applications, background jobs, loaders, and retry deliveries. Wait for active transactions to finish and prevent old writers from restarting. **Write downtime starts here.**
+**Start of write downtime.** Stop source writes from applications, background jobs, loaders, and retry deliveries. Wait for active transactions to finish and prevent old writers from restarting.
 
 ### Check Applied Changes {#check-replication}
 
@@ -296,7 +296,7 @@ Wait until `done` appears; neither `paused` nor `running` should remain. Using a
 
 Switch application endpoints, database paths, TLS/CA settings, and authentication to the target. In this example, the source table is `original_table` and the target is `replica_table`: update the name in relative application SQL queries as well. Also check absolute SQL paths, `PRAGMA TablePathPrefix`, migration tools, and background jobs. Prepare missing objects and indexes before running dependent queries, then recreate connections using the application's deployment procedure.
 
-Enable writes **only on the target** and verify real application scenarios. **Write downtime ends here.** Keep source writes disabled. After new target writes, returning to the source requires reconciling new changes; changing the endpoint back is insufficient.
+Enable writes **only on the target** and verify real application scenarios. **End of write downtime.** Keep source writes disabled. After new target writes, returning to the source requires reconciling new changes; changing the endpoint back is insufficient.
 
 ## 6. Drop the Replication Instance, If Needed {#cleanup}
 

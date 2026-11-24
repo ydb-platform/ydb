@@ -70,7 +70,7 @@ The user account that is used to connect to the source database must have the fo
 
 Replica objects are created or attached using the account that created the asynchronous replication instance.
 
-When replica objects are created automatically (`INITIAL_SCAN = TRUE`), access rights are not copied from the source to the target. When initial synchronization uses backup and restore, access rights and table ownership may be restored from the backup, depending on its contents and the import settings. For more information about access rights, see the [reference](../security/short-access-control-notation.md#access-rights).
+When replica objects are created automatically (`INITIAL_SCAN = TRUE`), access rights are not copied from the source to the target. When initial synchronization uses backup and restore, access rights and object ownership may be restored from the backup, depending on its contents and the import settings. For more information about access rights, see the [reference](../security/short-access-control-notation.md#access-rights).
 
 {% endnote %}
 
@@ -107,7 +107,7 @@ Both methods require reading the source data and writing it to the target. Their
 | Network transfer | Initial data is transferred from the source changefeeds to the target | Data is transferred from the source to S3 and then from S3 to the target; export compression can reduce the transfer volume |
 | Setup and operation | Synchronization starts automatically when replication is created | Requires S3 storage, separate backup and restore operations, checking their completion, and starting replication |
 
-For practical selection criteria and resource preparation, see the [migration planning guide](../devops/migration/index.md#initial-sync).
+For selection criteria and resource preparation, see the [migration planning guide](../devops/migration/index.md#initial-sync).
 
 ### Change Data Replication {#replication-of-changes}
 
@@ -123,7 +123,7 @@ You can also get the replication lag from the [description](../reference/ydb-cli
 
 ## Storing Changes in the Source {#availability-period}
 
-Accumulated CDC changefeeds consume storage in the source database. Their volume can grow substantially during initial scanning or replication lag; storage usage depends on processing acknowledgments and the message availability period. {#changefeed-storage}
+Messages in changefeeds consume storage in the source database. Their volume can grow substantially during initial scanning or replication lag; storage usage depends on processing acknowledgments and the message availability period. {#changefeed-storage}
 
 The [AVAILABILITY_PERIOD](../yql/reference/syntax/create-async-replication.md#params) parameter determines how long changefeeds retain messages whose processing has not yet been acknowledged by replication. It is set when replication is created and cannot be changed using `ALTER ASYNC REPLICATION`.
 
@@ -144,26 +144,24 @@ With `'UNLIMITED'`, replication uses an [important consumer](datamodel/topic.md#
 
 ## Replication Scope {#replication-scope}
 
-The set of source objects is fixed when the replication instance is created. See the [planning guide](../devops/migration/index.md#replication-scope) for grouping tables from different applications and large tables.
+See [Restrictions](#restrictions) for supported objects and rules governing changes to the object set.
 
 ## Restrictions {#restrictions}
 
-* The set of replicated objects is immutable and is generated when {{ ydb-short-name }} creates an asynchronous replication instance.
-* {{ ydb-short-name }} supports the following types of replicated objects:
+* The source object set is fixed when the asynchronous replication instance is created. For table grouping criteria, see the [migration planning guide](../devops/migration/index.md#replication-scope).
+* Object support depends on the object type:
 
-  * [row-based tables](datamodel/table.md#row-oriented-tables), including those with synchronous secondary indexes (unique indexes are supported; vector indexes are excluded)
-  * [directories](datamodel/dir.md)
+  | Object type | Replication support |
+  | --- | --- |
+  | [Row-based tables](datamodel/table.md#row-oriented-tables) | Supported, including synchronous secondary indexes and unique indexes. Vector indexes are not supported; availability of other index types and sequences depends on both database versions |
+  | [Directories](datamodel/dir.md) | Replicates row-based tables in the directory and its subdirectories that existed when the instance was created. Empty directories are not transferred |
+  | Other schema objects | Not transferred by row-table replication: column-oriented tables and their stores, coordination nodes, secrets, views, external data sources and tables, transfers, streaming queries, backup collections, resource pools and their classifiers |
+  | User topics and changefeeds | The initial scan does not transfer their definitions. Restoring a backup may restore definitions, but row-table replication does not transfer their messages or subsequent changes |
 
-    {{ ydb-short-name }} will replicate all row-based tables that are located in the given directories and subdirectories at the time the asynchronous replication instance is created.
-
-* With the default configuration, during asynchronous replication you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
-* During asynchronous replication, replicas are available only for reading.
-
-Row-table replication does not transfer column-oriented tables and their stores, coordination nodes, secrets, views, external data sources and tables, transfers, streaming queries, backup collections, resource pools and their classifiers, or other schema objects, including empty directories. Support for index types and sequences depends on the versions of both databases.
-
-The initial scan does not transfer definitions of user topics or changefeeds. Restoring a backup may restore their definitions, but row-table replication does not transfer their messages or subsequent changes in these streams. This restriction does not refer to the service CDC changefeeds that replication itself creates to transfer tables.
-
-Initial permissions and ownership depend on [how replica objects are created](#init). Permission and ownership changes made after replication starts are not automatically transferred to the target. With the default configuration, schema changes are not transferred automatically either; support for transferring schema changes when additional capabilities are enabled depends on the version and cluster settings.
+* Replication creates service changefeeds on the source to transfer tables. The restriction on transferring user topic messages does not apply to these service changefeeds: they carry the replicated table data.
+* During asynchronous replication, replica objects are read-only.
+* Initial permissions and ownership depend on [how replica objects are created](#init). Permission and ownership changes made after replication starts are not automatically transferred to the target.
+* This article describes the mode with the server flag `EnableAsyncReplicationSchemaChanges` disabled (its default value is `false`). In this mode, schema changes are not transferred automatically, and [adding or deleting columns](../yql/reference/syntax/alter_table/columns.md) in source tables is blocked during replication. Schema change replication is outside the scope of this article.
 
 ## Error Handling During Asynchronous Replication {#error-handling}
 

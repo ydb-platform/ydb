@@ -15,5 +15,5 @@ Main subsections:
 
 * [{#T}](observability/index.md) — tools for observing {{ ydb-short-name }} clusters.
 * [{#T}](backup-and-recovery/index.md) — backup and recovery of {{ ydb-short-name }} clusters.
-* [{#T}](migration/index.md): choosing a cross-cluster migration method, transferring data through a backup, and [step-by-step migration using asynchronous replication](migration/async-replication.md).
-* [{#T}](async-replication-initial-sync.md): transferring initial data using backup and restore, and starting asynchronous replication.
+* [{#T}](migration/index.md) – choosing a cross-cluster migration method and [migration using asynchronous replication](migration/async-replication.md), including [initial synchronization using a backup](async-replication-initial-sync.md).
+* [{#T}](async-replication-initial-sync.md) – transferring initial data using backup and restore, and starting asynchronous replication.

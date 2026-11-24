@@ -260,7 +260,6 @@ async def check_retained_session(replicas, probe, workload):
             await expect_output(sdk, b"EXPIRED")
 
 
-
 @pytest.mark.parametrize("workload", ["query-session", "table-session", "coordination-session"])
 def test_retained_session_after_replica_switch(replicas, workload):
     asyncio.run(check_retained_session(replicas, yatest.common.binary_path(PROBE), workload))

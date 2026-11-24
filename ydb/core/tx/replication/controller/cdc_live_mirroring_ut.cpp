@@ -255,6 +255,7 @@ Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
     Y_UNIT_TEST(InitialScanMirrorsCdcHistoryAndConsumerOffset) {
         auto flags = TopicReplicationFlags();
         flags.FeatureFlags.SetEnableCdcReplication(true);
+        flags.FeatureFlags.SetEnableCdcHandoff(true);
         TLiveCdcMirror test(flags);
         test.InitialScanAndMirror();
         test.ForceDoneTrimsHistory();

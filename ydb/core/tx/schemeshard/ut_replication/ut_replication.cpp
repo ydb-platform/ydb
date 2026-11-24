@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             Topic = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
         }
 
-        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected) {
+        void AlterTopic(const auto& edit, const NKikimr::TPathId* owner, NKikimrScheme::EStatus expected, ui64 trimId = 0) {
             const auto desc = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed/streamImpl").GetPathDescription();
             auto* request = AlterPQGroupRequest(++TxId, "/MyRoot/Table/Feed", R"(Name: "streamImpl")");
             auto& tx = *request->Record.MutableTransaction(0);
@@ -779,6 +779,9 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             config = desc.GetPersQueueGroup().GetPQTabletConfig();
             config.ClearPartitionKeySchema();
             edit(config);
+            if (trimId) {
+                tx.MutableAlterPersQueueGroup()->SetTrimCdcReplicationTxId(trimId);
+            }
 
             AsyncSend(Runtime, SchemeShard, request);
             TestModificationResult(Runtime, TxId, expected);
@@ -801,6 +804,34 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
                 mirror->SetConsumer(Consumer);
             }, &Owner, NKikimrScheme::StatusAccepted);
             Env.TestWaitNotification(Runtime, TxId);
+        }
+
+        void PrepareHandoff() {
+            Attach(NKikimrScheme::StatusAccepted);
+            Env.TestWaitNotification(Runtime, TxId);
+
+            auto* request = InternalTransaction(AlterTableRequest(++TxId, "/MyRoot", R"(Name: "Table")"));
+            auto& replica = *request->Record.MutableTransaction(0)->MutableAlterTable()->MutableReplicationConfig();
+            replica = DescribePath(Runtime, "/MyRoot/Table").GetPathDescription().GetTable().GetReplicationConfig();
+            replica.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+            AsyncSend(Runtime, SchemeShard, request);
+            TestModificationResult(Runtime, TxId);
+            Env.TestWaitNotification(Runtime, TxId);
+        }
+
+        auto* DetachRequest(bool activateFeed) {
+            auto* request = InternalTransaction(AlterTableRequest(++TxId, "/MyRoot", ""));
+            auto& tx = *request->Record.MutableTransaction(0);
+            const auto table = DescribePath(Runtime, "/MyRoot/Table").GetPathDescription().GetSelf().GetPathId();
+            NKikimr::TPathId(SchemeShard, table).ToProto(tx.MutableAlterTable()->MutablePathId());
+            Owner.ToProto(tx.MutableExpectedReplicationOwnerPathId());
+            if (activateFeed) {
+                const auto feed = DescribePrivatePath(Runtime, "/MyRoot/Table/Feed").GetPathDescription().GetSelf().GetPathId();
+                NKikimr::TPathId(SchemeShard, feed).ToProto(tx.MutableAlterTable()->AddActivateCdcStreams());
+            } else {
+                tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            }
+            return request;
         }
 
         void Split(ui64 boundary, NKikimrScheme::EStatus expected) {
@@ -848,6 +879,52 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         }
     };
 
+    Y_UNIT_TEST(CdcHandoffRequiresExplicitStreamCommand) {
+        using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+        TCdcAttachmentFixture test;
+        test.PrepareHandoff();
+        test.Runtime.GetAppData().FeatureFlags.SetEnableCdcHandoff(true);
+
+        // A SchemeShard predating field 57 only recognizes the table path and expected owner.
+        auto* empty = test.DetachRequest(true);
+        empty->Record.MutableTransaction(0)->MutableAlterTable()->ClearActivateCdcStreams();
+        AsyncSend(test.Runtime, test.SchemeShard, empty);
+        TestModificationResults(test.Runtime, test.TxId, {{NKikimrScheme::StatusInvalidParameter, "No changes specified"}});
+
+        auto* combined = test.DetachRequest(true);
+        combined->Record.MutableTransaction(0)->MutableAlterTable()->MutableReplicationConfig()->SetMode(TConfig::REPLICATION_MODE_NONE);
+        AsyncSend(test.Runtime, test.SchemeShard, combined);
+        TestModificationResults(test.Runtime, test.TxId, {{NKikimrScheme::StatusPreconditionFailed, "only the table path and stream IDs"}});
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Table"), {NLs::ReplicationMode(TConfig::REPLICATION_MODE_READ_ONLY)});
+    }
+
+    Y_UNIT_TEST_TWIN(CdcHandoffAdmission, ActivateFeed) {
+        using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+        TCdcAttachmentFixture test;
+        test.PrepareHandoff();
+
+        AsyncSend(test.Runtime, test.SchemeShard, test.DetachRequest(true));
+        TestModificationResults(test.Runtime, test.TxId, {{NKikimrScheme::StatusPreconditionFailed, "EnableCdcHandoff"}});
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Table"), {NLs::ReplicationMode(TConfig::REPLICATION_MODE_READ_ONLY)});
+
+        test.Runtime.GetAppData().FeatureFlags.SetEnableCdcHandoff(ActivateFeed);
+        NActors::TBlockEvents<NKikimr::TEvDataShard::TEvProposeTransactionResult> prepared(test.Runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetTxId() == test.TxId
+                && ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;
+        });
+        AsyncSend(test.Runtime, test.SchemeShard, test.DetachRequest(ActivateFeed));
+        TestModificationResult(test.Runtime, test.TxId);
+        test.Runtime.WaitFor("prepared detach", [&] { return !prepared.empty(); });
+
+        test.Runtime.GetAppData().FeatureFlags.SetEnableCdcHandoff(false);
+        prepared.Stop().Unblock();
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        TestDescribeResult(DescribePath(test.Runtime, "/MyRoot/Table"), {NLs::ReplicationMode(TConfig::REPLICATION_MODE_NONE)});
+        TestDescribeResult(DescribePrivatePath(test.Runtime, "/MyRoot/Table/Feed"), {
+            NLs::StreamState(ActivateFeed ? NKikimrSchemeOp::ECdcStreamStateReady : NKikimrSchemeOp::ECdcStreamStateDisabled),
+        });
+    }
+
     Y_UNIT_TEST(CdcTopicAttachmentSerializesWithTableSplits) {
         using namespace NKikimr;
         TCdcAttachmentFixture test;
@@ -873,6 +950,18 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST_TWIN(CdcTopicAttachmentRejectsPartitionQuorum, SchemaChanges) {
         TCdcAttachmentFixture test(SchemaChanges ? "SchemaChanges: true" : "ResolvedTimestampsIntervalMs: 1000");
         test.Attach(NKikimrScheme::StatusPreconditionFailed);
+    }
+
+    Y_UNIT_TEST_TWIN(CdcTrimRejectsKeyCompaction, AlreadyEnabled) {
+        TCdcAttachmentFixture test;
+        test.AlterTopic([&](auto& config) {
+            config.SetReplicationSourceConsumer(test.Consumer);
+            config.SetEnableCompactification(AlreadyEnabled);
+        }, &test.Owner, NKikimrScheme::StatusAccepted);
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+
+        test.AlterTopic([](auto& config) { config.SetEnableCompactification(!AlreadyEnabled); },
+            &test.Owner, NKikimrScheme::StatusPreconditionFailed, test.TxId + 1);
     }
 
     Y_UNIT_TEST(ConsumerAlterOnRunningCdcMirror) {

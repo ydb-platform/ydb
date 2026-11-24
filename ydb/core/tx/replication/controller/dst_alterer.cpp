@@ -249,26 +249,32 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::IndexTable: {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
+            auto& alter = *tx.MutableAlterTable();
+            DstPathId.ToProto(alter.MutablePathId());
+
             if (ClearingCdcSetup) {
-                *tx.MutableAlterTable()->MutableReplicationConfig() = SetupReplicationConfig;
+                *alter.MutableReplicationConfig() = SetupReplicationConfig;
             } else {
-                tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
-                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+                for (const auto& stream : CdcStreams) {
+                    if (stream.Activate) {
+                        stream.PathId.ToProto(alter.AddActivateCdcStreams());
+                    }
+                }
+                // Older SchemeShards must see an empty ALTER if activation is required.
+                if (!alter.ActivateCdcStreamsSize()) {
+                    alter.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+                }
             }
+
             if (CdcTableVersion) {
                 auto& condition = *tx.AddApplyIf();
                 condition.SetPathId(DstPathId.LocalPathId);
                 condition.SetPathVersion(CdcTableVersion);
             }
-            for (const auto& stream : CdcStreams) {
-                if (stream.Activate && !ClearingCdcSetup) {
-                    stream.PathId.ToProto(tx.MutableAlterTable()->AddActivateCdcStreams());
-                }
-            }
             break;
+        }
         case TReplication::ETargetKind::CdcTopic:
         case TReplication::ETargetKind::Topic:
             tx.CopyFrom(TopicTx);

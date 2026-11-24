@@ -447,9 +447,10 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     // YDB supported recursive directories handling along with --destination-prefix option.
     // So if we use it, then we can suppose that YDB already supports expanding of items.
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
+    const bool relativeDatabase = !config.Database.empty() && !config.Database.StartsWith('/');
     if (expandItems && settings.Item_.empty()) {
         constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
-        const TString rootPath = !config.Database.empty() && !config.Database.StartsWith('/') ? TString(".") : config.Database;
+        const TString rootPath = relativeDatabase ? TString(".") : config.Database;
         settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : rootPath, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
@@ -464,10 +465,9 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TTableClient tableClient(driver);
 
     if (expandItems) {
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
-        if (!config.Database.empty() && !config.Database.StartsWith('/')
-            && CommonSourcePath && !CommonSourcePath.StartsWith('/')) {
-            TStringBuf sourceRoot(CommonSourcePath);
+        ExpandItems(schemeClient, tableClient, settings, relativeDatabase ? TVector<TRegExMatch>{} : ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        if (relativeDatabase) {
+            TStringBuf sourceRoot = CommonSourcePath ? TStringBuf(CommonSourcePath) : TStringBuf(".");
             while (sourceRoot.ChopSuffix("/")) {
             }
             for (auto& item : settings.Item_) {
@@ -478,6 +478,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
                     item.Src = source.empty() ? TString(".") : TString(source);
                 }
             }
+            ExcludeItems(settings, ExclusionPatterns);
         }
         if (settings.Item_.empty()) {
             if (!ExclusionPatterns.empty()) {

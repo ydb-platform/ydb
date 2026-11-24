@@ -211,6 +211,12 @@ Y_UNIT_TEST_SUITE(RelativePathCompatibility) {
         UNIT_ASSERT_STRING_CONTAINS(output, "CREATE TABLE orders (");
     }
 
+    Y_UNIT_TEST_F(BenchmarkKeepsExplicitAbsolutePaths, TCliTestFixture) {
+        const auto output = RunCli({"-d", "tenant", "workload", "clickbench",
+            "--path", "/test_database/bench", "run", "--dry-run"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "/test_database/bench");
+    }
+
     Y_UNIT_TEST_F(TpccPreflightUsesTheSelectedDatabase, TTpccFixture) {
         struct TCase {
             TString Database;

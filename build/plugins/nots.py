@@ -868,6 +868,11 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     if _use_hermetic_node_modules(unit):
         unit.on_setup_extract_node_modules_layer_recipe(pm.module_path)
     else:
+        from lib.nots.package_manager.common_config import common_config_inputs
+
+        pj = pm.load_package_json_from_dir(pm.sources_path)
+        # The recipe installs from the isolated test source sandbox, not build inputs.
+        unit.ondata(["arcadia/" + filename for filename in common_config_inputs(pj, pm.sources_root)])
         unit.on_setup_install_node_modules_recipe(pm.module_path)
     unit.on_setup_extract_output_tars_recipe(pm.module_path)
     __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
@@ -930,6 +935,18 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         unit.onpeerdir(local_peers)
         __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
 
+    if not has_deps and settings.get("pnpmfile"):
+        from lib.nots.package_manager.common_config import common_config_inputs
+        from lib.nots.package_manager.utils import s_rooted
+
+        __set_append(
+            unit,
+            "_NODE_MODULES_INOUTS",
+            _build_directives(
+                ["hide", "input"], [s_rooted(p) for p in common_config_inputs(pj, pm.sources_root, effective_config)]
+            ),
+        )
+
     if has_deps:
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
         from lib.nots.package_manager import constants
@@ -959,9 +976,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         }
         ins = [path for path in ins if path not in source_manifests]
 
-        if not use_hermetic_node_modules:
+        if not use_hermetic_node_modules or settings.get("pnpmfile"):
             from lib.nots.package_manager.common_config import common_config_inputs
 
+            # beforePacking hooks also run in the build action, including hermetic builds.
             ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root, effective_config))
             # Legacy builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
@@ -1114,6 +1132,7 @@ def _NOTS_TOOL_CONFIGURE(unit: ymake.Unit):
     unit.set(["_NOTS_BSDTAR_ENV", "NOTS_BSDTAR_PATH=$BSDTAR_RESOURCE_GLOBAL/bsdtar"])
     tool = '${tool:"' + tool_path + '"} ${hide:TS_FAKEID} ${hide;input:T0_SETTINGS_PATH}'
     tool += ' ${env:_NOTS_BSDTAR_ENV} ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/settings.schema.json"}'
+    tool += ' ${hide;input:"devtools/frontend_build_platform/nots/tier0-settings/src/pnpmfile.mjs"}'
     unit.set(["NOTS_TOOL", tool])
     unit.set(["_NOTS_RECIPE_DEPENDS", tool_path])
     unit.set(["_NOTS_RECIPE", tool_path + "/nots-recipe"])

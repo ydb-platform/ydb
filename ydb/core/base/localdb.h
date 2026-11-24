@@ -141,6 +141,7 @@ typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
 
 TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
+TCompactionPolicyPtr TryParseCompactionPolicy(const NKikimrCompaction::TCompactionPolicy& policy, TString& err);
 
 bool ValidateCompactionPolicy(const TCompactionPolicy& policy, TString& err);
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);

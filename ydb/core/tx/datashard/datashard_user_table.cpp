@@ -304,22 +304,23 @@ bool TUserTable::IsIncrementalRestore() const {
 
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
-    // We expect schemeshard to send us full list of storage rooms
-    if (descr.GetPartitionConfig().StorageRoomsSize()) {
+    const auto& config = descr.GetPartitionConfig();
+    const bool hasFullRoomMap = config.StorageRoomsSize() != 0;
+    if (hasFullRoomMap) {
         Rooms.clear();
     }
 
-    for (const auto& roomDescr : descr.GetPartitionConfig().GetStorageRooms()) {
+    for (const auto& roomDescr : config.GetStorageRooms()) {
         TStorageRoom::TPtr room = new TStorageRoom(roomDescr);
         Rooms[room->GetId()] = room;
     }
 
-    for (const auto& family : descr.GetPartitionConfig().GetColumnFamilies()) {
+    for (const auto& family : config.GetColumnFamilies()) {
         auto it = Families.find(family.GetId());
         if (it == Families.end()) {
             it = Families.emplace(std::make_pair(family.GetId(), TUserFamily(family))).first;
         } else {
-            it->second.Update(family);
+            it->second.Update(family, hasFullRoomMap);
         }
     }
 
@@ -735,6 +736,7 @@ void TUserTable::ApplyAlter(
         }
     }
 
+    bool applyTieringPolicy = configDelta.HasTieringPolicy();
     if (configDelta.HasCompactionPolicy()) {
         TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> oldPolicy =
                 txc.DB.GetScheme().Tables.find(LocalTid)->second.CompactionPolicy;
@@ -748,10 +750,11 @@ void TUserTable::ApplyAlter(
             newPolicy.Serialize(*config.MutableCompactionPolicy());
         } else {
             strError = TString("cannot change compaction policy: ") + strError;
+            applyTieringPolicy = false;
         }
     }
 
-    if (configDelta.HasTieringPolicy()) {
+    if (applyTieringPolicy) {
         const auto policy = NTable::TieringPolicyFromProto(configDelta.GetTieringPolicy());
         for (ui32 tid : tids) {
             alter.SetTieringPolicy(tid, policy);

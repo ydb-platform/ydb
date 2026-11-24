@@ -12,6 +12,7 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 
 namespace NKikimr {
@@ -80,6 +81,76 @@ NTable::TScheme ReadLocalScheme(TTestActorRuntime& runtime, ui64 shard) {
     return scheme;
 }
 
+struct TTieringTestTable {
+    static constexpr ui32 TierId = 42;
+    static constexpr ui32 RoomId = 7;
+
+    ui64 Shard;
+    TTableId Id;
+    NTable::TTieringPolicy Policy;
+    NLocalDb::TCompactionPolicyPtr CompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
+
+    TTieringTestTable(Tests::TServer::TPtr server, TActorId sender) {
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
+        InitRoot(server, sender);
+
+        auto coldGeneration = CompactionPolicy->Generations.back();
+        coldGeneration.TierId = TierId;
+        CompactionPolicy->Generations.push_back(coldGeneration);
+        // Inject the normalized settings at the SchemeShard -> DataShard boundary.
+        auto patch = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+                return;
+            }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+            if (!tx.HasCreateTable() || tx.GetCreateTable().GetName() != "tiered") {
+                return;
+            }
+            auto& table = *tx.MutableCreateTable();
+            auto& config = *table.MutablePartitionConfig();
+            config.ClearCompactionPolicy();
+            CompactionPolicy->Serialize(*config.MutableCompactionPolicy());
+            auto& room = *config.AddStorageRooms();
+            room.SetRoomId(RoomId);
+            auto& data = *room.AddChannels();
+            data.SetPurpose(NKikimrStorageSettings::TChannelPurpose::Data);
+            data.SetChannel(2);
+            for (ui32 channel : {1, 2}) {
+                auto& external = *room.AddChannels();
+                external.SetPurpose(NKikimrStorageSettings::TChannelPurpose::External);
+                external.SetChannel(channel);
+            }
+            auto& family = *config.AddColumnFamilies();
+            family.SetId(TierId);
+            family.SetRoom(RoomId);
+            family.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            family.MutableStorageConfig()->SetDataThreshold(64);
+            family.MutableStorageConfig()->SetExternalThreshold(128);
+            family.SetKeyIndexInDescriptor(false);
+
+            const auto* column = FindIfPtr(table.GetColumns(), [](const auto& col) { return col.GetName() == "value"; });
+            UNIT_ASSERT(column);
+            Policy.ColumnTag = column->GetId();
+            Policy.Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+            Policy.Rules.clear();
+            auto& rule = Policy.Rules.emplace_back();
+            rule.TierId = TierId;
+            auto& range = rule.Ranges.emplace_back();
+            range.To = NTable::TTierRelativeBound{TDuration::Days(1)};
+            range.ToInclusive = true;
+            NTable::TieringPolicyToProto(Policy, *config.MutableTieringPolicy());
+            record.SetTxBody(tx.SerializeAsString());
+        });
+        TVector<ui64> shards;
+        std::tie(shards, Id) = CreateShardedTable(server, sender, "/Root", "tiered",
+            TShardedTableOptions().ShadowData(EShadowDataMode::Enabled));
+        Shard = shards.at(0);
+    }
+};
+
 // The test runtime sets up the leader Tablet Counters Aggregator only, and
 // events sent to an absent service never reach the observers.
 void SetupFollowerCountersAggregator(TTestActorRuntime &runtime) {
@@ -127,132 +198,190 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         auto server = MakeIntrusive<Tests::TServer>(settings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
-        InitRoot(server, sender);
+        TTieringTestTable tiered(server, sender);
+        auto expectedPolicy = tiered.Policy;
+        auto check = [&](bool groupIndexesInDescriptor, ui32 expectedRoom) {
+            const auto description = ReadStoredTableDescription(runtime, sender, tiered.Id.PathId.LocalPathId, tiered.Shard);
+            const auto& config = description.GetPartitionConfig();
+            UNIT_ASSERT(config.HasTieringPolicy());
+            UNIT_ASSERT(NTable::TieringPolicyFromProto(config.GetTieringPolicy()) == expectedPolicy);
+            const auto* family = FindIfPtr(config.GetColumnFamilies(), [](const auto& f) {
+                return f.GetId() == TTieringTestTable::TierId;
+            });
+            UNIT_ASSERT(family);
+            UNIT_ASSERT_VALUES_EQUAL(family->GetRoom(), expectedRoom);
+            UNIT_ASSERT(!family->GetKeyIndexInDescriptor());
+            UNIT_ASSERT_VALUES_EQUAL(family->GetGroupIndexesInDescriptor(), groupIndexesInDescriptor);
 
-        constexpr ui32 TierId = 42;
-        constexpr ui32 RoomId = 7;
-        auto compactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-        auto coldGeneration = compactionPolicy->Generations.back();
-        coldGeneration.TierId = TierId;
-        compactionPolicy->Generations.push_back(coldGeneration);
+            const auto scheme = ReadLocalScheme(runtime, tiered.Shard);
+            for (const TString name : {"__user__tiered", "__shadow__tiered"}) {
+                UNIT_ASSERT_C(scheme.TableNames.contains(name), name);
+                const auto& table = scheme.Tables.at(scheme.TableNames.at(name));
+                UNIT_ASSERT(table.TieringPolicy);
+                UNIT_ASSERT(*table.TieringPolicy == expectedPolicy);
+                UNIT_ASSERT(table.Columns.contains(expectedPolicy.ColumnTag));
+                if (expectedPolicy.ColumnTag != tiered.Policy.ColumnTag) {
+                    UNIT_ASSERT(!table.Columns.contains(tiered.Policy.ColumnTag));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(table.CompactionPolicy->Generations.size(), tiered.CompactionPolicy->Generations.size());
+                UNIT_ASSERT_VALUES_EQUAL(table.CompactionPolicy->Generations.back().TierId.value_or(0), tiered.TierId);
 
-        bool replacePolicy = false;
-        NTable::TTieringPolicy expectedPolicy;
-        auto patchScheme = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+                const auto& family = table.Families.at(tiered.TierId);
+                UNIT_ASSERT_VALUES_EQUAL(family.Room, expectedRoom);
+                UNIT_ASSERT(family.Codec == NTable::NPage::ECodec::LZ4);
+                UNIT_ASSERT_VALUES_EQUAL(family.Small, 64);
+                UNIT_ASSERT_VALUES_EQUAL(family.Large, 128);
+                UNIT_ASSERT(!family.KeyIndexInDescriptor);
+                UNIT_ASSERT_VALUES_EQUAL(family.GroupIndexesInDescriptor, groupIndexesInDescriptor);
+                if (expectedRoom == tiered.RoomId) {
+                    const auto& room = table.Rooms.at(expectedRoom);
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(room.Main), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(room.Outer), 2);
+                    UNIT_ASSERT(room.Blobs == TVector<ui8>({1, 2}));
+                }
+                for (const auto& [_, column] : table.Columns) {
+                    UNIT_ASSERT_UNEQUAL(column.Family, tiered.TierId);
+                }
+            }
+        };
+
+        check(true, tiered.RoomId);
+        RebootTablet(runtime, tiered.Shard, sender);
+        check(true, tiered.RoomId);
+
+        auto patchAlter = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
             auto& record = ev->Get()->Record;
             if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
                 return;
             }
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
-            const bool creating = tx.HasCreateTable();
-            if (!creating && !tx.HasAlterTable()) {
+            if (!tx.HasAlterTable() || tx.GetAlterTable().GetName() != "tiered") {
                 return;
             }
-            auto& table = creating ? *tx.MutableCreateTable() : *tx.MutableAlterTable();
-            if (table.GetName() != "tiered") {
-                return;
-            }
-            // Inject the per-shard settings at the same boundary used by SchemeShard.
+            auto& table = *tx.MutableAlterTable();
             auto& config = *table.MutablePartitionConfig();
             config.ClearCompactionPolicy();
-            compactionPolicy->Serialize(*config.MutableCompactionPolicy());
-            auto& room = *config.AddStorageRooms();
-            room.SetRoomId(RoomId);
-            auto& data = *room.AddChannels();
-            data.SetPurpose(NKikimrStorageSettings::TChannelPurpose::Data);
-            data.SetChannel(2);
-            for (ui32 channel : {1, 2}) {
-                auto& external = *room.AddChannels();
-                external.SetPurpose(NKikimrStorageSettings::TChannelPurpose::External);
-                external.SetChannel(channel);
-            }
-            if (creating || replacePolicy) {
-                auto& family = *config.AddColumnFamilies();
-                family.SetId(TierId);
-                family.SetRoom(RoomId);
-                if (creating) {
-                    family.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
-                    family.MutableStorageConfig()->SetDataThreshold(64);
-                    family.MutableStorageConfig()->SetExternalThreshold(128);
-                    family.SetKeyIndexInDescriptor(false);
-                } else {
-                    family.SetGroupIndexesInDescriptor(false);
-                }
-
-                const TStringBuf column = creating ? "value" : "extra";
-                expectedPolicy = {};
-                expectedPolicy.Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
-                for (const auto& col : table.GetColumns()) {
-                    if (col.GetName() == column) {
-                        expectedPolicy.ColumnTag = col.GetId();
-                    }
-                }
-                UNIT_ASSERT_UNEQUAL(expectedPolicy.ColumnTag, Max<ui32>());
-                auto& rule = expectedPolicy.Rules.emplace_back();
-                rule.TierId = TierId;
-                auto& range = rule.Ranges.emplace_back();
-                if (creating) {
-                    range.To = NTable::TTierRelativeBound{TDuration::Days(1)};
-                    range.ToInclusive = true;
-                } else {
-                    range.From = NTable::TTierAbsoluteBound{1'000'000};
-                    range.To = NTable::TTierAbsoluteBound{2'000'000};
-                }
+            config.ClearStorageRooms();
+            config.ClearColumnFamilies();
+            auto& family = *config.AddColumnFamilies();
+            family.SetId(tiered.TierId);
+            if (table.DropColumnsSize()) {
+                UNIT_ASSERT_VALUES_EQUAL(table.GetDropColumns(0).GetId(), tiered.Policy.ColumnTag);
+                const auto* extra = FindIfPtr(table.GetColumns(), [](const auto& col) { return col.GetName() == "extra"; });
+                UNIT_ASSERT(extra);
+                expectedPolicy.ColumnTag = extra->GetId();
+                auto& range = expectedPolicy.Rules.front().Ranges.front();
+                range.From = NTable::TTierAbsoluteBound{1'000'000};
+                range.To = NTable::TTierAbsoluteBound{2'000'000};
+                range.ToInclusive = false;
                 NTable::TieringPolicyToProto(expectedPolicy, *config.MutableTieringPolicy());
+                // A partial family update may omit the room.
+                family.SetGroupIndexesInDescriptor(false);
+            } else {
+                // In a full room map an omitted binding selects the default room.
+                config.AddStorageRooms()->SetRoomId(0);
             }
             record.SetTxBody(tx.SerializeAsString());
         });
 
-        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "tiered",
-            TShardedTableOptions().ShadowData(EShadowDataMode::Enabled));
-        const ui64 shard = shards.at(0);
-        auto check = [&](bool groupIndexesInDescriptor) {
-            const auto description = ReadStoredTableDescription(runtime, sender, tableId.PathId.LocalPathId, shard);
-            const auto& config = description.GetPartitionConfig();
-            UNIT_ASSERT(config.HasTieringPolicy());
-            UNIT_ASSERT(NTable::TieringPolicyFromProto(config.GetTieringPolicy()) == expectedPolicy);
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, R"(
+            ALTER TABLE `/Root/tiered` ADD COLUMN extra Uint32, DROP COLUMN value;
+        )", "/Root"), "SUCCESS");
+        check(false, tiered.RoomId);
+        RebootTablet(runtime, tiered.Shard, sender);
+        check(false, tiered.RoomId);
 
-            const auto scheme = ReadLocalScheme(runtime, shard);
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, R"(
+            ALTER TABLE `/Root/tiered` ADD COLUMN unrelated Uint32;
+        )", "/Root"), "SUCCESS");
+        check(false, 0);
+    }
+
+    Y_UNIT_TEST(RejectsInvalidTieringAltersBeforePrepare) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        auto server = MakeIntrusive<Tests::TServer>(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const TTieringTestTable table(server, sender);
+        const auto original = ReadStoredTableDescription(runtime, sender, table.Id.PathId.LocalPathId, table.Shard);
+
+        ui64 txId = 5000;
+        auto checkRejected = [&](NKikimrSchemeOp::TTableDescription alter, TStringBuf reason) {
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            tx.MutableSeqNo()->SetGeneration(Max<ui64>());
+            tx.MutableSeqNo()->SetRound(++txId);
+            table.Id.PathId.ToProto(alter.MutablePathId());
+            alter.SetName("tiered");
+            alter.SetTableSchemaVersion(original.GetTableSchemaVersion() + 1);
+            tx.MutableAlterTable()->Swap(&alter);
+            auto request = MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME,
+                table.Id.PathId.OwnerId, sender, txId, tx.SerializeAsString(), NKikimrSubDomains::TProcessingParams());
+            runtime.SendToPipe(table.Shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(sender);
+            const auto& result = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST,
+                result.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetError(0).GetKind(), NKikimrTxDataShard::TError::BAD_ARGUMENT);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetError(0).GetReason(), reason);
+
+            const auto stored = ReadStoredTableDescription(runtime, sender, table.Id.PathId.LocalPathId, table.Shard);
+            UNIT_ASSERT_VALUES_EQUAL(stored.ShortDebugString(), original.ShortDebugString());
+            const auto* storedFamily = FindIfPtr(stored.GetPartitionConfig().GetColumnFamilies(), [](const auto& family) {
+                return family.GetId() == TTieringTestTable::TierId;
+            });
+            UNIT_ASSERT(storedFamily);
+            UNIT_ASSERT(storedFamily->GetGroupIndexesInDescriptor());
+            const auto scheme = ReadLocalScheme(runtime, table.Shard);
             for (const TString name : {"__user__tiered", "__shadow__tiered"}) {
-                UNIT_ASSERT_C(scheme.TableNames.contains(name), name);
-                const auto& table = scheme.Tables.at(scheme.TableNames.at(name));
-                UNIT_ASSERT(table.TieringPolicy);
-                UNIT_ASSERT(*table.TieringPolicy == expectedPolicy);
-                UNIT_ASSERT_VALUES_EQUAL(table.CompactionPolicy->Generations.size(), compactionPolicy->Generations.size());
-                UNIT_ASSERT_VALUES_EQUAL(table.CompactionPolicy->Generations.back().TierId.value_or(0), TierId);
-
-                const auto& family = table.Families.at(TierId);
-                UNIT_ASSERT_VALUES_EQUAL(family.Room, RoomId);
-                UNIT_ASSERT(family.Codec == NTable::NPage::ECodec::LZ4);
-                UNIT_ASSERT_VALUES_EQUAL(family.Small, 64);
-                UNIT_ASSERT_VALUES_EQUAL(family.Large, 128);
-                UNIT_ASSERT(!family.KeyIndexInDescriptor);
-                UNIT_ASSERT_VALUES_EQUAL(family.GroupIndexesInDescriptor, groupIndexesInDescriptor);
-                const auto& room = table.Rooms.at(RoomId);
-                UNIT_ASSERT_VALUES_EQUAL(ui32(room.Main), 2);
-                UNIT_ASSERT_VALUES_EQUAL(ui32(room.Outer), 2);
-                UNIT_ASSERT(room.Blobs == TVector<ui8>({1, 2}));
-                for (const auto& [_, column] : table.Columns) {
-                    UNIT_ASSERT_UNEQUAL(column.Family, TierId);
-                }
+                const auto& local = scheme.Tables.at(scheme.TableNames.at(name));
+                UNIT_ASSERT_C(local.Families.at(table.TierId).GroupIndexesInDescriptor, name);
+                UNIT_ASSERT(local.Columns.contains(table.Policy.ColumnTag));
+                UNIT_ASSERT(local.TieringPolicy);
+                UNIT_ASSERT(*local.TieringPolicy == table.Policy);
+                UNIT_ASSERT_VALUES_EQUAL(local.CompactionPolicy->Generations.size(), table.CompactionPolicy->Generations.size());
+                UNIT_ASSERT_VALUES_EQUAL(local.CompactionPolicy->Generations.back().TierId.value_or(0), table.TierId);
             }
         };
 
-        check(true);
-        RebootTablet(runtime, shard, sender);
-        check(true);
+        NKikimrSchemeOp::TTableDescription drop;
+        auto* column = drop.AddDropColumns();
+        column->SetId(table.Policy.ColumnTag);
+        column->SetName("value");
+        checkRejected(std::move(drop), "Cannot drop column value used by the tiering policy");
 
-        replacePolicy = true;
-        WaitTxNotification(server, sender, AsyncAlterAddExtraColumn(server, "/Root", "tiered"));
-        check(false);
+        NKikimrSchemeOp::TTableDescription invalidRange;
+        auto& invalidConfig = *invalidRange.MutablePartitionConfig();
+        auto& family = *invalidConfig.AddColumnFamilies();
+        family.SetId(table.TierId);
+        family.SetGroupIndexesInDescriptor(false);
+        auto& policy = *invalidConfig.MutableTieringPolicy();
+        NTable::TieringPolicyToProto(table.Policy, policy);
+        auto& range = *policy.MutableRules(0)->MutableRanges(0);
+        range.Clear();
+        checkRejected(invalidRange, "unbounded range");
+        range.MutableTo();
+        checkRejected(std::move(invalidRange), "Tier bound has no value");
 
-        replacePolicy = false;
-        WaitTxNotification(server, sender, AsyncAlterDropColumn(server, "/Root", "tiered", "value"));
-        check(false);
-        RebootTablet(runtime, shard, sender);
-        check(false);
+        NKikimrSchemeOp::TTableDescription shrink;
+        auto& config = *shrink.MutablePartitionConfig();
+        auto& compaction = *config.MutableCompactionPolicy();
+        table.CompactionPolicy->Serialize(compaction);
+        compaction.MutableGeneration()->RemoveLast();
+        compaction.MutableGeneration(compaction.GenerationSize() - 1)->SetTierId(table.TierId);
+        auto replacement = table.Policy;
+        replacement.Rules.front().Ranges.front().To = NTable::TTierRelativeBound{TDuration::Days(2)};
+        NTable::TieringPolicyToProto(replacement, *config.MutableTieringPolicy());
+        checkRejected(std::move(shrink), "Decreasing number of levels");
+
+        NKikimrSchemeOp::TTableDescription unbind;
+        auto& unbound = *unbind.MutablePartitionConfig()->MutableCompactionPolicy();
+        table.CompactionPolicy->Serialize(unbound);
+        unbound.MutableGeneration(unbound.GenerationSize() - 1)->ClearTierId();
+        checkRejected(std::move(unbind), "tier 42 that has no compaction generation");
     }
 
     Y_UNIT_TEST(DeleteTtlDoesNotSetTieringPolicy) {

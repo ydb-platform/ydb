@@ -52,7 +52,7 @@ struct TUserTable : public TThrRefBase {
         {
         }
 
-        void Update(const NKikimrSchemeOp::TFamilyDescription& family) {
+        void Update(const NKikimrSchemeOp::TFamilyDescription& family, bool hasFullRoomMap = false) {
             if (family.HasColumnCodec()) {
                 ColumnCodec = family.GetColumnCodec();
                 Codec = ToDbCodec(ColumnCodec);
@@ -110,7 +110,10 @@ struct TUserTable : public TThrRefBase {
                     StorageConfig.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
                 }
             }
-            Room.Reset(new TStorageRoom(family.GetRoom()));
+            // SchemeShard omits Room for families assigned to room 0 in a full room map.
+            if (family.HasRoom() || hasFullRoomMap) {
+                Room.Reset(new TStorageRoom(family.GetRoom()));
+            }
         }
 
         static ui32 SaveGetThreshold(ui32 value) {

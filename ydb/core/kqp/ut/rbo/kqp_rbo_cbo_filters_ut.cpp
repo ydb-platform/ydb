@@ -4,6 +4,10 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
 #include <ydb/core/kqp/opt/rbo/rules/kqp_cbo_trees.h>
 
+#include <initializer_list>
+#include <optional>
+#include <tuple>
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpRboCboFilters) {
@@ -27,12 +31,35 @@ Y_UNIT_TEST_SUITE(KqpRboCboFilters) {
                 CREATE TABLE `/Root/C` (k Int32 NOT NULL, a Int32, x Int32, PRIMARY KEY(k));
                 CREATE TABLE `/Root/F` (k Int32 NOT NULL, PRIMARY KEY(k));
             )", true);
-            execute(R"(
-                UPSERT INTO `/Root/A` (k) VALUES (1), (2), (3);
-                UPSERT INTO `/Root/F` (k) VALUES (1), (2), (3);
-                UPSERT INTO `/Root/B` (k, a, x) VALUES (11, 1, 5), (12, 1, 6), (13, 1, 5), (21, 2, NULL);
-                UPSERT INTO `/Root/C` (k, a, x) VALUES (101, 1, 5), (102, 1, NULL), (201, 2, NULL), (301, 3, NULL);
-            )");
+            // Seed through the table API so the fixture works with either optimizer.
+            auto tableClient = kikimr.GetTableClient();
+            auto seed = [&](const std::string& table, NYdb::TValue rows) {
+                auto result = tableClient.BulkUpsert(table, std::move(rows)).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), table << ": " << result.GetIssues().ToString());
+            };
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+            for (i32 k : {1, 2, 3}) {
+                keys.AddListItem().BeginStruct().AddMember("k").Int32(k).EndStruct();
+            }
+            const auto keyRows = keys.EndList().Build();
+            seed("/Root/A", keyRows);
+            seed("/Root/F", keyRows);
+
+            auto seedJoinRows = [&](const std::string& table, std::initializer_list<std::tuple<i32, i32, std::optional<i32>>> data) {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [k, a, x] : data) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("k").Int32(k)
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("x").OptionalInt32(x)
+                        .EndStruct();
+                }
+                seed(table, rows.EndList().Build());
+            };
+            seedJoinRows("/Root/B", {{11, 1, 5}, {12, 1, 6}, {13, 1, 5}, {21, 2, std::nullopt}});
+            seedJoinRows("/Root/C", {{101, 1, 5}, {102, 1, std::nullopt}, {201, 2, std::nullopt}, {301, 3, std::nullopt}});
             for (bool equalNulls : {false, true}) {
                 // Legacy SQL accepts only equality predicates in JOIN ON.
                 if (equalNulls && !newRbo) {

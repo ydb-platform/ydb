@@ -238,6 +238,10 @@ namespace NActors {
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
+        const TActorId& GetDefaultSender() const noexcept {
+            return DefSelfID;
+        }
+
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *

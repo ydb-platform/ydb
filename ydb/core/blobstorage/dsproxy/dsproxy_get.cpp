@@ -12,11 +12,13 @@
 #include <util/system/datetime.h>
 #include "dsproxy_get_impl.h"
 
+#include <ydb/library/actors/core/event_bundle.h>
+
 namespace NKikimr {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-struct TEvAccelerateGet : public TEventLocal<TEvAccelerateGet, TEvBlobStorage::EvAccelerateGet> {
+struct TEvAccelerateGet final : TEventLocalBundled<TEvAccelerateGet, TEvBlobStorage::EvAccelerateGet> {
     ui64 CauseIdx;
     TEvAccelerateGet(ui64 causeIdx)
         : CauseIdx(causeIdx)
@@ -55,7 +57,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     TStackVec<TDiskCounters, TypicalDisksInGroup> DiskCounters;
 
     ui32 GetsAccelerated = 0;
-    bool IsGetAccelerateScheduled = false;
+    TSchedulerCookieHolder GetAccelerationCookie;
     ui32 PutsAccelerated = 0;
     bool IsPutAccelerateScheduled = false;
 
@@ -63,7 +65,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     TDuration LongRequestThreshold;
 
     void Handle(TEvAccelerateGet::TPtr &ev) {
-        IsGetAccelerateScheduled = false;
+        GetAccelerationCookie.Detach();
         RootCauseTrack.OnAccelerate(ev->Get()->CauseIdx);
         AccelerateGet();
     }
@@ -344,7 +346,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TryScheduleGetAcceleration() {
-        if (!IsGetAccelerateScheduled && GetsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
+        if (!GetAccelerationCookie.Get() && GetsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
             // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx) / 1000;
@@ -354,8 +356,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Get");
                 if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Get");
-                    Schedule(nextAcceleration - now, new TEvAccelerateGet(causeIdx));
-                    IsGetAccelerateScheduled = true;
+                    auto timer = MakeBundledWithCookie<TEvAccelerateGet>({.Recipient = SelfId()}, causeIdx);
+                    TActivationContext::Schedule(nextAcceleration - now, std::move(timer.Event),
+                        timer.SchedulerCookie.Release());
+                    GetAccelerationCookie.Reset(timer.OwnerCookie.Release());
                 } else {
                     AccelerateGet();
                 }

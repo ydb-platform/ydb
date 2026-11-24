@@ -364,8 +364,9 @@ TCompletionChunkRead::~TCompletionChunkRead() {
 
 void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     Read->Span.Event("PDisk.CompletionChunkRead.Exec");
-    THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
-        Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
+    auto event = MakeBundled<TEvChunkReadResult>({.Recipient = Read->Sender, .Sender = actorSystem->GetDefaultSender()},
+        NKikimrProto::OK, Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
+    auto* result = event->StaticCastAsLocal<TEvChunkReadResult>();
 
     if (!Read->ChunkEncrypted) {
         size_t headroom = Read->Offset % PDisk->Format.SectorSize;
@@ -394,7 +395,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     LWTRACK(PDiskChunkResponseTime, Read->Orbit, PDisk->PCtx->PDiskId, Read->ReqId.Id, Read->PriorityClass, responseTimeMs,
             Read->Size);
 
-    actorSystem->Send(Read->Sender, result.Release());
+    actorSystem->Send(std::move(event));
     Read->IsReplied = true;
     Read->Span.EndOk();
 

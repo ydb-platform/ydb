@@ -342,6 +342,7 @@ namespace NActors {
 
         void DoSchedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) {
             Y_UNUSED(workerId);
+            TSchedulerCookieHolder pending(cookie);
 
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
@@ -362,14 +363,14 @@ namespace NActors {
 
             if (Runtime->SingleSysEnv || !Runtime->ScheduledEventFilterFunc(*Runtime, ev, delay, deadline)) {
                 ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
-                Runtime->GetMailbox(Runtime->FirstNodeId + NodeIndex, mailboxHint).Schedule(TScheduledEventQueueItem(deadline, ev, cookie));
+                TScheduledEventQueueItem item(deadline, ev, pending.Get());
+                pending.Release();
+                Runtime->GetMailbox(Runtime->FirstNodeId + NodeIndex, mailboxHint).Schedule(item);
                 Runtime->MailboxesHasEvents.Signal();
                 if (verbose)
                     Cerr << "Event was added to scheduled queue\n";
             } else {
-                if (cookie) {
-                    cookie->Detach();
-                }
+                pending.Detach();
                 if (verbose) {
                     Cerr << "Scheduled event for " << ev->GetRecipientRewrite().ToString() << " was dropped\n";
                 }

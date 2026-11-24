@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "events.h"
 #include "event_local.h"
+#include "event_bundle.h"
 #include "hfunc.h"
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -109,7 +110,7 @@ Y_UNIT_TEST_SUITE(SchedulerActorLinux) {
         TAtomic PendingDestroyed = 0;
     };
 
-    struct TEvTimer : TEventLocal<TEvTimer, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+    struct TEvTimer final : TEventLocalBundled<TEvTimer, EventSpaceBegin(TEvents::ES_PRIVATE)> {
         const ui64 Id;
         TAtomic& Destroyed;
 
@@ -171,25 +172,25 @@ Y_UNIT_TEST_SUITE(SchedulerActorLinux) {
     public:
         THolder<TActorSystem> System;
 
-        TFixture() {
+        explicit TFixture(bool useSchedulerActor = true) {
             TSchedulerConfig config;
-            config.UseSchedulerActor = true;
+            config.UseSchedulerActor = useSchedulerActor;
             auto setup = MakeHolder<TActorSystemSetup>();
             setup->NodeId = 0;
             setup->ExecutorsCount = 1;
             setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
             setup->Executors[0] = new TBasicExecutorPool(0, 1, 10, "scheduler-test");
 
-            THolder<IActor> poller(CreatePollerActor());
-            THolder<IActor> scheduler(CreateSchedulerActor(config));
-            UNIT_ASSERT(poller);
-            UNIT_ASSERT(scheduler);
-            setup->LocalServices.emplace_back(MakePollerActorId(),
-                TActorSetupCmd(poller.Release(), TMailboxType::ReadAsFilled, 0));
-            setup->LocalServices.emplace_back(MakeSchedulerActorId(),
-                TActorSetupCmd(scheduler.Release(), TMailboxType::ReadAsFilled, 0));
-            // On Linux this is TMockSchedulerThread: it initializes the clocks
-            // but cannot deliver timers. Both factories must use the same config.
+            if (useSchedulerActor) {
+                THolder<IActor> poller(CreatePollerActor());
+                THolder<IActor> scheduler(CreateSchedulerActor(config));
+                UNIT_ASSERT(poller);
+                UNIT_ASSERT(scheduler);
+                setup->LocalServices.emplace_back(MakePollerActorId(),
+                    TActorSetupCmd(poller.Release(), TMailboxType::ReadAsFilled, 0));
+                setup->LocalServices.emplace_back(MakeSchedulerActorId(),
+                    TActorSetupCmd(scheduler.Release(), TMailboxType::ReadAsFilled, 0));
+            }
             setup->Scheduler = CreateSchedulerThread(config);
             System = MakeHolder<TActorSystem>(setup);
             System->Start();
@@ -258,6 +259,32 @@ Y_UNIT_TEST_SUITE(SchedulerActorLinux) {
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.CancelledDestroyed), 1);
         UNIT_ASSERT(!delivered.Get()->IsArmed());
         UNIT_ASSERT(!delivered.Detach());
+    }
+
+    Y_UNIT_TEST(DeliversCancelsAndDrainsBundledTimer) {
+        for (bool useSchedulerActor : {false, true}) {
+            TObservation observation;
+            TFixture fixture(useSchedulerActor);
+            const auto recipient = fixture.System->Register(new TReceiver(observation, 1));
+            const auto now = fixture.System->Monotonic();
+            auto cancelled = MakeBundledWithCookie<TEvTimer>({.Recipient = recipient}, 99, observation.CancelledDestroyed);
+            UNIT_ASSERT(cancelled.OwnerCookie.Detach());
+            fixture.System->Schedule(now, cancelled.Event.release(), cancelled.SchedulerCookie.Release());
+            auto pending = MakeBundledWithCookie<TEvTimer>({.Recipient = recipient}, 100, observation.PendingDestroyed);
+            fixture.System->Schedule(now + TDuration::Hours(24), pending.Event.release(), pending.SchedulerCookie.Release());
+            auto delivered = MakeBundledWithCookie<TEvTimer>({.Recipient = recipient}, 1, observation.Destroyed);
+            fixture.System->Schedule(now, delivered.Event.release(), delivered.SchedulerCookie.Release());
+
+            fixture.WaitAndStop(observation);
+            fixture.System->Cleanup();
+            UNIT_ASSERT_VALUES_EQUAL(observation.Delivered.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(observation.Delivered.front(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.Destroyed), 1);
+            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.CancelledDestroyed), 1);
+            UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.PendingDestroyed), 1);
+            UNIT_ASSERT(!delivered.OwnerCookie.Detach());
+            UNIT_ASSERT(!pending.OwnerCookie.Detach());
+        }
     }
 
     Y_UNIT_TEST(CancelsAlreadyQueuedTimer) {

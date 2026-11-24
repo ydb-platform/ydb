@@ -18,6 +18,20 @@ namespace NActors {
         static ISchedulerCookie* Make3Way();
     };
 
+    namespace NSchedulerCookie {
+        class TTwoWayCookie : public ISchedulerCookie {
+            TAtomic Owners = 2;
+
+        protected:
+            virtual void Destroy() noexcept = 0;
+
+        public:
+            bool IsArmed() noexcept final;
+            bool Detach() noexcept final;
+            bool DetachEvent() noexcept final;
+        };
+    }
+
     class TSchedulerCookieHolder : TNonCopyable {
         ISchedulerCookie* Cookie;
 

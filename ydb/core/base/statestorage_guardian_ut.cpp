@@ -4,11 +4,15 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
+
+#include <array>
+#include <optional>
 
 namespace NKikimr {
 namespace {
@@ -114,10 +118,8 @@ void CheckGuardianRegistration(ERegistrationFailure failure) {
         if (failure == ERegistrationFailure::Undelivered && !injected && ev->Recipient == replicas.front()) {
             injected = true;
             runtime.EnableScheduleForActor(ev->Sender);
-            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                new TEvents::TEvUndelivered(TEvStateStorage::TEvReplicaUpdate::EventType,
-                    TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
-            ev.Reset();
+            runtime.SendAsync(IEventHandle::ForwardOnNondelivery(TAutoPtr<IEventHandle>(ev.Release()),
+                TEvents::TEvUndelivered::Disconnected));
         }
     });
     auto refreshes = runtime.AddObserver<TEvTablet::TEvFollowerListRefresh>([&](auto& ev) {
@@ -144,7 +146,13 @@ void CheckGuardianRegistration(ERegistrationFailure failure) {
     }, TDuration::Seconds(10));
 }
 
-void CheckGuardianGracePeriod(bool recover) {
+enum class EGracePeriodScenario {
+    ContinuousFailure,
+    Recovery,
+    DisconnectDuringRetry,
+};
+
+void CheckGuardianGracePeriod(EGracePeriodScenario scenario) {
     TTestBasicRuntime runtime;
     SetupStateStorage(runtime, 0);
     runtime.Initialize(TAppPrepare().Unwrap());
@@ -157,27 +165,33 @@ void CheckGuardianGracePeriod(bool recover) {
     auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
     const auto replicas = resolved->Get()->GetPlainReplicas();
     UNIT_ASSERT_VALUES_EQUAL(replicas.size(), 3);
+    const std::array unavailableReplicas{replicas[0], replicas[1]};
 
     THashMap<TActorId, TActorId> children;
     THashMap<TActorId, ui32> failures;
     THashSet<TActorId> pingedChildren;
     TActorId guardian;
     bool unavailable = true;
-    bool demoted = false;
-    TMonotonic demotedAt;
+    std::optional<TMonotonic> demotedAt;
     auto registrations = runtime.AddObserver<TEvStateStorage::TEvReplicaRegFollower>([&](auto& ev) {
         if (ev->Get()->Record.GetTabletID() != tabletId) {
             return;
         }
         children[ev->Recipient] = ev->Sender;
-        if (unavailable && (ev->Recipient == replicas[0] || ev->Recipient == replicas[1])) {
-            ++failures[ev->Recipient];
+        if (unavailable && Find(unavailableReplicas, ev->Recipient) != unavailableReplicas.end()) {
+            const ui32 attempt = ++failures[ev->Recipient];
             // The child's 250 ms retry wakeup is dropped unless scheduling is enabled.
             runtime.EnableScheduleForActor(ev->Sender);
-            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                new TEvents::TEvUndelivered(TEvStateStorage::TEvReplicaRegFollower::EventType,
-                    TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
-            ev.Reset();
+            const bool disconnected = scenario == EGracePeriodScenario::DisconnectDuringRetry
+                && ev->Recipient == unavailableReplicas.back() && attempt > 1;
+            if (disconnected) {
+                // Interconnect reports the disconnect before the undelivered request.
+                const ui32 nodeId = ev->Recipient.NodeId();
+                runtime.SendAsync(new IEventHandle(ev->Sender, TActorId(),
+                    new TEvInterconnect::TEvNodeDisconnected(nodeId), 0, ev->Cookie));
+            }
+            runtime.SendAsync(IEventHandle::ForwardOnNondelivery(TAutoPtr<IEventHandle>(ev.Release()),
+                disconnected ? TEvents::TEvUndelivered::Disconnected : TEvents::TEvUndelivered::ReasonActorUnknown));
         }
     });
     auto pings = runtime.AddObserver<TEvTablet::TEvPing>([&](auto& ev) {
@@ -186,10 +200,9 @@ void CheckGuardianGracePeriod(bool recover) {
         }
     });
     auto demotions = runtime.AddObserver<TEvTablet::TEvDemoted>([&](auto& ev) {
-        if (ev->Recipient == follower && !demoted) {
+        if (ev->Recipient == follower && !demotedAt) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Sender, guardian);
             UNIT_ASSERT(ev->Get()->ByIsolation);
-            demoted = true;
             demotedAt = runtime.GetCurrentMonotonicTime();
         }
     });
@@ -200,15 +213,20 @@ void CheckGuardianGracePeriod(bool recover) {
         return children.size() == replicas.size();
     }, TDuration::Seconds(1));
 
-    if (recover) {
+    auto checkRetries = [&] {
+        for (const TActorId& replica : unavailableReplicas) {
+            UNIT_ASSERT_GT(failures.at(replica), 1u);
+        }
+    };
+    if (scenario == EGracePeriodScenario::Recovery) {
         runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT_C(!demoted, "the first transient outage caused isolation");
-        UNIT_ASSERT_GT(failures[replicas[0]], 1u);
-        UNIT_ASSERT_GT(failures[replicas[1]], 1u);
+        UNIT_ASSERT_C(!demotedAt, "the first transient outage caused isolation");
+        checkRetries();
         unavailable = false;
         runtime.WaitFor("both recovered replicas acknowledged registration", [&] {
-            return pingedChildren.contains(children.at(replicas[0]))
-                && pingedChildren.contains(children.at(replicas[1]));
+            return AllOf(unavailableReplicas, [&](const TActorId& replica) {
+                return pingedChildren.contains(children.at(replica));
+            });
         }, TDuration::Seconds(1));
 
         // Age the first outage's timestamp before failing the same replicas again.
@@ -223,13 +241,13 @@ void CheckGuardianGracePeriod(bool recover) {
 
     // Losing two of the three replicas causes observable isolation only after grace.
     runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_C(!demoted, "replica failures caused isolation before the grace period ended");
-    UNIT_ASSERT_GT(failures[replicas[0]], 1u);
-    UNIT_ASSERT_GT(failures[replicas[1]], 1u);
+    UNIT_ASSERT_C(!demotedAt, "replica failures caused isolation before the grace period ended");
+    checkRetries();
     runtime.WaitFor("isolation after continuous replica failures", [&] {
-        return demoted;
+        return demotedAt.has_value();
     }, TDuration::Seconds(2));
-    UNIT_ASSERT_GE_C(demotedAt - outageFrom, TDuration::Seconds(3), "isolated after " << demotedAt - outageFrom);
+    const auto isolationDelay = *demotedAt - outageFrom;
+    UNIT_ASSERT_GE_C(isolationDelay, TDuration::Seconds(3), "isolated after " << isolationDelay);
 }
 
 } // anonymous namespace
@@ -366,11 +384,15 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
     }
 
     Y_UNIT_TEST(MissingReplicaReportedAfterGracePeriod) {
-        CheckGuardianGracePeriod(false);
+        CheckGuardianGracePeriod(EGracePeriodScenario::ContinuousFailure);
     }
 
     Y_UNIT_TEST(GracePeriodStartsAgainAfterRecovery) {
-        CheckGuardianGracePeriod(true);
+        CheckGuardianGracePeriod(EGracePeriodScenario::Recovery);
+    }
+
+    Y_UNIT_TEST(DisconnectDuringRetryKeepsMissingReplicaGracePeriod) {
+        CheckGuardianGracePeriod(EGracePeriodScenario::DisconnectDuringRetry);
     }
 }
 

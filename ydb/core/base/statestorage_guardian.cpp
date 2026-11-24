@@ -143,6 +143,10 @@ protected:
 
     void HandleThenSomeSleep(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         if (ev->Cookie == LastCookie) {
+            // A subsequent TEvUndelivered would be ignored in StateSleep.
+            if (LastReplicaMissing != TMonotonic::Max()) {
+                ReplicaMissing(true);
+            }
             ++LastCookie;
             SomeSleep();
         }

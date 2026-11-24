@@ -3627,6 +3627,10 @@ private:
             return;
         }
 
+        if (ResultSetIndex < 0) {
+            return Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
+        }
+
         const auto operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
 
         if (operationStatus) {
@@ -3662,8 +3666,7 @@ private:
 
         if (!serializedMetas) {
             if (!operationStatus) {
-                Finish(Ydb::StatusIds::BAD_REQUEST, "Result is not ready");
-                return;
+                return FinishResultSetNotReady();
             }
 
             const auto operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
@@ -3684,6 +3687,10 @@ private:
 
         const NJson::TJsonValue* metaValue = nullptr;
         if (!value.GetValuePointer(ResultSetIndex, &metaValue)) {
+            if (!operationStatus) {
+                return FinishResultSetNotReady();
+            }
+
             Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
             return;
         }
@@ -3694,20 +3701,10 @@ private:
 
         if (!operationStatus) {
             if (!meta.enabled_runtime_results()) {
-                Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
-                return;
+                return FinishResultSetNotReady();
             }
             HasMoreResults = !meta.finished();
             NumberOfSavedRows = meta.number_rows();
-        }
-
-        const size_t nextIndex = static_cast<size_t>(ResultSetIndex) + 1;
-        HasNextResultSet = !HasMoreResults && nextIndex < value.GetArray().size();
-
-        if (HasNextResultSet && !operationStatus) {
-            Ydb::Query::Internal::ResultSetMeta nextMeta;
-            NProtobufJson::Json2Proto(value[nextIndex], nextMeta);
-            HasNextResultSet = nextMeta.enabled_runtime_results();
         }
 
         *ResultSet.mutable_columns() = meta.columns();
@@ -3834,12 +3831,17 @@ private:
                 {"logPrefix", LogPrefix()},
                 {"rowCount", ResultSet.rows_size()},
                 {"hasMoreResults", HasMoreResults});
-            auto response = std::make_unique<TEvFetchScriptResultsResponse>(status, std::move(ResultSet), HasMoreResults, std::move(issues));
-            response->HasNextResultSet = HasNextResultSet;
-            Send(Owner, std::move(response));
+            Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
-            Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
+            auto response = std::make_unique<TEvFetchScriptResultsResponse>(status, std::nullopt, /* hasMoreResults */ true, std::move(issues));
+            response->ResultSetNotReady = ResultSetNotReady;
+            Send(Owner, std::move(response));
         }
+    }
+
+    void FinishResultSetNotReady() {
+        ResultSetNotReady = true;
+        Finish(Ydb::StatusIds::BAD_REQUEST, "Result is not ready");
     }
 
     void CancelFetchQuery() {
@@ -3859,7 +3861,7 @@ private:
     i64 AdditionalRowSize = 0;
     Ydb::ResultSet ResultSet;
     bool HasMoreResults = false;
-    bool HasNextResultSet = false;
+    bool ResultSetNotReady = false;
 };
 
 // Save information about query effects like S3 writes in order to commit / rollback after operation finish, saved after query compilation in DataExecuter

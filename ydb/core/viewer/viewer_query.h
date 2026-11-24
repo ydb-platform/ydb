@@ -1,14 +1,16 @@
 #pragma once
 #include "json_handlers.h"
+#include "json_local_rpc.h"
 #include "json_pipe_req.h"
 #include "log.h"
-#include "ydb/core/viewer/json_local_rpc.h"
 
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/events/stream.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
@@ -45,6 +47,7 @@ class TJsonQuery : public TViewerPipeClient {
     TInstant Deadline;
     TInstant WakeupScheduledAt;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
+    static constexpr ui64 RefreshResultMetadataTag = 1;
     static constexpr TDuration MaxForgetAfter = TDuration::Seconds(60);
 
     enum ESchemaType {
@@ -469,7 +472,8 @@ public:
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NKqp::TKqpScriptExecutionEvents::EvFetchScriptResultsRequest) {
+        if (ev->Get()->SourceType == NKqp::TKqpScriptExecutionEvents::EvFetchScriptResultsRequest ||
+            ev->Get()->SourceType == NKqp::TKqpScriptExecutionEvents::EvGetScriptExecutionOperation) {
             return ReplyWithError("KQP proxy is unavailable");
         }
 
@@ -499,7 +503,7 @@ public:
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
             hFunc(TEvents::TEvUndelivered, Undelivered);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             default:
                 return TBase::StateWork(ev);
         }
@@ -536,22 +540,7 @@ public:
         }
 
         if (Action == "fetch-long-query") {
-            // For fetch-long-query, we need to directly check operation status and fetch results
-            if (OperationId) {
-                CheckOperationStatus();
-            } else if (!ExecutionId.empty()) {
-                // If we have execution_id but no operation_id, we can directly fetch results
-                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
-                    Database,
-                    ExecutionId,
-                    GetUserSID(),
-                    FetchResultSetIndex,
-                    FetchResultRowsOffset,
-                    std::min<i64>(FetchResultRowsLimit, LimitRows),
-                    OutputChunkMaxSize,
-                    Deadline), IEventHandle::FlagTrackDelivery);
-            }
-            return;
+            return CheckOperationStatus();
         }
 
         if (Long) {
@@ -1083,6 +1072,7 @@ private:
 
     void HandleReply(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         GetOperationResponse->Set(std::move(ev));
+        RequestDone();
 
         // Check if we have a valid response or an error
         if (!GetOperationResponse->IsOk()) {
@@ -1100,18 +1090,18 @@ private:
             return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
         }
 
-        // Now we know we have a valid response, safe to access
-        // Extract metadata for both streaming and non-streaming modes
         Ydb::Query::ExecuteScriptMetadata metadata;
-        if (GetOperationResponse->Get()->Metadata && GetOperationResponse->Get()->Metadata->UnpackTo(&metadata)) {
-            FetchResultSets = metadata.result_sets_meta_size();
-            // Extract execution_id from metadata if we don't have it yet
-            if (ExecutionId.empty() && !metadata.execution_id().empty()) {
-                ExecutionId = metadata.execution_id();
-            }
+        if (!GetOperationResponse->Get()->Metadata || !GetOperationResponse->Get()->Metadata->UnpackTo(&metadata)) {
+            return ReplyWithError("Failed to read script execution metadata");
         }
 
-        if (Streaming != EStreamingType::None) {
+        FetchResultSets = metadata.result_sets_meta_size();
+
+        if (ExecutionId.empty()) {
+            ExecutionId = metadata.execution_id();
+        }
+
+        if (Streaming != EStreamingType::None && OperationId) {
             NJson::TJsonValue json;
             json["id"] = OperationId->ToString();
             json["ready"] = GetOperationResponse->Get()->Ready;
@@ -1124,61 +1114,50 @@ private:
             StreamJsonResponse("OperationResponse", std::move(json));
         }
 
-        if (GetOperationResponse->Get()->Ready) {
-            if (FetchResultSets > 0) {
-                // Make sure we have execution_id before trying to fetch results
+        const bool ready = GetOperationResponse->Get()->Ready;
+        if (FetchResultSetIndex < FetchResultSets) {
+            const auto& set = metadata.result_sets_meta(FetchResultSetIndex);
+            if (ready || (!OperationId && (set.number_rows() > FetchResultRowsOffset || set.finished()))) {
                 if (ExecutionId.empty()) {
-                    // If we still don't have execution_id, there's an issue with the operation metadata
-                    NJson::TJsonValue json;
-                    if (Streaming == EStreamingType::None) {
-                        json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-                    }
-                    json["id"] = OperationId->ToString();
-                    json["ready"] = true;
-                    json["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
-                    json["error"]["message"] = "Failed to extract execution_id from operation metadata";
-                    return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
+                    return ReplyWithError("Failed to extract execution_id from operation metadata");
                 }
 
-                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
-                    Database,
-                    ExecutionId,
-                    GetUserSID(),
-                    FetchResultSetIndex,
-                    FetchResultRowsOffset,
-                    std::min<i64>(FetchResultRowsLimit, LimitRows),
-                    OutputChunkMaxSize,
-                    Deadline), IEventHandle::FlagTrackDelivery);
-            } else {
-                // Operation is ready but no result sets - reply with empty result for non-streaming
-                if (Streaming == EStreamingType::None) {
-                    NJson::TJsonValue jsonResponse;
-                    jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-                    jsonResponse["operation_id"] = OperationId->ToString();
-                    if (!ExecutionId.empty()) {
-                        jsonResponse["execution_id"] = ExecutionId;
-                    }
-                    ReplyWithJsonAndPassAway("OperationResponse", std::move(jsonResponse));
-                }
+                return FetchScriptResults();
             }
-        } else {
-            // Operation not ready yet - reset and continue waiting (will be checked again on next wakeup)
-            GetOperationResponse.reset();
+        } else if (ready) {
+            return FinishFetchResults();
         }
+
+        ScheduleResultMetadataRefresh();
+    }
+
+    void ScheduleResultMetadataRefresh() {
+        Schedule(WakeupPeriod, new TEvents::TEvWakeup(RefreshResultMetadataTag));
+    }
+
+    void FetchScriptResults() {
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()),
+            new NKqp::TEvFetchScriptResultsRequest(Database, ExecutionId, GetUserSID(), FetchResultSetIndex, FetchResultRowsOffset,
+                std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows), OutputChunkMaxSize, Deadline), IEventHandle::FlagTrackDelivery);
     }
 
     void HandleReply(NKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
+        if (ev->Get()->ResultSetNotReady) {
+            return ScheduleResultMetadataRefresh();
+        }
+
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError("Failed to fetch script results");
         }
-        if (ev->Get()->ResultSet && TotalRows < LimitRows) {
-            int rowsAvailable = LimitRows - TotalRows;
-            if (ev->Get()->ResultSet->rows_size() > rowsAvailable) {
-                ev->Get()->ResultSet->mutable_rows()->Truncate(rowsAvailable);
+
+        const int pageRows = ev->Get()->ResultSet ? ev->Get()->ResultSet->rows_size() : 0;
+        const int rows = std::min(pageRows, LimitRows - TotalRows);
+        if (ev->Get()->ResultSet && TotalRows < LimitRows && (rows > 0 || (!ev->Get()->HasMoreResults && FetchResultRowsOffset == 0))) {
+            if (rows < pageRows) {
+                ev->Get()->ResultSet->mutable_rows()->Truncate(rows);
                 ev->Get()->ResultSet->set_truncated(true);
             }
 
-            const auto rows = ev->Get()->ResultSet->rows_size();
             TotalRows += rows;
             FetchResultRowsOffset += rows;
 
@@ -1191,33 +1170,36 @@ private:
                 ResultSets[FetchResultSetIndex].emplace_back() = std::move(*ev->Get()->ResultSet);
             }
         }
+
         if (TotalRows < LimitRows) {
             if (ev->Get()->HasMoreResults) {
-                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
-                    Database,
-                    ExecutionId,
-                    GetUserSID(),
-                    FetchResultSetIndex,
-                    FetchResultRowsOffset,
-                    std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
-                    OutputChunkMaxSize,
-                    Deadline), IEventHandle::FlagTrackDelivery);
-                return;
-            } else if (FetchResultSetIndex + 1 < FetchResultSets || ev->Get()->HasNextResultSet) {
-                ++FetchResultSetIndex;
-                FetchResultRowsOffset = 0;
-                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
-                    Database,
-                    ExecutionId,
-                    GetUserSID(),
-                    FetchResultSetIndex,
-                    FetchResultRowsOffset,
-                    std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
-                    OutputChunkMaxSize,
-                    Deadline), IEventHandle::FlagTrackDelivery);
-                return;
+                if (rows == 0) {
+                    return ScheduleResultMetadataRefresh();
+                }
+
+                return FetchScriptResults();
+            }
+
+            ++FetchResultSetIndex;
+            FetchResultRowsOffset = 0;
+
+            if (FetchResultSetIndex < FetchResultSets) {
+                if (GetOperationResponse->Get()->Ready) {
+                    return FetchScriptResults();
+                }
+
+                return CheckOperationStatus();
+            }
+
+            if (!GetOperationResponse->Get()->Ready) {
+                return ScheduleResultMetadataRefresh();
             }
         }
+
+        FinishFetchResults();
+    }
+
+    void FinishFetchResults() {
         if (Streaming != EStreamingType::None) {
             FinishStreamAndPassAway();
         } else {
@@ -1279,12 +1261,22 @@ private:
 
     void CheckOperationStatus() {
         if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
-            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
+            const auto id = OperationId ? *OperationId : NKqp::OperationIdFromExecutionId(ExecutionId);
+            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()),
+                new NKqp::TEvGetScriptExecutionOperation(Database, id, GetUserSID()), IEventHandle::FlagTrackDelivery);
         }
     }
 
-    void HandleWakeup() {
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
         auto now = TActivationContext::Now();
+        if (ev->Get()->Tag == RefreshResultMetadataTag) {
+            if (Deadline && now >= Deadline) {
+                return ReplyWithTimeoutError();
+            }
+
+            return CheckOperationStatus();
+        }
+
         WakeupScheduledAt = TInstant();
         if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
             return ReplyAndForgetQuery();
@@ -1295,7 +1287,7 @@ private:
         if (!Forget && KeepAlive && (now - LastSendTime > KeepAlive)) {
             SendKeepAlive();
         }
-        if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {
+        if (OperationId && !GetOperationResponse.has_value()) {
             CheckOperationStatus();
         }
         ScheduleWakeup(GetWakeupPeriod(now), now);

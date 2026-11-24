@@ -863,6 +863,7 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/kqp/script_executions/common
     ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/path_aliasing

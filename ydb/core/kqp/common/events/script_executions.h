@@ -343,7 +343,7 @@ struct TEvFetchScriptResultsResponse : public TEventLocal<TEvFetchScriptResultsR
     const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     std::optional<Ydb::ResultSet> ResultSet;
     const bool HasMoreResults = false;
-    bool HasNextResultSet = false;
+    bool ResultSetNotReady = false;
     const NYql::TIssues Issues;
 };
 

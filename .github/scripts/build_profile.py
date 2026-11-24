@@ -1,6 +1,8 @@
 """Translate a named build profile to an argument vector for ya make."""
 
 import argparse
+import logging
+import shlex
 from pathlib import Path
 
 import yaml
@@ -8,20 +10,26 @@ import yaml
 PROFILE_PATH = Path("ydb/ci/build_profiles.yaml")
 
 
-def load_profiles(path=PROFILE_PATH):
-    with Path(path).open() as stream:
+def load_profiles(path=None):
+    with Path(path or PROFILE_PATH).open() as stream:
         return yaml.safe_load(stream)
 
 
 def resolve_profile(name, fallback=None):
     # Absence of the file is expected on release branches predating profiles.
-    # A missing profile in an existing file is a configuration error.
+    # The head snapshot also supplies names newly introduced by a PR.
     profiles = load_profiles() if PROFILE_PATH.is_file() else fallback
     if profiles is None:
         raise ValueError(f"Build profiles file is missing: {PROFILE_PATH}")
+    if not isinstance(profiles, dict):
+        raise ValueError("Build profiles must be a mapping")
+    if name not in profiles and fallback is not None and name in fallback:
+        profiles = fallback
     if name not in profiles:
         raise ValueError(f"Unknown build profile: {name}")
     profile = profiles[name]
+    if not isinstance(profile, dict) or not isinstance(profile.get("build_type"), str) or not profile["build_type"]:
+        raise ValueError(f"Build profile {name!r} requires a nonempty build_type")
     args = [f"--build={profile['build_type']}"]
     if profile.get("thinlto", False):
         args += ["--thinlto"]
@@ -31,6 +39,15 @@ def resolve_profile(name, fallback=None):
     for key, value in profile.get("definition_flags", {}).items():
         args.append(f"-D{key}={value}")
     return {"args": args, "sanitize": sanitizer}
+
+
+def reproduction_args(name):
+    # A missing/invalid profile must not hide the test results themselves.
+    try:
+        return shlex.join(resolve_profile(name)["args"])
+    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as error:
+        logging.warning("Cannot generate a reproduction command for profile %r: %s", name, error)
+        return ""
 
 
 if __name__ == "__main__":

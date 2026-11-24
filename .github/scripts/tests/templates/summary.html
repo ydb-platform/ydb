@@ -692,6 +692,7 @@
         }
 
         const buildPresetParams = {{ build_preset_params | tojson }};
+        if (!buildPresetParams) return "";
         return `./ya make -ttt ${buildPresetParams} -F ${bashSingleQuote(filterName)} ${path}`;
     }
 

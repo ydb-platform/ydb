@@ -5,8 +5,9 @@ release: &release
   definition_flags:
     DEBUGINFO_LINES_ONLY: "yes"
     HARDENING: "yes"
-    CFLAGS: "-fno-omit-frame-pointer -fdebug-info-for-profiling"
+    CFLAGS: "-fno-omit-frame-pointer -fdebug-info-for-profiling -Wno-unknown-argument"
   sanitize: ""
+  # Deployment/profiling options are consumed by Arcadia CI after import.
   profile_memory: false
   collect_flamegraphs: false
 release_no_lto:
@@ -17,16 +18,6 @@ relwithdebinfo:
   <<: *release
   build_type: relwithdebinfo
   thinlto: false
-asan:
-  <<: *release
-  build_type: relwithdebinfo
-  thinlto: false
-  sanitize: address
-tsan:
-  <<: *release
-  build_type: relwithdebinfo
-  thinlto: false
-  sanitize: thread
 profile:
   <<: *release
   build_type: profile
@@ -38,6 +29,8 @@ debug:
   <<: *release
   build_type: debug
   thinlto: false
+  definition_flags:
+    CFLAGS: "-fno-omit-frame-pointer -fdebug-info-for-profiling -Wno-unknown-argument"
 release-asan:
   <<: *release
   thinlto: false

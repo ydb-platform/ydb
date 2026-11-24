@@ -5,7 +5,6 @@ import json
 import math
 import os
 import re
-import shlex
 import sys
 import traceback
 from enum import Enum
@@ -23,7 +22,7 @@ from error_type_utils import (
 _SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
-from build_profile import resolve_profile  # noqa: E402
+from build_profile import reproduction_args  # noqa: E402
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -433,7 +432,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    build_preset_params = shlex.join(resolve_profile(build_preset)["args"])
+    build_preset_params = reproduction_args(build_preset)
 
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
@@ -715,7 +714,7 @@ def main():
     parser.add_argument("--public_dir", required=True)
     parser.add_argument("--public_dir_url", required=True)
     parser.add_argument("--summary_links", required=True)
-    parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--build_preset', default="relwithdebinfo", required=False)
     parser.add_argument('--branch', default="main", required=False)
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument('--is_retry', required=True, type=int)

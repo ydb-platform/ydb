@@ -1,4 +1,5 @@
 #include "autopartitioning_manager.h"
+#include "sourceid.h"
 
 #include <memory>
 #include <type_traits>
@@ -37,6 +38,27 @@ namespace {
                  ++it;
             }
         }
+    }
+
+    TString DecodeSourceId(const TString& sourceId) {
+        if (sourceId.size() > 0 && NPQ::NSourceIdEncoding::IsValidEncoded(sourceId)) {
+            return NPQ::NSourceIdEncoding::Decode(sourceId);
+        }
+        return sourceId;
+    }
+
+    TUint128 HashSourceId(const TString& decodedSourceId) {
+#ifdef _win_
+        return decodedSourceId.size() > 0 ? (double)Hash(decodedSourceId) : 0.;
+#else
+        return decodedSourceId.size() > 0 ? Hash(decodedSourceId) : 0;
+#endif
+    }
+
+    TString MakeSourceIdHashKey(const TString& decodedSourceId, TUint128 sourceIdHash) {
+        return decodedSourceId.size() > 0 // Kinesis protocol use empty sourceId
+            ? AsKeyBound(sourceIdHash)
+            : "";
     }
 }
 
@@ -81,14 +103,15 @@ public:
 class TWindowedAutopartitioningManager : public IAutopartitioningManager, public TLogPrefix {
     static constexpr size_t Precision = 100;
 public:
-    TWindowedAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, ui64 maxUsagePerSec, const ETag tag = ETag::BYTES)
+    TWindowedAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TSourceIdStorage& sourceIds, ui64 maxUsagePerSec, const ETag tag = ETag::BYTES)
         : Config(config)
         , Tag(tag)
         , PartitionId(partitionId),
         KeysManager(
             Min<size_t>(DEFAULT_NUM_SKETCHES, config.GetPartitionStrategy().GetScaleThresholdSeconds()),
             TDuration::Seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds())),
-        MaxUsagePerSec(maxUsagePerSec)
+        MaxUsagePerSec(maxUsagePerSec),
+        SourceIds(sourceIds)
     {
         RecreateSumMetric();
     }
@@ -111,28 +134,15 @@ protected:
             return;
         }
 
-        TString decodedSourceId = "";
-        if (sourceId.size() > 0) {
-            if (NPQ::NSourceIdEncoding::IsValidEncoded(sourceId)) {
-                decodedSourceId = NPQ::NSourceIdEncoding::Decode(sourceId);
-            } else {
-                decodedSourceId = sourceId;
-            }
-        }
+        const TString decodedSourceId = DecodeSourceId(sourceId);
 
         auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
         auto now = TAppData::TimeProvider->Now();
 
         SumMetric->Update(delta, now);
 
-#ifdef _win_
-        NKikimr::NPQ::TUint128 sourceIdHash = decodedSourceId.size() > 0 ? (double)Hash(decodedSourceId) : 0.;
-#else
-        auto sourceIdHash = decodedSourceId.size() > 0 ? Hash(decodedSourceId) : 0;
-#endif
-        TString sourceIdHashStr = decodedSourceId.size() > 0 // Kinesis protocol use empty sourceId
-            ? AsKeyBound(sourceIdHash)
-            : "";
+        const auto sourceIdHash = HashSourceId(decodedSourceId);
+        const TString sourceIdHashStr = MakeSourceIdHashKey(decodedSourceId, sourceIdHash);
 
         auto it = PerSourceMetrics.find(sourceIdHashStr);
         if (it == PerSourceMetrics.end()) {
@@ -159,11 +169,15 @@ protected:
     }
 
     std::optional<TString> SplitBoundary() override {
-        if (!IsEnabled() || HasKeySchema()) {
+        if (!IsEnabled()) {
             return std::nullopt;
         }
 
         CleanUp();
+
+        if (HasKeySchema()) {
+            return ChooseKeyRangeSplitBoundary();
+        }
 
         if (PerSourceMetrics.size() < 2) {
             return std::nullopt;
@@ -186,7 +200,7 @@ protected:
     }
 
     NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus /*currentState*/) override {
-        if (!IsEnabled() || HasKeySchema()) {
+        if (!IsEnabled()) {
             return NKikimrPQ::EScaleStatus::NORMAL;
         }
 
@@ -197,6 +211,9 @@ protected:
         auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
         if (AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnKllSketch()) {
             canSplit = canSplit || KeysManager.MoreThanOneKey(now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
+        }
+        if (HasKeySchema()) {
+            canSplit = ChooseKeyRangeSplitBoundary().has_value();
         }
 
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
@@ -353,6 +370,29 @@ protected:
         return *KeyRange;
     }
 
+    std::optional<TString> ChooseKeyRangeSplitBoundary() {
+        const auto partitionKeyRange = TPartitionKeyRange::TryParse(GetKeyRange());
+        if (!partitionKeyRange) {
+            return std::nullopt;
+        }
+
+        TVector<TWeightedKeyRange> sources;
+        for (const auto& [sourceId, sourceIdInfo] : SourceIds.GetInMemorySourceIds()) {
+            if (!sourceIdInfo.KeyRange) {
+                continue;
+            }
+
+            const TString decodedSourceId = DecodeSourceId(sourceId);
+            const auto metric = PerSourceMetrics.find(MakeSourceIdHashKey(decodedSourceId, HashSourceId(decodedSourceId)));
+            sources.push_back({
+                .KeyRange = *sourceIdInfo.KeyRange,
+                .Weight = metric != PerSourceMetrics.end() ? metric->second.GetValue() : 0,
+            });
+        }
+
+        return ChooseSplitBoundary(sources, *partitionKeyRange, MakePartitionKeyTypes(Config));
+    }
+
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;
 
     const NKikimrPQ::TPQTabletConfig& Config;
@@ -367,12 +407,13 @@ protected:
     TLastCounter<TString> SourceIdCounter;
     TInstant LastCleanUp;
     ui64 MaxUsagePerSec;
+    const TSourceIdStorage& SourceIds;
 };
 
 class TBytesAutopartitioningManager : public TWindowedAutopartitioningManager {
 public:
-    TBytesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, ETag tag = ETag::BYTES)
-        : TWindowedAutopartitioningManager(config, partitionId, config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), tag) {
+    TBytesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TSourceIdStorage& sourceIds, ETag tag = ETag::BYTES)
+        : TWindowedAutopartitioningManager(config, partitionId, sourceIds, config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), tag) {
     }
 
     void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
@@ -388,8 +429,8 @@ public:
 
 class TMessagesAutopartitioningManager : public TWindowedAutopartitioningManager {
 public:
-    TMessagesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, ETag tag = ETag::MESSAGES)
-        : TWindowedAutopartitioningManager(config, partitionId, config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(), tag) {
+    TMessagesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TSourceIdStorage& sourceIds, ETag tag = ETag::MESSAGES)
+        : TWindowedAutopartitioningManager(config, partitionId, sourceIds, config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(), tag) {
     }
 
     void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
@@ -440,10 +481,10 @@ private:
     }
 
 public:
-    TStatefulAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId) {
+    TStatefulAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TSourceIdStorage& sourceIds) {
         AutopartitioningManagers.reserve(AutoscaleMetricTagCount);
-        AutopartitioningManagers.push_back(std::make_unique<TBytesAutopartitioningManager>(config, partitionId, ETag::BYTES));
-        AutopartitioningManagers.push_back(std::make_unique<TMessagesAutopartitioningManager>(config, partitionId, ETag::MESSAGES));
+        AutopartitioningManagers.push_back(std::make_unique<TBytesAutopartitioningManager>(config, partitionId, sourceIds, ETag::BYTES));
+        AutopartitioningManagers.push_back(std::make_unique<TMessagesAutopartitioningManager>(config, partitionId, sourceIds, ETag::MESSAGES));
     }
 
     void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
@@ -537,7 +578,7 @@ private:
 
 class TSupportiveAutopartitioningManager : public IAutopartitioningManager {
 public:
-    TSupportiveAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId) : AutopartitioningManager(config, partitionId) {
+    TSupportiveAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TSourceIdStorage& sourceIds) : AutopartitioningManager(config, partitionId, sourceIds) {
     }
 
     void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
@@ -572,17 +613,17 @@ private:
     TStatefulAutopartitioningManager AutopartitioningManager;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds) {
     auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
     if (!withAutopartitioning) {
         return new TNoneAutopartitioningManager(config);
     }
 
     if (partitionId.IsSupportivePartition()) {
-        return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId);
+        return new TSupportiveAutopartitioningManager(config, partitionId.OriginalPartitionId, sourceIds);
     }
 
-    return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId);
+    return new TStatefulAutopartitioningManager(config, partitionId.OriginalPartitionId, sourceIds);
 }
 
 }

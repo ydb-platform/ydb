@@ -331,7 +331,13 @@ TStorageTransportMock::BarrierEraseFromPBuffer(
 NThreading::TFuture<TEvListPersistentBufferResult>
 TStorageTransportMock::ListPBufferEntries(const THostConnection& connection)
 {
-    Y_UNUSED(connection);
+    RequestedPBufferIds.push_back(connection.DDiskId);
+
+    if (const auto it = ListResponsesByPBufferId.find(connection.DDiskId);
+        it != ListResponsesByPBufferId.end())
+    {
+        return it->second;
+    }
 
     if (ListPBufferEntriesResult.Initialized()) {
         return ListPBufferEntriesResult;

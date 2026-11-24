@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -8,6 +9,7 @@
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 
 #define DEFAULT_NAME_1 "MyCollection1"
@@ -1497,6 +1499,30 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                           {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(RestoreMissingBackupCollectionHasReason) {
+        std::vector<std::string> auditLines;
+        TTestBasicRuntime runtime;
+        runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        const ui64 txId = 100;
+
+        const TString reason = "Backup collection not found: /MyRoot/.backups/collections/Collection";
+        TestCreateLongIncrementalRestoreOp(runtime, txId, "/MyRoot", R"(
+            Name: ".backups/collections/Collection"
+        )", {{NKikimrScheme::StatusPathDoesNotExist, reason}});
+
+        const std::string marker = "tx_id=" + std::to_string(txId);
+        runtime.WaitFor("scheme audit record", [&] {
+            return AnyOf(auditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
+        }, TDuration::Seconds(10));
+        const auto line = Tests::FindAuditLine(auditLines, marker);
+        UNIT_ASSERT_STRING_CONTAINS(line, "component=schemeshard");
+        UNIT_ASSERT_STRING_CONTAINS(line, "operation=RESTORE INCREMENTAL");
+        UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=StatusPathDoesNotExist");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
     }
 
     Y_UNIT_TEST(RestorePathStatePersistenceAcrossRestart) {

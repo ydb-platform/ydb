@@ -450,24 +450,17 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
             OperationOptions_,
             nodeReaderFormat);
     }
+    std::pair<TFormat, TMaybe<TSmallJobFile>> result{
+        skiffSchema ? CreateSkiffFormat(skiffSchema) : TFormat::YsonBinary(),
+        Nothing()
+    };
+    NYT::NDetail::ApplyFormatHints<TNode>(&result.first, formatHints);
     if (skiffSchema) {
-        auto format = CreateSkiffFormat(skiffSchema);
-        NYT::NDetail::ApplyFormatHints<TNode>(&format, formatHints);
-        return {
-            format,
-            TSmallJobFile{
-                TString("skiff") + GetSuffix(direction),
-                CreateSkiffConfig(skiffSchema)
-            }
-        };
-    } else {
-        auto format = TFormat::YsonBinary();
-        NYT::NDetail::ApplyFormatHints<TNode>(&format, formatHints);
-        return {
-            format,
-            Nothing()
-        };
+        auto& file = result.second.emplace();
+        file.FileName = TString("skiff") + GetSuffix(direction);
+        file.Data = CreateSkiffConfig(skiffSchema);
     }
+    return result;
 }
 
 [[noreturn]] static void ThrowUnsupportedStructureDescription(

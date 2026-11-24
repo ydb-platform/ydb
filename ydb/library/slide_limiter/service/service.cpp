@@ -31,14 +31,14 @@ void TLimiterActor::HandleMain(TEvExternal::TEvAskResource::TPtr& ev) {
 
 void TLimiterActor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     const auto now = TMonotonic::Now();
-    AFL_VERIFY(RequestsInFlight.size());
+    YDB_LOG_VERIFY(RequestsInFlight.size());
     while (RequestsInFlight.size() && RequestsInFlight.front().GetInstant() + Config.GetPeriod() <= now) {
-        AFL_VERIFY(RequestsInFlight.front().GetVolume() <= VolumeInFlight);
+        YDB_LOG_VERIFY(RequestsInFlight.front().GetVolume() <= VolumeInFlight);
         VolumeInFlight = VolumeInFlight - RequestsInFlight.front().GetVolume();
         RequestsInFlight.pop_front();
     }
     if (RequestsInFlight.empty()) {
-        AFL_VERIFY(!VolumeInFlight);
+        YDB_LOG_VERIFY(!VolumeInFlight);
     }
     while (RequestsQueue.size() &&
            (RequestsInFlight.empty() || VolumeInFlight + RequestsQueue.front().GetRequest()->GetVolume() <= Config.GetLimit())) {
@@ -46,7 +46,7 @@ void TLimiterActor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         VolumeInFlight += RequestsQueue.front().GetRequest()->GetVolume();
         RequestsInFlight.emplace_back(now, RequestsQueue.front().GetRequest()->GetVolume());
         RequestsQueue.front().GetRequest()->OnResourceAllocated();
-        AFL_VERIFY(VolumeInWaiting >= RequestsQueue.front().GetRequest()->GetVolume());
+        YDB_LOG_VERIFY(VolumeInWaiting >= RequestsQueue.front().GetRequest()->GetVolume());
         VolumeInWaiting -= RequestsQueue.front().GetRequest()->GetVolume();
         RequestsQueue.pop_front();
         Counters.InProgressStart->Inc();

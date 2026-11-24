@@ -334,7 +334,8 @@ static void BM_RestoreRequestExecutorCreation(benchmark::State& state)
 
         auto executor = std::make_shared<TRestoreRequestExecutor>(
             fixture.Runtime->GetActorSystem(0),
-            fixture.DirectBlockGroup);
+            fixture.DirectBlockGroup,
+            THostMask::MakeAll(fixture.VChunkConfig.GetHostCount()));
         auto* executorPtr = &executor;
         benchmark::DoNotOptimize(executorPtr);
         previous = std::move(executor);

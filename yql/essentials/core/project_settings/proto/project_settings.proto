@@ -1,0 +1,15 @@
+syntax = "proto2";
+
+package NYql.NProto;
+option java_package = "ru.yandex.yql.proto";
+
+message TProjectSettings {
+    message TPragma {
+        optional string Name = 1;
+        repeated string Value = 2;
+    }
+    repeated TPragma Pragmas = 1;
+    optional string DefaultCluster = 2;
+    optional string LangVer = 3;
+    optional bytes Attributes = 4; // binary yson
+}

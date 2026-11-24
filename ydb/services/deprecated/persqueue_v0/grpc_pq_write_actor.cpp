@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 
 #include <ydb/core/persqueue/public/pq_database.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -490,6 +491,11 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
 
 
 void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
+    if (const auto error = GetWriteModeError(Config.GetPQTabletConfig())) {
+        CloseSession(error->Reason, error->Code, ctx);
+        return;
+    }
+
     State = ES_WAIT_PARTITION;
 
     if (PartitionChooser) {

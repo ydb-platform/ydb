@@ -1,5 +1,8 @@
 #include "rdma_xdc_test_common.h"
 
+#include <algorithm>
+#include <cstring>
+
 TEST_F(XdcRdmaTest, SerializeToRope) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -668,6 +671,102 @@ TEST_P(XdcRdmaTransportTest, SendRdmaWithShuffledPayload) {
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
+TEST_P(XdcRdmaTransportTest, SendRdmaWithShuffledPayloadLongRope) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
+    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(123);
+    ev->Record.SetBuffer("hello world");
+    for (ui32 i = 0; i < 20; ++i) {
+        if (i % 2 == 0) {
+            TRope tmp;
+            for (ui32 j = 0; j < 100; j++) {
+                tmp.Insert(tmp.End(), TRope(ToString(i * 100 + j)));
+            }
+            ev->AddPayload(std::move(tmp));
+        } else {
+            TRope tmp;
+            for (ui32 j = 0; j < 100; j++) {
+                auto s = ToString(i * 100 + j);
+                auto buf = memPool->AllocRcBuf(s.size(), 0).value();
+                std::memcpy(buf.GetDataMut(), s.data(), buf.Size());
+                tmp.Insert(tmp.End(), TRope(buf));
+            }
+            ev->AddPayload(TRope(std::move(tmp)));
+        }
+    }
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 20u);
+        for (ui32 i = 0; i < 20; ++i) {
+            TString expected;
+            for (ui32 j = 0; j < 100; ++j) {
+                expected += ToString(i * 100 + j);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].GetSize(), expected.size());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[i].ConvertToString(), expected);
+        }
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
+    cluster.RegisterActor(senderPtr, 2);
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+}
+
+
+// Right now the case of mixed (rdma/regular memory) in one rope is transfeting via TCP.
+// This test just checks data is stil correct in this case.
+TEST_P(XdcRdmaTransportTest, SendRdmaWithShuffledPayloadLongMixedRope) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
+    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(123);
+    ev->Record.SetBuffer("hello world");
+    TRope tmp;
+    for (ui32 i = 0; i < 2000; ++i) {
+        if (i % 2 == 0) {
+            tmp.Insert(tmp.End(), TRope(ToString(i)));
+        } else {
+            auto s = ToString(i);
+            auto buf = memPool->AllocRcBuf(s.size(), 0).value();
+            std::memcpy(buf.GetDataMut(), s.data(), buf.Size());
+            tmp.Insert(tmp.End(), TRope(buf));
+        }
+    }
+    ev->AddPayload(TRope(std::move(tmp)));
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+
+        TString expected;
+        for (ui32 i = 0; i < 2000; ++i) {
+            expected += ToString(i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), expected.size());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), expected);
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
+    cluster.RegisterActor(senderPtr, 2);
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+}
+
+
+
 TEST_P(XdcRdmaTransportTest, SendRdmaWithRegionOffset) {
     const auto params = GetParam();
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
@@ -983,31 +1082,61 @@ TEST_P(XdcRdmaPoolPressureTest, SendMixBigShuffle) {
 }
 
 static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz, TTestICCluster& cluster,
-    std::shared_ptr<NInterconnect::NRdma::IMemPool> pool)
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> pool, const ui32 numRcBufsInRope)
 {
+    Y_ABORT_UNLESS(numRcBufsInRope > 0 && payloadSz > 0);
+    const size_t rcBufSz = std::max(payloadSz / numRcBufsInRope / sizeof(ui32), size_t{1}) * sizeof(ui32);
+    Y_ABORT_UNLESS(numRcBufsInRope - 1 <= (payloadSz - 1) / rcBufSz);
+    const size_t lastRcBufPos = rcBufSz * (numRcBufsInRope - 1);
+
     auto ev = std::make_unique<TEvTestSerialization>();
     ev->Record.SetBlobID(0);
     ev->Record.SetBuffer(TStringBuilder{} << "hello world ");
     for (ui32 j = 0; j < numPayloads; ++j) {
-        auto buf = pool->AllocRcBuf(payloadSz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED).value();
-        ui32* p = reinterpret_cast<ui32*>(buf.GetDataMut());
-        std::fill(p, p + (payloadSz / sizeof(*p)), j);
-        ev->AddPayload(TRope(std::move(buf)));
+        TRope payload;
+        size_t writePos = 0;
+        while (writePos < lastRcBufPos) {
+            auto buf = pool->AllocRcBuf(rcBufSz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED).value();
+            ui32* p = reinterpret_cast<ui32*>(buf.GetDataMut());
+            const ui32 value = j * numRcBufsInRope + writePos;
+            std::fill(p, p + rcBufSz / sizeof(*p), value);
+            payload.Insert(payload.End(), TRope(std::move(buf)));
+            writePos += rcBufSz;
+        }
+        {
+            const size_t tailSz = payloadSz - writePos;
+            auto buf = pool->AllocRcBuf(tailSz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED).value();
+            char* data = buf.GetDataMut();
+            ui32* p = reinterpret_cast<ui32*>(data);
+            const size_t words = tailSz / sizeof(*p);
+            const ui32 value = j * numRcBufsInRope + writePos;
+            std::fill(p, p + words, value);
+            std::memcpy(data + words * sizeof(*p), &value, tailSz % sizeof(*p));
+            payload.Insert(payload.End(), TRope(std::move(buf)));
+        }
+        ev->AddPayload(std::move(payload));
     }
     UNIT_ASSERT(ev->AllowExternalDataChannel());
 
-    auto receiverPtr = new TReceiveActor([numPayloads, payloadSz](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([numPayloads, payloadSz, numRcBufsInRope, rcBufSz, lastRcBufPos](TEvTestSerialization::TPtr ev) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayloadCount(), numPayloads);
         for (ui32 j = 0; j < numPayloads; ++j) {
             TRope buf = ev->Get()->GetPayload(j);
             auto span = buf.GetContiguousSpan();
-            const ui32* p = reinterpret_cast<const ui32*>(span.GetData());
             UNIT_ASSERT_VALUES_EQUAL(span.GetSize(), payloadSz);
 
-            while (p < reinterpret_cast<const ui32*>(span.GetData() + payloadSz)) {
-                UNIT_ASSERT_VALUES_EQUAL(*p, j);
-                p++;
+            const size_t tailSz = payloadSz % sizeof(j);
+            const size_t wordsSz = payloadSz - tailSz;
+            for (size_t offset = 0; offset < wordsSz; offset += sizeof(j)) {
+                ui32 value;
+                std::memcpy(&value, span.GetData() + offset, sizeof(value));
+                const size_t rcBufOffset = offset < lastRcBufPos
+                    ? offset / rcBufSz * rcBufSz
+                    : lastRcBufPos;
+                UNIT_ASSERT_VALUES_EQUAL(value, j * numRcBufsInRope + rcBufOffset);
             }
+            const ui32 tailValue = j * numRcBufsInRope + lastRcBufPos;
+            UNIT_ASSERT_VALUES_EQUAL(std::memcmp(span.GetData() + wordsSz, &tailValue, tailSz), 0);
         }
     });
     const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
@@ -1031,7 +1160,63 @@ TEST_P(XdcRdmaPoolPressureTest, Send1Payload) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(1, 8192, cluster, pool);
+    DoSendHugePayloadsNum(1, 8192, cluster, pool, 1);
+}
+
+TEST_P(XdcRdmaPoolPressureTest, Send1Payload2Bufs) {
+    const auto params = GetParam();
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
+
+    DoSendHugePayloadsNum(1, 8192, cluster, pool, 2);
+}
+
+TEST_P(XdcRdmaPoolPressureTest, Send1Payload3BufsUnalign) {
+    const auto params = GetParam();
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
+
+    DoSendHugePayloadsNum(1, 8195, cluster, pool, 2);
+}
+
+TEST_P(XdcRdmaPoolPressureTest, Send1Payload1000BufsUnalign) {
+    const auto params = GetParam();
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
+
+    DoSendHugePayloadsNum(1, (4 << 20) + 1, cluster, pool, 1000);
+}
+
+TEST_P(XdcRdmaPoolPressureTest, Send1Payload9999BufsUnalign) {
+    const auto params = GetParam();
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
+
+    DoSendHugePayloadsNum(1, (4 << 20) + 1, cluster, pool, 9999);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, Send2Payloads) {
@@ -1045,7 +1230,7 @@ TEST_P(XdcRdmaPoolPressureTest, Send2Payloads) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(2, 8192, cluster, pool);
+    DoSendHugePayloadsNum(2, 8192, cluster, pool, 1);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, Send250Payloads) {
@@ -1059,7 +1244,7 @@ TEST_P(XdcRdmaPoolPressureTest, Send250Payloads) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(250, 512, cluster, pool);
+    DoSendHugePayloadsNum(250, 512, cluster, pool, 1);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, Send500Payloads) {
@@ -1073,7 +1258,21 @@ TEST_P(XdcRdmaPoolPressureTest, Send500Payloads) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(500, 512, cluster, pool);
+    DoSendHugePayloadsNum(500, 512, cluster, pool, 1);
+}
+
+TEST_P(XdcRdmaPoolPressureTest, Send20Payload100BufsUnalign) {
+    const auto params = GetParam();
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
+
+    DoSendHugePayloadsNum(20, (2 << 20) + 1, cluster, pool, 100);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, Send4000Payloads) {
@@ -1087,7 +1286,7 @@ TEST_P(XdcRdmaPoolPressureTest, Send4000Payloads) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(4000, 512, cluster, pool);
+    DoSendHugePayloadsNum(4000, 512, cluster, pool, 1);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, Send16000Payloads) {
@@ -1101,7 +1300,7 @@ TEST_P(XdcRdmaPoolPressureTest, Send16000Payloads) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(16000, 512, cluster, pool);
+    DoSendHugePayloadsNum(16000, 512, cluster, pool, 1);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, Send32000Payloads) {
@@ -1115,7 +1314,7 @@ TEST_P(XdcRdmaPoolPressureTest, Send32000Payloads) {
         TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     WaitForInterconnectConnection(cluster, 2, 1);
 
-    DoSendHugePayloadsNum(32000, 512, cluster, pool);
+    DoSendHugePayloadsNum(32000, 512, cluster, pool, 1);
 }
 
 TEST_P(XdcRdmaPoolPressureTest, SendXPayloads) {
@@ -1130,7 +1329,7 @@ TEST_P(XdcRdmaPoolPressureTest, SendXPayloads) {
     WaitForInterconnectConnection(cluster, 2, 1);
 
     for (size_t i = 640; i < 650; i++) {
-        DoSendHugePayloadsNum(i, 512, cluster, pool);
+        DoSendHugePayloadsNum(i, 512, cluster, pool, 1);
     }
 }
 
@@ -1146,7 +1345,7 @@ TEST_P(XdcRdmaPoolPressureTest, SendXPayloadsWithRandSize) {
     WaitForInterconnectConnection(cluster, 2, 1);
 
     for (size_t i = 640; i < 650; i++) {
-        DoSendHugePayloadsNum(i, 512 + (RandomNumber<ui16>(4096) * 4), cluster, pool);
+        DoSendHugePayloadsNum(i, 512 + (RandomNumber<ui16>(4096) * 4), cluster, pool, 1);
     }
 }
 

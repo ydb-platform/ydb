@@ -6,16 +6,14 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
+    library/cpp/testing/common
 
     ydb/core/base
 
+    ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler/common
 
-    ydb/core/testlib
-    ydb/core/testlib/actors
-    ydb/core/testlib/basics
-
-    ydb/library/testlib/common
+    ydb/library/actors/testlib
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
 

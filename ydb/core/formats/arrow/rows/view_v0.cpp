@@ -2,7 +2,10 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NArrow {
 
@@ -29,9 +32,9 @@ public:
         }
         if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
             using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
-            return CustomActor.template OnValue<TWrap>(fieldIndex, *(CType*)(data));
+            return CustomActor.template OnValue<TWrap>(fieldIndex, ReadUnaligned<CType>(data));
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
 
@@ -66,7 +69,7 @@ public:
 TConclusion<TString> TSimpleRowViewV0::DebugString(const std::shared_ptr<arrow::Schema>& schema) const {
     TDebugStringActor custom;
     TGeneralActor<TDebugStringActor> resultActor(std::move(custom));
-    auto conclusion = Scan(schema, resultActor);
+    auto conclusion = Scan(*schema, resultActor);
     if (conclusion.IsFail()) {
         return conclusion;
     }
@@ -104,10 +107,10 @@ public:
 
 TConclusionStatus TSimpleRowViewV0::AddToBuilders(
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const {
-    AFL_VERIFY((ui32)schema->num_fields() == builders.size());
+    YDB_LOG_VERIFY((ui32)schema->num_fields() == builders.size());
     TBuildersActor custom(builders);
     TGeneralActor<TBuildersActor> resultActor(std::move(custom));
-    return Scan(schema, resultActor);
+    return Scan(*schema, resultActor);
 }
 
 class TCompareActor {
@@ -131,12 +134,8 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        const int cmp = std::string_view(data, size).compare(*ItemView);
-        if (cmp < 0) {
-            Result = std::partial_ordering::less;
-        } else if (cmp > 0) {
-            Result = std::partial_ordering::greater;
-        }
+        Result = TComparator::CompareValueNotNull(
+            arrow::util::string_view(data, size), arrow::util::string_view(ItemView->data(), ItemView->size()));
         return false;
     }
 
@@ -146,12 +145,11 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        AFL_VERIFY(ItemView->size() == sizeof(CType));
-        const CType itemValue = *(CType*)(ItemView->data());
-        if (value < itemValue) {
-            Result = std::partial_ordering::less;
-        } else if (itemValue < value) {
-            Result = std::partial_ordering::greater;
+        YDB_LOG_VERIFY(ItemView->size() == sizeof(CType));
+        Result = TComparator::CompareValueNotNull(value, ReadUnaligned<CType>(ItemView->data()));
+        // Packed rows historically treat unordered floating-point values as equivalent.
+        if (Result == std::partial_ordering::unordered) {
+            Result = std::partial_ordering::equivalent;
         }
         return false;
     }
@@ -162,8 +160,8 @@ public:
 };
 
 TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
-    const TSimpleRowViewV0& item, const std::shared_ptr<arrow::Schema>& schema, const std::optional<ui32> columnsCount) const {
-    AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema->num_fields());
+    const TSimpleRowViewV0& item, const arrow::Schema& schema, const std::optional<ui32> columnsCount) const {
+    YDB_LOG_VERIFY(!columnsCount || *columnsCount <= (ui32)schema.num_fields());
     TIterator itSelf(Values, schema);
     TIterator itItem(item.Values, schema);
     {
@@ -179,9 +177,9 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
         }
     }
 
-    ui32 idx = columnsCount.value_or((ui32)schema->num_fields());
+    ui32 idx = columnsCount.value_or((ui32)schema.num_fields());
     while (!itSelf.IsFinished()) {
-        AFL_VERIFY(!itItem.IsFinished());
+        YDB_LOG_VERIFY(!itItem.IsFinished());
 
         TCompareActor customActor(itItem.GetCurrentValue());
         TGeneralActor<TCompareActor> actor(std::move(customActor));
@@ -227,7 +225,7 @@ TString TSimpleRowViewV0::BuildString(const std::shared_ptr<arrow::RecordBatch>&
             if constexpr (std::is_base_of<arrow::FixedSizeBinaryType, typename TWrap::T>()) {
                 const arrow::util::string_view sv = arrImpl.GetView(recordIndex);
                 const ui32 size = static_cast<const arrow::FixedSizeBinaryType*>(batch->schema()->field(i)->type().get())->byte_width();
-                AFL_VERIFY(size == sv.size());
+                YDB_LOG_VERIFY(size == sv.size());
                 result.append(sv.data(), sv.size());
                 return true;
             }
@@ -244,7 +242,8 @@ TString TSimpleRowViewV0::BuildString(const std::shared_ptr<arrow::RecordBatch>&
                 result.append((const char*)&value, sizeof(CType));
                 return true;
             }
-            AFL_VERIFY(false)("type", batch->column(i)->type()->ToString());
+            YDB_LOG_VERIFY(false,
+                {"type", batch->column(i)->type()->ToString()});
             return false;
         });
     }
@@ -264,9 +263,9 @@ public:
         if (fieldIndex != ColumnIndex) {
             return false;
         }
-        AFL_VERIFY(fieldIndex == ColumnIndex);
+        YDB_LOG_VERIFY(fieldIndex == ColumnIndex);
         if (!data) {
-            Result = std::make_shared<arrow::NullScalar>();
+            Result = arrow::MakeNullScalar(Schema->field(fieldIndex)->type());
             return true;
         }
         using ScalarType = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
@@ -291,17 +290,17 @@ public:
 TConclusion<std::shared_ptr<arrow::Scalar>> TSimpleRowViewV0::GetScalar(
     const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const {
     TGetScalarActor resultActor(columnIndex, schema);
-    auto conclusion = Scan(schema, resultActor);
+    auto conclusion = Scan(*schema, resultActor);
     if (conclusion.IsFail()) {
         return conclusion;
     }
-    AFL_VERIFY(resultActor.GetResult());
+    YDB_LOG_VERIFY(resultActor.GetResult());
     return resultActor.GetResult();
 }
 
 TConclusionStatus TSimpleRowViewV0::TIterator::InitCurrentData() {
-    AFL_VERIFY(StartedFlag);
-    AFL_VERIFY(!IsFinishedFlag);
+    YDB_LOG_VERIFY(StartedFlag);
+    YDB_LOG_VERIFY(!IsFinishedFlag);
     if (1 > Values.size()) {
         IsFinishedFlag = true;
         return TConclusionStatus::Fail("unexpected string end");
@@ -350,7 +349,7 @@ TConclusionStatus TSimpleRowViewV0::TIterator::InitCurrentData() {
             CurrentValue = std::string_view(Values.data(), size);
             return false;
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     };
 

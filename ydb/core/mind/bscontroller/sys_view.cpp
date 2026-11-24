@@ -81,10 +81,11 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             totalSize = Min(totalSize.value_or(Max<ui64>()), slotSize);
         }
     }
-    const ui64 a = totalSize.value_or(0) * disks.size() * type.DataParts() / type.TotalPartCount();
-    const ui64 b = allocatedSize * disks.size() * type.DataParts() / type.TotalPartCount();
-    info->SetAllocatedSize(b);
-    info->SetAvailableSize(b < a ? a - b : 0);
+    const unsigned __int128 scaledTotalSize = TBlobStorageController::TGroupInfo::ScaleGroupResource(totalSize.value_or(0), disks.size(), type);
+    const unsigned __int128 scaledAllocatedSize = TBlobStorageController::TGroupInfo::ScaleGroupResource(allocatedSize, disks.size(), type);
+    const unsigned __int128 scaledAvailableSize = scaledAllocatedSize < scaledTotalSize ? scaledTotalSize - scaledAllocatedSize : 0;
+    info->SetAllocatedSize(static_cast<ui64>(Min<unsigned __int128>(scaledAllocatedSize, Max<ui64>())));
+    info->SetAvailableSize(static_cast<ui64>(Min<unsigned __int128>(scaledAvailableSize, Max<ui64>())));
 }
 
 class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
@@ -185,8 +186,7 @@ public:
     }
 
     template <typename TResponse, typename TRequest, typename TIndex>
-    void Reply(TRequest& request, TIndex& index) {
-        const auto& record = request->Get()->Record;
+    THolder<TResponse> BuildResponse(const TRequest& record, const TIndex& index) {
         auto response = MakeHolder<TResponse>();
 
         auto begin = index.begin();
@@ -208,29 +208,50 @@ public:
             }
         }
 
-        for (; begin != end; ++begin) {
+        for (; begin != index.end(); ++begin) {
+            if (end != index.end() && !(begin->first < end->first)) {
+                break;
+            }
             auto* entry = response->Record.AddEntries();
             FillKey(entry->MutableKey(), begin->first);
             entry->MutableInfo()->CopyFrom(*begin->second);
         }
 
-        Send(request->Sender, response.Release());
+        return response;
     }
 
     void Handle(TEvSysView::TEvGetPDisksRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetPDisksResponse>(ev, PDiskIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetPDisksResponse>(ev->Get()->Record, PDiskIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetVSlotsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetVSlotsResponse>(ev, VSlotIndex);
+        const auto& request = ev->Get()->Record;
+        auto response = BuildResponse<TEvSysView::TEvGetVSlotsResponse>(request, VSlotIndex);
+        if (request.GetIncludeDDiskPoolNames()) {
+            for (auto& entry : *response->Record.MutableEntries()) {
+                auto* slot = entry.MutableInfo();
+                if (!slot->GetDDisk()) {
+                    continue;
+                }
+                const auto group = GroupIndex.find(TGroupId::FromValue(slot->GetGroupId()));
+                if (group == GroupIndex.end()) {
+                    continue;
+                }
+                const TBoxStoragePoolId poolId(group->second->GetBoxId(), group->second->GetStoragePoolId());
+                if (const auto pool = StoragePoolIndex.find(poolId); pool != StoragePoolIndex.end() && pool->second->HasName()) {
+                    slot->SetStoragePoolName(pool->second->GetName());
+                }
+            }
+        }
+        Send(ev->Sender, response.Release());
     }
 
     void Handle(TEvSysView::TEvGetGroupsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetGroupsResponse>(ev, GroupIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetGroupsResponse>(ev->Get()->Record, GroupIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStoragePoolsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetStoragePoolsResponse>(ev, StoragePoolIndex);
+        Send(ev->Sender, BuildResponse<TEvSysView::TEvGetStoragePoolsResponse>(ev->Get()->Record, StoragePoolIndex).Release());
     }
 
     void Handle(TEvSysView::TEvGetStorageStatsRequest::TPtr& ev) {
@@ -314,6 +335,15 @@ IActor* TBlobStorageController::CreateSystemViewsCollector() {
 }
 
 void TBlobStorageController::ForwardToSystemViewsCollector(STATEFN_SIG) {
+    if (ev->GetTypeRewrite() == TEvSysView::EvGetStoragePoolsRequest &&
+            ev->Get<TEvSysView::TEvGetStoragePoolsRequest>()->Record.GetNbsDiscoveryOnly()) {
+        auto response = std::make_unique<TEvSysView::TEvGetStoragePoolsResponse>();
+        response->Record.SetHasDDiskPools(std::ranges::any_of(StoragePools, [](const auto& entry) {
+            return entry.second.DDisk;
+        }));
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
     TActivationContext::Forward(ev, SystemViewsCollectorId);
 }
 
@@ -379,7 +409,9 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
         pb->SetAvailableSize(m.GetAvailableSize());
     }
     if (status) {
-        pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(*status));
+        // PhantomOnly is still reported, so the real state of the VDisk is visible anyway
+        const bool reportAsReady = phantomOnly && AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+        pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(reportAsReady ? NKikimrBlobStorage::READY : *status));
     }
     if (m.HasState()) {
         pb->SetState(NKikimrWhiteboard::EVDiskState_Name(m.GetState()));
@@ -459,7 +491,7 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
 
     groupInfo->BridgePileId.CopyToProto(info, &std::decay_t<decltype(*info)>::SetBridgePileId);
 
-    if (groupInfo->BridgeProxyGroupId) {
+    if (groupInfo->BridgeProxyGroupId && !groupInfo->IsInlinePile()) { // inline pile is shown as an ordinary group
         groupInfo->BridgeProxyGroupId->CopyToProto(info, &std::decay_t<decltype(*info)>::SetProxyGroupId);
     }
 
@@ -567,9 +599,10 @@ void TBlobStorageController::UpdateSystemViews() {
                     SysViewChangedGroups.insert(*group->BridgeProxyGroupId);
                 }
                 if (group->BridgeGroupInfo) {
-                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
                         SysViewChangedGroups.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    }
+                    });
                 }
             }
         }
@@ -688,7 +721,7 @@ void TBlobStorageController::UpdateSystemViews() {
 
                 info->GetBridgePileId().CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetBridgePileId);
 
-                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId()) {
+                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId(); proxyGroupId && !info->IsInlinePile()) {
                     proxyGroupId->CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetProxyGroupId);
                 }
             }
@@ -718,52 +751,41 @@ void TBlobStorageController::UpdateSystemViews() {
 
         for (auto& [groupId, g] : state.Groups) {
             if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
-                aggr(g, group->BridgeGroupInfo->GetBridgeGroupState().GetPile() | std::views::transform([](const auto& pile) {
-                    return TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                }));
+                std::vector<TGroupId> pileGroupIds;
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    pileGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                });
+                aggr(g, pileGroupIds);
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
                 aggr(g, it->second.Info->GetBridgeGroupIds());
             }
         }
 
         for (auto& [groupId, g] : state.Groups) {
-            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end()) {
+            g.SetBridgeSyncStatus(GetBridgeSyncStatus(groupId));
+            if (const auto timestamp = GetBridgeSyncLastProgressTimestamp(groupId)) {
+                g.SetBridgeSyncLastProgressTimestamp(timestamp->GetValue());
+            }
+            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end() && it->second.ErrorCount) {
                 TBridgeSyncState& state = it->second;
                 g.SetBridgeSyncLastError(state.LastError);
                 g.SetBridgeSyncLastErrorTimestamp(state.LastErrorTimestamp.GetValue());
                 g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
                 g.SetBridgeSyncErrorCount(state.ErrorCount);
             }
-            if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId && group->BridgePileId) {
-                if (const TGroupInfo *proxyGroup = FindGroup(*group->BridgeProxyGroupId); proxyGroup && proxyGroup->BridgeGroupInfo) {
-                    const auto& bridgeGroupState = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                    if (group->BridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
-                        const auto& pile = bridgeGroupState.GetPile(group->BridgePileId.GetPileIndex());
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
-                    }
-                }
-            } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end() &&
-                    it->second.Info &&
-                    it->second.Info->Group &&
-                    it->second.Info->Group->HasBridgeProxyGroupId() &&
-                    it->second.Info->Group->HasBridgePileId()) {
-                if (const auto proxyIt = StaticGroups.find(TGroupId::FromProto(&it->second.Info->Group.value(),
-                            &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
-                        proxyIt != StaticGroups.end() &&
-                        proxyIt->second.Info &&
-                        proxyIt->second.Info->Group &&
-                        proxyIt->second.Info->Group->HasBridgeGroupState()) {
-                    const auto& bridgeGroupState = proxyIt->second.Info->Group->GetBridgeGroupState();
-                    const auto bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
-                        &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
-                    if (bridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
-                        const auto& pile = bridgeGroupState.GetPile(bridgePileId.GetPileIndex());
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
+            if (const auto stage = GetBridgeSyncStage(groupId)) {
+                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(*stage));
+                if (*stage != NKikimrBridge::TGroupState::SYNCED) {
+                    if (const auto remaining = GetBridgeSyncRemaining(groupId, *stage)) {
+                        g.SetBridgeSyncRemainingBytes(remaining->Bytes);
+                        g.SetBridgeSyncRemainingBytesComplete(remaining->Complete);
                     }
                 }
             }
             if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
                 TSyncerState& syncerState = it->second;
+                g.SetBridgeSyncCopyBytesPerSecond(syncerState.CopyRate);
                 for (const auto& perNodeInfo : syncerState.NodeIds | std::views::values) {
                     if (perNodeInfo.Progress.BytesTotal) {
                         const double progress = intmax_t(perNodeInfo.Progress.BytesDone) * 1'000'000 /

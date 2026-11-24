@@ -22,6 +22,8 @@ private:
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
     std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
+    // Unit tests turn hints on without AppData feature flags. Production uses EnableCsPatternIndexHints.
+    bool PatternIndexHintsEnabled = false;
 
 public:
     bool IsGenerated(const ui32 columnId) const {
@@ -78,7 +80,7 @@ public:
         if (data.empty()) {
             return;
         }
-        AFL_VERIFY(!Program);
+        YDB_LOG_VERIFY(!Program);
         std::vector<ui32> columnsVector;
         THashSet<ui32> columnsSet;
         for (auto&& i : data) {
@@ -97,6 +99,10 @@ public:
         OverrideProcessingColumnsSet = std::move(columnsSet);
     }
 
+    void SetPatternIndexHintsEnabled(const bool value) {
+        PatternIndexHintsEnabled = value;
+    }
+
     [[nodiscard]] TConclusionStatus Init(
         const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept;
     [[nodiscard]] TConclusionStatus Init(
@@ -104,7 +110,7 @@ public:
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetChainVerified() const {
-        AFL_VERIFY(!!Program);
+        YDB_LOG_VERIFY(!!Program);
         return Program;
     }
 

@@ -52,6 +52,7 @@
 ### Дополнительные параметры {#aux}
 
 {% include [import-additional-params.md](import-additional-params.md) %}
+
 - `--list`: Перечислить объекты в существующей выгрузке.
 
 {% include [import-resource-broker-note.md](import-resource-broker-note.md) %}
@@ -111,6 +112,8 @@
 {% include [import-operation-list-tail.md](import-operation-list-tail.md) %}
 
 ## Примеры {#examples}
+
+Для восстановления первоначальных данных перед запуском асинхронной репликации используйте [пошаговое руководство по переносу с помощью резервного копирования и восстановления](../../../../devops/async-replication-initial-sync.md). Репликация запускается после успешного импорта всех целевых таблиц.
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

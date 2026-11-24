@@ -23,6 +23,20 @@ ICodec* FindCodec(ECodec codecId)
                 /*bytewise*/ true> result;
             return &result;
         }
+        case ECodec::IsaReedSolomon_4_6: {
+            static NDetail::TCodec<
+                TReedSolomonIsa<4, 6, 8, NDetail::TCodecTraits>,
+                ECodec::IsaReedSolomon_4_6,
+                /*bytewise*/ true> result;
+            return &result;
+        }
+        case ECodec::IsaReedSolomon_5_5: {
+            static NDetail::TCodec<
+                TReedSolomonIsa<5, 5, 8, NDetail::TCodecTraits>,
+                ECodec::IsaReedSolomon_5_5,
+                /*bytewise*/ true> result;
+            return &result;
+        }
         case ECodec::IsaReedSolomon_6_3: {
             static NDetail::TCodec<
                 TReedSolomonIsa<6, 3, 8, NDetail::TCodecTraits>,

@@ -379,6 +379,7 @@ message TInternalOperationData {
     optional bool WritePortions = 4;
     optional bool IsBulk = 5;
     optional uint64 SchemeShardLocalPathId = 6;
+    repeated uint64 PortionIds = 7;
 }
 
 // Sent by columnshard when some overload reason stopped being relevant
@@ -418,4 +419,8 @@ message TCutHistoryRequest {
     optional NActorsProto.TActorId Recipient = 6;
     optional uint32 ToGeneration = 7;
     optional uint32 SendingGeneration = 8;
+}
+
+message TCutHistoryRequests {
+    repeated TCutHistoryRequest Requests = 1;
 }

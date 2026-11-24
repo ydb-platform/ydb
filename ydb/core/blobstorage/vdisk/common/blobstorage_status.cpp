@@ -22,6 +22,7 @@ namespace NKikimr {
         const TActorId NotifyId;
         const TInstant Now;
         const bool ReplDone;
+        const bool DurabilityReplDone;
         const bool IsReadOnly;
         unsigned Counter;
         std::unique_ptr<TEvBlobStorage::TEvVStatusResult> Result;
@@ -43,6 +44,7 @@ namespace NKikimr {
 
             Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(
                 NKikimrProto::OK, SelfVDiskId, true, ReplDone, IsReadOnly, IncarnationGuid);
+            Result->Record.SetDurabilityReplicated(DurabilityReplDone);
 
             const auto& oos = VCtx->GetOutOfSpaceState();
             Result->Record.SetStatusFlags(oos.GetGlobalStatusFlags().Flags);
@@ -104,6 +106,7 @@ namespace NKikimr {
                 const TActorId &notifyId,
                 const TInstant &now,
                 bool replDone,
+                bool durabilityReplDone,
                 bool isReadOnly)
             : TActorBootstrapped<TStatusRequestHandler>()
             , VCtx(vctx)
@@ -118,6 +121,7 @@ namespace NKikimr {
             , NotifyId(notifyId)
             , Now(now)
             , ReplDone(replDone)
+            , DurabilityReplDone(durabilityReplDone)
             , IsReadOnly(isReadOnly)
             , Counter(0)
         {}
@@ -136,9 +140,10 @@ namespace NKikimr {
             const TActorId &notifyId,
             const TInstant &now,
             bool replDone,
+            bool durabilityReplDone,
             bool isReadOnly) {
         return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId,
-            incarnationGuid, groupInfo, ev, notifyId, now, replDone, isReadOnly);
+            incarnationGuid, groupInfo, ev, notifyId, now, replDone, durabilityReplDone, isReadOnly);
     }
 
 } // NKikimr

@@ -6,7 +6,7 @@ This section describes the integration options between {{ ydb-short-name }} and 
 
 [Logstash](https://www.elastic.co/logstash) dynamically ingests, transforms, and ships data regardless of format or complexity. A Logstash pipeline can contain different types of plugins: input, output, and filter. The {{ ydb-short-name }} Logstash plugins repository is hosted on [GitHub](https://github.com/ydb-platform/ydb-logstash-plugins) and contains the following plugins:
 
-* **Storage Plugin** for persisting Logstash events in [row-oriented](../../concepts/datamodel/table.md#row-oriented-table) or [column-oriented](../../concepts/datamodel/table.md#olap-data-types) {{ ydb-short-name }} tables;
+* **Storage Plugin** for persisting Logstash events in [row-oriented](../../concepts/datamodel/table.md#row-oriented-tables) or [column-oriented](../../concepts/datamodel/table.md#column-oriented-tables) {{ ydb-short-name }} tables;
 * **Input Topic Plugin** for reading Logstash events from {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md);
 * **Output Topic Plugin** for sending Logstash events to {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md).
 
@@ -55,7 +55,7 @@ ydb_storage {
 
 ## {{ ydb-short-name }} Storage Plugin
 
-This plugin allows storing the Logstash events stream in {{ ydb-short-name }} tables for further analysis. This is especially useful with [column-oriented tables](../../concepts/datamodel/table.md#column-tables) optimized for handling Online Analytical Processing (OLAP) requests. Every [field](https://www.elastic.co/guide/en/logstash/current/event-dependent-configuration.html) of a Logstash event will be stored in a column with a corresponding name. Fields that do not match any column will be ignored.
+This plugin allows storing the Logstash events stream in {{ ydb-short-name }} tables for further analysis. This is especially useful with [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) optimized for handling Online Analytical Processing (OLAP) requests. Every [field](https://www.elastic.co/guide/en/logstash/current/event-dependent-configuration.html) of a Logstash event will be stored in a column with a corresponding name. Fields that do not match any column will be ignored.
 
 ### Configuration
 

@@ -1,5 +1,6 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ {
@@ -66,6 +67,37 @@ Y_UNIT_TEST(TestPublishAndForget) {
     }
     resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1));
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 0);
+}
+
+// The direct read proxy reports its death once for all its partition sessions; the cache must detach it from all
+// of them, not only from the first one.
+Y_UNIT_TEST(TestProxyDeathDetachesAllPartitionSessions) {
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+    const TVector<ui64> partitionSessionIds{1, 2, 3};
+    for (ui64 partitionSessionId : partitionSessionIds) {
+        runtime->Send(setup.ProxyId, TActorId{},
+            new TEvPQ::TEvRegisterDirectReadSession({"session1", partitionSessionId}, 1));
+    }
+    const auto proxy = runtime->AllocateEdgeActor();
+    for (ui64 partitionSessionId : partitionSessionIds) {
+        runtime->Send(setup.ProxyId, proxy,
+            new NGRpcProxy::V1::TEvPQProxy::TEvDirectReadDataSessionConnected({"session1", partitionSessionId}, 1, 1));
+    }
+    auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData());
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), partitionSessionIds.size());
+    for (const auto& [key, data] : resp->Data) {
+        UNIT_ASSERT_C(data.Client.Defined() && data.Client->ProxyId == proxy,
+            "partition session " << key.PartitionSessionId << " is not attached to the proxy");
+    }
+
+    runtime->Send(setup.ProxyId, proxy, new NGRpcProxy::V1::TEvPQProxy::TEvDirectReadDataSessionDead("session1"));
+    resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData());
+    UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), partitionSessionIds.size());
+    for (const auto& [key, data] : resp->Data) {
+        UNIT_ASSERT_C(!data.Client.Defined(),
+            "partition session " << key.PartitionSessionId << " is still attached to the dead proxy");
+    }
 }
 
 Y_UNIT_TEST(TestDeregister) {

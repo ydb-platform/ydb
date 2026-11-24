@@ -92,6 +92,7 @@ enum class EYtSettingType: ui64 {
     IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     ExtraColumns             /* "extraColumns" */,
     Pruned                   /* "pruned" */,
+    Consumer                 /* "consumer" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -149,6 +150,7 @@ enum class EYtSettingType: ui64 {
     ColumnGroups             /* "column_groups", "columngroups" */,
     SecurityTags             /* "security_tags", "securitytags" */,
     PrimaryKey               /* "primary_key" "primarykey" */,
+    Producer                 /* "producer" */,
     // Create, Alter
     Columns                  /* "columns"*/,
     Actions                  /* "actions"*/,

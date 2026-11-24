@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_INITIAL_TS = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
+@pytest.mark.usefixtures("wait_initial_resources")
 class TestWatermarksInYdb(StreamingTestBase):
     idle_timeout_seconds = 5
 
@@ -737,7 +738,7 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"kqp_constraints_transformer": False}], indirect=["kikimr"])
+    @pytest.mark.parametrize("kikimr", [{"enable_kqp_constraints_transformer": False}], indirect=["kikimr"])
     def test_watermarks_kqp_slj(
         self: StreamingTestBase,
         kikimr: Kikimr,

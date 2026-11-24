@@ -13,6 +13,9 @@
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
+#include <util/stream/output.h>
+
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
 
@@ -89,14 +92,23 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         auto& requestData = DecompressQueue.front();
         auto& readResult = requestData.DataEv->Get()->Result;
         for (auto& msg : readResult.Messages) {
-            bool compressed = (msg.GetCodec() != NYdb::NTopic::ECodec::RAW);
-            if (compressed) {
-                if (!requestData.DecompressionDone && Settings.ReportStats_) {
-                    SendOperationChange(EWorkerOperation::DECOMPRESS);
-                }
-                requestData.DecompressionDone = true;
-                DecompressMessage(msg);
+            if (msg.GetCodec() == NYdb::NTopic::ECodec::RAW) {
+                continue;
             }
+            if (!requestData.DecompressionDone && Settings.ReportStats_) {
+                SendOperationChange(EWorkerOperation::DECOMPRESS);
+            }
+            try {
+                DecompressMessage(msg);
+            } catch (...) {
+                if (Settings.ReportStats_) {
+                    SendError();
+                }
+                return Leave(TEvWorker::TEvGone::DATA_ERROR, MakeDecompressionIssue(
+                    TString(Settings.GetBase().Topics_.at(0).Path_), readResult.PartitionId, msg.GetOffset(),
+                    CurrentExceptionMessage(), static_cast<ui32>(msg.GetCodec())));
+            }
+            requestData.DecompressionDone = true;
         }
         ResponseQueue.emplace_back(std::move(requestData));
         DecompressQueue.pop_front();
@@ -115,6 +127,18 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         auto& response = ResponseQueue.front();
         auto& result = response.DataEv->Get()->Result;
+        if (Settings.FailOnDataLoss_) {
+            for (const auto& msg : result.Messages) {
+                if (msg.GetOffset() != NextReadOffset) {
+                    Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                        << "Unexpected message offset in topic " << Settings.GetBase().Topics_.at(0).Path_
+                        << ", partition " << result.PartitionId << ", consumer " << Settings.GetBase().ConsumerName_
+                        << ": expected offset " << NextReadOffset << ", got " << msg.GetOffset());
+                    return;
+                }
+                NextReadOffset += msg.GetLogicalMessageCount();
+            }
+        }
         const auto msgCount = result.Messages.size();
         TVector<TTopicMessage> records(::Reserve(msgCount));
         const ui64 maxOffset = result.Messages.back().GetOffset();
@@ -139,6 +163,35 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         ResponseQueue.pop_front();
         Send(Worker, event.Release());
+        CheckStatus();
+    }
+
+    void CheckStatus() {
+        // Requires source-side statuses to follow read responses on the stream.
+        // The proxy preserves SDK event order; finish local decompression too.
+        if (!PendingStatusReadOffset || !DecompressQueue.empty() || !ResponseQueue.empty()) {
+            return;
+        }
+
+        if (*PendingStatusReadOffset > NextReadOffset) {
+            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                << "Topic " << Settings.GetBase().Topics_.at(0).Path_
+                << ", partition " << Settings.GetBase().Topics_.at(0).PartitionIds_.at(0)
+                << ", consumer " << Settings.GetBase().ConsumerName_
+                << ": expected offset " << NextReadOffset
+                << " is before server read offset " << *PendingStatusReadOffset);
+        }
+        PendingStatusReadOffset.reset();
+    }
+
+    void Handle(TEvYdbProxy::TEvTopicReaderStatus::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!Settings.FailOnDataLoss_ || !Settings.CheckStatusForDataLoss_ || result.ReadSessionId != ReadSessionId) {
+            return;
+        }
+
+        PendingStatusReadOffset = result.ReadOffset;
+        CheckStatus();
     }
 
     void Handle(TEvYdbProxy::TEvEndTopicPartition::TPtr& ev) {
@@ -153,8 +206,18 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
-        ReadSessionId = ev->Get()->Result.ReadSessionId;
-        Send(Worker, new TEvWorker::TEvReaderStarted(ev->Get()->Result.CommittedOffset));
+        const auto& result = ev->Get()->Result;
+        ReadSessionId = result.ReadSessionId;
+        NextReadOffset = result.ReadOffset;
+        PendingStatusReadOffset.reset();
+        if (Settings.FailOnDataLoss_ && result.RetainedStartOffset && *result.RetainedStartOffset > NextReadOffset) {
+            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                << "Topic " << Settings.GetBase().Topics_.at(0).Path_
+                << ", consumer " << Settings.GetBase().ConsumerName_
+                << ": read offset " << NextReadOffset
+                << " is before retained start offset " << *result.RetainedStartOffset);
+        }
+        Send(Worker, new TEvWorker::TEvReaderStarted(result.CommittedOffset));
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
@@ -227,6 +290,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
         if (Settings.ReportStats_) {
             SendError();
+        }
+
+        if (ev->Get()->FailureKind == TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError) {
+            return Leave(TEvWorker::TEvGone::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         }
 
         switch (ev->Get()->Result.GetStatus()) {
@@ -315,6 +382,7 @@ public:
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
+            hFunc(TEvYdbProxy::TEvTopicReaderStatus, Handle);
             hFunc(TEvYdbProxy::TEvEndTopicPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             hFunc(TEvents::TEvWakeup, HandleWakeup);
@@ -343,6 +411,8 @@ private:
     TActorId ReadSession;
     TString ReadSessionId;
     ui64 CommittedOffset = 0;
+    ui64 NextReadOffset = 0;
+    std::optional<ui64> PendingStatusReadOffset;
     TMaybe<ui64> CommitInFlight;
     TMaybe<ui64> PendingCommit;
 

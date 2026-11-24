@@ -129,6 +129,13 @@ public:
              TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
+    // ColumnShard can report completion before this schemeshard has applied the plan step.
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "TEvNotifyTxCompletionResult triggered early");
+        NTableState::CollectSchemaChanged(OperationId, ev, context);
+        return false;
+    }
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
@@ -430,6 +437,12 @@ public:
 
         ApplySharding(OperationId.GetTxId(), pathId, storeInfo, channelsBindings, txState, context.SS);
 
+        // Undo-safety contract: the first direct DB write follows — from here
+        // on this Propose is undo-unsafe. Single-part suboperation only
+        // (enforced at ignite time in ProcessOperationParts): a failed propose
+        // aborts the whole transaction and the txc rolls everything back.
+        // All validations MUST stay above this line — a SetError/return after
+        // it would leave unreverted memory changes.
         NIceDb::TNiceDb db(context.GetDB());
 
         TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();

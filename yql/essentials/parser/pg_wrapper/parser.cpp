@@ -70,6 +70,7 @@ extern "C" {
 extern __thread Latch LocalLatchData;
 extern void destroy_timezone_hashtable();
 extern void destroy_typecache_hashtable();
+extern void destroy_collation_cache();
 extern void free_current_locale_conv();
 extern void RE_cleanup_cache();
 const char *progname;
@@ -304,6 +305,7 @@ extern "C" void setup_pg_thread_cleanup() {
             destroy_timezone_hashtable();
             destroy_typecache_hashtable();
             RE_cleanup_cache();
+            destroy_collation_cache();
 
             free_current_locale_conv();
             ResourceOwnerDelete(CurrentResourceOwner);

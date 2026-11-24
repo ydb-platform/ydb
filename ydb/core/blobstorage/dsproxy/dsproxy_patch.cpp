@@ -4,6 +4,7 @@
 #include "root_cause.h"
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/util/stlog.h>
 
 #include <bit>
@@ -698,6 +699,7 @@ public:
         if (OriginalGroupId == Info->GroupID) {
             SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
+            get->IsProxySubrequest = true;
             SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }
@@ -959,8 +961,14 @@ public:
         Info->PickSubgroup(OriginalId.Hash(), &VDisks, nullptr);
         IsSecured = (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE);
 
+        if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+            // Both VPatch and VMovedPatch require NORMAL; otherwise use ordinary Get/Put.
+            UseVPatch &= Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::NORMAL;
+        }
+
         IsGoodPatchedBlobId = result;
-        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsAllowedErasure = (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+                && Info->Type.GetErasure() != TErasureType::Erasure8Plus2Block)
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (EnableVPatchForTesting && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch

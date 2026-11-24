@@ -1,240 +1,139 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging
-import os
+
+from pathlib import Path
+
 import pytest
-import time
+import ydb as ydb_sdk
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, get_checkpoint_coordinator_metric
+from ydb.tests.library.common.wait_for import wait_for
 
 
-def assert_issues_contain(text, issues):
-    for issue in issues:
-        if text in issue.message:
-            return
-    assert False, f"Text [{text}] is expected to be among issues:\n{issues}"
+class TestContinueMode(StreamingTestBase):
+    def test_continue_from_offsets(self, ydb_topics):
+        first = ydb_topics('continue_1', partitions=2)
+        second = ydb_topics('continue_2', partitions=2)
+        client = first.kikimr.ydb_client
+        partition_key = 'trololo'
+        query = first.start(f"""
+            PRAGMA ydb.MaxTasksPerStage = '2';
+            INSERT INTO {first.output} SELECT Data FROM {first.input};
+        """)
+        try:
+            execution_id = client.query(f"""
+                SELECT LastExecutionId FROM `.sys/streaming_queries` WHERE Path = '{query}';
+            """)[0].rows[0]['LastExecutionId']
+            assert execution_id
+            checkpoint_id = execution_id + '-' + query
 
+            def assert_has_saved_checkpoints():
+                # The checkpoint namespace survives ALTER and execution-id changes.
+                rows = client.query(f"""
+                    SELECT COUNT(*) AS saved
+                    FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+                    WHERE graph_id = '{checkpoint_id}';
+                """)[0].rows
+                assert rows[0]['saved'] > 0, rows
 
-class TestContinueMode(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_continue_from_offsets(self, kikimr, client):
-        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
+            def metric(name):
+                return get_checkpoint_coordinator_metric(first.kikimr.cluster, query, name)
 
-        self.init_topics("continue_1", partitions_count=2)
-        input_topic_1 = self.input_topic
-        output_topic_1 = self.output_topic
-        consumer_1 = self.consumer_name
-        self.init_topics("continue_2", partitions_count=2)
-        input_topic_2 = self.input_topic
-        output_topic_2 = self.output_topic
-        consumer_2 = self.consumer_name
+            first.write(['1', '2'], partition_key=partition_key)
+            assert first.read(2) == ['1', '2']
+            # A checkpoint already in flight when output is observed may not yet
+            # contain the delivered input offsets. Wait for subsequent checkpoints.
+            first.checkpoint(query, count=3)
+            first.stop(query)
+            assert_has_saved_checkpoints()
 
-        partition_key = "trololo"
+            first.write(['3', '4'], partition_key=partition_key)
+            # This source is absent from the old checkpoint. Forced continuation
+            # must start it at fresh offsets, skipping data already in the topic.
+            second.write(['before-new-source-start'], partition_key=partition_key)
+            sql = f"""
+                PRAGMA ydb.MaxTasksPerStage = '1';
+                INSERT INTO {second.output}
+                SELECT Data FROM {first.input}
+                UNION ALL
+                SELECT Data FROM {second.input};
+            """
+            missing_topic = f'Topic `{second.input_topic}` is not found in previous query'
 
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="2";
+            # FORCE permits replacing the SQL text. The disposition independently
+            # controls whether missing sources in the old checkpoint are tolerated.
+            with pytest.raises(ydb_sdk.issues.Error) as error:
+                client.query(f"""
+                    ALTER STREAMING QUERY `{query}` SET (
+                        RUN = TRUE, FORCE = TRUE, STREAMING_DISPOSITION = FROM_CHECKPOINT
+                    ) AS DO BEGIN
+                        {sql}
+                    END DO;
+                """)
+            assert missing_topic in str(error.value), str(error.value)
 
-            INSERT INTO yds.`{output_topic_1}`
-            SELECT Data FROM yds.`{input_topic_1}`;'''
+            def failed_with_missing_topic():
+                state = first.state(query)
+                return state['Status'] == 'FAILED' and missing_topic in state['Issues']
 
-        query_id = client.create_query(
-            "continue-from-offsets-query", sql, type=fq.QueryContent.QueryType.STREAMING
-        ).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+            assert wait_for(failed_with_missing_topic, timeout_seconds=120, step_seconds=0.5), first.state(query)
+            first.stop(query)
+            assert_has_saved_checkpoints()
 
-        data = ["1", "2"]
-        write_stream(input_topic_1, data, partition_key=partition_key)
+            client.query(f"""
+                ALTER STREAMING QUERY `{query}` SET (
+                    RUN = TRUE, FORCE = TRUE, STREAMING_DISPOSITION = FROM_CHECKPOINT_FORCE
+                ) AS DO BEGIN
+                    {sql}
+                END DO;
+            """)
+            first.checkpoint(query, count=3)
+            assert first.state(query)['Status'] == 'RUNNING', first.state(query)
 
-        assert read_stream(output_topic_1, len(data), consumer_name=consumer_1) == data
+            # KQP currently logs coordinator transient issues rather than exposing
+            # this warning in .sys/streaming_queries.Issues.
+            warning = missing_topic + '. Query will use fresh offsets for its partitions'
 
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
+            def has_fresh_offsets_warning():
+                return any(
+                    warning in Path(node.ydbd_log_file_path).read_text(errors='replace')
+                    for node in first.kikimr.cluster.slots.values()
+                )
 
-        client.abort_query(query_id)
-        client.wait_query(query_id)
+            assert wait_for(has_fresh_offsets_warning, timeout_seconds=120, step_seconds=0.5), warning
+            assert metric('RestoredStreamingOffsetsFromCheckpoint') == 1
 
-        # Write to first topic.
-        # These offsets wouldn't be fresh but we should get this data in second output topic
-        # because offsets should be restored from checkpoint
-        data_2 = ["3", "4"]
-        write_stream(input_topic_1, data_2, partition_key=partition_key)
+            second.write(['5', '6'], partition_key=partition_key)
+            assert sorted(second.read(4)) == ['3', '4', '5', '6']
+            first.checkpoint(query, count=3)
+            assert_has_saved_checkpoints()
 
-        sql2 = Rf'''
-            PRAGMA dq.MaxTasksPerStage="1";
+            first.restart_streaming_node(first.kikimr)
+            assert wait_for(
+                lambda: metric('RestoredFromSavedCheckpoint') >= 1,
+                timeout_seconds=120,
+                step_seconds=0.5,
+            ), 'The query did not restore from its saved checkpoint after restart'
+            first.checkpoint(query, count=3)
+            assert_has_saved_checkpoints()
 
-            INSERT INTO yds.`{output_topic_2}`
-            SELECT Data FROM yds.`{input_topic_1}`;
+            # Verify both sources keep working without replaying earlier messages.
+            first.write(['7', '8'], partition_key=partition_key)
+            second.write(['9', '10'], partition_key=partition_key)
+            assert sorted(second.read(4)) == sorted(['7', '8', '9', '10'])
+            first.checkpoint(query, count=3)
+            assert_has_saved_checkpoints()
+        finally:
+            # Both helpers must keep their topics and data sources until the query is dropped.
+            client.query(f'DROP STREAMING QUERY IF EXISTS `{query}`;')
 
-            INSERT INTO yds.`{output_topic_2}`
-            SELECT Data FROM yds.`{input_topic_2}`;'''
-
-        def assert_has_saved_checkpoints():
-            describe_result = client.describe_query(query_id).result
-            logging.debug("Describe result: {}".format(describe_result))
-            assert describe_result.query.meta.has_saved_checkpoints, "Expected has_saved_checkpoints flag: {}".format(
-                describe_result.query.meta
-            )
-
-        def find_text(issues, text):
-            for issue in issues:
-                if text in issue.message:
-                    return True
-                if len(issue.issues) > 0 and find_text(issue.issues, text):
-                    return True
-            return False
-
-        def assert_has_issues(text, transient=False, deadline=0):
-            describe_result = client.describe_query(query_id).result
-            logging.debug("Describe result: {}".format(describe_result))
-            if find_text(describe_result.query.transient_issue if transient else describe_result.query.issue, text):
-                return True
-            assert (
-                deadline and deadline > time.time()
-            ), "Text \"{}\" is expected to be found in{} issues, but was not found. Describe query result:\n{}".format(
-                text, " transient" if transient else "", describe_result
-            )
-            return False
-
-        assert_has_saved_checkpoints()
-
-        # 1. Not forced mode. Expect to fail
-        client.modify_query(
-            query_id,
-            "continue-from-offsets-query",
-            sql2,
-            type=fq.QueryContent.QueryType.STREAMING,
-            state_load_mode=fq.StateLoadMode.EMPTY,
-            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
-        )
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert_has_issues("Topic `continue_2_input` is not found in previous query")
-
-        # 2. Forced mode. Expect to run.
-        client.modify_query(
-            query_id,
-            "continue-from-offsets-query",
-            sql2,
-            type=fq.QueryContent.QueryType.STREAMING,
-            state_load_mode=fq.StateLoadMode.EMPTY,
-            streaming_disposition=StreamingDisposition.from_last_checkpoint(True),
-        )
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        transient_issues_deadline = time.time() + plain_or_under_sanitizer(60, 300)
-        msg = "Topic `continue_2_input` is not found in previous query. Query will use fresh offsets for its partitions"
-        while True:
-            if assert_has_issues(msg, True, transient_issues_deadline):
-                break
-            else:
-                time.sleep(0.3)
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
-            query_id, "RestoredStreamingOffsetsFromCheckpoint"
-        )
-        assert restored_metric == 1
-
-        data_3 = ["5", "6"]
-        write_stream(input_topic_2, data_3, partition_key=partition_key)
-
-        assert sorted(read_stream(output_topic_2, 4, consumer_name=consumer_2)) == ["3", "4", "5", "6"]
-
-        kikimr.compute_plane.wait_completed_checkpoints(
-            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
-        )
-
-        assert_has_saved_checkpoints()
-
-        # Check that after node failure the query will restore from its usual checkpoint
-        kikimr.compute_plane.kikimr_cluster.nodes[1].stop()
-        kikimr.compute_plane.kikimr_cluster.nodes[1].start()
-        kikimr.compute_plane.wait_bootstrap(1)
-
-        # sleep task lease ttl / 2
-        time.sleep(2.5)
-
-        # Wait while graph is restored from checkpoint
-        n = 100
-        while n:
-            n -= 1
-            restored_metric = kikimr.compute_plane.get_checkpoint_coordinator_metric(
-                query_id, "RestoredFromSavedCheckpoint", expect_counters_exist=False
-            )
-            if restored_metric >= 1:
-                break
-            time.sleep(0.3)
-        assert restored_metric >= 1
-
-        assert_has_saved_checkpoints()
-
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_deny_disposition_from_checkpoint_in_create_query(self, client):
-        client.create_yds_connection(name="yds_create", database_id="FakeDatabaseId")
-
-        self.init_topics("deny_disposition_from_checkpoint_in_create_query")
-
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="2";
-
-            INSERT INTO yds_create.`{self.output_topic}`
-            SELECT Data FROM yds_create.`{self.input_topic}`;'''
-
-        response = client.create_query(
-            "deny_disposition_from_checkpoint_in_create_query",
-            sql,
-            type=fq.QueryContent.QueryType.STREAMING,
-            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
-            check_issues=False,
-        )
-        assert response.issues
-        assert_issues_contain(
-            "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request", response.issues
-        )
-
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_deny_state_load_mode_from_checkpoint_in_modify_query(self, kikimr, client):
-        client.create_yds_connection(name="yds_modify", database_id="FakeDatabaseId")
-
-        self.init_topics("deny_state_load_mode_from_checkpoint_in_modify_query")
-
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="2";
-
-            INSERT INTO yds_modify.`{self.output_topic}`
-            SELECT Data FROM yds_modify.`{self.input_topic}`;'''
-
-        response = client.create_query(
-            "deny_state_load_mode_from_checkpoint_in_modify_query", sql, type=fq.QueryContent.QueryType.STREAMING
-        )
-
-        query_id = response.result.query_id
-
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        client.abort_query(query_id)
-        client.wait_query(query_id)
-
-        response = client.modify_query(
-            query_id,
-            "deny_state_load_mode_from_checkpoint_in_modify_query",
-            sql,
-            type=fq.QueryContent.QueryType.STREAMING,
-            state_load_mode=fq.StateLoadMode.FROM_LAST_CHECKPOINT,
-            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
-            check_issues=False,
-        )
-
-        assert response.issues
-        assert_issues_contain("State load mode \"FROM_LAST_CHECKPOINT\" is not supported", response.issues)
+    @pytest.mark.parametrize('disposition', ['FROM_CHECKPOINT', 'FROM_CHECKPOINT_FORCE'])
+    def test_disposition_from_checkpoint_in_create_query(self, ydb_topics, disposition):
+        io = ydb_topics('create_from_checkpoint')
+        io.write(['before_create'])
+        # KQP accepts checkpoint disposition on CREATE; without a previous
+        # execution it starts from fresh offsets. YQ rejected this API request.
+        query = io.start(f'INSERT INTO {io.output} SELECT Data FROM {io.input};', disposition=disposition)
+        io.write(['after_create'])
+        assert io.read(1) == ['after_create']
+        io.stop(query)

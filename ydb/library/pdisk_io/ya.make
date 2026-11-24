@@ -32,6 +32,8 @@ IF (OS_WINDOWS)
 ENDIF(OS_WINDOWS)
 
 PEERDIR(
+    contrib/libs/lz4
+    contrib/libs/snappy
     ydb/library/actors/core
     ydb/library/actors/wilson
     library/cpp/containers/stack_vector

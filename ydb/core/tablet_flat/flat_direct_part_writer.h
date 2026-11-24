@@ -89,6 +89,8 @@ namespace NTabletFlatExecutor {
 
         bool HasError() const noexcept { return Failed; }
         const TString& Error() const noexcept { return ErrorText; }
+        const TVector<ui32>& GetYellowMoveChannels() const noexcept { return YellowMoveChannels; }
+        const TVector<ui32>& GetYellowStopChannels() const noexcept { return YellowStopChannels; }
 
         // Backpressure: false means the owner should wait for in-flight puts to
         // complete (TEvPutResult) before feeding more rows.
@@ -218,6 +220,10 @@ namespace NTabletFlatExecutor {
                     SeenYellowStopChannels[channel] = true;
                     YellowStopChannels.push_back(channel);
                 }
+                // Keep the channels available to the owner on failure, and stop
+                // before draining any more queued blobs.
+                Fail(TStringBuilder() << "Cannot write direct part: out of disk space (yellow stop) on channel " << channel);
+                return;
             }
 
             Cfg.Writer.ChannelsShares.Update(channel, msg.ApproximateFreeSpaceShare);

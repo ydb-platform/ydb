@@ -289,7 +289,7 @@ public:
 
 using TDqCliqueValidator = std::function<void(const TString& cliqueValue)>;
 
-struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher {
+struct TDqConfiguration: public NCommon::TDispatcherAndSettings<TDqSettings> {
     using TPtr = TIntrusivePtr<TDqConfiguration>;
 
     explicit TDqConfiguration(bool strictConfigValidation = false);
@@ -298,10 +298,10 @@ struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher 
     TDqCliqueValidator CliqueValidator;
 
     template <class TProtoConfig, typename TFilter>
-    void Init(const TProtoConfig& config, const TFilter& filter) {
+    void Init(const TProtoConfig& config, const TFilter& filter, const TProjectSettings& projectSettings = {}) {
         // Init settings from config
         this->Dispatch(config.GetDefaultSettings(), filter);
-
+        this->ApplyProjectSettings(projectSettings);
         this->FreezeDefaults();
     }
 };

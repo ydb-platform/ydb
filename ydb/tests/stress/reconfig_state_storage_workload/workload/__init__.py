@@ -200,7 +200,6 @@ class WorkloadInsertDelete(WorkloadBase):
 
 
 class WorkloadReconfigStateStorage(WorkloadBase):
-    config_name = "StateStorage"
     loop_cnt = 0
     wait_for = 1
 
@@ -209,7 +208,8 @@ class WorkloadReconfigStateStorage(WorkloadBase):
         self.ringGroupActorIdOffset = 1
         self.http_endpoint = http_endpoint
         self.lock = threading.Lock()
-        self.config_name = config_name
+        config_names = ("StateStorage", "StateStorageBoard", "SchemeBoard") if config_name == "All" else (config_name,)
+        self.config_keys = [f"{name}Config" for name in config_names]
 
     def get_stat(self):
         with self.lock:
@@ -224,39 +224,45 @@ class WorkloadReconfigStateStorage(WorkloadBase):
         logger.info(f"Config response: {res}")
         return res
 
+    def do_request_reconfig(self, ring_groups):
+        logger.info(self.do_request({"ReconfigStateStorage": {
+            key: {"RingGroups": groups} for key, groups in ring_groups.items()
+        }}))
+
     def _loop(self):
         logger.debug("starting")
         while not self.is_stop_requested():
             time.sleep(self.wait_for)
-            cfg = self.do_request_config()[f"{self.config_name}Config"]
-            defaultRingGroup = [cfg["Ring"]] if "Ring" in cfg else cfg["RingGroups"]
+            configs = self.do_request_config()
+            old_ring_groups = {}
+            for key in self.config_keys:
+                cfg = configs[key]
+                old_ring_groups[key] = [cfg["Ring"]] if "Ring" in cfg else cfg["RingGroups"]
             newRingGroup = [
                 {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
                 {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [1]}, {"Node": [2]}, {"Node": [3]}]}
                 ]
-            logger.info(f"From: {defaultRingGroup} To: {newRingGroup}")
-            for i in range(len(newRingGroup)):
-                newRingGroup[i]["WriteOnly"] = True
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": defaultRingGroup + newRingGroup}}}))
+            logger.info(f"From: {old_ring_groups} To: {newRingGroup}")
+            for group in newRingGroup:
+                group["WriteOnly"] = True
+            self.do_request_reconfig({key: groups + newRingGroup for key, groups in old_ring_groups.items()})
             time.sleep(self.wait_for)
-            for i in range(len(newRingGroup)):
-                newRingGroup[i]["WriteOnly"] = False
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": defaultRingGroup + newRingGroup}}}))
+            for group in newRingGroup:
+                group["WriteOnly"] = False
+            self.do_request_reconfig({key: groups + newRingGroup for key, groups in old_ring_groups.items()})
             time.sleep(self.wait_for)
-            for i in range(len(defaultRingGroup)):
-                defaultRingGroup[i]["WriteOnly"] = True
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": newRingGroup + defaultRingGroup}}}))
+            for groups in old_ring_groups.values():
+                for group in groups:
+                    group["WriteOnly"] = True
+            self.do_request_reconfig({key: newRingGroup + groups for key, groups in old_ring_groups.items()})
             time.sleep(self.wait_for)
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": newRingGroup}}}))
+            self.do_request_reconfig(dict.fromkeys(self.config_keys, newRingGroup))
             time.sleep(self.wait_for)
-            curConfig = self.do_request_config()[f"{self.config_name}Config"]
+            configs = self.do_request_config()
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
-            if curConfig != expectedConfig:
-                raise Exception(f"Incorrect reconfig: actual:{curConfig}, expected:{expectedConfig}")
+            for key in self.config_keys:
+                if configs[key] != expectedConfig:
+                    raise Exception(f"Incorrect reconfig of {key}: actual:{configs[key]}, expected:{expectedConfig}")
             self.ringGroupActorIdOffset += 1
             with self.lock:
                 logger.info(f"Reconfig {self.loop_cnt} finished")

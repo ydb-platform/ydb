@@ -6,7 +6,9 @@ namespace NKikimr {
 TTestContext::TTestContext(bool useSectorMap, EDiskMode diskMode, ui64 diskSize, const TString& usePath) {
 
     if (useSectorMap) {
-        SectorMap = new NPDisk::TSectorMap(diskSize, diskMode);
+        const auto compression = NPDisk::NSectorMap::TryGetCompressionFromPath(usePath);
+        Y_ABORT_UNLESS(compression, "Invalid SectorMap compression in path: %s", usePath.c_str());
+        SectorMap = new NPDisk::TSectorMap(diskSize, diskMode, *compression);
     } else {
         if (usePath) {
             Path = usePath;

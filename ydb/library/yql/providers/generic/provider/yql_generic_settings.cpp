@@ -11,7 +11,7 @@ namespace NYql {
 const TString TGenericSettings::TDefault::DateTimeFormat = "string";
 
 TGenericConfiguration::TGenericConfiguration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(GenericProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TGenericSettings>(GenericProviderName, TQContext(), strictConfigValidation)
 {
     REGISTER_SETTING(*this, UsePredicatePushdown);
     REGISTER_SETTING(*this, DateTimeFormat);

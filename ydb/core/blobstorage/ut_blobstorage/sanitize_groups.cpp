@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
+#include <ydb/core/sys_view/common/events.h>
 
 Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
     using NBsController::TPDiskId;
@@ -224,7 +225,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             auto *us = cmd->MutableUpdateSettings();
             us->AddEnableSelfHeal(true);
             us->AddEnableGroupLayoutSanitizer(true);
-            // us->AddAllowMultipleRealmsOccupation(allowMultipleRealmsOccupation);
+            us->AddAllowMultipleRealmsOccupation(allowMultipleRealmsOccupation);
             auto response = env->Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         }
@@ -241,6 +242,61 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
     Y_UNIT_TEST(ForbidMultipleRealmsOccupation) {
         TestMultipleRealmsOccupation(false);
+    }
+
+    void AssertDynamicGroupLayouts(TEnvironmentSetup& env, bool expected) {
+        // System views are published every five seconds of simulated time.
+        env.Sim(TDuration::Seconds(10));
+        const std::vector<ui32> groupIds = env.GetGroups();
+        UNIT_ASSERT(!groupIds.empty());
+        const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest,
+            0, TTestActorSystem::GetPipeConfigWithRetries());
+        const TAutoPtr<TEventHandle<NSysView::TEvSysView::TEvGetGroupsResponse>> response =
+            env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetGroupsResponse>(edge);
+        std::map<ui32, bool> layouts;
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            layouts.emplace(entry.GetKey().GetGroupId(), entry.GetInfo().GetLayoutCorrect());
+        }
+        for (const ui32 groupId : groupIds) {
+            UNIT_ASSERT_C(layouts.contains(groupId), groupId);
+            UNIT_ASSERT_VALUES_EQUAL_C(layouts.at(groupId), expected, groupId);
+        }
+    }
+
+    Y_UNIT_TEST(LayoutStatusFollowsMultipleRealmsOccupationSetting) {
+        std::vector<TNodeLocation> locations;
+        MakeLocations(locations, 3, 3, 1, LocationGenerator);
+        std::unique_ptr<TEnvironmentSetup> env;
+        CreateEnv(env, locations, TBlobStorageGroupType::ErasureMirror3dc);
+        env->UpdateSettings(false, false, false);
+
+        NKikimrBlobStorage::TConfigRequest readSettings;
+        readSettings.AddCommand()->MutableReadSettings();
+        const auto settingsResponse = env->Invoke(readSettings);
+        UNIT_ASSERT(settingsResponse.GetSuccess());
+        UNIT_ASSERT(settingsResponse.GetStatus(0).GetSettings().GetAllowMultipleRealmsOccupation(0));
+
+        env->Cleanup();
+        // Every group uses all nine racks. Moving one rack to a new DC splits one logical realm.
+        locations.back() = TNodeLocation(LocationGenerator(3, 2, 0));
+        env->Initialize();
+        env->Runtime->FilterFunction = CatchSanitizeRequests;
+        AssertDynamicGroupLayouts(*env, true);
+
+        NKikimrBlobStorage::TConfigRequest updateSettings;
+        updateSettings.AddCommand()->MutableUpdateSettings()->AddAllowMultipleRealmsOccupation(false);
+        UNIT_ASSERT(env->Invoke(updateSettings).GetSuccess());
+        AssertDynamicGroupLayouts(*env, false);
+
+        env->Cleanup();
+        env->Initialize();
+        env->Runtime->FilterFunction = CatchSanitizeRequests;
+        AssertDynamicGroupLayouts(*env, false);
+
+        updateSettings.MutableCommand(0)->MutableUpdateSettings()->SetAllowMultipleRealmsOccupation(0, true);
+        UNIT_ASSERT(env->Invoke(updateSettings).GetSuccess());
+        AssertDynamicGroupLayouts(*env, true);
     }
 
     void StressTest(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks, ui32 units) {

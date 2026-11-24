@@ -1,0 +1,36 @@
+PRAGMA YqlSelect = 'force';
+
+$rows = AsList(
+    AsStruct(Just(-1) AS x, Just(TRUE) AS b),
+    AsStruct(Just(3) AS x, Just(FALSE) AS b),
+    AsStruct(Just(3) AS x, Just(TRUE) AS b),
+    AsStruct(Nothing(Int32?) AS x, Nothing(Bool?) AS b)
+);
+
+SELECT
+    Spark::mean(x),
+    Spark::bit_and(x),
+    Spark::bit_or(x),
+    Spark::bit_xor(x),
+    Spark::bool_and(b),
+    Spark::bool_or(b),
+    Spark::every(b),
+    Spark::count_if(b)
+FROM
+    AS_TABLE($rows)
+;
+
+SELECT
+    Spark::mean(x),
+    Spark::bit_and(x),
+    Spark::bit_or(x),
+    Spark::bit_xor(x),
+    Spark::bool_and(b),
+    Spark::bool_or(b),
+    Spark::every(b),
+    Spark::count_if(b)
+FROM
+    AS_TABLE($rows)
+WHERE
+    FALSE
+;

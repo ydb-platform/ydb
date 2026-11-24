@@ -1,0 +1,17 @@
+/* custom error: Expected bool type, but got: Optional<Int32> */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a
+FROM (
+    SELECT
+        2 AS a
+)
+GROUP BY
+    a
+HAVING
+    (
+        SELECT
+            1 AS a
+    )
+;

@@ -359,11 +359,9 @@ namespace NKikimr::NGRpcService {
             }
 
             Y_UNIT_TEST(ShouldIsolateProtobufDescriptors) {
-                const auto* file = google::protobuf::DescriptorPool::generated_pool()
-                                       ->FindFileByName(
-                                           "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc/service.proto");
-                UNIT_ASSERT(file);
-                const auto* service = file->FindServiceByName("TBlockStoreService");
+                const auto* service = google::protobuf::DescriptorPool::generated_pool()
+                                          ->FindServiceByName(
+                                              "NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto.TBlockStoreService");
                 UNIT_ASSERT(service);
                 UNIT_ASSERT_VALUES_EQUAL(service->full_name(),
                                          "NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto.TBlockStoreService");

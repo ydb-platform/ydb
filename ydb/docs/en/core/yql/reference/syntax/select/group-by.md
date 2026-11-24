@@ -1,5 +1,3 @@
-{% if select_command != "SELECT STREAM" %}
-
 ## GROUP BY
 
 Groups the results of `SELECT` by the values of specified columns or expressions. Together with `GROUP BY`, [aggregate functions](../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) are often used to perform calculations in each group.
@@ -42,7 +40,7 @@ Aggregate functions do not consider `NULL` in their arguments, except for the fu
 
 {% endnote %}
 
-Also in YQL, there is a mechanism of aggregate function factories, implemented using the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregateby).
+Also in YQL, there is a mechanism of aggregate function factories, implemented using the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by).
 
 ### Examples {#examples}
 
@@ -77,7 +75,7 @@ GROUP BY
 
 {% note warning %}
 
-The ability to specify a name for a column or expression in `GROUP BY .. AS foo` is a YQL extension. Such a name becomes visible in `WHERE` despite the fact that filtering by `WHERE` is performed [earlier](../index.md#selectexec) than grouping. In particular, if the `T` table has two columns `foo` and `bar`, then in the `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` query filtering will actually occur on the `bar` column from the original table.
+The ability to specify a name for a column or expression in `GROUP BY .. AS foo` is a YQL extension. Such a name becomes visible in `WHERE` despite the fact that filtering by `WHERE` is performed [earlier](index.md#selectexec) than grouping. In particular, if the `T` table has two columns `foo` and `bar`, then in the `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` query filtering will actually occur on the `bar` column from the original table.
 
 {% endnote %}
 
@@ -271,8 +269,6 @@ GROUP /*+ COMPACT() */ BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
-
-{% endif %}
 
 ## GROUP BY ... HOP {#group-by-hop}
 

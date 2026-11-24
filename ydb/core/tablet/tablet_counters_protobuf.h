@@ -223,7 +223,9 @@ public:
             TTxType txType = tt->number();
             Y_ABORT_UNLESS((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)",
                    tt->full_name().c_str(), txType, tt->index());
-            Y_ABORT_UNLESS(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
+            // A deprecated tx type may omit TxTypeOpts: its counters stay unnamed and are not exported
+            const bool hasTxTypeOpts = tt->options().HasExtension(TxTypeOpts);
+            Y_ABORT_UNLESS(hasTxTypeOpts || tt->options().deprecated(), "tx type '%s' number (%d) is missing TxTypeOpts and is not deprecated",
                     tt->full_name().c_str(), txType);
             const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts);
             TString txPrefix = tto.GetName() + "/";
@@ -231,7 +233,7 @@ public:
                 const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
                 Y_ABORT_UNLESS(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
                        v->full_name().c_str(), v->number(), v->index());
-                if (!v->options().HasExtension(CounterOpts)) {
+                if (!hasTxTypeOpts || !v->options().HasExtension(CounterOpts)) {
                     NamesStrings.emplace_back(); // empty name
                     Ranges.emplace_back(); // empty ranges
                     Integral.push_back(false);

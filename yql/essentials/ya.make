@@ -3,6 +3,7 @@ SUBSCRIBER(g:yql)
 IF (NOT EXPORT_CMAKE)
     RECURSE(
         ast
+        build
         core
         docs
         minikql

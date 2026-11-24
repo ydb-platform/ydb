@@ -36,10 +36,13 @@ Contract:
 - cancellation/destruction unregisters the waiter;
 - wrong type/cookie falls through to other waiters and then StateFunc.
 
-Use a cookie unique among every live wait for the same possible reply type.
-Send's cookie defaults to 0; do not leave concurrent waits on cookie 0. When
-several waiters have the same type and cookie, one event wakes the first
-registered match; the intent is ambiguous.
+Use a fresh cookie for each request attempt, and do not reuse it while an
+earlier reply of the same type could still arrive; otherwise a late reply to an
+abandoned attempt completes the new wait. Send's cookie defaults to 0, so do
+not wait on the default. AllocateWaitCookie returns non-zero values from a
+process-wide counter; ActorRequest allocates such a cookie, sends the request,
+and returns the wait in one step. When several waiters have the same type and
+cookie, one event wakes the first registered match; the intent is ambiguous.
 
 Sending the request immediately before awaiting is safe in an actor turn: the
 mailbox cannot process its reply before this code reaches suspension. A reply

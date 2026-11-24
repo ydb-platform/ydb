@@ -1,5 +1,6 @@
 #include "vdisk_recoverylogwriter.h"
 #include "vdisk_events.h"
+#include "vdisk_mongroups.h"
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <util/generic/queue.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -18,46 +19,34 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         // TCounters
         ////////////////////////////////////////////////////////////////////////////
         struct TCounters {
+            NMonitoring::TDynamicCounters::TCounterPtr LogRecords;
+
             struct TItem {
                 ::NMonitoring::TDynamicCounters::TCounterPtr Msgs;
                 ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
-
-                TItem()
-                    : Msgs()
-                    , Bytes()
-                {}
-
-                TItem(const TString &prefix, const TString& name, TIntrusivePtr<::NMonitoring::TDynamicCounters> mon) {
-                    Msgs = mon->GetCounter(prefix + name + "Msgs", true);
-                    Bytes = mon->GetCounter(prefix + name + "Bytes", true);
-                }
-
-                void Update(i64 size) {
-                    ++*Msgs;
-                    *Bytes += size;
-                }
             };
 
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             TVector<TItem> Counters;
 
-            TCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> mon) {
-                auto group = mon->GetSubgroup("subsystem", "logrecs");
-                Counters.reserve(static_cast<size_t>(TLogSignature::Max));
-                TString prefix("Log");
-
-                for (int i = static_cast<int>(TLogSignature::First);
-                     i < static_cast<int>(TLogSignature::Max); i++) {
-                    TLogSignature s(i);
-                    if (s == TLogSignature::First) {
-                        Counters.emplace_back(TItem());
-                    } else {
-                        Counters.emplace_back(TItem(prefix, s.ToString(), group));
-                    }
-                }
+            TCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> mon)
+                : Group(mon->GetSubgroup("subsystem", "logrecs"))
+                , Counters(static_cast<size_t>(TLogSignature::Max))
+            {
+                LogRecords = Group->GetCounter("LogRecords", true);
             }
 
             void Update(TLogSignature signature, i64 size) {
-                Counters[static_cast<int>(signature)].Update(size);
+                ++*LogRecords;
+                auto& item = Counters[static_cast<int>(signature)];
+                // Registers on the first record, so signatures a VDisk never logs are not exported.
+                if (!item.Msgs) {
+                    const TString name = "Log" + signature.ToString();
+                    item.Msgs = Group->GetCounter(name + "Msgs", true, NMonGroup::GetVDiskCounterVisibility());
+                    item.Bytes = Group->GetCounter(name + "Bytes", true, NMonGroup::GetVDiskCounterVisibility());
+                }
+                ++*item.Msgs;
+                *item.Bytes += size;
             }
         };
 
@@ -217,7 +206,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , OwnerRound(ownerRound)
             , CurSentLsn(startLsn)
             , Queue()
-            , LsmLogBytesWritten(counters->GetSubgroup("subsystem", "lsmhull")->GetCounter("LsmLogBytesWritten"))
+            , LsmLogBytesWritten(counters->GetSubgroup("subsystem", "lsmhull")->GetCounter("LsmLogBytesWritten", true))
             , Counters(counters)
         {}
     };

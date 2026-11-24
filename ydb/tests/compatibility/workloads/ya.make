@@ -14,10 +14,15 @@ TEST_SRCS(
     test_statistics.py
     test_compact.py
     test_in_memory.py
+    test_snapshot_retention.py
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE == "address")
+    REQUIREMENTS(cpu:4 ram:72)
+ELSE()
+    REQUIREMENTS(cpu:4 ram:48)
+ENDIF()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
@@ -29,6 +34,8 @@ PEERDIR(
     ydb/tests/library
     ydb/tests/datashard/lib
     ydb/tests/library/compatibility
+    ydb/tests/library/snapshot_retention
+    ydb/tests/library/snapshot_retention/workload
 )
 
 END()

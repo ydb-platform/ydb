@@ -61,11 +61,8 @@ SRCS(
 PEERDIR(
     contrib/libs/openssl
     contrib/libs/protobuf
-    ydb/library/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
-    ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/library/ycloud/impl
     library/cpp/logger
     library/cpp/lwtrace/mon
     library/cpp/monlib/dynamic_counters
@@ -75,14 +72,20 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/engine
     ydb/core/kesus/tablet
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/mind/address_classification
     ydb/core/mon
     ydb/core/node_whiteboard
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public/describer
     ydb/core/protos
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/util
+    ydb/core/ymq/actor/cfg
+    ydb/core/ymq/actor/cloud_events
     ydb/core/ymq/attributes
     ydb/core/ymq/base
     ydb/core/ymq/error
@@ -90,21 +93,20 @@ PEERDIR(
     ydb/core/ymq/queues/common
     ydb/core/ymq/queues/fifo
     ydb/core/ymq/queues/std
-    ydb/core/persqueue/events
-    ydb/core/persqueue/public/describer
     ydb/library/aclib
+    ydb/library/actors/core
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
     ydb/library/mkql_proto/protos
     ydb/library/security
+    ydb/library/ycloud/impl
+    ydb/public/lib/deprecated/client
     ydb/public/lib/scheme_types
     ydb/public/lib/value
     ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/types/credentials
+    ydb/public/sdk/cpp/src/library/grpc/client
     yql/essentials/minikql
-    ydb/public/lib/deprecated/client
-    ydb/core/ymq/actor/cloud_events
-    ydb/core/ymq/actor/cfg
 )
 
 YQL_LAST_ABI_VERSION()

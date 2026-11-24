@@ -1,10 +1,5 @@
 #include "events.h"
 
-namespace NYql::NCommonAttrs {
-    extern TString OPERATIONID_ATTR;
-    extern TString JOBID_ATTR;
-}
-
 namespace NYql::NDqs {
     TEvAllocateWorkersRequest::TEvAllocateWorkersRequest(
         ui32 count,
@@ -42,30 +37,6 @@ namespace NYql::NDqs {
         for (const auto& node : nodes) {
             auto* worker = group.AddWorker();
             worker->SetNodeId(node);
-        }
-    }
-
-    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& infos) {
-        auto& group = *Record.MutableNodes();
-        group.SetResourceId(resourceId);
-        for (const auto& workerInfo : infos) {
-            auto* worker = group.AddWorker();
-            *worker->MutableGuid() = GetGuidAsString(workerInfo->WorkerId); // for debug only
-            worker->SetNodeId(workerInfo->NodeId);
-            worker->SetClusterName(workerInfo->ClusterName);
-
-            for (const auto& [k, v] : workerInfo->Attributes) {
-                auto* attr = worker->AddAttribute();
-                attr->SetKey(k);
-                attr->SetValue(v);
-
-                if (k == NCommonAttrs::JOBID_ATTR) {
-                    worker->SetJobId(v);
-                }
-                if (k == NCommonAttrs::OPERATIONID_ATTR) {
-                    worker->SetOperationId(v);
-                }
-            }
         }
     }
 

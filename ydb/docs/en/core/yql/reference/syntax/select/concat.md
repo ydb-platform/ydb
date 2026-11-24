@@ -14,7 +14,7 @@ The following functions are defined for these purposes:
 * min, max: These two arguments specify a range of table names included. The range is inclusive on both ends. If no range is specified, all tables in the prefix folder are used. The names of tables or folders located in the folder specified in prefix are lexicographically matched with the `[min, max]` range rather than concatenated, so make sure to specify the range without leading slashes.
 * suffix is the name of the table. It's expected without a leading slash. If no suffix is specified, then the `[min, max]` arguments specify a range of table names. If the suffix is specified, then the `[min, max]` arguments specify a range of folders hosting a table with the name specified in the suffix argument.
 
-```LIKE(`prefix`, `pattern`, `suffix`, `view`)``` and ```REGEXP(`prefix`, `pattern`, `suffix`, `view`)```: The pattern argument is specified in the format similar to the binary operators of the same name: [LIKE](../expressions.md#like) and [REGEXP](../expressions.md#regexp).
+```LIKE(`prefix`, `pattern`, `suffix`, `view`)``` and ```REGEXP(`prefix`, `pattern`, `suffix`, `view`)```: The pattern argument is specified in the format similar to the binary operators of the same name: [LIKE](../expressions.md#check-match) and [REGEXP](../expressions.md#check-match).
 
 ```FILTER(`prefix`, `callable`, `suffix`, `view`)```: The `callable` argument must be a callable expression with the `(String)->Bool` signature that will be called for each table/subdirectory in the prefix folder. The query will only include those tables for which the callable value returned `true`. It is most convenient to use, as callable values, [lambda functions](../expressions.md#lambda){% if yql == true %} or user-defined functions (UDF) written in [Python](../../udf/python.md) or [JavaScript](../../udf/javascript.md){% endif %}.
 
@@ -32,7 +32,7 @@ To specify a cluster of unioned tables, add it before the function name.
 
 All arguments of the functions described above can be declared separately using [named expressions](../expressions.md#named-nodes). In this case, you can also use  simple expressions in them by implicitly calling [EvaluateExpr](../../builtins/basic.md#evaluate_expr_atom).
 
-To get the name of the source table from which you originally obtained each row, use [TablePath()](../../builtins/basic.md#tablepath).
+To get the name of the source table from which you originally obtained each row, use {% if feature_bulk_tables %}[TablePath()](../../builtins/basic.md#tablepath){% else %}TablePath(){% endif %}.
 
 ### Examples
 

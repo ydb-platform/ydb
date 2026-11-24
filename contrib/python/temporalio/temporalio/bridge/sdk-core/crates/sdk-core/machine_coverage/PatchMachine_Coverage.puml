@@ -1,0 +1,8 @@
+@startuml
+Executing -[#blue]-> MarkerCommandCreated: Schedule
+Replaying -[#blue]-> MarkerCommandCreatedReplaying: Schedule
+MarkerCommandCreated -[#blue]-> Notified: CommandRecordMarker
+MarkerCommandCreatedReplaying -[#blue]-> Notified: CommandRecordMarker
+Notified -[#blue]-> MarkerCommandRecorded: MarkerRecorded
+MarkerCommandRecorded --> [*]
+@enduml

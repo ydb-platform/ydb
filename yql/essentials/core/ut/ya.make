@@ -38,7 +38,7 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/sql
     yql/essentials/sql/v1/translation
-    yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/string/impl
 )
 
 RESOURCE(

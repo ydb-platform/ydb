@@ -11,7 +11,7 @@ namespace {
 
 std::shared_ptr<arrow::Table> CombineAndSortExistsData(
     const std::vector<std::shared_ptr<arrow::Table>>& chunks, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    AFL_VERIFY(!chunks.empty());
+    YDB_LOG_VERIFY(!chunks.empty());
     if (chunks.size() == 1 && chunks.front()->num_rows() <= 1) {
         return chunks.front();
     }
@@ -46,7 +46,7 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::Finish() {
 }
 
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
-    AFL_VERIFY(data);
+    YDB_LOG_VERIFY(data);
     if (data->num_rows()) {
         ExistsChunks.emplace_back(data);
     }
@@ -54,7 +54,7 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::AddExistsDataOrdered(cons
 }
 
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::MergeExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
-    AFL_VERIFY(data);
+    YDB_LOG_VERIFY(data);
     NArrow::NMerger::TRWSortableBatchPosition existsPosition(
         data, 0, Schema->GetPKColumnNames(), Schema->GetIndexInfo().GetColumnSTLNames(false), false);
     bool exsistFinished = !existsPosition.InitPosition(0);
@@ -74,18 +74,19 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::MergeExistsDataOrdered(co
             }
             IncomingFinished = !IncomingPosition.NextPosition(1);
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
-    AFL_VERIFY(exsistFinished);
+    YDB_LOG_VERIFY(exsistFinished);
     return TYdbConclusionStatus::Success();
 }
 
 NKikimr::NOlap::IMerger::TYdbConclusionStatus TUpdateMerger::OnEqualKeys(
     const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) {
     auto rGuard = Builder.StartRecord();
-    AFL_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size())
-    ("index", Schema->GetIndexInfo().GetColumnIds(false).size())("exists", exists.GetData().GetColumns().size());
+    YDB_LOG_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size(),
+        {"index", Schema->GetIndexInfo().GetColumnIds(false).size()},
+        {"exists", exists.GetData().GetColumns().size()});
     for (i32 columnIdx = 0; columnIdx < Schema->GetIndexInfo().ArrowSchema().num_fields(); ++columnIdx) {
         const std::optional<ui32>& incomingColumnIdx = IncomingColumnRemap[columnIdx];
         if (incomingColumnIdx && HasIncomingDataFlags[*incomingColumnIdx]->GetView(incoming.GetPosition())) {
@@ -115,7 +116,7 @@ TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBa
             auto fExistsIdx = IncomingData->schema()->GetFieldIndex("$$EXISTS::" + f->name());
             std::shared_ptr<arrow::Array> flagsArray;
             if (fExistsIdx != -1) {
-                AFL_VERIFY(IncomingData->column(fExistsIdx)->type_id() == arrow::Type::BOOL);
+                YDB_LOG_VERIFY(IncomingData->column(fExistsIdx)->type_id() == arrow::Type::BOOL);
                 flagsArray = IncomingData->column(fExistsIdx);
             } else {
                 flagsArray = NArrow::TThreadSimpleArraysCache::GetConst(arrow::TypeTraits<arrow::BooleanType>::type_singleton(),
@@ -129,8 +130,9 @@ TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBa
 
 NArrow::TContainerWithIndexes<arrow::RecordBatch> TUpdateMerger::BuildResultBatch() {
     auto resultBatch = Builder.Finalize();
-    AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::SpecialColumnsCount)("schema", Schema->GetColumnsCount())(
-                                              "result", resultBatch->num_columns());
+    YDB_LOG_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::SpecialColumnsCount,
+        {"schema", Schema->GetColumnsCount()},
+        {"result", resultBatch->num_columns()});
     return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
 }
 

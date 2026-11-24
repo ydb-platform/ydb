@@ -12,6 +12,7 @@ Read the pages needed for your change:
 | Write a stackless actor handler | [Coroutine Actors](coroutine-actors.md) |
 | Choose a wait, deadline, cancellation scope, or task group | [Coroutine Primitives](coroutine-primitives.md) |
 | Integrate callbacks, custom awaiters, or keyed background work | [Coroutine Integration](coroutine-integration.md) |
+| Configure, measure, or test coroutine frame allocation | [Coroutine Frame Cache](coroutine-frame-cache.md) |
 | Select tests and review invariants | [Testing Actors](testing.md) |
 
 ## Mental model
@@ -87,9 +88,11 @@ The basic turn is:
    idempotency key.
 
 8. **Actor death is explicit and one-shot.** A registered actor is runtime
-   owned. It calls PassAway exactly once; nobody deletes it directly.
-   PassAway may defer detachment while stackless top-level tasks cancel. During
-   that interval later events can still reach StateFunc.
+   owned. It calls PassAway exactly once; a second call aborts, and nobody
+   deletes the actor directly. PassAway may defer detachment while stackless
+   top-level tasks cancel. During that interval later events can still reach
+   StateFunc, so switch to a state that tolerates them before calling PassAway.
+   Scheduled events and service-map entries are not removed with the actor.
 
 9. **Registration parent is metadata, not supervision.** It is passed to
    Registered/AfterRegister and is the sender of a bootstrapped actor's
@@ -108,6 +111,22 @@ The basic turn is:
     can make an in-flight outcome ambiguous. Reconnect/continuation behavior is
     a transport optimization, not an application guarantee.
 
+13. **ActorWaitForEvent matches type and cookie, not Sender.** Use a fresh
+    cookie for each request attempt; do not reuse it while an earlier reply
+    could arrive. Unmatched replies reach StateFunc.
+
+14. **Every coroutine suspension is an interleaving point.** Other events and
+    top-level tasks can change actor state before a frame resumes, including
+    the actor-global Become state. Revalidate state after each suspension. A
+    top-level coroutine takes all explicit parameters by value, and a coroutine
+    Bootstrap must call Become before its first suspension.
+
+15. **Cancellation is cooperative, not an exception.** PassAway, timeouts, and
+    cancellation scopes only request it; catch (...) does not observe it, and a
+    normal completion can still win. A wait without cancellation support can
+    delay actor death indefinitely. Forced teardown destroys frames without
+    resuming them and possibly without actor TLS, so destructors must not
+    depend on Send or TActorContext.
 
 ## Runtime Source Map
 

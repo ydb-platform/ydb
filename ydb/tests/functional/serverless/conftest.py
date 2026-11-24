@@ -14,6 +14,9 @@ pytest_plugins = 'ydb.tests.library.fixtures'
 
 logger = logging.getLogger(__name__)
 
+# Discovery tests need multiple shared and exclusive endpoints.
+DATABASE_SLOTS_COUNT = 2
+
 
 @pytest.fixture(scope='module')
 def metering_file_path(ydb_configurator):
@@ -43,7 +46,7 @@ def ydb_hostel_db_ctx(ydb_cluster, ydb_root, encryption_key=None, timeout_second
         timeout_seconds=timeout_seconds
     )
 
-    database_nodes = ydb_cluster.register_and_start_slots(database, count=3, encryption_key=encryption_key)
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=DATABASE_SLOTS_COUNT, encryption_key=encryption_key)
     ydb_cluster.wait_tenant_up(database)
 
     try:
@@ -51,12 +54,15 @@ def ydb_hostel_db_ctx(ydb_cluster, ydb_root, encryption_key=None, timeout_second
     finally:
         logger.info("destroy ydb_hostel_db for %s", database)
 
+        # wait_tenant_up only needs one usable endpoint; another static slot
+        # may still be resolving the tenant. Stop all slots before dropping
+        # the database so they cannot resolve a deleted tenant and abort.
+        ydb_cluster.unregister_and_stop_slots(database_nodes)
+
         ydb_cluster.remove_database(
             database,
             timeout_seconds=timeout_seconds
         )
-
-        ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
 @pytest.fixture(scope='module')
@@ -83,7 +89,7 @@ def ydb_serverless_db_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100,
         attributes={
             "cloud_id": "CLOUD_ID_VAL",
             "folder_id": "FOLDER_ID_VAL",
-            "database_id": "DATABASE_ID_VAL",
+            "database_id": database,
         },
     )
 
@@ -148,11 +154,11 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
         attributes={
             "cloud_id": "CLOUD_ID_VAL",
             "folder_id": "FOLDER_ID_VAL",
-            "database_id": "DATABASE_ID_VAL",
+            "database_id": database,
         },
     )
 
-    database_nodes = ydb_cluster.register_and_start_slots(database, count=3, encryption_key=encryption_key)
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=DATABASE_SLOTS_COUNT, encryption_key=encryption_key)
     ydb_cluster.wait_tenant_up(database)
 
     try:
@@ -175,7 +181,7 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
         )
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='function')
 def ydb_serverless_db_with_exclusive_nodes(ydb_cluster, ydb_root, ydb_hostel_db, encryption_key):
     database_name = os.path.join(ydb_root, "serverless_with_exclusive_nodes")
 

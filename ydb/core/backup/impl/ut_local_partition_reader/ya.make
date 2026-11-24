@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/backup/impl)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

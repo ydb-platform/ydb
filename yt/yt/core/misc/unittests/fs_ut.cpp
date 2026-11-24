@@ -13,12 +13,114 @@
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
 
+#include <util/system/file.h>
+#include <util/system/fstat.h>
+
+#include <cstdlib>
+
+#if defined(_linux_) || defined(_darwin_)
+    #include <sys/stat.h>
+    #include <sys/types.h>
+#endif
+#ifdef _linux_
+    #include <sys/sysmacros.h>
+#endif
+
+#ifdef _unix_
+    #include <unistd.h>
+#endif
+
 namespace NYT::NFS {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TFSTest, TestGetRealPath)
+#ifdef _unix_
+TEST(TFSDeathTest, GetHomePathEnvironment)
+{
+    EXPECT_EXIT(
+        {
+            EXPECT_EQ(::setenv("HOME", "/tmp/test-home", 1), 0);
+            EXPECT_EQ(GetHomePath(), "/tmp/test-home");
+            EXPECT_EQ(::setenv("HOME", "", 1), 0);
+            EXPECT_EQ(GetHomePath(), "");
+            EXPECT_EQ(::unsetenv("HOME"), 0);
+            EXPECT_THROW_WITH_SUBSTRING(GetHomePath(), "HOME environment variable is not set");
+            ::_exit(::testing::Test::HasFailure() ? 1 : 0);
+        },
+        ::testing::ExitedWithCode(0),
+        "");
+}
+
+TEST(TFSTest, SetPermissions)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("file").GetPath();
+    TFile file(TString(path), CreateAlways | WrOnly | CloseOnExec);
+
+    SetPermissions(path, /*permissions*/ 0600);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0600u);
+
+    SetPermissions(path, /*permissions*/ 0640);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0640u);
+
+    std::string directory = tempDir.Name();
+    SetPermissions(directory, /*permissions*/ 0750);
+    EXPECT_EQ(TFileStat(TString(directory)).Mode & 0777, 0750u);
+}
+
+TEST(TFSTest, SetPermissionsForFileDescriptor)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("file").GetPath();
+    TFile file(TString(path), CreateAlways | WrOnly | CloseOnExec);
+
+    SetPermissions(file.GetHandle(), /*permissions*/ 0640);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0640u);
+
+    Remove(path);
+    SetPermissions(file.GetHandle(), /*permissions*/ 0600);
+    EXPECT_EQ(TFileStat(file).Mode & 0777, 0600u);
+}
+
+TEST(TFSTest, SetPermissionsReportsMissingPath)
+{
+    const TTempDir tempDir;
+    std::string path = tempDir.Path().Child("missing").GetPath();
+
+    EXPECT_THROW_WITH_ERROR_CODE(SetPermissions(path, /*permissions*/ 0600), ELinuxErrorCode::NOENT);
+}
+#endif
+
+#if defined(_linux_) || defined(_darwin_)
+TEST(TFSTest, GetDeviceId)
+{
+    auto dir = TTempDir{};
+    auto path = std::string(dir.Name()) + "/file";
+    auto file = TFile(path.c_str(), CreateAlways | WrOnly);
+    struct stat status{};
+    ASSERT_EQ(::stat(path.c_str(), &status), 0);
+    auto deviceId = GetDeviceId(path);
+    EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
+}
+
+TEST(TFSTest, GetDeviceIdMatchesStat)
+{
+    auto dir = TTempDir{};
+    struct stat status{};
+    ASSERT_EQ(::stat(dir.Name().c_str(), &status), 0);
+    auto deviceId = GetDeviceId(std::string(dir.Name()));
+    EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
+}
+
+TEST(TFSTest, GetDeviceIdMissingPath)
+{
+    auto dir = TTempDir{};
+    EXPECT_THROW_WITH_SUBSTRING(GetDeviceId(std::string(dir.Name()) + "/missing"), "Failed to execute ::stat");
+}
+#endif
+
+TEST(TFSTest, GetRealPath)
 {
     auto cwd = NFs::CurrentWorkingDirectory();
     auto rootPrefix = cwd.substr(0, cwd.find(LOCSLASH_C));
@@ -30,7 +132,7 @@ TEST(TFSTest, TestGetRealPath)
     EXPECT_EQ(GetRealPath("/a/b/c/.././../d/."), rootPrefix + NormalizePathSeparators("/a/d"));
 }
 
-TEST(TFSTest, TestGetDirectoryName)
+TEST(TFSTest, GetDirectoryName)
 {
     auto cwd = NFs::CurrentWorkingDirectory();
     EXPECT_EQ(GetDirectoryName("/a/b/c"), NormalizePathSeparators("/a/b"));
@@ -40,7 +142,7 @@ TEST(TFSTest, TestGetDirectoryName)
     EXPECT_EQ(GetDirectoryName("/a"), NormalizePathSeparators("/"));
 }
 
-TEST(TFSTest, TestIsDirEmpty)
+TEST(TFSTest, IsDirEmpty)
 {
     auto cwd = NFs::CurrentWorkingDirectory();
     auto dir = CombinePaths(cwd, "test");
@@ -51,7 +153,7 @@ TEST(TFSTest, TestIsDirEmpty)
     RemoveRecursive(dir);
 }
 
-TEST(TFSTest, TestMakeDirRecursive)
+TEST(TFSTest, MakeDirRecursive)
 {
     auto dir = CombinePaths(NFs::CurrentWorkingDirectory(), "test");
 
@@ -70,7 +172,7 @@ TEST(TFSTest, TestMakeDirRecursive)
 }
 
 #ifdef _linux_
-TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
+TEST(TFSTest, MakeDirRecursiveReportsRealError)
 {
     if (::geteuid() != 0) {
         auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
@@ -105,7 +207,7 @@ TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
 }
 #endif
 
-TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
+TEST(TFSTest, IsPathRelativeAndInvolvesNoTraversal)
 {
     EXPECT_TRUE(NFS::IsPathRelativeAndInvolvesNoTraversal(""));
     EXPECT_TRUE(NFS::IsPathRelativeAndInvolvesNoTraversal("some"));
@@ -131,7 +233,7 @@ TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
     EXPECT_FALSE(NFS::IsPathRelativeAndInvolvesNoTraversal("./.."));
 }
 
-TEST(TFSTest, TestGetRelativePath)
+TEST(TFSTest, GetRelativePath)
 {
     EXPECT_EQ(GetRelativePath("/", "/"), ".");
     EXPECT_EQ(GetRelativePath("/a", "/"), "..");

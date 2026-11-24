@@ -1,0 +1,113 @@
+.description__text {
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.description__text strong,
+.description__text b {
+  font-weight: 600;
+}
+
+.description__text h3,
+.description__text h4 {
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+}
+
+.description__text ul,
+.description__text ol {
+  margin: 0.5em 0;
+  padding-inline-start: 1.5em;
+}
+
+.description__text ul {
+  list-style: disc;
+}
+
+.description__text ol {
+  list-style: decimal;
+}
+
+.description__text table {
+  border-collapse: collapse;
+  margin: 0.75em 0;
+}
+
+.description__text th,
+.description__text td {
+  border: 1px solid var(--color-border-subtle, currentColor);
+  padding: 0.4em 0.65em;
+  text-align: start;
+  vertical-align: top;
+}
+
+.description__text th {
+  background-color: color-mix(in srgb, currentColor 6%, transparent);
+  font-weight: 600;
+}
+
+.description__text pre,
+.description__text code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.description__text pre {
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Cell colors are carried by abbr because Allure removes style and class. */
+
+.description__text td[abbr="bg-ccffcc"],
+.description__text th[abbr="bg-ccffcc"] {
+  background-color: #ccffcc;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-ffcccc"],
+.description__text th[abbr="bg-ffcccc"] {
+  background-color: #ffcccc;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-ffffcc"],
+.description__text th[abbr="bg-ffffcc"] {
+  background-color: #ffffcc;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-f0f0f0"],
+.description__text th[abbr="bg-f0f0f0"] {
+  background-color: #f0f0f0;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-e0f0e0"],
+.description__text th[abbr="bg-e0f0e0"] {
+  background-color: #e0f0e0;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-90ee90"],
+.description__text th[abbr="bg-90ee90"] {
+  background-color: #90ee90;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-fa8072"],
+.description__text th[abbr="bg-fa8072"] {
+  background-color: #fa8072;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-eeffcc"],
+.description__text th[abbr="bg-eeffcc"] {
+  background-color: #eeffcc;
+  color: #16202a;
+}
+
+.description__text td[abbr="bg-f5f5f5"],
+.description__text th[abbr="bg-f5f5f5"] {
+  background-color: #f5f5f5;
+  color: #16202a;
+}

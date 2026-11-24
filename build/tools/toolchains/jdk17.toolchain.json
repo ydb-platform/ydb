@@ -1,0 +1,78 @@
+{
+    "toolchains": {
+        "jdk17": {
+            "tools": {
+                "jar": {
+                    "bottle": "jdk17",
+                    "executable": "jar"
+                },
+                "jar17": {
+                    "bottle": "jdk17",
+                    "executable": "jar"
+                },
+                "java": {
+                    "bottle": "jdk17",
+                    "executable": "java"
+                },
+                "java17": {
+                    "bottle": "jdk17",
+                    "executable": "java"
+                },
+                "javac": {
+                    "bottle": "jdk17",
+                    "executable": "javac"
+                },
+                "javac17": {
+                    "bottle": "jdk17",
+                    "executable": "javac"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                }
+            ]
+        }
+    },
+    "bottles": {
+        "jdk17": {
+            "formula": "build/platform/java/jdk/jdk17/jdk.json",
+            "executable": {
+                "jar": [
+                    "bin",
+                    "jar"
+                ],
+                "java": [
+                    "bin",
+                    "java"
+                ],
+                "javac": [
+                    "bin",
+                    "javac"
+                ]
+            }
+        }
+    }
+}

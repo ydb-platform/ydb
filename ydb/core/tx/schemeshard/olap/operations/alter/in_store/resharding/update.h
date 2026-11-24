@@ -11,7 +11,7 @@ private:
     using TBase = ISSEntityUpdate;
     NOlap::NBackground::TTxChainData TxChainData;
     virtual TString DoGetShardTxBodyString(const ui64 /*tabletId*/, const TMessageSeqNo& /*seqNo*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return "";
     }
 
@@ -24,6 +24,10 @@ private:
     }
 
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoRestore(const TUpdateRestoreContext& /*context*/) override {
+        return TConclusionStatus::Fail("Resharding launcher has no persistent ALTER to restore");
+    }
+
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) override;
 
     virtual std::set<ui64> DoGetShardIds() const override {

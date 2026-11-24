@@ -58,7 +58,7 @@ const TEndpointKey& TKqpSessionCommon::GetEndpointKey() const {
 // Can be called from interceptor, need lock
 bool TKqpSessionCommon::MarkBroken() {
     std::lock_guard guard(Lock_);
-    const bool firstTerminal = State_ != EState::S_BROKEN && State_ != EState::S_CLOSING;
+    const bool firstTerminal = !CloseRequested_ && State_ != EState::S_BROKEN;
     if (State_ == EState::S_ACTIVE) {
         NeedUpdateActiveCounter_ = true;
     }
@@ -68,13 +68,21 @@ bool TKqpSessionCommon::MarkBroken() {
 
 bool TKqpSessionCommon::MarkAsClosing() {
     std::lock_guard guard(Lock_);
-    const bool firstTerminal = State_ != EState::S_BROKEN && State_ != EState::S_CLOSING;
+    if (CloseRequested_ || State_ == S_BROKEN) {
+        return false;
+    }
+    CloseRequested_ = true;
+    // Idle sessions may already be selected for checkout. Leave their state
+    // intact, but remember shutdown even before the pool installs its handler.
+    if (State_ == S_IDLE) {
+        return true;
+    }
     if (State_ == EState::S_ACTIVE) {
         NeedUpdateActiveCounter_ = true;
     }
 
     State_ = EState::S_CLOSING;
-    return firstTerminal;
+    return true;
 }
 
 bool TKqpSessionCommon::MarkActive() {
@@ -89,12 +97,17 @@ bool TKqpSessionCommon::MarkActive() {
 
 bool TKqpSessionCommon::MarkIdle() {
     std::lock_guard guard(Lock_);
-    if (State_ == EState::S_BROKEN || State_ == EState::S_CLOSING) {
+    if (CloseRequested_ || State_ == EState::S_BROKEN) {
         return false;
     }
     State_ = EState::S_IDLE;
     NeedUpdateActiveCounter_ = false;
     return true;
+}
+
+bool TKqpSessionCommon::CanReturnToPool() const {
+    std::lock_guard guard(Lock_);
+    return State_ == S_IDLE && !CloseRequested_;
 }
 
 bool TKqpSessionCommon::IsOwnedBySessionPool() const {
@@ -103,7 +116,7 @@ bool TKqpSessionCommon::IsOwnedBySessionPool() const {
 
 TKqpSessionCommon::EState TKqpSessionCommon::GetState() const {
     // See comments in InjectSessionStatusInterception about lock
-    std::lock_guard guard(const_cast<TAdaptiveLock&>(Lock_));
+    std::lock_guard guard(Lock_);
     return State_;
 }
 

@@ -3,7 +3,8 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

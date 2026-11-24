@@ -13,10 +13,6 @@ namespace NACLib {
     class TUserContext;
 }
 
-namespace NKikimr::NFulltext {
-    class IDeltaReader;
-};
-
 namespace NKikimr::NMiniKQL {
     struct TEngineHostCounters;
 }
@@ -247,7 +243,8 @@ public:
 
     bool PrechargeRow(
         const TTableId& tableId,
-        const TArrayRef<const TRawTypeValue> key);
+        const TArrayRef<const TRawTypeValue> key,
+        bool needsMvccRead);
 
 private:
     void EnsureVolatileTxId();

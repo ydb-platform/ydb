@@ -21,6 +21,21 @@ using namespace NKikimrServices;
 
 namespace NKikimr {
 
+    namespace NRepl {
+        TDuration EstimateReplicationTimeOfArrival(ui64 workAtBegin, ui64 workAtEnd,
+                TInstant timeAtBegin, TInstant timeAtEnd) {
+            if (workAtBegin <= workAtEnd || timeAtEnd <= timeAtBegin) {
+                return {};
+            }
+
+            const double workPerSecond = (workAtBegin - workAtEnd) / (timeAtEnd - timeAtBegin).SecondsFloat();
+            const TDuration estimate = TDuration::Seconds(workAtEnd / workPerSecond);
+
+            // Whiteboard publishes the estimate in a uint32 seconds field.
+            return estimate.Seconds() <= Max<ui32>() ? estimate : TDuration::Zero();
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Internal Repl messages
     ////////////////////////////////////////////////////////////////////////////
@@ -180,7 +195,9 @@ namespace NKikimr {
         TActorId ReplJobActorId;
         std::list<std::optional<TDonorQueueItem>> DonorQueue;
         std::deque<std::pair<TVDiskID, TDonorQueueActors>> Donors;
-        std::set<TVDiskID> ConnectedPeerDisks, ConnectedDonorDisks;
+        // peers are tracked by their position in the group, as their generation changes with the group's one
+        std::set<TVDiskIdShort> ConnectedPeerDisks;
+        std::set<TVDiskID> ConnectedDonorDisks;
         TEvResumeForce *ResumeForceToken = nullptr;
         TInstant ReplicationEndTime;
         bool UnrecoveredNonphantomBlobs = false;
@@ -265,13 +282,20 @@ namespace NKikimr {
 
         void Handle(TEvProxyQueueState::TPtr ev) {
             const TVDiskID& vdiskId = ev->Get()->VDiskId;
-            auto& set = vdiskId.GroupGeneration == ReplCtx->GInfo->GroupGeneration
-                ? ConnectedPeerDisks
-                : ConnectedDonorDisks;
-            if (ev->Get()->IsConnected) {
-                set.insert(vdiskId);
+            // A peer queue keeps reporting after a generation change, possibly with the VDiskId of the previous
+            // generation, so tell peers from donors by the queue actor rather than by the generation.
+            const TVDiskIdShort shortId(vdiskId);
+            const auto it = QueueActorMapPtr->find(shortId);
+            if (it != QueueActorMapPtr->end() && it->second == ev->Sender) {
+                if (ev->Get()->IsConnected) {
+                    ConnectedPeerDisks.insert(shortId);
+                } else {
+                    ConnectedPeerDisks.erase(shortId);
+                }
+            } else if (ev->Get()->IsConnected) {
+                ConnectedDonorDisks.insert(vdiskId);
             } else {
-                set.erase(vdiskId);
+                ConnectedDonorDisks.erase(vdiskId);
             }
             if (ResumeForceToken) { // if the process is blocked by number of available queues, try to kick it
                 ResumeIfReady();
@@ -383,6 +407,15 @@ namespace NKikimr {
             Send(donor.QueueActors.FastReadQueueActorId, new TEvents::TEvPoison); // kill the queue actor
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvBlobStorage::TEvDropDonor(donor.NodeId,
                 donor.PDiskId, donor.VSlotId, donor.VDiskId));
+        }
+
+        void HandleNonPhantomsRemain(STFUNC_SIG) {
+            Y_VERIFY_S(ev->Sender == ReplJobActorId &&
+                ev->Cookie == static_cast<ui64>(EReplDone::NonPhantomsRemain), ReplCtx->VCtx->VDiskLogPrefix);
+            if (!std::exchange(UnrecoveredNonphantomBlobs, true)) {
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                    SelfId(), nullptr, static_cast<ui64>(EReplDone::NonPhantomsRemain)));
+            }
         }
 
         void Handle(TEvReplFinished::TPtr &ev) {
@@ -499,11 +532,13 @@ namespace NKikimr {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
                     Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
-                    if (!UnrecoveredNonphantomBlobs) {
-                        // semi-finished replication -- we have only phantom-like unreplicated blobs
-                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
-                            SelfId(), nullptr, 1));
-                    }
+                    // report outcome of every pass as the remaining blobs may become phantom-like or not depending on
+                    // the state of other disks of the group
+                    const EReplDone outcome = UnrecoveredNonphantomBlobs
+                        ? EReplDone::NonPhantomsRemain
+                        : EReplDone::OnlyPhantomsRemain; // semi-finished replication
+                    TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                        SelfId(), nullptr, static_cast<ui64>(outcome)));
                 } else {
                     // no more blobs to replicate; replication will not resume
                     State = Finished;
@@ -516,7 +551,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplItemsDone() = 0;
                     ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
-                        SelfId(), nullptr, 0));
+                        SelfId(), nullptr, static_cast<ui64>(EReplDone::Finished)));
                 }
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
@@ -598,13 +633,7 @@ namespace NKikimr {
             const TInstant timeAtBegin = first->Start;
             const TInstant timeAtEnd = last->End;
 
-            if (workAtBegin < workAtEnd || timeAtEnd < timeAtBegin) {
-                return {}; // can't evaluate
-            }
-
-            const double workPerSecond = (workAtBegin - workAtEnd) / (timeAtEnd - timeAtBegin).SecondsFloat();
-
-            return TDuration::Seconds(workAtEnd / workPerSecond);
+            return NRepl::EstimateReplicationTimeOfArrival(workAtBegin, workAtEnd, timeAtBegin, timeAtEnd);
         }
 
         void ResetReplProgressTimer(bool finish) {
@@ -757,6 +786,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateRepl,
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(TEvReplStarted, Handle)
+            fFunc(TEvBlobStorage::EvReplDone, HandleNonPhantomsRemain)
             hFunc(TEvReplFinished, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)

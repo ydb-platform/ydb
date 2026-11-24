@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr::NKqp {
@@ -92,8 +93,11 @@ void CheckResourcesReleased(TTestActorRuntime& runtime, const TCreationState& st
     });
     UNIT_ASSERT(state.Tx);
     UNIT_ASSERT_VALUES_EQUAL(state.Tx->TxExecutionUnits.load(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(state.Tx->TxExternalDataQueryMemory.load(), 0);
     UNIT_ASSERT_VALUES_EQUAL(state.Tx->TxScanQueryMemory.load(), 0);
+    // the memory of the queries is accounted by the compute scheduler
+    if (const auto& scheduler = runtime.GetAppData().KqpComputeScheduler) {
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 0);
+    }
 }
 
 } // namespace
@@ -206,7 +210,7 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
                     .BlockTrackingMode = {},
                     .ArrayBufferMinFillPercentage = {},
                     .BufferPageAllocSize = {},
-                    .CheckpointCoordinator = {},
+                    .EnableCheckpoints = false,
                     .EnableWatermarks = false,
                 });
                 auto error = planner.PlanExecution();

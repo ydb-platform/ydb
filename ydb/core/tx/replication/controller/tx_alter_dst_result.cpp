@@ -42,6 +42,17 @@ public:
             return true;
         }
 
+        // ALTER replaces the actor even when the destination remains in Alter.
+        // Its predecessor's result describes the previous desired state.
+        if (!target->IsExpectedDstAlterer(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete destination alterer",
+                {"rid", rid},
+                {"tid", tid},
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
         if (target->GetDstState() != TReplication::EDstState::Alter) {
             YDB_LOG_WARN_CTX(ctx, "Dst state mismatch",
                 {"rid", rid},
@@ -51,14 +62,19 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetDstState(NextState(Replication->GetDesiredState()));
+            const bool removing = Replication->GetState() == TReplication::EState::Removing;
+            if (removing) {
+                target->SetDstState(TReplication::EDstState::Done);
+            } else {
+                target->SetDstState(NextState(Replication->GetDesiredState()));
+            }
             target->UpdateConfig(Replication->GetConfig());
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst altered",
                 {"rid", rid},
                 {"tid", tid});
 
-            if (Replication->CheckAlterDone()) {
+            if (!removing && Replication->CheckAlterDone()) {
                 YDB_LOG_NOTICE_CTX(ctx, "Replication altered",
                     {"rid", rid},
                     {"state", Replication->GetDesiredState()});
@@ -70,8 +86,7 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            Self->SetReplicationError(*Replication, *target);
 
             YDB_LOG_ERROR_CTX(ctx, "Alter dst error",
                 {"rid", rid},
@@ -90,7 +105,9 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
+        if (Replication->GetState() != TReplication::EState::Ready
+            && Replication->GetState() != TReplication::EState::Removing)
+        {
             Replication.Reset();
         }
 

@@ -4,6 +4,7 @@
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
+#include <util/charset/utf8.h>
 
 using namespace NSQLComplete;
 
@@ -29,6 +30,35 @@ Y_UNIT_TEST(Empty) {
     UNIT_ASSERT_VALUES_EQUAL(context.Cursor.NextTokenIndex, 0);
     UNIT_ASSERT_VALUES_EQUAL(context.Cursor.Position, 0);
     UNIT_ASSERT(context.Enclosing().Empty());
+}
+
+Y_UNIT_TEST(StatementWithUtf8Bom) {
+    for (const TString& prefix : TVector<TString>{"", "\xEF\xBB\xBF"}) {
+        const TString first = prefix + "SELECT 1; -- предыдущий день.\n";
+        const TString second = "SELECT 2;";
+        const TString query = first + second;
+        auto lexer = MakeLexer();
+        for (size_t position = 0; position <= query.size(); ++position) {
+            if (position < query.size() && IsUTF8ContinuationByte(query[position])) {
+                continue;
+            }
+            TMaterializedInput input = {.Text = query, .CursorPosition = position};
+            NSQLPureAST::TCursorText statement;
+            size_t statementPosition = 0;
+            UNIT_ASSERT(GetStatement(lexer, input, statement, statementPosition));
+            if (position < first.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(statement.Text, first);
+                UNIT_ASSERT_VALUES_EQUAL(statementPosition, 0);
+            } else if (position < query.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(statement.Text, second);
+                UNIT_ASSERT_VALUES_EQUAL(statementPosition, first.size());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(statement.Text, query);
+                UNIT_ASSERT_VALUES_EQUAL(statementPosition, query.size());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(statement.CursorPosition, position - (position == query.size() ? 0 : statementPosition));
+        }
+    }
 }
 
 Y_UNIT_TEST(Blank) {

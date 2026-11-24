@@ -19,7 +19,7 @@
 
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
-#include <ydb/core/kqp/common/dynamic_function_registry.h>
+#include <ydb/core/kqp/common/dynamic_function_registry/dynamic_function_registry.h>
 
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/log_settings.h>
@@ -31,6 +31,10 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr {
+
+namespace NWorkloadManager::NPrivate {
+    class TWorkloadManagerGateway;
+}
 
 namespace NKikimrServicesInitializers {
 
@@ -373,6 +377,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TWriteSessionsQuoterInitializer : public IKikimrServicesInitializer {
+public:
+    TWriteSessionsQuoterInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TTopicDeferredPublishRegistryInitializer : public IKikimrServicesInitializer {
 public:
     TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig);
@@ -412,9 +423,14 @@ public:
 
 class TWorkloadManagerServiceInitializer : public IKikimrServicesInitializer {
 public:
-    TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig);
+    TWorkloadManagerServiceInitializer(
+        const TKikimrRunConfig& runConfig,
+        std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+
+private:
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> Gateway_;
 };
 
 class TKqpServiceInitializer : public IKikimrServicesInitializer {

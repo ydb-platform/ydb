@@ -1,3 +1,8 @@
+$input = [
+    <|TestField: Just(@@{"str":"string value"}@@)|>,
+    <|TestField: Just(@@{"test":{"str":"string value"}}@@)|>,
+];
+
 /*
 
 syntax='proto3';
@@ -28,5 +33,4 @@ $config = @@{
 $udfPar = Udf(Protobuf::Parse, $config as TypeConfig);
 $udfSer = Udf(Protobuf::Serialize, $config as TypeConfig);
 
-SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)) FROM plato.Input;
-
+SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)) FROM AS_TABLE($input);

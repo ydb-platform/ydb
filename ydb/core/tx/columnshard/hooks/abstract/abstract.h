@@ -487,6 +487,7 @@ public:
 
         TGuard& operator=(TGuard&& other) {
             std::swap(Controller, other.Controller);
+            return *this;
         }
 
         TController* operator->() {

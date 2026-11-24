@@ -1,0 +1,7 @@
+/* custom error: Native descending sort support is currently disabled */
+
+PRAGMA yt.UseNativeDescSort;
+
+SELECT *
+FROM plato.Input
+ORDER BY key DESC;

@@ -187,7 +187,7 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
         return Limit.load();
     }
 
-    // stands for the node level memory availability, see NRm::TTxState::GetMemoryAvailability:
+    // stands for the node level memory availability, see NScheduler::TSchedulableMemory::GetAvailability:
     // negative under memory pressure, otherwise what is left of the limit
     i64 GetMemoryAvailability() const override {
         return MemoryPressure.load() ? -1 : static_cast<i64>(Limit.load()) - Quota.load();

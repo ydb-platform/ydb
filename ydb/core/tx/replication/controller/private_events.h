@@ -42,10 +42,12 @@ struct TEvPrivate {
         EvAllowCreateStream,
         EvRequestDropStream,
         EvAllowDropStream,
-        EvPrepareAttachDst,
-        EvPrepareAttachDstResult,
         EvRestoreSession,
         EvBootPersistedWorkers,
+        EvUpdateYdbProxy,
+        EvCancelCreateStream,
+        EvCancelDropStream,
+        EvExpireWorkerLag,
 
         EvEnd,
     };
@@ -157,24 +159,19 @@ struct TEvPrivate {
 
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
         const TPathId DstPathId;
+        const bool WaitingImport = false;
 
-        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId);
+        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
         TString ToString() const override;
     };
 
-    struct TEvPrepareAttachDst: public TEventLocal<TEvPrepareAttachDst, EvPrepareAttachDst> {
-        const ui64 ReplicationId;
-        const ui64 TargetId;
-        const TPathId DstPathId;
+    struct TEvUpdateYdbProxy: public TEventLocal<TEvUpdateYdbProxy, EvUpdateYdbProxy> {
+        const TActorId YdbProxy;
 
-        explicit TEvPrepareAttachDst(ui64 rid, ui64 tid, const TPathId& dstPathId);
-        TString ToString() const override;
-    };
-
-    struct TEvPrepareAttachDstResult: public TEventLocal<TEvPrepareAttachDstResult, EvPrepareAttachDstResult> {
-        TEvPrepareAttachDstResult() = default;
-        TString ToString() const override;
+        explicit TEvUpdateYdbProxy(const TActorId& ydbProxy)
+            : YdbProxy(ydbProxy)
+        {}
     };
 
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
@@ -208,6 +205,8 @@ struct TEvPrivate {
         explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
     };
+
+    struct TEvExpireWorkerLag: public TEventLocal<TEvExpireWorkerLag, EvExpireWorkerLag> {};
 
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };
@@ -321,6 +320,12 @@ struct TEvPrivate {
     };
 
     struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
+    };
+
+    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
+    };
+
+    struct TEvCancelDropStream: public TEventLocal<TEvCancelDropStream, EvCancelDropStream> {
     };
 
     struct TEvBootPersistedWorkers: public TEventLocal<TEvBootPersistedWorkers, EvBootPersistedWorkers> {

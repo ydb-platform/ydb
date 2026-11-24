@@ -4,18 +4,16 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusion<std::shared_ptr<ISSEntityUpdate>> TStandaloneTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
+NKikimr::TConclusion<std::shared_ptr<ISSEntityUpdate>> TStandaloneTable::DoBuildUpdate(const NKikimrSchemeOp::TModifyScheme& modification) const {
     std::shared_ptr<ISSEntityUpdate> result;
-    if (context.GetModification()->HasAlterTable() || context.GetModification()->HasAlterColumnTable()) {
+    if (modification.HasAlterTable() || modification.HasAlterColumnTable()) {
         result = std::make_shared<TStandaloneSchemaUpdate>();
     }
+
     if (!result) {
         return TConclusionStatus::Fail("alter data not found");
     }
-    auto conclusion = result->Initialize(context);
-    if (conclusion.IsFail()) {
-        return conclusion;
-    }
+
     return result;
 }
 

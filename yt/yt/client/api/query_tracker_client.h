@@ -52,6 +52,7 @@ DEFINE_REFCOUNTED_TYPE(TQuerySecret)
 struct TStartQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
+    , public TMutatingOptions
 {
     NYTree::INodePtr Settings;
     bool Draft = false;
@@ -87,8 +88,7 @@ struct TGetQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
-    std::vector<std::string> ProgressParts;
-    std::optional<ui32> MinProgressRevision;
+    NYTree::IMapNodePtr ProgressOptions;
 
     NYTree::TAttributeFilter Attributes;
     NTransactionClient::TTimestamp Timestamp = NTransactionClient::NullTimestamp;

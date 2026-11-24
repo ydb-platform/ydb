@@ -27,6 +27,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -576,6 +577,9 @@ public:
             case Locked:
                 return "Locked";
                 break;
+            case Disabled:
+                return "Disabled";
+                break;
             case Restart:
                 return "Restart";
                 break;
@@ -596,11 +600,11 @@ public:
         IsDisabled = true;
     }
 
-    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId) const;
+    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId,
+                         TDuration restartCooldown) const;
 
     ui32 RingId = 0;
     bool IsDisabled = false;
-    const TDuration Timeout = TDuration::Minutes(2);
 
     TVector<TNodeInfoPtr> Replicas;
 };
@@ -729,7 +733,7 @@ public:
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
 
-    void ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 priority, const TString &requestId);
+    void ApplyActionWithoutLog(const NKikimrCms::TAction &action, const TNodeLockContext &ctx);
     void ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit);
 
     TClusterInfo() = default;
@@ -745,17 +749,18 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
+    using TStateStorageReplicaRings = TMap<ui32, ui32>;
+
     bool IsStateStorageReplicaNode(ui32 nodeId) const {
-        return StateStorageReplicas.contains(nodeId);
+        return StateStorageNodeToRings.contains(nodeId);
     }
 
     bool IsStateStorageinfoReceived() {
         return StateStorageInfoReceived;
     }
 
-    ui32 GetRingId(ui32 nodeId) {
-        Y_ABORT_UNLESS(IsStateStorageReplicaNode(nodeId));
-        return StateStorageNodeToRingId[nodeId];
+    const TStateStorageReplicaRings* FindStateStorageReplicaRings(ui32 nodeId) const {
+        return StateStorageNodeToRings.FindPtr(nodeId);
     }
 
     void CheckNodeExistenceWithVerify(ui32 nodeId) const {
@@ -953,6 +958,22 @@ public:
         return BSGroups;
     }
 
+    void SetHasDDiskPools(bool value) {
+        HasDDiskPools = value;
+    }
+
+    std::optional<bool> GetHasDDiskPools() const {
+        return HasDDiskPools;
+    }
+
+    void AddDDiskSlot(const NKikimrBlobStorage::TVSlotId& slot) {
+        DDiskSlots.push_back(slot);
+    }
+
+    const auto& GetDDiskSlots() const {
+        return DDiskSlots;
+    }
+
     void SetDDiskPoolName(ui32 nodeId, ui32 pdiskId, ui32 slotId, const TString& name) {
         DDiskPoolNames[nodeId][(ui64(pdiskId) << 32) | slotId] = name;
     }
@@ -1139,6 +1160,8 @@ private:
     TBSGroups BSGroups;
     THashMap<ui32, THashMap<ui64, NKikimrWhiteboard::TDDiskStateInfo>> DDiskStateInfo;
     THashMap<ui32, THashMap<ui64, TString>> DDiskPoolNames;
+    TVector<NKikimrBlobStorage::TVSlotId> DDiskSlots;
+    std::optional<bool> HasDDiskPools;
     TInstant Timestamp;
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;
@@ -1149,8 +1172,7 @@ private:
     TMultiMap<TString, ui32> HostNameToNodeId;
     TMultiMap<TString, ui32> TenantToNodeId;
     THashMap<TString, TLockableItemPtr> LockableItems;
-    THashSet<ui32> StateStorageReplicas;
-    THashMap<ui32, ui32> StateStorageNodeToRingId;
+    THashMap<ui32, TStateStorageReplicaRings> StateStorageNodeToRings;
 
 public:
     using TSysNodesCheckers = THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>>;

@@ -7,6 +7,36 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStoragePDiskCrypto) {
+
+    Y_UNIT_TEST(TestMixedSectorHashFormats) {
+        ui8 sector[4096];
+        for (size_t i = 0; i < sizeof(sector); ++i) {
+            sector[i] = i;
+        }
+        const ui64 offset = 16384;
+        const ui64 magic = 0x123456789abcdef0ULL;
+        const TLogoBlobID blobId(1, 2, 3, 0, 4096, 4);
+        THashCalculator legacy;
+        legacy.Hash(&offset, sizeof(offset));
+        legacy.Hash(&magic, sizeof(magic));
+        legacy.Hash(sector, sizeof(sector) - sizeof(ui64));
+        const ui64 oldHash = legacy.GetHashResult();
+        NPDisk::TPDiskHashCalculator writer;
+        const ui64 ordinaryHash = writer.HashSector(offset, magic, sector, sizeof(sector), {});
+        const ui64 saltedHash = writer.HashSector(offset, magic, sector, sizeof(sector), blobId);
+        NPDisk::TPDiskHashCalculator oldWriter(false);
+        UNIT_ASSERT_VALUES_EQUAL(oldWriter.HashSector(offset, magic, sector, sizeof(sector), {}), oldHash);
+        NPDisk::TPDiskHashCalculator reader;
+        // Exercise every cached mode and switching back to Poly1305 after t1ha.
+        for (ui64 hash : {ordinaryHash, ordinaryHash, saltedHash, saltedHash, oldHash, oldHash,
+                ordinaryHash, oldHash, saltedHash}) {
+            UNIT_ASSERT(reader.CheckSectorHash(offset, magic, sector, sizeof(sector), hash, blobId));
+        }
+        sector[42] ^= 1;
+        for (ui64 hash : {ordinaryHash, saltedHash, oldHash}) {
+            UNIT_ASSERT(!reader.CheckSectorHash(offset, magic, sector, sizeof(sector), hash, blobId));
+        }
+    }
     Y_UNIT_TEST(TestMixedStreamCypher) {
         for (ui32 enableEnctyption = 0; enableEnctyption < 2; ++enableEnctyption) {
             NPDisk::TPDiskStreamCypher cypher1(enableEnctyption);

@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 SRCS(
     endpoints_ut.cpp
 )

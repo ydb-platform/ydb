@@ -28,6 +28,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+GENERATE_ENUM_SERIALIZATION(ut_olap_enums.h)
+
 SRCS(
     ut_olap.cpp
     ut_olap_schema_entity_id.cpp

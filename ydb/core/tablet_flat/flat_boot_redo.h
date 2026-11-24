@@ -69,13 +69,23 @@ namespace NBoot {
                 if (head->LargeGlobId && index != TCookie::EIdx::RedoLz4) {
                     Apply(head->Stamp, *head, head->Body);
                 } else {
-                    size_t decompressedSize = Codec->DecompressedLength(head->Body);
-                    Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
-                        "Commit " << head->Stamp << " " << NFmt::Do(head->LargeGlobId)
-                        << " has an unexpected decompressed size of " << decompressedSize << " bytes"
-                        << ", possible data corruption");
+                    TString redo;
+                    try {
+                        size_t decompressedSize = Codec->DecompressedLength(head->Body);
+                        Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                            "Commit " << head->Stamp << " " << NFmt::Do(head->LargeGlobId)
+                                      << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                                      << ", possible data corruption");
 
-                    Apply(head->Stamp, *head, Codec->Decode(head->Body));
+                        redo = Codec->Decode(head->Body);
+                    } catch (NBlockCodecs::TCodecError& error) {
+                        error << " while decoding redo log " << NFmt::TStamp(head->Stamp) << " "
+                              << NFmt::Do(head->LargeGlobId) << " with codec " << Codec->Name() << " (encoded size "
+                              << head->Body.size() << " bytes)";
+                        throw;
+                    }
+
+                    Apply(head->Stamp, *head, std::move(redo));
                 }
 
                 ++Skip, Queue.pop_front();

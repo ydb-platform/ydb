@@ -26,7 +26,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_TABLET_METHOD macro already defined
 #endif
 
-#define SETUP_TABLET_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+#define SETUP_TABLET_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, callClass) \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                          \
         for (auto* cq: CQS) {                                                          \
             SETUP_RUNTIME_EVENT_METHOD(                                                \
@@ -40,7 +40,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 auditMode,                                                             \
                 EEmptyDatabaseMode::EmptyDatabaseAllowed,                              \
                 COMMON,                                                                \
-                ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                  \
+                ::NKikimr::NGRpcService::callClass,                  \
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
                 cq,                                                                    \
                 nullptr,                                                               \
@@ -50,9 +50,10 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }                                                                              \
     }
 
-    SETUP_TABLET_METHOD(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_TABLET_METHOD(ChangeTabletSchema, DoChangeTabletSchemaRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_TABLET_METHOD(RestartTablet, DoRestartTabletRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_TABLET_METHOD(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestNoOperationCall);
+    SETUP_TABLET_METHOD(ChangeTabletSchema, DoChangeTabletSchemaRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestNoOperationCall);
+    SETUP_TABLET_METHOD(RestartTablet, DoRestartTabletRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestNoOperationCall);
+    SETUP_TABLET_METHOD(ReassignTablets, DoReassignTabletsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestOperationCall);
 
 #undef SETUP_TABLET_METHOD
 }

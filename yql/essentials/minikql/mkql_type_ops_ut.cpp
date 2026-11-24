@@ -40,6 +40,25 @@ Y_UNIT_TEST(IsLeapYear) {
     UNIT_ASSERT(IsLeapYear(2400));
 }
 
+Y_UNIT_TEST(Date32InvalidMonth) {
+    UNIT_ASSERT(!ValueFromString(NUdf::EDataSlot::Date32, "0101-31-01"));
+}
+
+Y_UNIT_TEST(ExtendedDateMonthRange) {
+    for (const TStringBuf year : {"0101", "-0101"}) {
+        for (ui32 month = 0; month < 100; ++month) {
+            TStringStream date;
+            date << year << '-' << LeftPad(month, 2, '0') << "-01";
+            const bool validMonth = month >= 1 && month <= 12;
+            UNIT_ASSERT_VALUES_EQUAL(bool(ValueFromString(NUdf::EDataSlot::Date32, date.Str())), validMonth);
+            date << "T00:00:00Z";
+            for (const auto slot : {NUdf::EDataSlot::Datetime64, NUdf::EDataSlot::Timestamp64}) {
+                UNIT_ASSERT_VALUES_EQUAL(bool(ValueFromString(slot, date.Str())), validMonth);
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST(Date16vs32) {
     for (ui16 value16 = 0; value16 < NUdf::MAX_DATE; ++value16) {
         const NUdf::TUnboxedValue& strDate16 = ValueToString(NUdf::EDataSlot::Date, NUdf::TUnboxedValuePod(value16));
@@ -206,6 +225,63 @@ void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime, size_t step) {
 Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
     constexpr size_t datetimeStep = 100 * 86400;
     RunTestForAllTimezones(TestSplitMakeTzDatetime32vs64, datetimeStep);
+}
+
+Y_UNIT_TEST(SplitTzDatetime32vs64Pre1970) {
+    const ui16 tzId = GetTimezoneId("Etc/GMT+1");
+    ui32 year_n;
+    ui32 month_n;
+    ui32 day_n;
+    ui32 hour_n;
+    ui32 minute_n;
+    ui32 second_n;
+    ui32 dayOfYear_n;
+    ui32 weekOfYear_n;
+    ui32 weekOfYearIso8601_n;
+    ui32 dayOfWeek_n;
+    UNIT_ASSERT(SplitTzDatetime(0U, year_n, month_n, day_n, hour_n, minute_n, second_n,
+                                dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n, tzId));
+    UNIT_ASSERT_VALUES_EQUAL(1969U, year_n);
+    UNIT_ASSERT_VALUES_EQUAL(12U, month_n);
+    UNIT_ASSERT_VALUES_EQUAL(31U, day_n);
+    UNIT_ASSERT_VALUES_EQUAL(365U, dayOfYear_n);
+    UNIT_ASSERT_VALUES_EQUAL(53U, weekOfYear_n);
+    UNIT_ASSERT_VALUES_EQUAL(1U, weekOfYearIso8601_n);
+    UNIT_ASSERT_VALUES_EQUAL(3U, dayOfWeek_n);
+
+    i32 year_w;
+    ui32 month_w;
+    ui32 day_w;
+    ui32 hour_w;
+    ui32 minute_w;
+    ui32 second_w;
+    ui32 dayOfYear_w;
+    ui32 weekOfYear_w;
+    ui32 weekOfYearIso8601_w;
+    ui32 dayOfWeek_w;
+    UNIT_ASSERT(SplitTzDatetime64(0LL, year_w, month_w, day_w, hour_w, minute_w, second_w,
+                                  dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w, tzId));
+    UNIT_ASSERT_VALUES_EQUAL(year_n, static_cast<ui32>(year_w));
+    UNIT_ASSERT_VALUES_EQUAL(month_n, month_w);
+    UNIT_ASSERT_VALUES_EQUAL(day_n, day_w);
+    UNIT_ASSERT_VALUES_EQUAL(dayOfYear_n, dayOfYear_w);
+    UNIT_ASSERT_VALUES_EQUAL(weekOfYear_n, weekOfYear_w);
+    UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_n, weekOfYearIso8601_w);
+    UNIT_ASSERT_VALUES_EQUAL(dayOfWeek_n, dayOfWeek_w);
+}
+
+Y_UNIT_TEST(MakeTzDateRejectsInvalidDate) {
+    ui16 value = 123;
+    UNIT_ASSERT(!MakeTzDate(1970, 0, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+    UNIT_ASSERT(!MakeTzDate(1970, 1, 0, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+}
+
+Y_UNIT_TEST(MakeTzDateAcceptsEpoch) {
+    ui16 value = 123;
+    UNIT_ASSERT(MakeTzDate(1970, 1, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 0);
 }
 
 Y_UNIT_TEST(SplitMakeTzDateSingle) {

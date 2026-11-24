@@ -37,11 +37,11 @@ protected:
         return result;
     }
     virtual ui32 DoGetNullsCount() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
@@ -70,7 +70,7 @@ protected:
 
 public:
     virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     bool HasSubColumn(const TString& subColumnName) const {
@@ -79,7 +79,7 @@ public:
     }
 
     void StoreSourceString(const TString& sourceDeserializationString) {
-        AFL_VERIFY(!SourceDeserializationString);
+        YDB_LOG_VERIFY(!SourceDeserializationString);
         SourceDeserializationString = sourceDeserializationString;
     }
 
@@ -112,8 +112,8 @@ public:
         return nullptr;
     }
 
-    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), svPath);
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const NSubColumns::TParsedJsonPath& parsedPath, const ui32 recordsCount) const {
+        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), parsedPath);
         if (pathResult.IsFail()) {
             return TConclusionStatus::Fail(pathResult.GetErrorMessage());
         }

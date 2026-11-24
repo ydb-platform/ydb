@@ -10,7 +10,7 @@
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
-В качестве примера рассмотрим кластер {{ ydb-short-name }}, в котором на хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v2/config-settings.md#hosts). Этот узел обслуживает часть статической группы.
+В качестве примера рассмотрим кластер {{ ydb-short-name }}, в котором на хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../reference/configuration/hosts.md). Этот узел обслуживает часть статической группы.
 
 Фрагмент конфигурации статической группы:
 

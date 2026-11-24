@@ -21,9 +21,11 @@ arcanum:
           - name: fbp_team
             assign: 999
             ship: 0
+            ignore_self_ship: false
       # Если изменения от кого-то стороннего, то ревью на FBP
       - authors: "!ya_make:developer"
         reviewers:
           name: fbp_team
           assign: 999
           ship: 1
+          ignore_self_ship: false

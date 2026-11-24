@@ -21,6 +21,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
+#include <util/generic/scope.h>
+#include <util/system/datetime.h>
 #include <util/thread/pool.h>
 
 #include <algorithm>
@@ -672,15 +674,18 @@ struct TTabletRestartReadSessionEnv {
 };
 
 void TearDownGrpcAndServer(TTabletRestartReadSessionEnv& env) {
-    env.DropHooks();
-
     if (!env.Server) {
         return;
     }
 
-    auto& runtime = env.Runtime();
-    auto shutdown = NThreading::Async([&] {
-        env.Server->ShutdownGRpc();
+    env.DropHooks();
+    // Dispatch or the deadline check below may throw. Keep the server alive
+    // until the background shutdown has joined its gRPC threads, even if the
+    // fixture is destroyed while unwinding that exception.
+    auto server = std::shared_ptr<::NPersQueue::TTestServer>(std::move(env.Server));
+    auto& runtime = *server->GetRuntime();
+    auto shutdown = NThreading::Async([server] {
+        server->ShutdownGRpc();
         return true;
     }, DispatchPool());
     const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
@@ -691,8 +696,7 @@ void TearDownGrpcAndServer(TTabletRestartReadSessionEnv& env) {
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
     }
     shutdown.GetValueSync();
-    env.Server->ShutdownServer();
-    env.Server.reset();
+    server->ShutdownServer();
 }
 
 class TTabletRestartReadSessionFixture : public NUnitTest::TBaseFixture {
@@ -1791,6 +1795,51 @@ Y_UNIT_TEST(RebootBothTabletsCombinedStress) {
 }
 
 } // Y_UNIT_TEST_SUITE_F(TTabletRestartReadSessionTest)
+
+Y_UNIT_TEST_SUITE(TTabletRestartServerCleanup) {
+Y_UNIT_TEST(DispatchFailureDuringGrpcShutdown) {
+    TTabletRestartReadSessionEnv env;
+    env.Start();
+    auto& runtime = env.Runtime();
+
+    TIntrusivePtr<NYdbGrpc::TGrpcServiceProtectiable> service;
+    for (const auto& candidate : env.Server->CleverServer->GetGRpcServer().GetServices()) {
+        service = dynamic_cast<NYdbGrpc::TGrpcServiceProtectiable*>(candidate.Get());
+        if (service) {
+            break;
+        }
+    }
+    UNIT_ASSERT(service);
+    // Keep Stop() in progress until the main thread has unwound teardown.
+    auto shutdownGuard = service->ProtectShutdown();
+    UNIT_ASSERT(shutdownGuard);
+    Y_DEFER { shutdownGuard.Release(); };
+
+    runtime.SetScheduledEventsSelectorFunc([service](auto&, auto&, auto&) {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (!service->IsShuttingDown() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_C(service->IsShuttingDown(), "gRPC shutdown did not start");
+        ythrow NActors::TSchedulingLimitReachedException(100'000);
+    });
+    const auto edge = runtime.AllocateEdgeActor();
+    runtime.Schedule(new IEventHandle(edge, edge, new NActors::TEvents::TEvWakeup()),
+                     TDuration::MicroSeconds(1));
+
+    UNIT_ASSERT_EXCEPTION(TearDownGrpcAndServer(env), NActors::TSchedulingLimitReachedException);
+    // Model fixture destruction after failed teardown. This must not destroy
+    // the gRPC server while the background Stop() still owns its threads.
+    env.Server.reset();
+    shutdownGuard.Release();
+
+    const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+    while (service.RefCount() != 1 && TInstant::Now() < deadline) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(service.RefCount(), 1, "background server cleanup did not finish");
+}
+}
 
 } // anonymous namespace
 } // namespace NKikimr::NPersQueueTests

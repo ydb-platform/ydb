@@ -11,11 +11,12 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class TStandaloneSchemaUpdate: public TColumnTableUpdate {
 private:
     using TBase = ISSEntityUpdate;
-    std::optional<TOlapSchemaUpdate> AlterSchema;
-    std::optional<TOlapTTLUpdate> AlterTTL;
-    std::optional<TOlapMultiColumnStatisticsUpdate> AlterMultiColumnStatistics;
+    bool UpdateSchema = false;
+    bool UpdateTTL = false;
     std::shared_ptr<TStandaloneTable> TargetStandalone;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoRestoreImpl(
+        const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) override;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetStandalone->GetTableInfoPtrVerified();
@@ -26,7 +27,7 @@ private:
     }
 
     virtual std::set<ui64> DoGetShardIds() const override {
-        if (!AlterSchema && !AlterTTL) {
+        if (!UpdateSchema && !UpdateTTL) {
             // Statistics-only alter: SchemeShard-local state change, no shard schema transaction.
             return {};
         }
@@ -49,10 +50,10 @@ private:
     }
 
     void FillToShardTx(NKikimrTxColumnShard::TAlterTable& shardAlter) const {
-        if (AlterSchema) {
+        if (UpdateSchema) {
             *shardAlter.MutableSchema() = TargetStandalone->GetTableSchemaProto();
         }
-        if (AlterTTL) {
+        if (UpdateTTL) {
             *shardAlter.MutableTtlSettings() = TargetStandalone->GetTableTTLProto();
         }
     }

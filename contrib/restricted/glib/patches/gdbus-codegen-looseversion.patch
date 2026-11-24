@@ -1,0 +1,17 @@
+--- a/gio/gdbus-2.0/codegen/utils.py
++++ b/gio/gdbus-2.0/codegen/utils.py
+@@ -19,7 +19,7 @@
+ #
+ # Author: David Zeuthen <davidz@redhat.com>
+ 
+-import distutils.version
++import looseversion
+ import os
+ import sys
+ 
+@@ -162,4 +162,4 @@
+         v = str(key[0])
+     else:
+         v = "0"
+-    return (distutils.version.LooseVersion(v), key[1])
++    return (looseversion.LooseVersion(v), key[1])

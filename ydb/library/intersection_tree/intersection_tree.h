@@ -190,6 +190,7 @@ namespace NKikimr {
 
     public:
         void Add(const TValue& value, const TKey& leftKey, const TKey& rightKey) {
+            Y_ENSURE(CompareKeys(*this, leftKey, rightKey) <= 0);
             auto res = Values.emplace(
                 std::piecewise_construct,
                 std::forward_as_tuple(value),
@@ -278,7 +279,7 @@ namespace NKikimr {
             }
 
             bool IsLeftInclusive() const {
-                return !GetLeftPartitionKey().IsLeftInclusive();
+                return GetLeftPartitionKey().IsLeftInclusive();
             }
 
             bool HasRightKey() const {
@@ -299,11 +300,15 @@ namespace NKikimr {
             }
 
             i32 GetCount() const {
-                return LastLeft ? (RightCount + RightBorder->LeftDelta) : (LeftCount + LeftBorder->RightDelta);
+                const TNode* node = LastLeft ? RightBorder : LeftBorder;
+                if (!node) {
+                    return 0;
+                }
+                return LastLeft ? (RightCount + node->LeftDelta) : (LeftCount + node->RightDelta);
             }
 
             template<class TCallback>
-            bool ForEachValue(const TCallback& callback) {
+            bool ForEachValue(const TCallback& callback) const {
                 const TNode* node = LastLeft ? RightBorder : LeftBorder;
                 if (!node) {
                     return true;
@@ -333,7 +338,7 @@ namespace NKikimr {
                     return TFoundRange();
                 }
                 const TNode* newRight = LeftBorder;
-                i32 newRightCount = RightCount;
+                i32 newRightCount = LeftCount;
                 auto [newLeft, newLeftCount] = Predecessor(newRight, newRightCount);
                 if (newRight->Left) {
                     return TFoundRange(newLeft, newRight, newLeftCount, newRightCount, false);
@@ -373,7 +378,7 @@ namespace NKikimr {
                             return {parent, count};
                         }
                         Y_DEBUG_ABORT_UNLESS(parent->Left.get() == node);
-                        count -= parent->RightDelta;
+                        count -= parent->LeftDelta;
                         node = parent;
                     }
                     return {nullptr, count};

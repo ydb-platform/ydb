@@ -2074,6 +2074,10 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
 
     const TCoAggregate agg = node.Input().Cast<TCoAggregate>();
+    // A global aggregate still emits a row for an empty input, so a false predicate must stay above it.
+    if (agg.Keys().Size() == 0) {
+        return node;
+    }
     const THashSet<TStringBuf> keyColumns = GetAggregationInputKeys(agg);
 
     TExprNodeList andComponents;

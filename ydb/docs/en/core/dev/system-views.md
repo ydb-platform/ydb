@@ -367,6 +367,16 @@ WHERE ApplicationName = 'my_analytics_app'
 ```
 
 
+### Terminating a session {#terminate-session}
+
+To terminate a selected session and its running query, copy its `SessionId` and submit a separate [`KILL SESSION`](../yql/reference/syntax/kill-session.md) query:
+
+```yql
+KILL SESSION `ydb://session/3?node_id=52910&id=MWFmNGYwYTAtYzJkN2RhOWEtZmFkMDhlMTUtZjU0ZDE0OTA%3D`;
+```
+
+Replace the example ID with a value from the query results. See the [statement reference](../yql/reference/syntax/kill-session.md#permissions) for the required permissions and operation result.
+
 ## Query compilation cache {#compile-cache-queries}
 
 The following system view contains information about queries stored in the compilation cache on all cluster nodes:
@@ -379,9 +389,11 @@ The `compile_cache_queries` system view is not available in serverless mode.
 
 {% endnote %}
 
-Each cluster node has its own cache of compiled queries. This cache is used by all sessions running on that node: if during query execution its text is already in the cache, no additional compilation is required.
+Each cluster node has its own cache of compiled queries. All sessions on the node share this cache and can reuse a matching plan without recompiling the query.
 
 The system view `compile_cache_queries` provides data on the cache state on all or selected cluster nodes. When querying this view, requests are sent to each node unless a restriction on `NodeId` is specified in the `WHERE` condition. The response returns current information about the cache contents for each node, and the resulting table combines the received data.
+
+At startup, a node uses this view for [compilation cache warmup](../concepts/query_execution/compile-cache-warmup.md). It compiles selected queries before it starts serving clients.
 
 View structure:
 
@@ -390,13 +402,13 @@ View structure:
 | `NodeId` | Node ID where the query is stored in the cache.<br/>Type: `Uint32`.<br/>Key: `0`. |
 | `QueryId` | Unique query ID in the node cache.<br/>Type: `Utf8`.<br/>Key: `1`. |
 | `Query` | Query text. If the query exceeds 10 KB, it is truncated.<br/>Type: `Utf8`. |
-| `AccessCount` | Number of cache hits for the query text.<br/>Type: `Uint64`. |
+| `AccessCount` | Number of accesses to the compiled plan while it is in the cache, including the first access after compilation.<br/>Type: `Uint64`. |
 | `CompiledAt` | Query compilation time.<br/>Type: `Timestamp`. |
 | `UserSID` | Security ID of the user on whose behalf the query was compiled. May be empty for system queries.<br/>Type: `Utf8`. |
 | `LastAccessedAt` | Time of the last access to the query compilation result in the cache.<br/>Type: `Timestamp`. |
 | `CompilationDurationMs` | Query compilation duration in milliseconds.<br/>Type: `Uint64`. |
 | `Warnings` | Warnings that occurred during query compilation.<br/>Type: `Utf8`. |
-| `Metadata` | Query parameter types in JSON format. Contains the `parameters` key with parameter names and their types.<br/>Type: `Utf8`. |
+| `Metadata` | Compilation metadata in JSON format. The `parameters` key contains query parameter names and types. Parameter values are never stored. Only the metadata system user can see the `user_group_sids` key. It contains an array of the user's group IDs, or `null` if the number of groups or the total size of their IDs exceeds the limit. Older entries may omit this key.<br/>Type: `Utf8`. |
 | `IsTruncated` | Flag indicating whether the query text was truncated due to exceeding the 10 KB limit.<br/>Type: `Bool`. |
 | `QueryType` | Query type, one of:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service in concurrent mode<br/>May be empty for old entries.<br/>Type: `Utf8`. |
 | `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old entries without syntax information<br/>`SYNTAX_PG` — deprecated value for entries compiled before the removal of experimental PostgreSQL compatibility; new queries with this syntax are not accepted<br/>Type: `Utf8`. |
@@ -613,7 +625,7 @@ WHERE Name = "default";
 
 ## Resource pool classifier information {#resource_pools_classifiers}
 
-The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#common-parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
 
 System view structure:
 
@@ -655,7 +667,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | User [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | User [SID](../concepts/glossary.md#access-sid).<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates whether login is allowed for this user; used for explicit blocking by an administrator. Independent of `IsLockedOut`.<br />Type: `Bool`. |
 | `IsLockedOut` | Indicates that this user is automatically blocked due to exceeding the number of failed authentications. Does not depend on `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | User creation time.<br />Type: `Timestamp`. |
@@ -674,7 +686,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | Group [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | Group [SID](../concepts/glossary.md#access-sid).<br />Type: `Utf8`.<br />Key: `0`. |
 
 ### Information about group membership
 
@@ -689,7 +701,7 @@ Table structure:
 | `GroupSid` | Group SID.<br />Type: `Utf8`.<br />Key: `0`. |
 | `MemberSid` | Group member SID. Can be either a user SID or a group SID.<br />Type: `Utf8`.<br />Key: `1`. |
 
-### Information about access rights
+### Information about access rights {#information-about-access-rights}
 
 The views contain a list of granted [access rights](../concepts/glossary.md#access-right).
 

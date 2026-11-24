@@ -31,7 +31,7 @@ Parameters:
 
 `--columns STR`: A required parameter that defines the columns used in the index and their order in the index key. Column names are separated by a comma, with no spaces. The index key will include both the columns listed and the columns from the table's primary key.
 
-`--cover STR`: An optional parameter that defines the [covering columns](../../../../concepts/query_execution/secondary_indexes.md#cover) of the index. Their values won't be added to the index key, but will be written to the index. This enables you to retrieve the values when searching the index without accessing the table.
+`--cover STR`: An optional parameter that defines the [covering columns](../../../../concepts/query_execution/secondary_indexes.md#covering) of the index. Their values won't be added to the index key, but will be written to the index. This enables you to retrieve the values when searching the index without accessing the table.
 
 When the command is executed, the DBMS starts building the index in the background, and the pseudographics-formatted `id` field shows the operation ID, so you can retrieve its status by `operation get`. When the index is being built, you can abort the process using `operation cancel`.
 

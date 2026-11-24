@@ -1,0 +1,98 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "StructType";
+                                    [
+                                        [
+                                            "Any";
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ]
+                                        ];
+                                        [
+                                            "x";
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "\n\n{\n\n    \"Any\": \"<x=y>{a=1;b=c}\",\n\n    \"x\": \"aaa\"\n\n}\n\n";
+                        [
+                            [
+                                {
+                                    "$attributes" = {
+                                        "x" = {
+                                            "$type" = "string";
+                                            "$value" = "y"
+                                        }
+                                    };
+                                    "$value" = {
+                                        "a" = {
+                                            "$type" = "int64";
+                                            "$value" = "1"
+                                        };
+                                        "b" = {
+                                            "$type" = "string";
+                                            "$value" = "c"
+                                        }
+                                    }
+                                }
+                            ];
+                            [
+                                "aaa"
+                            ]
+                        ];
+                        "{\n  \"x\":\"aaa\",\n  \"Any\":\"<x=y>{a=1;b=c}\"\n}";
+                        "Success"
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

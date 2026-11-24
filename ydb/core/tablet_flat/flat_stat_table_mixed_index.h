@@ -21,7 +21,7 @@ inline bool BuildStatsMixedIndex(const TSubset& subset, TStats& stats, ui64 rowC
     // Make index iterators for all parts
     bool started = true;
     for (const auto& part : subset.Flatten) {
-        stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        AddIndexSize(stats.IndexSize, *part);
         for (const auto& [_, bloom] : part->ByKeyPrefixes) {
             if (bloom) stats.ByKeyFilterSize += bloom->Raw.size();
         }

@@ -1,0 +1,11 @@
+USE plato;
+
+PRAGMA config.flags("OptimizerFlags", "EmitPruneKeys");
+PRAGMA yt.MapJoinLimit = "1m";
+
+SELECT * FROM Input3
+WHERE value IN (
+    SELECT a.value
+    FROM Input1 AS a
+    JOIN Input2 AS b ON a.value = b.value
+);

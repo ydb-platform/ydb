@@ -28,9 +28,15 @@ NRpc::IChannelPtr CreateCredentialsInjectingChannel(
             underlyingChannel,
             options);
     } else if (options.ServiceTicketAuth) {
-        return CreateServiceTicketInjectingChannel(
+        auto channel = CreateServiceTicketInjectingChannel(
             underlyingChannel,
             options);
+        if (options.UserTicket && !options.UserTicket->empty()) {
+            channel = CreateUserTicketInjectingChannel(
+                std::move(channel),
+                options);
+        }
+        return channel;
     } else if (options.UserTicket) {
         return CreateUserTicketInjectingChannel(
             underlyingChannel,

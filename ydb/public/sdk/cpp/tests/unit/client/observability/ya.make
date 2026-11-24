@@ -7,8 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-FORK_SUBTESTS()
-
 SRCS(
     metric_buffer_ut.cpp
     metrics_ut.cpp

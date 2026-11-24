@@ -24,7 +24,7 @@ WITH
 * `s3_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3-совместимого хранилища данных.
 * `write_folder` — путь к директории внутри бакета, в которую будет вестись запись;  путь должен быть не пустым и заканчиваться на `/`; запись в корень бакета не поддерживается.
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
-* `compression` — [формат сжатия](formats.md#compression_formats) файлов, опционально.
+* `compression` — [формат сжатия](formats.md#compression) файлов, опционально.
 * `schema_definition` — [описание схемы хранимых данных](external_data_source.md#schema) в файлах, опционально; если не указано, будет выведено автоматически из типа `<expression>`.
 * `format_settings` — [параметры форматирования](external_data_source.md#format_settings), опционально.
 

@@ -1,0 +1,29 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    x.*
+WITHOUT
+    a
+FROM (
+    VALUES
+        (1, 3)
+) AS x (
+    a,
+    c
+);
+
+SELECT
+    *
+FROM (
+    SELECT
+        x.*
+    WITHOUT
+        a
+    FROM (
+        VALUES
+            (1, 3)
+    ) AS x (
+        a,
+        c
+    )
+);

@@ -14,15 +14,15 @@
 
 #include "device_test_tool.h"
 #include "device_test_tool_cli.h"
+#include "device_test_tool_pdisk_test.h"
+#ifdef _linux_
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_ddisk_client_server.h"
 #include "device_test_tool_driveestimator.h"
 #include "device_test_tool_interconnect_test.h"
 #include "device_test_tool_pb_test.h"
-#include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
-#ifdef _linux_
 #include "device_test_tool_uring_router_test.h"
 #endif
 
@@ -48,6 +48,7 @@ static NActors::NLog::EPriority ParseLogLevel(const TString& s) {
     ythrow yexception() << "invalid --log-level '" << s << "', expected one of: warn, info, debug, trace";
 }
 
+#ifdef _linux_
 // Parse "host:port" or "[host]:port" (the latter for IPv6 literals).
 // Splits on the LAST ':' for the non-bracket form. Throws on malformed input.
 static std::pair<TString, ui16> ParseHostPort(const TString& s) {
@@ -98,6 +99,7 @@ static void InstallInterconnectServerSignalHandler() {
     signal(SIGINT, InterconnectServerSignalHandler);
     signal(SIGTERM, InterconnectServerSignalHandler);
 }
+#endif
 
 static const char* ydb_logo =
 R"__(
@@ -145,6 +147,9 @@ static int Run(int argc, char **argv) {
     using namespace NLastGetopt;
     using namespace NKikimr::NStressTool;
     const bool ddisk = argc > 1 && TStringBuf(argv[1]) == "ddisk";
+#ifdef _darwin_
+    Y_ENSURE(!ddisk, "macOS supports only PDisk sector-map workloads; the ddisk command is unavailable");
+#endif
     TVector<const char*> args(argv, argv + argc);
     TString programName = argv[0];
     if (ddisk) {
@@ -154,12 +159,16 @@ static int Run(int argc, char **argv) {
     }
     TCommandLine cli(ddisk);
     TOptsParseResult res(&cli.Opts, args.size(), args.data());
+#ifdef _darwin_
+    ValidatePDiskSectorMapOptions(res, ddisk);
+#endif
     auto& paths = cli.Paths;
+    const auto inFlight = ResolveInFlight(res);
+#ifdef _linux_
     const auto serverNodeId = cli.ServerNodeId;
     const auto clientNodeId = cli.ClientNodeId;
     const auto icPort = cli.IcPort;
     const auto& clientEndpoints = cli.ClientEndpoints;
-    const auto inFlight = ResolveInFlight(res, ddisk);
 
     // Server mode is selected by --server. Client mode by --client without --server.
     // In server mode, --client is also required and provides the expected client's NodeID
@@ -199,6 +208,9 @@ static int Run(int argc, char **argv) {
     }
 
     if (!clientMode && !serverMode && paths.empty()) {
+#else
+    if (paths.empty()) {
+#endif
         Cerr << "Error: at least one --path must be specified" << Endl;
         return 1;
     }
@@ -207,6 +219,7 @@ static int Run(int argc, char **argv) {
         Cout << ydb_logo << Flush;
     }
 
+#ifdef _linux_
     const bool pathsProvided = !paths.empty();
 
     // For client mode, and for server mode when running as an interconnect
@@ -214,6 +227,7 @@ static int Run(int argc, char **argv) {
     if ((clientMode || serverMode) && paths.empty()) {
         paths.push_back("unused");
     }
+#endif
 
     NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN;
     try {
@@ -223,19 +237,31 @@ static int Run(int argc, char **argv) {
         return 1;
     }
 
+#ifdef _linux_
     try {
         ValidateDDiskOptions(res);
     } catch (const yexception& ex) {
         Cerr << "Error: " << ex.what() << Endl;
         return 1;
     }
+#endif
 
     auto protoTests = LoadTests(res, ddisk);
+#ifdef _darwin_
+    ValidatePDiskSectorMapTests(protoTests);
+#endif
 
     NKikimr::TPerfTestConfig config(paths, res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
             res.Get("run-count"), inFlight.From, inFlight.To, cli.DisablePDiskDataEncryption,
             cli.DisableDDiskChecksums, cli.ForcePDiskFallback, logLevel);
+#ifdef _darwin_
+    for (ui32 i = 0; i < config.NumDevices(); ++i) {
+        Y_ENSURE(config.SectorMaps[i], "macOS requires a sector map for every --path; got '"
+            << config.Paths[i] << "', expected SectorMap:<name>[:<GiB>[:<mode>]]");
+    }
+#endif
+#ifdef _linux_
     config.DDiskDevNullMode = cli.DDiskDevNullMode;
     if (ddisk) {
         config.PhysicalChunkSize = DDiskChunkSize;
@@ -440,6 +466,8 @@ static int Run(int argc, char **argv) {
         }
     }
 
+#endif
+
 #ifndef NDEBUG
     Cerr << "Warning: you're running stress tool built without NDEBUG defined, results will be much worse than expected"
         << Endl;
@@ -528,6 +556,7 @@ static int Run(int argc, char **argv) {
 
     auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
 
+#ifdef _linux_
     for (ui32 i = 0; i < protoTests.AioTestListSize(); ++i) {
         NDevicePerfTest::TAioTest testProto = protoTests.GetAioTestList(i);
         for (ui32 run = 0; run < config.RunCount; ++run) {
@@ -538,7 +567,6 @@ static int Run(int argc, char **argv) {
     }
     printer->EndTest();
 
-#ifdef _linux_
     for (ui32 i = 0; i < protoTests.UringRouterTestListSize(); ++i) {
         NDevicePerfTest::TUringRouterTest testProto = protoTests.GetUringRouterTestList(i);
         if (config.HasInFlightOverride()) {
@@ -559,7 +587,6 @@ static int Run(int argc, char **argv) {
         }
     }
     printer->EndTest();
-#endif
 
     for (ui32 i = 0; i < protoTests.TrimTestListSize(); ++i) {
         NDevicePerfTest::TTrimTest testProto = protoTests.GetTrimTestList(i);
@@ -570,6 +597,8 @@ static int Run(int argc, char **argv) {
         }
     }
     printer->EndTest();
+
+#endif
 
     // Helper lambda to override InFlight in PDiskTest proto
     auto overridePDiskInFlight = [](NDevicePerfTest::TPDiskTest& testProto, ui32 inFlight) {
@@ -609,6 +638,7 @@ static int Run(int argc, char **argv) {
     }
     printer->EndTest();
 
+#ifdef _linux_
     // Helper lambda to override InFlight in DDiskTest proto
     auto overrideDDiskInFlight = [](NDevicePerfTest::TDDiskTest& testProto, ui32 inFlight) {
         for (size_t j = 0; j < testProto.DDiskTestListSize(); ++j) {
@@ -712,6 +742,8 @@ static int Run(int argc, char **argv) {
         }
     }
     printer->EndTest();
+
+#endif
 
     return 0;
 }

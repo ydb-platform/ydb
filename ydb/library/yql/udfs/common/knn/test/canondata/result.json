@@ -19,6 +19,11 @@
             "uri": "file://test.test_CosineSimilarity_/results.txt"
         }
     ],
+    "test.test[EmptyVectorDeserialization]": [
+        {
+            "uri": "file://test.test_EmptyVectorDeserialization_/results.txt"
+        }
+    ],
     "test.test[ErrorDistanceInvalidFormat]": [
         {
             "uri": "file://test.test_ErrorDistanceInvalidFormat_/results.txt"
@@ -37,6 +42,11 @@
     "test.test[ErrorDistanceSameTag]": [
         {
             "uri": "file://test.test_ErrorDistanceSameTag_/extracted"
+        }
+    ],
+    "test.test[ErrorFloat8DistanceSameTag]": [
+        {
+            "uri": "file://test.test_ErrorFloat8DistanceSameTag_/extracted"
         }
     ],
     "test.test[ErrorFloatFromBinaryStringBitVector]": [
@@ -64,9 +74,24 @@
             "uri": "file://test.test_Float16Serialization_/results.txt"
         }
     ],
+    "test.test[Float8E4M3Serialization]": [
+        {
+            "uri": "file://test.test_Float8E4M3Serialization_/results.txt"
+        }
+    ],
+    "test.test[Float8E5M2Serialization]": [
+        {
+            "uri": "file://test.test_Float8E5M2Serialization_/results.txt"
+        }
+    ],
     "test.test[InnerProductSimilarity]": [
         {
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"
+        }
+    ],
+    "test.test[Int4Serialization]": [
+        {
+            "uri": "file://test.test_Int4Serialization_/results.txt"
         }
     ],
     "test.test[Int8Serialization]": [
@@ -97,6 +122,11 @@
     "test.test[OptionalAutoUnpacking]": [
         {
             "uri": "file://test.test_OptionalAutoUnpacking_/results.txt"
+        }
+    ],
+    "test.test[Uint4Serialization]": [
+        {
+            "uri": "file://test.test_Uint4Serialization_/results.txt"
         }
     ],
     "test.test[Uint8Serialization]": [

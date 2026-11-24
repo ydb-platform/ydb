@@ -1,4 +1,5 @@
 #include <ydb/core/tablet_flat/flat_executor.h>
+#include <ydb/core/tablet_flat/flat_executor_misc.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_writer_conf.h>
 #include <ydb/core/tablet_flat/flat_writer_bundle.h>
@@ -10,6 +11,36 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 Y_UNIT_TEST_SUITE(NOther) {
+    Y_UNIT_TEST(CompactOutputDefaultMaterialization)
+    {
+        const NTable::TScheme::TFamily leaderFamily;
+        const TCompactCfg::TOutputConf conf;
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.MaterializeOuterEdge, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(conf.MaterializeExtEdge, leaderFamily.Large);
+    }
+
+    Y_UNIT_TEST(CompactOutputLeaderFamilyMaterialization)
+    {
+        NTable::TScheme::TFamily leaderFamily;
+        leaderFamily.Small = 64;
+        leaderFamily.Large = 512;
+
+        TCompactCfg::TOutputConf conf(leaderFamily);
+        UNIT_ASSERT_VALUES_EQUAL(conf.MaterializeOuterEdge, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(conf.MaterializeExtEdge, 512);
+
+        conf.Layout.SmallEdge = Max<ui32>();
+        conf.Layout.LargeEdge = 1024;
+        UNIT_ASSERT_VALUES_EQUAL(conf.MaterializeOuterEdge, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(conf.MaterializeExtEdge, 512);
+
+        conf.MaterializeOuterEdge = 0;
+        conf.MaterializeExtEdge = Max<ui32>();
+        UNIT_ASSERT_VALUES_EQUAL(conf.Layout.SmallEdge, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(conf.Layout.LargeEdge, 1024);
+    }
+
     Y_UNIT_TEST(Blocks)
     {
         NWriter::TConf conf;

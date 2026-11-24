@@ -52,7 +52,7 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
             fieldNames.emplace(i);
         }
         auto table = batch->BuildTableVerified(fieldNames);
-        AFL_VERIFY(table);
+        YDB_LOG_VERIFY(table);
         filter = shardingActual->GetShardingInfo()->GetFilter(table);
     }
     NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
@@ -68,14 +68,14 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
         });
         if (!coveredByOlder) {
             if (pInfo.GetPortionType() == EPortionType::Written) {
-                AFL_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
+                YDB_LOG_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
                 filterDeleted = NArrow::TColumnFilter::BuildDenyFilter();
             } else {
                 auto table = batch->BuildTableVerified(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
-                AFL_VERIFY(table);
+                YDB_LOG_VERIFY(table);
                 auto col = table->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
-                AFL_VERIFY(col);
-                AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
+                YDB_LOG_VERIFY(col);
+                YDB_LOG_VERIFY(col->type()->id() == arrow::Type::BOOL);
                 for (auto&& c : col->chunks()) {
                     auto bCol = static_pointer_cast<arrow::BooleanArray>(c);
                     for (ui32 i = 0; i < bCol->length(); ++i) {

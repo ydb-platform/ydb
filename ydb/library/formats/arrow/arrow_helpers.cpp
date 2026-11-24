@@ -3,6 +3,7 @@
 #include "replace_key.h"
 #include "simple_arrays_cache.h"
 
+#include "switch/compare.h"
 #include "switch/switch_type.h"
 #include "validation/validation.h"
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -67,8 +68,11 @@ std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>&
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(tableExt->num_columns());
     for (auto& col : res->columns()) {
-        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(res))("schema", res->schema()->ToString())(
-            "size_new", GetTableDataSize(res));
+        YDB_LOG_VERIFY(col->num_chunks() == 1,
+            {"size", col->num_chunks()},
+            {"sizeBytes", GetTableDataSize(res)},
+            {"schema", res->schema()->ToString()},
+            {"sizeNew", GetTableDataSize(res)});
         columns.push_back(col->chunk(0));
     }
     return arrow::RecordBatch::Make(res->schema(), res->num_rows(), columns);
@@ -104,7 +108,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
         const std::shared_ptr<arrow::RecordBatch>& batch,
         const THashMap<ui64, std::vector<ui32>>& shardRows,
         arrow::MemoryPool* memoryPool) {
-    AFL_VERIFY(batch);
+    YDB_LOG_VERIFY(batch);
     std::shared_ptr<arrow::UInt64Array> permutation;
     {
         arrow::UInt64Builder builder(memoryPool);
@@ -137,7 +141,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards) {
-    AFL_VERIFY(batch);
+    YDB_LOG_VERIFY(batch);
     std::shared_ptr<arrow::UInt64Array> permutation;
     {
         arrow::UInt64Builder builder;
@@ -170,7 +174,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards) {
-    AFL_VERIFY(batch);
+    YDB_LOG_VERIFY(batch);
     Y_ABORT_UNLESS((size_t)batch->num_rows() == sharding.size());
 
     std::vector<std::vector<ui32>> shardRows(numShards);
@@ -202,7 +206,9 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
         if (sizeByColumn.size()) {
             auto it = sizeByColumn.find(field->name());
             if (it != sizeByColumn.end()) {
-                AFL_VERIFY(NArrow::ReserveData(*builder, it->second))("size", it->second)("field", field->name());
+                YDB_LOG_VERIFY(NArrow::ReserveData(*builder, it->second),
+                    {"size", it->second},
+                    {"field", field->name()});
             }
         }
 
@@ -216,12 +222,12 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
 }
 
 std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems, const ui32 reserveSize) {
-    AFL_VERIFY(field);
+    YDB_LOG_VERIFY(field);
     return MakeBuilder(field->type(), reserveItems, reserveSize);
 }
 
 std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type, const ui32 reserveItems, const ui32 reserveSize) {
-    AFL_VERIFY(type);
+    YDB_LOG_VERIFY(type);
     std::unique_ptr<arrow::ArrayBuilder> builder;
     TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), type, &builder));
     if (reserveSize) {
@@ -362,7 +368,8 @@ std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataTy
         }
         return true;
     });
-    AFL_VERIFY(out)("type", type->ToString());
+    YDB_LOG_VERIFY(out,
+        {"type", type->ToString()});
     return out;
 }
 
@@ -404,11 +411,13 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
 }
 
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
-    AFL_VERIFY(c);
+    YDB_LOG_VERIFY(c);
     if (!s) {
         return c->IsNull(position);
     }
-    AFL_VERIFY(c->type()->Equals(s->type))("s", s->type->ToString())("c", c->type()->ToString());
+    YDB_LOG_VERIFY(c->type()->Equals(s->type),
+        {"s", s->type->ToString()},
+        {"c", c->type()->ToString()});
 
     return SwitchTypeImpl<bool, 0>(c->type()->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -419,7 +428,7 @@ bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 posit
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& cval = static_cast<const TArrayType&>(*c).GetView(position);
             const auto& sval = static_cast<const TScalar&>(*s).value;
-            AFL_VERIFY(sval);
+            YDB_LOG_VERIFY(sval);
             TStringBuf cBuf(reinterpret_cast<const char*>(cval.data()), cval.size());
             TStringBuf sBuf(reinterpret_cast<const char*>(sval->data()), sval->size());
             return cBuf == sBuf;
@@ -442,34 +451,24 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
 
+        std::partial_ordering cmp = std::partial_ordering::equivalent;
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
             Y_ABORT_UNLESS(xval);
             Y_ABORT_UNLESS(yval);
-            TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());
-            TStringBuf yBuf(reinterpret_cast<const char*>(yval->data()), yval->size());
-            if (xBuf < yBuf) {
-                return -1;
-            } else if (yBuf < xBuf) {
-                return 1;
-            } else {
-                return 0;
-            }
-        }
-        if constexpr (std::is_arithmetic_v<TValue>) {
+            cmp = TComparator::CompareValueNotNull(
+                arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
+                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()));
+        } else if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            if (xval < yval) {
-                return -1;
-            } else if (yval < xval) {
-                return 1;
-            } else {
-                return 0;
-            }
+            cmp = TComparator::CompareValueNotNull(xval, yval);
+        } else {
+            Y_ABORT_UNLESS(false);   // TODO: non primitive types
         }
-        Y_ABORT_UNLESS(false);   // TODO: non primitive types
-        return 0;
+        // Preserve the scalar API's treatment of unordered floating-point values as equal.
+        return int(cmp > 0) - int(cmp < 0);
     });
 }
 
@@ -762,7 +761,8 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
             }
         }
         for (auto&& field : batch->schema()->fields()) {
-            AFL_VERIFY(columnNames.emplace(field->name()).second)("field_name", field->name());
+            YDB_LOG_VERIFY(columnNames.emplace(field->name()).second,
+                {"fieldName", field->name()});
             fields.emplace_back(field);
         }
     }
@@ -785,13 +785,17 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
                 positions.emplace_back(pos);
                 pos += arr->length();
             }
-            AFL_VERIFY(pos == t->num_rows())("pos", pos)("length", t->num_rows());
+            YDB_LOG_VERIFY(pos == t->num_rows(),
+                {"pos", pos},
+                {"length", t->num_rows()});
         }
         positions.emplace_back(t->num_rows());
     }
     std::sort(positions.begin(), positions.end());
     positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
-    AFL_VERIFY(positions.size() > 1)("size", positions.size())("positions", JoinSeq(",", positions));
+    YDB_LOG_VERIFY(positions.size() > 1,
+        {"size", positions.size()},
+        {"positions", JoinSeq(",", positions)});
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
     slicedData.resize(positions.size() - 1);
     for (auto&& i : t->columns()) {
@@ -807,11 +811,15 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
         };
         initializeIt();
         for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
-            AFL_VERIFY(it != i->chunks().end());
-            AFL_VERIFY(positions[idx + 1] - currentPosition <= length)("length", length)("idx+1", positions[idx + 1])("pos", currentPosition);
+            YDB_LOG_VERIFY(it != i->chunks().end());
+            YDB_LOG_VERIFY(positions[idx + 1] - currentPosition <= length,
+                {"length", length},
+                {"positionForIdxPlus1", positions[idx + 1]},
+                {"pos", currentPosition});
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
-            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])
-            ("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
+            YDB_LOG_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx],
+                {"length", chunk->length()},
+                {"expect", positions[idx + 1] - positions[idx]});
             if (positions[idx + 1] - currentPosition == length) {
                 ++it;
                 initializeIt();
@@ -823,13 +831,17 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     ui32 count = 0;
     for (auto&& i : slicedData) {
-        AFL_VERIFY(i.size());
-        AFL_VERIFY(i.front()->length());
+        YDB_LOG_VERIFY(i.size());
+        YDB_LOG_VERIFY(i.front()->length());
         result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
         count += result.back()->num_rows();
     }
-    AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows())("sd_size", slicedData.size())("columns", t->num_columns())(
-                          "schema", t->schema()->ToString());
+    YDB_LOG_VERIFY(count == t->num_rows(),
+        {"count", count},
+        {"t", t->num_rows()},
+        {"sdSize", slicedData.size()},
+        {"columns", t->num_columns()},
+        {"schema", t->schema()->ToString()});
     return result;
 }
 
@@ -841,7 +853,7 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
 }
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
-    AFL_VERIFY(column);
+    YDB_LOG_VERIFY(column);
     return column->null_bitmap_data();
 }
 

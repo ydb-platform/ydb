@@ -36,8 +36,9 @@ DEPENDS(
 DATA(
     arcadia/yql/essentials/tests/s-expressions/minirun # python files
     arcadia/yql/essentials/tests/s-expressions/suites
-    arcadia/yql/essentials/cfg/tests
 )
+
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/cfg/configs.inc)
 
 PEERDIR(
     yql/essentials/tests/common/test_framework

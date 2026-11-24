@@ -1038,7 +1038,48 @@ TExprNode::TPtr NarrowHashJoinCoreOutput(TExprNode::TPtr&& wideFlow, const THash
         .Build();
 }
 
+bool HasBlockChannelInput(const TExprBase& input) {
+    const TExprNode* current = input.Raw();
+    while (current) {
+        if (const auto type = current->GetTypeAnn(); type && IsWideSequenceBlockType(*type)) {
+            return true;
+        }
+        if (!current->IsCallable() || !current->ChildrenSize()) {
+            break;
+        }
+        const auto callableName = current->Content();
+        if (callableName == "WideFromBlocks"sv) {
+            return true;
+        }
+        if (callableName == "WideToBlocks"sv) {
+            return false;
+        }
+        if (callableName != "ToFlow"sv
+            && callableName != "FromFlow"sv
+            && callableName != "NarrowMap"sv
+            && callableName != "ExpandMap"sv
+            && callableName != "WideMap"sv)
+        {
+            break;
+        }
+        current = current->Child(0);
+    }
+    return false;
+}
+
 } // anonymous namespace
+
+TExprBase DqPeepholeChooseHashJoin(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyHashJoin>()) {
+        return node;
+    }
+    const auto join = node.Cast<TDqPhyHashJoin>();
+
+    const bool useBlocks = HasBlockChannelInput(join.LeftInput()) && HasBlockChannelInput(join.RightInput());
+    return TExprBase(ctx.RenameNode(join.Ref(), useBlocks
+        ? TDqPhyBlockHashJoin::CallableName()
+        : TDqPhyScalarHashJoin::CallableName()));
+}
 
 TExprBase DqPeepholeRewriteScalarHashJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyScalarHashJoin>()) {

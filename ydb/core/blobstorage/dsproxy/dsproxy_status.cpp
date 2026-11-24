@@ -35,7 +35,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
         }
-        if (record.HasApproximateFreeSpaceShare()) {
+        if (Info->IsWriteTargetRealm(vdisk.FailRealm) && record.HasApproximateFreeSpaceShare()) {
             const float value = record.GetApproximateFreeSpaceShare();
             ApproximateFreeSpaceShare = Min(ApproximateFreeSpaceShare.value_or(value), value);
         }
@@ -102,6 +102,9 @@ public:
             const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw();
 
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->IsFailRealmExcluded(vd.FailRealm)) {
+                continue;
+            }
             DSP_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
                 << " vDiskId# " << vd
                 << " node# " << Info->GetActorId(vd).NodeId());

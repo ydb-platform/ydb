@@ -410,19 +410,6 @@ def list_run_jobs(
     return jobs
 
 
-def pull_refs_from_commit_pulls(pulls: Any) -> List[Dict[str, Any]]:
-    """Keep number + target branch from GET /commits/{sha}/pulls."""
-    refs: List[Dict[str, Any]] = []
-    if not isinstance(pulls, list):
-        return refs
-    for pull in pulls:
-        if not isinstance(pull, dict):
-            continue
-        base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
-        refs.append({"number": pull.get("number"), "base": {"ref": base.get("ref")}})
-    return refs
-
-
 def pull_requests_have_target(pulls: Any) -> bool:
     if not isinstance(pulls, list):
         return False
@@ -430,30 +417,94 @@ def pull_requests_have_target(pulls: Any) -> bool:
         if not isinstance(pull, dict):
             continue
         base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
-        if base.get("ref"):
+        if pull.get("number") is not None and base.get("ref"):
             return True
     return False
 
 
-def attach_pull_requests(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
-    """Recover PR target branch from the head SHA when the run payload omits it."""
+def _head_owner(run: Dict[str, Any]) -> str:
+    repo = run.get("head_repository") if isinstance(run.get("head_repository"), dict) else {}
+    owner = repo.get("owner") if isinstance(repo.get("owner"), dict) else {}
+    return str(owner.get("login") or "")
+
+
+def _as_pull_ref(pull: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
+    base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+    return {
+        "number": pull.get("number"),
+        "title": pull.get("title") or (run or {}).get("display_title") or "",
+        "base": {"ref": base.get("ref")},
+    }
+
+
+def _pick_pull(pulls: Any, number: Any = None, sha: Any = None) -> Optional[Dict[str, Any]]:
+    for pull in pulls or []:
+        if not isinstance(pull, dict) or pull.get("number") is None:
+            continue
+        if number is not None and pull.get("number") != number:
+            continue
+        if sha:
+            head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+            got = head.get("sha")
+            if got and got != sha:
+                continue
+        return pull
+    return None
+
+
+def _get_list(get, url: str, params: Optional[Dict[str, Any]] = None) -> list:
+    try:
+        payload = get(url, params=params)
+    except RateLimitExhausted:
+        raise
+    except Exception as exc:  # noqa: BLE001 — keep exporting the run
+        print("Warning: %s: %s" % (url, exc))
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+def attach_pull_requests(
+    org: str,
+    repo: str,
+    run: Dict[str, Any],
+    fetcher=None,
+) -> Dict[str, Any]:
+    """Fill number and base.ref when list-runs omits pull_requests (forks)."""
+    get = fetcher or github_get
     if run.get("event") not in ("pull_request", "pull_request_target"):
         return run
     if pull_requests_have_target(run.get("pull_requests")):
         return run
+    number = None
+    existing = _pick_pull(run.get("pull_requests"))
+    if existing is not None:
+        number = existing.get("number")
     sha = run.get("head_sha")
-    if not sha:
-        return run
-    try:
-        pulls = github_get(f"https://api.github.com/repos/{org}/{repo}/commits/{quote(str(sha))}/pulls")
-    except Exception as exc:  # noqa: BLE001 — keep exporting the run
-        print(f"Warning: commit pulls for {sha}: {exc}")
-        return run
-    refs = pull_refs_from_commit_pulls(pulls)
-    if not refs:
+    owner = _head_owner(run) or org
+    branch = run.get("head_branch") or ""
+    chosen = None
+    if owner and branch:
+        chosen = _pick_pull(
+            _get_list(
+                get,
+                "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
+                {"head": "%s:%s" % (owner, branch), "state": "open", "per_page": 10},
+            ),
+            number=number,
+            sha=None if number is not None else sha,
+        )
+    if chosen is None and sha:
+        chosen = _pick_pull(
+            _get_list(
+                get,
+                "https://api.github.com/repos/%s/%s/commits/%s/pulls" % (org, repo, quote(str(sha))),
+            ),
+            number=number,
+        )
+    if chosen is None:
         return run
     enriched = dict(run)
-    enriched["pull_requests"] = refs
+    enriched["pull_requests"] = [_as_pull_ref(chosen, run)]
     return enriched
 
 

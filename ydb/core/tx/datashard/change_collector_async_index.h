@@ -46,9 +46,14 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
         TArrayRef<const NTable::TUpdateOp> updates);
 
     void Clear();
+    ui64 GetKeySize() const;
 
 public:
-    using TBaseChangeCollector::TBaseChangeCollector;
+    TAsyncIndexChangeCollector(TDataShard* self, IDataShardUserDb& userDb, IBaseChangeCollectorSink& sink,
+        EAsyncIndexKeySizePolicy keySizePolicy)
+        : TBaseChangeCollector(self, userDb, sink)
+        , KeySizePolicy(keySizePolicy)
+    {}
 
     void OnRestart() override;
     bool NeedToReadKeys() const override;
@@ -57,6 +62,7 @@ public:
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
 private:
+    const EAsyncIndexKeySizePolicy KeySizePolicy;
     mutable THashMap<TTableId, TCachedTags> CachedTags;
 
     // reused between Collect() calls, cleared after every Clear() call

@@ -2557,6 +2557,79 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
     WaitForPQWriteTxs();
 }
 
+Y_UNIT_TEST_F(ProposeTx_MutateDisabled_AbortsNewTransactions, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(true);
+
+    ui64 txId = 2;
+    for (bool immediate : {false, true}) {
+        SendProposeTransactionRequest({.TxId=txId,
+                                      .TxOps={{.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}},
+                                      .Immediate=immediate});
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTxId(), txId);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.ErrorsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrors(0).GetReason(), "Topic mutations are temporarily disabled");
+        ++txId;
+    }
+}
+
+Y_UNIT_TEST_F(ProposeTx_WriteMode_AbortsNewTransactions, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(false);
+
+    ui32 version = 1'000'000;
+    ui64 txId = 2;
+    for (auto mode : {NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE, NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED}) {
+        auto config = MakePQTabletConfig({.partitions=1}, {}, *Ctx->Runtime, ++version);
+        config.SetWriteMode(mode);
+        SendPQTabletConfig(*Ctx->Runtime, Ctx->TabletId, Ctx->Edge, config, version, version);
+
+        for (bool immediate : {false, true}) {
+            SendProposeTransactionRequest({.TxId=txId,
+                                          .TxOps={{.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}},
+                                          .Immediate=immediate});
+            auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.ErrorsSize(), 1);
+            const auto reason = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE
+                ? "Write to topic is temporarily disabled" : "Write to topic is prohibited";
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrors(0).GetReason(), reason);
+            ++txId;
+        }
+    }
+}
+
+Y_UNIT_TEST_F(ProposeTx_MutateDisabled_PreservesPreparedTransaction, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 2;
+    const TProposeTransactionParams params{
+        .TxId=txId,
+        .TxOps={{.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}},
+        .Immediate=false,
+    };
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSourceTopicMutateRestricted(true);
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
 Y_UNIT_TEST_F(ProposeTx_Missing_Operations, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);

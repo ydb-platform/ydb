@@ -5,6 +5,7 @@ SRCS(
     executor_impl.h
     executor_impl.cpp
     log_lazy.h
+    replication.h
     retry_policy.cpp
     simple_blocking_helpers.h
     trace_lazy.h
@@ -13,7 +14,6 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
 
-    ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/types
     
 

@@ -1,0 +1,1 @@
+<tmp_path>/program.sql:<main>: Error: The recursive field 'Test.test' was attempted to be parsed as a string, but actually it has no value. Consider using the BytesV2 parsing mode to allow for optional recursive messages.

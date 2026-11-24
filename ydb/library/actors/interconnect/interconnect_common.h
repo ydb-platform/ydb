@@ -115,6 +115,8 @@ namespace NActors {
         ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;
+        TString RdmaAddress;
+        TString RdmaInterface;
         bool CollectSubscriptionStackTrace = false;
         TDuration SubscriberLivenessCheckInterval = TDuration::Hours(1);
 

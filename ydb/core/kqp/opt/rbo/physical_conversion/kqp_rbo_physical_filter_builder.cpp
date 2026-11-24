@@ -4,16 +4,10 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
+NPhysicalConvertionUtils::TStageBody TPhysicalFilterBuilder::BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) {
     const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(Filter, 0);
 
-    // clang-format off
-    input = Build<TCoToFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx, Names);
+    auto wideInput = input.AsWide(inputColumns, Ctx, Names);
 
     THashMap<TString, ui32> colNamesToIndices;
     TVector<TExprNode::TPtr> lambdaArgs;
@@ -56,21 +50,15 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     auto wideLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(lambdaArgs)), {lambdaResult});
 
     // clang-format off
-    input = Build<TCoWideFilter>(Ctx, Pos)
-        .Input(input)
+    auto output = Build<TCoWideFilter>(Ctx, Pos)
+        .Input(wideInput)
         .Lambda(std::move(wideLambda))
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Filter), Names), Ctx, Names);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical filter] " << KqpExprToPrettyString(TExprBase(output), Ctx);
 
-    // clang-format off
-    input = Build<TCoFromFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical filter] " << KqpExprToPrettyString(TExprBase(input), Ctx);
-
-    return input;
+    // WideFilter passes every input slot through, so drop the ones that are dead past this operator.
+    return NPhysicalConvertionUtils::BuildLiveWideBody(output, NPhysicalConvertionUtils::GetFullNames(inputColumns, Names),
+        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Filter), Names), Ctx);
 }

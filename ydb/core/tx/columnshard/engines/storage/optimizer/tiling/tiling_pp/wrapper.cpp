@@ -22,7 +22,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
 
-using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
+using TCoreTiling = Tiling<TPortionInfo>;
 
 /// JSON layout matches TTilingOptimizer in tiling++.cpp (same proto blob).
 struct TPlannerSettings {
@@ -206,6 +206,10 @@ protected:
         Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
     }
 
+    void DoAddLoadedPortions(const std::vector<TPortionInfo::TPtr>& add) override {
+        Core.AddLoadedPortions(add);
+    }
+
     bool DoUsesPullCompactionScheduling() const override {
         return true;
     }
@@ -243,8 +247,8 @@ protected:
         return Core.DoGetUsefulMetric();
     }
 
-    TConclusion<bool> DoCheckNoIntersections() const override {
-        return Core.HasNoIntersections();
+    bool DoNeedCompaction() const override {
+        return !Core.HasNoIntersections();
     }
 
     bool DoIsOverloaded() const override {
@@ -287,7 +291,7 @@ public:
         , PortionExpectedSize(settings.PortionExpectedSize)
         , CompactionThreads(settings.CompactionThreads)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 };
 

@@ -100,7 +100,7 @@ struct TS3ClusterSettings {
     TString Url;
 };
 
-struct TS3Configuration: public TS3Settings, public NCommon::TSettingDispatcher {
+struct TS3Configuration: public NCommon::TDispatcherAndSettings<TS3Settings> {
     using TPtr = TIntrusivePtr<TS3Configuration>;
     using TSetupper = std::function<void(TS3Configuration& configuration)>;
 

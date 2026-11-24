@@ -8,6 +8,7 @@ class TDqIntegrationBase: public IDqIntegration {
 public:
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, const TPartitionSettings& settings) override;
     bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues) override;
+    bool AllowExecuteInDq(const TExprNode& node, TExprContext& ctx) override;
     bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues) override;
     TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) override;
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& settings) override;

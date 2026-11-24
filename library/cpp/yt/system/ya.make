@@ -3,9 +3,9 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
+    access_spreader.cpp
     at_fork.cpp
     count_down_latch.cpp
-    cpu_id.cpp
     env.cpp
     event_count.cpp
     exit.cpp
@@ -32,12 +32,6 @@ PEERDIR(
     library/cpp/yt/exception
     library/cpp/yt/misc
 )
-
-IF (OS_LINUX)
-    PEERDIR(
-        library/cpp/yt/rseq
-    )
-ENDIF()
 
 END()
 

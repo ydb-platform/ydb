@@ -325,12 +325,6 @@ def validate_test(unit, kw):
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
-    # Mark test with ya:external tag if it requests any secret from external storages
-    # It's not stable and nonreproducible by definition
-    for x in secret_requirements:
-        if x in requirements:
-            tags.add(consts.YaTestTags.External)
-
     if valid_kw.get("FUZZ-OPTS"):
         for option in get_list("FUZZ-OPTS"):
             if not option.startswith("-"):
@@ -369,7 +363,6 @@ def validate_test(unit, kw):
                     errors.append("File '{}' specified in the YT_SPEC macro doesn't exist".format(filename))
                     continue
                 if not is_yt_spec_contain_pool_info(filename):
-                    tags.add(consts.YaTestTags.External)
                     tags.add("ya:yt_research_pool")
 
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')
@@ -426,6 +419,17 @@ def dump_test(unit, kw):
         ymake.report_configure_error(e)
     if valid_kw is None:
         return None
+    tags = set(deserialize_list(valid_kw.get(df.Tag.KEY, "")))
+    if (
+        unit.get('SANITIZER_TYPE') not in (None, '', 'no')
+        and consts.YaTestTags.PerfTest in tags
+        and consts.YaTestTags.PerfTestWithSanitizers not in tags
+    ):
+        valid_kw[df.SkipTest.KEY] = valid_kw.get(df.SkipTest.KEY) or 'Performance tests are disabled under sanitizers'
+        # Skipped LARGE suites are still discovered by CI.
+        tags.add(consts.YaTestTags.NotAutocheck)
+        valid_kw[df.Tag.KEY] = serialize_list(sorted(tags))
+    valid_kw.setdefault(df.BuildFolderPath.KEY, _common.get_norm_unit_path(unit))
     string_handler = StringIO()
     for k, v in valid_kw.items():
         print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)
@@ -1167,6 +1171,7 @@ def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
     name = spec_args['NAME'][0]
+
     global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
     for resource, _ in global_resources:
         unit.onpeerdir(resource)

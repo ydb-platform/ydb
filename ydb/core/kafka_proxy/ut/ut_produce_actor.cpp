@@ -80,7 +80,7 @@ namespace {
             const TString TopicPath = "/Root/PQ/my-topic";
             const NKikimrConfig::TKafkaProxyConfig KafkaConfig = {};
             const TString KeyToProduce = "record-key";
-            const TString ValueToProduce = "record-value";
+            TString ValueToProduce = "record-value";
             TString TransactionalId = "123";
 
             void SetUp(NUnitTest::TTestContext&) override {
@@ -118,7 +118,8 @@ namespace {
                     i32 baseSequence = 0,
                     i64 baseTimestamp = 0,
                     i64 timestampDelta = 0,
-                    ECompressionType compression = ECompressionType::NONE) {
+                    ECompressionType compression = ECompressionType::NONE,
+                    size_t recordsCount = 1) {
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
@@ -130,14 +131,18 @@ namespace {
                 records->ProducerEpoch = producerEpoch;
 
                 records->BaseOffset = 3;
+                records->LastOffsetDelta = recordsCount - 1;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
                 records->BaseTimestamp = baseTimestamp;
                 records->Attributes = static_cast<i16>(compression);
-                records->Records.resize(1);
-                records->Records[0].TimestampDelta = timestampDelta;
-                records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
-                records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
+                records->Records.resize(recordsCount);
+                for (size_t i = 0; i < recordsCount; ++i) {
+                    records->Records[i].OffsetDelta = i;
+                    records->Records[i].TimestampDelta = timestampDelta;
+                    records->Records[i].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
+                    records->Records[i].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
+                }
 
                 const TString serializedRecords = WriteKafkaRecordBatch(*records);
                 auto recordsBuffer = std::make_shared<TBuffer>(serializedRecords.data(), serializedRecords.size());
@@ -219,6 +224,53 @@ namespace {
         };
 
     Y_UNIT_TEST_SUITE_F(ProduceActor, TProduceActorFixture) {
+        Y_UNIT_TEST(WriteRestrictionsReturnUnknownServerError) {
+            ui32 configVersion = 1'000'000;
+            const auto configEdge = Ctx->Runtime->AllocateEdgeActor();
+            auto setWriteMode = [&](NKikimrPQ::TPQTabletConfig::EWriteMode mode) {
+                auto config = MakePQTabletConfig({.partitions = 4}, {}, *Ctx->Runtime, ++configVersion);
+                config.SetWriteMode(mode);
+                SendPQTabletConfig(*Ctx->Runtime, Ctx->TabletId, configEdge, config,
+                    configVersion, configVersion);
+            };
+            auto checkResponse = [&](EKafkaErrors expected) {
+                auto event = GrabProduceResponse();
+                UNIT_ASSERT_VALUES_EQUAL(event->ErrorCode, expected);
+                auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
+                const auto& partitions = response->Responses[0].PartitionResponses;
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(partitions[0].ErrorCode, expected);
+                return partitions[0];
+            };
+
+            ui64 producerId = 1;
+            i64 endOffset = 0;
+            for (size_t size : {size_t(16), size_t(600 * 1024)}) {
+                ValueToProduce = TString(size, 'x');
+                for (size_t count : {size_t(1), size_t(2)}) {
+                    for (auto mode : {NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE,
+                                      NKikimrPQ::TPQTabletConfig::WRITE_PROHIBITED}) {
+                        setWriteMode(mode);
+                        SendProduceToPartitions({0}, {}, producerId, 0, 0, 0, 0, ECompressionType::NONE, count);
+                        const bool temporary = mode == NKikimrPQ::TPQTabletConfig::WRITE_UNAVAILABLE;
+                        const auto rejected = checkResponse(EKafkaErrors::UNKNOWN_SERVER_ERROR);
+                        UNIT_ASSERT(rejected.ErrorMessage);
+                        UNIT_ASSERT_STRING_CONTAINS(TString(*rejected.ErrorMessage), temporary
+                            ? "Write to topic is temporarily disabled" : "Write to topic is prohibited");
+
+                        // Retry the same batch and sequence after reopening the topic.
+                        setWriteMode(NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+                        SendProduceToPartitions({0}, {}, producerId, 0, 0, 0, 0, ECompressionType::NONE, count);
+                        const auto written = checkResponse(EKafkaErrors::NONE_ERROR);
+                        UNIT_ASSERT_VALUES_EQUAL(written.BaseOffset, endOffset);
+                        endOffset += count;
+                        ++producerId;
+                    }
+                }
+            }
+        }
 
         Y_UNIT_TEST(OnProduceWithTransactionalIdAndNewEpoch_shouldRegisterNewPartitionWriterAndSendPoisonPillToOld) {
             i64 producerId = 0;
@@ -780,5 +832,40 @@ namespace {
             auto response = GrabProduceResponse();
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
+
+        Y_UNIT_TEST(ClientDataWritesDisabled) {
+            Ctx->Runtime->GetAppData().FeatureFlags.SetEnableClientModifications(false);
+            ui32 writes = 0;
+            Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == TEvPartitionWriter::TEvWriteRequest::EventType) {
+                    ++writes;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+
+            for (size_t size : {size_t(16), size_t(600 * 1024)}) {
+                for (size_t recordsCount : {size_t(1), size_t(2)}) {
+                    for (const auto& transactionalId : {TMaybe<TString>{}, TMaybe<TString>{"transaction"}}) {
+                        ValueToProduce = TString(size, 'x');
+                        SendProduceToPartitions({0, 1}, transactionalId, 0, 0, 0, 0, 0,
+                            ECompressionType::NONE, recordsCount);
+
+                        auto event = GrabProduceResponse();
+                        auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
+                        UNIT_ASSERT(response);
+                        UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses.size(), 2);
+
+                        for (const auto& partition : response->Responses[0].PartitionResponses) {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::POLICY_VIOLATION);
+                            UNIT_ASSERT_STRING_CONTAINS(TString(*partition.ErrorMessage), "Client data writes are disabled");
+                        }
+                    }
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+        }
+
     }
 } // anonymous namespace

@@ -66,6 +66,7 @@ private:
     TVersionedPresetSchemas VersionedSchemas;
 
     void InitDerivedState();
+    void RegisterSchemaVersion(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
 public:
     NMonitoring::TDynamicCounters::TCounterPtr GetBadPortionsCounter() const {
@@ -96,6 +97,11 @@ public:
         return &LastPortion;
     }
 
+    TInsertWriteId BuildNextInsertWriteId(IDbWrapper& db) {
+        db.WriteCounter(LAST_INSERT_WRITE_ID, ++LastInsertWriteId);
+        return TInsertWriteId(LastInsertWriteId);
+    }
+
     enum ETableIdx {
         GRANULES = 0,
     };
@@ -105,6 +111,7 @@ public:
         LAST_GRANULE,
         LAST_PLAN_STEP,
         LAST_TX_ID,
+        LAST_INSERT_WRITE_ID,
     };
 
     enum class EStatsUpdateType {
@@ -115,7 +122,7 @@ public:
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
-        const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
+        const TSchemaVersionView& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema,
@@ -132,7 +139,7 @@ public:
         return LastSnapshot;
     }
 
-    virtual void DoRegisterTable(const TInternalPathId pathId) override;
+    virtual void DoRegisterTable(const TInternalPathId pathId, TLoadedKeyRanges&& loadedKeyRanges) override;
 
     void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
         GranulesStorage->FetchDataAccessors(request);
@@ -142,9 +149,13 @@ public:
     bool LoadCounters(IDbWrapper& db);
 
 public:
-    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
+    virtual std::shared_ptr<ITxReader> BuildLoader(
+        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) override;
     bool FinishLoading();
+    void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);
+    // ALTER TABLE ... COMPACT WITH (CASCADE = true): true rewrites every portion to the current schema, false stops that
+    void SetSchemeNeedActualization(const bool value);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
@@ -176,12 +187,14 @@ public:
     virtual bool ApplyChangesOnExecute(
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
 
-    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
-    void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) override;
+    void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) override;
 
     std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, const NReader::TReadDescription& readDescription,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override;
+    bool ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const override;
+    bool ArePortionsLoadedFrom(const TInternalPathId pathId, const NArrow::TSimpleRow& key) const override;
+    bool AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const override;
 
     bool IsPortionExists(const TInternalPathId pathId, const ui64 portionId) const {
         return !!GranulesStorage->GetPortionOptional(pathId, portionId);
@@ -196,7 +209,7 @@ public:
 
     virtual bool HasDataInPathId(const TInternalPathId pathId) const override {
         auto g = GetGranuleOptional(pathId);
-        return g && (g->GetPortions().size() || g->GetInsertedPortions().size());
+        return g && !g->IsErasable();
     }
 
     bool IsGranuleExists(const TInternalPathId pathId) const {
@@ -217,7 +230,8 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
         auto result = GetGranuleOptional(pathId);
-        AFL_VERIFY(result)("path_id", pathId);
+        YDB_LOG_VERIFY(result,
+            {"pathId", pathId});
         return result;
     }
 
@@ -238,7 +252,7 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
-        AFL_VERIFY(info->HasRemoveSnapshot());
+        YDB_LOG_VERIFY(info->HasRemoveSnapshot());
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
 
@@ -251,7 +265,7 @@ public:
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         auto exPortion = portion->MakeCopy();
-        AFL_VERIFY(portion);
+        YDB_LOG_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
         Counters->AddPortion(*portion);
@@ -267,6 +281,7 @@ private:
     std::shared_ptr<NColumnShard::TPortionIndexStats> Counters;
     ui64 LastPortion;
     ui64 LastGranule;
+    ui64 LastInsertWriteId = 0;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
 

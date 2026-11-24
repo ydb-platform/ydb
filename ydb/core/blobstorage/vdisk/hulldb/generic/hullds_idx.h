@@ -508,28 +508,18 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////////
     template <>
     inline void TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>::UpdateLevelStat(NMonGroup::TLsmAllLevelsStat &stat) {
-        struct TLevelGroupInfo {
-            ui64 SstNum = 0;
-            ui64 NumItems = 0;
-            ui64 NumItemsInplaced = 0;
-            ui64 NumItemsHuge = 0;
-            ui64 DataInplaced = 0;
-            ui64 DataHuge = 0;
-        };
+        using TLevelGroupInfo = NMonGroup::TLsmLevelStats;
+        std::array<TLevelGroupInfo, NMonGroup::TLsmAllLevelsStat::MaxCounterLevels> levels;
 
-        TLevelGroupInfo levels[NMonGroup::TLsmAllLevelsStat::MaxCounterLevels];
+        TLevelGroupInfo sorted;
 
-        ui64 allLevelsDataInplaced = 0;
-
-        auto process = [&allLevelsDataInplaced](TLevelGroupInfo& info, TLevelSegment *seg) {
+        auto process = [](TLevelGroupInfo& info, TLevelSegment *seg) {
             info.SstNum += 1;
             info.NumItems += seg->Info.Items;
             info.NumItemsInplaced += seg->Info.ItemsWithInplacedData;
             info.NumItemsHuge += seg->Info.ItemsWithHugeData;
             info.DataInplaced += seg->Info.InplaceDataTotalSize;
             info.DataHuge += seg->Info.HugeDataTotalSize;
-
-            allLevelsDataInplaced += seg->Info.InplaceDataTotalSize;
         };
 
         for (const auto& seg : CurSlice->Level0.Segs->Segments) {
@@ -538,28 +528,20 @@ namespace NKikimr {
 
         ui32 levelIndex = 1;
         for (const auto& level : CurSlice->SortedLevels) {
-            TLevelGroupInfo& info = levels[levelIndex];
+            TLevelGroupInfo info;
             for (const auto& seg : level.Segs->Segments) {
                 process(info, seg.Get());
             }
-            if (++levelIndex >= NMonGroup::TLsmAllLevelsStat::MaxCounterLevels) {
-                break;
+            sorted += info;
+            if (levelIndex < levels.size()) {
+                levels[levelIndex] = info;
             }
+            ++levelIndex;
         }
 
-        AllLevelsDataInplaced = allLevelsDataInplaced;
+        AllLevelsDataInplaced = levels[0].DataInplaced + sorted.DataInplaced;
 
-        for (ui32 level = 0; level < NMonGroup::TLsmAllLevelsStat::MaxCounterLevels; ++level) {
-            TLevelGroupInfo& from = levels[level];
-            auto& to = stat.Levels[level];
-
-            to->SstNum() = from.SstNum;
-            to->NumItems() = from.NumItems;
-            to->NumItemsInplaced() = from.NumItemsInplaced;
-            to->NumItemsHuge() = from.NumItemsHuge;
-            to->DataInplaced() = from.DataInplaced;
-            to->DataHuge() = from.DataHuge;
-        }
+        stat.Update(levels, sorted);
     }
 
     template <>

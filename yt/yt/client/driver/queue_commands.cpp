@@ -183,7 +183,8 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 
     ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
         BuildYsonMapFragmentFluently(consumer)
-            .Item("start_offset").Value(result.Rowset->GetStartOffset());
+            .Item("start_offset").Value(result.Rowset->GetStartOffset())
+            .OptionalItem("response_size_limit_reached", result.ResponseSizeLimitReached);
     });
 
     auto format = context->GetOutputFormat();
@@ -264,7 +265,8 @@ void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 
     ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
         BuildYsonMapFragmentFluently(consumer)
-            .Item("start_offset").Value(result.Rowset->GetStartOffset());
+            .Item("start_offset").Value(result.Rowset->GetStartOffset())
+            .OptionalItem("response_size_limit_reached", result.ResponseSizeLimitReached);
     });
 
     auto format = context->GetOutputFormat();

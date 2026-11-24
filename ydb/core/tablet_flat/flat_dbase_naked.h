@@ -412,7 +412,7 @@ namespace NTable {
             SchemeRollbackState.Redo.reset();
         }
 
-        void RollbackTransaction()
+        TVector<ui32> RollbackTransaction()
         {
             for (ui32 tid : Prepared) {
                 auto& wrap = Tables.at(tid);
@@ -439,11 +439,10 @@ namespace NTable {
                     wrap.Serial = wrap.SerialBackup;
                 }
             }
-            Affects.clear();
-
             RollbackScheme();
             Serial_ = Begin_;
             InTransaction = false;
+            return std::exchange(Affects, {});
         }
 
         void RollbackScheme()
@@ -600,9 +599,9 @@ namespace NTable {
             }
         }
 
-        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain)
+        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain, IRedoObserver* observer = nullptr)
         {
-            return Redo.Replay(plain), *this;
+            return Redo.Replay(plain, Annex, observer), *this;
         }
 
         TVector<ui32> GrabAffects() noexcept

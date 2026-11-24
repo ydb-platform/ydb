@@ -5,6 +5,8 @@ namespace NKikimr::NDataShard {
 void TDataShard::OnYellowChannelsChanged() {
     if (!IsAnyChannelYellowStop()) {
         NotifyOverloadSubscribers(ERejectReason::YellowChannels);
+    } else {
+        AbortDirectImportsForSpace();
     }
 }
 

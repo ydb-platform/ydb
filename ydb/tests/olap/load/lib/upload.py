@@ -10,6 +10,7 @@ import allure
 import json
 import logging
 import os
+import shlex
 import pytest
 import yatest.common
 import ydb
@@ -232,16 +233,9 @@ class UploadTpchBase(UploadClusterBase):
     @classmethod
     def do_setup_class(cls) -> None:
         cls.__static_nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
-        results = re.deploy_binaries_to_hosts(
-            [YdbCliHelper.get_cli_path()],
-            [n.host for n in cls.__static_nodes],
-            cls.get_remote_tmpdir()
-        )
-        for host, host_results in results.items():
-            for bin, res in host_results.items():
-                assert res.get('success', False), f'host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}'
         for i in range(len(cls.__static_nodes)):
             node = cls.__static_nodes[i]
+            cli_path = YdbCliHelper.deploy_remote_cli(node.host, cls.get_remote_tmpdir())
             script_path = yatest.common.work_path('ydb_upload_tpch.sh')
             with open(script_path, 'w') as script_file:
                 script_file.write(f'''#!/bin/bash
@@ -250,7 +244,7 @@ class UploadTpchBase(UploadClusterBase):
                     RET_CODE=1
                     while [ $RET_CODE -ne 0 ]
                     do
-                        {cls.get_remote_tmpdir()}/ydb -e grpc://{node.host}:{node.grpc_port} -d /{YdbCluster.ydb_database} \\
+                        {shlex.quote(cli_path)} -e grpc://{node.host}:{node.grpc_port} -d /{YdbCluster.ydb_database} \\
                             workload tpch -p {YdbCluster.get_tables_path(cls.get_path())} \\
                             import --bulk-size 50000 \\
                             generator --scale {cls.scale} -i {i} -C {len(cls.__static_nodes)} --state {cls.get_remote_tmpdir()}/state.json

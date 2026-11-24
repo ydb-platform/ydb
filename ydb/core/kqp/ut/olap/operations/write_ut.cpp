@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             Sleep(TDuration::Seconds(2));
         }
 
-        AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
     }
 
     Y_UNIT_TEST(TestRemoveTableBeforeIndexation) {
@@ -194,10 +194,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         READ: SELECT SchemaVersion FROM `/Root/ColumnTable/.sys/primary_index_schema_stats` WHERE PresetId = 0 ORDER BY SchemaVersion;
         EXPECTED: [[[6u]];[[9u]];[[11u]]]
         ------
+        STOP_PORTIONS_CLEANUP
+        ------
         DATA:
         DELETE FROM `/Root/ColumnTable`
         ------
         ONE_COMPACTION:
+        ------
+        ONE_PORTIONS_CLEANUP
         ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true
@@ -303,11 +307,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         }
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(5));
-        AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         {
             const auto startInstant = TMonotonic::Now();
-            AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
-            ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+            YDB_LOG_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0,
+                {"count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount()});
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
                    TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {
@@ -320,7 +324,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             }
         }
 
-        AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        YDB_LOG_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         const auto writesCountStart = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount();
         const auto deletesCountStart = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount();
         {
@@ -335,10 +339,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Sleep(TDuration::MilliSeconds(500));
             }
         }
-        AFL_VERIFY(writesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount())
-        ("writes", writesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount());
-        AFL_VERIFY(deletesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount())
-        ("deletes", deletesCountStart)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+        YDB_LOG_VERIFY(writesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount(),
+            {"writes", writesCountStart},
+            {"count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount()});
+        YDB_LOG_VERIFY(deletesCountStart == Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount(),
+            {"deletes", deletesCountStart},
+            {"count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount()});
     }
 
     Y_UNIT_TEST(DefaultValues) {
@@ -419,7 +425,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("portion_id")), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
         }
-        AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+        YDB_LOG_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
     }
 
     Y_UNIT_TEST(ColumnShardMaxOperationBytes) {
@@ -538,7 +544,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("portion_id")), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
         }
-        AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+        YDB_LOG_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
     }
 
     Y_UNIT_TEST(WriteDeleteCleanGC) {
@@ -593,7 +599,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Cerr << "Wait size in memory... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
                 Sleep(TDuration::Seconds(2));
             }
-            AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+            YDB_LOG_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         }
         {
             auto it = client
@@ -614,7 +620,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Cerr << "Wait empty... " << Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
                 Sleep(TDuration::Seconds(2));
             }
-            AFL_VERIFY(!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+            YDB_LOG_VERIFY(!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
         }
     }
 

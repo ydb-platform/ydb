@@ -1,4 +1,8 @@
-/* syntax version 1 */
+$rows = [
+    <|fts_seconds: 3875345u, fts_msec: 3875345000ul, fts_usec: 3875345000000ul, fdays: 7s, fdays_overflow: 100000, fdays_null: Nothing(Optional<Int16>), fhours: 168, fminutes: 10080, fseconds: 604800, fmsec: 604800000l, fusec: -604800000000l|>,
+    <|fts_seconds: 3875345u, fts_msec: 3875345000ul, fts_usec: 3875345000000ul, fdays: 7s, fdays_overflow: 100000, fdays_null: Nothing(Optional<Int16>), fhours: 168, fminutes: 10080, fseconds: 604800, fmsec: 604800000l, fusec: -604800000000l|>,
+];
+
 pragma UseBlocks;
 
 select
@@ -16,4 +20,4 @@ select
 
     DateTime::IntervalFromDays(fdays_overflow) as interval_days_overflow,
     DateTime::IntervalFromDays(fdays_null) as interval_null,
-from Input
+FROM AS_TABLE($rows)

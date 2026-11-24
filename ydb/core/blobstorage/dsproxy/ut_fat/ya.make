@@ -4,10 +4,11 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(30)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/library/actors/interconnect/mock
     ydb/library/actors/protos
     ydb/library/actors/util
     library/cpp/getopt

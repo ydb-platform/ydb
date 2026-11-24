@@ -60,7 +60,7 @@ public:
 }   // namespace
 
 NReader::NCommon::TExecutionResult TSourceData::DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& step) {
-    AFL_VERIFY(!HasPortionAccessor());
+    YDB_LOG_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
         {"fetchingInfo", step.DebugString()});
@@ -266,10 +266,10 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                 }
                 if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
                     const auto* composite = static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
-                    AFL_VERIFY(records[idx].GetChunkIdx() < composite->GetChunks().size());
+                    YDB_LOG_VERIFY(records[idx].GetChunkIdx() < composite->GetChunks().size());
                     chunkByRecord[idx] = composite->GetChunks()[records[idx].GetChunkIdx()];
                 } else {
-                    AFL_VERIFY(records[idx].GetChunkIdx() == 0);
+                    YDB_LOG_VERIFY(records[idx].GetChunkIdx() == 0);
                     chunkByRecord[idx] = accessor;
                 }
             }
@@ -280,7 +280,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                 return record.GetMeta().HasAdditionalAccessorData() ? record.GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust()
                                                                     : TString();
             }
-            AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
+            YDB_LOG_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
             return static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get())->GetHeader().DebugJson().GetStringRobust();
         };
         const auto indexDetail = [&](const TIndexChunk& index) -> TString {
@@ -318,13 +318,14 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             });
         return NArrow::FinishBuilder(std::move(builder));
     }
-    AFL_VERIFY(false)("column_id", columnId);
+    YDB_LOG_VERIFY(false,
+        {"columnId", columnId});
     return nullptr;
 }
 
 TConclusion<NReader::NCommon::TExecutionResult> TSourceData::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
-    AFL_VERIFY(fetchersExt.size());
+    YDB_LOG_VERIFY(fetchersExt.size());
     if (!OriginalData) {
         OriginalData = std::make_shared<NArrow::NAccessor::TAccessorsCollection>();
     }
@@ -340,13 +341,13 @@ TConclusion<NReader::NCommon::TExecutionResult> TSourceData::DoStartFetchImpl(
             NBlobOperations::NRead::TCompositeReadBlobs blobs;
             i->OnDataReceived(readActions, blobs);
             MutableStageData().AddFetcher(i);
-            AFL_VERIFY(readActions.IsEmpty());
+            YDB_LOG_VERIFY(readActions.IsEmpty());
         }
         return NReader::NCommon::TExecutionResult::Done();
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
-        AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
+        YDB_LOG_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
     }
     return NReader::NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TColumnsFetcherTask::TStartJob>(
         std::move(readActions), fetchers, GetExecutionContext().GetCursorStep(), "fetcher"));
@@ -426,7 +427,7 @@ TConclusionStatus TSourceData::DoAssembleAccessor(
         }
         if (HasStageData()) {
             if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
-                AFL_VERIFY(OriginalData);
+                YDB_LOG_VERIFY(OriginalData);
                 auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
                 NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
                 auto conclusion = fetcher->OnDataCollected(fetchContext);

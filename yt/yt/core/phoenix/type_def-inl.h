@@ -14,8 +14,24 @@
 #include <library/cpp/yt/misc/static_initializer.h>
 
 #include <concepts>
+#include <functional>
 
 namespace NYT::NPhoenix::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Extracts the registered type from a TPhoenixTypeInitializer__ specialization.
+//! NB: The initializer refers to the type through its injected class name only, since
+//! names in a specialization's body are access-checked while its template arguments are not.
+//! This lets private nested types be registered without befriending the initializer.
+template <class TInitializer>
+struct TTypeInitializerTraits;
+
+template <template <class> class TInitializer, class T>
+struct TTypeInitializerTraits<TInitializer<T>>
+{
+    using TType = T;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,7 +39,6 @@ namespace NYT::NPhoenix::NDetail {
 #undef PHOENIX_DEFINE_TYPE
 #undef PHOENIX_DEFINE_TEMPLATE_TYPE
 #undef PHOENIX_DEFINE_OPAQUE_TYPE
-#undef PHOENIX_REGISTER_FIELD
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -57,7 +72,7 @@ namespace NYT::NPhoenix::NDetail {
     struct TPhoenixTypeInitializer__<type> \
     { \
         YT_STATIC_INITIALIZER({ \
-            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<typename ::NYT::NPhoenix::NDetail::TTypeInitializerTraits<TPhoenixTypeInitializer__>::TType, false>(); \
         }); \
     }
 
@@ -69,7 +84,7 @@ namespace NYT::NPhoenix::NDetail {
     struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
         YT_STATIC_INITIALIZER({ \
-            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<typename ::NYT::NPhoenix::NDetail::TTypeInitializerTraits<TPhoenixTypeInitializer__>::TType, true>(); \
         }); \
     }
 
@@ -102,7 +117,7 @@ namespace NYT::NPhoenix::NDetail {
     struct TPhoenixTypeInitializer__<type> \
     { \
         YT_STATIC_INITIALIZER({ \
-            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<typename ::NYT::NPhoenix::NDetail::TTypeInitializerTraits<TPhoenixTypeInitializer__>::TType, false>(); \
         }); \
     }; \
     \
@@ -122,19 +137,9 @@ namespace NYT::NPhoenix::NDetail {
     struct TPhoenixTypeInitializer__<type> \
     { \
         YT_STATIC_INITIALIZER({ \
-            ::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+            ::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<typename ::NYT::NPhoenix::NDetail::TTypeInitializerTraits<TPhoenixTypeInitializer__>::TType>(); \
         }); \
     }
-
-#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
-    registrar.template Field<fieldTag, &TAccessor::fieldName>(#fieldName) __VA_ARGS__ ()
-
-#define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version, ...) \
-    registrar \
-        .template VirtualField<fieldTag>(#fieldName, [] (TThis* /*this_*/, auto& context) { \
-            Load<fieldType>(context); \
-        }) \
-        .BeforeVersion(version) __VA_ARGS__ ()
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -152,6 +157,70 @@ using TFieldLoadHandler = void (*)(TThis*, TContext&);
 
 template <class TThis, class TContext>
 using TFieldSaveHandler = void (*)(const TThis*, TContext&);
+
+//! Resets a field skipped on load (by its version range) unless it has a missing handler.
+template <auto Member, class TThis>
+void ResetMissingField(TThis* this_)
+{
+    using TField = std::remove_cvref_t<decltype(this_->*Member)>;
+    // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
+    // NB: Assign a value-initialized temporary rather than |{}|: e.g. for a vector of
+    // move-only elements |= {}| picks the initializer_list overload, which passes
+    // the requires-check but fails to instantiate.
+    if constexpr (requires { this_->*Member = TField{}; }) {
+        this_->*Member = TField{};
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Deduces the persisted type of a property from its setter's value parameter.
+//! A setter is either a member function taking the value or a non-generic callable
+//! taking |(TThis*, value)|.
+template <class TSetter>
+struct TPropertySetterTraits
+    : public TPropertySetterTraits<decltype(&TSetter::operator())>
+{ };
+
+template <class TClass, class TResult, class TArg, bool NoExcept>
+struct TPropertySetterTraits<TResult (TClass::*)(TArg) noexcept(NoExcept)>
+{
+    using TValueArg = TArg;
+};
+
+template <class TCallable, class TResult, class TThis, class TArg, bool NoExcept>
+struct TPropertySetterTraits<TResult (TCallable::*)(TThis*, TArg) const noexcept(NoExcept)>
+{
+    using TValueArg = TArg;
+};
+
+template <auto Getter, auto Setter, class TSerializer>
+struct TPropertyFieldHandlers
+{
+    using TValueArg = typename TPropertySetterTraits<decltype(Setter)>::TValueArg;
+    using TValue = std::remove_cvref_t<TValueArg>;
+
+    static_assert(
+        !std::is_lvalue_reference_v<TValueArg> || std::is_const_v<std::remove_reference_t<TValueArg>>,
+        "Property setter must take its value by value, by rvalue reference or by const reference");
+
+    template <class TThis, class TContext>
+    static void Load(TThis* this_, TContext& context)
+    {
+        TValue value;
+        TSerializer::Load(context, value);
+        std::invoke(Setter, this_, std::move(value));
+    }
+
+    template <class TThis, class TContext>
+    static void Save(const TThis* this_, TContext& context)
+    {
+        static_assert(
+            std::is_same_v<std::remove_cvref_t<std::invoke_result_t<decltype(Getter), const TThis*>>, TValue>,
+            "Property getter must return the type taken by its setter");
+        TSerializer::Save(context, std::invoke(Getter, this_));
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -199,6 +268,11 @@ template <class TThis>
 struct TTraits
 {
     using TVersion = decltype(std::declval<typename TMetadataOf<TThis>::TLoadContextImpl>().GetVersion());
+
+    static void RegisterMetadata(auto&& registrar)
+    {
+        TMetadataOf<TThis>::RegisterMetadata(registrar);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -239,6 +313,13 @@ public:
         return std::move(*this);
     }
 
+    //! Keeps the current value (e.g. its in-class default) of a field skipped on load,
+    //! instead of resetting it to |{}|.
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing(nullptr);
+    }
+
     template <class TSerializer>
     auto Serializer() &&
     {
@@ -254,6 +335,19 @@ class TTypeRegistrarBase
 public:
     template <TFieldTag::TUnderlying TagValue, auto Member>
     TDummyFieldRegistrar Field(auto&& /*name*/)
+    {
+        return {};
+    }
+
+    //! Registers a virtual field persisted via a getter and a setter.
+    //! The persisted type is deduced from the setter's value parameter, and the getter must return
+    //! the same type (modulo cv-ref). Setters should take the value by value; it is always moved in.
+    template <
+        TFieldTag::TUnderlying TagValue,
+        auto Getter,
+        auto Setter,
+        class TSerializer = TDefaultSerializer>
+    TDummyFieldRegistrar PropertyField(auto&& /*name*/)
     {
         return {};
     }
@@ -279,6 +373,9 @@ public:
     void BaseType()
     { }
 
+    void BeforeSave(auto&& /*handler*/)
+    { }
+
     void AfterLoad(auto&& /*handler*/)
     { }
 
@@ -289,7 +386,7 @@ public:
 template <class TThis>
 decltype(auto) RunRegistrar(auto&& registrar)
 {
-    TMetadataOf<TThis>::RegisterMetadata(registrar);
+    TTraits<TThis>::RegisterMetadata(registrar);
     return std::move(registrar)();
 }
 
@@ -327,6 +424,16 @@ public:
         auto&& /*saveHandler*/)
     {
         return VirtualField<TagValue>(std::move(name), loadHandler);
+    }
+
+    template <
+        TFieldTag::TUnderlying TagValue,
+        auto Getter,
+        auto Setter,
+        class TSerializer = TDefaultSerializer>
+    auto PropertyField(std::string name)
+    {
+        return DoField<TagValue>(std::move(name));
     }
 
     template <class TBase>
@@ -451,6 +558,11 @@ public:
         return TFieldSaveRegistrar(std::move(*this));
     }
 
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing(nullptr);
+    }
+
     template <class TFieldSerializer_>
     auto Serializer() &&
     {
@@ -521,6 +633,11 @@ public:
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing(nullptr);
+    }
+
     void operator()() &&
     {
         if (auto version = Context_.GetVersion(); version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
@@ -576,6 +693,41 @@ public:
             saveHandler);
     }
 
+    template <
+        TFieldTag::TUnderlying TagValue,
+        auto Getter,
+        auto Setter,
+        class TSerializer = TDefaultSerializer>
+    auto PropertyField(auto&& /*name*/)
+    {
+        return TVirtualFieldSaveRegistrar<TThis, TContext>(
+            This_,
+            Context_,
+            &TPropertyFieldHandlers<Getter, Setter, TSerializer>::template Save<TThis, TContext>);
+    }
+
+private:
+    const TThis* const This_;
+    TContext& Context_;
+};
+
+template <class TThis, class TContext>
+class TBeforeSaveRegistrar
+    : public TTypeRegistrarBase
+{
+public:
+    TBeforeSaveRegistrar(const TThis* this_, TContext& context)
+        : This_(this_)
+        , Context_(context)
+    { }
+
+    using TBeforeSave = void (*)(const TThis*, TContext&);
+
+    void BeforeSave(TBeforeSave handler)
+    {
+        handler(This_, Context_);
+    }
+
 private:
     const TThis* const This_;
     TContext& Context_;
@@ -584,6 +736,7 @@ private:
 template <class TThis, class TContext>
 void SaveImpl(const TThis* this_, TContext& context)
 {
+    RunRegistrar<TThis>(TBeforeSaveRegistrar(this_, context));
     RunRegistrar<TThis>(TSaveBaseTypesRegistrar(this_, context));
     RunRegistrar<TThis>(TSaveFieldsRegistrar(this_, context));
 }
@@ -655,6 +808,11 @@ public:
         return TFieldLoadRegistrar(std::move(*this));
     }
 
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing([] (TThis* /*this_*/, TContext& /*context*/) { });
+    }
+
     auto InVersions(TVersionFilter<TThis> filter) &&
     {
         VersionFilter_ = filter;
@@ -675,10 +833,7 @@ public:
         } else if (MissingHandler_) {
             MissingHandler_(This_, Context_);
         } else {
-            // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
-            if constexpr (requires { This_->*Member = {}; }) {
-                This_->*Member = {};
-            }
+            ResetMissingField<Member>(This_);
         }
     }
 
@@ -741,6 +896,11 @@ public:
     {
         MissingHandler_ = handler;
         return TVirtualFieldLoadRegistrar(std::move(*this));
+    }
+
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing([] (TThis* /*this_*/, TContext& /*context*/) { });
     }
 
     using TVersionFilter = bool (*)(TVersion version);
@@ -814,6 +974,18 @@ public:
         return VirtualField<TagValue>(name, loadHandler);
     }
 
+    template <
+        TFieldTag::TUnderlying TagValue,
+        auto Getter,
+        auto Setter,
+        class TSerializer = TDefaultSerializer>
+    auto PropertyField(const char* name)
+    {
+        return VirtualField<TagValue>(
+            name,
+            &TPropertyFieldHandlers<Getter, Setter, TSerializer>::template Load<TThis, TContext>);
+    }
+
 private:
     TThis* const This_;
     TContext& Context_;
@@ -852,10 +1024,6 @@ Y_NO_INLINE void CompatLoadImpl(auto* this_, auto& context, const auto& schedule
 template <class TThis, class TContext>
 void LoadImpl(TThis* this_, TContext& context)
 {
-    static_assert(
-        std::derived_from<TContext, TLoadContext>,
-        "Phoenix types must be loaded via NPhoenix::TLoadContext or its descendants");
-
     RunRegistrar<TThis>(TLoadBaseTypesRegistrar(this_, context));
     if (const auto* runtimeSchedule = FindRuntimeTypeLoadSchedule<TThis>(context)) [[unlikely]] {
         CompatLoadImpl(this_, context, *runtimeSchedule);
@@ -908,6 +1076,11 @@ public:
     {
         Descriptor_->MissingHandler = handler;
         return std::move(*this);
+    }
+
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing([] (TThis* /*this_*/, TContext& /*context*/) { });
     }
 
     template <class TFieldSerializer_>
@@ -966,6 +1139,11 @@ public:
         return std::move(*this);
     }
 
+    auto KeepWhenMissing() &&
+    {
+        return std::move(*this).WhenMissing([] (TThis* /*this_*/, TContext& /*context*/) { });
+    }
+
     template <class TFieldSerializer_>
     auto Serializer() &&
     {
@@ -1014,10 +1192,7 @@ public:
     {
         auto* descriptor = AddField<TagValue>();
         descriptor->MissingHandler = [] (TThis* this_, TContext& /*context*/) {
-            // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
-            if constexpr (requires { this_->*Member = {}; }) {
-                this_->*Member = {};
-            }
+            ResetMissingField<Member>(this_);
         };
         return TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
     }
@@ -1039,6 +1214,18 @@ public:
         auto&& /*saveHandler*/)
     {
         return VirtualField<TagValue>(name, loadHandler);
+    }
+
+    template <
+        TFieldTag::TUnderlying TagValue,
+        auto Getter,
+        auto Setter,
+        class TSerializer = TDefaultSerializer>
+    auto PropertyField(auto&& name)
+    {
+        return VirtualField<TagValue>(
+            name,
+            &TPropertyFieldHandlers<Getter, Setter, TSerializer>::template Load<TThis, TContext>);
     }
 
     auto operator()() &&
@@ -1156,12 +1343,16 @@ const TRuntimeTypeLoadSchedule<TThis, TContext>* TUniverseLoadSchedule::FindRunt
 template <class TThis, class TContext>
 const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule(TContext& context)
 {
-    auto* schedule = context.GetLoadSchedule();
-    if (!schedule) [[likely]] {
+    // Contexts not derived from TLoadContext lack schema support and load solely by version.
+    if constexpr (std::derived_from<TContext, TLoadContext>) {
+        auto* schedule = context.GetLoadSchedule();
+        if (!schedule) [[likely]] {
+            return nullptr;
+        }
+        return schedule->template FindRuntimeTypeLoadSchedule<TThis, TContext>();
+    } else {
         return nullptr;
     }
-
-    return schedule->template FindRuntimeTypeLoadSchedule<TThis, TContext>();
 }
 
 Y_NO_INLINE void CompatLoadImpl(auto* this_, auto& context, const auto& runtimeSchedule)

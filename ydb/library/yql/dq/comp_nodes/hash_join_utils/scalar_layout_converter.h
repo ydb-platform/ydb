@@ -18,7 +18,7 @@ public:
 public:
     virtual ~IScalarLayoutConverter() = default;
 
-    // Pack single tuple from scalar values
+    // Pack one tuple. Same path as PackBatch of a single row.
     virtual void Pack(const NYql::NUdf::TUnboxedValue* values, TPackResult& packed) = 0;
 
     // Pack multiple tuples from scalar values
@@ -38,6 +38,7 @@ public:
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 
     virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
+    virtual const TVector<ui32>& GetInnerColumns(ui32 inputColumn) const = 0;
 };
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(

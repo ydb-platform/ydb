@@ -266,12 +266,18 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     template <typename TCont>
     bool FillColumnIds(const TCont& columnNames, NKikimrTxDataShard::TEvUploadRowsRequest& request) {
         auto& rowScheme = *request.MutableRowScheme();
+        const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
 
         for (const auto& column : columnNames) {
             const auto* info = Columns.FindPtr(column);
             if (!info) {
                 Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown column: " << column);
+                return false;
+            }
+
+            if (disablePgCompatibility && info->PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "PostgreSQL compatibility is disabled");
                 return false;
             }
 
@@ -430,6 +436,10 @@ public:
     using TRpcRequestActor<TImportDataRPC, TEvImportDataRequest, true>::TRpcRequestActor;
 
     void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            return Reply(StatusIds::PRECONDITION_FAILED, TIssuesIds::DEFAULT_ERROR,
+                "Client data writes are disabled");
+        }
         switch (GetProtoRequest()->format_case()) {
         case Import::ImportDataRequest::kYdbDump:
             break;

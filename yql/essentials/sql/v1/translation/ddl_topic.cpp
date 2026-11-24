@@ -76,17 +76,18 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
 
     if (alter) {
         if (desc.Settings.Type) {
-            ctx.Error() << "type alter is not supported";
+            ctx.Error(desc.Settings.Type->GetPos()) << "type alter is not supported";
             return {nullptr};
         }
         if (desc.Settings.KeepMessagesOrder) {
-            ctx.Error() << "keep_messages_order alter is not supported";
+            ctx.Error(desc.Settings.KeepMessagesOrder->GetPos()) << "keep_messages_order alter is not supported";
             return {nullptr};
         }
     }
 
     auto settings = node.Y();
     settings = setValue(settings, desc.Settings.Important, "important");
+    settings = setValue(settings, desc.Settings.ReplicateOffsets, "replicate_offsets");
     settings = setValueWithReset(settings, desc.Settings.AvailabilityPeriod, "setAvailabilityPeriod", "resetAvailabilityPeriod");
     settings = setValueWithReset(settings, desc.Settings.ReadFromTs, "setReadFromTs", "resetReadFromTs");
     settings = setValueWithReset(settings, desc.Settings.SupportedCodecs, "setSupportedCodecs", "resetSupportedCodecs");

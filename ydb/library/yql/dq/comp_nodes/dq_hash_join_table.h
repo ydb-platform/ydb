@@ -114,8 +114,30 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.Empty();
     }
 
+    const IBlockLayoutConverter::TPackResult& BuildData() const {
+        return BuildData_;
+    }
+
     ui64 RequiredMemoryForBuild(int nTuples) const {
         return Table_.RequiredMemoryForBuild(nTuples);
+    }
+
+    void PrefetchDirectory(const ui8* packed) const {
+        if (!Empty()) {
+            Table_.PrefetchDirectory(packed);
+        }
+    }
+
+    void PrefetchBuffer(const ui8* packed) const {
+        if (!Empty()) {
+            Table_.PrefetchBuffer(packed);
+        }
+    }
+
+    void PrefetchTuple(const ui8* packed) const {
+        if (!Empty()) {
+            Table_.PrefetchTuple(packed);
+        }
     }
 
     // resumeIndex is where the scan of this probe continues, 0 once every match was consumed

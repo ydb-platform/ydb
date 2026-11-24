@@ -8,7 +8,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TGetAddressTest, Test)
+TEST(TGetAddressTest, ChoosePreferredNetworkOrThrow)
 {
     const TAddressMap map{{"ipv4", "127.0.0.1:8081"}, {"ipv6", "::1:8081"}, {"default", "localhost:8081"}};
 
@@ -17,7 +17,7 @@ TEST(TGetAddressTest, Test)
     EXPECT_THROW(GetAddressOrThrow(map, { "wrong" }), TErrorException);
 }
 
-TEST(TFindAddressTest, Test)
+TEST(TFindAddressTest, ChoosePreferredNetwork)
 {
     const TAddressMap map{{"ipv4", "127.0.0.1:8081"}, {"ipv6", "::1:8081"}, {"default", "localhost:8081"}};
 

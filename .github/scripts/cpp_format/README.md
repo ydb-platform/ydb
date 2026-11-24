@@ -178,6 +178,10 @@ formatter resource as Ya's style tests. `--list` does not resolve or download th
 formatter. To reuse a previously resolved Ya binary offline, set
 `YDB_CLANG_FORMAT` to its executable path.
 
+Checks use a batch dry run first. If it fails, the helper compares each file's
+formatted output with its original bytes, matching the native Ya checker. This
+avoids false positives from clang-format replacements that leave the text unchanged.
+
 Exit status is 0 on success, 1 on formatting failures, and 2 for configuration or
 invocation errors.
 

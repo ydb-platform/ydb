@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT YQL::@@(block '(
     (let vt (VariantType (TupleType (DataType 'String) (DataType 'String))))
 	(let inputRows (AsList

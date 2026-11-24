@@ -21,6 +21,7 @@
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/inotify.h>
 #include <yt/yt/core/misc/spsc_queue.h>
@@ -495,6 +496,11 @@ public:
 
     void Synchronize(TInstant deadline = TInstant::Max())
     {
+        ++PendingSynchronizationCount_;
+        auto guard = Finally([&] {
+            --PendingSynchronizationCount_;
+        });
+
         DequeueExecutor_->ScheduleOutOfBand();
         auto enqueuedEvents = EnqueuedEvents_.load();
         while (enqueuedEvents > FlushedEvents_.load() && TInstant::Now() < deadline) {
@@ -1167,14 +1173,15 @@ private:
 
         auto eventsWritten = ProcessTimeOrderedBuffer();
 
-        if (eventsWritten == 0) {
+        auto synchronizationPending = PendingSynchronizationCount_.load() > 0;
+        if (eventsWritten == 0 && !synchronizationPending) {
             return;
         }
 
         WrittenEvents_ += eventsWritten;
 
         auto config = Config_.Acquire();
-        if (!config->FlushPeriod || ShutdownRequested_) {
+        if (!config->FlushPeriod || ShutdownRequested_ || synchronizationPending) {
             FlushWriters();
         }
     }
@@ -1349,6 +1356,8 @@ private:
     std::atomic<ui64> FlushedEvents_ = 0;
     std::atomic<ui64> SuppressedEvents_ = 0;
     std::atomic<ui64> DroppedEvents_ = 0;
+
+    std::atomic<int> PendingSynchronizationCount_ = 0;
 
     THashMap<std::string, ILogWriterPtr> NameToWriter_;
     THashMap<TLogWriterCacheKey, std::vector<ILogWriterPtr>> KeyToCachedWriter_;

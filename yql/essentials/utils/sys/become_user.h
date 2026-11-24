@@ -7,7 +7,9 @@ namespace NYql {
 // works on Linux only
 
 // assume we have enough capabilities to do so: CAP_SETUID, CAP_SETGID
-void BecomeUser(const TString& username, const TString& groupname);
+void BecomeUser(const TString& username, const TString& groupname, bool dumpable = true);
+
+void EnsureNonRootUserAndGroup();
 
 // should be called by root (more specifically caps required: CAP_SETPCAP)
 // special ambient capabilities will be set up: CAP_SETUID, CAP_SETGID, CAP_KILL

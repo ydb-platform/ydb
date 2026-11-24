@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <stdexcept>
 #include <type_traits>
 
 namespace NYql {
@@ -9,8 +10,8 @@ namespace NDetail {
 
 struct TAny {
     template <typename T>
-    consteval operator T() const { // NOLINT(google-explicit-constructor)
-        return {};
+    operator T() const { // NOLINT(google-explicit-constructor)
+        throw std::logic_error("TAny can only be used in unevaluated contexts");
     }
 };
 

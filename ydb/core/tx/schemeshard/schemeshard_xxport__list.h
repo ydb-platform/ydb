@@ -25,6 +25,10 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
     {
     }
 
+    static bool IsVisible(const TInfo&) {
+        return true;
+    }
+
     bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container,
         const TSet<std::pair<TInstant, ui64>> containerByTime, TTransactionContext&, const TActorContext&) {
         const auto& record = Request->Get()->Record;
@@ -60,7 +64,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         while (it != containerByTime.begin() && skip) {
             --it;
             auto& item = container.at(it->second);
-            if (IsSameDomain(item, domainPathId) && item->Kind == kind) {
+            if (IsSameDomain(item, domainPathId) && item->Kind == kind && TDerived::IsVisible(*item)) {
                 --skip;
             }
         }
@@ -69,7 +73,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         while (it != containerByTime.begin() && size < pageSize) {
             --it;
             auto& item = container.at(it->second);
-            if (IsSameDomain(item, domainPathId) && item->Kind == kind) {
+            if (IsSameDomain(item, domainPathId) && item->Kind == kind && TDerived::IsVisible(*item)) {
                 Self->FromXxportInfo(*resp.MutableEntries()->Add(), *item);
                 ++size;
             }

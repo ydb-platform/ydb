@@ -107,7 +107,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 * `newImage` — снимок состояния строки, получившегося в результате изменения. Присутствует в режимах `NEW_IMAGE` и `NEW_AND_OLD_IMAGES`. Содержит названия и значения столбцов.
 * `oldImage` — снимок состояния строки, предшествовавшего изменению. Присутствует в режимах `OLD_IMAGE` и `NEW_AND_OLD_IMAGES`. Содержит названия и значения столбцов.
 * `ts` — [виртуальная метка времени](#virtual-timestamps). Присутствует, если включена настройка `VIRTUAL_TIMESTAMPS`. Содержит значение глобального времени координатора (`step`) и уникальный идентификатор транзакции (`txId`).
-* `user` — идентификатор пользователя. Присутствует, если включена настройка `USER_SIDS`. Содержит [SID](glossary.md#sid-access-sid) пользователя. Если происходит удаление записей по [TTL](ttl.md), то указывается значение `ttl@system`.
+* `user` — идентификатор пользователя. Присутствует, если включена настройка `USER_SIDS`. Содержит [SID](glossary.md#access-sid) пользователя. Если происходит удаление записей по [TTL](ttl.md), то указывается значение `ttl@system`.
 * `traceId` — идентификатор [трассировки OpenTelemetry](../reference/observability/tracing/external-traces.md). Присутствует, если включена настройка `TRACE_IDS`.
 
 Например, запись об обновлении в режиме `UPDATES`:
@@ -194,7 +194,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 * `eventName` — `INSERT`, `MODIFY` или `REMOVE`. Значение `INSERT` допустимо только в режиме `NEW_AND_OLD_IMAGES`.
 * `eventSource` — содержит строку `ydb:document-table`.
 * `eventVersion` — содержит строку `1.0`.
-* `userIdentity` — информация о пользователе. Присутствует, если включена настройка `USER_SIDS`. Имеет вложенные поля `type` (содержит `"User"` или `"Service"`) и `principalId` (содержит [SID](glossary.md#sid-access-sid) пользователя). Если происходит удаление записей по [TTL](ttl.md), то поле `type` содержит `"Service"`, а поле `principalId` содержит `"dynamodb.amazonaws.com"`.
+* `userIdentity` — информация о пользователе. Присутствует, если включена настройка `USER_SIDS`. Имеет вложенные поля `type` (содержит `"User"` или `"Service"`) и `principalId` (содержит [SID](glossary.md#access-sid) пользователя). Если происходит удаление записей по [TTL](ttl.md), то поле `type` содержит `"Service"`, а поле `principalId` содержит `"dynamodb.amazonaws.com"`.
 
 {% endif %}
 
@@ -239,7 +239,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
   * `step` — глобальное время координатора. Компонент [виртуальных меток времени](#virtual-timestamps).
   * `txId` — уникальный идентификатор транзакции. Компонент [виртуальных меток времени](#virtual-timestamps).
   * `snapshot` — признак чтения из снапшота.
-  * `user` — идентификатор пользователя. Присутствует, если включена настройка `USER_SIDS`. Содержит [SID](glossary.md#sid-access-sid) пользователя. Если происходит удаление записей по [TTL](ttl.md), то указывается значение `ttl@system`.
+  * `user` — идентификатор пользователя. Присутствует, если включена настройка `USER_SIDS`. Содержит [SID](glossary.md#access-sid) пользователя. Если происходит удаление записей по [TTL](ttl.md), то указывается значение `ttl@system`.
   * `traceId` — идентификатор [трассировки OpenTelemetry](../reference/observability/tracing/external-traces.md). Присутствует, если включена настройка `TRACE_IDS`.
 
 При чтении с использованием [Kafka API](../reference/kafka-api/index.md) в качестве ключа сообщения указывается Debezium-совместимый первичный ключ измененной строки:

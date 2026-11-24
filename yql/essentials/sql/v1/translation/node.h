@@ -777,8 +777,14 @@ struct TGeneratedColumn {
     bool Stored = false;
 };
 
+struct TDefaultExpression {
+    TString ContextPrefix;
+    TString ExprText;
+    TNodePtr Expr;
+};
+
 struct TColumnOptions {
-    TNodePtr DefaultExpr;
+    TMaybe<TDefaultExpression> Default;
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
@@ -802,7 +808,7 @@ struct TColumnSchema {
     TString Name;
     TNodePtr Type;
     TVector<TIdentifier> Families;
-    TNodePtr DefaultExpr;
+    TMaybe<TDefaultExpression> Default;
     TMaybe<TCompression> Compression;
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;
@@ -1478,14 +1484,6 @@ public:
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 
-struct TStreamingQuerySettings {
-    inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
-    inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
-    inline static constexpr char QUERY_AST_FEATURE[] = "__query_ast";
-
-    TObjectFeatureNodePtr Features;
-};
-
 TString IdContent(TContext& ctx, const TString& str);
 TString IdContentFromString(TContext& ctx, const TString& str);
 TTableHints GetContextHints(TContext& ctx);
@@ -1609,7 +1607,7 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context);
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
 TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);

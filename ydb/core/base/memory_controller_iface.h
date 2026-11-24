@@ -15,6 +15,8 @@ enum class EMemoryConsumerKind {
     ColumnTablesColumnDataCache,
     ColumnTablesDeduplicationGroupedMemory,
     ColumnTablesPortionsMetaDataCache,
+
+    QueryExecution,
 };
 
 struct TConsumerReport {
@@ -51,9 +53,11 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
+    const bool DemandOnly;
 
-    TEvConsumerRegister(EMemoryConsumerKind kind)
+    TEvConsumerRegister(EMemoryConsumerKind kind, bool demandOnly = false)
         : Kind(kind)
+        , DemandOnly(demandOnly)
     {}
 };
 
@@ -61,8 +65,11 @@ struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerR
 struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
     const EMemoryConsumerKind Kind;
 
-    TEvConsumerUnregister(EMemoryConsumerKind kind)
+    const bool RetainUntilUnused;
+
+    TEvConsumerUnregister(EMemoryConsumerKind kind, bool retainUntilUnused = false)
         : Kind(kind)
+        , RetainUntilUnused(retainUntilUnused)
     {}
 };
 

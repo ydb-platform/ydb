@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/syncer)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

@@ -125,7 +125,8 @@ public:
         const NYT::TNode& outSpec,
         const NYT::TNode& writerOptions,
         const std::string_view& optLLVM,
-        THolder<NCommon::TCodecContext>&& codecCtx
+        THolder<NCommon::TCodecContext>&& codecCtx,
+        IStatsRegistry* jobStats
     )
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded, EValueRepresentation::Boxed)
         , Flow(flow)
@@ -137,6 +138,7 @@ public:
         , WriterOptions(writerOptions)
         , OptLLVM(optLLVM)
         , CodecCtx(std::move(codecCtx))
+        , JobStats(jobStats)
         , Logger(mutables)
         , LogComponent(mutables)
     {}
@@ -270,7 +272,7 @@ private:
             auto transaction = client->AttachTransaction(Path.TransactionId_.GetRef());
             auto specs = MakeHolder<TMkqlIOSpecs>();
             specs->SetUseSkiff(OptLLVM);
-            specs->Init(*CodecCtx, OutSpec);
+            specs->Init(*CodecCtx, OutSpec, JobStats);
             auto path = Path;
             path.TransactionId_.Clear();
             NYT::TTableWriterOptions options;
@@ -318,6 +320,7 @@ private:
     const NYT::TNode WriterOptions;
     const TString OptLLVM;
     const THolder<NCommon::TCodecContext> CodecCtx;
+    IStatsRegistry* const JobStats;
     const TMutableDataOnContext<NUdf::TLoggerPtr> Logger;
     const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
 
@@ -327,7 +330,7 @@ private:
 
 }
 
-IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, IStatsRegistry* jobStats, const TComputationNodeFactoryContext& ctx) {
     YQL_ENSURE(callable.GetInputsCount() == 7, "Expected seven args.");
 
     const auto& clusterName = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().AsStringRef();
@@ -349,7 +352,7 @@ IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationN
     }
 
     auto codecCtx = MakeHolder<NCommon::TCodecContext>(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory);
-    return new TYtDqWideWriteWrapper(ctx.Mutables, static_cast<IComputationWideFlowNode*>(node), std::move(representations), clusterName, token, richYPath, outSpec, writerOptions, optLLVM, std::move(codecCtx));
+    return new TYtDqWideWriteWrapper(ctx.Mutables, static_cast<IComputationWideFlowNode*>(node), std::move(representations), clusterName, token, richYPath, outSpec, writerOptions, optLLVM, std::move(codecCtx), jobStats);
 }
 
 } // NYql

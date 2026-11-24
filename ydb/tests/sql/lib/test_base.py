@@ -29,6 +29,8 @@ class TestBase(Query):
         cls.database = "/Root"
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                    extra_feature_flags=cls.get_extra_feature_flags(),
+                                                   disabled_feature_flags=cls.get_disabled_feature_flags(),
+                                                   datashard_config=cls.get_datashard_config(),
                                                    column_shard_config={
                                                        'disabled_on_scheme_shard': False,
                                                        'lag_for_compaction_before_tierings_ms': 0,
@@ -65,6 +67,14 @@ class TestBase(Query):
         return "%s:%s" % (
             self.cluster.nodes[1].host, self.cluster.nodes[1].port
             )
+
+    @classmethod
+    def get_datashard_config(cls):
+        return {}
+
+    @classmethod
+    def get_disabled_feature_flags(cls):
+        return []
 
     @classmethod
     def get_extra_feature_flags(cls):

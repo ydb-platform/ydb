@@ -979,6 +979,17 @@ message TLayersConfig {
     optional TFetchConfig FetchConfig = 2;
 }
 
+/////////////////////////////// Nile ///////////////////////////////
+
+message TNileConfig {
+    message TAllowedOperation {
+        required string Cluster = 1;
+        required string User = 2; // "*" allows every user on this cluster.
+    }
+
+    repeated TAllowedOperation Allowed = 1;
+}
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -1013,4 +1024,5 @@ message TGatewaysConfig {
     optional TSpytGatewayConfig Spyt = 28;
 
     repeated TActivationGroup ActivationGroup = 29; // Named activation groups shared by all configuration sections.
+    optional TNileConfig Nile = 30; // Absent disables validation; present with no entries denies every Nile operation.
 }

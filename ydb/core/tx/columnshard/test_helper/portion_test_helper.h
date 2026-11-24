@@ -26,13 +26,14 @@ inline TIndexInfo MakePortionTestIndexInfo() {
 inline std::shared_ptr<arrow::RecordBatch> MakePortionTestPKBatch(const ui64 startKey, const ui64 endKey) {
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()) });
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues({ startKey, endKey }).ok());
+    YDB_LOG_VERIFY(builder.AppendValues({ startKey, endKey }).ok());
     auto array = builder.Finish().ValueOrDie();
     return arrow::RecordBatch::Make(schema, 2, { array });
 }
 
 inline std::shared_ptr<TPortionInfo> MakeTestCompactedPortion(const TInternalPathId pathId, const ui64 portionId, const ui64 startKey,
-    const ui64 endKey, const ui32 recordsCount, const TSnapshot& appearanceSnapshot, const std::optional<TSnapshot>& removeSnapshot) {
+    const ui64 endKey, const ui32 recordsCount, const TSnapshot& appearanceSnapshot, const std::optional<TSnapshot>& removeSnapshot,
+    const TString& tierName = {}) {
     TString serialized = NArrow::SerializeBatchNoCompression(MakePortionTestPKBatch(startKey, endKey));
     TIndexInfo indexInfo = MakePortionTestIndexInfo();
 
@@ -51,12 +52,13 @@ inline std::shared_ptr<TPortionInfo> MakeTestCompactedPortion(const TInternalPat
     metaProto.SetIndexRawBytes(0);
     metaProto.SetIndexBlobBytes(0);
     metaProto.SetNumSlices(1);
+    metaProto.SetTierName(tierName);
     metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(appearanceSnapshot.GetPlanStep());
     metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(appearanceSnapshot.GetTxId());
 
     TPortionMetaConstructor metaConstructor;
     TFakeGroupSelector groupSelector;
-    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
+    YDB_LOG_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
 
     TCompactedPortionInfoConstructor constructor(pathId, portionId);
     constructor.SetSchemaVersion(1);

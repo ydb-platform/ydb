@@ -188,7 +188,47 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 }
 
 
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config) {
+    const auto validate = [](const auto& group, const TString& path) -> TString {
+        const ui32 rings = group.RingSize() ? group.RingSize() : group.NodeSize();
+        if (!group.GetNToSelect() || group.GetNToSelect() > rings) {
+            return TStringBuilder() << path << ".NToSelect# " << group.GetNToSelect()
+                << " must be in [1, " << rings << "] (number of configured rings)";
+        }
+        return {};
+    };
+    if (config.HasRing()) {
+        if (TString error = validate(config.GetRing(), "Ring")) {
+            return error;
+        }
+    }
+    for (ui32 i = 0; i < config.RingGroupsSize(); ++i) {
+        if (TString error = validate(config.GetRingGroups(i), TStringBuilder() << "RingGroups[" << i << ']')) {
+            return error;
+        }
+    }
+    return {};
+}
+
 EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
+    const auto& domains = proposed.GetDomainsConfig();
+    for (const auto& config : domains.GetStateStorage()) {
+        if (TString error = ValidateStateStorageConfigSelection(config)) {
+            msg.push_back(TStringBuilder() << "StateStorage " << error);
+            return EValidationResult::Error;
+        }
+    }
+#define VALIDATE_SELECTION(NAME) \
+    if (domains.HasExplicit##NAME##Config()) { \
+        if (TString error = ValidateStateStorageConfigSelection(domains.GetExplicit##NAME##Config())) { \
+            msg.push_back(TStringBuilder() << #NAME << ' ' << error); \
+            return EValidationResult::Error; \
+        } \
+    }
+    VALIDATE_SELECTION(StateStorage)
+    VALIDATE_SELECTION(StateStorageBoard)
+    VALIDATE_SELECTION(SchemeBoard)
+#undef VALIDATE_SELECTION
     if (proposed.HasSelfManagementConfig()) {
         const auto& sm = proposed.GetSelfManagementConfig();
         if (sm.GetEnabled()) {
@@ -198,7 +238,6 @@ EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& pr
     if (!proposed.HasDomainsConfig()) {
         return EValidationResult::Ok;
     }
-    const auto& domains = proposed.GetDomainsConfig();
     bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();
     if (!isExplicit) {
         if (domains.DomainSize() < 1) {
@@ -407,9 +446,77 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
 }
 
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
+TString ValidateStateStorageConfig(
+        const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig,
+        const NKikimrConfig::TStateStorageConfig& newSSConfig, bool allowRingGroupReassignment) {
+    constexpr size_t MaxRingCount = 1024;
+    constexpr size_t MaxNodeCount = 1024;
+
+    const auto validateStructure = [name](const char* configName,
+            const NKikimrConfig::TStateStorageConfig& config) -> TString {
+        if (config.GetSSId() != 1) {
+            return TStringBuilder() << configName << ' ' << name << " configuration has invalid SSId";
+        }
+        if (config.HasRing() == (config.RingGroupsSize() > 0)) {
+            return TStringBuilder() << configName << ' ' << name
+                << " configuration must contain either Ring or RingGroups";
+        }
+
+        const auto validateRingGroup = [name, configName](
+                const NKikimrConfig::TStateStorageConfig::TRing& ringGroup) -> TString {
+            if (ringGroup.RingSize() && ringGroup.NodeSize()) {
+                return TStringBuilder() << configName << ' ' << name
+                    << " Ring and Node are defined, use one of them";
+            }
+            if (ringGroup.RingSize() >= MaxRingCount) {
+                return TStringBuilder() << configName << ' ' << name << " has too many rings";
+            }
+            if (ringGroup.NodeSize() >= MaxNodeCount) {
+                return TStringBuilder() << configName << ' ' << name << " has too many nodes";
+            }
+            if (!ringGroup.RingSize() && !ringGroup.NodeSize()) {
+                return TStringBuilder() << configName << ' ' << name << " has empty ring group";
+            }
+            for (const auto& ring : ringGroup.GetRing()) {
+                if (ring.RingSize()) {
+                    return TStringBuilder() << configName << ' ' << name << " has too deep nested ring declaration";
+                }
+                if (ring.HasRingGroupActorIdOffset()) {
+                    return TStringBuilder() << configName << ' ' << name
+                        << " RingGroupActorIdOffset should be used in ring group level, not ring";
+                }
+                if (!ring.NodeSize()) {
+                    return TStringBuilder() << configName << ' ' << name << " has empty ring";
+                }
+                if (ring.GetUseSingleNodeActorId() && ring.NodeSize() != 1) {
+                    return TStringBuilder() << configName << ' ' << name
+                        << " ring with UseSingleNodeActorId must contain exactly one node";
+                }
+            }
+            return {};
+        };
+
+        if (config.HasRing()) {
+            return validateRingGroup(config.GetRing());
+        }
+        for (const auto& ringGroup : config.GetRingGroups()) {
+            if (TString error = validateRingGroup(ringGroup)) {
+                return error;
+            }
+        }
+        return {};
+    };
+
     if (!newSSConfig.HasRing() && newSSConfig.RingGroupsSize() == 0) {
         return TStringBuilder() << "New " << name << " configuration is not filled in";
+    }
+    if (TString error = validateStructure("New", newSSConfig)) {
+        return error;
+    }
+    if (oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize()) {
+        if (TString error = validateStructure("Old", oldSSConfig)) {
+            return error;
+        }
     }
     if (!oldSSConfig.HasRing() && oldSSConfig.RingGroupsSize() == 0) {
         auto info = BuildStateStorageInfo(newSSConfig);
@@ -427,7 +534,8 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     disabledCnt++;
                 }
             }
-            if (disabledCnt > rg.NToSelect / 2 - 1) { // -1 ring for rolling restart
+            const ui32 maxDisabled = rg.NToSelect > 1 ? (rg.NToSelect - 2) / 2 : 0;
+            if (disabledCnt > maxDisabled) { // keep one ring available for rolling restart
                 return TStringBuilder() << "New " << name << " configuration disabled too many rings";
             }
         }
@@ -458,7 +566,7 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     << " to# " << SingleLineProto(newSSConfig);
             }
         }
-        if (disabledCnt > fromInfoGroup.NToSelect / 2) {
+        if (disabledCnt > (fromInfoGroup.NToSelect - 1) / 2) {
             return TStringBuilder() << name << " configuration disabled too many rings"
                 << " from# " << SingleLineProto(oldSSConfig)
                 << " to# " << SingleLineProto(newSSConfig);
@@ -509,6 +617,38 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
         }
 
         Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
+
+        if (allowRingGroupReassignment) {
+            if (newSSInfo->RingGroups.size() != oldSSInfo->RingGroups.size()) {
+                return TStringBuilder() << name << " ring group count differs";
+            }
+            for (ui32 groupIndex : xrange(oldSSInfo->RingGroups.size())) {
+                const auto& oldGroup = oldSSInfo->RingGroups[groupIndex];
+                const auto& newGroup = newSSInfo->RingGroups[groupIndex];
+                if (oldGroup.Rings.size() != newGroup.Rings.size()
+                        || oldGroup.NToSelect != newGroup.NToSelect
+                        || oldGroup.WriteOnly != newGroup.WriteOnly) {
+                    return TStringBuilder() << name << " ring group #" << groupIndex
+                        << " selection or writeOnly differs";
+                }
+                ui32 disabledCnt = 0;
+                for (ui32 ringIndex : xrange(oldGroup.Rings.size())) {
+                    const auto& oldRing = oldGroup.Rings[ringIndex];
+                    const auto& newRing = newGroup.Rings[ringIndex];
+                    if (oldRing.IsDisabled || newRing.IsDisabled) {
+                        ++disabledCnt;
+                    } else if (oldRing != newRing) {
+                        return TStringBuilder() << name << " ring group #" << groupIndex
+                            << " ring #" << ringIndex << " differs";
+                    }
+                }
+                if (disabledCnt > (oldGroup.NToSelect - 1) / 2) {
+                    return TStringBuilder() << name << " ring group #" << groupIndex
+                        << " configuration disabled too many rings";
+                }
+            }
+            return "";
+        }
 
         for (auto& newGroup : newSSInfo->RingGroups) {
             if (newGroup.WriteOnly) {

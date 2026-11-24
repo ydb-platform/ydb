@@ -1,0 +1,12 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Advanced System & Process Monitor",
+        "definition": {
+            "executable": [
+                "atop",
+                "atop"
+            ]
+        }
+    }
+}

@@ -6,6 +6,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
+    ydb/library/formats/arrow/helpers
     ydb/library/formats/arrow/simple_builder
     ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/hash
@@ -13,6 +14,7 @@ PEERDIR(
     ydb/core/formats/arrow/program
     ydb/core/formats/arrow/program/ascii_contains
     ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/rows
     ydb/core/formats/arrow/serializer
     ydb/core/base
     ydb/library/formats/arrow
@@ -35,6 +37,7 @@ CFLAGS(
 )
 
 SRCS(
+    comparison_ut.cpp
     ut_arrow.cpp
     ut_buffer_over_string.cpp
     ut_column_filter.cpp

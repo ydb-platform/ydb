@@ -30,6 +30,30 @@ TString GetValidJoinKind(const TString& joinKind) {
     return joinKind;
 }
 
+TOrderedIUs<> GetAggregateInputShuffle(const TOpAggregate& aggregate) {
+    if (!aggregate.IsDistinctAll()) {
+        return aggregate.GetKeyColumns();
+    }
+
+    TOrderedIUs<> result;
+    for (const auto& [output, trait] : aggregate.GetAggregationTraits().Items()) {
+        result.Append(trait.Input);
+    }
+    return result;
+}
+
+TOrderedIUs<> GetAggregateOutputShuffle(const TOpAggregate& aggregate) {
+    if (!aggregate.IsDistinctAll()) {
+        return aggregate.GetKeyColumns();
+    }
+
+    TOrderedIUs<> result;
+    for (const auto output : aggregate.GetAggregationTraits().Keys()) {
+        result.Append(output);
+    }
+    return result;
+}
+
 TOrderedIUs<> GetAggregatePreservedShuffling(const TOpAggregate& aggregate, const TRBOContext& ctx) {
     if (aggregate.GetKeyColumns().Items().empty()) {
         return {};
@@ -88,18 +112,39 @@ bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TStr
     const THashSet<TString> pointKeys(keyColumns.begin(), keyColumns.begin() + pointPrefixLen);
     size_t next = pointPrefixLen;
     for (const auto& sortColumn : sortColumns) {
+        // The key is unique, so sort columns after the full key cannot change the order.
+        if (next == keyColumns.size()) {
+            return true;
+        }
         if (sortColumn.empty()) {
             return false;
         }
         if (pointKeys.contains(sortColumn)) {
             continue;
         }
-        if (next >= keyColumns.size() || keyColumns[next] != sortColumn) {
+        if (keyColumns[next] != sortColumn) {
             return false;
         }
         ++next;
     }
     return true;
+}
+
+std::optional<bool> GetKeyReadDirection(const TSortIUs& sortElements) {
+    const auto& items = sortElements.Items();
+    if (items.empty()) {
+        return std::nullopt;
+    }
+    // The nulls order of a sort does not matter: the physical sort orders by the direction only, with NULLs smaller
+    // than any value, as in the key order of a datashard table. A read in the reverse order returns NULLs last, as
+    // a descending sort does, although the YQL translator always marks NULLs first.
+    const bool ascending = items.front().second.Ascending;
+    for (const auto& [column, order] : items) {
+        if (order.Ascending != ascending) {
+            return std::nullopt;
+        }
+    }
+    return ascending;
 }
 
 }

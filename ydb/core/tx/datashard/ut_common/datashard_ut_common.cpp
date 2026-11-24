@@ -1217,6 +1217,7 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         if (family.Name) fam->SetName(family.Name);
         if (family.Id) fam->SetId(*family.Id);
         if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+        if (family.ColumnCodecLevel) fam->SetColumnCodecLevel(*family.ColumnCodecLevel);
         if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
         if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
         if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
@@ -1554,7 +1555,8 @@ void ApplyChanges(
     auto status = ev->Get()->Record.GetStatus();
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
-        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected)
+        << ": " << ev->Get()->Record.ShortDebugString());
     if (expectedReason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetReason()), static_cast<ui32>(expectedReason));
     }
@@ -1763,6 +1765,7 @@ ui64 AsyncSetColumnFamily(
     auto fam = desc.MutablePartitionConfig()->AddColumnFamilies();
     if (family.Name) fam->SetName(family.Name);
     if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+    if (family.ColumnCodecLevel) fam->SetColumnCodecLevel(*family.ColumnCodecLevel);
     if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
     if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
     if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
@@ -1788,6 +1791,7 @@ ui64 AsyncAlterColumnFamily(
     if (family.Name) fam->SetName(family.Name);
     if (family.Id) fam->SetId(*family.Id);
     if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+    if (family.ColumnCodecLevel) fam->SetColumnCodecLevel(*family.ColumnCodecLevel);
     if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
     if (family.DataPoolKind) {
         auto* data = fam->MutableStorageConfig()->MutableData();
@@ -1941,6 +1945,13 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
     desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     desc.MutableStreamDescription()->SetTraceIds(streamDesc.TraceIds);
+    desc.MutableStreamDescription()->SetCompression(streamDesc.Compression);
+    if (streamDesc.CompressionLevel) {
+        desc.MutableStreamDescription()->SetCompressionLevel(streamDesc.CompressionLevel);
+    }
+    if (streamDesc.TopicPartitions) {
+        desc.SetTopicPartitions(streamDesc.TopicPartitions);
+    }
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
@@ -2733,8 +2744,10 @@ namespace {
                     break
 
             switch (parser.GetPrimitiveType()) {
+            PRINT_PRIMITIVE(Uint16);
             PRINT_PRIMITIVE(Uint32);
             PRINT_PRIMITIVE(Uint64);
+            PRINT_PRIMITIVE(Int16);
             PRINT_PRIMITIVE(Int32);
             PRINT_PRIMITIVE(Int64);
             PRINT_PRIMITIVE(Date);

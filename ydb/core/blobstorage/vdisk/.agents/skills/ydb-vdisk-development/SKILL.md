@@ -25,7 +25,7 @@ Event definitions and group identities also live in `ydb/core/blobstorage/base/`
 
 ## Implementation Checks
 
-Trace the change through ingress/group identity checks, Hull updates, PDisk log durability, and response timing where those paths are affected. Blob, Block, and Barrier records have distinct semantics; preserve generation fencing and garbage-collection visibility. For chunk or log changes, identify when state becomes recoverable and when old storage may be reclaimed.
+Trace the change through ingress/group identity checks, Hull updates, PDisk log durability, and response timing where those paths are affected. Blob, Block, and Barrier records have distinct semantics; keep the Block semantics, including the `IgnoreBlock` exception, and garbage-collection visibility. For chunk or log changes, identify when state becomes recoverable and when old storage may be reclaimed.
 
 Read the [PDisk skill](../../../../pdisk/.agents/skills/ydb-pdisk-development/SKILL.md) when the task involves the PDisk side of the interface. Read [NodeWarden](../../../../../../docs/en/core/contributor/distributed-storage/node-warden.md) for startup/reconfiguration, and the [actor guide](../../../../../../docs/en/core/contributor/actor-system/index.md) for actor lifetime changes.
 

@@ -1,0 +1,11 @@
+@startuml
+Created -[#blue]-> Scheduled: WorkflowTaskScheduled
+Scheduled -[#blue]-> Started: WorkflowTaskStarted
+Scheduled --> TimedOut: WorkflowTaskTimedOut
+Started -[#blue]-> Completed: WorkflowTaskCompleted
+Started -[#blue]-> Failed: WorkflowTaskFailed
+Started -[#blue]-> TimedOut: WorkflowTaskTimedOut
+TimedOut --> [*]
+Completed --> [*]
+Failed --> [*]
+@enduml

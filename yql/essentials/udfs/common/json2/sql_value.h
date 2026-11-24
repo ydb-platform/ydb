@@ -30,7 +30,7 @@ TUnboxedValue TryConvertJson(const IValueBuilder* valueBuilder, const TUnboxedVa
 }
 
 template <>
-TUnboxedValue TryConvertJson<TUtf8>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
+inline TUnboxedValue TryConvertJson<TUtf8>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     Y_UNUSED(valueBuilder);
     if (IsNodeType(source, ENodeType::String)) {
         return ClearUtf8Mark(source);
@@ -39,7 +39,7 @@ TUnboxedValue TryConvertJson<TUtf8>(const IValueBuilder* valueBuilder, const TUn
 }
 
 template <>
-TUnboxedValue TryConvertJson<TUtf8, true>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
+inline TUnboxedValue TryConvertJson<TUtf8, true>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     switch (GetNodeType(source)) {
         case ENodeType::String:
             return ClearUtf8Mark(source);
@@ -61,7 +61,7 @@ TUnboxedValue TryConvertJson<TUtf8, true>(const IValueBuilder* valueBuilder, con
 }
 
 template <>
-TUnboxedValue TryConvertJson<i64>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
+inline TUnboxedValue TryConvertJson<i64>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     Y_UNUSED(valueBuilder);
     if (!source.IsEmbedded()) {
         return {};
@@ -79,7 +79,7 @@ TUnboxedValue TryConvertJson<i64>(const IValueBuilder* valueBuilder, const TUnbo
 }
 
 template <>
-TUnboxedValue TryConvertJson<double>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
+inline TUnboxedValue TryConvertJson<double>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     Y_UNUSED(valueBuilder);
     if (!source.IsEmbedded()) {
         return {};
@@ -97,7 +97,7 @@ TUnboxedValue TryConvertJson<double>(const IValueBuilder* valueBuilder, const TU
 }
 
 template <>
-TUnboxedValue TryConvertJson<bool>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
+inline TUnboxedValue TryConvertJson<bool>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     Y_UNUSED(valueBuilder);
     if (!source.IsEmbedded() || !IsNodeType(source, ENodeType::Bool)) {
         return {};

@@ -823,9 +823,9 @@ def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
     if primary_pile_name is None or primary_pile_name == pile_name:
         raise QueryError('Cannot reconnect a pile without a connected primary pile')
 
-    # A disconnected pile shuts down its gRPC servers. Both requests therefore
-    # enter through the connected primary; quorum_piles selects the witnesses
-    # for each update and does not select the RPC endpoint.
+    # A disconnected pile shuts down its gRPC servers, so the request enters
+    # through the connected primary. The update is committed by the quorum of
+    # every pile taking part in the configuration quorum in the new state.
     primary_endpoints = pile_to_endpoints.get(primary_pile_name)
     if not primary_endpoints:
         raise QueryError(
@@ -834,12 +834,6 @@ def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
         )
     update_pile_states(
         (update,),
-        quorum_piles=(primary_pile_name,),
-        endpoints=primary_endpoints,
-    )
-    update_pile_states(
-        (update,),
-        quorum_piles=(pile_name,),
         endpoints=primary_endpoints,
     )
 
@@ -851,6 +845,8 @@ def create_bsc_request(args):
         request.AllowUnusableDisks = True
     if hasattr(args, 'ignore_degraded_group_check') and args.ignore_degraded_group_check:
         request.IgnoreDegradedGroupsChecks = True
+    if hasattr(args, 'treat_phantoms_only_vdisks_as_working') and args.treat_phantoms_only_vdisks_as_working:
+        request.TreatPhantomsOnlyVDisksAsWorking = True
     if hasattr(args, 'ignore_disintegrated_group_check') and args.ignore_disintegrated_group_check:
         request.IgnoreDisintegratedGroupsChecks = args.ignore_disintegrated_group_check
     if hasattr(args, 'ignore_failure_model_group_check') and args.ignore_failure_model_group_check:
@@ -1044,7 +1040,7 @@ def deserialize_fail_domain(s):
     return res
 
 
-def pdisk_matches_storage_pool(pdisk, sp):
+def pdisk_matches_storage_pool(pdisk, sp, location=None):
     if pdisk.BoxId != sp.BoxId:
         return False
 
@@ -1061,6 +1057,12 @@ def pdisk_matches_storage_pool(pdisk, sp):
                     break
             elif prop.HasField('Kind'):
                 if prop.Kind != pdisk.Kind:
+                    break
+            elif prop.HasField('Location'):
+                if location is None or not all(
+                    location.HasField(field.name) and getattr(location, field.name) == value
+                    for field, value in prop.Location.ListFields()
+                ):
                     break
             else:
                 print('ERROR: unknown property in StoragePool filter', file=sys.stderr)
@@ -1178,12 +1180,15 @@ def build_pdisk_static_slots_map(base_config):
 
 def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
     pdisk_usage_map = {}
+    node_locations = {node.NodeId: node.Location for node in base_config.Node} if storage_pool is not None else {}
 
     group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
 
     pdisk_slot_size_in_units_map = {}
     for pdisk in base_config.PDisk:
-        if storage_pool is not None and not pdisk_matches_storage_pool(pdisk, storage_pool):
+        if storage_pool is not None and not pdisk_matches_storage_pool(
+            pdisk, storage_pool, node_locations.get(pdisk.NodeId)
+        ):
             continue
         pdisk_id = get_pdisk_id(pdisk)
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots
@@ -1486,6 +1491,9 @@ def add_allow_unusable_pdisks_option(p):
 
 def add_ignore_degraded_group_check_option(p):
     p.add_argument('--ignore-degraded-group-check', action='store_true', help='Ignore results of DEGRADED group checks')
+    p.add_argument('--treat-phantoms-only-vdisks-as-working', action='store_true',
+                   help='Treat REPLICATING VDisks with only phantom-like blobs remaining as working ones in group checks; '
+                        'use only when these blobs are known to be phantoms')
 
 
 def add_ignore_disintegrated_group_check_option(p):

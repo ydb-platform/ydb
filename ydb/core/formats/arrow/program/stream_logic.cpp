@@ -22,39 +22,27 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<TExecutionResult> TStreamLogicProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
+    YDB_LOG_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
     return TExecutionResult::Done();
 }
 
-TConclusion<bool> TStreamLogicProcessor::AddMonoValue(
-    const bool monoValue, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const {
-    if (Operation == NKernels::EOperation::And) {
-        if (monoValue) {
-            if (!accResult) {
-                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            }
-            return false;
-        } else {
-            context.MutableResources().Upsert(GetOutputColumnIdOnce(),
-                NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            return true;
-        }
-    } else if (Operation == NKernels::EOperation::Or) {
-        if (!monoValue) {
-            if (!accResult) {
-                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            }
-            return false;
-        } else {
-            context.MutableResources().Upsert(GetOutputColumnIdOnce(),
-                NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            return true;
-        }
+// Returns whether no further inputs can change the result.
+bool TStreamLogicProcessor::HandleMonoValue(const bool monoValue, const bool isAccumulatorInput,
+    const std::shared_ptr<IChunkedArray>& accumulatedResult, const TProcessorContext& context) const {
+    const bool isAbsorbingValue = Operation == NKernels::EOperation::And ? !monoValue : monoValue;
+    if ((!isAbsorbingValue && accumulatedResult) || (isAbsorbingValue && isAccumulatorInput)) {
+        return isAbsorbingValue;
     }
-    Y_FAIL();
-    return false;
+
+    const auto recordsCount = context.GetResources().GetRecordsCountRobustVerified();
+    auto accessor = monoValue ? NAccessor::TSparsedArray::BuildTrueArrayUI8(recordsCount)
+                              : NAccessor::TSparsedArray::BuildFalseArrayUI8(recordsCount);
+    if (accumulatedResult) {
+        context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessor, false);
+    } else {
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
+    }
+    return isAbsorbingValue;
 }
 
 TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const TProcessorContext& context) const {
@@ -70,20 +58,38 @@ TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const 
 
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(!context.GetResources().HasMarker(FinishMarker));
-    const auto& accResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
+    YDB_LOG_VERIFY(!context.GetResources().HasMarker(FinishMarker));
+    const auto& accumulatedResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
+    std::optional<bool> monoResult;
+    if (accumulatedResult) {
+        auto isMonoResult = GetMonoInput(accumulatedResult);
+        if (isMonoResult.IsFail()) {
+            return isMonoResult;
+        }
+        monoResult = isMonoResult.DetachResult();
+    }
 
-    if (auto accInput = context.GetResources().GetAccessorOptional(inputId)) {
-        TConclusion<std::optional<bool>> isMonoInput = GetMonoInput(accInput);
+    if (monoResult && HandleMonoValue(*monoResult, true, accumulatedResult, context)) {
+        return true;
+    }
+
+    if (auto accessorInput = context.GetResources().GetAccessorOptional(inputId)) {
+        TConclusion<std::optional<bool>> isMonoInput = GetMonoInput(accessorInput);
         if (isMonoInput.IsFail()) {
             return isMonoInput;
         }
         if (isMonoInput.GetResult()) {
-            return AddMonoValue(*isMonoInput.GetResult(), accResult, context);
+            return HandleMonoValue(*isMonoInput.GetResult(), false, accumulatedResult, context);
         }
-        if (!accResult) {
-            AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
-            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
+        if (!accumulatedResult) {
+            YDB_LOG_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id(),
+                {"type", accessorInput->GetDataType()->ToString()});
+            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessorInput, false);
+        } else if (monoResult) {
+            YDB_LOG_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id(),
+                {"type", accessorInput->GetDataType()->ToString()});
+            context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessorInput, false);
+            return IsFinishAccessor(accessorInput);
         } else {
             return CombineInput(inputId, context);
         }
@@ -91,8 +97,9 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     } else {
         const auto& scalarInput = context.GetResources().GetConstantScalarVerified(inputId);
         if (!scalarInput->is_valid) {
-            AFL_VERIFY(scalarInput->type->id() == arrow::uint8()->id())("type", scalarInput->type->ToString());
-            if (!accResult) {
+            YDB_LOG_VERIFY(scalarInput->type->id() == arrow::uint8()->id(),
+                {"type", scalarInput->type->ToString()});
+            if (!accumulatedResult) {
                 context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
                     std::make_shared<NAccessor::TTrivialArray>(TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
                         *scalarInput, context.GetResources().GetRecordsCountRobustVerified()))), false);
@@ -106,7 +113,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             return isMonoInput;
         }
 
-        return AddMonoValue(isMonoInput.GetResult(), accResult, context);
+        return HandleMonoValue(isMonoInput.GetResult(), false, accumulatedResult, context);
     }
 }
 
@@ -152,7 +159,7 @@ public:
         }
         auto s = b.Serialize();
         Kernels = NYql::LoadKernels(s, *Registry, Factory);
-        AFL_VERIFY(Kernels.size() == operations.size() * kernelsPerOperation);
+        YDB_LOG_VERIFY(Kernels.size() == operations.size() * kernelsPerOperation);
 
         for (size_t operationIndex = 0; operationIndex < operations.size(); ++operationIndex) {
             const auto& firstKernel = Kernels[operationIndex * kernelsPerOperation];
@@ -175,7 +182,7 @@ TStreamLogicProcessor::TStreamLogicProcessor(
     } else if (Operation == NKernels::EOperation::Or) {
         Function = std::make_shared<TKernelFunction>(Singleton<TSpecFunctionsOperator>()->GetORKernel());
     } else {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 }
 
@@ -187,7 +194,7 @@ NJson::TJsonValue TStreamLogicProcessor::DoDebugJson() const {
 
 bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const {
     const auto arrChecker = [&](const arrow::Array& arr) {
-        AFL_VERIFY(arr.type()->id() == arrow::uint8()->id());
+        YDB_LOG_VERIFY(arr.type()->id() == arrow::uint8()->id());
         const arrow::UInt8Array& ui8Arr = static_cast<const arrow::UInt8Array&>(arr);
         const ui8* values = ui8Arr.raw_values();
         if (Operation == NKernels::EOperation::And) {
@@ -203,12 +210,13 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
                 }
             }
         } else {
-            AFL_VERIFY(false)("op", Operation);
+            YDB_LOG_VERIFY(false,
+                {"op", Operation});
         }
         return true;
     };
     bool result = true;
-    accessor->VisitValues([&](const std::shared_ptr<arrow::Array>& array) {
+    accessor->VisitDistinctValues([&](const std::shared_ptr<arrow::Array>& array) {
         if (!arrChecker(*array)) {
             result = false;
         }
@@ -230,8 +238,9 @@ TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::
 }
 
 TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
-    AFL_VERIFY(scalar);
-    AFL_VERIFY(scalar->type->id() == arrow::uint8()->id())("type", scalar->type->ToString());
+    YDB_LOG_VERIFY(scalar);
+    YDB_LOG_VERIFY(scalar->type->id() == arrow::uint8()->id(),
+        {"type", scalar->type->ToString()});
     return static_cast<const arrow::UInt8Scalar*>(scalar.get())->value != 0;
 }
 

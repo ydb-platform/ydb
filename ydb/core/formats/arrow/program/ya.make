@@ -50,6 +50,7 @@ SRCS(
     projection.cpp
     assign_const.cpp
     assign_internal.cpp
+    pattern_hints.cpp
     custom_registry.cpp
     GLOBAL kernel_logic.cpp
     reserve.cpp

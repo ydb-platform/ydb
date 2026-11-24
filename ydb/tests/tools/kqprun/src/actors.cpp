@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/services/workload_manager/actors/actors.h>
 
 #include <library/cpp/colorizer/colors.h>
@@ -17,7 +18,9 @@ class TRunScriptActorMock: public NActors::TActorBootstrapped<TRunScriptActorMoc
 public:
     TRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback)
         : TargetNode_(request.TargetNode)
+        , WilsonTraceId_(std::move(request.WilsonTraceId))
         , QueryId_(request.QueryId)
+        , QueryLabel_(std::move(request.QueryLabel))
         , Request_(std::move(request.Event))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
@@ -33,8 +36,12 @@ public:
     }
 
     void Bootstrap() {
+        Trace_ = NWilson::TSpan(1, std::move(WilsonTraceId_), "kqprun.query");
+        Trace_.Attribute("query.name", QueryLabel_);
+        Trace_.Attribute("query.index", static_cast<i64>(QueryId_));
         NActors::ActorIdToProto(SelfId(), Request_->Record.MutableRequestActorId());
-        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(Request_));
+        Send(new NActors::IEventHandle(
+            NKikimr::NKqp::MakeKqpProxyID(TargetNode_), SelfId(), Request_.release(), 0, 0, nullptr, Trace_.GetTraceId()));
 
         Become(&TRunScriptActorMock::StateFunc);
     }
@@ -82,6 +89,11 @@ public:
     }
 
     void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            Trace_.EndOk();
+        } else {
+            Trace_.EndError("Query request failed");
+        }
         Promise_.SetValue(TQueryResponse{ .Response = std::move(ev), .ResultSets = std::move(ResultSets_) });
         PassAway();
     }
@@ -99,7 +111,10 @@ public:
 
 private:
     const ui32 TargetNode_ = 0;
+    NWilson::TTraceId WilsonTraceId_;
     const size_t QueryId_ = 0;
+    const TString QueryLabel_;
+    NWilson::TSpan Trace_;
     const NColorizer::TColors CerrColors_ = NColorizer::AutoColors(Cerr);
 
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;

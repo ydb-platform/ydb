@@ -2,7 +2,10 @@ PY23_TEST()
 
 TEST_SRCS(
     test_logging.py
+    test_rewrite.py
     test_tools.py
+    test_rewrite_prebuilt.py
+    rewrite_warning.py
 )
 
 PEERDIR(

@@ -161,6 +161,12 @@ namespace NPage {
         return type == EPage::DataPage || type == EPage::BTreeIndexV2;
     }
 
+    /// A page of a column group index (flat or b-tree), as opposed to its data pages.
+    constexpr bool IsIndexPage(EPage type) noexcept
+    {
+        return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
+    }
+
     struct TPageLocation {
         TPageOffset Offset;
         ui64 Size = 0;
@@ -243,6 +249,7 @@ namespace NPage {
     enum class ECodec : ui8 {
         Plain   = 0,    /* Keep data in page as-is  */
         LZ4     = 1,    /* Use lz4fast compressor   */
+        ZSTD    = 2,    /* Use zstd compressor      */
     };
 
     enum class ECache {

@@ -404,7 +404,7 @@ Specifics:
 * The container elements are passed in arguments. Hence, the number of elements in the resulting container is equal to the number of arguments passed, except when the dictionary keys repeat.
 * `AsTuple` and `AsStruct` can be called without arguments, and also the arguments can have different types.
 * The field names in `AsStruct` are set using `AsStruct(field_value AS field_name)`.
-* Creating a list requires at least one argument if you need to output the element types. To create an empty list with the given type of elements, use the function [ListCreate](list.md#listcreate). You can create an empty list as an `AsList()` call without arguments. In this case, this expression will have the `EmptyList` type.
+* Creating a list requires at least one argument if you need to output the element types. To create an empty list with the given type of elements, use the function [ListCreate](list.md#list-create). You can create an empty list as an `AsList()` call without arguments. In this case, this expression will have the `EmptyList` type.
 * Creating a dictionary requires at least one argument if you need to output the element types. To create an empty dictionary with the given type of elements, use the function [DictCreate](dict.md#dictcreate). You can create an empty dictionary as an `AsDict()` call without arguments, in this case, this expression will have the `EmptyDict` type.
 * Creating a set requires at least one argument if you need to output element types. To create an empty set with the given type of elements, use the function [SetCreate](dict.md#setcreate). You can create an empty set as an `AsSet()` call without arguments, in this case, this expression will have the `EmptySet` type.
 * `AsList` outputs the common type of elements in the list. A type error is raised in the case of incompatible types.
@@ -889,7 +889,7 @@ Evaluate an expression before the start of the main calculation and input its re
 
 EvaluateExpr can be used where the grammar already expects an expression. For example, you can use it to:
 
-* Round the current time to days, weeks, or months and insert it into the query to ensure correct [query caching](../syntax/pragma.md#yt.querycachemode), although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
+* Round the current time to days, weeks, or months and insert it into the query to ensure correct query caching, although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
 * Run a heavy calculation with a small result once per query instead of once per job.
 
 {% if backend_name == "YT" %}
@@ -1245,11 +1245,11 @@ Create a factory for [aggregation functions](aggregation.md) to separately descr
 
 Arguments:
 
-1. A string in double quotes with the name of an aggregate function, for example ["MIN"](aggregation.md#min).
-2. Optional parameters of the aggregate function that are data-independent. For example, the percentile value in [PERCENTILE](aggregation.md#percentile).
+1. A string in double quotes with the name of an aggregate function, for example ["MIN"](aggregation.md#min-max).
+2. Optional parameters of the aggregate function that are data-independent. For example, the percentile value in [PERCENTILE](aggregation.md#percentile-median).
 
 The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](aggregation.md#aggregate-by).
-If the aggregate function is applied to two columns instead of one, as, for example, [MIN_BY](aggregation.md#minby), then in [AGGREGATE_BY](aggregation.md#aggregate-by), the first argument passes a `Tuple` of two values. See more details in the description of the applicable aggregate function.
+If the aggregate function is applied to two columns instead of one, as, for example, [MIN_BY](aggregation.md#max-min-by), then in [AGGREGATE_BY](aggregation.md#aggregate-by), the first argument passes a `Tuple` of two values. See more details in the description of the applicable aggregate function.
 
 ### Examples
 

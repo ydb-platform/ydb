@@ -6,6 +6,7 @@ RECURSE(
     common
     switch
     csv
+    helpers
     validation
     hash    
     minikql

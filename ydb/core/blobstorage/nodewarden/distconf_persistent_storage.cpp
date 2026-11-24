@@ -7,7 +7,7 @@
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::ReadConfig(std::vector<TString> paths, ui64 cookie) {
+    TActorId TDistributedConfigKeeper::ReadConfig(std::vector<TString> paths, ui64 cookie) {
         class TReaderActor : public TActorBootstrapped<TReaderActor> {
             const std::vector<TString> Paths;
             const ui64 Cookie;
@@ -74,6 +74,11 @@ namespace NKikimr::NStorage {
                         break;
                 }
                 --RepliesPending;
+                if (Cookie && RepliesPending) {
+                    Response->Complete = false;
+                    Send(ParentId, Response.release(), 0, Cookie);
+                    Response = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
+                }
                 CheckIfDone();
             }
 
@@ -86,22 +91,25 @@ namespace NKikimr::NStorage {
 
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvNodeWardenReadMetadataResult, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
             )
         };
-        Register(new TReaderActor(std::move(paths), cookie));
+        return Register(new TReaderActor(std::move(paths), cookie));
     }
 
-    void TDistributedConfigKeeper::WriteConfig(THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> records) {
+    void TDistributedConfigKeeper::WriteConfig(TString path, NKikimrBlobStorage::TPDiskMetadataRecord record,
+            ui64 cookie) {
         class TWriterActor : public TActorBootstrapped<TWriterActor> {
-            THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> Records;
-            std::vector<TString> Drives;
-            ui32 RepliesPending = 0;
-            std::unique_ptr<TEvPrivate::TEvStorageConfigStored> Response = std::make_unique<TEvPrivate::TEvStorageConfigStored>();
+            const TString Path;
+            std::unique_ptr<TEvNodeWardenWriteMetadata> Request;
+            const ui64 Cookie;
             TActorId ParentId;
 
         public:
-            TWriterActor(THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> records)
-                : Records(std::move(records))
+            TWriterActor(TString path, NKikimrBlobStorage::TPDiskMetadataRecord record, ui64 cookie)
+                : Path(std::move(path))
+                , Request(std::make_unique<TEvNodeWardenWriteMetadata>(Path, std::move(record)))
+                , Cookie(cookie)
             {}
 
             void Bootstrap(TActorId parentId) {
@@ -109,45 +117,34 @@ namespace NKikimr::NStorage {
 
                 YDB_LOG_DEBUG("TWriterActor bootstrap",
                     {"marker", "NWDC51"},
-                    {"records", Records});
+                    {"path", Path},
+                    {"record", Request->Record});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                for (auto& [path, record] : Records) {
-                    Send(nodeWardenId, new TEvNodeWardenWriteMetadata(path, std::move(record)), 0, Drives.size());
-                    Drives.push_back(path);
-                    ++RepliesPending;
-                }
+                Send(nodeWardenId, Request.release());
 
                 Become(&TThis::StateFunc);
-                CheckIfDone();
             }
 
             void Handle(TEvNodeWardenWriteMetadataResult::TPtr ev) {
-                const size_t index = ev->Cookie;
-                Y_ABORT_UNLESS(index < Drives.size());
-                const TString& path = Drives[index];
                 YDB_LOG_DEBUG("TWriterActor result",
                     {"marker", "NWDC52"},
-                    {"path", path},
+                    {"path", Path},
                     {"outcome", ev->Get()->Outcome},
                     {"guid", ev->Get()->Guid});
-                Response->StatusPerPath.emplace_back(path, ev->Get()->Outcome == NPDisk::EPDiskMetadataOutcome::OK, ev->Get()->Guid);
-                --RepliesPending;
-                CheckIfDone();
-            }
 
-            void CheckIfDone() {
-                if (!RepliesPending) {
-                    Send(ParentId, Response.release());
-                    PassAway();
-                }
+                auto response = std::make_unique<TEvPrivate::TEvStorageConfigStored>();
+                response->StatusPerPath.emplace_back(Path, ev->Get()->Outcome == NPDisk::EPDiskMetadataOutcome::OK,
+                    ev->Get()->Guid);
+                Send(ParentId, response.release(), 0, Cookie);
+                PassAway();
             }
 
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvNodeWardenWriteMetadataResult, Handle);
             )
         };
-        Register(new TWriterActor(std::move(records)));
+        Register(new TWriterActor(std::move(path), std::move(record), cookie));
     }
 
     TString TDistributedConfigKeeper::CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
@@ -172,62 +169,143 @@ namespace NKikimr::NStorage {
         return CalculateFingerprint(config) == config.GetFingerprint();
     }
 
-    void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
+    void TDistributedConfigKeeper::StartPersistWrite(const TString& path) {
+        auto& item = PersistQ.at(path).front();
+        PathsToRetry.erase(path);
+        WriteConfig(path, std::move(item.Metadata), item.Cookie);
+    }
+
+    ui64 TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
         YDB_LOG_DEBUG("PersistConfig",
             {"marker", "NWDC35"},
             {"metadataByPath", MetadataByPath});
 
-        TPersistQueueItem& item = PersistQ.emplace_back();
-        item.Callback = std::move(callback);
-        for (const TString& path : drives) {
+        ui64 cookie = 0;
+        TPersistOperation *operation = nullptr;
+        if (callback) {
+            cookie = NextPersistCookie++;
+            Y_ABORT_UNLESS(cookie);
+            operation = &PersistOperations[cookie];
+            operation->Callback = std::move(callback);
+        }
+
+        const THashSet<TString> paths(drives.begin(), drives.end());
+        for (const TString& path : paths) {
             if (const auto it = MetadataByPath.find(path); it != MetadataByPath.end()) {
-                item.MetadataByPath.insert(*it);
-                PathsToRetry.erase(path);
+                auto& queue = PersistQ[path];
+                if (!cookie && queue.size() > 1 && !queue.back().Cookie) {
+                    // Keep the latest not-started committed save on this side of a proposal barrier.
+                    queue.back().Metadata = it->second;
+                } else {
+                    auto& item = queue.emplace_back();
+                    item.Metadata = it->second;
+                    item.Cookie = cookie;
+                }
+                if (operation) {
+                    ++operation->RepliesPending;
+                }
+                if (queue.size() == 1) {
+                    StartPersistWrite(path);
+                }
             } else {
                 Y_DEBUG_ABORT();
             }
         }
 
-        if (PersistQ.size() == 1) { // this was the first item, we can start writing now
-            WriteConfig(std::move(item.MetadataByPath));
+        if (operation && !operation->RepliesPending) {
+            // Preserve asynchronous completion even when this proposal has no local drives.
+            Send(SelfId(), new TEvPrivate::TEvStorageConfigStored, 0, cookie);
         }
+        return cookie;
+    }
+
+    void TDistributedConfigKeeper::CancelPersistConfig(ui64 cookie) {
+        const auto it = PersistOperations.find(cookie);
+        if (it == PersistOperations.end()) {
+            return;
+        }
+        TPersistCallback callback = std::move(it->second.Callback);
+        PersistOperations.erase(it);
+
+        for (auto& [path, queue] : PersistQ) {
+            // The front may still physically write, so retain it and fence its late result by cookie.
+            const auto firstPending = std::next(queue.begin());
+            queue.erase(std::remove_if(firstPending, queue.end(), [cookie](const auto& item) {
+                return item.Cookie == cookie;
+            }), queue.end());
+
+            // Removing a proposal barrier may expose two pending committed saves; keep the newer one.
+            for (size_t index = 1; index + 1 < queue.size(); ) {
+                if (!queue[index].Cookie && !queue[index + 1].Cookie) {
+                    queue.erase(queue.begin() + index);
+                } else {
+                    ++index;
+                }
+            }
+        }
+
+        TEvPrivate::TEvStorageConfigStored result;
+        result.Complete = true;
+        callback(result);
     }
 
     void TDistributedConfigKeeper::Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev) {
         ui32 numOk = 0;
         ui32 numError = 0;
+        TDuration passed;
         for (const auto& [path, status, guid] : ev->Get()->StatusPerPath) {
             ++(status ? numOk : numError);
-            if (!status) {
-                PathsToRetry.insert(path);
+            const auto it = PersistQ.find(path);
+            Y_ABORT_UNLESS(it != PersistQ.end() && !it->second.empty());
+            auto& queue = it->second;
+            Y_ABORT_UNLESS(queue.front().Cookie == ev->Cookie);
+            passed = Max(passed, TDuration::Seconds(queue.front().Timer.Passed()));
+            queue.pop_front();
+            if (!queue.empty()) {
+                StartPersistWrite(path);
+            } else {
+                PersistQ.erase(it);
+                if (status) {
+                    PathsToRetry.erase(path);
+                } else {
+                    PathsToRetry.insert(path);
+                }
             }
         }
-
-        Y_ABORT_UNLESS(!PersistQ.empty());
-        auto& item = PersistQ.front();
 
         YDB_LOG_DEBUG("TEvStorageConfigStored",
             {"marker", "NWDC36"},
             {"numOk", numOk},
             {"numError", numError},
-            {"passed", TDuration::Seconds(item.Timer.Passed())});
+            {"passed", passed});
 
-        if (item.Callback) {
-            item.Callback(*ev->Get());
+        TPersistCallback callback;
+        if (const auto it = PersistOperations.find(ev->Cookie); it != PersistOperations.end()) {
+            auto& operation = it->second;
+            Y_ABORT_UNLESS(operation.RepliesPending >= ev->Get()->StatusPerPath.size());
+            operation.RepliesPending -= ev->Get()->StatusPerPath.size();
+            ev->Get()->Complete = !operation.RepliesPending;
+            if (ev->Get()->Complete) {
+                callback = std::move(operation.Callback);
+                PersistOperations.erase(it);
+            } else {
+                callback = operation.Callback;
+            }
         }
-        PersistQ.pop_front();
 
-        if (!PersistQ.empty()) {
-            auto& front = PersistQ.front();
-            WriteConfig(std::move(front.MetadataByPath));
-        } else if (!PathsToRetry.empty()) {
-            // no pending writes -- retry failed ones
+        if (!PathsToRetry.empty() && !PersistRetryScheduled) {
+            PersistRetryScheduled = true;
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvRetryPersistConfig,
                 0, SelfId(), {}, nullptr, 0));
+        }
+
+        if (callback) {
+            callback(*ev->Get());
         }
     }
 
     void TDistributedConfigKeeper::HandleRetryPersistConfig() {
+        PersistRetryScheduled = false;
         PersistConfig({}, {PathsToRetry.begin(), PathsToRetry.end()});
     }
 
@@ -239,15 +317,23 @@ namespace NKikimr::NStorage {
             {"cookie", ev->Cookie},
             {"numItemsRead", msg.MetadataPerPath.size()});
         if (ev->Cookie) {
-            if (const auto it = ScatterTasks.find(ev->Cookie); it != ScatterTasks.end()) {
+            if (const auto it = ScatterTasks.find(ev->Cookie); it != ScatterTasks.end()
+                    && !it->second.LocalContributionExpired) {
                 TScatterTask& task = it->second;
+                if (msg.Complete) {
+                    task.ConfigReaderActor = {};
+                }
 
                 THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> committed;
                 THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposed;
 
                 auto *res = task.Response.MutableCollectConfigs();
-                Y_ABORT_UNLESS(!res->CommittedConfigsSize());
-                Y_ABORT_UNLESS(!res->ProposedConfigsSize());
+                for (auto& item : *res->MutableCommittedConfigs()) {
+                    committed.emplace(item.GetConfig(), &item);
+                }
+                for (auto& item : *res->MutableProposedConfigs()) {
+                    proposed.emplace(item.GetConfig(), &item);
+                }
 
                 for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                     auto addConfig = [&, path = path, guid = guid](const auto& config, auto func, auto& set) {
@@ -287,13 +373,21 @@ namespace NKikimr::NStorage {
                     disk->SetPath(path);
                 }
 
-                FinishAsyncOperation(it->first);
+                if (msg.Complete) {
+                    FinishAsyncOperation(it->first);
+                }
             }
         } else {
             std::vector<TString> drivesToRead = PrevDrivesToRead;
             auto processDrive = [&](const auto& /*node*/, const auto& drive) {
                 drivesToRead.push_back(drive.GetPath());
             };
+
+            // An empty record means a successful read of an empty disk. Keep it
+            // distinct from a failed read, whose existing metadata is still unknown.
+            for (const auto& [path, guid] : msg.NoMetadata) {
+                MetadataByPath.try_emplace(path);
+            }
 
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                 MetadataByPath[path] = m;
@@ -343,7 +437,10 @@ namespace NKikimr::NStorage {
                     const auto [begin, end] = std::ranges::remove_if(drivesToWrite, [&](const TString& path) {
                         const auto it = MetadataByPath.find(path);
                         if (it == MetadataByPath.end()) {
-                            return false; // this drive did not contain any metadata at all, we have to write it
+                            // Do not overwrite unread metadata using a local commit:
+                            // this drive may contain a newer generation. Let bootstrap
+                            // finish so cluster quorum recovery can resolve the config.
+                            return true;
                         }
                         const NKikimrBlobStorage::TPDiskMetadataRecord& m = it->second;
                         if (!m.HasCommittedStorageConfig()) {

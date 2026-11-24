@@ -136,6 +136,12 @@ namespace NDiscovery {
                 case NKikimrBridge::TClusterState::SUSPENDED:
                     pileInfo->set_state(Ydb::Bridge::PileState::SUSPENDED);
                     break;
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    pileInfo->set_state(Ydb::Bridge::PileState::HOT_STANDBY);
+                    break;
+                case NKikimrBridge::TClusterState::INACTIVE:
+                    pileInfo->set_state(Ydb::Bridge::PileState::INACTIVE);
+                    break;
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT("Unknown pile state");
@@ -204,6 +210,19 @@ namespace NDiscovery {
             if (!CheckEndpointId(endpointId, entry)) {
                 continue;
             }
+            if (const auto implicitPileId = NBridge::GetImplicitPileId(bridgeInfo.get());
+                    implicitPileId && entry.GetBridgePileName().empty()) {
+                // single-pile cluster (converted from non-bridged one) may contain nodes without pile name
+                entry.SetBridgePileName(bridgeInfo->GetPile(implicitPileId)->Name);
+            }
+            if (bridgeInfo) {
+                const auto *pile = bridgeInfo->ResolvePile(entry.GetBridgePileName());
+                if (pile && !NBridge::PileStateTraits(pile->State).RequiresConfigQuorum) {
+                    // Match TGRpcServersManager: these piles don't accept client requests, even if their board
+                    // publishers remain connected (as in HOT_STANDBY).
+                    continue;
+                }
+            }
             if (entry.GetSsl()) {
                 AddEndpoint(cachedMessageSsl, statesSsl, entry);
             } else {
@@ -222,6 +241,9 @@ namespace NDiscovery {
 
         if (bridgeInfo) {
             for (const auto& pile : bridgeInfo->Piles) {
+                if (pile.State == NKikimrBridge::TClusterState::INACTIVE) {
+                    continue; // the pile is not part of the cluster, it has no endpoints for clients
+                }
                 AddPileState(cachedMessage, pile);
                 AddPileState(cachedMessageSsl, pile);
             }
@@ -461,6 +483,10 @@ namespace NDiscoveryPrivate {
                 }
             }
 
+            if ((*cachedData)->BridgeInfo != BridgeInfo) {
+                // A pile can stop serving requests without changing its endpoint-board entries.
+                (*cachedData)->UpdateCache(NameserviceResponse, BridgeInfo, EndpointId.GetOrElse({}));
+            }
             Send(ev->Sender, (*cachedData)->ToEvent(msg->ReturnSerializedMessage), 0, ev->Cookie);
         }
 

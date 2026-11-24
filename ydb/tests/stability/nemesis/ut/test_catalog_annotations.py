@@ -84,6 +84,7 @@ class TestBoundarySchedulerCompatibility:
             custom = spec.get("planner_cls") is not None or spec.get("planner_factory") is not None
             derived_safe = (
                 target_kind_for(name) is TargetKind.DATACENTER
+                or target_kind_for(name) is TargetKind.PILE
                 or recovery_mode_for(name) == "extract"
             )
             if custom and not derived_safe and "boundary_safe" not in spec:

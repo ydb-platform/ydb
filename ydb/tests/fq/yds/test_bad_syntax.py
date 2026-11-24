@@ -1,94 +1,96 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
-import os
 import pytest
-import time
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+from ydb.tests.library.common.wait_for import wait_for
+
+import ydb as ydb_sdk
 
 
 class TestBadSyntax(TestYdsBase):
-    @yq_v1
     @pytest.mark.parametrize(
-        "query_type",
-        [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
-        ids=["analytics", "streaming"],
+        ('after_modify', 'with_read_rules'),
+        [(False, False), (True, False), (True, True)],
+        ids=['create', 'modify', 'modify_with_created_read_rules'],
     )
-    @pytest.mark.parametrize("after_modify", [True, False], ids=["modify", "create"])
-    @pytest.mark.parametrize(
-        "with_read_rules", [True, False], ids=["with_created_read_rules", "without_created_read_rules"]
-    )
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_bad_syntax(self, kikimr, client, query_type, after_modify, with_read_rules):
-        if with_read_rules and not after_modify:
-            return
+    def test_bad_syntax(self, ydb_topics, after_modify, with_read_rules):
+        io = ydb_topics('bad_syntax')
+        client = io.kikimr.ydb_client
+        query = io.kikimr.get_database_name() + '/' + io.name + '_query'
+        io.queries.append(query)
 
-        correct_sql = "SELECT 42;"
-        incorrect_sql = "blablabla"
-        if with_read_rules:
-            self.init_topics("bad_syntax_{}".format(query_type))
-            connection_name = "yds_{}".format(query_type)
-            sql_with_rr = "INSERT INTO {connection_name}.`{output_topic}` SELECT * FROM {connection_name}.`{input_topic}` LIMIT 1;".format(
-                connection_name=connection_name, output_topic=self.output_topic, input_topic=self.input_topic
-            )
+        def describe():
+            return client.query(f"""
+                SELECT Text, Status FROM `.sys/streaming_queries` WHERE Path = '{query}';
+            """)[0].rows
 
         if after_modify:
+            consumer_pragma = ''
             if with_read_rules:
-                client.create_yds_connection(name=connection_name, database_id="FakeDatabaseId")
-                create_response = client.create_query("q", sql_with_rr, type=query_type)
+                consumer = io.consumer_name + '_input'
+                io.kikimr.external_ydb_client.query(f'ALTER TOPIC `{io.input_topic}` ADD CONSUMER `{consumer}`;')
+                consumer_pragma = f'PRAGMA pq.Consumer = "{consumer}";'
+
+            # Streaming queries need a topic source. RUN=FALSE covers ALTER
+            # before a reader exists; LIMIT 1 covers ALTER after successful execution.
+            client.query(f"""
+                CREATE STREAMING QUERY `{query}` WITH (
+                    RUN = {with_read_rules}, CHECKPOINT_INTERVAL = 'PT1S'
+                ) AS DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = 'FALSE';
+                    {consumer_pragma}
+                    INSERT INTO {io.output} SELECT Data FROM {io.input} LIMIT 1;
+                END DO;
+            """)
+            if with_read_rules:
+                io.checkpoint(query)
+                io.write(['A'])
+                assert io.read(1) == ['A']
+                assert wait_for(
+                    lambda: io.state(query)['Status'] == 'COMPLETED',
+                    timeout_seconds=120,
+                    step_seconds=0.5,
+                ), io.state(query)
             else:
-                create_response = client.create_query("q", correct_sql, type=query_type)
+                assert io.state(query)['Status'] == 'CREATED'
+            before = describe()[0]
+            operation = f'ALTER STREAMING QUERY `{query}` SET (FORCE = TRUE)'
         else:
-            create_response = client.create_query("q", incorrect_sql, type=query_type)
+            operation = f'CREATE STREAMING QUERY `{query}`'
 
-        query_id = create_response.result.query_id
-        assert not create_response.issues, str(create_response.issues)
-        logging.debug(str(create_response.result))
+        with pytest.raises(ydb_sdk.issues.GenericError) as error:
+            client.query(f'{operation} AS DO BEGIN blablabla; END DO;')
+        issues = str(error.value)
+        assert 'blablabla' in issues, issues
+        assert 'internal error' not in issues.lower(), issues
+        assert any(
+            message in issues.lower()
+            for message in (
+                'unexpected',
+                'extraneous input',
+                'mismatched input',
+                'no viable alternative',
+                'failed to parse',
+            )
+        ), issues
 
+        # DDL syntax errors must neither create a query nor replace an existing definition.
+        after = describe()
         if after_modify:
-            if with_read_rules:
-                client.wait_query(query_id, statuses=[fq.QueryMeta.RUNNING])
-                if query_type == fq.QueryContent.QueryType.STREAMING:
-                    kikimr.compute_plane.wait_zero_checkpoint(query_id)
-                else:
-                    time.sleep(3)  # TODO: remove it after streaming disposition will be supported
-                self.write_stream(["A"])
-            client.wait_query(query_id, statuses=[fq.QueryMeta.COMPLETED])
-            client.modify_query(query_id, "q", incorrect_sql, type=query_type)
-            client.wait_query(query_id, statuses=[fq.QueryMeta.FAILED])
+            assert len(after) == 1, after
+            assert after[0]['Text'] == before['Text'], after
+            assert after[0]['Status'] == before['Status'], after
         else:
-            client.wait_query(query_id, statuses=[fq.QueryMeta.FAILED])
+            assert not after, after
 
-        describe_result = client.describe_query(query_id).result
-        logging.debug("Describe result: {}".format(describe_result))
-        describe_string = "{}".format(describe_result)
-        assert "Internal Error" not in describe_string
-        assert "Failed to parse query" in describe_string
+    def test_require_as(self, ydb_cluster):
+        with pytest.raises(ydb_sdk.issues.GenericError) as error:
+            ydb_cluster.ydb_client.query('PRAGMA DisableAnsiOptionalAs; SELECT 42 a;')
+        assert 'Expecting mandatory AS here' in str(error.value)
 
-    @yq_v1
-    def test_require_as(self, client):
-        bad_sql = "SELECT 42 a"
-        query_id = client.create_query("bad", bad_sql).result.query_id
-
-        client.wait_query(query_id, statuses=[fq.QueryMeta.FAILED])
-
-        describe_result = client.describe_query(query_id).result
-        logging.debug("Describe result: {}".format(describe_result))
-        describe_string = "{}".format(describe_result)
-        assert "Expecting mandatory AS here" in describe_string
-
-    @yq_v1
-    def test_type_as_column(self, client):
-        bad_sql = "select max(DateTime) from AS_TABLE([<|x:1|>]);"
-        query_id = client.create_query("bad", bad_sql).result.query_id
-
-        client.wait_query(query_id, statuses=[fq.QueryMeta.FAILED])
-
-        describe_result = client.describe_query(query_id).result
-        logging.debug("Describe result: {}".format(describe_result))
-        describe_string = "{}".format(describe_result)
-        assert "Member not found: DateTime" in describe_string
+    def test_type_as_column(self, ydb_cluster):
+        with pytest.raises(ydb_sdk.issues.GenericError) as error:
+            ydb_cluster.ydb_client.query('select max(DateTime) from AS_TABLE([<|x:1|>]);')
+        assert 'Member not found: DateTime' in str(error.value)

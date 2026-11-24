@@ -146,6 +146,44 @@ void SetRunningSysTablet(ui32 nodeId, bool running) {
     }
 }
 
+TString SendWalleHttpRequest(TCmsTestEnv &env, HTTP_METHOD method, const TString &uri, const TString &body = {}) {
+    TFakeMonHttpRequest httpRequest(method, uri, {}, body);
+    const auto edge = env.AllocateEdgeActor();
+    NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+        TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+    env.Register(CreateWalleApiHandler(event));
+    TAutoPtr<IEventHandle> handle;
+    const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+    UNIT_ASSERT(response);
+    return response->Answer;
+}
+
+void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+    UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
+    const auto bodyOffset = response.find("\r\n\r\n");
+    UNIT_ASSERT(bodyOffset != TString::npos);
+    NJson::TJsonValue json;
+    UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
+    UNIT_ASSERT_VALUES_EQUAL_C(json["status"].GetString(), status, response);
+    UNIT_ASSERT_VALUES_EQUAL(json["hosts"].GetArray().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(json["hosts"][0].GetString(), ToString(nodeId));
+}
+
+TString MakeWalleDrainDataJson(ui32 nodeId, const TString &drainData = "true",
+    const TString &action = "redeploy", const TString &taskId = "eviction") {
+    return Sprintf(R"({"id":"%s","type":"automated","issuer":"UT","action":"%s","hosts":["%u"],"drain_data":%s})",
+        taskId.c_str(), action.c_str(), nodeId, drainData.c_str());
+}
+
+void SetVDisksMoved(TCmsTestEnv &env, const TTestEnvOpts &opts, ui32 nodeId, bool moved) {
+    auto &node = TFakeNodeWhiteboardService::Info[nodeId];
+    node.VDisksMoved = moved;
+    if (moved) {
+        node.VDiskStateInfo.clear();
+    }
+    env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCmsTest) {
@@ -419,12 +457,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         const auto disks = env.RequestDDiskDiskList();
         UNIT_ASSERT(disks.DisksSize() > 0);
         for (const auto& disk : disks.GetDisks()) {
-            // Pool and links must not depend on a live whiteboard space sample.
+            // Pool and actor identity are available without a live whiteboard space sample.
             UNIT_ASSERT(!disk.HasDDiskOccupancy());
             UNIT_ASSERT_VALUES_EQUAL(disk.GetStoragePoolName(), "pool-42");
             const auto& id = disk.GetDiskId();
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetDDiskPath(), Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
-                id.GetPDiskId(), id.GetDDiskSlotId()));
+            UNIT_ASSERT(!disk.HasDDiskPath());
             UNIT_ASSERT_VALUES_EQUAL(disk.GetPersistentBufferId(), MakeBlobStoragePersistentBufferId(
                 id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId()).ToString());
         }
@@ -520,9 +557,18 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                     TFakeNodeWhiteboardService::Info[env.GetNodeId(i)]
                         .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(i))).SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
                 }
+                auto addSample = [&](ui32 nodeId) -> TDDiskStateInfo& {
+                    auto& sample = TFakeNodeWhiteboardService::Info.at(nodeId).DDiskStateInfo.emplace_back();
+                    sample.SetPDiskId(pdiskIds.at(nodeId));
+                    sample.SetDDiskSlotId(1);
+                    return sample;
+                };
+                addSample(env.GetNodeId(1)).SetDDiskPath("legacy-viewer-path");
+                addSample(env.GetNodeId(2)).SetDDiskStatus(TDDiskStateInfo::Ready);
             }
             // Exercise the HTTP parameter mapping through the actual proxy and CMS.
-            auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds) {
+            auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
+                    bool checkProjection = false) {
                 TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET,
                     "/api/json/ddisk/tablets?" + params, {}, "");
                 const auto edge = env.AllocateEdgeActor();
@@ -543,6 +589,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 for (ui64 tabletId : expectedIds) {
                     UNIT_ASSERT_VALUES_EQUAL(tablets[i++]["TabletId"].GetUInteger(), tabletId);
                 }
+                if (checkProjection) {
+                    const auto& fields = json["FieldsAvailable"].GetArray();
+                    UNIT_ASSERT_VALUES_EQUAL(fields.size(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(fields[0].GetString(), "TabletId");
+                    UNIT_ASSERT_VALUES_EQUAL(fields[1].GetString(), "Degrade");
+                    UNIT_ASSERT(tablets[0].Has("Degrade"));
+                    UNIT_ASSERT(!tablets[0].Has("GroupsCount"));
+                }
             };
             checkHttpOrder("sort_by=degrade&sort_desc=0", {2003, 2001, 2002});
             checkHttpOrder("sort_by=degrade&sort_desc=1", {2002, 2001, 2003});
@@ -550,6 +604,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             checkHttpOrder("group_by_degrade=1&sort_desc=1", {2002, 2001, 2003});
             checkHttpOrder("group_by_degrade=0", {2001, 2002, 2003});
             checkHttpOrder("group_by_degrade=1&offset=1&limit=1&only_problems=1", {2001});
+            checkHttpOrder("fields_required=Degrade&limit=1&timeout=30000", {2001}, true);
 
             // Counts must also be populated when parsing is deferred until after paging.
             for (auto sortBy : {NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID,
@@ -573,6 +628,58 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                     UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskCount(), swapRoles ? secondary : primary);
                     UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferCount(), swapRoles ? primary : secondary);
                 }
+            }
+
+            {
+                NKikimrCms::TDDiskTabletListRequest summary;
+                summary.SetGroupBy(NKikimrCms::DDISK_TABLET_GROUP_BY_DEGRADE);
+                summary.SetGroupsOnly(true);
+                summary.SetOnlyProblems(true);
+                const auto response = env.RequestDDiskTabletList(summary);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetUnfilteredCount(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTotalCount(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(response.GroupsSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(0).GetName(), "2");
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(1).GetName(), "1");
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(0).GetCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetGroups(1).GetCount(), 1);
+
+                const auto detail = env.RequestDDiskInfo(2002, true);
+                UNIT_ASSERT_VALUES_EQUAL(detail.GetStatus(), NKikimrProto::OK);
+                const auto& group = detail.GetGroups(0);
+                UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), swapRoles ? 2 : 3);
+                UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), swapRoles ? 2 : 1);
+                const auto& unallocated = group.GetDDiskId(group.DDiskIdSize() - 1);
+                UNIT_ASSERT_VALUES_EQUAL(unallocated.GetNodeId(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(unallocated.GetPDiskId(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 4);
+                THashMap<ui32, const TDDiskStateInfo*> slots;
+                for (const auto& slot : detail.GetSlots()) {
+                    UNIT_ASSERT(!slot.HasDDiskPath());
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetPDiskId(), pdiskIds.at(slot.GetNodeId()));
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskSlotId(), 1);
+                    UNIT_ASSERT(!slot.GetPersistentBufferId().empty());
+                    UNIT_ASSERT(slots.emplace(slot.GetNodeId(), &slot).second);
+                }
+                for (ui32 i : {0, 1}) {
+                    const auto& slot = *slots.at(env.GetNodeId(i));
+                    UNIT_ASSERT(!slot.GetHasWhiteboardData());
+                    UNIT_ASSERT(slot.GetDDiskStatus() == TDDiskStateInfo::Broken);
+                    UNIT_ASSERT(slot.GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetDDiskStatusReason(), "DeviceIoError");
+                    UNIT_ASSERT_VALUES_EQUAL(slot.GetPersistentBufferStatusReason(), "DeviceIoError");
+                }
+                const auto& ready = *slots.at(env.GetNodeId(2));
+                UNIT_ASSERT(ready.HasDDiskStatus());
+                UNIT_ASSERT(ready.GetDDiskStatus() == TDDiskStateInfo::Ready);
+                UNIT_ASSERT(!ready.HasPersistentBufferStatus());
+                const auto& unknown = *slots.at(env.GetNodeId(3));
+                UNIT_ASSERT(!unknown.HasDDiskStatus());
+                UNIT_ASSERT(!unknown.HasPersistentBufferStatus());
+                const auto legacy = env.RequestDDiskInfo(2002);
+                UNIT_ASSERT_VALUES_EQUAL(legacy.SlotsSize(), 0);
             }
 
             NKikimrCms::TDDiskTabletListRequest request;
@@ -988,6 +1095,107 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
+    Y_UNIT_TEST(DDiskConfiguredInventoryAndFilters)
+    {
+        TCmsTestEnv env(8);
+        NKikimrCms::TDDiskDiskListRequest request;
+        request.SetInventory(true);
+        request.SetLimit(0);
+        request.SetIncludeTabletIds(false);
+        const auto oldController = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(oldController.GetStatus().GetCode(), NKikimrCms::TStatus::ERROR_TEMP);
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& config = *TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+            config.SetHasDDiskPools(false);
+        }
+        const auto ordinary = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(ordinary.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ordinary.GetTotalCount(), 0);
+
+        const auto first = env.PDiskId(0, 0);
+        const auto second = env.PDiskId(1, 0);
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& config = *TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+            config.SetHasDDiskPools(true);
+            auto addSlot = [&](bool ddisk, const TPDiskID& pdisk, ui32 slotId) {
+                auto* group = config.AddGroup();
+                group->SetIsProxyGroup(true); // storage identity only, independent of mock VDisks
+                group->SetDDisk(ddisk);
+                group->SetStoragePoolName("typed-inventory");
+                auto* slot = group->AddVSlotId();
+                slot->SetNodeId(pdisk.NodeId);
+                slot->SetPDiskId(pdisk.DiskId);
+                slot->SetVSlotId(slotId);
+            };
+            addSlot(true, first, 1000);
+            addSlot(true, second, 1001);
+            addSlot(false, first, 1002);
+            auto& info = TFakeNodeWhiteboardService::Info.at(first.NodeId);
+            info.PDiskStateInfo.at(first.DiskId).SetState(NKikimrBlobStorage::TPDiskState::Normal);
+            auto& sample = info.DDiskStateInfo.emplace_back();
+            sample.SetPDiskId(first.DiskId);
+            sample.SetDDiskSlotId(1000);
+            sample.SetDDiskStatus(NKikimrWhiteboard::TDDiskStateInfo::Ready);
+            sample.SetPersistentBufferStatus(NKikimrWhiteboard::TDDiskStateInfo::Broken);
+            sample.SetPersistentBufferStatusReason("buffer failure");
+            sample.SetAllocatedSize(100);
+            sample.SetAvailableSize(200);
+            sample.SetTotalSize(300);
+            TFakeNodeWhiteboardService::Info.at(second.NodeId).PDiskStateInfo.at(second.DiskId)
+                .SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
+        }
+        const auto inventory = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetUnfilteredCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.DisksSize(), 2);
+        const auto& healthyPDisk = inventory.GetDisks(0);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetDiskId().GetDDiskSlotId(), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetStoragePoolName(), "typed-inventory");
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetDDiskTabletCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetPersistentBufferTabletCount(), 0);
+        UNIT_ASSERT(healthyPDisk.GetAvailable());
+        UNIT_ASSERT(healthyPDisk.GetDDiskStatus() == NKikimrWhiteboard::TDDiskStateInfo::Ready);
+        UNIT_ASSERT(healthyPDisk.GetPersistentBufferStatus() == NKikimrWhiteboard::TDDiskStateInfo::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetPersistentBufferStatusReason(), "buffer failure");
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetTotalSize(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetAvailableSize(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(healthyPDisk.GetAllocatedSize(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetDisks(1).GetDDiskStatusReason(), "DeviceIoError");
+        UNIT_ASSERT_VALUES_EQUAL(inventory.GetDisks(1).GetPersistentBufferStatusReason(), "DeviceIoError");
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList().GetTotalCount(), 0);
+
+        request.SetGroupBy(NKikimrCms::DDISK_DISK_GROUP_BY_STATE);
+        request.SetGroupsOnly(true);
+        request.SetOnlyProblems(true);
+        request.SetOffset(1);
+        request.SetLimit(1);
+        const auto grouped = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetTotalCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(0).GetName(), "DeviceIoError");
+        UNIT_ASSERT_VALUES_EQUAL(grouped.GetGroups(1).GetName(), "Normal");
+        UNIT_ASSERT_VALUES_EQUAL(grouped.DisksSize(), 0);
+
+        request.SetGroupsOnly(false);
+        request.SetOffset(0);
+        request.SetFilterGroup("Normal");
+        const auto expanded = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(expanded.GetUnfilteredCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(expanded.GetTotalCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(expanded.GetDisks(0).GetDiskId().GetNodeId(), first.NodeId);
+
+        request.ClearFilterGroup();
+        request.SetNodeId(first.NodeId);
+        request.SetPDiskId(second.DiskId);
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(request).GetTotalCount(), 0);
+        request.SetPDiskId(first.DiskId);
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(request).GetTotalCount(), 1);
+        request.SetTabletId(1); // inventory narrowed to an unknown exact tablet
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(request).GetTotalCount(), 0);
+    }
+
     Y_UNIT_TEST(DDiskDiskListAggregationFilterSortAndPage)
     {
         TCmsTestEnv env(8);
@@ -1283,10 +1491,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8);
 
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+        auto allowed = env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+
+        auto denied = env.CheckPermissionRequest("other-user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(),
+            TStringBuilder() << "Cannot lock node '" << env.GetNodeId(0)
+                << "': node state: 'Locked' (permission " << allowed.GetPermissions(0).GetId() << " owned by user)");
     }
 
     Y_UNIT_TEST(RequestRestartServicesWrongHost)
@@ -2285,6 +2499,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         config.MutableClusterLimits()->SetDisabledNodesLimit(2);
         config.MutableClusterLimits()->SetDisabledNodesRatioLimit(20);
         config.SetInfoCollectionTimeout(TDuration::Minutes(1).GetValue());
+        config.MutableSentinelConfig()->SetEnable(false);
         env.SetCmsConfig(config);
 
         auto res = env.GetCmsConfig();
@@ -2295,6 +2510,39 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesLimit(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesRatioLimit(), 20);
         UNIT_ASSERT_VALUES_EQUAL(res.GetInfoCollectionTimeout(), TDuration::Minutes(1).GetValue());
+
+        auto restartAndCheckConfig = [&] {
+            TActorId cms;
+            THashSet<TActorId> ackSenders;
+            auto activeObserver = env.AddObserver<TEvTablet::TEvTabletActive>([&](auto& ev) {
+                cms = ev->Sender;
+            });
+            auto ackObserver = env.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>([&](auto& ev) {
+                ackSenders.insert(ev->Sender);
+            });
+            env.RestartCms();
+            // TabletActive precedes replay of the initial configuration.
+            env.WaitFor("CMS configuration replay", [&] { return cms && ackSenders.contains(cms); }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(env.GetCmsConfig().SerializeAsString(), res.SerializeAsString());
+        };
+        restartAndCheckConfig();
+
+        config.SetDefaultRetryTime(TDuration::Minutes(12).GetValue());
+        config.MutableTenantLimits()->SetDisabledNodesLimit(3);
+        config.MutableTenantLimits()->SetDisabledNodesRatioLimit(30);
+        config.MutableClusterLimits()->SetDisabledNodesLimit(4);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(40);
+        config.MutableSentinelConfig()->SetDryRun(true);
+        env.SetCmsConfig(config);
+        res = env.GetCmsConfig();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetDefaultRetryTime(), TDuration::Minutes(12).GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(res.GetTenantLimits().GetDisabledNodesLimit(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetTenantLimits().GetDisabledNodesRatioLimit(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesLimit(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesRatioLimit(), 40);
+        UNIT_ASSERT(res.GetSentinelConfig().GetDryRun());
+
+        restartAndCheckConfig();
     }
 
     Y_UNIT_TEST(RestartNodeInDownState)
@@ -2517,6 +2765,163 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageTwoReadWriteRingGroups)
+    {
+        TTestEnvOpts opts(5, 0);
+        opts.NRings = 3;
+        opts.RingSize = 1;
+        opts.NToSelect = 3;
+        TCmsTestEnv env(opts);
+
+        constexpr ui32 sharedNodeIndex = 2;
+        NKikimrConfig::TStateStorageConfig config;
+        config.SetSSId(1);
+        for (ui32 firstNodeIndex : {0u, sharedNodeIndex}) {
+            auto* group = config.AddRingGroups();
+            group->SetNToSelect(3);
+            for (ui32 i = 0; i < 3; ++i) {
+                group->AddNode(env.GetNodeId(firstNodeIndex + i));
+            }
+        }
+        auto info = BuildStateStorageInfo(config);
+        auto observer = env.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto& ev) {
+            ev->Get()->Info = info;
+        });
+
+        auto checkRestart = [&](ui32 nodeIndex, TStatus::ECode expectedStatus) {
+            return env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, expectedStatus,
+                                              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeIndex), 60000000, "storage"));
+        };
+        auto checkDenied = [&](ui32 nodeIndex, ui32 ringGroupId) {
+            const auto response = checkRestart(nodeIndex, TStatus::DISALLOW_TEMP);
+            UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), "Too many unavailable state storage rings");
+            UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), TStringBuilder() << ". Ring group: " << ringGroupId
+                                        << ". Requested ring: " << nodeIndex - 2 * ringGroupId
+                                        << " (nodes: [" << env.GetNodeId(nodeIndex) << "])");
+        };
+
+        const auto firstPermission = checkRestart(0, TStatus::ALLOW);
+        checkDenied(sharedNodeIndex, 0);
+        env.CheckDonePermission("user", firstPermission.GetPermissions(0).GetId());
+
+        checkRestart(3, TStatus::ALLOW);
+        checkDenied(sharedNodeIndex, 1);
+        checkDenied(4, 1);
+
+        config.MutableRingGroups(1)->SetWriteOnly(true);
+        info = BuildStateStorageInfo(config);
+        checkRestart(sharedNodeIndex, TStatus::ALLOW);
+    }
+
+    Y_UNIT_TEST(StateStorageUnavailableRingsDiagnostics)
+    {
+        TTestEnvOpts opts(10, 0);
+        opts.NRings = 5;
+        opts.RingSize = 2;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithEnableCmsSmartAvailabilityMode());
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.UpdateNodeStartTime(2, env.GetTimeProvider()->Now() + TDuration::Minutes(1));
+        env.AdvanceCurrentTime(TDuration::Seconds(90));
+        env.RestartCms();
+
+        auto expectedReason = [&](EAvailabilityMode mode, ui32 requestedRing) -> TString {
+            TStringBuilder reason;
+            reason << "Too many unavailable state storage rings. Restarting rings: 1"
+                   << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 1";
+            if (mode == MODE_KEEP_AVAILABLE) {
+                reason << ". Disabled rings: 0";
+            }
+            reason << ". Maximum allowed number of unavailable rings for this mode: "
+                   << (mode == MODE_MAX_AVAILABILITY ? 1 : 2)
+                   << ". Ring group: 0. Requested ring: " << requestedRing
+                   << " (nodes: [" << env.GetNodeId(2 * requestedRing) << ", " << env.GetNodeId(2 * requestedRing + 1)
+                   << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0) << ", " << env.GetNodeId(1)
+                   << "], state: Restart), 1 (nodes: [" << env.GetNodeId(2) << ", " << env.GetNodeId(3)
+                   << "], state: Locked)]";
+            return reason;
+        };
+
+        for (auto mode : {MODE_MAX_AVAILABILITY, MODE_KEEP_AVAILABLE, MODE_SMART_AVAILABILITY}) {
+            const auto denied = env.CheckPermissionRequest("user", false, true, false, true, mode, TStatus::DISALLOW_TEMP,
+                                                           MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+            UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expectedReason(mode, 2));
+        }
+
+        // An unavailable requested ring remains in the diagnostic with its actual state.
+        for (ui32 ringId : {0u, 1u}) {
+            const ui32 nodeIndex = ringId == 0 ? 0 : 3;
+            const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                           MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeIndex), 60000000, "storage"));
+            UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expectedReason(MODE_MAX_AVAILABILITY, ringId));
+        }
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        const auto denied = env.CheckPermissionRequest("user", false, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        const auto scheduled = env.CheckGetRequest("user", denied.GetRequestId());
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.RequestsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).ActionsSize(), 1);
+        const auto& issue = scheduled.GetRequests(0).GetActions(0).GetIssue();
+        UNIT_ASSERT_VALUES_EQUAL(issue.GetType(), TAction::TIssue::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
+        UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), expectedReason(MODE_KEEP_AVAILABLE, 2));
+        UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), denied.GetStatus().GetReason());
+    }
+
+    Y_UNIT_TEST(StateStorageSameRequestRingDiagnostics)
+    {
+        TTestEnvOpts opts(5, 0);
+        opts.NRings = 5;
+        opts.RingSize = 1;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithEnableCmsSmartAvailabilityMode());
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
+
+        const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        const TString expected = TStringBuilder() << "Too many unavailable state storage rings. Restarting rings: 1"
+            << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 0"
+            << ". Maximum allowed number of unavailable rings for this mode: 1"
+            << ". Ring group: 0. Requested ring: 1 (nodes: [" << env.GetNodeId(1)
+            << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0)
+            << "], state: Restart by this request)]";
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expected);
+    }
+
+    Y_UNIT_TEST(StateStorageDisabledRingsDiagnostics)
+    {
+        TTestEnvOpts opts(10, 0);
+        opts.NRings = 5;
+        opts.RingSize = 2;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts);
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        info->RingGroups = env.GetStateStorageInfo()->RingGroups;
+        auto& disabledRing = info->RingGroups[0].Rings[0];
+        disabledRing.IsDisabled = true;
+        std::swap(disabledRing.Replicas[0], disabledRing.Replicas[1]);
+        auto observer = env.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto& ev) {
+            ev->Get()->Info = info;
+        });
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+        env.RestartCms();
+
+        const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        const TString expected = TStringBuilder() << "Too many unavailable state storage rings. Restarting rings: 1"
+            << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 0. Disabled rings: 1"
+            << ". Maximum allowed number of unavailable rings for this mode: 2. Ring group: 0. Requested ring: 2"
+            << " (nodes: [" << env.GetNodeId(4) << ", " << env.GetNodeId(5)
+            << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0) << ", " << env.GetNodeId(1)
+            << "], state: Disabled), 1 (nodes: [" << env.GetNodeId(2) << ", " << env.GetNodeId(3)
+            << "], state: Restart)]";
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expected);
     }
 
     Y_UNIT_TEST(StateStorageNodesFromOneRing)
@@ -3112,6 +3517,256 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.DestroyDefaultCmsPipe();
     }
 
+    Y_UNIT_TEST(WalleDrainDataHttpLifecycle)
+    {
+        const auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        const auto nodeId = env.GetNodeId(0);
+
+        // ok
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        // forbid another eviction request for same host
+        const auto duplicate = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId, "true", "redeploy", "duplicate"));
+        UNIT_ASSERT_C(duplicate.StartsWith("HTTP/1.1 400"), duplicate);
+        env.CheckWalleListTasks(1);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "in-process", nodeId);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::DISALLOW_TEMP, nodeId);
+        // "move" vdisks
+        SetVDisksMoved(env, opts, nodeId, true);
+
+        // prepared
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "ok", nodeId);
+        // A retained eviction request with no pending actions is already approved.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "ok", nodeId);
+        env.CheckWalleListTasks("eviction", "ok", nodeId);
+
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_DELETE, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 204"), response);
+        env.CheckWalleListTasks(0);
+
+        // allow immediately
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "ok", nodeId);
+        // check markers after restart
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::ALLOW, nodeId);
+        const auto duplicateAfterRestart = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId, "true", "redeploy", "duplicate"));
+        UNIT_ASSERT_C(duplicateAfterRestart.StartsWith("HTTP/1.1 400"), duplicateAfterRestart);
+        env.CheckWalleListTasks(1);
+        env.CheckWalleRemoveTask("eviction");
+
+        // restore vdisks
+        SetVDisksMoved(env, opts, nodeId, false);
+        // prepare
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        // reject until prepared
+        env.CheckWalleRemoveTask("eviction");
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+        env.CheckWalleListTasks(0);
+    }
+
+    Y_UNIT_TEST(WalleDrainDataDryRun)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleListTasks(0);
+        // DryRun must not leave a marker that rejects a real eviction request.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+    }
+
+    Y_UNIT_TEST(WalleDrainDataValidation)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        for (const TString drainData : {"1", "null", "{}", "[]", R"("")", R"("true")", R"("false")", R"("full")"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDrainDataJson(nodeId, drainData));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("drain_data must be a boolean"), response);
+        }
+        for (const TString action : {"prepare", "deactivate", "change-disk"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDrainDataJson(nodeId, "true", action));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+        }
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            Sprintf(R"({"id":"eviction","action":"redeploy","hosts":["%u","%u"],"drain_data":true})",
+                nodeId, env.GetNodeId(1)));
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+        env.CheckWalleListTasks(0);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
+    }
+
+    Y_UNIT_TEST(WalleDrainDataRequiresCmsSupport)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        ui32 createRequests = 0;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                auto *msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeCmsID()) {
+                    // Older CMS tablets do not provide version information on connection.
+                    msg->VersionInfo.clear();
+                }
+            } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
+                ++createRequests;
+            }
+            return prev(ev);
+        });
+
+        for (const TString uri : {"/api/walle/v11/tasks", "/api/walle/v11/tasks?dry_run=true"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri, MakeWalleDrainDataJson(nodeId));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("CMS does not support drain_data"), response);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
+        env.CheckWalleListTasks(0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+
+        // Ordinary tasks do not require the support check.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
+    }
+
+    Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        auto config = env.GetCmsConfig();
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(config);
+        const auto disabledRequest = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId));
+        UNIT_ASSERT_C(disabledRequest.StartsWith("HTTP/1.1 500"), disabledRequest);
+        UNIT_ASSERT_C(disabledRequest.Contains("Evict vdisks is disabled in Sentinel"), disabledRequest);
+        env.CheckWalleListTasks(0);
+
+        // Evict VDisks
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(config);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+
+        // Disable VDisks eviction
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(config);
+        const auto failedCheck = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(failedCheck.StartsWith("HTTP/1.1 500"), failedCheck);
+        UNIT_ASSERT_C(failedCheck.Contains("Evict vdisks is disabled in Sentinel"), failedCheck);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+
+        // The pending task can still be checked and cancelled after a restart.
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::ERROR);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+        const auto removed = SendWalleHttpRequest(env, HTTP_METHOD_DELETE, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(removed.StartsWith("HTTP/1.1 204"), removed);
+        env.CheckWalleListTasks(0);
+
+        // Enable VDisks eviction again; cancellation must have removed the host marker.
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(config);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+    }
+
+    Y_UNIT_TEST(WalleDrainDataCleanupAfterRestart)
+    {
+        const auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        const auto nodeId = env.GetNodeId(0);
+        SetVDisksMoved(env, opts, nodeId, true);
+
+        // Stop before storing the Walle task, after its permission has been saved.
+        bool storeTaskDropped = false;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCms::EvStoreWalleTask) {
+                storeTaskDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return prev(ev);
+        });
+
+        TFakeMonHttpRequest httpRequest(HTTP_METHOD_POST, "/api/walle/v11/tasks", {},
+            MakeWalleDrainDataJson(nodeId));
+        const auto edge = env.AllocateEdgeActor();
+        NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+            TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+        env.Register(CreateWalleApiHandler(event));
+
+        TDispatchOptions dispatchOpts;
+        dispatchOpts.FinalEvents.emplace_back([&](IEventHandle&) { return storeTaskDropped; });
+        env.DispatchEvents(dispatchOpts);
+        env.SetObserverFunc(prev);
+        UNIT_ASSERT(storeTaskDropped);
+
+        env.CheckListPermissions(WALLE_CMS_USER, 1);
+        const auto requests = env.CheckListRequests(WALLE_CMS_USER, 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests.GetRequests(0).ActionsSize(), 0);
+        env.CheckWalleListTasks(0);
+
+        // The HTTP handler retries the original POST after CMS restarts.
+        // Cleanup must remove the old host marker so that this retry can succeed.
+        env.RestartCms();
+        TAutoPtr<IEventHandle> handle;
+        const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        CheckWalleHttpTask(response->Answer, "ok", nodeId);
+        env.CheckListRequests(WALLE_CMS_USER, 1);
+        env.CheckListPermissions(WALLE_CMS_USER, 1);
+        env.CheckWalleListTasks("eviction", "ok", nodeId);
+
+        // Removing the retried task must allow another evacuation request.
+        env.CheckWalleRemoveTask("eviction");
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckWalleListTasks(0);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(nodeId)), "ok", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+    }
+
+    Y_UNIT_TEST(WalleDrainDataRequiresSentinel)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDrainDataJson(env.GetNodeId(0)));
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 500"), response);
+        UNIT_ASSERT_C(response.Contains("Unable to evict vdisks while Sentinel (self heal) is disabled"), response);
+        env.CheckWalleListTasks(0);
+    }
+
     Y_UNIT_TEST(VDisksEvictionShouldFailWhileSentinelIsDisabled)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
@@ -3298,6 +3953,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Check that FAULTY BSC request is sent again
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
+        env.CheckRejectRequest("user", request.GetRequestId());
     }
 
     Y_UNIT_TEST(EmergencyDuringRollingRestart)
@@ -3711,6 +4368,37 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeStateStorageAfterRemovePile)
+    {
+        TTestEnvOpts opts(16, 0);
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto* nodesInfo = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(nodesInfo);
+            } else if (ev->GetTypeRewrite() == TEvStateStorage::EvListStateStorageResult) {
+                auto* reply = ev->Get<TEvStateStorage::TEvListStateStorageResult>();
+                auto info = MakeIntrusive<TStateStorageInfo>();
+                // Removing pile 0 leaves pile 1 at its original index and moves its ring group to position 0.
+                auto& group = info->RingGroups.emplace_back(reply->Info->RingGroups.at(1));
+                group.State = ERingGroupState::PRIMARY;
+                group.BridgePileId = TBridgePileId::FromPileIndex(1);
+                reply->Info = std::move(info);
+            }
+            return prev(ev);
+        });
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        const auto denied = env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        UNIT_ASSERT_STRING_CONTAINS(denied.GetStatus().GetReason(), "Too many unavailable state storage rings");
+        UNIT_ASSERT_STRING_CONTAINS(denied.GetStatus().GetReason(), TStringBuilder() << ". Ring group: 0. Requested ring: 1"
+                                    << " (nodes: [" << env.GetNodeId(2) << "])");
     }
 
     Y_UNIT_TEST(BridgeModeNodeLimit)

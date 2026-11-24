@@ -327,7 +327,7 @@ private:
 
     void ProceedSummary() {
         while (SummaryIndex < Accum.size()) {
-            if ((Typed && ControlRequest.GetOperation() == NKikimrClient::TNbsDbgLikeLoadControl::DELETE)
+            if ((Typed && ControlRequest.GetOperation() == NKikimrClient::TNbsDbgLikeLoadControl_EOperation_DELETE)
                 || !ShouldQuerySummary(Accum[SummaryIndex].Hive)) {
                 ++SummaryIndex;
                 continue;

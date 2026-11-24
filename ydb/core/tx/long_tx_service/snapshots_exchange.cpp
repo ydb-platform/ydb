@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/services/services.pb.h>
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
@@ -34,7 +35,7 @@ namespace {
         TSubtreeSplitter(const ui64 insideDCFanOut, const THashMap<TActorId, TString>& exchangeActorIdToDataCenterId)
             : InsideDCFanOut(insideDCFanOut)
             , ExchangeActorIdToDataCenterId(exchangeActorIdToDataCenterId) {
-            AFL_ENSURE(InsideDCFanOut > 0);
+            YDB_LOG_ENSURE(InsideDCFanOut > 0);
         }
 
         THashMap<TActorId, THashSet<TActorId>> Split(const TVector<TActorId>& children) {
@@ -63,7 +64,7 @@ namespace {
                 }
             } else {
                 for (size_t index = 0; index < children.size() && index < InsideDCFanOut; ++index) {
-                    AFL_ENSURE(subtrees.emplace(children[index], THashSet<TActorId>{}).second);
+                    YDB_LOG_ENSURE(subtrees.emplace(children[index], THashSet<TActorId>{}).second);
                 }
 
                 for (size_t index = InsideDCFanOut; index < children.size(); ++index) {
@@ -91,7 +92,7 @@ namespace {
             childrenActorIds.reserve(event->Record.GetTree().GetChildrenActorIds().size());
             for (const auto& childActorIdProto : event->Record.GetTree().GetChildrenActorIds()) {
                 const TActorId childActorId = ActorIdFromProto(childActorIdProto);
-                AFL_ENSURE(NodeIdToTreeNodeActorId.emplace(childActorId.NodeId(), childActorId).second);
+                YDB_LOG_ENSURE(NodeIdToTreeNodeActorId.emplace(childActorId.NodeId(), childActorId).second);
                 childrenActorIds.push_back(childActorId);
             }
 
@@ -125,7 +126,7 @@ namespace {
         }
 
         void Handle(TParentEvent::TPtr& ev) {
-            AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
+            YDB_LOG_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const auto childActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
             YDB_LOG_DEBUG("Handling TParentEvent",
                 {"logPrefix", LogPrefix},
@@ -145,7 +146,7 @@ namespace {
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-            AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Get()->NodeId));
+            YDB_LOG_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Get()->NodeId));
             const auto failedActorId = NodeIdToTreeNodeActorId.at(ev->Get()->NodeId);
             YDB_LOG_DEBUG("Handling TEvNodeDisconnected for Failed actor",
                 {"logPrefix", LogPrefix},
@@ -163,7 +164,7 @@ namespace {
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-            AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
+            YDB_LOG_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const TActorId failedActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
             YDB_LOG_DEBUG("Handling TEvents::TEvUndelivered",
                 {"logPrefix", LogPrefix},
@@ -180,7 +181,7 @@ namespace {
     private:
         bool RetrySubtree(TActorId childActorId) {
             auto iterChildActorSubtree = ChildToSubtree.find(childActorId);
-            AFL_ENSURE(iterChildActorSubtree != ChildToSubtree.end());
+            YDB_LOG_ENSURE(iterChildActorSubtree != ChildToSubtree.end());
             THashSet<TActorId> subtree(std::move(iterChildActorSubtree->second));
             ChildToSubtree.erase(iterChildActorSubtree);
             if (subtree.empty()) {
@@ -188,7 +189,7 @@ namespace {
             }
             const TActorId newRoot = *subtree.begin();
             subtree.erase(newRoot);
-            AFL_ENSURE(ChildToSubtree.emplace(newRoot, std::move(subtree)).second);
+            YDB_LOG_ENSURE(ChildToSubtree.emplace(newRoot, std::move(subtree)).second);
 
             YDB_LOG_DEBUG("Retrying subtree for child actor New root for Subtree",
                 {"logPrefix", LogPrefix},
@@ -307,7 +308,7 @@ namespace {
             SnapshotBorder = std::min(SnapshotBorder, recvBorder);
             for (const auto& snapshot : ev->Record.GetSnapshots().GetSnapshots()) {
                 NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
-                AFL_ENSURE(sessionActorId);
+                YDB_LOG_ENSURE(sessionActorId);
                 TVector<::NKikimr::TTableId> tableIds;
                 tableIds.reserve(snapshot.GetTableIds().size());
                 for (const auto& tableIdProto : snapshot.GetTableIds()) {
@@ -339,7 +340,7 @@ namespace {
 
     private:
         void AddToCollectedSnapshots(const TRemoteSnapshotInfo& snapshot) {
-            AFL_ENSURE(CollectedSnapshots.insert(snapshot).second);
+            YDB_LOG_ENSURE(CollectedSnapshots.insert(snapshot).second);
 
             if (CollectedSnapshots.size() > AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
                 auto lastSnapshotIter = CollectedSnapshots.begin();
@@ -416,6 +417,7 @@ class TSnapshotsExchangerActor : public TActorBootstrapped<TSnapshotsExchangerAc
         enum EEv {
             EvRemoteSnapshotsUpdate = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvPrefillTimeout,
+            EvRetrySubscriber,
         };
 
         struct TEvRemoteSnapshotsUpdate : public TEventLocal<TEvRemoteSnapshotsUpdate, EvRemoteSnapshotsUpdate> {
@@ -424,6 +426,10 @@ class TSnapshotsExchangerActor : public TActorBootstrapped<TSnapshotsExchangerAc
 
         struct TEvPrefillTimeout : public TEventLocal<TEvPrefillTimeout, EvPrefillTimeout> {
             TEvPrefillTimeout() = default;
+        };
+
+        struct TEvRetrySubscriber : public TEventLocal<TEvRetrySubscriber, EvRetrySubscriber> {
+            TEvRetrySubscriber() = default;
         };
     };
 
@@ -468,6 +474,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
 
             sFunc(TEvents::TEvPoison, HandlePoison);
         }
@@ -477,6 +484,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
+            hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
 
             hFunc(TEvLongTxService::TEvRemoteSnapshotsPrefillResult, Handle);
 
@@ -498,6 +506,7 @@ public:
 
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
+            hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
 
             hFunc(TEvPrivate::TEvRemoteSnapshotsUpdate, Handle);
 
@@ -570,9 +579,8 @@ private:
     }
 
     void CreateSubscriber() {
-        if (Subscriber) {
-            Send(Subscriber, new TEvents::TEvPoison);
-            Subscriber = TActorId{};
+        if (Subscriber || SubscriberRetryScheduled) {
+            return;
         }
 
         auto subscriber = CreateBoardLookupActor(
@@ -581,12 +589,45 @@ private:
         Subscriber = Register(subscriber);
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            CreateSubscriber();
+    void ScheduleSubscriberRetry() {
+        if (SubscriberRetryScheduled) {
             return;
         }
 
+        const auto startDelay = Max(SubscriberSettings.StartDelayMs, TDuration::MilliSeconds(1));
+        const auto maxDelay = Max(SubscriberSettings.MaxDelayMs, startDelay);
+        SubscriberRetryDelay = SubscriberRetryDelay ? Min(SubscriberRetryDelay * 2, maxDelay) : startDelay;
+
+        const auto minDelay = Max(SubscriberRetryDelay / 2, TDuration::MilliSeconds(1));
+        const auto delayUs = AppData()->RandomProvider->Uniform(minDelay.MicroSeconds(), SubscriberRetryDelay.MicroSeconds() + 1);
+        SubscriberRetryScheduled = true;
+        Schedule(TDuration::MicroSeconds(delayUs), new TEvPrivate::TEvRetrySubscriber());
+    }
+
+    void Handle(TEvPrivate::TEvRetrySubscriber::TPtr&) {
+        if (!SubscriberRetryScheduled) {
+            return;
+        }
+
+        SubscriberRetryScheduled = false;
+        CreateSubscriber();
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        if (!Subscriber || ev->Sender != Subscriber) {
+            return;
+        }
+
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
+            Subscriber = TActorId{};
+            ScheduleSubscriberRetry();
+            return;
+        }
+        if (ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            return;
+        }
+
+        SubscriberRetryDelay = TDuration::Zero();
         UpdateNodes(ev->Get()->InfoEntries);
 
         if (CurrentStateFunc() == &TThis::StatePrepare) {
@@ -599,10 +640,20 @@ private:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            CreateSubscriber();
+        if (!Subscriber || ev->Sender != Subscriber) {
             return;
         }
+
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
+            Subscriber = TActorId{};
+            ScheduleSubscriberRetry();
+            return;
+        }
+        if (ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            return;
+        }
+
+        SubscriberRetryDelay = TDuration::Zero();
         UpdateNodes(ev->Get()->Updates);
     }
 
@@ -619,13 +670,13 @@ private:
                     NKikimrLongTxService::TSnapshotExchangeBoardNodeInfo nodeInfo;
                     Y_PROTOBUF_SUPPRESS_NODISCARD nodeInfo.ParseFromString(entry.Payload);
                     auto owner = ActorIdFromProto(nodeInfo.GetOwner());
-                    AFL_ENSURE(owner.NodeId() == publisherId.NodeId());
+                    YDB_LOG_ENSURE(owner.NodeId() == publisherId.NodeId());
                     ExchangeActorIdToDataCenterId.emplace(owner, nodeInfo.GetDataCenterId());
                     PublisherIdToExchangeActorId.emplace(publisherId, owner);
                 }
             }
         }
-        AFL_ENSURE(PublisherIdToExchangeActorId.size() == ExchangeActorIdToDataCenterId.size());
+        YDB_LOG_ENSURE(PublisherIdToExchangeActorId.size() == ExchangeActorIdToDataCenterId.size());
         YDB_LOG_DEBUG("Finished updating nodes, now know other exchange actors",
             {"logPrefix", LogPrefix},
             {"exchangeActorIdToDataCenterIdSize", ExchangeActorIdToDataCenterId.size()});
@@ -657,8 +708,8 @@ private:
             {"borderStep", ev->Get()->Record.GetSnapshots().GetBorderStep()},
             {"borderTxId", ev->Get()->Record.GetSnapshots().GetBorderTxId()});
         // Finished collecting snapshots from cluster.
-        AFL_ENSURE(UpdateInflight);
-        AFL_ENSURE(ev->Sender.NodeId() == SelfId().NodeId());
+        YDB_LOG_ENSURE(UpdateInflight);
+        YDB_LOG_ENSURE(ev->Sender.NodeId() == SelfId().NodeId());
 
         if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
             auto propagateEvent = std::make_unique<TEvLongTxService::TEvPropagateSnapshots>();
@@ -689,7 +740,7 @@ private:
             TVector<TRemoteSnapshotInfo> remoteSnapshots;
             for (const auto& snapshot : ev->Get()->Record.GetSnapshots().GetSnapshots()) {
                 NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
-                AFL_ENSURE(sessionActorId);
+                YDB_LOG_ENSURE(sessionActorId);
                 if (sessionActorId.NodeId() != SelfId().NodeId()) {
                     TVector<::NKikimr::TTableId> tableIds;
                     tableIds.reserve(snapshot.GetTableIds().size());
@@ -744,7 +795,7 @@ private:
         YDB_LOG_DEBUG("Handling TEvPropagateSnapshotsResult event",
             {"logPrefix", LogPrefix});
         // Finished propagating snapshots to cluster.
-        AFL_ENSURE(UpdateInflight);
+        YDB_LOG_ENSURE(UpdateInflight);
         UpdateInflight = false;
 
         const auto now = AppData()->TimeProvider->Now();
@@ -764,7 +815,7 @@ private:
         TRowVersion snapshotBorder = TRowVersion::Max();
 
         auto addToCollectedSnapshots = [&collectedSnapshots, &snapshotBorder](const TRemoteSnapshotInfo& snapshot) {
-            AFL_ENSURE(collectedSnapshots.insert(snapshot).second);
+            YDB_LOG_ENSURE(collectedSnapshots.insert(snapshot).second);
             if (collectedSnapshots.size() > AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
                 auto lastSnapshotIter = collectedSnapshots.begin();
                 snapshotBorder = std::min(snapshotBorder, lastSnapshotIter->Snapshot);
@@ -844,7 +895,7 @@ private:
             YDB_LOG_DEBUG("Not a leader, skipping snapshot collection",
                 {"logPrefix", LogPrefix});
         } else {
-            AFL_ENSURE(UpdateInflight);
+            YDB_LOG_ENSURE(UpdateInflight);
             YDB_LOG_DEBUG("Update already in flight, skipping snapshot collection",
                 {"logPrefix", LogPrefix});
         }
@@ -863,7 +914,7 @@ private:
     }
 
     void StartPrefill() {
-        AFL_ENSURE(!PublisherIdToExchangeActorId.empty());
+        YDB_LOG_ENSURE(!PublisherIdToExchangeActorId.empty());
         auto actorIt = PublisherIdToExchangeActorId.begin();
         std::advance(actorIt, RandomNumber<ui64>(PublisherIdToExchangeActorId.size()));
         PrefillTargetActor = actorIt->second;
@@ -884,14 +935,14 @@ private:
         YDB_LOG_DEBUG("Handling TEvRemoteSnapshotsPrefillResult",
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender});
-        AFL_ENSURE(ev->Sender == PrefillTargetActor);
+        YDB_LOG_ENSURE(ev->Sender == PrefillTargetActor);
 
         const auto& snapshots = ev->Get()->Record.GetSnapshots();
 
         TVector<TRemoteSnapshotInfo> remoteSnapshots;
         for (const auto& snapshot : snapshots.GetSnapshots()) {
             NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
-            AFL_ENSURE(sessionActorId);
+            YDB_LOG_ENSURE(sessionActorId);
             // RemoteSnapshotsStorage tracks other nodes only (own snapshots live in LocalSnapshotsStorage),
             // so skip our own node here, consistently with collection times below and the propagation path.
             if (sessionActorId.NodeId() == SelfId().NodeId()) {
@@ -986,6 +1037,8 @@ private:
 
     TActorId Publisher;
     TActorId Subscriber;
+    TDuration SubscriberRetryDelay;
+    bool SubscriberRetryScheduled = false;
     THashMap<TActorId, TString> ExchangeActorIdToDataCenterId;
     THashMap<TActorId, TActorId> PublisherIdToExchangeActorId;
     TString SelfDataCenterId;

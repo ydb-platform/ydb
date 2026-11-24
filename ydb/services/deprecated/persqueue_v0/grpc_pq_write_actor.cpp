@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 
 #include <ydb/core/persqueue/public/pq_database.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -173,6 +174,11 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext&
 }
 
 void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
+
     Y_ABORT_UNLESS(ACLCheckInProgress);
     Y_ABORT_UNLESS(SecurityObject);
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
@@ -191,6 +197,10 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", NPersQueue::NErrorCode::PRECONDITION_FAILED, ctx);
+        return;
+    }
     THolder<TEvPQProxy::TEvWriteInit> event(ev->Release());
 
     if (State != ES_CREATED) {
@@ -481,6 +491,11 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
 
 
 void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
+    if (const auto error = GetWriteModeError(Config.GetPQTabletConfig())) {
+        CloseSession(error->Reason, error->Code, ctx);
+        return;
+    }
+
     State = ES_WAIT_PARTITION;
 
     if (PartitionChooser) {

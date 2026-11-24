@@ -283,7 +283,7 @@ class YdbCluster:
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
             cls._ydb_driver = cls._create_ydb_driver(
-                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None), iam_file=cls.ydb_iam_file
+                cls.ydb_endpoint, "/" + cls.ydb_database.lstrip("/"), oauth=os.getenv('OLAP_YDB_OAUTH', None), iam_file=cls.ydb_iam_file
             )
         return cls._ydb_driver
 

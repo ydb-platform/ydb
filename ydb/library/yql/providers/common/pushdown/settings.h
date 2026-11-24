@@ -18,7 +18,7 @@ struct TSettings {
         ParameterExpression = 1 << 7,   // Query parameters
         CastExpression = 1 << 8,   // CAST()
         StringTypes = 1 << 9,   // Support string types
-        DateTimeTypes = 1 << 10,   // Date, Datetime, Timestamp
+        DateTimeTypes = 1 << 10,   // Date, Interval, Timestamp
         UuidType = 1 << 11,
         DecimalType = 1 << 12,
         DyNumberType = 1 << 13,
@@ -49,6 +49,7 @@ struct TSettings {
         PredicateAsExpression = ui64{ 1 } << 31,   // Predicates can be used in expressions (e.g. (a = b) = (c = d))
         AnyExpressionExceptMember = ui64{ 1 } << 32,
         StructOperators = ui64{ 1 } << 33,   // Struct operators can be used
+        LikeOperatorComplex = ui64{ 1 } << 34,   // Complete LIKE/ILIKE supported
     };
 
     explicit TSettings(NLog::EComponent logComponent)

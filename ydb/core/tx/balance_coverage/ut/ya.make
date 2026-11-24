@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/balance_coverage)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ELSE()

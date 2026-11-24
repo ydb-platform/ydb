@@ -1104,6 +1104,9 @@ struct TDictCase {
         kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        // SDK retries use real-time backoff. Keep legacy waits until this test
+        // disables those retries (https://github.com/ydb-platform/ydb/pull/55891).
+        runtime.SetFastSimulatedTime(false);
         auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
 
         ui32 bouncedRequests = 0;

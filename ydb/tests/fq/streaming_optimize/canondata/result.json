@@ -24,6 +24,16 @@
             "uri": "file://test_sql_negative.test_watermarks-bad_type-default.txt_/err_file.out"
         }
     ],
+    "test_sql_negative.test[watermarks-hopping_event_time_mismatch-default.txt]": [
+        {
+            "uri": "file://test_sql_negative.test_watermarks-hopping_event_time_mismatch-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[watermarks-non_materialized_event_time-default.txt]": [
+        {
+            "uri": "file://test_sql_negative.test_watermarks-non_materialized_event_time-default.txt_/err_file.out"
+        }
+    ],
     "test_sql_streaming.test[hop-GroupByHop-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_hop-GroupByHop-default.txt_/ast.txt"

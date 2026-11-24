@@ -99,6 +99,8 @@ public:
         }
     }
 
+    virtual void PrepareResponse(NJson::TJsonValue&) {}
+
     virtual bool ValidateRequest(TRequestProtoType& request) {
         using google::protobuf::Descriptor;
         using google::protobuf::Reflection;
@@ -203,6 +205,7 @@ public:
             }
 
             if (!status || status->IsSuccess()) {
+                PrepareResponse(body);
                 return ReplyAndPassAway(GetHTTPOKJSON(body));
             } else {
                 if (status) {

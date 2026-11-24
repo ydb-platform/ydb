@@ -1,0 +1,12 @@
+USE plato;
+
+$inputs = ["Input1", "Input2"];
+
+DEFINE SUBQUERY $prepare($path) AS
+    SELECT * FROM $path ORDER BY key, subkey;
+END DEFINE;
+
+$merged = SubqueryMergeFor($inputs, $prepare);
+
+INSERT INTO Output WITH TRUNCATE
+PROCESS $merged();

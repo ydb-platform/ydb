@@ -25,7 +25,7 @@ struct TClusterMainSettings {
     TYdbClusterConfig Raw;
 };
 
-struct TYdbConfiguration : public TYdbSettings, public NCommon::TSettingDispatcher {
+struct TYdbConfiguration : public NCommon::TDispatcherAndSettings<TYdbSettings> {
     using TPtr = TIntrusivePtr<TYdbConfiguration>;
 
     explicit TYdbConfiguration(bool strictConfigValidation = false);

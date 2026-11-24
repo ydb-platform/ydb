@@ -1,0 +1,50 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "873f3cea1c5a0ba96c30fee5d00c5e68";
+                            "96de06e3859de4cbb46d86518615ef8c";
+                            "fa7b90cfe0e34e4278effb1095873e8d";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "368f44e676bc0947b862092e7a90d962";
+                            "96de06e3859de4cbb46d86518615ef8c";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "873f3cea1c5a0ba96c30fee5d00c5e68";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "873f3cea1c5a0ba96c30fee5d00c5e68";
+                            "873f3cea1c5a0ba96c30fee5d00c5e68";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "873f3cea1c5a0ba96c30fee5d00c5e68";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "d30d2c025f7a44e8533698c27b5cac92";
+                            "368f44e676bc0947b862092e7a90d962"
+                        ]
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

@@ -1,4 +1,5 @@
 #include "vdisk_histogram_latency.h"
+#include "vdisk_mongroups.h"
 
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 
@@ -30,7 +31,8 @@ namespace NKikimr {
             Histo = histoGroup->GetHistogram("LatencyMs", std::move(h));
             LatencyUsMax.Init(histoGroup->GetCounter("LatencyUsMax", false));
             LatencyUsCompletedSum = histoGroup->GetCounter("LatencyUsCompletedSum", true);
-            LatencyCompletedCount = histoGroup->GetCounter("LatencyCompletedCount", true);
+            LatencyCompletedCount = histoGroup->GetCounter("LatencyCompletedCount", true,
+                NMonGroup::GetVDiskCounterVisibility());
             InFlightLatencyUsSum = histoGroup->GetCounter("InFlightLatencyUsSum", false);
             InFlightCount = histoGroup->GetCounter("InFlightCount", false);
         }

@@ -57,7 +57,7 @@ public:
 
     ui32 GetExactKeyIndexVerified(const std::string_view keyName) const {
         const auto idx = GetExactKeyIndexOptional(keyName);
-        AFL_VERIFY(idx.has_value());
+        YDB_LOG_VERIFY(idx.has_value());
         return *idx;
     }
 
@@ -88,8 +88,8 @@ public:
     template <class TColumnPredicate>
     TConclusion<std::optional<TResolvedPath>> ResolvePath(const TParsedJsonPath& jsonPath, const TColumnPredicate& isColumnAvailable) const {
         const auto& [pathItems, pathTypes, startPositions] = jsonPath.Items;
-        AFL_VERIFY(pathItems.size() == pathTypes.size());
-        AFL_VERIFY(pathItems.size() == startPositions.size());
+        YDB_LOG_VERIFY(pathItems.size() == pathTypes.size());
+        YDB_LOG_VERIFY(pathItems.size() == startPositions.size());
 
         TString columnName;
         columnName.reserve(EstimateSubcolumnNameSize(jsonPath.Source, pathItems.size()));
@@ -254,7 +254,7 @@ public:
     }
 
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
-        AFL_VERIFY(index < DataNames->length());
+        YDB_LOG_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
         return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
     }
@@ -315,16 +315,12 @@ struct TResolvedPathMatch {
 };
 
 inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
-    const TDictStats& columnsStats, const TDictStats& othersStats, const TJsonPathBuf path) {
-    auto parsed = ParseJsonPath(path);
-    if (parsed.IsFail()) {
-        return TConclusionStatus::Fail(parsed.GetErrorMessage());
-    }
-    auto columnsResult = columnsStats.ResolvePath(parsed.GetResult());
+    const TDictStats& columnsStats, const TDictStats& othersStats, const TParsedJsonPath& path) {
+    auto columnsResult = columnsStats.ResolvePath(path);
     if (columnsResult.IsFail()) {
         return TConclusionStatus::Fail(columnsResult.GetErrorMessage());
     }
-    auto othersResult = othersStats.ResolvePath(parsed.GetResult());
+    auto othersResult = othersStats.ResolvePath(path);
     if (othersResult.IsFail()) {
         return TConclusionStatus::Fail(othersResult.GetErrorMessage());
     }
@@ -334,6 +330,15 @@ inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
         return columnsPath ? std::optional<TResolvedPathMatch>(TResolvedPathMatch{ *columnsPath, true }) : std::nullopt;
     }
     return TResolvedPathMatch{ *othersPath, false };
+}
+
+inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
+    const TDictStats& columnsStats, const TDictStats& othersStats, const TJsonPathBuf path) {
+    auto parsed = ParseJsonPath(path);
+    if (parsed.IsFail()) {
+        return TConclusionStatus::Fail(parsed.GetErrorMessage());
+    }
+    return ResolveBestPath(columnsStats, othersStats, parsed.GetResult());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

@@ -1,22 +1,17 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 
-namespace {
+using namespace NBridgeTest;
 
-TNodeLocation GetFailoverLocation(ui32 nodeId) {
-    NActorsInterconnect::TNodeLocation location;
-    location.SetBridgePileName(TStringBuilder() << "pile_" << (nodeId - 1) / 8 + 1);
-    location.SetDataCenter("my_dc");
-    location.SetRack(TStringBuilder() << "rack_" << nodeId);
-    location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-    return TNodeLocation(location);
-}
+namespace {
 
 void TestTwoFailedPiles(bool primarySurvives, bool atomic) {
     TEnvironmentSetup env{{
         .NodeCount = 24,
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-        .LocationGenerator = GetFailoverLocation,
+        .LocationGenerator = GetBridgedLocation,
         .SelfManagementConfig = true,
         .NumPiles = 3,
         .AutomaticBootstrap = true,
@@ -55,6 +50,22 @@ void TestTwoFailedPiles(bool primarySurvives, bool atomic) {
     };
     put("before failure");
     put(TString(128_KB, 'a'));
+
+    const auto propagationDeadline = runtime->GetClock() + TDuration::Seconds(30);
+    for (ui32 id = survivor * 8 + 1; id <= (survivor + 1) * 8; ++id) {
+        const auto edge = runtime->AllocateEdgeActor(id, __FILE__, __LINE__);
+        runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(id), edge,
+            new TEvNodeWardenQueryStorageConfig(true)), id);
+        for (;;) {
+            auto local = env.WaitForEdgeActorEvent<TEvNodeWardenStorageConfig>(edge, false, propagationDeadline);
+            UNIT_ASSERT_C(local && local->Get()->Config, "Timed out waiting for initial configuration on node " << id);
+            if (local->Get()->Config->GetClusterState().GetGeneration() >= state.GetGeneration()) {
+                break;
+            }
+        }
+        runtime->Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+            MakeBlobStorageNodeWardenID(id), edge, nullptr, 0), id);
+    }
 
     // The test bootstrapper retries failed boots without a delay. Pause those
     // retries while distconf converges, then release them after failover.
@@ -173,7 +184,7 @@ Y_UNIT_TEST_SUITE(BridgeFailover) {
         TEnvironmentSetup env{{
             .NodeCount = 24,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetFailoverLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,

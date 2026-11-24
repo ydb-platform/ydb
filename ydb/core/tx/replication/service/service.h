@@ -30,6 +30,8 @@ struct TEvService {
         EvSchemaChangeResult,
         EvIndexBuildProgress,
         EvIndexBuildProgressResult,
+        EvSourceOffsetReport,
+        EvSourceOffsetResult,
 
         EvEnd,
     };
@@ -69,12 +71,16 @@ struct TEvService {
         explicit TEvWorkerStatus(const TWorkerId& id,
                 NKikimrReplication::TEvWorkerStatus::EStatus status,
                 NKikimrReplication::TEvWorkerStatus::EReason reason,
-                const TString& errorDescription
+                const TString& errorDescription,
+                TMaybe<ui64> sourceCommittedOffset = Nothing()
         ) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(status);
             Record.SetReason(reason);
             Record.SetErrorDescription(errorDescription);
+            if (sourceCommittedOffset) {
+                Record.SetSourceCommittedOffset(*sourceCommittedOffset);
+            }
         }
 
         explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag) {
@@ -141,6 +147,9 @@ struct TEvService {
     struct TEvIndexBuildProgressResult: public TEventPB<TEvIndexBuildProgressResult, NKikimrReplication::TEvIndexBuildProgress, EvIndexBuildProgressResult> {
         TEvIndexBuildProgressResult() = default;
     };
+
+    struct TEvSourceOffsetReport: public TEventPB<TEvSourceOffsetReport, NKikimrReplication::TEvSourceOffsetReport, EvSourceOffsetReport> {};
+    struct TEvSourceOffsetResult: public TEventPB<TEvSourceOffsetResult, NKikimrReplication::TEvSourceOffsetResult, EvSourceOffsetResult> {};
 
     struct TEvSchemaChangeReport: public TEventPB<TEvSchemaChangeReport, NKikimrReplication::TEvSchemaChangeReport, EvSchemaChangeReport> {
         TEvSchemaChangeReport() = default;

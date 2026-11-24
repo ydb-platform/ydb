@@ -12,6 +12,7 @@ SRCS(
 
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/core/base
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/common/proxy

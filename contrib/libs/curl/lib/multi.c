@@ -2805,8 +2805,12 @@ CURLMcode curl_multi_perform(CURLM *m, int *running_handles)
     while(Curl_uint_bset_next(&multi->process, mid, &mid));
   }
 
-  sigpipe_apply(multi->admin, &pipe_st);
-  Curl_cshutdn_perform(&multi->cshutdn, multi->admin, CURL_SOCKET_TIMEOUT);
+  /* Applying SIGPIPE settings is only needed for actual shutdown work.
+   * The admin handle defaults to NOSIGNAL=0 before the first transfer. */
+  if(Curl_cshutdn_count(multi->admin)) {
+    sigpipe_apply(multi->admin, &pipe_st);
+    Curl_cshutdn_perform(&multi->cshutdn, multi->admin, CURL_SOCKET_TIMEOUT);
+  }
   sigpipe_restore(&pipe_st);
 
   if(multi_ischanged(m, TRUE))
@@ -3204,7 +3208,7 @@ static CURLMcode multi_socket(struct Curl_multi *multi,
   }
 
 out:
-  if(mrc.run_cpool) {
+  if(mrc.run_cpool && Curl_cshutdn_count(multi->admin)) {
     sigpipe_apply(multi->admin, &mrc.pipe_st);
     Curl_cshutdn_perform(&multi->cshutdn, multi->admin, s);
   }

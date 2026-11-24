@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/gateway/behaviour/streaming_query)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(5)
 SIZE(MEDIUM)
 
 SRCS(

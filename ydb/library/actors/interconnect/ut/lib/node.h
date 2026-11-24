@@ -11,7 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
-#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -19,6 +19,7 @@
 
 #include <util/string/cast.h>
 #include <util/system/env.h>
+#include <util/system/sanitizers.h>
 
 #include "tls/tls.h"
 
@@ -64,7 +65,8 @@ public:
         common->ClusterUUID = "cluster";
         common->AcceptUUID = {common->ClusterUUID};
         common->TechnicalSelfHostName = address;
-        common->Settings.Handshake = TDuration::Seconds(1);
+        common->Settings.Handshake = NSan::PlainOrUnderSanitizer(
+            TDuration::Seconds(1), TDuration::Seconds(15));
         common->Settings.DeadPeer = deadPeerTimeout;
         common->Settings.CloseOnIdle = TDuration::Minutes(1);
         common->Settings.SendBufferDieLimitInMB = 512;
@@ -80,7 +82,7 @@ public:
         if (common->Settings.V2.Threads) {
             // Mirror production: the engine is created up front whenever Threads is non-zero (regardless of
             // Settings.V2.Enable, which only gates handshake negotiation and may be flipped at runtime) and
-            // published in Common; the proxy binds it to the actor system on start (SetActorSystem). Shard
+            // published in Common; OnActorSystemCreated installs its actor-system client. Shard
             // count is overridable via YDB_IC_V2_SHARDS so tests can force many connections onto one ring.
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
                 common->Settings.V2.Threads = FromString<ui32>(s);
@@ -89,9 +91,9 @@ public:
                 common->Settings.V2.RingsPerShard = FromString<ui32>(s);
             }
             common->UringEngineV2 = CreateUringEngine(common);
-            setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
-                if (engine) {
-                    engine->SetActorSystem(actorSystem);
+            setup.OnActorSystemCreated.push_back([common = common](TActorSystem *actorSystem) {
+                if (const auto& engine = common->UringEngineV2) {
+                    engine->SetClient(CreateUringEngineClient(*common, actorSystem));
                 }
             });
         }
@@ -138,7 +140,7 @@ public:
             TMailboxType::ReadAsFilled, 0));
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
             TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive), rdmaCqMode, nullptr),
+                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive, 8, 0), rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

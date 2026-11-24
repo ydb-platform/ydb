@@ -195,6 +195,139 @@ TEST(TStatisticsTest, BuildingConsumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TStatisticsTest, ParseCompactMixedScalarAndSummary)
+{
+    auto statistics = ParseCompactStatistics(TYsonStringBuf(TStringBuf(
+        "{group={scalar=7;full={sum=12;count=2;min=5;max=7;last=7;};negative=-3;};zero=0;}")));
+    std::map<TStatisticPath, TSummary> expectedData{
+        {"group"_L / "scalar"_L, TSummary(7, 1, 7, 7, 7)},
+        {"group"_L / "full"_L, TSummary(12, 2, 5, 7, 7)},
+        {"group"_L / "negative"_L, TSummary(-3, 1, -3, -3, -3)},
+        {"zero"_L, TSummary(0, 1, 0, 0, 0)},
+    };
+    EXPECT_EQ(statistics.Data(), expectedData);
+}
+
+TEST(TStatisticsTest, ParseCompactReservedNamesRemainSummaryMaps)
+{
+    auto statistics = ParseCompactStatistics(TYsonStringBuf(TStringBuf(
+        "{custom={sum={sum=1;count=1;min=1;max=1;last=1;};"
+        "count={sum=2;count=1;min=2;max=2;last=2;};"
+        "min={sum=3;count=1;min=3;max=3;last=3;};"
+        "max={sum=4;count=1;min=4;max=4;last=4;};"
+        "last={sum=5;count=1;min=5;max=5;last=5;};}}")));
+    auto expected = CreateStatistics({
+        {"custom"_L / "sum"_L, 1},
+        {"custom"_L / "count"_L, 2},
+        {"custom"_L / "min"_L, 3},
+        {"custom"_L / "max"_L, 4},
+        {"custom"_L / "last"_L, 5},
+    });
+    EXPECT_EQ(statistics.Data(), expected.Data());
+}
+
+TEST(TStatisticsTest, ParseCompactSummaryWithoutLastAndTimestamp)
+{
+    auto statistics = ParseCompactStatistics(TYsonStringBuf(TStringBuf(
+        "<timestamp=\"2026-10-03T12:00:00.000000Z\";>"
+        "{scalar=0;full={sum=9;count=3;min=2;max=4;};}")));
+    EXPECT_EQ(FindSummary(statistics, "full"_L), TSummary(9, 3, 2, 4, std::nullopt));
+    EXPECT_EQ(statistics.GetTimestamp(), TInstant::ParseIso8601("2026-10-03T12:00:00.000000Z"));
+    auto ordinaryYson = ConvertToYsonString(statistics);
+    auto ordinaryStatistics = ConvertTo<TStatistics>(ordinaryYson);
+    EXPECT_EQ(ordinaryStatistics.Data(), statistics.Data());
+    EXPECT_EQ(ordinaryStatistics.GetTimestamp(), statistics.GetTimestamp());
+}
+
+TEST(TStatisticsTest, DefaultParserRejectsScalarLeaves)
+{
+    TYsonString yson(TStringBuf("{scalar=7;}"));
+    EXPECT_THROW(ConvertTo<TStatistics>(yson), std::exception);
+}
+
+TEST(TStatisticsTest, ParseCompactReservedScalarsRetainLegacyInterpretation)
+{
+    EXPECT_THROW(ParseCompactStatistics(TYsonStringBuf(TStringBuf("{custom={sum=7;};}"))), std::exception);
+}
+
+TEST(TStatisticsTest, ParseCompactRejectsStatisticPathPrefixConflict)
+{
+    for (auto yson : {
+        "{foo={bar=1;sum=2;count=1;min=2;max=2;};}",
+        "{foo={sum=2;count=1;min=2;max=2;bar=1;};}",
+    }) {
+        SCOPED_TRACE(yson);
+        EXPECT_THROW(ParseCompactStatistics(TYsonStringBuf(TStringBuf(yson))), std::exception);
+    }
+}
+
+TEST(TStatisticsTest, OrdinaryParserRejectsStatisticPathPrefixConflict)
+{
+    TYsonString yson(TStringBuf(
+        "{foo={bar={sum=1;count=1;min=1;max=1;last=1;};sum=1;count=1;min=1;max=1;last=1;};}"));
+    EXPECT_THROW(ConvertTo<TStatistics>(yson), std::exception);
+}
+
+TEST(TStatisticsTest, RepeatedSummaryPathUsesLastSummary)
+{
+    TYsonString yson(TStringBuf(
+        "{foo={sum=1;count=1;min=1;max=1;last=1;};"
+        "foo={sum=12;count=2;min=5;max=7;};}"));
+    TSummary expectedSummary(12, 2, 5, 7, std::nullopt);
+
+    auto ordinaryStatistics = ConvertTo<TStatistics>(yson);
+    EXPECT_EQ(ordinaryStatistics.Data().size(), 1u);
+    EXPECT_EQ(FindSummary(ordinaryStatistics, "foo"_L), expectedSummary);
+
+    auto compactStatistics = ParseCompactStatistics(yson);
+    EXPECT_EQ(compactStatistics.Data().size(), 1u);
+    EXPECT_EQ(FindSummary(compactStatistics, "foo"_L), expectedSummary);
+}
+
+TEST(TStatisticsTest, RepeatedCompactStatisticPathUsesLastSummary)
+{
+    for (auto yson : {
+        "{foo=1;foo=2;}",
+        "{foo={sum=1;count=1;min=1;max=1;last=1;};foo=2;}",
+        "{foo=1;foo={sum=2;count=1;min=2;max=2;last=2;};}",
+    }) {
+        SCOPED_TRACE(yson);
+        auto statistics = ParseCompactStatistics(TYsonStringBuf(TStringBuf(yson)));
+        EXPECT_EQ(statistics.Data().size(), 1u);
+        EXPECT_EQ(FindSummary(statistics, "foo"_L), TSummary(2, 1, 2, 2, 2));
+    }
+}
+
+TEST(TStatisticsTest, CompactSerialization)
+{
+    auto statistics = ConvertTo<TStatistics>(TYsonString(TStringBuf(
+        "<timestamp=\"2026-10-03T12:00:00.000000Z\";>"
+        "{zero={sum=0;count=1;min=0;max=0;last=0;};"
+        "negative={sum=-3;count=1;min=-3;max=-3;last=-3;};"
+        "multi={sum=12;count=2;min=5;max=7;last=7;};"
+        "missing_last={sum=4;count=1;min=4;max=4;};"
+        "reserved={sum={sum=1;count=1;min=1;max=1;last=1;};"
+        "count={sum=2;count=1;min=2;max=2;last=2;};"
+        "min={sum=3;count=1;min=3;max=3;last=3;};"
+        "max={sum=4;count=1;min=4;max=4;last=4;};"
+        "last={sum=5;count=1;min=5;max=5;last=5;};}}")));
+
+    auto yson = SerializeCompactStatistics(statistics);
+    auto node = ConvertToNode(yson)->AsMap();
+    EXPECT_EQ(node->GetChildOrThrow("zero")->GetType(), ENodeType::Int64);
+    EXPECT_EQ(node->GetChildOrThrow("negative")->GetType(), ENodeType::Int64);
+    EXPECT_EQ(node->GetChildOrThrow("multi")->GetType(), ENodeType::Map);
+    EXPECT_EQ(node->GetChildOrThrow("missing_last")->GetType(), ENodeType::Map);
+    auto reservedNode = node->GetChildOrThrow("reserved")->AsMap();
+    for (auto key : {"sum", "count", "min", "max", "last"}) {
+        EXPECT_EQ(reservedNode->GetChildOrThrow(key)->GetType(), ENodeType::Map);
+    }
+
+    auto parsedStatistics = ParseCompactStatistics(yson);
+    EXPECT_EQ(parsedStatistics.Data(), statistics.Data());
+    EXPECT_EQ(parsedStatistics.GetTimestamp(), statistics.GetTimestamp());
+}
+
 TEST(TStatisticsTest, GetRangeByPrefix) {
     TStatistics statistics = CreateStatistics({
         {"a"_L, 1},
@@ -282,4 +415,3 @@ TEST(TTaggedStatisticsTest, AppendStatistics)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

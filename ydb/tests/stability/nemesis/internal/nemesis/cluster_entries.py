@@ -398,9 +398,12 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
                 "runner": cls(),
                 "schedule": sched,
                 "ui_group": _BRIDGE_UI_GROUP,
+                # Per-type /api/schedule still uses this planner. The boundary scheduler does not:
+                # target_kind PILE fans out over the pile it already chose (see pile_inject_fanout).
                 "planner_factory": _bridge_pile_fanout_planner_factory,
                 "target_kind": TargetKind.PILE,
                 "impact_scope": ImpactScope.PILE,
+                # A pile is not an erasure domain. BYPASS keeps it off the fail-domain budget.
                 "guard_mode": GuardMode.BYPASS,
                 "supports_manual": False,
             }

@@ -1,7 +1,7 @@
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 #include <ydb/core/tablet_flat/util_fmt_flat.h>
 #include <ydb/core/tablet_flat/flat_redo_player.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/tablet_flat/flat_part_overlay.h>
 #include <ydb/core/protos/scheme_log.pb.h>
 #include <ydb/core/protos/tablet.pb.h>

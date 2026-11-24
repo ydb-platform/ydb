@@ -14,7 +14,7 @@ bool TSyncPointResult::IsSourcePrepared(const NCommon::IDataSource& source) cons
         return source.IsSyncSection() && source.HasStageResult() &&
                (source.GetStageResult().HasResultChunk() || source.GetStageResult().IsEmpty());
     } else if (source.IsSyncSection()) {
-        AFL_VERIFY(source.HasStageData() || (source.HasStageResult() && source.GetStageResult().IsEmpty()));
+        YDB_LOG_VERIFY(source.HasStageData() || (source.HasStageResult() && source.GetStageResult().IsEmpty()));
         return true;
     } else {
         return false;
@@ -53,8 +53,8 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const NCommon::TDataSo
                 {"sourceIdx", source.GetSourceIdx()},
                 {"table", resultChunk->GetTable()->num_rows()},
                 {"isFinished", isFinished});
-            auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
-                Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
+            const ui32 readyRecords = isFinished ? source.GetRecordsCount() : resultChunk->GetStartIndex() + resultChunk->GetRecordsCount();
+            auto cursor = Collection->BuildCursor(source, readyRecords, Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source.GetResourceGuards(), source.MutableAs<IDataSource>()->GetGroupGuard(),
                     resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source.GetSourceId()));

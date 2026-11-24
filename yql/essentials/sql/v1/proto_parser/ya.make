@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     yql/essentials/utils
+    yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues
     yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
 )
@@ -9,6 +10,7 @@ PEERDIR(
 SRCS(
     parse_tree.cpp
     proto_parser.cpp
+    range.cpp
     reflection.cpp
     statement.cpp
     token.cpp
@@ -20,6 +22,9 @@ RECURSE(
     antlr4
     antlr4_ansi
     benchmark
+    check
 )
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+)

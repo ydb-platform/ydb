@@ -123,9 +123,11 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(bool initializeHttpGateway, NYql
         httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
     }
 
+    constexpr ui64 maxMessageSize = 136314880;   // logbroker default grpc max message size
     NYdb::TDriverConfig cfg;
     cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
     cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+    cfg.SetMaxMessageSize(maxMessageSize);
     auto driver = std::make_shared<NYdb::TDriver>(cfg);
 
     const auto& s3Config = queryServiceConfig.GetS3();
@@ -161,6 +163,10 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(bool initializeHttpGateway, NYql
         .SetNeedsStatsCollectors(options.NeedsStatsCollectors)
         .SetUseRealThreads(options.UseRealThreads)
         .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
+
+    if (appConfig->GetGRpcConfig().HasMaxMessageSize()) {
+        settings.SetGrpcServerOptions(NYdbGrpc::TServerOptions().SetMaxMessageSize(appConfig->GetGRpcConfig().GetMaxMessageSize()));
+    }
 
     settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
     federatedQuerySetupFactory->SetScriptExecutionSettings({

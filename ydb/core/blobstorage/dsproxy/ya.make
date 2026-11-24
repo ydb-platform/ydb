@@ -48,12 +48,14 @@ SRCS(
     dsproxy_strategy_base.h
     dsproxy_strategy_get_bold.h
     dsproxy_strategy_get_m3dc_basic.h
+    dsproxy_strategy_get_mirror3dc.h
     dsproxy_strategy_get_m3dc_restore.h
     dsproxy_strategy_get_m3of4.h
     dsproxy_strategy_get_min_iops_block.h
     dsproxy_strategy_get_min_iops_mirror.h
     dsproxy_strategy_m3of4_base.h
     dsproxy_strategy_put_m3dc.h
+    dsproxy_strategy_put_mirror3dc.h
     dsproxy_strategy_put_m3of4.h
     dsproxy_strategy_restore.h
     group_sessions.cpp
@@ -72,6 +74,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/ingress
     ydb/core/control/lib
+    ydb/core/mon
     ydb/core/retro_tracing_impl/spans
     ydb/core/util
     ydb/library/actors/retro_tracing/collector

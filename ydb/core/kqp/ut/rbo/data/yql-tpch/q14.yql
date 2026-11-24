@@ -11,9 +11,9 @@ SELECT
         END
     ) / (Sum(l_extendedprice * ($to_decimal(1) - l_discount)) + $to_decimal_max_precision("0.000000000001")) AS promo_revenue
 FROM
-    `/Root/lineitem` as lineitem
+    `lineitem` as lineitem
 ,
-    `/Root/part` as part
+    `part` as part
 WHERE
     l_partkey == p_partkey
     AND l_shipdate >= Date('1995-09-01')

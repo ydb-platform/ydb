@@ -1,22 +1,7 @@
 #include "backoff_strategy.h"
 #include "jitter.h"
 
-#include <util/random/normal.h>
-
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
-
-double BackoffStrategyDefaultRandomGenerator()
-{
-    // StdNormalRandom is unlikely to produce a value outside of [-Max, Max] range.
-    constexpr double Max = 7.0;
-    return std::clamp(StdNormalRandom<double>() / Max, -1.0, +1.0);
-}
-
-} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -67,7 +52,7 @@ void TBackoffStrategy::ApplyJitter()
     BackoffWithJitter_ = ::NYT::ApplyJitter(
         Backoff_,
         Options_.BackoffJitter,
-        &NDetail::BackoffStrategyDefaultRandomGenerator);
+        &DefaultJitterRandomGenerator);
 }
 
 void TBackoffStrategy::UpdateOptions(const TExponentialBackoffOptions& newOptions)
@@ -137,7 +122,7 @@ void TRelativeConstantBackoffStrategy::DoRecordInvocation(TInstant now)
     BackoffWithJitter_ = ::NYT::ApplyJitter(
         Options_.Backoff,
         Options_.BackoffJitter,
-        &NDetail::BackoffStrategyDefaultRandomGenerator);
+        &DefaultJitterRandomGenerator);
 }
 
 } // namespace NYT

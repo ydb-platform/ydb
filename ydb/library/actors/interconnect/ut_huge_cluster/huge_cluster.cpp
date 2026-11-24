@@ -9,6 +9,8 @@
 Y_UNIT_TEST_SUITE(HugeCluster) {
     using namespace NActors;
 
+    constexpr auto TrackingFlags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+
     class TPoller: public TActor<TPoller> {
         const std::vector<TActorId>& Targets;
         std::unordered_map<TActorId, TManualEvent>& Connected;
@@ -22,14 +24,14 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
 
         void Handle(TEvTestStartPolling::TPtr /*ev*/, const TActorContext& ctx) {
             for (ui32 i = 0; i < Targets.size(); ++i) {
-                ctx.Send(Targets[i], new TEvTest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, i);
+                ctx.Send(Targets[i], new TEvTest(), TrackingFlags, i);
             }
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {
             const ui32 cookie = ev->Cookie;
             // Cerr << "TEvUndelivered ping from node# " << SelfId().NodeId() << " to node# " << cookie + 1 << Endl;
-            ctx.Send(Targets[cookie], new TEvTest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, cookie);
+            ctx.Send(Targets[cookie], new TEvTest(), TrackingFlags, cookie);
         }
 
         void Handle(TEvTest::TPtr ev, const TActorContext& /*ctx*/) {
@@ -60,14 +62,14 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
         void Bootstrap(const TActorContext& ctx) {
             Become(&TThis::StateFunc);
             for (ui32 i = 0; i < Pollers.size(); ++i) {
-                ctx.Send(Pollers[i], new TEvTestStartPolling(), IEventHandle::FlagTrackDelivery, i);
+                ctx.Send(Pollers[i], new TEvTestStartPolling(), TrackingFlags, i);
             }
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {
             const ui32 cookie = ev->Cookie;
             // Cerr << "TEvUndelivered start poller message to node# " << cookie + 1 << Endl;
-            ctx.Send(Pollers[cookie], new TEvTestStartPolling(), IEventHandle::FlagTrackDelivery, cookie);
+            ctx.Send(Pollers[cookie], new TEvTestStartPolling(), TrackingFlags, cookie);
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr& /*ev*/, const TActorContext& ctx) {

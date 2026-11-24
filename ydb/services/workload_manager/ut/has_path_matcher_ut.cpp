@@ -46,7 +46,7 @@ void AddPqTopicSink(TKqpPhyQuery& phy, const TString& topicPath) {
 const auto MatchesTxTable = [](const TString& pattern, const TString& path) {
     TKqpPhyQuery phy;
     AddTxTable(phy, path);
-    return MatchesPath(TRegexPredicate::FromGlob(pattern), {}, phy);
+    return MatchesPath(TRegexPredicate::FromGlob(pattern), TVector<TString>{}, phy);
 };
 
 // Runs the matcher with pattern `/Root/t*` against the given queryTables list.
@@ -59,14 +59,14 @@ const auto MatchesQueryTables = [](const TVector<TString>& queryTables) {
 const auto MatchesTx = [](auto build) {
     TKqpPhyQuery phy;
     build(phy);
-    return MatchesPath(TRegexPredicate::FromGlob("/Root/db/target"), {}, phy);
+    return MatchesPath(TRegexPredicate::FromGlob("/Root/db/target"), TVector<TString>{}, phy);
 };
 
 // Runs the matcher with pattern `/Root/db/topic` against a phyQuery built by `build`.
 const auto MatchesTopics = [](auto build) {
     TKqpPhyQuery phy;
     build(phy);
-    return MatchesPath(TRegexPredicate::FromGlob("/Root/db/topic"), {}, phy);
+    return MatchesPath(TRegexPredicate::FromGlob("/Root/db/topic"), TVector<TString>{}, phy);
 };
 
 }   // anonymous namespace
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TPathMatcherPredicate) {
     Y_UNIT_TEST(EmptyPredicateAcceptsAny) {
         TKqpPhyQuery phy;
         AddTxTable(phy, "/Root/anything");
-        UNIT_ASSERT(MatchesPath(std::nullopt, {}, phy));
+        UNIT_ASSERT(MatchesPath(std::nullopt, TVector<TString>{}, phy));
     }
 
     Y_UNIT_TEST(NonMatchingPathIsNotAccepted) {

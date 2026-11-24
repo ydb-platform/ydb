@@ -23,6 +23,7 @@ namespace NTable {
     class TRowState;
     struct TChange;
     class TDatabaseImpl;
+    struct IRedoObserver;
     class TAnnex;
     class TTable;
     class TKeyRangeCache;
@@ -231,6 +232,7 @@ public:
     void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
+    ui64 GetTableMemAllocatedSize(ui32 table) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
     ui64 GetTableMemOpsCount(ui32 tableId) const;
     ui64 GetTableIndexSize(ui32 table) const;
@@ -285,7 +287,8 @@ public:
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
-    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex);
+    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex,
+        TArrayRef<const ui32> truncatedTables, IRedoObserver* observer = nullptr);
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 

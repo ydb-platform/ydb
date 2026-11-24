@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -260,7 +261,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourcePkMatchesPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -325,7 +327,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceMultipleShardingColumns, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -452,7 +455,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceNoPartitionByUsesPrimaryKey, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -523,7 +527,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * (TConsistencySharding64) hash rows on these columns IN ORDER. A permuted
      * order (e.g. from iterating a THashSet of PK column names) makes the hashes
      * uncorrelated: every per-shard task then receives rows for all shards
-     * (AFL_VERIFY(splitResult.size() == 1) fires with actual=<shardCount> under
+     * (YDB_LOG_VERIFY(splitResult.size() == 1) fires with actual=<shardCount> under
      * KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK, and KeyColumns order in the plan
      * mismatches regardless of the flag).
      *
@@ -534,10 +538,11 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasNoPartitionByMultiColumnPkPreservesOrder, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         // NOTE: use SetKqpSettings (like the pure-literal tests) so the setting
         // propagates reliably for every CTAS source path.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -594,7 +599,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourcePartitionBySubsetOfPrimaryKey, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -666,10 +672,11 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasGeneratedDataWithPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         // NOTE: AS_TABLE($data) doesn't go through a real table read, so PRAGMA
         // ydb.EnableCsWriteAffinity doesn't propagate. Use SetKqpSettings instead.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -714,10 +721,11 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasPureLiteralWithPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         // NOTE: Pure literals go through EnsureDqUnion path. PRAGMA ydb.EnableCsWriteAffinity
         // doesn't propagate for that path, so we must use SetKqpSettings here.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -756,10 +764,11 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasGeneratedDataWithoutPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         // NOTE: AS_TABLE($data) doesn't go through a real table read, so PRAGMA
         // ydb.EnableCsWriteAffinity doesn't propagate. Use SetKqpSettings instead.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -803,10 +812,11 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasGeneratedDataPartitionBySubsetOfPrimaryKey, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         // NOTE: AS_TABLE($data) doesn't go through a real table read, so PRAGMA
         // ydb.EnableCsWriteAffinity doesn't propagate. Use SetKqpSettings instead.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -855,7 +865,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceSelectWithAliases, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -924,7 +935,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceVerifyAffinityFlagTogglesHashShuffle, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -991,10 +1003,11 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasPureLiteralVerifyAffinityFlagTogglesHashShuffle, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         // NOTE: Pure literals go through EnsureDqUnion path. PRAGMA ydb.EnableCsWriteAffinity
         // doesn't propagate for that path, so we must use SetKqpSettings here.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -1036,7 +1049,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceWithWhereFilter, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // A new test cluster reuses table IDs; discard schema objects from previous clusters.
+        NOlap::TSchemaCachesManager::DropCaches();
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();

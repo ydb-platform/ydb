@@ -102,6 +102,10 @@ public:
         return Select(read).CanRead(read, ctx, skipIssues);
     }
 
+    bool AllowExecuteInDq(const TExprNode& node, TExprContext& ctx) override {
+        return Select(node).AllowExecuteInDq(node, ctx);
+    }
+
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& settings) override {
         return Select(*read).WrapRead(read, ctx, settings);
     }
@@ -246,6 +250,10 @@ public:
         , Streams_(std::move(streams))
         , Dq_(*Tables_->GetDqIntegration(), Streams_)
     {
+    }
+
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const override {
+        return Tables_->AcceptsProjectSetting(pragma);
     }
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {

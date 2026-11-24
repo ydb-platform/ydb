@@ -103,7 +103,7 @@ public:
 
 void TAccessorsFetcherImpl::StartRequest(
     std::shared_ptr<TDataAccessorsRequest>&& request, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-    AFL_VERIFY(!InFlightRequests);
+    YDB_LOG_VERIFY(!InFlightRequests);
     const auto& commonContext = *context->GetCommonContext();
     if (commonContext.GetScanOrbit() && (NLWTrace::HasShuttles(*commonContext.GetScanOrbit()) || LWPROBE_ENABLED(ScanStartFetchingAccessor))) {
         LWTRACK(ScanStartFetchingAccessor, *commonContext.GetScanOrbit(),
@@ -115,7 +115,7 @@ void TAccessorsFetcherImpl::StartRequest(
     }
     request->RegisterSubscriber(std::make_shared<TLocalPortionAccessorFetchingSubscriber>(context));
     context->GetCommonContext()->GetDataAccessorsManager()->AskData(std::move(request));
-    AFL_VERIFY(++InFlightRequests == 1);
+    YDB_LOG_VERIFY(++InFlightRequests == 1);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

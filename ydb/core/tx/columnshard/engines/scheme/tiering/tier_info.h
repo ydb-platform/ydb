@@ -52,7 +52,7 @@ public:
         return schema->GetFieldByName(EvictColumnName);
     }
 
-    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
+    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar, NScheme::TTypeId columnType) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
         return std::make_shared<TTierInfo>(std::nullopt, evictDuration, ttlColumn, unitsInSecond);
@@ -163,21 +163,22 @@ public:
             , NextTierName(nextTierName)
             , NextTierWaiting(nextTierDuration)
         {
-            AFL_VERIFY(!nextTierName == !nextTierDuration);
+            YDB_LOG_VERIFY(!nextTierName == !nextTierDuration);
         }
 
         TString GetNextTierNameVerified() const {
-            AFL_VERIFY(NextTierName);
+            YDB_LOG_VERIFY(NextTierName);
             return *NextTierName;
         }
 
         TDuration GetNextTierWaitingVerified() const {
-            AFL_VERIFY(NextTierWaiting);
+            YDB_LOG_VERIFY(NextTierWaiting);
             return *NextTierWaiting;
         }
     };
 
-    TTieringContext GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction) const;
+    TTieringContext GetTierToMove(
+        const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const;
 
     const TSet<TTierRef>& GetOrderedTiers() const {
         return OrderedTiers;
@@ -188,7 +189,7 @@ public:
     }
 
     [[nodiscard]] bool Add(const std::shared_ptr<TTierInfo>& tier) {
-        AFL_VERIFY(tier);
+        YDB_LOG_VERIFY(tier);
         if (!TTLColumnName) {
             if (tier->GetEvictColumnName().empty()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -249,7 +250,7 @@ public:
     }
 
     const TString& GetEvictColumnName() const {
-        AFL_VERIFY(TTLColumnName);
+        YDB_LOG_VERIFY(TTLColumnName);
         return *TTLColumnName;
     }
 

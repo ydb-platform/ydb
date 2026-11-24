@@ -23,6 +23,7 @@ PY_SRCS(
     internal/nemesis/runners/cluster_tablets.py
     internal/nemesis/runners/datacenter.py
     internal/nemesis/runners/bridge_pile.py
+    internal/nemesis/runners/local_kikimr.py
     internal/nemesis/runners/yaml_gates.py
     internal/nemesis/runners/target_payload.py
     internal/nemesis/chaos_dispatch.py

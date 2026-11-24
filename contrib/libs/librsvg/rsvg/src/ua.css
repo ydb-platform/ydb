@@ -1,0 +1,41 @@
+/* See https://www.w3.org/TR/SVG/styling.html#UAStyleSheet
+ *
+ * Commented out rules cannot yet be parsed.
+ */
+
+/*
+@namespace url(http://www.w3.org/2000/svg);
+@namespace xml url(http://www.w3.org/XML/1998/namespace);
+*/
+
+svg:not(:root), image, marker, pattern, symbol { overflow: hidden; }
+
+/*
+*:not(svg),
+*:not(foreignObject) > svg {
+  transform-origin: 0 0;
+}
+
+*[xml|space=preserve] {
+  text-space-collapse: preserve-spaces;
+}
+*/
+
+defs,
+clipPath, mask, marker,
+desc, title, metadata,
+pattern, linearGradient, radialGradient,
+script, style,
+symbol {
+  display: none !important;
+}
+
+:host(use) > symbol {
+  display: inline !important;
+}
+
+/*
+:link, :visited {
+  cursor: pointer;
+}
+*

@@ -4,6 +4,15 @@
 
 namespace NSQLTranslationV1 {
 
+struct TFlattenByArg {
+    TNodePtr Column;
+    TNodePtr Expression;
+};
+
+struct TFlattenByArgs {
+    TVector<TFlattenByArg> Arguments;
+};
+
 struct TYqlColumnRef {
     TPosition Position;
     TString Name;
@@ -25,6 +34,7 @@ struct TYqlSourceAlias {
 struct TYqlSource {
     TNodePtr Node;
     TMaybe<TYqlSourceAlias> Alias;
+    TNodePtr Flatten;
 };
 
 enum class EYqlJoinKind {
@@ -45,11 +55,7 @@ struct TYqlJoin {
     TVector<TYqlJoinConstraint> Constraints;
 };
 
-struct TPlainAsterisk {};
-
-using TProjection = std::variant<
-    TVector<TNodePtr>,
-    TPlainAsterisk>;
+using TProjection = TVector<TNodePtr>;
 
 struct TYqlWithout {
     struct TColumn {
@@ -155,6 +161,13 @@ TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlSelf(TPosition position);
 
+TNodePtr BuildYqlFlattenColumns(TPosition position);
+
+TNodePtr BuildYqlFlattenBy(
+    TPosition position,
+    TString mode,
+    TFlattenByArgs&& args);
+
 TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
 TSourcePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
@@ -166,6 +179,8 @@ TNodePtr BuildYqlScalarSubquery(TNodePtr node);
 TNodePtr BuildYqlExistsSubquery(TNodePtr node);
 
 TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression);
+
+TNodePtr BuildYqlStar(TPosition position, TMaybe<TString> source = Nothing());
 
 TNodePtr BuildYqlStatement(TNodePtr node);
 

@@ -199,7 +199,9 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleTruncateTable(NNodes::TKiTruncateTable, TExprContext&) override {
+    TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext&) override {
+        SessionCtx->Tables().GetOrAddTable(TString(node.DataSink().Cluster()), SessionCtx->GetDatabase(),
+            TString(node.TablePath().Value()));
         return TStatus::Ok;
     }
 
@@ -1457,6 +1459,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .TablePath().Build(key.GetTablePath())
+                        .Settings(settings.Other)
                         .Done();
 
                     return truncateTable.Ptr();
@@ -1751,13 +1754,16 @@ public:
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();
-                } else if (mode == "drop" || mode == "dropCascade") {
+                } else if (mode == "drop" || mode == "dropCascade" || mode == "dropForce" || mode == "dropCascadeForce") {
                     return Build<TKiDropReplication>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Replication().Build(key.GetReplicationPath())
                         .Cascade<TCoAtom>()
-                            .Value(mode == "dropCascade")
+                            .Value(mode == "dropCascade" || mode == "dropCascadeForce")
+                            .Build()
+                        .SourceCleanup<TCoAtom>()
+                            .Value(mode == "dropForce" || mode == "dropCascadeForce" ? "abandon" : "drop")
                             .Build()
                         .Done()
                         .Ptr();

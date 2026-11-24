@@ -89,6 +89,17 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
+        if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
+            if (context) {
+                NKikimrBlobDepot::TEvResolveResult::TResolvedKey item;
+                item.SetKey(context->Obtain<TResolveContext>().Key);
+                item.SetErrorReason(msg.GetErrorReason() ? msg.GetErrorReason()
+                    : NKikimrProto::EReplyStatus_Name(msg.GetStatus()));
+                process(item, false);
+            }
+            return; // a failed lookup does not prove absence and must not populate the cache
+        }
+
         if (!context) {
             // aside requests -- just add received data to cache
             for (const auto& item : msg.GetResolvedKeys()) {
@@ -151,10 +162,9 @@ namespace NKikimr::NBlobDepot {
             if (mustRestoreFirst != item->GetMustRestoreFirst()) {
                 item->SetMustRestoreFirst(mustRestoreFirst);
             }
-            // A pending resolve is shared with the queries that arrive while it is in flight, but a
-            // cache entry is a blob id and thus belongs to a single tablet, so every query sharing
-            // it carries the same data kind.
-            msg.SetDataKind(dataKind);
+            // All waiters for this blob share its tablet's data kind. The query that issues the resolve
+            // supplies its deadline and bridge accounting, including when other queries join later.
+            query->SetResolveParameters(msg, dataKind);
 
             Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(TString(keyBuf), mustRestoreFirst));
             ++(mustRestoreFirst ? entry.MustRestoreFirstResolvePending : entry.OrdinaryResolvePending);

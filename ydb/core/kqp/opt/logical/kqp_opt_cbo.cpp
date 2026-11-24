@@ -496,12 +496,16 @@ std::pair<TMaybe<double>, TMaybe<double>> GetJoinKeyUniqueVals(
         auto lhsIt = leftData.find(lhs);
         auto rhsIt = rightData.find(rhs);
 
-        if (lhsIt != leftData.end() && lhsIt->second.NumUniqueVals) {
-            lhsUniqueVals = lhsIt->second.NumUniqueVals.value();
+        if (lhsIt != leftData.end()) {
+            if (const auto ndv = lhsIt->second.GetDistinctCount()) {
+                lhsUniqueVals = *ndv;
+            }
         }
 
-        if (rhsIt != rightData.end() && rhsIt->second.NumUniqueVals) {
-            rhsUniqueVals = rhsIt->second.NumUniqueVals.value();
+        if (rhsIt != rightData.end()) {
+            if (const auto ndv = rhsIt->second.GetDistinctCount()) {
+                rhsUniqueVals = *ndv;
+            }
         }
     }
 

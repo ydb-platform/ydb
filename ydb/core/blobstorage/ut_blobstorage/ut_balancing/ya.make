@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 
     FORK_SUBTESTS()
 

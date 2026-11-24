@@ -16,6 +16,9 @@ namespace NKqp {
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings) {
         TKikimrSettings kikimrSettings(settings);
+        if (!kikimrSettings.FeatureFlags.HasDisableOldSecretCreation()) {
+            kikimrSettings.FeatureFlags.SetDisableOldSecretCreation(false);
+        }
         if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
             kikimrSettings.SetEnableTieringInColumnShard(true);
         }

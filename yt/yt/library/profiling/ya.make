@@ -19,7 +19,7 @@ PEERDIR(
     library/cpp/yt/compact_containers
     library/cpp/yt/string
     library/cpp/yt/memory
-    library/cpp/yt/threading
+    library/cpp/yt/system
 )
 
 # The rseq-backed sensors use library/cpp/yt/rseq, which is Linux-only.

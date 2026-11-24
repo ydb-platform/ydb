@@ -44,6 +44,7 @@ def parse_args():
     parser.add_argument("--default-config-file", required=True)
     parser.add_argument("--project-config-file", required=True)
     parser.add_argument("--export-fixes", required=True)
+    parser.add_argument("--check-option", action="append", type=parse_check_option, default=[])
     parser.add_argument("--checks", required=False, default="")
     parser.add_argument("--header-filter", required=False, default=None)
     parser.add_argument("--collect-build-volume", action="store_true")
@@ -140,6 +141,23 @@ def filter_configs(result_config, filtered_config):
     with open(filtered_config, 'w') as afile:
         json.dump(result_config, afile)
     return filtered_out
+
+
+def parse_check_option(value):
+    key, separator, option_value = value.partition("=")
+    if not separator or not key:
+        raise argparse.ArgumentTypeError("expected a nonempty check option name followed by =value")
+    return key, option_value
+
+
+def set_check_options(config, overrides):
+    options = config.get("CheckOptions") or {}
+    if not isinstance(options, dict):
+        options = {opt["key"]: opt["value"] for opt in options}
+    options = dict(options)
+    options.update(overrides)
+    config["CheckOptions"] = [{"key": key, "value": value} for key, value in options.items()]
+    return config
 
 
 def filter_cmd(cmd):
@@ -245,6 +263,11 @@ def main():
             additional_config_path=filtered_config,
             result_config_path=result_config,
         )
+    if args.check_option:
+        config = load_yaml(result_config_file, remove_comments=False)
+        result_config_file = os.path.join(config_dir, "overridden_tidy_config.json")
+        with open(result_config_file, "w") as afile:
+            json.dump(set_check_options(config, args.check_option), afile)
     compile_command_path = generate_compilation_database(clang_cmd, args.source_root, args.testing_src, db_tmpdir)
 
     cmd = [

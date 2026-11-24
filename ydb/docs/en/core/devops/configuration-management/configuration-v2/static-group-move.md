@@ -10,7 +10,7 @@ When manual static group configuration management is needed, disable automatic s
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
-As an example, consider a {{ ydb-short-name }} cluster where a [static node](../../../devops/configuration-management/configuration-v2/config-settings.md#hosts) is configured and running on the host with `node_id:1`. This node serves part of the static group.
+As an example, consider a {{ ydb-short-name }} cluster where a [static node](../../../reference/configuration/hosts.md) is configured and running on the host with `node_id:1`. This node serves part of the static group.
 
 Static group configuration fragment:
 

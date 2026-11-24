@@ -19,15 +19,15 @@ TConclusionStatus TRestartTabletsCommand::DoExecute(TKikimrRunner& kikimr) {
 
 TConclusionStatus TStopSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-    AFL_VERIFY(controller);
+    YDB_LOG_VERIFY(controller);
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     return TConclusionStatus::Success();
 }
 
 TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-    AFL_VERIFY(controller);
-    AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas));
+    YDB_LOG_VERIFY(controller);
+    YDB_LOG_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas));
     const i64 cleanups = controller->GetCleanupSchemasFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     const TInstant start = TInstant::Now();
@@ -42,7 +42,7 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
     }
 
     if (Expected) {
-        AFL_VERIFY((cleanups < controller->GetCleanupSchemasFinishedCounter().Val()) == *Expected);
+        YDB_LOG_VERIFY((cleanups < controller->GetCleanupSchemasFinishedCounter().Val()) == *Expected);
     }
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
@@ -51,26 +51,56 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
 
 TConclusionStatus TFastPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-    AFL_VERIFY(controller);
+    YDB_LOG_VERIFY(controller);
     controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
     return TConclusionStatus::Success();
 }
 
+TConclusionStatus TStopPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    YDB_LOG_VERIFY(controller);
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TOnePortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    YDB_LOG_VERIFY(controller);
+    YDB_LOG_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Cleanup));
+    const i64 erased = controller->GetPortionsErasedCounter().Val();
+    controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+    const TInstant start = TInstant::Now();
+    while (TInstant::Now() - start < TDuration::Seconds(60)) {
+        if (erased < controller->GetPortionsErasedCounter().Val()) {
+            Cerr << "PORTIONS_ERASED: " << erased << " -> " << controller->GetPortionsErasedCounter().Val() << Endl;
+            break;
+        }
+
+        Cerr << "WAIT_PORTIONS_CLEANUP: " << controller->GetPortionsErasedCounter().Val() << Endl;
+        Sleep(TDuration::MilliSeconds(300));
+    }
+
+    YDB_LOG_VERIFY(erased < controller->GetPortionsErasedCounter().Val());
+
+    controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+    return TConclusionStatus::Success();
+}
+
 TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-    AFL_VERIFY(controller);
+    YDB_LOG_VERIFY(controller);
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     return TConclusionStatus::Success();
 }
 
 TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-    AFL_VERIFY(controller);
-    AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
+    YDB_LOG_VERIFY(controller);
+    YDB_LOG_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
     // TSchemaCommand command;
     // command.DeserializeFromString("ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,`COMPACTION_PLANNER.FEATURES`=`{'accumulator_trigger_portions':2}`)");
-    // AFL_VERIFY(command.Execute(kikimr).IsSuccess());
+    // YDB_LOG_VERIFY(command.Execute(kikimr).IsSuccess());
     const i64 compactions = controller->GetCompactionFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     const TInstant start = TInstant::Now();
@@ -84,7 +114,7 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
         Sleep(TDuration::MilliSeconds(300));
     }
 
-    AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
+    YDB_LOG_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
@@ -95,7 +125,7 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
 
 TConclusionStatus TWaitCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-    AFL_VERIFY(controller);
+    YDB_LOG_VERIFY(controller);
     controller->WaitCompactions(TDuration::Seconds(15));
     return TConclusionStatus::Success();
 }

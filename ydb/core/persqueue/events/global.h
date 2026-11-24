@@ -63,6 +63,7 @@ namespace NKikimr::TEvPersQueue {
         EvPartitionUpdateReadMetrics,
         EvCheckMessageDeduplicationRequest,
         EvCheckMessageDeduplicationResponse,
+        EvReplicationData,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -77,6 +78,9 @@ namespace NKikimr::TEvPersQueue {
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {
         TEvRequest() {}
+
+        // Mirrorer requests are sent locally to their own tablet; this flag is not serialized.
+        bool FromMirrorer = false;
     };
 
     struct TEvPartitionUpdateReadMetrics : public TEventPB<TEvPartitionUpdateReadMetrics,
@@ -184,6 +188,9 @@ namespace NKikimr::TEvPersQueue {
             NKikimrPQ::TStatusResponse, EvStatusResponse> {
         TEvStatusResponse() {}
     };
+
+    struct TEvReplicationData : public TEventPB<TEvReplicationData,
+            NKikimrPQ::TEvReplicationData, EvReplicationData> {};
 
     struct TEvHasDataInfo : public TEventPB<TEvHasDataInfo,
             NKikimrPQ::THasDataInfo, EvHasDataInfo> {

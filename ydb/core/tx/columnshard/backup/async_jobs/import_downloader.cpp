@@ -21,7 +21,9 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
     switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
 #ifndef KIKIMR_DISABLE_S3_OPS
-            return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, tabletId, txId, restoreTask, tableInfo));
+            // ColumnShard consumes row uploads, not flat-table parts.
+            return std::unique_ptr<NActors::IActor>(
+                CreateS3Downloader(subscriberActorId, tabletId, txId, restoreTask, tableInfo, /*directPartImportAllowed=*/false));
 #else
             return TConclusionStatus::Fail("Import from S3 are disabled");
 #endif
@@ -60,7 +62,6 @@ public:
                 hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -105,14 +106,14 @@ public:
         for (ui32 i = 0; i < rowScheme.KeyColumnIdsSize(); ++i) {
             const ui32 colId = rowScheme.GetKeyColumnIds(i);
             auto it = YdbSchema.find(colId);
-            AFL_VERIFY(it != YdbSchema.end());
+            YDB_LOG_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
         for (ui32 i = 0; i < rowScheme.ValueColumnIdsSize(); ++i) {
             const ui32 colId = rowScheme.GetValueColumnIds(i);
             auto it = YdbSchema.find(colId);
-            AFL_VERIFY(it != YdbSchema.end());
+            YDB_LOG_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
@@ -153,8 +154,9 @@ public:
                 totalBytes += cell.Size();
             }
 
-            AFL_VERIFY(allCells.size() == rowSchemaOrder.size())
-            ("all_cells_size", allCells.size())("schema_size", rowSchemaOrder.size());
+            YDB_LOG_VERIFY(allCells.size() == rowSchemaOrder.size(),
+                {"allCellsSize", allCells.size()},
+                {"schemaSize", rowSchemaOrder.size()});
 
             batchBuilder.AddRow(TConstArrayRef<TCell>(allCells.data(), allCells.size()));
             allCells.clear();
@@ -175,7 +177,6 @@ public:
             return Fail(product->Error);
         }
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -183,7 +184,6 @@ public:
         auto result = std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true);
         result->Error = error;
         Send(SubscriberActorId, std::move(result));
-        Counters.OnActorDead();
         PassAway();
     }
 

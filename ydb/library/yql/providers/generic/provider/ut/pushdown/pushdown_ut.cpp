@@ -1,5 +1,6 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
@@ -7,6 +8,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_pushdown.h>
 
 #include <fmt/format.h>
 #include <google/protobuf/text_format.h>
@@ -19,12 +21,15 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/public/purecalc/purecalc.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -32,6 +37,107 @@ using namespace NYql;
 using namespace NNodes;
 using namespace NKikimr::NMiniKQL;
 using namespace fmt::literals;
+
+namespace NPushdownTest {
+class TInputSpec: public NPureCalc::TInputSpecBase {
+public:
+    explicit TInputSpec(const TString& columnName) {
+        auto type = NYT::TNode::CreateList().Add("OptionalType").Add(NYT::TNode::CreateList().Add("DataType").Add("String"));
+        Schemas_.push_back(
+            NYT::TNode::CreateList().Add("StructType").Add(NYT::TNode::CreateList().Add(NYT::TNode::CreateList().Add(columnName).Add(type))));
+    }
+
+    const TVector<NYT::TNode>& GetSchemas() const override {
+        return Schemas_;
+    }
+
+private:
+    TVector<NYT::TNode> Schemas_;
+};
+
+class TOutputSpec: public NPureCalc::TOutputSpecBase {
+public:
+    TOutputSpec()
+        : Schema_(NYT::TNode::CreateList()
+                      .Add("StructType")
+                      .Add(NYT::TNode::CreateList().Add(
+                          NYT::TNode::CreateList().Add("accepted").Add(NYT::TNode::CreateList().Add("DataType").Add("Bool")))))
+    {
+    }
+
+    const NYT::TNode& GetSchema() const override {
+        return Schema_;
+    }
+
+private:
+    NYT::TNode Schema_;
+};
+
+class TConsumer: public NPureCalc::IConsumer<const NUdf::TUnboxedValue*> {
+public:
+    explicit TConsumer(TVector<bool>& values)
+        : Values_(values)
+    {
+    }
+
+    void OnObject(const NUdf::TUnboxedValue* value) override {
+        Values_.push_back(value->GetElement(0).Get<bool>());
+    }
+
+    void OnFinish() override {
+    }
+
+private:
+    TVector<bool>& Values_;
+};
+}   // namespace NPushdownTest
+
+template <>
+struct NYql::NPureCalc::TInputSpecTraits<NPushdownTest::TInputSpec> {
+    static constexpr bool IsPartial = false;
+    static constexpr bool SupportPushStreamMode = true;
+    using TConsumerType = TWorkerHolder<IPushStreamWorker>;
+
+    static TConsumerType MakeConsumer(const NPushdownTest::TInputSpec&, TConsumerType worker) {
+        return worker;
+    }
+};
+
+template <>
+struct NYql::NPureCalc::TOutputSpecTraits<NPushdownTest::TOutputSpec> {
+    static constexpr bool IsPartial = false;
+    static constexpr bool SupportPushStreamMode = true;
+
+    static void SetConsumerToWorker(const NPushdownTest::TOutputSpec&, IPushStreamWorker* worker, TVector<bool>& values) {
+        worker->SetConsumer(MakeHolder<NPushdownTest::TConsumer>(values));
+    }
+};
+
+static bool EvaluatePredicate(const TString& predicate, const TString& columnName, const std::optional<TString>& value) {
+    auto factory = NPureCalc::MakeProgramFactory(NPureCalc::TProgramFactoryOptions().SetLLVMSettings("OFF"));
+    auto program = [&] {
+        try {
+            return factory->MakePushStreamProgram(NPushdownTest::TInputSpec{ columnName }, NPushdownTest::TOutputSpec{},
+                TStringBuilder() << "SELECT COALESCE(" << predicate << ", FALSE) AS accepted FROM Input;", NPureCalc::ETranslationMode::SQL);
+        } catch (const NPureCalc::TCompileError& error) {
+            Cerr << "Predicate: " << predicate << "\nIssues: " << error.GetIssues() << Endl;
+            throw;
+        }
+    }();
+    TVector<bool> result;
+    auto worker = program->Apply(result);
+    with_lock(worker->GetScopedAlloc()) {
+        NUdf::TUnboxedValue* items = nullptr;
+        auto row = worker->GetGraph().GetHolderFactory().CreateDirectArrayHolder(1, items);
+        if (value) {
+            items[0] = MakeString(*value);
+        }
+        worker->Push(std::move(row));
+        worker->OnFinish();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+    return result.front();
+}
 
 // Template for program to optimize
 static constexpr auto ProgramTemplate = R"ast((
@@ -373,9 +479,80 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         BuildProtoFilterFromLambda(lambdaText);
         UNIT_ASSERT(!DqSourceSettings.select().where().has_filter_typed());
     }
+
+    void AssertPushdownPreservesMatch(
+        const TString& lambdaText, const TString& originalPredicate, const TString& columnName, const std::optional<TString>& value) {
+        // These rows must be accepted by the original expression. A source filter
+        // may admit extra rows, but must never discard a matching row.
+        UNIT_ASSERT(EvaluatePredicate(originalPredicate, columnName, value));
+        Transform(ProgramFromLambda(lambdaText));
+        TExprNode::TPtr filter;
+        TExprNode::TPtr rowArgument;
+        VisitExpr(ExprRoot, [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("OptionalIf") && node->ChildrenSize() == 2 && node->Child(1)->IsArgument()) {
+                UNIT_ASSERT_C(!filter, "Expected one row filter in this single-input fixture");
+                filter = node->HeadPtr();
+                rowArgument = node->ChildPtr(1);
+            }
+            return true;
+        });
+        UNIT_ASSERT(filter);
+        const TExprBase row(rowArgument);
+        NPushdown::TPredicateNode predicate{ TExprBase(filter) };
+        NPushdown::CollectPredicates(Ctx, TExprBase(filter), predicate, row, TExprBase(filter), NPq::TCommonPushdownSettings{});
+        if (!predicate.CanBePushed) {
+            return;   // Keeping the original local predicate is a valid fallback.
+        }
+        NConnector::NApi::TPredicate proto;
+        TStringBuilder error;
+        UNIT_ASSERT_C(SerializeFilterPredicate(Ctx, TExprBase(filter), row.Cast<TCoArgument>(), &proto, error), error);
+        const TString pushedPredicate = FormatPredicate(proto);
+        UNIT_ASSERT_C(EvaluatePredicate(pushedPredicate, columnName, value), "Pushed filter discarded a matching row: " << pushedPredicate);
+    }
 };
 
 Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
+    Y_UNIT_TEST(LikePushdownPreservesNullForFoldedPattern) {
+        AssertPushdownPreservesMatch(R"ast(
+            (Not (Apply
+                (AssumeStrict (Udf '"Re2.Match" '(
+                    (Apply (Udf '"Re2.PatternFromLike") (SafeCast (String '"abc%x%") (DataType '"String")))
+                    (NamedApply (Udf '"Re2.Options") '()
+                        (AsStruct '('"CaseSensitive" (Bool '"true"))))
+                )))
+                (Member $row '"col_optional_string")
+            ))
+        )ast", R"sql(col_optional_string NOT LIKE CAST("abc%x%" AS String))sql", "col_optional_string", std::nullopt);
+    }
+
+    Y_UNIT_TEST(LikePushdownPreservesPositionalRegexpOptions) {
+        AssertPushdownPreservesMatch(R"ast(
+            (Apply
+                (Udf '"Re2.Match" '(
+                    (Apply (Udf '"Re2.PatternFromLike") (String '"_%_"))
+                    (NamedApply (Udf '"Re2.Options") '((Bool '"false"))
+                        (AsStruct '('"CaseSensitive" (Bool '"true"))))
+                ))
+                (Member $row '"col_string")
+            )
+        )ast", R"sql(Re2::Match(Udf(Re2::PatternFromLike)("_%_"), Re2::Options(false, true AS CaseSensitive))(col_string))sql", "col_string",
+            TString("\xC3\xA9"));   // Two bytes, one Unicode character.
+    }
+
+    Y_UNIT_TEST(LikePushdownPreservesCustomEscape) {
+        AssertPushdownPreservesMatch(R"ast(
+            (Apply
+                (Udf '"Re2.Match" '(
+                    (Apply (Udf '"Re2.PatternFromLike") (String '"_!_") (String '"!"))
+                    (NamedApply (Udf '"Re2.Options") '()
+                        (AsStruct '('"CaseSensitive" (Bool '"true"))))
+                ))
+                (Member $row '"col_string")
+            )
+        )ast", R"sql(Re2::Match(Udf(Re2::PatternFromLike)("_!_", "!"), Re2::Options(true AS CaseSensitive))(col_string))sql", "col_string",
+            TString("a_"));
+    }
+
     Y_UNIT_TEST(NoFilter) {
         AssertNoPush(R"ast((Bool '"true"))ast");   // Note that R"ast()ast" is empty string!
     }

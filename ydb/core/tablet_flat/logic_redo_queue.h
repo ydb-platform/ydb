@@ -10,7 +10,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
 #include <ydb/core/util/queue_inplace.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

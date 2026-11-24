@@ -1,147 +1,147 @@
 {
-    "test.test[CRYPTR-627]": [
+    "test.test[CRYPTR-627-Results]": [
         {
-            "uri": "file://test.test_CRYPTR-627_/results.txt"
+            "uri": "file://test.test_CRYPTR-627-Results_/results.txt"
         }
     ],
-    "test.test[YQL-16111]": [
+    "test.test[YQL-16111-Results]": [
         {
-            "uri": "file://test.test_YQL-16111_/results.txt"
+            "uri": "file://test.test_YQL-16111-Results_/results.txt"
         }
     ],
-    "test.test[YQL-19040]": [
+    "test.test[YQL-19040-Results]": [
         {
-            "uri": "file://test.test_YQL-19040_/results.txt"
+            "uri": "file://test.test_YQL-19040-Results_/results.txt"
         }
     ],
-    "test.test[YQL-3381]": [
+    "test.test[YQL-3381-Results]": [
         {
-            "uri": "file://test.test_YQL-3381_/results.txt"
+            "uri": "file://test.test_YQL-3381-Results_/results.txt"
         }
     ],
-    "test.test[YQL-6706]": [
+    "test.test[YQL-6706-Results]": [
         {
-            "uri": "file://test.test_YQL-6706_/results.txt"
+            "uri": "file://test.test_YQL-6706-Results_/results.txt"
         }
     ],
-    "test.test[YQL-8307]": [
+    "test.test[YQL-8307-Results]": [
         {
-            "uri": "file://test.test_YQL-8307_/results.txt"
+            "uri": "file://test.test_YQL-8307-Results_/results.txt"
         }
     ],
-    "test.test[empty_message]": [
+    "test.test[empty_message-Results]": [
         {
-            "uri": "file://test.test_empty_message_/extracted"
+            "uri": "file://test.test_empty_message-Results_/extracted"
         }
     ],
-    "test.test[map_bytes_v1]": [
+    "test.test[map_bytes_v1-Results]": [
         {
-            "uri": "file://test.test_map_bytes_v1_/results.txt"
+            "uri": "file://test.test_map_bytes_v1-Results_/results.txt"
         }
     ],
-    "test.test[map_bytes_v2]": [
+    "test.test[map_bytes_v2-Results]": [
         {
-            "uri": "file://test.test_map_bytes_v2_/results.txt"
+            "uri": "file://test.test_map_bytes_v2-Results_/results.txt"
         }
     ],
-    "test.test[oneof_bytes_v1_fail]": [
+    "test.test[oneof_bytes_v1_fail-Results]": [
         {
-            "uri": "file://test.test_oneof_bytes_v1_fail_/extracted"
+            "uri": "file://test.test_oneof_bytes_v1_fail-Results_/extracted"
         }
     ],
-    "test.test[oneof_bytes_v1_success]": [
+    "test.test[oneof_bytes_v1_success-Results]": [
         {
-            "uri": "file://test.test_oneof_bytes_v1_success_/results.txt"
+            "uri": "file://test.test_oneof_bytes_v1_success-Results_/results.txt"
         }
     ],
-    "test.test[oneof_bytes_v2]": [
+    "test.test[oneof_bytes_v2-Results]": [
         {
-            "uri": "file://test.test_oneof_bytes_v2_/results.txt"
+            "uri": "file://test.test_oneof_bytes_v2-Results_/results.txt"
         }
     ],
-    "test.test[recursion_bytes_v1_fail_empty_optional]": [
+    "test.test[recursion_bytes_v1_fail_empty_optional-Results]": [
         {
-            "uri": "file://test.test_recursion_bytes_v1_fail_empty_optional_/extracted"
+            "uri": "file://test.test_recursion_bytes_v1_fail_empty_optional-Results_/extracted"
         }
     ],
-    "test.test[recursion_bytes_v1_success]": [
+    "test.test[recursion_bytes_v1_success-Results]": [
         {
-            "uri": "file://test.test_recursion_bytes_v1_success_/results.txt"
+            "uri": "file://test.test_recursion_bytes_v1_success-Results_/results.txt"
         }
     ],
-    "test.test[recursion_bytes_v2]": [
+    "test.test[recursion_bytes_v2-Results]": [
         {
-            "uri": "file://test.test_recursion_bytes_v2_/results.txt"
+            "uri": "file://test.test_recursion_bytes_v2-Results_/results.txt"
         }
     ],
-    "test.test[recursion_fail]": [
+    "test.test[recursion_fail-Results]": [
         {
-            "uri": "file://test.test_recursion_fail_/extracted"
+            "uri": "file://test.test_recursion_fail-Results_/extracted"
         }
     ],
-    "test.test[recursion_ignore]": [
+    "test.test[recursion_ignore-Results]": [
         {
-            "uri": "file://test.test_recursion_ignore_/results.txt"
+            "uri": "file://test.test_recursion_ignore-Results_/results.txt"
         }
     ],
-    "test.test[syntax_aware_empty_nested_message]": [
+    "test.test[syntax_aware_empty_nested_message-Results]": [
         {
-            "uri": "file://test.test_syntax_aware_empty_nested_message_/results.txt"
+            "uri": "file://test.test_syntax_aware_empty_nested_message-Results_/results.txt"
         }
     ],
-    "test.test[syntax_aware_nested_enum_string_value]": [
+    "test.test[syntax_aware_nested_enum_string_value-Results]": [
         {
-            "uri": "file://test.test_syntax_aware_nested_enum_string_value_/results.txt"
+            "uri": "file://test.test_syntax_aware_nested_enum_string_value-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_any]": [
+    "test.test[yt_mode_any-Results]": [
         {
-            "uri": "file://test.test_yt_mode_any_/results.txt"
+            "uri": "file://test.test_yt_mode_any-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_enum]": [
+    "test.test[yt_mode_enum-Results]": [
         {
-            "uri": "file://test.test_yt_mode_enum_/results.txt"
+            "uri": "file://test.test_yt_mode_enum-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_map]": [
+    "test.test[yt_mode_map-Results]": [
         {
-            "uri": "file://test.test_yt_mode_map_/results.txt"
+            "uri": "file://test.test_yt_mode_map-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_map_recursive_v1]": [
+    "test.test[yt_mode_map_recursive_v1-Results]": [
         {
-            "uri": "file://test.test_yt_mode_map_recursive_v1_/results.txt"
+            "uri": "file://test.test_yt_mode_map_recursive_v1-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_map_recursive_v2]": [
+    "test.test[yt_mode_map_recursive_v2-Results]": [
         {
-            "uri": "file://test.test_yt_mode_map_recursive_v2_/results.txt"
+            "uri": "file://test.test_yt_mode_map_recursive_v2-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_no_ser]": [
+    "test.test[yt_mode_no_ser-Results]": [
         {
-            "uri": "file://test.test_yt_mode_no_ser_/results.txt"
+            "uri": "file://test.test_yt_mode_no_ser-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_plain]": [
+    "test.test[yt_mode_plain-Results]": [
         {
-            "uri": "file://test.test_yt_mode_plain_/results.txt"
+            "uri": "file://test.test_yt_mode_plain-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_ser_pb]": [
+    "test.test[yt_mode_ser_pb-Results]": [
         {
-            "uri": "file://test.test_yt_mode_ser_pb_/results.txt"
+            "uri": "file://test.test_yt_mode_ser_pb-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_ser_yt]": [
+    "test.test[yt_mode_ser_yt-Results]": [
         {
-            "uri": "file://test.test_yt_mode_ser_yt_/results.txt"
+            "uri": "file://test.test_yt_mode_ser_yt-Results_/results.txt"
         }
     ],
-    "test.test[yt_mode_variant]": [
+    "test.test[yt_mode_variant-Results]": [
         {
-            "uri": "file://test.test_yt_mode_variant_/results.txt"
+            "uri": "file://test.test_yt_mode_variant-Results_/results.txt"
         }
     ]
 }

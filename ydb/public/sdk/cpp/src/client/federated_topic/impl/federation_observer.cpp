@@ -5,13 +5,14 @@
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
-constexpr TDuration REDISCOVERY_DELAY = TDuration::Seconds(30);
-
 TFederatedDbObserverImpl::TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , FederatedDbState(std::make_shared<TFederatedDbState>())
     , PromiseToInitState(NThreading::NewPromise())
     , FederationDiscoveryRetryPolicy(settings.RetryPolicy_)
+    , DiscoveryInterval(settings.FederationDiscoveryInterval_
+        ? settings.FederationDiscoveryInterval_
+        : TDuration::Seconds(30))
 {
     RpcSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
     RpcSettings.UseAuth = true;
@@ -159,20 +160,37 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
         //   1) The request was meant for a non-federated topic: fall back to single db mode.
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
+            if (Federated) {
+                // Read sessions follow the published membership. Replacing a known federation with
+                // the single-database fallback would drop every other database, so keep the last
+                // state and ask again later.
+                LOG_LAZY(DbDriverState_->Log, TLOG_WARNING, TStringBuilder()
+                    << "OnFederationDiscovery: Got " << status.GetStatus()
+                    << " after a successful discovery, keeping the last federation state. Description: "
+                    << status.GetIssues().ToOneLineString());
+                ScheduleFederationDiscoveryImpl(DiscoveryInterval);
+                return;
+            }
             LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
                 << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
-            FederatedDbState->Status = TPlainStatus{};  // SUCCESS
-            FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
-            // FederatedDbState->SelfLocation = ???;
+            // Sessions copy the published state without Lock, so publish a new object instead of mutating it.
+            auto newInfo = std::make_shared<TFederatedDbState>();
+            newInfo->Status = TPlainStatus{};  // SUCCESS
+            newInfo->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
+            // newInfo->SelfLocation = ???;
             auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
             db->set_path(TStringType{DbDriverState_->Database});
             db->set_endpoint(TStringType{DbDriverState_->DiscoveryEndpoint});
             db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
             db->set_weight(100);
-            FederatedDbState->DbInfos.emplace_back(std::move(db));
+            newInfo->DbInfos.emplace_back(std::move(db));
+            std::swap(FederatedDbState, newInfo);
         } else {
             if (status.IsSuccess()) {
-                ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
+                Federated = true;
+                // Each outage gets the full retry budget, not what earlier outages left of it.
+                FederationDiscoveryRetryState = nullptr;
+                ScheduleFederationDiscoveryImpl(DiscoveryInterval);
             } else {
                 LOG_LAZY(DbDriverState_->Log, TLOG_ERR, TStringBuilder()
                     << "OnFederationDiscovery: Got error. Status: " << status.GetStatus()

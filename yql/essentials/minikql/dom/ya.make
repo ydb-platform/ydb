@@ -16,10 +16,12 @@ SRCS(
     make.cpp
     peel.cpp
     hash.cpp
+    convert.cpp
 )
 
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

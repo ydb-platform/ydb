@@ -7,6 +7,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include "event_destructor.h"
 #include "events/events.h"
 #include "interconnect_stream.h"
 #include "types.h"
@@ -16,17 +17,34 @@
 
 namespace NActors {
 
-    class TActorSystem;
     class IReceiveCallback;
     struct TInterconnectProxyCommon;
 
+    class IUringEngine;
+    using TUringEnginePtr = TIntrusivePtr<IUringEngine>;
+
+    class IUringEngineClient : public IEventDestructor {
+    public:
+        virtual ~IUringEngineClient() = default;
+
+        // Called by SetClient before any connection is registered. Arranges engine shutdown.
+        virtual void Start(const TUringEnginePtr& engine) = 0;
+
+        // Called once after all engine workers have stopped, before the event destination is torn down.
+        // Completes pending client work, including the final destruction batch.
+        virtual void Stop() = 0;
+
+        // Takes ownership of the event. May be called concurrently from engine worker threads.
+        virtual void Send(std::unique_ptr<IEventHandle> ev) = 0;
+    };
+
+    using IUringEngineClientPtr = std::shared_ptr<IUringEngineClient>;
+
     class IUringEngine : public TThrRefBase {
     public:
-        // Binds the engine to the actor system and arranges (via DeferPreStop) for the reaper threads to be
-        // stopped before the actor system is torn down. The engine is created before the actor system exists
-        // (see CreateUringEngine), so this must be called exactly once it is available, before any Register.
-        // Idempotent and thread-safe.
-        virtual void SetActorSystem(TActorSystem* actorSystem) = 0;
+        // Installs the client before the first Register. Must be called exactly once, before any
+        // worker can send an event. Keeps the client alive and calls its Start method.
+        virtual void SetClient(IUringEngineClientPtr client) = 0;
 
         // Registers a connected socket, arms receiving, and returns an opaque non-zero handle (0 on
         // failure). The engine holds a reference to the socket until Unregister fully drains. Thread-safe.
@@ -45,7 +63,7 @@ namespace NActors {
         // Register receive callback (for IDirectSession). Null callback deregisters it.
         virtual void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) = 0;
 
-        // Stops every reaper thread. Must be called before the actor system is torn down.
+        // Stops every reaper thread. Must be called before the client's event destination is torn down.
         virtual void Stop() = 0;
 
         // Issue monitoring request.
@@ -55,16 +73,13 @@ namespace NActors {
         virtual ui64 GetTotalOutputQueueSize(ui64 conn) = 0;
     };
 
-    using TUringEnginePtr = TIntrusivePtr<IUringEngine>;
-
     // Creates the engine, taking every knob it needs from `common` (which it keeps a reference to, so
     // sessions can read the shared settings): Settings.V2.UringEngineThreads worker threads (clamped to
     // >= 1), each driving Settings.V2.UringEngineRingsPerShard io_uring rings (clamped to >= 1). With
     // SQPOLL, each ring has its own kernel poll thread, so rings-per-shard scales submission-polling
     // capacity independently of serialization workers.
-    // The engine is created without an actor system (it does not exist yet at startup); bind it later via
-    // SetActorSystem before the first Register. Returns nullptr when io_uring is unavailable (non-Linux or a
-    // kernel that cannot create a ring).
+    // The engine is created without a client; install one via SetClient before the first Register.
+    // Returns nullptr when io_uring is unavailable (non-Linux or a kernel that cannot create a ring).
     //
     // When the kernel SQPOLL thread is saturated while shard workers still have headroom, try
     // EnableSQPOLL=false (submit from the underutilized worker) or raise UringEngineRingsPerShard. When

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -13,7 +14,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 namespace {
 
-ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard) {
+ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard, bool internal) {
     TPath implTable = index.Child(name);
     {
         // To safely fill the TransactionTemplate below, we need to check if the table is valid.
@@ -37,6 +38,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
 
     TTableInfo::TPtr table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
+    transaction.SetInternal(internal);
 
     auto operation = transaction.MutableAlterTable();
     operation->SetName(name);
@@ -146,7 +148,11 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
 
         if (config.HasVectorIndexKmeansTreeDescription()) {
-            *alterIndex->MutableVectorIndexKmeansTreeDescription() = config.GetVectorIndexKmeansTreeDescription();
+            if (context.SS->Indexes.at(index.Base()->PathId)->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                *alterIndex->MutableHnswIndexDescription()->MutableSettings() = config.GetVectorIndexKmeansTreeDescription().GetSettings();
+            } else {
+                *alterIndex->MutableVectorIndexKmeansTreeDescription() = config.GetVectorIndexKmeansTreeDescription();
+            }
         }
 
         result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
@@ -170,16 +176,19 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                     return {std::move(op)};
                 }
                 result.push_back(std::move(op));
-            } else if (context.SS->TablesWithSnapshots.contains(indexChildItems.second)) {
+            } else if (context.SS->HasTableSnapshot(indexChildItems.second)) {
+                // This is the index impl table during unique-index validation,
+                // which holds exactly one snapshot.
                 auto finalize = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
                 *finalize.MutableLockGuard() = tx.GetLockGuard();
                 auto op = finalize.MutableFinalizeBuildIndexMainTable();
                 op->SetTableName(indexImplTableName);
-                op->SetSnapshotTxId(ui64(context.SS->TablesWithSnapshots.at(indexChildItems.second)));
+                op->SetSnapshotTxId(ui64(context.SS->GetSingleTableSnapshot(indexChildItems.second)));
                 op->SetBuildIndexId(config.GetBuildIndexId());
                 result.push_back(CreateFinalizeBuildIndexMainTable(partId, finalize));
             } else {
-                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard()));
+                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName,
+                    indexChildItems.second, tx.GetLockGuard(), tx.GetInternal()));
             }
         }
     }

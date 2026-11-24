@@ -1,6 +1,8 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
-DEPENDS(yql/essentials/udfs/common/protobuf)
+DEPENDS(
+    yql/essentials/udfs/common/protobuf/impl
+)
 
 TIMEOUT(300)
 

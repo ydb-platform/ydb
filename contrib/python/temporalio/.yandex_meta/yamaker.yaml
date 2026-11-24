@@ -1,0 +1,23 @@
+requirements:
+  - grpcio
+  - opentelemetry-api
+  - contrib/libs/googleapis-common-protos
+exclude:
+  - temporalio/contrib/aws/*
+  - temporalio/contrib/deepagents/*
+  - temporalio/contrib/google_genai/*
+  - temporalio/contrib/langgraph/*
+  - temporalio/contrib/langsmith/*
+  - temporalio/contrib/strands/*
+exclude_from_macros:
+  - temporalio/bridge/ya.make
+  - temporalio/bridge/sdk-core/*
+  - temporalio/bridge/src/*
+  - temporalio/bridge/Cargo.lock
+  - temporalio/bridge/Cargo.toml
+  - temporalio/api/cluster/*
+  - temporalio/api/interaction/*
+keep:
+  - temporalio/bridge/py_wrapper.cpp
+  - temporalio/bridge/ya.make
+  - temporalio/bridge/sdk-core/*/ya.make

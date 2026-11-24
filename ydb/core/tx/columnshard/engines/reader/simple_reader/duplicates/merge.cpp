@@ -14,7 +14,7 @@ private:
 
     void AddImpl(const ui64 portionId, const bool value) {
         auto* findFilter = Filters.FindPtr(portionId);
-        AFL_VERIFY(findFilter);
+        YDB_LOG_VERIFY(findFilter);
         findFilter->Add(value);
     }
 
@@ -37,14 +37,14 @@ public:
     }
 
     THashMap<ui64, NArrow::TColumnFilter>&& ExtractFilters() && {
-        AFL_VERIFY(!IsDone);
+        YDB_LOG_VERIFY(!IsDone);
         IsDone = true;
         return std::move(Filters);
     }
 
     void AddSource(const ui64 portionId) {
-        AFL_VERIFY(!IsDone);
-        AFL_VERIFY(Filters.emplace(portionId, NArrow::TColumnFilter::BuildAllowFilter()).second);
+        YDB_LOG_VERIFY(!IsDone);
+        YDB_LOG_VERIFY(Filters.emplace(portionId, NArrow::TColumnFilter::BuildAllowFilter()).second);
     }
 };
 
@@ -63,7 +63,7 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
     for (const auto& interval : Context.GetIntervals()) {
         for (auto&& [portionId, filter] : BuildFiltersOnInterval(interval, merger, columnData)) {
-            AFL_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetGlobalContext().GetMaxVersion(), TIntervalBordersView(interval.GetBegin().MakeView(), interval.GetEnd().MakeView()), portionId), std::move(filter)).second);
+            YDB_LOG_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetGlobalContext().GetMaxVersion(), TIntervalBordersView(interval.GetBegin().MakeView(), interval.GetEnd().MakeView()), portionId), std::move(filter)).second);
         }
     }
 
@@ -81,7 +81,7 @@ THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInte
     NArrow::NMerger::TMergePartialStream& merger, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData) {
     merger.SkipToBound(*interval.GetBegin().GetKey(), !interval.GetBegin().GetIsLast());
 
-    AFL_VERIFY(!interval.IsEmpty());
+    YDB_LOG_VERIFY(!interval.IsEmpty());
     if (interval.IsExclusive()) {
         THashMap<ui64, NArrow::TColumnFilter> result;
         for (const auto& [portionId, _] : columnData) {

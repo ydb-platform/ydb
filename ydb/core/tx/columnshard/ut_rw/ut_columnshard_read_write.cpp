@@ -1,6 +1,7 @@
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
@@ -377,12 +378,13 @@ void TestWrite(const TestTableDescription& table) {
     ok = WriteData(runtime, sender, writeId++, tableId, TString(), ydbSchema);
     UNIT_ASSERT(!ok);
 
-    // null column in PK
+    // null column in PK: the test schema does not mark its key columns NOT NULL, and the shard takes nullability
+    // from the schema, so NULL key cells are accepted (a NOT NULL key column still rejects them)
 
     TTestBlobOptions optsNulls;
     optsNulls.NullColumns.emplace("timestamp");
     ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, ydbSchema, optsNulls), ydbSchema);
-    UNIT_ASSERT(!ok);
+    UNIT_ASSERT(ok);
 
     // missing columns
 
@@ -1750,6 +1752,166 @@ void TestScanResumedByCursorOnOtherReader(const TString& interruptedReader, cons
     AssertResumedScanReadsEveryKeyOnce(interrupted, resumed, portionsCount);
 }
 
+ui64 GetDictionaryOnlyOptimizationCount(TTestBasicRuntime& runtime) {
+    auto scanCounters =
+        GetServiceCounters(runtime.GetAppData(0).Counters, "tablets")->FindSubgroup("subsystem", "columnshard")->FindSubgroup("module_id",
+            "Scan");
+    auto dictionaryOnlyCount = scanCounters->FindCounter("Deriviative/Dictionary/OnlyOptimization/Count");
+    UNIT_ASSERT_C(dictionaryOnlyCount, "dictionary-only optimization counter is absent");
+    return dictionaryOnlyCount->Val();
+}
+
+template <class TCheck>
+void WithDictionaryDistinctPortion(
+    const TString& readerClassName, const ui64 rowsPerPortion, const TTestBlobOptions& blobOptions, TCheck&& check) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(readerClassName);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    TestTableDescription table;
+    for (auto& column : table.Schema) {
+        if (column.GetName() == "message") {
+            column.SetStorageId({});
+            column.SetAccessorClassName("DICTIONARY");
+        }
+    }
+    const ui64 tableId = 1;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(
+        WriteData(runtime, sender, 1, tableId, MakeTestBlob({ 0, rowsPerPortion }, table.Schema, blobOptions), table.Schema, true, &writeIds));
+    const ui64 txId = 100;
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    const NOlap::TSnapshot snapshot(planStep, Max<ui64>());
+    check(runtime, table, tableId, snapshot);
+}
+
+// Program with filter not eligible for dictionary-only
+NKikimrSSA::TProgram BuildDictionaryDistinctFilterProgram(const TestTableDescription& table) {
+    const ui32 messageId = table.GetColumnIds({ "message" }).front();
+    const ui32 requestId = table.GetColumnIds({ "request_id" }).front();
+    NKikimrSSA::TProgram program;
+    const ui32 predicateId = table.Schema.size() + 1;
+    auto* assignment = program.AddCommand()->MutableAssign();
+    assignment->MutableColumn()->SetId(predicateId);
+    auto* function = assignment->MutableFunction();
+    function->SetId(NKikimrSSA::TProgram::TAssignment::FUNC_CMP_EQUAL);
+    function->AddArguments()->SetId(messageId);
+    function->AddArguments()->SetId(requestId);
+    program.AddCommand()->MutableFilter()->MutablePredicate()->SetId(predicateId);
+    program.AddCommand()->MutableProjection()->AddColumns()->SetId(messageId);
+    program.AddCommand()->MutableDistinct()->MutableKeyColumn()->SetId(messageId);
+    return program;
+}
+
+// One portion contains 60 rows but only one dictionary value.
+// DISTINCT fetches that value without reading its row indices.
+// The first scan returns the value with a cursor at the portion's end.
+// New readers resume from that cursor with either fetching mode.
+// Both must skip the consumed source and return no duplicates.
+void TestDictionaryDistinctResumedByCursor(const TString& readerClassName) {
+    constexpr ui64 rowsPerPortion = 60;
+    TTestBlobOptions blobOptions;
+    blobOptions.SameValueColumns.emplace("message");
+    blobOptions.SameValueColumns.emplace("request_id");
+    WithDictionaryDistinctPortion(readerClassName, rowsPerPortion, blobOptions,
+        [&](TTestBasicRuntime& runtime, const TestTableDescription& table, const ui64 tableId, const NOlap::TSnapshot& snapshot) {
+            const ui32 messageId = table.GetColumnIds({ "message" }).front();
+            NKikimrSSA::TProgram program;
+            program.AddCommand()->MutableProjection()->AddColumns()->SetId(messageId);
+            program.AddCommand()->MutableDistinct()->MutableKeyColumn()->SetId(messageId);
+            TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            interrupted.SetReverse(std::nullopt);
+            interrupted.SetProgram(program);
+            interrupted.SetReplyColumnIds({ messageId });
+            UNIT_ASSERT(interrupted.InitializeScanner());
+            interrupted.Ack();
+            UNIT_ASSERT_C(interrupted.Receive(), "scan finished before the cursor could be resumed");
+            UNIT_ASSERT_VALUES_EQUAL(interrupted.GetReceivedBatches().front()->num_rows(), 1);
+            UNIT_ASSERT_C(GetDictionaryOnlyOptimizationCount(runtime) > 0, "dictionary-only optimization was not used");
+            const auto& cursor = interrupted.GetLastCursor();
+            UNIT_ASSERT_C(cursor.HasColumnShardSimple(), cursor.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(cursor.GetColumnShardSimple().GetStartRecordIndex(), rowsPerPortion);
+
+            TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            resumed.SetReverse(std::nullopt);
+            resumed.SetProgram(program);
+            resumed.SetReplyColumnIds({ messageId });
+            resumed.SetScanCursor(cursor);
+            resumed.ReadAll();
+            UNIT_ASSERT(resumed.IsCorrectlyFinished());
+            UNIT_ASSERT(
+                DataHas<std::string>(interrupted.GetReceivedBatches(), { blobOptions.SameValue, blobOptions.SameValue + 1 }, true, "message"));
+            UNIT_ASSERT_VALUES_EQUAL(resumed.GetRecordsCount(), 0);
+
+            auto programWithFilter = BuildDictionaryDistinctFilterProgram(table);
+
+            const auto dictionaryOnlyCountBeforeResume = GetDictionaryOnlyOptimizationCount(runtime);
+            TShardReader resumedWithoutOptimization(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            resumedWithoutOptimization.SetReverse(std::nullopt);
+            resumedWithoutOptimization.SetProgram(programWithFilter);
+            resumedWithoutOptimization.SetReplyColumnIds({ messageId });
+            resumedWithoutOptimization.SetScanCursor(cursor);
+            resumedWithoutOptimization.ReadAll();
+            UNIT_ASSERT(resumedWithoutOptimization.IsCorrectlyFinished());
+            UNIT_ASSERT_VALUES_EQUAL(resumedWithoutOptimization.GetRecordsCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetDictionaryOnlyOptimizationCount(runtime), dictionaryOnlyCountBeforeResume);
+        });
+}
+
+// The first scan is non-dictionary-only - we need it to get a valid mid-portion cursor
+// The resumed scan would be dictionary-only-eligible if not for the cursor position.
+void TestDictionaryDistinctResumedInsidePortion(const TString& readerClassName) {
+    // More than one stored chunk is needed for an ordinary scan to emit an interior page cursor.
+    constexpr ui64 rowsPerPortion = 30'000;
+    TTestBlobOptions blobOptions;
+    WithDictionaryDistinctPortion(readerClassName, rowsPerPortion, blobOptions,
+        [&](TTestBasicRuntime& runtime, const TestTableDescription& table, const ui64 tableId, const NOlap::TSnapshot& snapshot) {
+            const ui32 messageId = table.GetColumnIds({ "message" }).front();
+            auto programWithFilter = BuildDictionaryDistinctFilterProgram(table);
+            TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            interrupted.SetReverse(std::nullopt);
+            interrupted.SetProgram(programWithFilter);
+            interrupted.SetReplyColumnIds({ messageId });
+            UNIT_ASSERT(interrupted.InitializeScanner());
+            interrupted.Ack();
+            UNIT_ASSERT_C(interrupted.Receive(), "scan finished before an interior cursor was emitted");
+            const auto& cursor = interrupted.GetLastCursor();
+            UNIT_ASSERT_C(cursor.HasColumnShardSimple(), cursor.ShortDebugString());
+            const ui64 firstPageRows = interrupted.GetReceivedBatches().front()->num_rows();
+            UNIT_ASSERT_C(firstPageRows > 0 && firstPageRows < rowsPerPortion, firstPageRows);
+            UNIT_ASSERT_VALUES_EQUAL(cursor.GetColumnShardSimple().GetStartRecordIndex(), firstPageRows);
+
+            NKikimrSSA::TProgram program;
+            program.AddCommand()->MutableProjection()->AddColumns()->SetId(messageId);
+            program.AddCommand()->MutableDistinct()->MutableKeyColumn()->SetId(messageId);
+            const auto dictionaryOnlyCountBeforeResume = GetDictionaryOnlyOptimizationCount(runtime);
+            TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            resumed.SetReverse(std::nullopt);
+            resumed.SetProgram(program);
+            resumed.SetReplyColumnIds({ messageId });
+            resumed.SetScanCursor(cursor);
+            resumed.ReadAll();
+            UNIT_ASSERT(resumed.IsCorrectlyFinished());
+            UNIT_ASSERT_VALUES_EQUAL(resumed.GetRecordsCount(), rowsPerPortion - firstPageRows);
+            UNIT_ASSERT_VALUES_EQUAL(GetDictionaryOnlyOptimizationCount(runtime), dictionaryOnlyCountBeforeResume);
+
+            std::vector<std::shared_ptr<arrow::RecordBatch>> batches = interrupted.GetReceivedBatches();
+            batches.insert(batches.end(), resumed.GetReceivedBatches().begin(), resumed.GetReceivedBatches().end());
+            UNIT_ASSERT(DataHas<std::string>(batches, { 0, rowsPerPortion }, true, "message"));
+        });
+}
+
 template <class TCheck>
 void WithSysViewPortions(const TString& readerClassName, TCheck&& check, ui64 portionsCount = 25,
     const std::function<void(NKikimrSchemeOp::TColumnTableSchema&)>& configureSchema = {}, bool overlapPortions = false) {
@@ -1964,6 +2126,155 @@ Y_UNIT_TEST_SUITE(TColumnShardInit) {
         TActorId sender = runtime.AllocateEdgeActor();
         Y_UNUSED(SetupSchema(runtime, sender, 1, TestTableDescription{}));
     }
+
+    Y_UNIT_TEST(CompactsPortionsLoadedOnStart) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        const ui64 tableId = 1;
+        const TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+        const TString data = MakeTestBlob({ 0, 75 * 1000 }, table.Schema);
+        for (ui64 writeId = 0, txId = 100; writeId < 3; ++writeId, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+            PlanCommit(runtime, sender, ProposeCommit(runtime, sender, txId, writeIds), txId);
+        }
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        for (ui32 i = 0; i < 60 && !csControllerGuard->GetCompactionFinishedCounter().Val(); ++i) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_GT(csControllerGuard->GetCompactionFinishedCounter().Val(), 0);
+    }
+
+    TActorId StartShard(TTestBasicRuntime & runtime, const ui64 tableId, const TestTableDescription& table) {
+        TTester::Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+        return sender;
+    }
+
+    void AlterSchema(TTestBasicRuntime & runtime, TActorId & sender, const ui64 tableId, const TestTableDescription& table, const ui32 version,
+        const ui64 txId) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, true, version, table.Schema, table.Pk, {})));
+        tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
+        Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), txId));
+    }
+
+    void AddColumns(TestTableDescription & table, const ui32 count) {
+        for (ui32 i = 0; i < count; ++i) {
+            table.Schema.emplace_back("added_" + ::ToString(table.Schema.size()), NScheme::TTypeInfo(NTypeIds::Int32));
+        }
+    }
+
+    std::map<ui64, std::vector<TString>> ColumnsByVersion(
+        TTestBasicRuntime & runtime, NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> & csControllerGuard) {
+        for (ui32 i = 0; i < 10 && !csControllerGuard->GetShardActualsCount(); ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        std::map<ui64, std::vector<TString>> result;
+        for (auto&& [version, info] : csControllerGuard->GetTheOnlyShard()->GetIndexVerified().GetVersionedIndex().GetSchemaByVersion()) {
+            result.emplace(version, info.GetSchema()->GetIndexInfo().GetColumnNames());
+        }
+        return result;
+    }
+
+    // one more change than the writer allows in a stored diff
+    constexpr ui32 MoreChangesThanDiffLimit = 101;
+
+    Y_UNIT_TEST(LoadsSchemaVersionsOnStart) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        for (ui32 version = 2, txId = 100; version <= 4; ++version, ++txId) {
+            // the drop makes a field of one version's diff wrong in the next one, if it leaked there
+            if (version == 3) {
+                table.Schema.pop_back();
+            } else {
+                table.Schema.emplace_back("added_" + ::ToString(version), NScheme::TTypeInfo(NTypeIds::Int32));
+            }
+            AlterSchema(runtime, sender, tableId, table, version, txId);
+        }
+
+        const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
+        UNIT_ASSERT_VALUES_EQUAL(beforeReboot.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(beforeReboot.rbegin()->second.size(), beforeReboot.begin()->second.size() + 1);
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
+    }
+
+    Y_UNIT_TEST(WritesSchemaDiffAfterStart) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        AddColumns(table, 1);
+        const ui32 version = 2;
+        const ui64 txId = 100;
+        AlterSchema(runtime, sender, tableId, table, version, txId);
+
+        const auto versions = ReadSchemaPresetVersions(runtime, TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_VALUES_EQUAL(versions.size(), 2);
+        UNIT_ASSERT(versions[1].HasDiff());
+        // the diff is made against the schema filled on start, so a reboot checks that schema is right
+        const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
+    }
+
+    Y_UNIT_TEST(WritesNoSchemaDiffOverHundredChanges) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        AddColumns(table, MoreChangesThanDiffLimit);
+        const ui32 version = 2;
+        const ui64 txId = 100;
+        AlterSchema(runtime, sender, tableId, table, version, txId);
+
+        const auto versions = ReadSchemaPresetVersions(runtime, TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_VALUES_EQUAL(versions.size(), 2);
+        UNIT_ASSERT(!versions[1].HasDiff());
+        UNIT_ASSERT(versions[1].HasSchema());
+    }
+
+    Y_UNIT_TEST(LoadsSchemaVersionWithoutDiff) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        const ui64 tableId = 1;
+        TestTableDescription table;
+        TActorId sender = StartShard(runtime, tableId, table);
+        AddColumns(table, MoreChangesThanDiffLimit);
+        const ui32 version = 2;
+        const ui64 txId = 100;
+        AlterSchema(runtime, sender, tableId, table, version, txId);
+
+        const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
+    }
 }
 
 Y_UNIT_TEST_SUITE(EvWrite) {
@@ -1990,7 +2301,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
 
         {
@@ -2028,8 +2339,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId + 1), false);
 
@@ -2060,7 +2371,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        YDB_LOG_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
 
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
@@ -2091,7 +2402,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                     "field", NConstruction::TStringPoolFiller(8, 100));
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-            AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             {
                 auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
@@ -2104,7 +2415,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                     "field", NConstruction::TStringPoolFiller(8, 100));
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-            AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             {
                 auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
@@ -2118,6 +2429,35 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
+    }
+
+    Y_UNIT_TEST(UncommittedPortionsAreLoadedOnStart) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto controller = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)) };
+        Y_UNUSED(PrepareTablet(runtime, tableId, schema));
+        const ui64 txId = 111;
+
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        YDB_LOG_VERIFY(writer.Write(MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 }), { 1 }, txId) ==
+                   NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        // a transaction that is not proposed is aborted on start
+        Y_UNUSED(writer.StartCommit(txId));
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, runtime.AllocateEdgeActor());
+
+        const TColumnShard& shard = *controller->GetTheOnlyShard();
+        const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
+        const auto uncommittedPortions = shard.GetOperationsManager().GetUncommittedPortionAddresses();
+        UNIT_ASSERT(!uncommittedPortions.empty());
+        for (const auto& address : uncommittedPortions) {
+            const auto portion = index.GetGranuleVerified(address.GetPathId()).GetPortionOptional(address.GetPortionId(), false);
+            UNIT_ASSERT_C(portion, address.DebugString());
+            UNIT_ASSERT(!portion->IsCommitted());
+        }
     }
 
     Y_UNIT_TEST(WriteIntoReadOnlyTableFails) {
@@ -2147,8 +2487,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         {
             const ui64 lockId = 111;
             NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
-            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
         // Create a read-only copy of the source table at dstPathId.
@@ -2192,8 +2532,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         {
             const ui64 lockId = 333;
             NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
-            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            YDB_LOG_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
     }
 }
@@ -2226,9 +2566,212 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteOverload(table);
     }
 
+    // A shard with one standalone table on the given planner; the test sends the schemeshard's TEvCompactTable requests
+    // itself, see TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr&).
+    class TForcedCompactionTest {
+    public:
+        using TResult = NKikimrTxDataShard::TEvCompactTableResult;
+        using EBackground = NKikimr::NYDBTest::ICSController::EBackground;
+
+        // first: the observer and the controller below register with the runtime and must be destroyed before it
+        TTestBasicRuntime Runtime;
+
+    private:
+        static constexpr ui64 TableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> Pk = TTestSchema::YdbPkSchema();
+        std::vector<NArrow::NTest::TTestColumn> Schema = TTestSchema::YdbSchema();   // of the current version
+        ui32 SchemaVersion = 1;
+        TTestSchema::TTableSpecials Specials;
+        ui64 WriteId = 0;
+        ui64 TxId = 100;
+        TTestActorRuntimeBase::TEventObserverHolder ReplyObserver;
+
+    public:
+        NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> Controller;
+        TActorId Sender;
+        // the live portions' schema versions at the shard's last reply (background compaction may go on afterwards)
+        std::optional<std::set<ui64>> VersionsOnReply;
+
+        explicit TForcedCompactionTest(const TString& planner)
+            : Specials(TTestSchema::TTableSpecials().WithCompactionPlanner(planner))
+            , Controller(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>())
+        {
+            TTester::Setup(Runtime);
+            Controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            Controller->SetOverrideTasksActualizationLag(TDuration::Zero());
+            Sender = Runtime.AllocateEdgeActor();
+            CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            Runtime.DispatchEvents(options);
+            Y_UNUSED(SetupSchema(Runtime, Sender, TTestSchema::CreateStandaloneTableTxBody(TableId, Schema, Pk, Specials), /*txId=*/10));
+            ReplyObserver = Runtime.AddObserver<TEvDataShard::TEvCompactTableResult>([this](TEvDataShard::TEvCompactTableResult::TPtr&) {
+                VersionsOnReply = PortionSchemaVersions();
+            });
+        }
+
+        void DisableBackground(const EBackground id) {
+            Controller->DisableBackground(id);
+        }
+
+        void EnableBackground(const EBackground id) {
+            Controller->EnableBackground(id);
+        }
+
+        // a batch of the given key range, written with the current schema
+        void WriteBatch(const std::pair<ui64, ui64>& keys) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(Runtime, Sender, WriteId++, TableId, MakeTestBlob(keys, Schema), Schema, true, &writeIds,
+                NEvWrite::EModificationType::Upsert, /*lockId=*/1, SchemaVersion));
+            const ui64 txId = ++TxId;
+            const auto planStep = ProposeCommit(Runtime, Sender, txId, writeIds);
+            PlanCommit(Runtime, Sender, planStep, txId);
+        }
+
+        // `count` batches of one and the same key range: with tiling++ they intersect until compaction merges them
+        void WriteOverlappingBatches(const ui32 count) {
+            for (ui32 i = 0; i < count; ++i) {
+                WriteBatch({ 0, 75 * 1000 });
+            }
+            Runtime.SimulateSleep(TDuration::Seconds(3));   // the writes become portions
+        }
+
+        // the next schema version: one more column, SCHEME_NEED_ACTUALIZATION off (the portions keep their version)
+        void AlterSchema() {
+            ++SchemaVersion;
+            Schema.emplace_back("extra" + ToString(SchemaVersion), TTypeInfo(NTypeIds::Uint64));
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(TableId, /*standalone=*/true, SchemaVersion, Schema, Pk, Specials)));
+            tx.MutableAlterTable()->MutableSchema()->SetVersion(SchemaVersion);
+            tx.MutableAlterTable()->MutableSchema()->MutableOptions()->SetSchemeNeedActualization(false);
+            Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), ++TxId));
+        }
+
+        // the schemeshard's request; `cascade` unset leaves the flag out of the message
+        void SendCompact(const ui64 forcedCompactionTxId, const std::optional<bool> cascade) {
+            auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, TableId);
+            request->Record.SetTxId(forcedCompactionTxId);
+            if (cascade) {
+                request->Record.SetCascade(*cascade);
+            }
+            VersionsOnReply.reset();
+            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, request.release());
+        }
+
+        void SendCompactWithoutId() {
+            VersionsOnReply.reset();
+            ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, TableId));
+        }
+
+        // drives the background loop (wakeup = EnqueueBackgroundActivities, sleep = async work) until the shard replies
+        TResult::EStatus WaitResult() {
+            TEvDataShard::TEvCompactTableResult::TPtr ev;
+            for (ui32 i = 0; i < 120 && !ev; ++i) {
+                RunBackground(1);
+                ev = Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(Sender, TDuration::MilliSeconds(1));
+            }
+            UNIT_ASSERT_C(ev, "no reply");
+            UNIT_ASSERT(VersionsOnReply);
+            return ev->Get()->Record.GetStatus();
+        }
+
+        // a couple of background rounds without a reply: the request is held (or nobody is waiting)
+        void AssertNoReply(const TString& why) {
+            RunBackground(2);
+            UNIT_ASSERT_C(!Runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(Sender, TDuration::MilliSeconds(1)), why);
+        }
+
+        // tiling++: drives the background loop until every portion has settled into the last level
+        void WaitSettled() {
+            for (ui32 i = 0; i < 120; ++i) {
+                bool settled = true;
+                for (const auto& [_, granule] : Engine().GetTables()) {
+                    settled &= !granule->GetOptimizerPlanner().NeedCompaction();
+                }
+                if (settled) {
+                    return;
+                }
+                RunBackground(1);
+            }
+            UNIT_ASSERT_C(false, "the portions did not settle");
+        }
+
+        void Reboot() {
+            RebootTablet(Runtime, TTestTxConfig::TxTablet0, Sender);
+        }
+
+        // EnableCSSchemasCollapsing: drives the background loop until the shard has erased the schema version
+        void WaitSchemaVersionCollapsed(const ui64 version) {
+            for (ui32 i = 0; i < 30; ++i) {
+                if (!Engine().GetVersionedIndex().GetSchemaByVersion().contains(version)) {
+                    return;
+                }
+                RunBackground(1);
+            }
+            UNIT_ASSERT_C(false, "schema version " << version << " was not collapsed");
+        }
+
+        // portions queued for the schema rewrite (counted by the test controller)
+        i64 QueuedForActualization() {
+            return Controller->GetNeedActualizationCount().Val();
+        }
+
+        // live portions by schema version
+        std::map<ui64, i64> PortionsByVersion() {
+            std::map<ui64, i64> counts;
+            for (const auto& [_, granule] : Engine().GetTables()) {
+                for (const auto& [_, portion] : granule->GetPortions()) {
+                    if (!portion->HasRemoveSnapshot()) {
+                        ++counts[portion->GetSchemaVersion()];
+                    }
+                }
+            }
+            return counts;
+        }
+
+        std::set<ui64> PortionSchemaVersions() {
+            std::set<ui64> versions;
+            for (const auto& [version, _] : PortionsByVersion()) {
+                versions.emplace(version);
+            }
+            return versions;
+        }
+
+        void AssertVersions(const std::set<ui64>& expected) {
+            UNIT_ASSERT_EQUAL_C(PortionSchemaVersions(), expected, PortionVersionsString());
+        }
+
+        void AssertVersionsOnReply(const std::set<ui64>& expected) {
+            UNIT_ASSERT(VersionsOnReply);
+            UNIT_ASSERT_EQUAL_C(
+                *VersionsOnReply, expected, "on reply: " << JoinSeq(",", *VersionsOnReply) << "; now: " << PortionVersionsString());
+        }
+
+    private:
+        void RunBackground(const ui32 rounds) {
+            for (ui32 i = 0; i < rounds; ++i) {
+                ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+                Runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        const NOlap::TColumnEngineForLogs& Engine() {
+            return Controller->GetTheOnlyShard()->GetTablesManager().GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+        }
+
+        // "version:count,..." for the assertion messages
+        TString PortionVersionsString() {
+            TStringBuilder sb;
+            for (const auto& [version, count] : PortionsByVersion()) {
+                sb << (sb.empty() ? "" : ",") << version << ":" << count;
+            }
+            return TString(sb);
+        }
+    };
+
     Y_UNIT_TEST(ForcedCompactionColumnStoreRejected) {
         // Forced compaction (ALTER TABLE ... COMPACT) is not supported for tables that belong to a column
-        // store: the shard replies FAILED even though the request is well-formed.
+        // store: the shard answers NOT_NEEDED even though the request is well-formed.
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -2245,67 +2788,159 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestTableDescription table{ .Standalone = false };
         Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
 
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, tableId);
+        request->Record.SetTxId(1);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
         auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender);
         UNIT_ASSERT(ev);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 
-    Y_UNIT_TEST(ForcedCompactionHeldUntilNoIntersections) {
-        // A standalone tiling++ column table with intersecting portions: the shard holds the request until
-        // background compaction settles every portion into the regular last level, then replies OK.
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    Y_UNIT_TEST(ForcedCompactionCascadeRewritesPortionsToCurrentSchema) {
+        // A plain request is answered once the planner has nothing to do: tiling++ holds it until compaction has
+        // settled every portion into the last level (OK), the other planners answer NOT_NEEDED at once. No operation
+        // id: NOT_NEEDED whatever the state. Older portions are left alone by a plain request and rewritten by CASCADE
+        // (OK once no live portion is older, NOT_NEEDED when there was nothing to rewrite).
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        for (const TString planner : { "tiling++", "lc-buckets" }) {
+            TForcedCompactionTest t(planner);
+            // the batches stay as written (a compaction would rewrite the merged portions with the current schema)
+            t.DisableBackground(EBackground::Compaction);
+            t.WriteOverlappingBatches(2);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-            runtime.DispatchEvents(options);
+            t.SendCompactWithoutId();
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
+
+            t.SendCompact(1, false);
+            if (planner == "tiling++") {
+                t.AssertNoReply("held while the portions intersect");
+                t.EnableBackground(EBackground::Compaction);
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+            }
+            t.AssertVersionsOnReply({ 1 });
+
+            t.AlterSchema();   // version 2
+            t.SendCompact(2, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
+            t.AssertVersions({ 1 });
+            UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
+
+            t.SendCompact(3, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::OK, planner);
+            t.AssertVersionsOnReply({ 2 });
+
+            t.SendCompact(4, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(t.WaitResult(), TResult::NOT_NEEDED, planner);
         }
+    }
 
-        const ui64 tableId = 1;
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-        auto specials = TTestSchema::TTableSpecials().WithForcedCompaction(true);   // standalone + tiling++
-        TString txBody = TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials);
-        Y_UNUSED(SetupSchema(runtime, sender, txBody, /*txId=*/10));
+    Y_UNIT_TEST(ForcedCompactionCascadeRewritesCollapsedVersion) {
+        // With EnableCSSchemasCollapsing the shard erases a version whose successor only added nullable columns, and
+        // the lookup of that version gives the successor: its portions look current. The rewrite goes by the stored
+        // version.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("lc-buckets");
+        t.Runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(1);
 
-        // Write several overlapping (identical key range) portions; with compaction disabled they stay
-        // intersecting, so the table is not yet fully compacted.
-        ui64 writeId = 0;
-        ui64 txId = 100;
-        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
-        for (ui32 i = 0; i < 5; ++i, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
-            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
-        }
-        // Let indexation move the committed data into engine portions (compaction remains disabled).
-        runtime.SimulateSleep(TDuration::Seconds(3));
+        t.AlterSchema();   // version 2, version 1 collapses into it
+        t.WaitSchemaVersionCollapsed(1);
+        t.AssertVersions({ 1 });   // the portion keeps its stored version
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
 
-        // Portions still intersect -> the request is held, no result is produced yet.
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
-        runtime.SimulateSleep(TDuration::Seconds(2));   // let the handler run (compaction still disabled)
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1)));
+        t.SendCompact(1, true);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 2 });
 
-        // Enable compaction and drive the background loop: each manual wakeup runs EnqueueBackgroundActivities
-        // (which starts a compaction and re-checks the held request); SimulateSleep lets the async compaction
-        // complete. Once every portion settles into the last level, RecheckForcedCompactions replies OK.
-        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        TEvDataShard::TEvCompactTableResult::TPtr ev;
-        for (int i = 0; i < 120 && !ev; ++i) {
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
-            runtime.SimulateSleep(TDuration::Seconds(1));
-            ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
-        }
-        UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        t.SendCompact(2, true);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+    }
+
+    Y_UNIT_TEST(ForcedCompactionCascadeRetryNewOperationRestart) {
+        // The schemeshard repeats its request until answered and tells the shards nothing on cancel. A request with the
+        // id being served is a retry: it changes nothing. A plain request of another operation turns the rewrite of a
+        // cancelled CASCADE off: NOT_NEEDED at once, the superseded request gets no reply. A restart forgets the
+        // operation and its rewrite; the retry that follows starts it anew.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("tiling++");
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(2);
+        t.EnableBackground(EBackground::Compaction);
+        t.SendCompact(1, false);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);   // settled, every portion at version 1
+        t.AlterSchema();   // version 2
+        t.DisableBackground(EBackground::TTL);   // the rewrite tasks: the queue stays as it is
+
+        t.SendCompact(2, true);
+        t.AssertNoReply("held until the portions are rewritten");
+        const i64 queued = t.QueuedForActualization();
+        UNIT_ASSERT_VALUES_EQUAL(queued, t.PortionsByVersion().at(1));
+
+        t.SendCompact(2, true);   // a retry
+        t.AssertNoReply("a retry is held like the request it repeats");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), queued);
+
+        t.SendCompact(3, false);   // another operation: the CASCADE one has been cancelled on the schemeshard
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::NOT_NEEDED);
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), 0);
+        t.AssertNoReply("the superseded request is not answered");
+        t.AssertVersions({ 1 });
+
+        t.SendCompact(4, true);
+        t.AssertNoReply("held until the portions are rewritten");
+        t.Reboot();
+        t.EnableBackground(EBackground::TTL);
+        t.AssertNoReply("the operation is forgotten with the restart: nothing is rewritten, nobody is answered");
+        t.AssertVersions({ 1 });
+        t.SendCompact(4, true);   // the schemeshard's retry
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 2 });
+    }
+
+    Y_UNIT_TEST(ForcedCompactionCascadeThresholdIsSchemaAtRequest) {
+        // CASCADE queues the portions older than the schema current at the request and rewrites them with the newest
+        // schema at the time of the rewrite. A schema change meanwhile neither drops nor extends the queue, and a retry
+        // keeps the threshold.
+        using TResult = TForcedCompactionTest::TResult;
+        using EBackground = TForcedCompactionTest::EBackground;
+        TForcedCompactionTest t("tiling++");
+        t.DisableBackground(EBackground::Compaction);
+        t.WriteOverlappingBatches(2);
+        t.EnableBackground(EBackground::Compaction);
+        t.SendCompact(1, false);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);   // settled, every portion at version 1
+
+        t.AlterSchema();   // version 2
+        t.AlterSchema();   // version 3
+        t.WriteBatch({ 100 * 1000, 175 * 1000 });   // another key range, written with schema 3
+        t.WaitSettled();   // into the last level, through the accumulator if it was small enough for it
+        t.AssertVersions({ 1, 3 });
+
+        t.DisableBackground(EBackground::TTL);
+        t.SendCompact(2, true);
+        t.AssertNoReply("held until the portions older than schema 3 are rewritten");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(1));   // only those
+        t.AlterSchema();   // version 4
+        t.AssertNoReply("still held");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(1));
+        t.SendCompact(2, true);   // a retry after the schema change keeps the threshold at 3 (a new operation would take 4)
+        t.AssertNoReply("still held");
+        UNIT_ASSERT_VALUES_EQUAL(t.QueuedForActualization(), t.PortionsByVersion().at(1));
+
+        t.EnableBackground(EBackground::TTL);
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 3, 4 });
+
+        t.AlterSchema();   // version 5
+        t.SendCompact(3, true);   // a new operation: its threshold is the new current schema
+        UNIT_ASSERT_VALUES_EQUAL(t.WaitResult(), TResult::OK);
+        t.AssertVersionsOnReply({ 5 });
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {
@@ -2332,6 +2967,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto ydbSchema = table.Schema;
         auto planStep = SetupSchema(runtime, sender, tableId);
+
+        const auto getTableStats = [&]() {
+            NKikimrTableStats::TTableStats stats;
+            csDefaultControllerGuard->GetTheOnlyShard()->GetTabletCounters().FillStats(stats);
+            return stats;
+        };
 
         constexpr ui32 numRows = 10;
         std::pair<ui64, ui64> portion = { 10, 10 + numRows };
@@ -2411,8 +3052,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
+            const auto statsBeforeDelete = getTableStats();
+            UNIT_ASSERT_VALUES_EQUAL(statsBeforeDelete.GetRowDeletes(), 0);
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
+            // Count delete writes before commit, separately from updates.
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), numRows);
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowUpdates(), statsBeforeDelete.GetRowUpdates());
             auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
@@ -2421,7 +3067,20 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
-            AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            YDB_LOG_VERIFY(!rb || rb->num_rows() == 0,
+                {"count", rb->num_rows()});
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), numRows);
+        }
+        {
+            // Erasing missing keys is still delete work, even if the transaction is later aborted.
+            constexpr ui64 lockId = 2;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete, lockId));
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), 2 * numRows);
+            TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, lockId);
+            UNIT_ASSERT_VALUES_EQUAL(writer.Abort(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), 2 * numRows);
         }
     }
 
@@ -2516,6 +3175,22 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
+    Y_UNIT_TEST(DictionaryDistinctResumedByCursor) {
+        TestDictionaryDistinctResumedByCursor("TRIVIAL");
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedByCursorSimpleReader) {
+        TestDictionaryDistinctResumedByCursor("SIMPLE");
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedInsidePortion) {
+        TestDictionaryDistinctResumedInsidePortion("TRIVIAL");
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedInsidePortionSimpleReader) {
+        TestDictionaryDistinctResumedInsidePortion("SIMPLE");
+    }
+
     Y_UNIT_TEST(SysViewLimitDrainsEqualPrefixes) {
         using TStats = NKikimr::NSysView::Schema::PrimaryIndexPortionStats;
         for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
@@ -2550,7 +3225,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto controller = NYDBTest::TControllers::GetControllerAs<TDefaultTestsController>();
                     controller->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
                     const auto sender = runtime.AllocateEdgeActor();
-                    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(1, tableId));
+                    auto compactRequest = std::make_unique<TEvDataShard::TEvCompactTable>(1, tableId);
+                    compactRequest->Record.SetTxId(1);
+                    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, compactRequest.release());
                     TEvDataShard::TEvCompactTableResult::TPtr compacted;
                     for (ui32 attempt = 0; attempt < 30 && !compacted; ++attempt) {
                         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
@@ -2586,10 +3263,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     schema.MutableColumns(schema.ColumnsSize() - 1)->SetId(trailingColumnId);
                     auto* index = schema.AddIndexes();
                     index->SetId(indexId);
-                    index->SetName("timestamp_max");
-                    index->SetClassName("MAX");
+                    index->SetName("timestamp_min_max");
+                    index->SetClassName("MIN_MAX");
                     index->SetStorageId("__LOCAL_METADATA");
-                    index->MutableMaxIndex()->SetColumnId(schema.GetColumns(0).GetId());
+                    auto* minMax = index->MutableMinMaxIndex();
+                    minMax->SetColumnId(schema.GetColumns(0).GetId());
+                    minMax->MutableDataExtractor()->SetClassName("DEFAULT");
+                    minMax->MutableDataExtractor()->MutableDefault();
                 }, /*overlapPortions=*/true);
         }
     }
@@ -3122,7 +3802,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
                 auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
                 if (scan->Finished) {
-                    AFL_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
+                    YDB_LOG_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
                     break;
                 }
                 UNIT_ASSERT(scan->ArrowBatch);
@@ -3134,7 +3814,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto bytes = batchStats->GetColumnByName("ColumnBlobBytes");
                     auto rawBytes = batchStats->GetColumnByName("ColumnRawBytes");
                     auto activities = batchStats->GetColumnByName("Activity");
-                    AFL_VERIFY(activities);
+                    YDB_LOG_VERIFY(activities);
 
                     const auto pathId = TInternalPathId::FromRawValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
                     auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
@@ -3177,7 +3857,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
             }
         }
-        AFL_VERIFY(success);
+        YDB_LOG_VERIFY(success);
     }
 
     void TestCompactionSplitGranule(const TTypeId typeId) {
@@ -3530,8 +4210,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
             writeAndCommit(triggerData);
         }
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
+        YDB_LOG_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
+        YDB_LOG_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
         // With the registry guard (delay = 1+1+1+10 = 13s per phase), cleanup requires two
         // plan-step advances of 13s each (phase-1 marking, then phase-2 deletion). In this test
         // runtime plan step follows simulated time, so advance it explicitly to avoid relying on
@@ -3553,6 +4233,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_GE(compactionsHappened, previousCompactionsHappened);
         UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
         UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
+
+        // Compaction cleanup removes physical rows without deleting logical rows.
+        const auto& counters = csDefaultControllerGuard->GetTheOnlyShard()->GetTabletCounters();
+        UNIT_ASSERT_GT(counters.GetValue(COUNTER_ROWS_ERASED), 0);
+        NKikimrTableStats::TTableStats stats;
+        counters.FillStats(stats);
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetRowDeletes(), 0);
     }
 
     void TestCleanupSnapshotPersistenceAfterReboot() {

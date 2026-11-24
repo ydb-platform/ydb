@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 

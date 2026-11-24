@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/core/project_settings/yql_project_settings.h>
+
 #include "yql_data_provider.h"
 #include "yql_udf_index_package_set.h"
 #include "yql_udf_resolver.h"
@@ -530,6 +532,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
+    bool PositionalUnionAll = false;
     bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
 
@@ -550,6 +553,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool FuzzUniversal = false;
     TRuntimeSettings::TConstPtr RuntimeSettings;
     bool StrictConfigValidation = false;
+    THashSet<TString> AcceptedSqlProjectSettings;
+    TProjectSettings ProjectSettings;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;
@@ -641,6 +646,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     bool Initialize(TExprContext& ctx);
     bool DoInitialize(TExprContext& ctx);
+    bool ValidateProjectSettings(TExprContext& ctx) const;
 
     TString GetDefaultDataSource() const;
 

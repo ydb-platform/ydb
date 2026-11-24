@@ -39,6 +39,7 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
         case_file,
         '--syntax-version=1',
         '--test-antlr4',
+        '--test-parser-ranges',
     ]
 
     if ansi_lexer:

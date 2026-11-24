@@ -49,7 +49,7 @@ bool Has(ui32 id) {
         return false;
     }
 
-    return NRegistrator::GetModules()->at(id).Id == id;
+    return NRegistrator::GetModules()->at(id - 1).Id == id;
 }
 
 IRePtr Deserialize(const TStringBuf& serializedRegex) {

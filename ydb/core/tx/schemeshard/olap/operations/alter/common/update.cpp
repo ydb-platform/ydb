@@ -1,7 +1,14 @@
 #include "update.h"
+#include "object.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
+
+TConclusionStatus TColumnTableUpdate::DoRestore(const TUpdateRestoreContext& context) {
+    const auto& table = context.GetOriginalEntityAsVerified<TColumnTableEntity>().GetTableInfoVerified();
+    YDB_LOG_VERIFY(table.AlterData && table.AlterData->AlterBody);
+    return DoRestoreImpl(context, table.AlterData);
+}
 
 TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context) {
     auto conclusion = DoStartImpl(context);
@@ -23,7 +30,9 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
         for (const auto& tier : oldDataSources) {
             if (!newDataSources.contains(tier)) {
                 auto tierPath = TPath::Resolve(tier, ssContext->SS);
-                AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                YDB_LOG_VERIFY(tierPath.IsResolved(),
+                    {"path", tier}
+                );
                 ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
                 ssContext->SS->RemoveExternalDataSourceReference(tierPath->PathId, pathId);
                 ssContext->DbChanges.PersistExternalDataSource(tierPath->PathId);
@@ -32,7 +41,9 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
         for (const auto& tier : newDataSources) {
             if (!oldDataSources.contains(tier)) {
                 auto tierPath = TPath::Resolve(tier, ssContext->SS);
-                AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                YDB_LOG_VERIFY(tierPath.IsResolved(),
+                    {"path", tier}
+                );
                 ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
                 ssContext->SS->AddExternalDataSourceReference(
                     tierPath->PathId, TPath::Init(pathId, ssContext->SS));

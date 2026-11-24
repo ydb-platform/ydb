@@ -15,3 +15,4 @@ Main subsections:
 
 * [{#T}](observability/index.md) — tools for observing {{ ydb-short-name }} clusters.
 * [{#T}](backup-and-recovery/index.md) — backup and recovery of {{ ydb-short-name }} clusters.
+* [{#T}](async-replication-initial-sync.md): transferring initial data using backup and restore, and starting asynchronous replication.

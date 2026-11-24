@@ -101,7 +101,7 @@ namespace NKikimr {
                     // then check the parts; we have `parts' argument to validate actual blob content
                     ui8 partsMask;
                     iter.ExtractPlainDataAndAdvance(&partsMask, sizeof(partsMask));
-                    Y_ABORT_UNLESS(parts.Raw() == partsMask);
+                    Y_ABORT_UNLESS(parts.Raw8() == partsMask);
                     break;
                 }
 
@@ -274,7 +274,7 @@ namespace NKikimr {
                     char header[HeaderSize];
                     Y_ABORT_UNLESS(fullDataSize <= Max<ui32>());
                     *reinterpret_cast<ui32*>(header) = fullDataSize;
-                    *reinterpret_cast<ui8*>(header + sizeof(ui32)) = parts.Raw();
+                    *reinterpret_cast<ui8*>(header + sizeof(ui32)) = parts.Raw8();
                     rope.Insert(rope.End(), arena.CreateRope(header, HeaderSize));
                     break;
                 }
@@ -301,7 +301,7 @@ namespace NKikimr {
 
         static inline TRope Create(ui64 fullDataSize, ui8 partId, ui8 total, TRope&& data, TRopeArena& arena,
                 EBlobHeaderMode blobHeaderMode, std::optional<ui64> checksum) {
-            Y_ABORT_UNLESS(partId > 0 && partId <= 8);
+            Y_ABORT_UNLESS(partId > 0 && partId <= total && total <= TErasureType::MaxTotalParts);
             return CreateFromDistinctParts(&data, &data + 1, NMatrix::TVectorType::MakeOneHot(partId - 1, total),
                 fullDataSize, arena, blobHeaderMode, checksum);
         }
@@ -376,7 +376,7 @@ namespace NKikimr {
                 case EBlobHeaderMode::OLD_HEADER: {
                     char header[HeaderSize];
                     *reinterpret_cast<ui32*>(header) = FullDataSize;
-                    *reinterpret_cast<ui8*>(header + sizeof(ui32)) = Parts.Raw();
+                    *reinterpret_cast<ui8*>(header + sizeof(ui32)) = Parts.Raw8();
                     rope.Insert(rope.End(), arena.CreateRope(header, sizeof(header)));
                     break;
                 }

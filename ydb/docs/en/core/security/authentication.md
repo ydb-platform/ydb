@@ -27,7 +27,7 @@ Anonymous authentication should be used only for evaluation purposes for local d
 
 {% endnote %}
 
-The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/auth_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
+The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
 
 Depending on the authentication mode settings, the actual authentication may not be anonymous:
 
@@ -345,6 +345,12 @@ Device authentication is optional and configured independently: the mechanism ca
 * **Service Account Key** — the attributes of a service account and a signing key are set as parameters for the client (SDK or CLI), based on which the client periodically accesses the IAM API in the background to rotate (obtain the next) token passed in requests.
 * **Metadata** — the client (SDK or CLI) periodically accesses a local service to rotate (obtain the next) token passed in requests.
 * **OAuth 2.0 token exchange** - the client (SDK or CLI) exchanges a token of another type for an access token using the [OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693), which is then passed in requests to the {{ ydb-short-name }} API.
+
+{% note info %}
+
+When using **Service Account Key** authentication, the client (SDK or CLI) builds a [JWT](https://www.rfc-editor.org/rfc/rfc7519) using the host system clock. If the system clock is ahead or behind, IAM may reject the token request. For diagnostics and recommendations, see [{#T}](../troubleshooting/client-clock-skew.md).
+
+{% endnote %}
 
 Any holder of a valid token can gain access to perform operations, so the main task of the security system is to ensure token secrecy and prevent its compromise.
 

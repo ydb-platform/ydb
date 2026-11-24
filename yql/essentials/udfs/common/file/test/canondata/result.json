@@ -1,0 +1,37 @@
+{
+    "test.test[ByLines-Results]": [
+        {
+            "uri": "file://test.test_ByLines-Results_/results.txt"
+        }
+    ],
+    "test.test[Empty-Results]": [
+        {
+            "uri": "file://test.test_Empty-Results_/results.txt"
+        }
+    ],
+    "test.test[SkipBeyondEnd-Results]": [
+        {
+            "uri": "file://test.test_SkipBeyondEnd-Results_/results.txt"
+        }
+    ],
+    "test.test[SkipTake-Results]": [
+        {
+            "uri": "file://test.test_SkipTake-Results_/results.txt"
+        }
+    ],
+    "test.test[SkipZero-Results]": [
+        {
+            "uri": "file://test.test_SkipZero-Results_/results.txt"
+        }
+    ],
+    "test.test[TakeZero-Results]": [
+        {
+            "uri": "file://test.test_TakeZero-Results_/results.txt"
+        }
+    ],
+    "test.test[Typed-Results]": [
+        {
+            "uri": "file://test.test_Typed-Results_/results.txt"
+        }
+    ]
+}

@@ -1,8 +1,6 @@
 #include "yql_s3_read_actor.h"
 #include "yql_s3_source_queue.h"
 
-#include <ydb/core/base/events.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/event_local.h>

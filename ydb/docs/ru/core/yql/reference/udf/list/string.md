@@ -72,7 +72,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Переводят регистр ascii символов строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
-*
+* {#splittolist}
 
   ```text
   String::SplitToList(string:String?, delimeter:String,

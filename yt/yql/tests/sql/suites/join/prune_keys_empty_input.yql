@@ -1,0 +1,28 @@
+use plato;
+
+pragma yt.JoinMergeTablesLimit = "10";
+pragma config.flags('OptimizerFlags', 'EmitPruneKeys');
+
+-- PruneKeys over an empty input must not produce a standalone YtMap.
+$empty = (
+    select *
+    from Input2
+    limit 0
+);
+
+select count(*)
+from Input1 as a
+left join any $empty as b
+on a.key = b.key;
+
+-- The same applies to PruneAdjacentKeys over an ordered empty input.
+$empty_sorted = (
+    select *
+    from Sorted2
+    limit 0
+);
+
+select count(*)
+from Sorted1 as a
+left join any $empty_sorted as b
+on a.k1 = b.k2;

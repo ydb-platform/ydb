@@ -8,18 +8,18 @@ $cross_items = (
     SELECT
         i_item_sk AS ss_item_sk
     FROM
-        `/Root/test/ds/item`
+        `item`
     , (
         SELECT
             iss.i_brand_id AS brand_id,
             iss.i_class_id AS class_id,
             iss.i_category_id AS category_id
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/item` AS iss
+            `item` AS iss
         ,
-            `/Root/test/ds/date_dim` AS d1
+            `date_dim` AS d1
         WHERE
             ss_item_sk == iss.i_item_sk
             AND ss_sold_date_sk == d1.d_date_sk
@@ -30,11 +30,11 @@ $cross_items = (
             ics.i_class_id AS class_id,
             ics.i_category_id AS category_id
         FROM
-            `/Root/test/ds/catalog_sales`
+            `catalog_sales`
         ,
-            `/Root/test/ds/item` AS ics
+            `item` AS ics
         ,
-            `/Root/test/ds/date_dim` AS d2
+            `date_dim` AS d2
         WHERE
             cs_item_sk == ics.i_item_sk
             AND cs_sold_date_sk == d2.d_date_sk
@@ -45,11 +45,11 @@ $cross_items = (
             iws.i_class_id AS class_id,
             iws.i_category_id AS category_id
         FROM
-            `/Root/test/ds/web_sales`
+            `web_sales`
         ,
-            `/Root/test/ds/item` AS iws
+            `item` AS iws
         ,
-            `/Root/test/ds/date_dim` AS d3
+            `date_dim` AS d3
         WHERE
             ws_item_sk == iws.i_item_sk
             AND ws_sold_date_sk == d3.d_date_sk
@@ -69,9 +69,9 @@ $avg_sales = (
             ss_quantity AS quantity,
             ss_list_price AS list_price
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ss_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
@@ -80,9 +80,9 @@ $avg_sales = (
             cs_quantity AS quantity,
             cs_list_price AS list_price
         FROM
-            `/Root/test/ds/catalog_sales`
+            `catalog_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             cs_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
@@ -91,9 +91,9 @@ $avg_sales = (
             ws_quantity AS quantity,
             ws_list_price AS list_price
         FROM
-            `/Root/test/ds/web_sales`
+            `web_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ws_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
@@ -116,11 +116,11 @@ FROM (
         Sum(ss_quantity * ss_list_price) AS sales,
         Count(*) AS number_sales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ss_item_sk IN (
             SELECT
@@ -152,11 +152,11 @@ FROM (
         Sum(cs_quantity * cs_list_price) AS sales,
         Count(*) AS number_sales
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         cs_item_sk IN (
             SELECT
@@ -188,11 +188,11 @@ FROM (
         Sum(ws_quantity * ws_list_price) AS sales,
         Count(*) AS number_sales
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ws_item_sk IN (
             SELECT
@@ -229,18 +229,18 @@ $cross_items = (
     SELECT
         i_item_sk AS ss_item_sk
     FROM
-        `/Root/test/ds/item`
+        `item`
     , (
         SELECT
             iss.i_brand_id AS brand_id,
             iss.i_class_id AS class_id,
             iss.i_category_id AS category_id
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/item` AS iss
+            `item` AS iss
         ,
-            `/Root/test/ds/date_dim` AS d1
+            `date_dim` AS d1
         WHERE
             ss_item_sk == iss.i_item_sk
             AND ss_sold_date_sk == d1.d_date_sk
@@ -251,11 +251,11 @@ $cross_items = (
             ics.i_class_id AS class_id,
             ics.i_category_id AS category_id
         FROM
-            `/Root/test/ds/catalog_sales`
+            `catalog_sales`
         ,
-            `/Root/test/ds/item` AS ics
+            `item` AS ics
         ,
-            `/Root/test/ds/date_dim` AS d2
+            `date_dim` AS d2
         WHERE
             cs_item_sk == ics.i_item_sk
             AND cs_sold_date_sk == d2.d_date_sk
@@ -266,11 +266,11 @@ $cross_items = (
             iws.i_class_id AS class_id,
             iws.i_category_id AS category_id
         FROM
-            `/Root/test/ds/web_sales`
+            `web_sales`
         ,
-            `/Root/test/ds/item` AS iws
+            `item` AS iws
         ,
-            `/Root/test/ds/date_dim` AS d3
+            `date_dim` AS d3
         WHERE
             ws_item_sk == iws.i_item_sk
             AND ws_sold_date_sk == d3.d_date_sk
@@ -290,9 +290,9 @@ $avg_sales = (
             ss_quantity AS quantity,
             ss_list_price AS list_price
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ss_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
@@ -301,9 +301,9 @@ $avg_sales = (
             cs_quantity AS quantity,
             cs_list_price AS list_price
         FROM
-            `/Root/test/ds/catalog_sales`
+            `catalog_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             cs_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
@@ -312,9 +312,9 @@ $avg_sales = (
             ws_quantity AS quantity,
             ws_list_price AS list_price
         FROM
-            `/Root/test/ds/web_sales`
+            `web_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         WHERE
             ws_sold_date_sk == d_date_sk
             AND d_year BETWEEN 1998 AND 1998 + 2
@@ -343,11 +343,11 @@ FROM (
         Sum(ss_quantity * ss_list_price) AS sales,
         Count(*) AS number_sales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ss_item_sk IN (
             SELECT
@@ -361,7 +361,7 @@ FROM (
             SELECT
                 d_week_seq
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_year == 1998 + 1
                 AND d_moy == 12
@@ -388,11 +388,11 @@ FROM (
         Sum(ss_quantity * ss_list_price) AS sales,
         Count(*) AS number_sales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         ss_item_sk IN (
             SELECT
@@ -406,7 +406,7 @@ FROM (
             SELECT
                 d_week_seq
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_year == 1998
                 AND d_moy == 12

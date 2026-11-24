@@ -26,7 +26,21 @@ namespace NKikimr::NKqp::NScheduler {
 
         struct TStaticAttributes;
 
+        namespace NStatic {
+            struct TTreeElement;
+
+            class TPool;
+            class TDatabase;
+            class TRoot;
+
+            using TPoolPtr = std::shared_ptr<const TPool>;
+            using TDatabasePtr = std::shared_ptr<const TDatabase>;
+            using TRootPtr = std::shared_ptr<const TRoot>;
+        } // namespace NStatic
+
         namespace NDynamic {
+            struct TTreeElement;
+
             class TQuery;
             class TPool;
             class TDatabase;
@@ -73,6 +87,7 @@ namespace NKikimr::NKqp::NScheduler {
     struct TOptions {
         bool Enabled = true;
         TDelayParams DelayParams;
+        bool MemoryEnabled = true; // TODO: remove later when FeatureFlags.EnableComputeSchedulerMemory=true always.
     };
 
 } // namespace NKikimr::NKqp::NScheduler

@@ -1,0 +1,11 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    1
+FROM (
+    SELECT
+        2 AS a
+)
+WHERE
+    Just(EvaluateExpr(TRUE))
+;

@@ -18,6 +18,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/yexception.h>
 #include <util/system/types.h>
 
 #include <optional>
@@ -305,12 +306,38 @@ struct TEvSaveScriptResultFinished : public TEventLocal<TEvSaveScriptResultFinis
     const NYql::TIssues Issues;
 };
 
+struct TEvFetchScriptResultsRequest : public TEventWithDatabaseId<TEvFetchScriptResultsRequest, TKqpScriptExecutionEvents::EvFetchScriptResultsRequest> {
+    TEvFetchScriptResultsRequest(TString database, TString executionId, std::optional<TString> userSID, i32 resultSetIndex,
+        i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
+        : TEventWithDatabaseId(std::move(database))
+        , ExecutionId(std::move(executionId))
+        , UserSID(std::move(userSID))
+        , ResultSetIndex(resultSetIndex)
+        , Offset(offset)
+        , RowsLimit(rowsLimit)
+        , SizeLimit(sizeLimit)
+        , Deadline(deadline)
+    {}
+
+    TString ExecutionId;
+    std::optional<TString> UserSID;
+    const i32 ResultSetIndex;
+    const i64 Offset;
+    const i64 RowsLimit;
+    const i64 SizeLimit;
+    const TInstant Deadline;
+};
+
 struct TEvFetchScriptResultsResponse : public TEventLocal<TEvFetchScriptResultsResponse, TKqpScriptExecutionEvents::EvFetchScriptResultsResponse> {
     TEvFetchScriptResultsResponse(const Ydb::StatusIds::StatusCode status, std::optional<Ydb::ResultSet>&& resultSet, const bool hasMoreResults, NYql::TIssues issues)
         : Status(status)
         , ResultSet(std::move(resultSet))
         , HasMoreResults(hasMoreResults)
         , Issues(std::move(issues))
+    {}
+
+    TEvFetchScriptResultsResponse(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : TEvFetchScriptResultsResponse(status, std::nullopt, false, std::move(issues))
     {}
 
     const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -464,6 +491,13 @@ struct TEvSaveScriptFinalStatusResponse : public TEventLocal<TEvSaveScriptFinalS
     NYql::TIssues Issues;
 };
 
+// Process-local metadata returned atomically with the corresponding secret value.
+struct TSecretRevision {
+    ui64 PathOwnerId = 0;
+    ui64 LocalPathId = 0;
+    ui64 Version = 0;
+};
+
 struct TEvDescribeSecretsResponse : public TEventLocal<TEvDescribeSecretsResponse, TKqpScriptExecutionEvents::EvDescribeSecretsResponse> {
     struct TDescription {
         TDescription(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
@@ -476,7 +510,17 @@ struct TEvDescribeSecretsResponse : public TEventLocal<TEvDescribeSecretsRespons
             , Status(Ydb::StatusIds::SUCCESS)
         {}
 
+        TDescription(std::vector<TString> secretValues, std::vector<TSecretRevision> revisions)
+            : SecretValues(std::move(secretValues))
+            , SecretRevisions(std::move(revisions))
+            , Status(Ydb::StatusIds::SUCCESS)
+        {
+            Y_ENSURE(SecretValues.size() == SecretRevisions->size(), "Secret values and revisions must have the same size");
+        }
+
         const std::vector<TString> SecretValues;
+        // Revisions for all values in the same order; nullopt when the resolver provides no metadata.
+        const std::optional<std::vector<TSecretRevision>> SecretRevisions;
         const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         const NYql::TIssues Issues;
     };

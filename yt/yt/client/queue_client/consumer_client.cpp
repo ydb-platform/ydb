@@ -60,7 +60,15 @@ static const TTableSchemaPtr YTConsumerTableSchema = New<TTableSchema>(std::vect
     TColumnSchema("meta", EValueType::Any).SetRequired(false),
 }, /*strict*/ true, /*uniqueKeys*/ true);
 
+static constexpr TStringBuf YTMultiConsumerHashColumnName = "hash";
+static constexpr TStringBuf YTMultiConsumerNameColumnName = "queue_consumer_name";
+
+// NB: Hash expression is not fixed; any uint64 expression over queue_consumer_name, queue_cluster
+// and queue_path is accepted, e.g. farm_hash(queue_consumer_name, queue_path) or
+// farm_hash(queue_consumer_name) % 128.
 static const TTableSchemaPtr YTMultiConsumerTableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+    TColumnSchema(std::string(YTMultiConsumerHashColumnName), EValueType::Uint64, ESortOrder::Ascending)
+        .SetExpression("farm_hash(queue_consumer_name, queue_cluster, queue_path)"),
     TColumnSchema("queue_consumer_name", EValueType::String, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("queue_cluster", EValueType::String, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("queue_path", EValueType::String, ESortOrder::Ascending).SetRequired(true),
@@ -121,7 +129,7 @@ public:
                 if (index != 0) {
                     builder.AppendString(", ");
                 }
-                builder.AppendFormat("[%v]", ConsumerTableSchema_->Columns()[index].Name());
+                builder.AppendFormat("[%v]", ConsumerNameTable_->GetName(RowPrefix_[index].Id));
             }
             builder.AppendString(") = (");
             for (int index = 0; index < RowPrefix_.GetCount(); ++index) {
@@ -650,6 +658,47 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+void ValidateMultiConsumerSchema(const TTableSchema& schema)
+{
+    auto throwInvalid = [&] (TStringBuf reason) {
+        THROW_ERROR_EXCEPTION("Invalid queue multi consumer schema")
+            .With("reason", reason)
+            .With("actual_schema", schema)
+            .With("expected_schema", *YTMultiConsumerTableSchema);
+    };
+
+    if (!schema.IsStrict() || !schema.IsUniqueKeys()) {
+        throwInvalid("schema must be strict and have unique keys");
+    }
+
+    const auto& expectedColumns = YTMultiConsumerTableSchema->Columns();
+    const auto& actualColumns = schema.Columns();
+    if (actualColumns.empty()) {
+        throwInvalid("empty schema");
+    }
+
+    const auto& frontColumn = actualColumns.front();
+    auto nonHashColumnItBegin = actualColumns.begin() + 1;
+    if (frontColumn.Name() != YTMultiConsumerHashColumnName) {
+        nonHashColumnItBegin = actualColumns.begin();
+    } else if (frontColumn.GetWireType() != EValueType::Uint64 ||
+        frontColumn.SortOrder() != ESortOrder::Ascending ||
+        !frontColumn.Expression())
+    {
+        throwInvalid("\"hash\" column must be an ascending computed column of type \"uint64\"");
+    }
+
+    if (!std::equal(nonHashColumnItBegin, actualColumns.end(), expectedColumns.begin() + 1, expectedColumns.end())) {
+        throwInvalid("non-hash columns mismatch");
+    }
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 IConsumerClientPtr CreateConsumerClient(
     const IClientPtr& consumerClusterClient,
     TYPath consumerPath,
@@ -670,13 +719,14 @@ IConsumerClientPtr CreateConsumerClient(
     const TRichYPath& consumerPath,
     const TTableSchema& consumerSchema)
 {
-    if (consumerSchema == *YTMultiConsumerTableSchema) {
+    if (consumerSchema.FindColumn(YTMultiConsumerNameColumnName)) {
+        ValidateMultiConsumerSchema(consumerSchema);
         if (!consumerPath.GetQueueConsumerName()) {
             THROW_ERROR_EXCEPTION("Queue consumer name is required for multi-consumer schema")
                 .With("consumer_schema", consumerSchema)
                 .With("consumer_path", consumerPath);
         }
-        return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), consumerPath.GetQueueConsumerName(), YTMultiConsumerTableSchema);
+        return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), consumerPath.GetQueueConsumerName(), New<TTableSchema>(consumerSchema));
     }
 
     bool isConsumerSchemaWithMeta = consumerSchema == *YTConsumerTableSchema;

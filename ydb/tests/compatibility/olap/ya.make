@@ -11,8 +11,10 @@ TEST_SRCS(
     test_min_max_index.py
     test_rename_table.py
     test_compression.py
+    test_cut_history.py
     test_encoding.py
     test_tiering.py
+    test_ttl_types.py
 )
 
 SIZE(LARGE)
@@ -28,6 +30,7 @@ PEERDIR(
     contrib/python/boto3
     ydb/tests/library
     ydb/tests/library/compatibility
+    ydb/tests/olap/common
 )
 
 END()

@@ -1,0 +1,5 @@
+[tools]
+protoc = "23.4"
+"github:temporalio/cli" = "1.8.0"
+"cargo:cargo-component" = "0.21.1"
+"cargo:cargo-msrv" = "0.19.3"

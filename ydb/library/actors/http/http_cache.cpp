@@ -322,7 +322,7 @@ public:
                     waiter.Span.EndError(error2);
                 }
             }
-            Send(waiter.Request->Sender, new TEvHttpProxy::TEvHttpIncomingResponse(waiter.Request->Get()->Request, response2, error2));
+            Send(waiter.Request->Sender, new TEvHttpProxy::TEvHttpIncomingResponse(waiter.Request->Get()->Request, response2, error2), 0, waiter.Request->Cookie);
         }
         cacheRecord.Waiters.clear();
         TString error;
@@ -405,7 +405,7 @@ public:
                         span.EndError(it->second.Error);
                     }
                 }
-                Send(event->Sender, new TEvHttpProxy::TEvHttpIncomingResponse(event->Get()->Request, response, it->second.Error));
+                Send(event->Sender, new TEvHttpProxy::TEvHttpIncomingResponse(event->Get()->Request, response, it->second.Error), 0, event->Cookie);
                 it->second.DeathTime = NActors::TActivationContext::Now() + it->second.CachePolicy.TimeToExpire; // prolong active cache items
                 return;
             }

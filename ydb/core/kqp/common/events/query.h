@@ -2,8 +2,8 @@
 
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/result_set_format/settings/settings.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
@@ -20,7 +20,6 @@
 
 namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
-class IQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -254,6 +253,8 @@ public:
         return Record.GetRequestType();
     }
 
+    TMaybe<TString> GetMvccVersion() const;
+
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {
         if (RequestCtx && RequestCtx->GetInternalToken()) {
             return RequestCtx->GetInternalToken();
@@ -380,14 +381,6 @@ public:
         return WmSessionUpdater;
     }
 
-    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
-        WmQueryClassifier = std::move(classifier);
-    }
-
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
-        return WmQueryClassifier;
-    }
-
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
         ProgressStatsPeriod = progressStatsPeriod;
     }
@@ -482,6 +475,7 @@ public:
     }
 
     mutable NKikimrKqp::TEvQueryRequest Record;
+    std::optional<bool> DisablePgCompatibility;
 
 private:
     void PrepareRemote() const;
@@ -517,7 +511,6 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

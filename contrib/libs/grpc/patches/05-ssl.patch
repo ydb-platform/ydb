@@ -37,7 +37,7 @@ diff --git a/src/core/lib/security/security_connector/ssl_utils.cc b/src/core/li
 index 29030f0..317651c 100644
 --- a/src/core/lib/security/security_connector/ssl_utils.cc
 +++ b/src/core/lib/security/security_connector/ssl_utils.cc
-@@ -47,6 +47,8 @@
+@@ -51,6 +51,8 @@
  #include "src/core/tsi/ssl_transport_security.h"
  #include "src/core/tsi/transport_security.h"
  
@@ -46,12 +46,13 @@ index 29030f0..317651c 100644
  // -- Constants. --
  
  #if defined(GRPC_ROOT_PEM_PATH)
-@@ -584,6 +586,8 @@
-   if (GRPC_SLICE_IS_EMPTY(result) &&
-       !ConfigVars::Get().NotUseSystemSslRoots()) {
-     result = LoadSystemRootCerts();
+@@ -596,7 +598,8 @@
+   }
+   // Try loading roots from OS trust store if flag is enabled.
+   if (result.empty() && !ConfigVars::Get().NotUseSystemSslRoots()) {
+-    result = Slice(LoadSystemRootCerts());
 +    // Merge with Arcadia certs.
-+    result = AddArcadiaRootCerts(result);
++    result = Slice(AddArcadiaRootCerts(LoadSystemRootCerts()));
    }
    // Fallback to roots manually shipped with gRPC.
-   if (GRPC_SLICE_IS_EMPTY(result) &&
+   if (result.empty() && ovrd_res != GRPC_SSL_ROOTS_OVERRIDE_FAIL_PERMANENTLY) {

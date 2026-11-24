@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/huge)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(

@@ -24,6 +24,8 @@ CLUSTER_CONFIG = dict(
     },
     column_shard_config={
         'max_read_staleness_ms': 200,
+        # Recheck inactive portions for cleanup as snapshots expire (default: 60s).
+        'periodic_wakeup_activation_period_ms': 1000,
         # Default report period is 60s; shorten for medium timeout.
         'statistics': {
             'report_base_statistics_period_ms': 1000,
@@ -107,7 +109,7 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
     def base_stats_ready():
         resp = get_base_stats_response()
         # Portion counters may temporarily exceed the logical row count.
-        return resp is not None and resp.status_code == 200 and resp.json()["row_count"] >= total_count
+        return resp is not None and resp.status_code == 200 and resp.json()["row_count"] == total_count
 
     assert_that(wait_for(base_stats_ready, timeout_seconds=60), "base stats ready")
     row_count_before = last_response.json()["row_count"]

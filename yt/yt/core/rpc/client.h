@@ -433,7 +433,7 @@ protected:
 
     virtual void SetPromise(const TError& error) = 0;
 
-    const IInvokerPtr& GetInvoker();
+    IInvokerPtr GetInvoker();
 
 private:
     std::string Address_;

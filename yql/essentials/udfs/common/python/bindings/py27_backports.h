@@ -9,6 +9,8 @@ extern "C" {
     // Declare functions which are to be backported
     // (see details about need for backports in ya.make)
 
+    // NOLINTBEGIN(readability-identifier-naming)
+
     int _PySlice_Unpack(PyObject* slice,
                         Py_ssize_t* start, Py_ssize_t* stop, Py_ssize_t* step);
 
@@ -20,6 +22,8 @@ extern "C" {
 
 #define PySlice_Unpack _PySlice_Unpack
 #define PySlice_AdjustIndices _PySlice_AdjustIndices
+
+    // NOLINTEND(readability-identifier-naming)
 
 #ifdef __cplusplus
 }

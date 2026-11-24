@@ -111,12 +111,13 @@ you're more than welcome to participate!
 * [Ehsan Saei](https://github.com/esigo)
 * [Lalit Kumar Bhasin](https://github.com/lalitb), Microsoft
 * [Marc Alff](https://github.com/marcalff), Oracle
-* [Tom Tan](https://github.com/ThomsonTan), Microsoft
 
 For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
 
 ### Approvers
 
+* [Mateen Anjum](https://github.com/mateenali66)
+* [Tom Tan](https://github.com/ThomsonTan)
 * [WenTao Ou](https://github.com/owent)
 
 For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).

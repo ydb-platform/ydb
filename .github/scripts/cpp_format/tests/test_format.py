@@ -271,18 +271,90 @@ ENDIF()
 
     def test_check_progress_preserves_files_and_reports_failures(self):
         file = self.write('shared/a.cpp', 'int  x;\n')
+        unchanged = self.write('shared/unchanged.cpp', 'int y;\n')
         output = io.StringIO()
+        errors = io.StringIO()
         with mock.patch.object(cpp_format, 'ROOT', self.root), mock.patch.object(
-            cpp_format, 'selected_files', return_value={'shared': ['shared/a.cpp']}
+            cpp_format, 'selected_files', return_value={'shared': ['shared/a.cpp', 'shared/unchanged.cpp']}
         ), mock.patch.object(cpp_format, 'resolve_formatter', return_value='mock-clang-format'), mock.patch.object(
-            cpp_format.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)
-        ) as formatter, contextlib.redirect_stdout(output):
+            cpp_format.subprocess, 'run', side_effect=[
+                subprocess.CompletedProcess([], 1),
+                subprocess.CompletedProcess([], 0, stdout=b'int x;\n', stderr=b''),
+                subprocess.CompletedProcess([], 0, stdout=unchanged.read_bytes(), stderr=b''),
+            ]
+        ) as formatter, contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             self.assertEqual(cpp_format.main(['--check']), 1)
-        self.assertNotIn('-i', formatter.call_args.args[0])
-        self.assertIn('--dry-run', formatter.call_args.args[0])
+        self.assertTrue(all('-i' not in call.args[0] for call in formatter.call_args_list))
+        self.assertIn('--dry-run', formatter.call_args_list[0].args[0])
         self.assertEqual(file.read_text(), 'int  x;\n')
-        self.assertIn('Checked 1 / 1 files in shared (overall 1 / 1 checked)', output.getvalue())
-        self.assertTrue(output.getvalue().endswith('Finished with errors: 1 / 1 files checked.\n'))
+        self.assertEqual(unchanged.read_text(), 'int y;\n')
+        self.assertIn('Checked 2 / 2 files in shared (overall 2 / 2 checked)', output.getvalue())
+        self.assertTrue(output.getvalue().endswith('Finished with errors: 2 / 2 files checked.\n'))
+        self.assertIn(f'{file}: error: code should be clang-formatted', errors.getvalue())
+        self.assertIn('-int  x;\n+int x;\n', errors.getvalue())
+        self.assertNotIn(str(unchanged), errors.getvalue())
+
+    def test_check_accepts_identical_bytes_after_failed_dry_run(self):
+        files = [self.write('shared/a.cpp', 'int x;\n'), self.write('shared/b.cpp', '')]
+        files[1].write_bytes(b'// \xff\r\nint y;\r\n')
+        originals = [path.read_bytes() for path in files]
+        style = self.root / 'config/.clang-format'
+        for dry_run_status in (0, 1):
+            with self.subTest(dry_run_status=dry_run_status):
+                results = [subprocess.CompletedProcess([], dry_run_status)]
+                if dry_run_status:
+                    results += [subprocess.CompletedProcess([], 0, stdout=source, stderr=b'') for source in originals]
+                errors = io.StringIO()
+                progress = mock.Mock()
+                clear_progress = mock.Mock()
+                with mock.patch.object(cpp_format.subprocess, 'run', side_effect=results) as formatter, contextlib.redirect_stderr(errors):
+                    self.assertEqual(
+                        cpp_format.format_files(
+                            self.root,
+                            ['shared/a.cpp', 'shared/b.cpp'],
+                            style,
+                            'mock-clang-format',
+                            fix=False,
+                            progress=progress,
+                            clear_progress=clear_progress,
+                        ),
+                        0,
+                    )
+                self.assertEqual(errors.getvalue(), '')
+                progress.assert_called_once_with(2, 0)
+                clear_progress.assert_not_called()
+                self.assertEqual([path.read_bytes() for path in files], originals)
+                self.assertEqual(formatter.call_count, len(results))
+                for call, path, source in zip(formatter.call_args_list[1:], files, originals):
+                    self.assertEqual(call.kwargs['input'], source)
+                    self.assertEqual(
+                        call.args[0], ['mock-clang-format', '--style=file:' + str(style), '--assume-filename=' + str(path)]
+                    )
+
+    def test_check_reports_formatter_errors_even_with_identical_output(self):
+        file = self.write('shared/a.cpp', '')
+        for stderr in (b'invalid configuration\n', b''):
+            with self.subTest(stderr=stderr):
+                errors = io.StringIO()
+                clear_progress = mock.Mock()
+                with mock.patch.object(cpp_format.subprocess, 'run', side_effect=[
+                    subprocess.CompletedProcess([], 1),
+                    subprocess.CompletedProcess([], 2, stdout=b'', stderr=stderr),
+                ]), contextlib.redirect_stderr(errors):
+                    self.assertEqual(
+                        cpp_format.format_files(
+                            self.root,
+                            ['shared/a.cpp'],
+                            self.root / 'config/.clang-format',
+                            'mock-clang-format',
+                            fix=False,
+                            clear_progress=clear_progress,
+                        ),
+                        1,
+                    )
+                self.assertIn(stderr.decode() if stderr else 'exit status 2', errors.getvalue())
+                clear_progress.assert_called_once_with()
+                self.assertEqual(file.read_bytes(), b'')
 
     def test_terminal_progress_redraws_one_row_without_overwriting_diagnostics(self):
         files = [f'shared/{i:02}.cpp' for i in range(33)]
@@ -313,6 +385,23 @@ ENDIF()
                 self.assertLessEqual(len(redraws[3].splitlines()[0]), width - 1)
                 self.assertTrue(text.endswith('Finished with errors: 0 formatted / 33 checked files.\n'))
                 self.assertTrue(all(call.kwargs['capture_output'] for call in formatter.call_args_list))
+
+    @unittest.skipUnless(os.environ.get('YDB_CLANG_FORMAT'), 'set YDB_CLANG_FORMAT for real formatter coverage')
+    def test_real_formatter_accepts_function_try_block_with_noop_replacements(self):
+        # clang-format 18 reports unchanged catch indentation with this option.
+        style = self.root / 'config/.clang-format'
+        style.write_text(style.read_text() + 'SeparateDefinitionBlocks: Always\n')
+        file = self.write('shared/a.cpp', 'int f() try { return 1; } catch (...) {\n    return 0;\n}\n')
+        formatted = subprocess.check_output([os.environ['YDB_CLANG_FORMAT'], '--style=file:' + str(style), str(file)])
+        file.write_bytes(formatted)
+        self.git('add', '.')
+        errors = io.StringIO()
+        with mock.patch.object(cpp_format, 'ROOT', self.root), contextlib.redirect_stdout(
+            io.StringIO()
+        ), contextlib.redirect_stderr(errors):
+            self.assertEqual(cpp_format.main(['--check']), 0)
+        self.assertEqual(errors.getvalue(), '')
+        self.assertEqual(file.read_bytes(), formatted)
 
     @unittest.skipUnless(os.environ.get('YDB_CLANG_FORMAT'), 'set YDB_CLANG_FORMAT for real formatter coverage')
     def test_real_formatter_checks_fixes_and_preserves_per_root_styles(self):

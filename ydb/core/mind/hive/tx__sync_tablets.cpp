@@ -96,10 +96,25 @@ public:
                 tablet->SendStopTablet(Local, SideEffects);
             }
         };
+        const auto rejectUnexpectedTablet = [&](const TTabletInfo& tablet, const NKikimrLocal::TEvSyncTablets_TTabletInfo& reported) {
+            if (!Self->BridgeInfo || tablet.IsPresentOnLocal(Local) || tablet.GetNodeFilter().IsAllowedPile(node.BridgePileId)) {
+                return false;
+            }
+            const auto tabletId = tablet.GetFullTabletId();
+            SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId, reported.GetGeneration()));
+            tabletsToRestart.erase(tabletId);
+            if (tablet.IsStopped()) {
+                tabletsToBoot.insert(tabletId);
+            }
+            return true;
+        };
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetInbootTablets()) {
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet) {
+                if (rejectUnexpectedTablet(*tablet, ti)) {
+                    continue;
+                }
                 if (IsSameTablet(tablet, ti)) {
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
@@ -122,6 +137,9 @@ public:
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet) {
+                if (rejectUnexpectedTablet(*tablet, ti)) {
+                    continue;
+                }
                 if (IsSameTablet(tablet, ti)) {
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();

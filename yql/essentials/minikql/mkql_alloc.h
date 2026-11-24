@@ -8,6 +8,11 @@
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    #include <yql/essentials/public/udf/service/dispatch/udf_service_dispatch.h>
+#endif
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
 
 #include <util/string/builder.h>
 #include <util/system/align.h>
@@ -19,6 +24,13 @@
 #include <atomic>
 #include <memory>
 #include <source_location>
+
+namespace NKikimr {
+
+void SetArrowAllocator(arrow::MemoryPool* allocator);
+arrow::MemoryPool* GetArrowAllocator();
+
+} // namespace NKikimr
 
 namespace NKikimr::NMiniKQL {
 
@@ -59,6 +71,7 @@ struct TAllocLocation {
         return 0;
     }
 
+    // NOLINTNEXTLINE(readability-identifier-naming): std::source_location compatibility.
     static TAllocLocation current() {
         return {};
     }
@@ -192,18 +205,27 @@ static_assert(sizeof(TMkqlPAllocHeader) ==
                       sizeof(void*), "Padding is not allowed");
 
 constexpr size_t ArrowAlignment = 64;
+
+enum class EMkqlArrowPageKind: ui8 {
+    ArenaPage = 0xA1,
+    MkqlPoolBlock = 0xB2,
+    DefaultPoolBlock = 0xC3,
+};
+
 struct TMkqlArrowHeader {
     TAllocState::TListEntry Entry;
     ui64 Size;
     ui64 Offset;
     std::atomic<ui64> UseCount;
+    EMkqlArrowPageKind Kind;
     std::array<
         char,
         ArrowAlignment -
             sizeof(TAllocState::TListEntry) -
             sizeof(ui64) -
             sizeof(ui64) -
-            sizeof(std::atomic<ui64>)>
+            sizeof(std::atomic<ui64>) -
+            sizeof(EMkqlArrowPageKind)>
         Padding;
 };
 
@@ -288,6 +310,11 @@ private:
     TAllocState MyState_;
     size_t AttachedCount_ = 0;
     TAllocState* PrevState_ = nullptr;
+#ifndef MKQL_DISABLE_UDF_SERVICE_DISPATCH
+    // This define must agree across MiniKQL and all TScopedAlloc consumers.
+    NYql::NUdf::TUdfSymbolsExchange UdfSymbolsExchange_ = nullptr;
+    const NYql::NUdf::TStaticSymbols* PreviousUdfSymbols_ = nullptr;
+#endif
 };
 
 class TPagedArena {
@@ -352,7 +379,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
 #endif
     Y_DEBUG_ABORT_UNLESS(state);
 
-    bool useMalloc = sz > MaxPageUserData || TAllocState::IsDefaultAllocatorUsed();
+    bool useMalloc = sz > MaxPageUserData || IsDefaultAllocatorUsed();
 
     if (Y_UNLIKELY(useMalloc)) {
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
@@ -405,7 +432,7 @@ inline void MKQLFreeFastWithSizeImpl(const void* mem, size_t sz, TAllocState* st
     state->DefaultMemInfo->Return(mem, sz);
 #endif
 
-    bool useFree = sz > MaxPageUserData || TAllocState::IsDefaultAllocatorUsed();
+    bool useFree = sz > MaxPageUserData || IsDefaultAllocatorUsed();
 
     if (Y_UNLIKELY(useFree)) {
         auto entry = (TAllocState::TListEntry*)(mem)-1;

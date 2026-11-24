@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
                 range->SetReverse(true);
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(true);
-                Resolve.SetDataKind(Request.DataKind);
+                SetResolveParameters(Resolve, Request.DataKind);
             }
 
             void IssueResolve() {

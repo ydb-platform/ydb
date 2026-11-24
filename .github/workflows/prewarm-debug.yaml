@@ -1,16 +1,15 @@
 name: Prewarm-debug
 on:
-  # schedule is off: hourly prewarm was taking runners.
-  # Re-enable when the pool is calm.
+  schedule:
+    - cron: "0 */2 * * *"  # At minute 0 past every 2nd hour
   workflow_dispatch:
 jobs:
   build_and_test:
     strategy:
       fail-fast: false
       matrix:
-        # Temporary: same branches as stable_tests_branches.json, relw + release.
         build_preset: ["release", "relwithdebinfo"]
-        branch: ["main", "stable-26-3-1", "stable-26-4-1"]
+        branch: ["main"]
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
     steps:

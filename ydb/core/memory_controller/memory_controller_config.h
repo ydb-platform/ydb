@@ -86,6 +86,28 @@ GET_MAX_LIMIT(SharedCache)
 GET_LIMIT(QueryExecutionLimit)
 GET_LIMIT(CompactionLimit)
 
+// TODO: the memory of the queries is limited by the compute scheduler (the QueryExecution consumer) and not by the
+//       resource broker anymore, so it's taken out of the computed limit of the resource broker - the sum of the
+//       limits stays as before. The limits which make it up:
+//       - TMemoryControllerConfig::ActivitiesLimitPercent (ActivitiesLimitBytes) - the whole limit of the activities;
+//       - TMemoryControllerConfig::QueryExecutionLimitPercent (QueryExecutionLimitBytes) - the queries, see above;
+//       - what is left is the limit of the resource broker, shared by its queues: the compactions of the column tables
+//         (TMemoryControllerConfig::CompactionLimitPercent / CompactionLimitBytes), the transactions of the tablets and
+//         the other services of the queries (queue_kqp_resource_manager, e.g. the vector index levels cache) - the
+//         queues are limited by TResourceBrokerConfig as well.
+//       The explicit limit of the resource broker (TResourceBrokerConfig::ResourceLimit) is taken as it is, see
+//       TMemoryController::HandleWakeup. Nothing is taken out without the registered consumer (see
+//       FeatureFlags.EnableComputeSchedulerMemory) and with the queries limit not less than the activities limit
+//       (a misconfiguration) - otherwise the resource broker would get no memory at all.
+inline ui64 GetResourceBrokerLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes, bool hasQueryExecutionConsumer) {
+    const ui64 activitiesLimitBytes = GetActivitiesLimitBytes(config, hardLimitBytes);
+    const ui64 queryExecutionLimitBytes = GetQueryExecutionLimitBytes(config, hardLimitBytes);
+    if (!hasQueryExecutionConsumer || queryExecutionLimitBytes >= activitiesLimitBytes) {
+        return activitiesLimitBytes;
+    }
+    return activitiesLimitBytes - queryExecutionLimitBytes;
+}
+
 // ColumnTablesReadExecution memory is split into:
 // - ColumnTablesScanGroupedMemory
 // - ColumnTablesDeduplicationGroupedMemory

@@ -685,6 +685,37 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    // Under Read Committed RW the sink takes pessimistic locks (EvLockRows)
+    // with skipAbsent for UPDATE/DELETE. When every key is absent the datashard
+    // succeeds with an empty taken-lock list, so the shard must not be marked
+    // as a pessimistic-lock commit participant: it holds no locks, no prepare
+    // is ever sent to it, and marking it would hang the commit.
+    class TDeleteAbsentKeys : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session.ExecuteQuery(Q1_(R"(
+                DELETE FROM Test WHERE Group == 1000u;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session.ExecuteQuery(Q1_(R"(
+                SELECT COUNT(*) FROM Test;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(DeleteAbsentKeys) {
+        TDeleteAbsentKeys tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

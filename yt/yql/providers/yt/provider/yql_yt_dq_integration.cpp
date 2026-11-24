@@ -422,6 +422,27 @@ public:
         return true;
     }
 
+    bool AllowExecuteInDq(const TExprNode& node, TExprContext& ctx) override {
+        if (!TResOrPullBase::Match(&node)) {
+            return true;
+        }
+
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        const auto result = TResOrPullBase(&node);
+        const auto settings = ytState->Configuration->GetSettingsForNode(result.Origin().Ref());
+        const auto cluster = settings->DefaultCluster.Get().GetOrElse(ytState->Gateway->GetDefaultClusterName());
+        const auto staticNetworkProject = settings->StaticNetworkProject.Get(cluster);
+
+        if (staticNetworkProject) {
+            AddInfo(ctx, "unsupported yt pragma: staticnetworkproject", false);
+            return false;
+        }
+
+        return true;
+    }
+
     bool CanRead(const TExprNode& node, TExprContext& ctx, bool skipIssues) override {
         auto ytState = State_.lock();
         YQL_ENSURE(ytState);

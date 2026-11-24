@@ -256,6 +256,33 @@ bool TConstraintSet::FilterConstraints(const TPredicate& predicate) {
 
 namespace {
 
+ui64 AddPathToHash(ui64 hash, const TPartOfConstraintBase::TPathType& path) {
+    for (const auto& part : path) {
+        hash = MurmurHash(part.data(), part.size(), hash);
+    }
+    const ui64 separator = path.size();
+    return MurmurHash(&separator, sizeof(separator), hash);
+}
+
+ui64 AddPathSetToHash(ui64 hash, const TPartOfConstraintBase::TSetType& paths) {
+    const auto size = paths.size();
+    hash = MurmurHash<ui64>(&size, sizeof(size), hash);
+    for (const auto& path : paths) {
+        hash = AddPathToHash(hash, path);
+    }
+    return hash;
+}
+
+ui64 AddSetOfSetsToHash(ui64 hash, const TPartOfConstraintBase::TSetOfSetsType& sets) {
+    const auto size = sets.size();
+    hash = MurmurHash<ui64>(&size, sizeof(size), hash);
+    for (const auto& set : sets) {
+        YQL_ENSURE(!set.empty());
+        hash = AddPathSetToHash(hash, set);
+    }
+    return hash;
+}
+
 size_t GetElementsCount(const TTypeAnnotationNode* type) {
     if (type) {
         switch (type->GetKind()) {
@@ -321,11 +348,12 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&&
     , Content_(content)
 {
     YQL_ENSURE(!Content_.empty());
+    const auto size = Content_.size();
+    Hash_ = MurmurHash<ui64>(&size, sizeof(size), Hash_);
     for (const auto& c : Content_) {
         YQL_ENSURE(!c.first.empty());
-        for (const auto& path : c.first) {
-            Hash_ = std::accumulate(path.cbegin(), path.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-        }
+        Hash_ = MurmurHash<ui64>(&c.second, sizeof(c.second), Hash_);
+        Hash_ = AddPathSetToHash(Hash_, c.first);
     }
 }
 
@@ -721,14 +749,7 @@ TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, TSetOfSetsType
 {
     YQL_ENSURE(!Sets_.empty());
     YQL_ENSURE(!HasDuplicates(Sets_));
-    const auto size = Sets_.size();
-    Hash_ = MurmurHash<ui64>(&size, sizeof(size), Hash_);
-    for (const auto& set : Sets_) {
-        YQL_ENSURE(!set.empty());
-        for (const auto& path : set) {
-            Hash_ = std::accumulate(path.cbegin(), path.cend(), Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-        }
-    }
+    Hash_ = AddSetOfSetsToHash(Hash_, Sets_);
 }
 
 TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys)
@@ -1115,12 +1136,7 @@ TUniqueConstraintNodeBase<Distinct>::TUniqueConstraintNodeBase(TExprContext& ctx
     for (const auto& sets : Content_) {
         YQL_ENSURE(!sets.empty());
         YQL_ENSURE(!TConstraintWithFieldsNode::HasDuplicates(sets));
-        for (const auto& set : sets) {
-            YQL_ENSURE(!set.empty());
-            for (const auto& path : set) {
-                TBase::Hash_ = std::accumulate(path.cbegin(), path.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-            }
-        }
+        TBase::Hash_ = AddSetOfSetsToHash(TBase::Hash_, sets);
     }
 }
 
@@ -1542,13 +1558,17 @@ TPartOfConstraintNode<TOriginalConstraintNode>::TPartOfConstraintNode(TExprConte
     , Mapping_(std::move(mapping))
 {
     YQL_ENSURE(!Mapping_.empty());
+    const auto size = Mapping_.size();
+    TBase::Hash_ = MurmurHash<ui64>(&size, sizeof(size), TBase::Hash_);
     for (const auto& part : Mapping_) {
         YQL_ENSURE(!part.second.empty());
         const auto hash = part.first->GetHash();
         TBase::Hash_ = MurmurHash<ui64>(&hash, sizeof(hash), TBase::Hash_);
+        const auto partSize = part.second.size();
+        TBase::Hash_ = MurmurHash<ui64>(&partSize, sizeof(partSize), TBase::Hash_);
         for (const auto& item : part.second) {
-            TBase::Hash_ = std::accumulate(item.first.cbegin(), item.first.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-            TBase::Hash_ = std::accumulate(item.second.cbegin(), item.second.cend(), TBase::Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
+            TBase::Hash_ = AddPathToHash(TBase::Hash_, item.first);
+            TBase::Hash_ = AddPathToHash(TBase::Hash_, item.second);
         }
     }
 }
@@ -1852,13 +1872,18 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetCommonMapping(const TOriginal
     }
 
     if (complete) {
-        auto& part = mapping[complete];
-        for (const auto& path : complete->GetFullSet()) {
-            auto key = path;
-            if (!field.empty()) {
-                key.emplace_front(field);
+        const auto fullSet = complete->GetFullSet();
+        // Do not create an empty mapping[complete] entry for a field-less constraint:
+        // it has no origin path that can be represented by a PartOf mapping.
+        if (!fullSet.empty()) {
+            auto& part = mapping[complete];
+            for (const auto& path : fullSet) {
+                auto key = path;
+                if (!field.empty()) {
+                    key.emplace_front(field);
+                }
+                part.insert_unique(std::make_pair(key, path));
             }
-            part.insert_unique(std::make_pair(key, path));
         }
     }
 
@@ -2007,37 +2032,301 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx)
-    : TConstraintNode(ctx, Name())
+    : TConstraintWithFieldsT(ctx, Name())
 {
 }
 
-TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
-    : TConstraintNode(ctx, Name())
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, TPartOfConstraintBase::TPathType eventTime)
+    : TStreamingConstraintNode(ctx, std::move(eventTime), TSetType{})
 {
-    YQL_ENSURE(serialized.IsEntity(), "Unexpected serialized content of " << Name() << " constraint");
+}
+
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, TPathType eventTime, TSetType eventTimePaths)
+    : TConstraintWithFieldsT(ctx, Name())
+    , EventTime_(std::move(eventTime))
+    , EventTimePaths_(std::move(eventTimePaths))
+{
+    InitEventTime(ctx);
+}
+
+void TStreamingConstraintNode::InitEventTime(TExprContext& ctx) {
+    for (auto& part : *EventTime_) {
+        part = ctx.AppendString(part);
+    }
+    EventTimePaths_.insert_unique(*EventTime_);
+    for (auto& path : EventTimePaths_) {
+        for (auto& part : path) {
+            part = ctx.AppendString(part);
+        }
+    }
+
+    Hash_ = AddPathToHash(Hash_, *EventTime_);
+    for (const auto& path : EventTimePaths_) {
+        if (path != *EventTime_) {
+            Hash_ = AddPathToHash(Hash_, path);
+        }
+    }
+}
+
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TConstraintWithFieldsT(ctx, Name())
+{
+    if (serialized.IsEntity()) {
+        return;
+    }
+
+    try {
+        if (serialized.IsMap()) {
+            YQL_ENSURE(serialized.AsMap().size() == 2U);
+            EventTime_ = NodeToPath(ctx, serialized["event_time"]);
+            YQL_ENSURE(serialized["aliases"].IsList());
+            for (const auto& alias : serialized["aliases"].AsList()) {
+                EventTimePaths_.insert_unique(NodeToPath(ctx, alias));
+            }
+            YQL_ENSURE(EventTimePaths_.contains(*EventTime_));
+        } else {
+            YQL_ENSURE(serialized.IsList() || serialized.IsString());
+            EventTime_ = NodeToPath(ctx, serialized);
+        }
+        InitEventTime(ctx);
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
 }
 
 bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
     if (this == &node) {
         return true;
     }
-    if (GetHash() != node.GetHash()) {
+    if (GetHash() != node.GetHash() || GetName() != node.GetName()) {
         return false;
     }
-    return GetName() == node.GetName();
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    return that && EventTime_ == that->EventTime_ && EventTimePaths_ == that->EventTimePaths_;
+}
+
+bool TStreamingConstraintNode::Includes(const TConstraintNode& node) const {
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    return that && std::includes(EventTimePaths_.cbegin(), EventTimePaths_.cend(),
+                                 that->EventTimePaths_.cbegin(), that->EventTimePaths_.cend());
+}
+
+const TStreamingConstraintNode* TStreamingConstraintNode::MakeCommon(const TStreamingConstraintNode* other, TExprContext& ctx) const {
+    if (!other) {
+        return nullptr;
+    }
+    if (this == other) {
+        return this;
+    }
+
+    TSetType paths;
+    std::set_intersection(EventTimePaths_.cbegin(), EventTimePaths_.cend(),
+                          other->EventTimePaths_.cbegin(), other->EventTimePaths_.cend(),
+                          std::back_inserter(paths));
+    if (paths.empty()) {
+        return ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+    const auto canonical = EventTime_ && paths.contains(*EventTime_) ? *EventTime_ : paths.front();
+    return ctx.MakeConstraint<TStreamingConstraintNode>(canonical, std::move(paths));
+}
+
+void TStreamingConstraintNode::Out(IOutputStream& out) const {
+    TConstraintNode::Out(out);
+    if (EventTime_.Defined()) {
+        out.Write('(');
+        out.Write(JoinSeq(';', *EventTime_));
+        for (const auto& path : EventTimePaths_) {
+            if (path != *EventTime_) {
+                out.Write('|');
+                out.Write(JoinSeq(';', path));
+            }
+        }
+        out.Write(')');
+    }
 }
 
 void TStreamingConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.Write(true);
+    if (!EventTime_.Defined()) {
+        out.Write(true);
+    } else if (EventTimePaths_.size() == 1U) {
+        out.Write(JoinSeq(';', *EventTime_));
+    } else {
+        out.OpenArray();
+        for (const auto& path : EventTimePaths_) {
+            out.Write(JoinSeq(';', path));
+        }
+        out.CloseArray();
+    }
 }
 
 NYT::TNode TStreamingConstraintNode::ToYson() const {
-    return NYT::TNode::CreateEntity();
+    if (!EventTime_.Defined()) {
+        return NYT::TNode::CreateEntity();
+    }
+    if (EventTimePaths_.size() == 1U) {
+        return PathToNode(*EventTime_);
+    }
+
+    auto res = NYT::TNode::CreateMap();
+    res["event_time"] = PathToNode(*EventTime_);
+    res["aliases"] = SetToNode(EventTimePaths_, /*withShortcut=*/false);
+    return res;
 }
 
 bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
-    return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
+    if (type.GetKind() == ETypeAnnotationKind::Tuple) {
+        if (EventTime_.Defined()) {
+            return false;
+        }
+        for (const auto* item : type.Cast<TTupleExprType>()->GetItems()) {
+            if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, item->GetKind())) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (!IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
+        return false;
+    }
+
+    const auto& itemType = GetSeqItemType(type);
+    return std::all_of(EventTimePaths_.cbegin(), EventTimePaths_.cend(), [&itemType](const TPathType& path) {
+        return TPartOfConstraintBase::GetSubTypeByPath(path, itemType);
+    });
 }
+
+TPartOfConstraintBase::TSetType TStreamingConstraintNode::GetFullSet() const {
+    return EventTimePaths_;
+}
+
+void TStreamingConstraintNode::FilterUncompleteReferences(TSetType& references) const {
+    for (auto it = references.cbegin(); it != references.cend();) {
+        if (IsEventTimePath(*it)) {
+            ++it;
+        } else {
+            it = references.erase(it);
+        }
+    }
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!EventTime_.Defined() || !predicate) {
+        return this;
+    }
+    TSetType paths;
+    std::copy_if(EventTimePaths_.cbegin(), EventTimePaths_.cend(), std::back_inserter(paths), predicate);
+    if (paths == EventTimePaths_) {
+        return this;
+    }
+    if (paths.empty()) {
+        return ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+    const auto canonical = paths.contains(*EventTime_) ? *EventTime_ : paths.front();
+    return ctx.MakeConstraint<TStreamingConstraintNode>(canonical, std::move(paths));
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    if (!EventTime_.Defined() || !reduce) {
+        return this;
+    }
+
+    const auto canonicalPaths = reduce(*EventTime_);
+    TSetType paths;
+    for (const auto& path : EventTimePaths_) {
+        for (const auto& renamed : reduce(path)) {
+            paths.insert_unique(renamed);
+        }
+    }
+    if (paths.empty()) {
+        return ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+
+    TPathType canonical;
+    if (paths.contains(*EventTime_)) {
+        canonical = *EventTime_;
+    } else if (!canonicalPaths.empty()) {
+        // Multiple destinations of the canonical event-time path are proven
+        // aliases of the same value. Preserve all of them and select a representative.
+        canonical = canonicalPaths.front();
+    } else if (paths.size() == 1U) {
+        canonical = paths.front();
+    } else {
+        // Keep the existing conservative rule for an ambiguous rename without
+        // the canonical path. Proven aliases can still survive a projection.
+        return ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+    return ctx.MakeConstraint<TStreamingConstraintNode>(std::move(canonical), std::move(paths));
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode&, TExprContext&) const {
+    return this;
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    if (!IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind())) {
+        return this;
+    }
+    if (type.GetKind() == ETypeAnnotationKind::Tuple) {
+        return IsApplicableToType(type) ? this : ctx.MakeConstraint<TStreamingConstraintNode>();
+    }
+    const auto& itemType = GetSeqItemType(type);
+    return DoFilterFields(ctx, [&itemType](const TPathType& path) {
+        return TPartOfConstraintBase::GetSubTypeByPath(path, itemType);
+    });
+}
+
+template <>
+const TPartOfStreamingConstraintNode*
+TPartOfStreamingConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
+    bool first = true;
+    TMapType mapping;
+    for (const auto* constraint : constraints) {
+        // An empty result produces no values whose event-time lineage must agree.
+        if (constraint->GetConstraint<TEmptyConstraintNode>()) {
+            continue;
+        }
+
+        const auto part = constraint->GetConstraint<TPartOfStreamingConstraintNode>();
+        if (!part) {
+            return nullptr;
+        }
+        if (first) {
+            mapping = part->GetColumnMapping();
+            first = false;
+        } else {
+            const auto& nextMapping = part->GetColumnMapping();
+            for (auto it = mapping.begin(); mapping.end() != it;) {
+                const auto next = nextMapping.find(it->first);
+                if (nextMapping.cend() == next) {
+                    it = mapping.erase(it);
+                    continue;
+                }
+
+                TPartType result;
+                std::set_intersection(
+                    it->second.cbegin(), it->second.cend(),
+                    next->second.cbegin(), next->second.cend(),
+                    std::back_inserter(result),
+                    [](const TPartType::value_type& c1, const TPartType::value_type& c2) {
+                        return c1 < c2;
+                    });
+                if (result.empty()) {
+                    it = mapping.erase(it);
+                } else {
+                    it->second = std::move(result);
+                    ++it;
+                }
+            }
+        }
+        if (mapping.empty()) {
+            return nullptr;
+        }
+    }
+
+    return mapping.empty() ? nullptr : ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(mapping));
+}
+
+template class TPartOfConstraintNode<TStreamingConstraintNode>;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2530,6 +2819,11 @@ void Out<NYql::TPartOfUniqueConstraintNode>(IOutputStream& out, const NYql::TPar
 
 template <>
 void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TPartOfDistinctConstraintNode& value) {
+    value.Out(out);
+}
+
+template <>
+void Out<NYql::TPartOfStreamingConstraintNode>(IOutputStream& out, const NYql::TPartOfStreamingConstraintNode& value) {
     value.Out(out);
 }
 

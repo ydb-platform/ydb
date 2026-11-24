@@ -15,6 +15,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
+#include <util/generic/overloaded.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
@@ -22,11 +23,15 @@ namespace NKikimr::NDataShard {
 
 class TChangeSender: public TActor<TChangeSender> {
     using ESenderType = TEvChangeExchange::ESenderType;
+    using TAsyncIndexSender = TEvChangeExchange::TAsyncIndexSender;
+    using TCdcStreamSender = TEvChangeExchange::TCdcStreamSender;
+    using TSenderParams = TEvChangeExchange::TSenderParams;
     using TEnqueuedRecord = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
 
     struct TSender {
         TTableId UserTableId;
         ESenderType Type;
+        TSenderParams Params;
         TActorId ActorId;
     };
 
@@ -43,28 +48,27 @@ class TChangeSender: public TActor<TChangeSender> {
             {"isActive", IsActive()});
     }
 
-    TSender& AddChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) {
+    TSender& AddChangeSender(const TPathId& pathId, const TTableId& userTableId, const TSenderParams& params) {
         Y_DEBUG_ABORT_UNLESS(!Senders.contains(pathId));
 
         auto& sender = Senders[pathId];
         sender.UserTableId = userTableId;
-        sender.Type = type;
+        sender.Type = GetSenderType(params);
+        sender.Params = params;
 
         return sender;
     }
 
-    TActorId RegisterChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) const {
-        switch (type) {
-        case ESenderType::AsyncIndex:
-            return Register(CreateAsyncIndexChangeSender(DataShard, userTableId, pathId));
-        case ESenderType::CdcStream:
-            return Register(CreateCdcStreamChangeSender(DataShard, pathId));
-        }
-    }
-
     void RegisterChangeSender(const TPathId& pathId, TSender& sender) const {
         Y_DEBUG_ABORT_UNLESS(!sender.ActorId);
-        sender.ActorId = RegisterChangeSender(pathId, sender.UserTableId, sender.Type);
+        sender.ActorId = std::visit(TOverloaded{
+            [&](const TAsyncIndexSender&) {
+                return Register(CreateAsyncIndexChangeSender(DataShard, sender.UserTableId, pathId));
+            },
+            [&](const TCdcStreamSender& cdcStream) {
+                return Register(CreateCdcStreamChangeSender(DataShard, pathId, cdcStream.Stream));
+            },
+        }, sender.Params);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -122,7 +126,7 @@ class TChangeSender: public TActor<TChangeSender> {
             {"senderType", msg.Type},
             {"pathId", msg.PathId});
 
-        auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Type);
+        auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Params);
         if (IsActive()) {
             RegisterChangeSender(msg.PathId, sender);
         }
@@ -280,11 +284,11 @@ public:
             const auto fullTableId = TTableId(self->GetPathOwnerId(), tableId);
 
             tableInfo->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
-                AddChangeSender(indexPathId, fullTableId, ESenderType::AsyncIndex);
+                AddChangeSender(indexPathId, fullTableId, TAsyncIndexSender{});
             });
 
-            for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
-                AddChangeSender(streamPathId, fullTableId, ESenderType::CdcStream);
+            for (const auto& [streamPathId, stream] : tableInfo->CdcStreams) {
+                AddChangeSender(streamPathId, fullTableId, TCdcStreamSender{stream});
             }
         }
     }

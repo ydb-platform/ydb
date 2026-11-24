@@ -414,17 +414,21 @@ Y_UNIT_TEST_TWIN(AnalyzeSamplingServerless, ColumnShard) {
     PrepareMultiColumnTable(env, "Database", "Table", ColumnShard);
     TVector<double> requestedRates;
     auto observer = env.GetServer().GetRuntime()->AddObserver<TEvStatistics::TEvAnalyze>([&](auto& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDatabase(), "/Root/Database");
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TablesSize(), 1);
         const auto& table = ev->Get()->Record.GetTables(0);
         UNIT_ASSERT_VALUES_EQUAL(table.ColumnTagsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(table.GetColumnTags(0), 2);
         requestedRates.push_back(table.GetSampleRate());
     });
-    TTableClient client(env.GetDriver());
-    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+        .Database("/Root/Database").DiscoveryMode(NYdb::EDiscoveryMode::Off));
+    auto sessionResult = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync(); });
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.GetSession();
     for (const TString rate : {"0.5", "1"}) {
         const auto result = env.RunInThreadPool([&] {
-            return session.ExecuteSchemeQuery("ANALYZE `Root/Database/Table` (Value1) SAMPLE " + rate + ";").GetValueSync();
+            return session.ExecuteSchemeQuery("ANALYZE `/Root/Database/Table` (Value1) SAMPLE " + rate + ";").GetValueSync();
         });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }

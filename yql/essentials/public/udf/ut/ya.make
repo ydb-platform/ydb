@@ -1,6 +1,7 @@
 UNITTEST_FOR(yql/essentials/public/udf)
 
 SRCS(
+    sanitizer_utils_ut.cpp
     udf_counter_ut.cpp
     udf_value_ut.cpp
     udf_data_type_ut.cpp
@@ -9,7 +10,7 @@ SRCS(
     udf_type_printer_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_CURRENT_ABI_VERSION()
 
 PEERDIR(
     yql/essentials/utils

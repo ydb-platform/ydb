@@ -10,21 +10,22 @@ SRCS(
 
 PEERDIR(
     library/cpp/html/pcdata
-    ydb/library/actors/core
-    ydb/library/actors/interconnect
-    ydb/library/yql/dq/actors/compute
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/kqp/common
+    ydb/core/kqp/common/warmup
     ydb/core/kqp/counters
     ydb/core/mind
     ydb/core/mon
+    ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/resource_pools
     ydb/core/tablet
-    ydb/core/node_whiteboard
     ydb/core/util
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/library/yql/dq/actors/compute
 )
 
 YQL_LAST_ABI_VERSION()

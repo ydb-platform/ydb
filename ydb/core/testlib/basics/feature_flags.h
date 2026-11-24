@@ -31,6 +31,7 @@ public:
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableChangefeeds)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
+    FEATURE_FLAG_SETTER(EnableRebuildIndex)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
     FEATURE_FLAG_SETTER(EnableGrpcAudit)
@@ -42,12 +43,14 @@ public:
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
     FEATURE_FLAG_SETTER(EnableExternalDataSources)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
+    FEATURE_FLAG_SETTER(EnableHnswIndex)
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
     FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
     FEATURE_FLAG_SETTER(EnableTablePgTypes)
+    FEATURE_FLAG_SETTER(DisablePgCompatibility)
     FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
@@ -87,6 +90,8 @@ public:
     FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
     FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
+    FEATURE_FLAG_SETTER(TransferInternalDataDecompression)
+    FEATURE_FLAG_SETTER(EnableCdcAggregator)
     #undef FEATURE_FLAG_SETTER
 };
 

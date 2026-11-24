@@ -217,6 +217,7 @@ public:
     void FinalizeRunner() const {
         YdbSetup_.WaitAsyncQueries();
         YdbSetup_.CloseSessions();
+        YdbSetup_.FlushTraces();
     }
 
     bool FetchScriptResults(const TString& userSID) {

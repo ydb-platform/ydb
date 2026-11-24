@@ -10,7 +10,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 FORK_SUBTESTS()
-FORK_TEST_FILES()
+SPLIT_FACTOR(5)
 
 PEERDIR(
     ydb/tests/datashard/lib

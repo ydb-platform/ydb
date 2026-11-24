@@ -1,6 +1,7 @@
 #include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
@@ -11,6 +12,7 @@
 #include "schemeshard_operation_registry.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -112,6 +114,20 @@ bool TSchemeShard::ProcessOperationParts(
     if (parts.size() > 1) {
         // allow altering impl index tables as part of consistent operation
         context.IsAllowedPrivateTables = true;
+
+        // Suboperations with RequiresSinglePartTransaction have undo-unsafe
+        // Propose: on a failed propose in a multi-part transaction the already
+        // accepted parts could not be reverted. Forbid them here, at ignite time.
+        for (const auto& part : parts) {
+            Y_VERIFY_S(!DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; }),
+                "IgniteOperation, single-part direct-write suboperation in a multi-part transaction"
+                    << ", subop: " << part->Name()
+                    << ", subopType: " << NKikimrSchemeOp::EOperationType_Name(part->GetModifyScheme().GetOperationType())
+                    << ", total subops count: " << parts.size()
+                    << ", txId: " << txId
+                    << ", schemeshard: " << selfId
+            );
+        }
     }
 
     for (auto& part : parts) {
@@ -166,19 +182,28 @@ bool TSchemeShard::ProcessOperationParts(
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
             TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
 
-            Y_VERIFY_S(context.IsUndoChangesSafe(),
-                "IgniteOperation, operation is aborting, changes made by subop proposes should be reverted"
-                    << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                    << ", accepted subops count: " << operation->Parts.size()
-                    << ", total subops count: " << parts.size()
-                    << ", txId: " << txId
-                    << ", failed subop: " << operation->GetTxId()
-                    << ", failed subop status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                    << ", fail reason: " << response->Record.GetReason()
-                    << ", first GetDB called at: " << locationInfo
-                    << ", modifyScheme tx: " << SecureDebugString(record)
-                    << ", schemeshard:  " << selfId
-            );
+            // A single-part direct-write suboperation failing its own propose
+            // is a documented exception: the transaction aborts with zero
+            // accepted parts and the direct writes are rolled back by the txc.
+            const bool singlePartDirectWrite =
+                parts.size() == 1
+                && DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; });
+
+            if (!singlePartDirectWrite) {
+                Y_VERIFY_S(context.IsUndoChangesSafe(),
+                    "IgniteOperation, operation is aborting, changes made by subop proposes should be reverted"
+                        << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                        << ", accepted subops count: " << operation->Parts.size()
+                        << ", total subops count: " << parts.size()
+                        << ", txId: " << txId
+                        << ", failed subop: " << operation->GetTxId()
+                        << ", failed subop status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                        << ", fail reason: " << response->Record.GetReason()
+                        << ", first GetDB called at: " << locationInfo
+                        << ", modifyScheme tx: " << SecureDebugString(record)
+                        << ", schemeshard:  " << selfId
+                );
+            }
 
             AbortOperationPropose(txId, context);
 
@@ -186,7 +211,10 @@ bool TSchemeShard::ProcessOperationParts(
         }
 
         // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
-        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+        // Single-part direct-write suboperations are a documented exception, do not warn about them.
+        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()
+            && !DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; }))
+        {
             prevProposeUndoSafe = false;
 
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
@@ -202,6 +230,58 @@ bool TSchemeShard::ProcessOperationParts(
     return true;
 }
 
+namespace {
+
+bool IsAsyncReplicationFeed(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
+    return AnyOf(desc.GetUserAttributes(), [](const auto& attr) {
+        return attr.GetKey() == ATTR_ASYNC_REPLICATION;
+    });
+}
+
+bool IsAsyncReplicationFeed(const TPath& path) {
+    return path.IsResolved()
+        && path.Base()->PathType == NKikimrSchemeOp::EPathTypeCdcStream
+        && path.Base()->UserAttrs->Attrs.contains(ATTR_ASYNC_REPLICATION);
+}
+
+// The replication controller's own changefeed operations, which it issues over the public API
+// with the replication's credentials. The topic side exempts the same marker when reading and
+// committing, in TReadInitAndAuthActor.
+bool IsAsyncReplicationOperation(const NKikimrSchemeOp::TModifyScheme& tx, TSchemeShard* ss) {
+    const auto workingDir = TPath::Resolve(tx.GetWorkingDir(), ss);
+    switch (tx.GetOperationType()) {
+    case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
+        return IsAsyncReplicationFeed(tx.GetCreateCdcStream().GetStreamDescription());
+    case NKikimrSchemeOp::ESchemeOpAlterCdcStream: {
+        const auto& op = tx.GetAlterCdcStream();
+        return IsAsyncReplicationFeed(workingDir.Child(op.GetTableName()).Child(op.GetStreamName()));
+    }
+    case NKikimrSchemeOp::ESchemeOpDropCdcStream: {
+        const auto& op = tx.GetDropCdcStream();
+        const auto table = workingDir.Child(op.GetTableName());
+        return op.StreamNameSize() && AllOf(op.GetStreamName(), [&table](const auto& name) {
+            return IsAsyncReplicationFeed(table.Child(name));
+        });
+    }
+    case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup: {
+        // The feed's topic lives under the feed itself. Resolve it the way TAlterPQ::Propose
+        // does -- a PathId decides the target and the working dir is then ignored.
+        const auto& op = tx.GetAlterPersQueueGroup();
+        if (!op.HasName() && !op.HasPathId()) {
+            return false;
+        }
+        const auto topic = op.HasPathId()
+            ? TPath::Init(ss->MakeLocalId(op.GetPathId()), ss)
+            : workingDir.Child(op.GetName());
+        return IsAsyncReplicationFeed(topic.Parent());
+    }
+    default:
+        return false;
+    }
+}
+
+} // anonymous namespace
+
 THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context) {
     using namespace NGenerated;
     THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> response = nullptr;
@@ -216,9 +296,26 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         return response;
     }
 
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
+        && context.UserToken
+        && !context.UserToken->IsSystemUser()
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get())
+        && !(record.TransactionSize() && AllOf(record.GetTransaction(), [this](const auto& tx) {
+            return IsAsyncReplicationOperation(tx, this);
+        })))
+    {
+        return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+            "Client schema modifications are disabled for non-administrators");
+    }
+
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {
+        if (IsDatabaseFreezeBlocking(transaction)) {
+            return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "Database is frozen for schema changes");
+        }
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(quotaResult.Status, ui64(txId), ui64(selfId)));

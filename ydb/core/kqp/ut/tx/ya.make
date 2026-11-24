@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(
@@ -18,6 +18,7 @@ SRCS(
     kqp_sink_tx_ut.cpp
     kqp_snapshot_isolation_ut.cpp
     kqp_tx_ut.cpp
+    kqp_unsafe_truncate_ut.cpp
     kqp_tx_commit_timestamp_cdc_ut.cpp
     kqp_rollback.cpp
     kqp_online_ro_ut.cpp
@@ -25,6 +26,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp
+    ydb/core/kqp/common/simple
     ydb/core/kqp/ut/common
     ydb/core/tx/columnshard/hooks/testing
     yql/essentials/sql/pg_dummy

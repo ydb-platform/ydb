@@ -122,6 +122,8 @@ To get a list of import operations, use the `operation list import/s3` command:
 
 ## Examples {#examples}
 
+To restore the initial data before starting asynchronous replication, follow the [step-by-step guide to initial synchronization using backup and restore](../../../../devops/async-replication-initial-sync.md). Start replication after all target tables have been imported successfully.
+
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Importing to the database root {#example-full-db}

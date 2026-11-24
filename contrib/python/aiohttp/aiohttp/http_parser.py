@@ -1212,8 +1212,8 @@ class DeflateBuffer:
         assert not chunk
 
         if self.size > 0:
-            if self.encoding == "deflate" and not self.decompressor.eof:
-                raise ContentEncodingError("deflate")
+            if self.encoding in {"deflate", "zstd"} and not self.decompressor.eof:
+                raise ContentEncodingError(self.encoding)
 
         self.out.feed_eof()
 

@@ -35,13 +35,13 @@ FROM (
             s_store_id,
             Sum(Coalesce(ss_sales_price * ss_quantity, CAST(0 AS Decimal(7,2)))) AS sumsales
         FROM
-            `/Root/test/ds/store_sales`
+            `store_sales`
         ,
-            `/Root/test/ds/date_dim`
+            `date_dim`
         ,
-            `/Root/test/ds/store`
+            `store`
         ,
-            `/Root/test/ds/item`
+            `item`
         WHERE
             ss_sold_date_sk == d_date_sk
             AND ss_item_sk == i_item_sk

@@ -8,6 +8,7 @@ TEST_SRCS(
     test_ydb_flame_graph.py
     test_ydb_impex.py
     test_ydb_interactive_ai.py
+    test_ydb_interactive_helpers.py
     test_ydb_interactive_sql.py
     test_ydb_profile.py
     test_ydb_recursive_remove.py
@@ -17,6 +18,7 @@ TEST_SRCS(
     test_ydb_sql.py
     test_ydb_table.py
     test_ydb_tools.py
+    test_ydb_topic.py
     test_ydb_topic_deferred_publish.py
 )
 
@@ -34,6 +36,7 @@ ELSE()
 ENDIF()
 
 DEPENDS(
+    contrib/tools/python3/bin
     ydb/apps/ydb
     ydb/apps/ydb/experimental/ydb
     ydb/tests/functional/ydb_cli/ai_interactive
@@ -56,7 +59,7 @@ PY_SRCS(
 
 FORK_TEST_FILES()
 FORK_SUBTESTS()
-SPLIT_FACTOR(30)
+SPLIT_FACTOR(5)
 
 END()
 

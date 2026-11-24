@@ -53,6 +53,12 @@ bool IsDropViewStack(const TParserCallStack& stack) {
     return Find(stack, RULE(Drop_view_stmt)) != std::end(stack);
 }
 
+bool IsChecksumTableStack(const TParserCallStack& stack) {
+    return Contains({RULE(Checksum_table_stmt),
+                     RULE(Simple_table_ref_core),
+                     RULE(Object_ref)}, stack);
+}
+
 bool IsTableRefStack(const TParserCallStack& stack) {
     return !Contains({RULE(Create_table_stmt),
                       RULE(Simple_table_ref)}, stack) &&
@@ -127,7 +133,8 @@ bool IsLikelyObjectRefStack(const TParserCallStack& stack) {
 }
 
 bool IsLikelyExistingTableStack(const TParserCallStack& stack) {
-    return (IsTableRefStack(stack) && !IsDropViewStack(stack)) || IsDropTableStack(stack);
+    return (IsTableRefStack(stack) && !IsDropViewStack(stack)) || IsDropTableStack(stack) ||
+           IsChecksumTableStack(stack);
 }
 
 bool IsLikelyExistingViewStack(const TParserCallStack& stack) {

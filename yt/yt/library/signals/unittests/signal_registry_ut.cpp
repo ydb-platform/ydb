@@ -18,15 +18,22 @@ using namespace NConcurrency;
 
 TEST(TSignalRegistryTest, PushCallbackJustWorks)
 {
+#ifdef _linux_
+    auto signal = SIGRTMIN + 1;
+#elif defined(_darwin_)
+    auto signal = SIGUSR2;
+#else
+    #error Unsupported platform
+#endif
     auto promise = NewPromise<void>();
 
-    TSignalRegistry::Get()->PushCallback(SIGRTMIN + 1, [promise] () {
+    TSignalRegistry::Get()->PushCallback(signal, [promise] () {
         promise.Set();
     });
 
     auto future = promise.ToFuture();
 
-    raise(SIGRTMIN + 1);
+    raise(signal);
 
     EXPECT_TRUE(WaitForFast(future.WithTimeout(TDuration::Seconds(5))).IsOK());
 }

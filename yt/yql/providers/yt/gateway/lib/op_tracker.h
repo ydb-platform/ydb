@@ -23,7 +23,8 @@ public:
 
     virtual NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
         const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
-        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress) = 0;
+        const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted,
+        bool isExternalProgress, bool enableProgressDataStatistics) = 0;
 };
 
 } // NYql

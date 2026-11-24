@@ -84,6 +84,11 @@ public:
         return std::nullopt;
     }
 
+    // Ngram size when this index can serve a probe with the given case mode. Empty for every other index.
+    virtual std::optional<ui32> GetCompatibleBloomNgramSize(const bool /*caseSensitive*/) const {
+        return std::nullopt;
+    }
+
     std::optional<ui64> CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const;
 
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
@@ -146,7 +151,7 @@ public:
     TIndexMetaContainer(const std::shared_ptr<IIndexMeta>& object)
         : TBase(object)
     {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
     }
 };
 

@@ -29,7 +29,6 @@ def write_json(path, value):
 
 def test_ya_tools_conf_normalizes_nested_windows_paths(tmp_path, monkeypatch):
     conf_dir = tmp_path / 'conf'
-    write_json(conf_dir / 'ya.conf.json', {'bottles': {}})
     write_json(
         conf_dir / 'tools' / 'tools' / 'parent' / 'default-child.tool.json',
         {'tool': {'type': 'simple'}},
@@ -53,7 +52,6 @@ def test_ya_tools_conf_normalizes_nested_windows_paths(tmp_path, monkeypatch):
     res._YA_TOOLS_CONF(unit, 'conf')
 
     assert unit.resource_files == [
-        ['STRIP', 'conf/', 'conf/ya.conf.json'],
         [
             'PREFIX',
             'yatools',
@@ -67,16 +65,6 @@ def test_ya_tools_conf_normalizes_nested_windows_paths(tmp_path, monkeypatch):
 
 def test_ya_tools_conf_collects_resource_files(tmp_path):
     conf_dir = tmp_path / 'conf'
-    write_json(
-        conf_dir / 'ya.conf.json',
-        {
-            'bottles': {
-                'shared': {'formula': 'conf/formulas/root.json'},
-                'legacy': {'formula': 'conf/formulas/legacy.json'},
-                'object': {'formula': {'resource': 'ignored'}},
-            }
-        },
-    )
     touch(conf_dir / 'tools' / 'internal' / 'tiers.json')
     write_json(
         conf_dir / 'tools' / 'tools' / 'root.tool.json',
@@ -116,7 +104,6 @@ def test_ya_tools_conf_collects_resource_files(tmp_path):
     touch(conf_dir / 'tools' / 'toolchains' / 'ignored.json')
     touch(conf_dir / 'tools' / 'toolchains' / 'nested' / 'ignored.toolchain.json')
     touch(conf_dir / 'formulas' / 'root.json')
-    touch(conf_dir / 'formulas' / 'legacy.json')
     touch(conf_dir / 'formulas' / 'tool.json')
     touch(conf_dir / 'formulas' / 'toolchain.json')
     touch(tmp_path / 'build' / 'external_resources' / 'default' / 'resources.json')
@@ -126,7 +113,6 @@ def test_ya_tools_conf_collects_resource_files(tmp_path):
     res._YA_TOOLS_CONF(unit, 'conf/')
 
     assert unit.resource_files == [
-        ['STRIP', 'conf/', 'conf/ya.conf.json'],
         [
             'PREFIX',
             'yatools',
@@ -143,20 +129,82 @@ def test_ya_tools_conf_collects_resource_files(tmp_path):
         ],
         'build/external_resources/default/resources.json',
         'build/external_resources/parent/default-child/resources.json',
-        'conf/formulas/legacy.json',
         'conf/formulas/root.json',
         'conf/formulas/tool.json',
         'conf/formulas/toolchain.json',
     ]
 
 
+def test_ya_tools_conf_collects_selected_tools(tmp_path):
+    conf_dir = tmp_path / 'conf'
+    touch(conf_dir / 'tools' / 'internal' / 'tiers.json')
+    write_json(
+        conf_dir / 'tools' / 'tools' / 'selected.tool.json',
+        {'tool': {'type': 'simple', 'definition': {'formula': 'conf/formulas/selected.json'}}},
+    )
+    write_json(
+        conf_dir / 'tools' / 'tools' / 'skipped.tool.json',
+        {'tool': {'type': 'simple', 'definition': {'formula': 'conf/formulas/skipped.json'}}},
+    )
+    write_json(
+        conf_dir / 'tools' / 'tools' / 'nested' / 'skipped.tool.json',
+        {'tool': {'type': 'simple', 'definition': {'formula': 'conf/formulas/nested.json'}}},
+    )
+    write_json(
+        conf_dir / 'tools' / 'toolchains' / 'default.toolchain.json',
+        {'bottles': {'toolchain': {'formula': 'conf/formulas/toolchain.json'}}},
+    )
+    for name in ('nested', 'selected', 'skipped', 'toolchain'):
+        touch(conf_dir / 'formulas' / (name + '.json'))
+
+    unit = FakeUnit(str(tmp_path))
+    res._YA_TOOLS_CONF(unit, 'conf', 'selected', 'selected')
+
+    assert unit.resource_files == [
+        [
+            'PREFIX',
+            'yatools',
+            'STRIP',
+            'conf',
+            'conf/tools/internal/tiers.json',
+            'conf/tools/toolchains/default.toolchain.json',
+            'conf/tools/tools/selected.tool.json',
+        ],
+        'conf/formulas/selected.json',
+        'conf/formulas/toolchain.json',
+    ]
+
+
+def test_ya_tools_conf_reports_invalid_selected_tools(tmp_path, monkeypatch):
+    conf_dir = tmp_path / 'conf'
+    write_json(conf_dir / 'tools' / 'tools' / 'known.tool.json', {'tool': {'type': 'parent'}})
+    errors = []
+    monkeypatch.setattr(res.ymake, 'report_configure_error', errors.append, raising=False)
+    unit = FakeUnit(str(tmp_path))
+
+    res._YA_TOOLS_CONF(unit, 'conf', 'known', 'missing', 'nested/tool', 'nested\\tool')
+
+    assert unit.resource_files == [
+        [
+            'PREFIX',
+            'yatools',
+            'STRIP',
+            'conf',
+            'conf/tools/tools/known.tool.json',
+        ],
+    ]
+    assert 'Tool config "{}" is not found'.format(conf_dir / 'tools' / 'tools' / 'missing.tool.json') in errors
+    assert 'Tool name "nested/tool" must not contain path separators' in errors
+    assert 'Tool name "nested\\tool" must not contain path separators' in errors
+
+
 def test_ya_tools_conf_allows_missing_optional_directories(tmp_path):
-    write_json(tmp_path / 'conf' / 'ya.conf.json', {'bottles': {}})
+    (tmp_path / 'conf').mkdir()
     unit = FakeUnit(str(tmp_path))
 
     res._YA_TOOLS_CONF(unit, 'conf')
 
-    assert unit.resource_files == [['STRIP', 'conf/', 'conf/ya.conf.json']]
+    assert unit.resource_files == []
 
 
 def test_ya_tools_conf_reports_missing_config_directory(tmp_path, monkeypatch):
@@ -170,21 +218,19 @@ def test_ya_tools_conf_reports_missing_config_directory(tmp_path, monkeypatch):
     assert errors == ['Directory "{}" not found'.format(tmp_path / 'missing')]
 
 
-def test_ya_tools_conf_reports_missing_ya_conf_json(tmp_path, monkeypatch):
-    (tmp_path / 'conf').mkdir()
-    errors = []
-    monkeypatch.setattr(res.ymake, 'report_configure_error', errors.append, raising=False)
+def test_ya_tools_conf_ignores_ya_conf_json(tmp_path):
+    conf_dir = tmp_path / 'conf'
+    conf_dir.mkdir()
+    (conf_dir / 'ya.conf.json').write_text('{not valid json')
     unit = FakeUnit(str(tmp_path))
 
     res._YA_TOOLS_CONF(unit, 'conf')
 
     assert unit.resource_files == []
-    assert errors == ['File "{}" not found'.format(tmp_path / 'conf' / 'ya.conf.json')]
 
 
 def test_ya_tools_conf_reports_invalid_formulas(tmp_path, monkeypatch):
     conf_dir = tmp_path / 'conf'
-    write_json(conf_dir / 'ya.conf.json', {'bottles': {}})
     write_json(
         conf_dir / 'tools' / 'tools' / 'outside.tool.json',
         {'tool': {'type': 'simple', 'definition': {'formula': 'conf-other/formula.json'}}},

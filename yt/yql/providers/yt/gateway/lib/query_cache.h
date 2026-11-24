@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yql/providers/yt/gateway/lib/op_tracker.h>
+#include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <yql/essentials/utils/threading/async_queue.h>
@@ -92,7 +93,7 @@ public:
     void SetOperationId(NYT::TOperationId operationId);
 
     void SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
-        const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter);
+        const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter, bool enableProgressDataStatistics);
 
 private:
     static TString GetCachePath(const TString& userName, const TString& tmpFolder);
@@ -105,6 +106,7 @@ private:
     TMaybe<ui32> PublicId_;
     TOperationProgressWriter ProgressWriter_;
     TStatWriter StatWriter_;
+    bool EnableProgressDataStatistics_ = DEFAULT_ENABLE_PROGRESS_DATA_STATISTICS;
 
     const TTransactionCache::TEntry::TPtr Entry;
     const TVector<TString> DstTables;

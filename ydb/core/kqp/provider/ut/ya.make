@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/kqp/query_compiler
     ydb/core/kqp/ut/common
     ydb/core/resource_pools
+    ydb/library/yql/providers/pq/provider
     yql/essentials/ast
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
@@ -29,7 +30,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 END()

@@ -125,7 +125,8 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
-        ISignatureValidatorPtr signatureValidator)
+        ISignatureValidatorPtr signatureValidator,
+        IInvokerPtr heavyCommandInvoker)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
@@ -136,6 +137,7 @@ public:
             Config_->ProxyDiscoveryCache,
             RootClient_))
         , SignatureValidator_(std::move(signatureValidator))
+        , HeavyCommandInvoker_(std::move(heavyCommandInvoker))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
         // Register all commands.
@@ -410,6 +412,10 @@ public:
         REGISTER    (TRemovePipelineSpecCommand,           "remove_pipeline_spec",            Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TGetPipelineDynamicSpecCommand,       "get_pipeline_dynamic_spec",       Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TSetPipelineDynamicSpecCommand,       "set_pipeline_dynamic_spec",       Structured, Structured, true,  false, ApiVersion4);
+        REGISTER(TGetPipelineDynamicSpecPatchesCommand, "get_pipeline_dynamic_spec_patches", Null, Structured, false, false, ApiVersion4);
+        REGISTER(TPatchPipelineDynamicSpecCommand, "patch_pipeline_dynamic_spec", Structured, Structured, true, false, ApiVersion4);
+        REGISTER(TCancelPipelineDynamicSpecPatchCommand, "cancel_pipeline_dynamic_spec_patch", Null, Structured, true, false, ApiVersion4);
+        REGISTER(TResetPipelineDynamicSpecCommand, "reset_pipeline_dynamic_spec", Null, Structured, true, false, ApiVersion4);
         REGISTER    (TRemovePipelineDynamicSpecCommand,    "remove_pipeline_dynamic_spec",    Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);
@@ -500,7 +506,7 @@ public:
             request);
 
         return BIND(&TDriver::DoExecute, entry.Execute, context)
-            .AsyncVia(Connection_->GetInvoker())
+            .AsyncVia(GetCommandInvoker(entry.Descriptor))
             .Run();
     }
 
@@ -571,6 +577,7 @@ private:
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
     const ISignatureGeneratorPtr SignatureGenerator_;
     const ISignatureValidatorPtr SignatureValidator_;
+    const IInvokerPtr HeavyCommandInvoker_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
@@ -597,6 +604,13 @@ private:
             command.Execute(context);
         });
         YT_VERIFY(CommandNameToEntry_.emplace(descriptor.CommandName, entry).second);
+    }
+
+    IInvokerPtr GetCommandInvoker(const TCommandDescriptor& descriptor) const
+    {
+        return descriptor.Heavy && HeavyCommandInvoker_
+            ? HeavyCommandInvoker_
+            : Connection_->GetInvoker();
     }
 
     static void DoExecute(TExecuteCallback executeCallback, TCommandContextPtr context)
@@ -763,7 +777,8 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
-    ISignatureValidatorPtr signatureValidator)
+    ISignatureValidatorPtr signatureValidator,
+    IInvokerPtr heavyCommandInvoker)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
@@ -772,7 +787,8 @@ IDriverPtr CreateDriver(
     return New<TDriver>(
         std::move(config),
         std::move(connection),
-        std::move(signatureValidator));
+        std::move(signatureValidator),
+        std::move(heavyCommandInvoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

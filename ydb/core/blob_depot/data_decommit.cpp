@@ -18,6 +18,7 @@ namespace NKikimr::NBlobDepot {
         std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
         THashSet<TLogoBlobID> ResolutionErrors;
         TEvBlobDepot::TEvResolve::TPtr Ev;
+        TInstant Deadline = TInstant::Max(); // the one of the requesting query
 
         ui32 TxInFlight = 0;
 
@@ -201,6 +202,11 @@ namespace NKikimr::NBlobDepot {
             if (Token.expired()) {
                 return PassAway();
             }
+            if (const auto& record = Ev->Get()->Record; record.HasDeadlineUs()) {
+                Deadline = TInstant::MicroSeconds(record.GetDeadlineUs());
+                // nobody waits for the result afterwards; this also bounds the local transactions
+                Schedule(Deadline - TActivationContext::Now(), new TEvents::TEvWakeup);
+            }
 
             YDB_LOG_DEBUG("TResolveDecommitActor::Bootstrap",
                 {"marker", "BDT42"},
@@ -272,6 +278,12 @@ namespace NKikimr::NBlobDepot {
             Become(&TThis::StateFunc);
         }
 
+        template<typename TEvent>
+        void SendBackingRequest(ui32 groupId, std::unique_ptr<TEvent> event, ui64 cookie) {
+            event->IsProxySubrequest = Ev->Get()->Record.GetSkipBridgeAccountingForSubrequests();
+            SendToBSProxy(SelfId(), groupId, event.release(), cookie);
+        }
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // RANGE QUERIES are for metadata only -- they scan not yet assimilated parts of the original group and do not
         // recover any data; thus they are IsIndexOnly and not MustRestoreFirst range queries
@@ -286,9 +298,9 @@ namespace NKikimr::NBlobDepot {
                 {"from", from},
                 {"to", to},
                 {"mustRestoreFirst", mustRestoreFirst});
-            auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
+            auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, Deadline, true);
             ev->Decommission = true;
-            SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), mustRestoreFirst);
+            SendBackingRequest(Self->Config.GetVirtualGroupId(), std::move(ev), mustRestoreFirst);
             ++RangesInFlight;
         }
 
@@ -358,11 +370,11 @@ namespace NKikimr::NBlobDepot {
                 const ui32 bytes = GetBytesFor(GetQ.front());
                 GetBytesInFlight += bytes;
                 GetQ.pop_front();
-                auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
+                auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, Deadline,
                     NKikimrBlobStorage::EGetHandleClass::FastRead, false /*mustRestoreFirst*/,
                     !mustRestoreFirst /*isIndexOnly*/);
                 ev->Decommission = true;
-                SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), bytes);
+                SendBackingRequest(Self->Config.GetVirtualGroupId(), std::move(ev), bytes);
             }
         }
 
@@ -426,13 +438,14 @@ namespace NKikimr::NBlobDepot {
                 // This is the restore the MustRestoreFirst read asked for, so it inherits the kind of
                 // the reader: the payload is user data, but a tablet reading its own log during boot
                 // cannot get up until this copy lands.
-                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
-                        .BlobId = id,
-                        .Buffer = TRope(TRcBuf(buffer)),
-                        .Deadline = TInstant::Max(),
-                        .WriteSource = TWriteSource::BlobDepotPut,
-                        .DataKind = Ev->Get()->Record.GetDataKind(),
-                    }), (ui64)keep | (ui64)doNotKeep << 1);
+                auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = id,
+                    .Buffer = TRope(TRcBuf(buffer)),
+                    .Deadline = Deadline,
+                    .WriteSource = TWriteSource::BlobDepotPut,
+                    .DataKind = Ev->Get()->Record.GetDataKind(),
+                });
+                SendBackingRequest(channel.GroupId, std::move(ev), (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                 Y_ABORT_UNLESS(inserted);
                 const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;
@@ -471,6 +484,8 @@ namespace NKikimr::NBlobDepot {
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
+                // this copy won't ever get its blob bound to the key, so it doesn't hold garbage collection back anymore
+                Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
             } else {
                 AssimilatedBlobs.push_back({std::move(key), TAssimilatedBlobInfo::TUpdate{
                     TBlobSeqId::FromLogoBlobId(msg.Id), keep, doNotKeep}});
@@ -544,12 +559,30 @@ namespace NKikimr::NBlobDepot {
             PassAway();
         }
 
+        void PassAway() override {
+            ActorToken.reset(); // pending preparation transactions must stop issuing requests
+            if (!Token.expired()) {
+                // Transactions already submitted own their copies. These copies have no transaction to bind them.
+                for (const auto& [id, key] : IdToKey) {
+                    Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(id));
+                }
+                for (const auto& blob : AssimilatedBlobs) {
+                    if (const auto *update = std::get_if<TAssimilatedBlobInfo::TUpdate>(&blob.Action)) {
+                        Self->ReleaseMoveDataBlobSeqId(update->BlobSeqId);
+                    }
+                }
+            }
+            TActorBootstrapped::PassAway();
+        }
+
         STATEFN(StateFunc) {
             if (Token.expired()) {
                 return PassAway();
             }
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
+                case TEvents::TSystem::Wakeup:
+                    return FinishWithError(NLog::PRI_NOTICE, "decommission resolve deadline exceeded");
                 hFunc(TEvBlobStorage::TEvGetResult, Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Handle);
                 hFunc(TEvBlobStorage::TEvPutResult, Handle);

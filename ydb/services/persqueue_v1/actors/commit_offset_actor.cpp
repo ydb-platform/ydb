@@ -4,6 +4,7 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -14,12 +15,11 @@ using namespace PersQueue::V1;
 
 TCommitOffsetActor::TCommitOffsetActor(
         TEvCommitOffsetRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
-        const TActorId& schemeCache, const TActorId& newSchemeCache,
+        const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
     , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
-    , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
     , Counters(counters)
@@ -31,7 +31,6 @@ TCommitOffsetActor::TCommitOffsetActor(
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
     , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
     , Counters(nullptr)
@@ -46,7 +45,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
-    AFL_ENSURE(request);
+    YDB_LOG_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
     PartitionId = request->partition_id();
 
@@ -80,7 +79,8 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
-            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString()),
+            AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!topicsList.IsValid) {
         return AnswerError(
@@ -91,7 +91,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
+            Request().GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
     ));
 }
 
@@ -123,8 +123,17 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
-    AFL_ENSURE(TopicAndTablets.size() == 1);
+    YDB_LOG_ENSURE(TopicAndTablets.size() == 1);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
+
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        && !topicInitInfo.IsAsyncReplication
+        && !topicInitInfo.IsReplicationConsumer)
+    {
+        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
+        return;
+    }
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
@@ -219,7 +228,7 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     // Convert to correct response.
 
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
-    AFL_ENSURE(!partitionResult.HasCmdReadResult());
+    YDB_LOG_ENSURE(!partitionResult.HasCmdReadResult());
 
     LOG_D("CommitOffset, commit done");
 
@@ -246,7 +255,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
 
-    AFL_ENSURE(PipeClient);
+    YDB_LOG_ENSURE(PipeClient);
 
     auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
     commit->SetClientId(ClientId);

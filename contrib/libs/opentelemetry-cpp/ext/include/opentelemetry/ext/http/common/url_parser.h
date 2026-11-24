@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "opentelemetry/common/detail/ascii.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -193,16 +194,6 @@ public:
     std::string result;
     result.reserve(encoded.size());
 
-    auto hex_to_int = [](int ch) -> int {
-      if (ch >= '0' && ch <= '9')
-        return ch - '0';
-      if (ch >= 'a' && ch <= 'f')
-        return ch - 'a' + 10;
-      if (ch >= 'A' && ch <= 'F')
-        return ch - 'A' + 10;
-      return -1;
-    };
-
     for (size_t pos = 0; pos < encoded.size(); pos++)
     {
       auto c = encoded[pos];
@@ -213,8 +204,8 @@ public:
           return encoded;
         }
 
-        int hi = hex_to_int(encoded[pos + 1]);
-        int lo = hex_to_int(encoded[pos + 2]);
+        int hi = opentelemetry::common::detail::HexDigitValue(encoded[pos + 1]);
+        int lo = opentelemetry::common::detail::HexDigitValue(encoded[pos + 2]);
 
         if (hi == -1 || lo == -1)
         {

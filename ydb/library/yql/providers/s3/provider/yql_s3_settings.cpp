@@ -10,7 +10,7 @@ namespace NYql {
 using namespace NCommon;
 
 TS3Configuration::TS3Configuration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(S3ProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TS3Settings>(S3ProviderName, TQContext(), strictConfigValidation)
 {
     REGISTER_SETTING(*this, SourceCoroActor);
     REGISTER_SETTING(*this, MaxOutputObjectSize);

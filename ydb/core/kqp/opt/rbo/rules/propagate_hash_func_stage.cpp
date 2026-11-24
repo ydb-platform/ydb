@@ -16,32 +16,21 @@ void PropagateHashFuncs(TStageGraph& stageGraph, const TKikimrConfiguration::TPt
     // preserve the producer hash, so sibling HashShuffle connections must use
     // the same function.
     THashMap<ui32, NDq::EHashShuffleFuncType> hashTypeByStageId;
-    for (const auto stageId : stageGraph.GetTopologicalOrder()) {
+    for (const auto* stage : stageGraph.TopologicalOrder()) {
         auto stageHashType = defaultHashType;
-
-        if (stageGraph.IsSourceStage(stageId)) {
+        if (stage->IsSource()) {
             stageHashType = columnShardHashType;
         } else {
-            for (const auto inputStageId : stageGraph.StageInputs.at(stageId)) {
-                for (const auto& connection : stageGraph.GetConnections(inputStageId, stageId)) {
-                    if (!IsConnection<TMapConnection>(connection)) {
-                        continue;
-                    }
-
-                    const auto it = hashTypeByStageId.find(inputStageId);
-                    Y_ENSURE(it != hashTypeByStageId.end(), "Input stage hash function type is not initialized.");
-                    stageHashType = it->second;
+            for (auto* edge : stageGraph.IncomingEdges(*stage)) {
+                if (IsConnection<TMapConnection>(edge->Connection())) {
+                    stageHashType = hashTypeByStageId.at(edge->Producer().Id());
                 }
             }
         }
-
-        hashTypeByStageId[stageId] = stageHashType;
-
-        for (const auto inputStageId : stageGraph.StageInputs.at(stageId)) {
-            for (const auto& connection : stageGraph.Connections.at(std::make_pair(inputStageId, stageId))) {
-                if (auto* shuffle = dynamic_cast<TShuffleConnection*>(connection.get())) {
-                    shuffle->HashFuncType = stageHashType;
-                }
+        hashTypeByStageId[stage->Id()] = stageHashType;
+        for (auto* edge : stageGraph.IncomingEdges(*stage)) {
+            if (IsConnection<TShuffleConnection>(edge->Connection())) {
+                edge->SetShuffleHashFunction(stageHashType);
             }
         }
     }

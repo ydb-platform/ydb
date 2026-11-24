@@ -41,6 +41,8 @@ YT_DEFINE_ERROR_ENUM(
     // The worker cancelled the job after being disconnected from the controller for too long.
     ((AbandonedJob)                    (3306))
     ((TimerStoreLimitExceeded)         (3307))
+    ((PartitionKeyLimitExceeded)       (3308))
+    ((PersistedStateSnapshotOutdated)   (3309))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

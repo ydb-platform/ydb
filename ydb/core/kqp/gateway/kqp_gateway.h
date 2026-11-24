@@ -22,6 +22,8 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
+#include <functional>
+
 namespace NKikimr::NGRpcService {
 
 class IRequestCtxMtSafe;
@@ -164,6 +166,7 @@ public:
         bool FlushEffects = false;
         bool DisablePessimisticLocks = false;
         bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+        bool CompiledWithPgCompatibilityDisabled = false;
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
         NLWTrace::TOrbit Orbit;
@@ -192,6 +195,7 @@ public:
     };
 
     struct TAstQuerySettings {
+        bool IsInternalCall = false;
         Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     };
 
@@ -239,10 +243,12 @@ public:
         const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target, const TMaybe<TString>& traceId) = 0;
 };
 
+// The optional provider overrides traceId, even when it returns empty.
+// It must retain any captured context.
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId,
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
-    NWilson::TTraceId traceId = {});
+    NWilson::TTraceId traceId = {}, std::function<NWilson::TTraceId()> traceParentProvider = {});
 
 } // namespace NKikimr::NKqp
 

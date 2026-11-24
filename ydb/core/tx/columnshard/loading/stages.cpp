@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -41,11 +42,10 @@ bool TOperationsManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactio
 }
 
 bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(Self->StoragesManager);
+    YDB_LOG_VERIFY(Self->StoragesManager);
     if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
         return false;
     }
-    Self->InitFindEmptyHistoryIntervals();
     return true;
 }
 
@@ -203,9 +203,18 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
-        if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {
+        if (!tablesManagerLocal.InitFromDB(db, Self->Info(), &LoadDurations)) {
             return false;
         }
+    }
+    const std::pair<TString, TDuration> steps[] = {
+        { "tables", LoadDurations.Tables },
+        { "schema_presets", LoadDurations.SchemaPresets },
+        { "table_versions", LoadDurations.TableVersions },
+        { "schema_preset_versions", LoadDurations.SchemaPresetVersions },
+    };
+    for (const auto& [step, duration] : steps) {
+        TraceStartupStageFinished(Self->StartupTimeline.MutableOrbit(), Self->TabletID(), GetStageName() + "/" + step, duration);
     }
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());
@@ -218,7 +227,8 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 std::shared_ptr<NKikimr::ITxReader> TTablesManagerInitializer::BuildNextReaderAfterLoad() {
     if (Self->TablesManager.HasPrimaryIndex()) {
-        return Self->TablesManager.MutablePrimaryIndex().BuildLoader(std::make_shared<TBlobGroupSelector>(Self->Info()));
+        return Self->TablesManager.MutablePrimaryIndex().BuildLoader(
+            std::make_shared<TBlobGroupSelector>(Self->Info()), Self->GetOperationsManager().GetUncommittedPortionAddresses());
     } else {
         return nullptr;
     }
@@ -243,7 +253,7 @@ bool TTiersManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContex
 
     while (!rowset.EndOfSet()) {
         NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-        AFL_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
+        YDB_LOG_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
         if (versionInfo.GetTtlSettings().HasEnabled()) {
             NOlap::TTiering tiering;
             tiering.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).Validate();

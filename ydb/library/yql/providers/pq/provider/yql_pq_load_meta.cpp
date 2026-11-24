@@ -129,7 +129,7 @@ private:
             try {
                 pending.Meta.FederatedTopic = pending.Future.GetValue();
             } catch (const std::exception& ex) {
-                if (!State_->UseYtflowEngine || !isWrite) {
+                if (!State_->IsYtflowEngine() || !isWrite) {
                     TIssues issues;
                     issues.AddIssue(ex.what());
                     ctx.IssueManager.AddIssues(issues);

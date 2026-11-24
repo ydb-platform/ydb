@@ -1,9 +1,11 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import rich.console
+import yatest.common
 from textual.command import CommandPalette
 from textual.css.query import NoMatches
 from textual.widgets import Button, Checkbox, Input, ListView, TabbedContent
@@ -25,6 +27,10 @@ from ydb.tools.mnc.viewer.widgets import (
     OverviewStatusCard,
     _validate_multinode_config,
 )
+
+
+_YDB_RELATIVE_ROOT = Path(yatest.common.test_source_path()).parents[3].relative_to(yatest.common.source_path())
+_YDB_BINARY_PATH = _YDB_RELATIVE_ROOT / "apps" / "ydbd" / "ydbd"
 
 
 class ClusterConfigValidationTest(unittest.TestCase):
@@ -327,7 +333,7 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             pane = app.query_one(OperationsPane)
             binary_input = pane.query_one("#operations-bin-path", Input)
-            self.assertEqual(binary_input.placeholder, "/repo/ydb/apps/ydbd/ydbd")
+            self.assertEqual(binary_input.placeholder, os.path.join("/repo", _YDB_BINARY_PATH))
             self.assertEqual(binary_input.value, "")
             self.assertIsNone(pane._request().bin_path)
 
@@ -335,7 +341,7 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
             app._mnc_config["git_ydb_root"] = "/other-repo"
             app._refresh_mnc_config_status()
             await pilot.pause()
-            self.assertEqual(binary_input.placeholder, "/other-repo/ydb/apps/ydbd/ydbd")
+            self.assertEqual(binary_input.placeholder, os.path.join("/other-repo", _YDB_BINARY_PATH))
             self.assertEqual(binary_input.value, "/tmp/custom-ydb")
             self.assertEqual(pane._request().bin_path, "/tmp/custom-ydb")
 
@@ -582,11 +588,11 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
 
                 pane = app.query_one(OperationsPane)
                 binary_input = pane.query_one("#operations-bin-path", Input)
-                self.assertEqual(binary_input.placeholder, "/repo/ydb/apps/ydbd/ydbd")
+                self.assertEqual(binary_input.placeholder, os.path.join("/repo", _YDB_BINARY_PATH))
                 pane.query_one("#operations-run", Button).press()
                 await self._wait_for_operation_status(pilot, app, "OK")
 
-        self.assertEqual(contexts[0]["path_to_bin"], "/repo/ydb/apps/ydbd/ydbd")
+        self.assertEqual(contexts[0]["path_to_bin"], os.path.join("/repo", _YDB_BINARY_PATH))
         self.assertTrue(contexts[0]["work_directory_exists"])
         self.assertTrue(contexts[0]["do_rebuild"])
         self.assertFalse(contexts[0]["do_strip"])

@@ -124,6 +124,11 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
                << "=" << RightJoinKeys[i].RelName << "."
                << RightJoinKeys[i].AttributeName << ",";
     }
+    for (const auto& [left, right] : PostJoinConditions) {
+        stream << " Filter: " << left.RelName << "." << left.AttributeName
+               << (IsEqualNullsKey(left, right) ? " IS NOT DISTINCT FROM " : "=")
+               << right.RelName << "." << right.AttributeName;
+    }
     stream << "\n";
 
     for (int i = 0; i < ntabs; i++) {
@@ -292,15 +297,18 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         std::optional<double> lhsUniqueVals;
         std::optional<double> rhsUniqueVals;
         if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-            auto lhs = leftJoinKeys[0].AttributeName;
-            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
-            auto rhs = rightJoinKeys[0].AttributeName;
-            rightStats.ColumnStatistics->Data[rhs];
-            rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+            const auto& leftData = leftStats.ColumnStatistics->Data;
+            const auto& rightData = rightStats.ColumnStatistics->Data;
+            if (const auto it = leftData.find(leftJoinKeys[0].AttributeName); it != leftData.end()) {
+                lhsUniqueVals = it->second.GetDistinctCount();
+            }
+            if (const auto it = rightData.find(rightJoinKeys[0].AttributeName); it != rightData.end()) {
+                rhsUniqueVals = it->second.GetDistinctCount();
+            }
         }
 
         if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
-            newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
+            newCard = leftStats.Nrows * rightStats.Nrows / std::max(std::max(*lhsUniqueVals, *rhsUniqueVals), 1.0);
         } else {
             newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
         }

@@ -154,6 +154,8 @@ namespace NKikimr {
             auto shortTargetVDiskId = TVDiskIdShort(TargetVDiskId);
             TargetVDiskId = msg->NewInfo->GetVDiskId(shortTargetVDiskId);
             TargetActorId = msg->NewInfo->GetActorId(shortTargetVDiskId);
+            // the context holds our own VDiskId; peers reject requests from the previous generation
+            JobCtx = TSjCtx::Create(SyncerCtx, msg->NewInfo);
         }
 
     public:

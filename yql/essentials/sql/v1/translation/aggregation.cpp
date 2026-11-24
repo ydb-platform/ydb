@@ -855,9 +855,9 @@ private:
                   Y("String", BuildQuotedAtom(Pos_, message)));
         }
 
-        if (isFactory) {
-            FactoryPercentile_ = x;
-        } else {
+        FactoryPercentile_ = x;
+
+        if (!isFactory) {
             Percentiles_.emplace(Name_, x);
         }
 
@@ -1571,7 +1571,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name_));
-            if (IsOverWindow() || IsOverWindowDistinct()) {
+            if (src && (IsOverWindow() || IsOverWindowDistinct())) {
                 src->AddTmpWindowColumn(Name_);
             }
         }

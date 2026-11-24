@@ -63,7 +63,6 @@ bool TInlineScalarSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input,
 
 // Rewrite a single scalar subplan into a cross-join for uncorrelated queries
 // or into a left join for correlated (assuming at most one tuple in the output of each subquery)
-// FIXME: Need to do correct general case decorellation in the future
 
 bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     TVector<TInfoUnitId> scalarIUs;
@@ -116,7 +115,14 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         TJoinIUs joinKeys = domain.Keys;
         auto dependentJoin = std::move(domain).Bind(subplan, subplan->Pos);
 
-        auto [rightInput, rightResIU] = MakeAtMostOneRowPerGroup(dependentJoin, domainColumns, subplanResIU, subplanResType, subplan->Pos, ctx, props);
+        TIntrusivePtr<IOperator> rightInput = dependentJoin;
+        TInfoUnitId rightResIU = subplanResIU;
+
+        if (subplan->Props.Metadata->LogicalCard != ELogicalCardinality::One) {
+            const auto & pair = MakeAtMostOneRowPerGroup(dependentJoin, domainColumns, subplanResIU, subplanResType, subplan->Pos, ctx, props);
+            rightInput = pair.first;
+            rightResIU = pair.second;
+        }
 
         TIntrusivePtr<IOperator> joinLeftInput = child;
         TIntrusivePtr<IOperator> joinRightInput = rightInput;
@@ -128,7 +134,14 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     }
     // Otherwise we assume an uncorrelated supbplan
     else {
-        auto [checkedInput, checkedResIU] = MakeAtMostOneRowPerGroup(subplan, {}, subplanResIU, subplanResType, subplan->Pos, ctx, props);
+        TIntrusivePtr<IOperator> checkedInput = subplan;
+        TInfoUnitId checkedResIU = subplanResIU;
+
+        if (subplan->Props.Metadata->LogicalCard != ELogicalCardinality::One) {
+            const auto & pair =  MakeAtMostOneRowPerGroup(subplan, {}, subplanResIU, subplanResType, subplan->Pos, ctx, props);
+            checkedInput = pair.first;
+            checkedResIU = pair.second;
+        }
 
         TMapIUs renameElements;
         renameElements.Add(scalarIU, MakeColumnAccess(checkedResIU, subplan->Pos, &ctx.ExprCtx, &props));

@@ -54,7 +54,7 @@
 
 {% cut "См. графики на панели мониторинга Grafana **CPU**" %}
 
-Графики на панели мониторинга Grafana **CPU** показывают рост нагрузки на CPU [в пуле ресурсов пользователей и интерконнекта](../../../concepts/glossary.md#actor-system-pool):
+Графики на панели мониторинга Grafana **CPU** показывают рост нагрузки на CPU [в пуле ресурсов пользователей и интерконнекта](../../../reference/configuration/actor_system_config.md#tuneconfig):
 
 ![CPU](./_assets/overloaded-shard-simple-case/incident-grafana-cpu-dashboard-user-pool-by-actors.png)
 

@@ -40,7 +40,13 @@ namespace NTable {
         {
             if (OnPause) {
                 return EReady::Page;
-            } else if (Iter == nullptr) {
+            }
+            // A sleeping consumer may still reference the delivered cells.
+            // Release the completed key only when traversal resumes.
+            if (std::exchange(KeyConsumed, false)) {
+                CurrentEnv->ReleaseRowHistory();
+            }
+            if (Iter == nullptr) {
                 Lead.Clear();
 
                 if (Seeks == Max<ui64>()) {
@@ -54,6 +60,11 @@ namespace NTable {
 
                 switch (op) {
                     case EScan::Feed:
+                        if (Scan->ShouldSkipSubset(Subset)) {
+                            /* The scan needs no rows at all, finish it without
+                                even creating an iterator over the subset. */
+                            return EReady::Gone;
+                        }
                         if (!Reset()) {
                             return EReady::Page;
                         }
@@ -145,6 +156,7 @@ namespace NTable {
                             if (!VersionScan) {
                                 Seen++;
                                 op = Scan->Feed(Iter->GetKey().Cells(), Iter->Row());
+                                KeyConsumed = true;
                             } else {
                                 Y_DEBUG_ABORT_UNLESS(!Conf.NoErased, "VersionScan with Conf.NoErased == true is unexpected");
                                 op = VersionScan->BeginKey(Iter->GetKey().Cells());
@@ -170,6 +182,7 @@ namespace NTable {
                                 !Subset.RemovedTransactions.Contains(lockTxId) &&
                                 !Subset.CommittedTransactions.Contains(lockTxId))
                             {
+                                NotifySource();
                                 op = VersionScan->Feed(lockMode, lockTxId);
                                 if (op != EScan::Feed) {
                                     VersionState = EVersionState::FeedDelta;
@@ -185,6 +198,7 @@ namespace NTable {
                             Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             ui64 txId = Iter->GetUncommittedTxId();
                             if (Iter->Row() != ERowOp::Absent && !Subset.RemovedTransactions.Contains(txId)) {
+                                NotifySource();
                                 op = VersionScan->Feed(Iter->Row(), txId);
                             } else {
                                 op = EScan::Feed;
@@ -210,6 +224,7 @@ namespace NTable {
                                 !Subset.RemovedTransactions.Contains(lockTxId) &&
                                 !Subset.CommittedTransactions.Contains(lockTxId))
                             {
+                                NotifySource();
                                 op = VersionScan->Feed(lockMode, lockTxId);
                                 if (op != EScan::Feed) {
                                     VersionState = EVersionState::Feed;
@@ -223,6 +238,7 @@ namespace NTable {
                         case EVersionState::Feed: {
                             Seen++;
                             TRowVersion rowVersion = Iter->GetRowVersion();
+                            NotifySource();
                             op = VersionScan->Feed(Iter->Row(), rowVersion);
                             if (rowVersion) {
                                 VersionState = EVersionState::SkipVersion;
@@ -235,6 +251,7 @@ namespace NTable {
 
                         case EVersionState::EndKey:
                             op = VersionScan->EndKey();
+                            KeyConsumed = true;
                             VersionState = EVersionState::BeginKey;
                             break;
 
@@ -515,6 +532,11 @@ namespace NTable {
         const TRowVersion SnapshotVersion;
 
     private:
+        void NotifySource()
+        {
+            VersionScan->SetSource(Iter->GetSource());
+        }
+
         enum class ESeekState {
             LoadColdParts,
             PrepareBoots,
@@ -537,6 +559,7 @@ namespace NTable {
         };
 
         IVersionScan * const VersionScan;
+        bool KeyConsumed = false;
         EVersionState VersionState = EVersionState::BeginKey;
         TRowVersion NextRowVersion;
 

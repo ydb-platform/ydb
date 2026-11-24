@@ -1,5 +1,6 @@
 #include "kqp_rbo_context.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 namespace NKikimr::NKqp {
@@ -17,5 +18,9 @@ TRBOContext::TRBOContext(NOpt::TKqpOptimizeContext& kqpCtx, NYql::TExprContext& 
     , ExecutionJson(std::nullopt)
     , ExplainJson(std::nullopt)
 {}
+
+TCompileTrace* TRBOContext::GetCompileTrace() const {
+    return KqpCtx.GetCompileTrace();
+}
 
 } // namespace NKikimr::NKqp

@@ -148,11 +148,21 @@ private:
             PushSkipStat("NonEmptyKeyFilter", nodeName);
             return false;
         }
+        // A YtReadTable has a single data source cluster. Cross-cluster writes
+        // are supported, but inputs from several clusters need separate reads.
+        if (GetClusterFromSection(section) == YtUnspecifiedCluster) {
+            PushSkipStat("MultipleClusters", nodeName);
+            return false;
+        }
         ui64 dataSize = 0ULL, dataChunks = 0ULL;
         for (const auto& path : section.Paths()) {
             const TYtPathInfo info(path);
             const auto& tableInfo = info.Table;
             if (!tableInfo || !tableInfo->Stat || !tableInfo->Meta || !tableInfo->RowSpec) {
+                return false;
+            }
+            if (!State_->IsHybridEnabledForCluster(tableInfo->Cluster)) {
+                PushSkipStat("DisabledCluster", nodeName);
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(tableInfo->Cluster).GetOrElse(false);
@@ -307,7 +317,7 @@ private:
                     .World<TCoWorld>().Build()
                     .DataSource<TYtDSource>()
                         .Category(sort.DataSink().Category())
-                        .Cluster(sort.DataSink().Cluster())
+                        .Cluster().Value(GetClusterFromSection(sort.Input().Item(0))).Build()
                         .Build()
                     .Input(sort.Input())
                     .Build()
@@ -445,7 +455,7 @@ private:
                                         .World<TCoWorld>().Build()
                                         .DataSource<TYtDSource>()
                                             .Category(map.DataSink().Category())
-                                            .Cluster(map.DataSink().Cluster())
+                                            .Cluster().Value(GetClusterFromSection(map.Input().Item(0))).Build()
                                         .Build()
                                         .Input(map.Input())
                                     .Build()
@@ -580,7 +590,7 @@ private:
                     .template World<TCoWorld>().Build()
                     .template DataSource<TYtDSource>()
                         .Category(reduce.DataSink().Category())
-                        .Cluster(reduce.DataSink().Cluster())
+                        .Cluster().Value(GetClusterFromSection(reduce.Input().Item(0))).Build()
                         .Build()
                     .Input(reduce.Input())
                     .Build()

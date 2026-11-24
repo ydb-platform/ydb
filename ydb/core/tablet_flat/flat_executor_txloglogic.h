@@ -8,7 +8,7 @@
 #include "flat_executor_counters.h"
 #include "flat_sausage_slicer.h"
 #include "logic_redo_eggs.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 namespace NKikimr {

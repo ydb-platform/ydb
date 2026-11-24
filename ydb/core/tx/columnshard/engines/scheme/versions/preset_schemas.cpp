@@ -9,18 +9,18 @@ TVersionedPresetSchemas::TVersionedPresetSchemas(const ui64 defaultPresetId, con
     : DefaultPresetId(defaultPresetId)
     , SchemaObjectsCache(schemaObjectsCache)
 {
-    AFL_VERIFY(storagesManager);
-    AFL_VERIFY(SchemaObjectsCache);
+    YDB_LOG_VERIFY(storagesManager);
+    YDB_LOG_VERIFY(SchemaObjectsCache);
     RegisterPreset(defaultPresetId);
     for (auto&& key : NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::GetRegisteredKeys()) {
         if (get<1>(key).StartsWith("store_")) {
             continue;
         }
         auto obj = NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(key);
-        AFL_VERIFY(!!obj);
+        YDB_LOG_VERIFY(!!obj);
         RegisterPreset(obj->GetPresetId());
         MutableVersionedIndex(obj->GetPresetId()).AddIndex(TSnapshot::Zero(),
-            SchemaObjectsCache->UpsertIndexInfo(obj->GetIndexInfo(storagesManager, SchemaObjectsCache)));
+            SchemaObjectsCache->GetOrInsertIndexInfo(obj->GetIndexInfo(storagesManager, SchemaObjectsCache)));
     }
 }
 

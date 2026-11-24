@@ -167,6 +167,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
 
     Y_UNIT_TEST_TWIN(CreateExternalDataSourceWithSa, UseSchemaSecrets) {
         NKqp::TKikimrSettings settings;
+        settings.FeatureFlags.SetDisableOldSecretCreation(false);
         settings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         settings.AppConfig.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(/* value */ 50000);
         TKikimrRunner kikimr{ settings };
@@ -258,6 +259,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
 
     Y_UNIT_TEST_TWIN(DisableS3ExternalDataSource, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(/* value */ false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr(appCfg);

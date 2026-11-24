@@ -3,8 +3,7 @@
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
-#include <ydb/core/kqp/common/kqp_ru_calc.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
+#include <ydb/core/kqp/common/stats/ru_calc.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/datashard/read_table_scan.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -23,6 +22,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 
@@ -102,13 +102,8 @@ public:
         Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
-
-        if (entry.Indexes.size()) {
-            errorMessage = "EvReadResults is not supported for tables with indexes";
-            return false;
-        }
-
         const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
+        const bool disablePgCompatibility = AppData()->FeatureFlags.GetDisablePgCompatibility();
 
         THashSet<TString> keyColumnNamesInSchema;
         THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*> nameToColumn;
@@ -125,6 +120,7 @@ public:
         if (!PrepareRequestedKeyColumns(keyColumnNamesInSchema,
                                         nameToColumn,
                                         entry.NotNullColumns,
+                                        disablePgCompatibility,
                                         errorMessage))
         {
             return false;
@@ -136,12 +132,23 @@ public:
             return false;
         }
 
+        if (disablePgCompatibility) {
+            const auto* pgColumn = FindIfPtr(RequestedColumnsMeta, [](const auto& column) {
+                return column.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+            });
+            if (pgColumn) {
+                errorMessage = Sprintf("PostgreSQL compatibility is disabled for column '%s'", pgColumn->Name.c_str());
+                return false;
+            }
+        }
+
         return true;
     }
 
     bool PrepareRequestedKeyColumns(const THashSet<TString>& keyColumnNamesInSchema,
                                     const THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*>& nameToColumn,
                                     const THashSet<TString>& notNullColumns,
+                                    bool disablePgCompatibility,
                                     TString& errorMessage)
     {
         auto keyColumnsLeft = keyColumnNamesInSchema;
@@ -157,6 +164,11 @@ public:
                 return false;
             }
             const auto& colInfo = *colInfoPtr;
+
+            if (disablePgCompatibility && (typeInProto.has_pg_type() || colInfo.PType.GetTypeId() == NScheme::NTypeIds::Pg)) {
+                errorMessage = Sprintf("PostgreSQL compatibility is disabled for column '%s'", name.c_str());
+                return false;
+            }
 
             TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
 

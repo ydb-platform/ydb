@@ -39,7 +39,7 @@ class TBoardReplicaPublishActor : public TActorBootstrapped<TBoardReplicaPublish
     void NotAvailableUnsubscribe() {
         if (Replica.NodeId() != SelfId().NodeId())
             Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe());
-        Send(PublishActor, new TEvents::TEvGone());
+        Send(PublishActor, new TEvStateStorage::TEvPublishActorGone(Replica));
         PassAway();
     }
 
@@ -59,11 +59,10 @@ public:
     {}
 
     void Bootstrap() {
-        // Note: we don't track delivery, and instead treat undelivery as some
-        // form of silent "permanent" failure, waiting for disconnection. On
-        // disconnection we assume the node may be restarted with a new
-        // configuration and the actor become valid.
-        Send(Replica, new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor, ClusterStateGeneration, ClusterStateGuid), IEventHandle::FlagSubscribeOnSession, ++Round);
+        Send(Replica,
+            new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor, ClusterStateGeneration, ClusterStateGuid),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+            ++Round);
 
         Become(&TThis::StatePublish);
     }
@@ -73,6 +72,7 @@ public:
             cFunc(TEvents::TEvPoisonPill::EventType, Cleanup);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, NotAvailable); // no cleanup on node disconnect
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, NotAvailableUnsubscribe);
+            cFunc(TEvents::TEvUndelivered::EventType, NotAvailableUnsubscribe);
         }
     }
 };

@@ -1,14 +1,16 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
+#include <ydb/core/kqp/common/simple/user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -517,6 +519,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.IsSorted());
+        readProto.SetRequireSortedRead(settings.RequireSortedRead);
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }
@@ -565,7 +568,7 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
     const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -577,7 +580,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx, trace);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -758,8 +761,18 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        queryProto.SetForceImmediateEffectsExecution(
-            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
+        bool hasUnsafeTruncate = false;
+        for (const auto& tx : query.Transactions()) {
+            if (GetTableTruncateSettings(tx)) {
+                hasUnsafeTruncate = true;
+                break;
+            }
+        }
+
+        queryProto.SetForceImmediateEffectsExecution(hasUnsafeTruncate
+            || Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
         queryProto.SetDisablePessimisticLocks(
             Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
@@ -1018,11 +1031,6 @@ private:
                 FillTableId(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
                 FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1033,11 +1041,6 @@ private:
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadWideTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1049,13 +1052,11 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
-                FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
+                {
+                    TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
                 }
+                FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1067,14 +1068,12 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
+                {
+                    TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
+                }
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
                 stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
             } else if (auto maybeDqReadWrapBase = node.Maybe<TDqReadWrapBase>()) {
@@ -1087,9 +1086,10 @@ private:
         });
 
         stageProto.SetStageCost(stageCost);
-        if (auto stats = OptimizeCtx.KqpStats.GetStats(stage.Program().Body().Raw())) {
-            stageProto.SetEstimatedRows(stats->Nrows);
-        }
+        // TODO: fill TKqpPhyStage::EstimatedRows and TKqpPhyTableOperation::EstimatedRows when:
+        //  - read estimates take key ranges into account: now a read by ranges, e.g. `key IN $param`,
+        //    is estimated as the whole table;
+        //  - TShardInfo::EstimatedRows gets a consumer, e.g. task placement in TMaxTasksGraph.
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 
@@ -1138,7 +1138,7 @@ private:
                     YQL_ENSURE(maybeTransformNode);
                     auto transformNode = maybeTransformNode.Cast();
 
-                    AFL_ENSURE(IsTableSink(transformNode.DataSink().Cast<TCoDataSink>().Category()));
+                    YDB_LOG_ENSURE(IsTableSink(transformNode.DataSink().Cast<TCoDataSink>().Category()));
 
                     auto* transformProto = stageProto.AddOutputTransforms();
                     transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
@@ -1152,6 +1152,10 @@ private:
                         settingsProto,
                         tablesMap,
                         stage);
+                    // A returning sink cannot run without this metadata. Fail
+                    // compilation so New RBO can fall back before any effects.
+                    YQL_ENSURE(!settingsProto.GetReturningColumns().empty(),
+                        "Returning table sink requires returning-column metadata");
                     transformProto->MutableInternalSink()->MutableSettings()->PackFrom(settingsProto);
                     transformProto->SetOutputIndex(FromString(TStringBuf(transformNode.Index())));
 
@@ -1159,7 +1163,7 @@ private:
                     const auto outputRowType = transformNode.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
 
                     const auto programOutputType = GetSeqItemType(stage.Program().Ref().GetTypeAnn());
-                    AFL_ENSURE(inputRowType->Equals(*programOutputType));
+                    YDB_LOG_ENSURE(inputRowType->Equals(*programOutputType));
 
                     TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
                     transformProto->SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputRowType), TypeEnv));
@@ -1423,6 +1427,7 @@ private:
 
             TString indexName = TString(settings.Index().Cast().StringValue());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
+            fullTextProto.SetMainTableCovered(settings.MainTableCovered().Cast().Value() == "true");
 
             auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
 
@@ -1572,8 +1577,23 @@ private:
             }
 
             {
-                for (const auto& expr: settings.Query().Maybe<TExprList>().Cast()) {
-                    auto* value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                for (auto expr: settings.Query().Maybe<TExprList>().Cast()) {
+                    NKqpProto::TKqpPhyValue* value;
+                    if (const auto query = NOpt::TryParseFulltextPatternQuery(expr.Ptr())) {
+                        auto* patternQuery = fullTextProto.MutableQuerySettings()->AddPatternQueries();
+                        if (query->Escape) {
+                            patternQuery->SetEscape(TString(1, *query->Escape));
+                        }
+                        using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                        TPatternQuery::EMatchMode matchMode;
+                        YQL_ENSURE(TPatternQuery::EMatchMode_Parse(TString(query->Mode), &matchMode),
+                            "Unexpected string match mode: " << query->Mode);
+                        patternQuery->SetMode(matchMode);
+                        value = patternQuery->MutablePattern();
+                        expr = TExprBase(query->Pattern);
+                    } else {
+                        value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                    }
                     if (expr.Maybe<TCoParameter>()) {
                         value->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
                     } else {
@@ -1842,7 +1862,7 @@ private:
             if (usedColumns.contains(columnName)
                     && !columnToOrder.contains(columnName)
                     && !localDefaultColumnsIds.contains(columnName)) {
-                AFL_ENSURE(isDefaultColumn(columnName));
+                YDB_LOG_ENSURE(isDefaultColumn(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1850,8 +1870,8 @@ private:
         // Default columns with local processing
         for (const auto& columnName : tableMeta->ColumnOrder) {
             if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
-                AFL_ENSURE(isDefaultColumn(columnName));
-                AFL_ENSURE(localDefaultColumnsIds.contains(columnName));
+                YDB_LOG_ENSURE(isDefaultColumn(columnName));
+                YDB_LOG_ENSURE(localDefaultColumnsIds.contains(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1910,18 +1930,18 @@ private:
                     return false;
                 }
             }
-            AFL_ENSURE(names.contains("new"));
-            AFL_ENSURE(names.contains("old"));
+            YDB_LOG_ENSURE(names.contains("new"));
+            YDB_LOG_ENSURE(names.contains("old"));
             return true;
         }();
 
         if (shape.IsStructOfNewAndOldValues) {
-            AFL_ENSURE(Config->GetEnableIndexStreamWrite());
-            AFL_ENSURE(settings.Mode().StringValue() == "update_conditional");
+            YDB_LOG_ENSURE(Config->GetEnableIndexStreamWrite());
+            YDB_LOG_ENSURE(settings.Mode().StringValue() == "update_conditional");
 
             settingsProto.SetInputRowFormat(NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS);
 
-            AFL_ENSURE(structType->GetSize() == 2);
+            YDB_LOG_ENSURE(structType->GetSize() == 2);
             for (const auto& item : structType->GetItems()) {
                 if (item->GetName() == "new") {
                     shape.NewStructType = item->GetItemType()->Cast<TStructExprType>();
@@ -2056,13 +2076,13 @@ private:
             }
             const auto& implTable = tableMeta->ImplTables[index];
 
-            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+            YDB_LOG_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
             for (const auto& columnName : implTable->KeyColumnNames) {
                 if (mode == "insert") {
                     // In case of INSERT we assume that row doesn't exist (otherwise, query will fail),
                     // so we don't need to lookup existing rows.
-                    AFL_ENSURE(columnsSet.contains(columnName));
+                    YDB_LOG_ENSURE(columnsSet.contains(columnName));
                 } else if (mode == "delete" && columnsSet.contains(columnName)) {
                     // In case of DELETE we assume that forwarded rows are from WHERE
                 } else if (!mainKeyColumnsSet.contains(columnName)) {
@@ -2098,7 +2118,7 @@ private:
             const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape,
             const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet, THashSet<TStringBuf>& localDefaultColumns,
             const bool streamIndexWrite) {
-        AFL_ENSURE(settings.Mode().StringValue() != "insert");
+        YDB_LOG_ENSURE(settings.Mode().StringValue() != "insert");
 
         THashSet<TStringBuf> lookupColumnsSet;
         if (streamIndexWrite) {
@@ -2153,7 +2173,7 @@ private:
             // Register them as LookupColumns only to provide runtime metadata for indexes and RETURNING.
             for (const auto& item : shape.OldStructType->GetItems()) {
                 const auto& columnName = item->GetName();
-                AFL_ENSURE(!mainKeyColumnsSet.contains(columnName));
+                YDB_LOG_ENSURE(!mainKeyColumnsSet.contains(columnName));
 
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
@@ -2399,7 +2419,7 @@ private:
                 YQL_ENSURE(implTable->Name.EndsWith(NTableIndex::ImplTable));
             }
 
-            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+            YDB_LOG_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
             auto indexSettings = settingsProto.AddIndexes();
             indexSettings->SetIndexName(indexDescription.Name);
@@ -2443,7 +2463,7 @@ private:
             localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
         }
 
-        AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+        YDB_LOG_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
         THashSet<TStringBuf> columnsSet;
         for (const auto& columnName : shape.Columns) {
@@ -2452,7 +2472,7 @@ private:
         THashSet<TStringBuf> mainKeyColumnsSet;
         for (const auto& columnName : tableMeta->KeyColumnNames) {
             mainKeyColumnsSet.insert(columnName);
-            AFL_ENSURE(columnsSet.contains(columnName));
+            YDB_LOG_ENSURE(columnsSet.contains(columnName));
         }
 
         const auto affectedIndexes = ComputeAffectedIndexes(settings, tableMeta, columnsSet, mainKeyColumnsSet, streamIndexWrite);
@@ -2517,7 +2537,7 @@ private:
             FillColumnProto(columnName, columnMeta, columnProto);
         }
 
-        AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+        YDB_LOG_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
         const auto columnToOrder = CreateColumnToOrder(
             shape.Columns,
             tableMeta,
@@ -2527,7 +2547,7 @@ private:
             settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
         }
 
-        AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+        YDB_LOG_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
                     || localDefaultColumns.Ids.empty());
         for (const auto& defaultColumnId : localDefaultColumns.Ids) { // from plan!!!
             settingsProto.AddDefaultColumnsIds(defaultColumnId);
@@ -2536,7 +2556,7 @@ private:
         settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
 
         const bool inconsistentWrite = settings.InconsistentWrite().Value() == "true"sv;
-        AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+        YDB_LOG_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
         settingsProto.SetInconsistentTx(inconsistentWrite);
     }
 
@@ -2549,11 +2569,11 @@ private:
             settingsProto.AddInputColumns(TString(column));
         }
 
-        AFL_ENSURE(settings.InconsistentWrite().StringValue() == "true");
+        YDB_LOG_ENSURE(settings.InconsistentWrite().StringValue() == "true");
         settingsProto.SetInconsistentTx(true);
 
-        AFL_ENSURE(settings.Priority().StringValue() == "0");
-        AFL_ENSURE(settings.StreamWrite().StringValue() == "true");
+        YDB_LOG_ENSURE(settings.Priority().StringValue() == "0");
+        YDB_LOG_ENSURE(settings.StreamWrite().StringValue() == "true");
     }
 
     // Trailing flags common to all sink modes (priority, stream-write, batch, impl-table).
@@ -2579,7 +2599,7 @@ private:
         const TSinkInputShape shape = DetermineInputRowFormat(settings, settingsProto, stage);
 
         if (settings.Mode().StringValue() != "fill_table") {
-            AFL_ENSURE(settings.Table().PathId() != "");
+            YDB_LOG_ENSURE(settings.Table().PathId() != "");
             FillTableId(settings.Table(), *settingsProto.MutableTable());
             FillTablesMap(settings.Table(), shape.Columns, tablesMap);
 
@@ -2612,7 +2632,14 @@ private:
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (IsTableSink(dataSinkCategory)) {
+        if (dataSinkCategory == KqpTableTruncateSinkName) {
+            const auto settings = sink.Settings().Cast<TKqpTableTruncateSettings>();
+            NKikimrKqp::TKqpTableTruncateSettings settingsProto;
+            settingsProto.SetTablePath(settings.TablePath().StringValue());
+            auto& internalSink = *protoSink->MutableInternalSink();
+            internalSink.SetType(TString(KqpTableTruncateSinkName));
+            internalSink.MutableSettings()->PackFrom(settingsProto);
+        } else if (IsTableSink(dataSinkCategory)) {
             auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>();
             YQL_ENSURE(settings, "Unsupported sink type");
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
@@ -2656,6 +2683,11 @@ private:
             }
         }
         YQL_ENSURE(indexDesc);
+        // Old schemas omit the index owner; use the same fallback as the
+        // metadata loader when resolving the index implementation tables.
+        vectorTopK.MutableHnswIndexId()->SetOwnerId(
+            indexDesc->PathOwnerId ? indexDesc->PathOwnerId : mainTable->Metadata->PathId.OwnerId());
+        vectorTopK.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
         // Index settings
         auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
@@ -3147,6 +3179,9 @@ private:
 
             const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
             YQL_ENSURE(indexDesc);
+            proto.MutableHnswIndexId()->SetOwnerId(
+                indexDesc->PathOwnerId ? indexDesc->PathOwnerId : tableMeta->PathId.OwnerId());
+            proto.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
             // Index settings
             const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);

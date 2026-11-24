@@ -33,7 +33,7 @@ The browser works with the assistant through Gateway:
 
 ## Configure Model Access {#configure-model-access}
 
-`ydb_em_ai_model_token_name` is the [tokenator](../../concepts/glossary.md#tokenator) entry name that Gateway uses for model requests.
+`ydb_em_ai_model_token_name` is the tokenator entry name that Gateway uses for model requests.
 
 Example tokenator entry:
 

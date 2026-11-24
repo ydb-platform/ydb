@@ -10,8 +10,21 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class ISSEntityUpdate {
 private:
     bool Initialized = false;
+
+    template <class TInitializer>
+    TConclusionStatus InitializeOnce(TInitializer&& initializer) {
+        YDB_LOG_VERIFY(!Initialized);
+        auto result = initializer();
+        if (result.IsSuccess()) {
+            Initialized = true;
+        }
+
+        return result;
+    }
+
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
+    virtual TConclusionStatus DoRestore(const TUpdateRestoreContext& context) = 0;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;
     virtual TConclusionStatus DoFinish(const TUpdateFinishContext& context) = 0;
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const = 0;
@@ -22,32 +35,31 @@ public:
     virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const = 0;
 
     std::set<ui64> GetShardIds() const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetShardIds();
     }
 
     TString GetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetShardTxBodyString(tabletId, seqNo);
     }
 
     TConclusionStatus Start(const TUpdateStartContext& context) {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoStart(context);
     }
 
     TConclusionStatus Finish(const TUpdateFinishContext& context) {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoFinish(context);
     }
 
     TConclusionStatus Initialize(const TUpdateInitializationContext& context) {
-        AFL_VERIFY(!Initialized);
-        auto result = DoInitialize(context);
-        if (result.IsSuccess()) {
-            Initialized = true;
-        }
-        return result;
+        return InitializeOnce([&] { return DoInitialize(context); });
+    }
+
+    TConclusionStatus Restore(const TUpdateRestoreContext& context) {
+        return InitializeOnce([&] { return DoRestore(context); });
     }
 };
 

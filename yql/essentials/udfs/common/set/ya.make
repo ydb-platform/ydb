@@ -1,16 +1,12 @@
 YQL_UDF_CONTRIB(set_udf)
-    
-    YQL_ABI_VERSION(
-        2
-        28
-        0
-    )
 
-    SRCS(
-        set_udf.cpp
-    )
-    
-    END()
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
+
+INCLUDE(ya.make.inc)
+
+END()
 
 RECURSE_FOR_TESTS(
     test

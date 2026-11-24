@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -9,6 +9,7 @@
 #include <util/generic/vector.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace NYql {
@@ -43,6 +44,16 @@ struct TPhyTxResultMetadata {
 struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
     THashMap<NKikimr::TTableId, TIntrusivePtr<TTableConstInfo>> Map;
 };
+
+struct TQueryTable {
+    TString Path;
+    // Key ranges of the reads from this table, when every read is bounded by
+    // a key range known before execution: literals and parameters supplied
+    // with the query. Empty otherwise.
+    TVector<const NKqpProto::TKqpPhyKeyRange*> KeyRanges;
+};
+
+const NKqpProto::TKqpInternalSink* FindTableTruncateSink(const NKqpProto::TKqpPhyTx& tx);
 
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
@@ -112,6 +123,12 @@ public:
         return Proto->GetTables();
     }
 
+    bool HasUnsafeTruncate() const {
+        return FindTableTruncateSink(*Proto) != nullptr;
+    }
+
+    NKikimrKqp::TKqpTableTruncateSettings GetUnsafeTruncate() const;
+
     const NKqpProto::TKqpSchemeOperation& GetSchemeOperation() const {
         return Proto->GetSchemeOperation();
     }
@@ -149,15 +166,32 @@ public:
     bool GetUseLlvm(const NYql::NDqProto::TProgram::TSettings& kqpSettingsProto) const;
 };
 
+struct TQueryTableAccess {
+    bool HasOlapRead = false;
+    bool HasOlapWrite = false;
+    bool HasOltpRead = false;
+    bool HasOltpWrite = false;
+};
+
 class TPreparedQueryHolder {
 private:
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
     YDB_ACCESSOR(bool, UseKqpTasksGraphV2, false);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
-    TVector<TString> QueryTables;
+    TVector<TQueryTable> QueryTables;
     std::vector<TKqpPhyTxHolder::TConstPtr> Transactions;
     TIntrusivePtr<TTableConstInfoMap> TableConstInfoById;
+
+    enum class EBatchMode { None, Sink, InvalidTransform };
+    // Keep validation at its original point of use, including on explain-only plans.
+    struct TProperties {
+        TQueryTableAccess TableAccess;
+        EBatchMode BatchMode = EBatchMode::None;
+        bool UnexpectedReadOp = false;
+        bool UnexpectedWriteOp = false;
+    };
+    std::optional<TProperties> Properties;
 
 public:
 
@@ -176,6 +210,9 @@ public:
     const ::google::protobuf::RepeatedPtrField< ::NKikimrKqp::TParameterDescription>& GetParameters() const {
         return Proto->GetParameters();
     }
+
+    const TQueryTableAccess& GetTableAccess() const;
+    bool IsBatchQuery() const;
 
     const TKqpPhyTxHolder::TConstPtr& GetPhyTx(ui32 idx) const;
     TKqpPhyTxHolder::TConstPtr GetPhyTxOrEmpty(ui32 idx) const;
@@ -198,7 +235,7 @@ public:
         return Proto->ByteSize();
     }
 
-    const TVector<TString>& GetQueryTables() const {
+    const TVector<TQueryTable>& GetQueryTables() const {
         return QueryTables;
     }
 

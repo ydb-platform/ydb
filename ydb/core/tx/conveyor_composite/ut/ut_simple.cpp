@@ -13,6 +13,7 @@
 #include <ydb/library/signals/object_counter.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 #include <util/generic/ylimits.h>
@@ -90,7 +91,8 @@ private:
         while (TMonotonic::Now() - start < ExecutionTime) {
         }
         if (PerWorker) {
-            AFL_VERIFY(AssignedWorker < PerWorker->size())("worker", AssignedWorker);
+            YDB_LOG_VERIFY(AssignedWorker < PerWorker->size(),
+                {"worker", AssignedWorker});
             (*PerWorker)[AssignedWorker].Inc();
         }
         Counter->Inc();
@@ -134,7 +136,7 @@ void WaitWarmupAccounted(NActors::TActorSystem& actorSystem, const NActors::TAct
 
 NConfig::TConfig ParseConveyorProto(const TString& textProto) {
     NKikimrConfig::TCompositeConveyorConfig protoConfig;
-    AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+    YDB_LOG_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
     return NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
 }
 
@@ -227,7 +229,7 @@ public:
         auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         const std::string textProto = GetConveyorConfig();
         NKikimrConfig::TCompositeConveyorConfig protoConfig;
-        AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+        YDB_LOG_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
         NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
         const auto actorId = actorSystem.Register(CreateService(config, counters));
@@ -291,7 +293,8 @@ public:
         };
 
         bool result = DoWithRetryOnRetCode(checkCount, TRetryOptions{retries, sleep});
-        AFL_VERIFY(result)("count", getCount());
+        YDB_LOG_VERIFY(result,
+            {"count", getCount()});
 
         actorSystem.Stop();
         actorSystem.Cleanup();
@@ -604,7 +607,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     Y_UNIT_TEST(HeavyLimitsParseErrors) {
         auto expectFail = [](const TString& textProto) {
             NKikimrConfig::TCompositeConveyorConfig protoConfig;
-            AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+            YDB_LOG_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
             UNIT_ASSERT(NConfig::TConfig::BuildFromProto(protoConfig).IsFail());
         };
         expectFail(R"(
@@ -1144,5 +1147,18 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
 
         actorSystem.Stop();
         actorSystem.Cleanup();
+    }
+
+    Y_UNIT_TEST(HistogramsAppearOnFirstCollect) {
+        auto root = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        TCounters counters("TEST", root);
+        auto pool = counters.GetWorkersPoolSignals("WP");
+        pool->GetCategorySignals(ESpecialTaskCategory::Scan);
+        UNIT_ASSERT(!NMonitoring::ToJson(*root).Contains("Histogram/"));
+
+        pool->PackExecuteHistogram.Collect(1);
+        const auto json = NMonitoring::ToJson(*root);
+        UNIT_ASSERT(json.Contains("Histogram/PackExecute/Duration/Us"));
+        UNIT_ASSERT(!json.Contains("Histogram/SendBack/Duration/Us"));
     }
 }

@@ -10,7 +10,9 @@ Tracing is a tool that allows you to view the detailed path of a request through
 
 ![Trace Example](_images/spans.png "Trace Example")
 
-To aggregate disparate spans into traces, they are sent to a *collector*. This service aggregates and stores received spans for subsequent trace analysis. {{ ydb-short-name }} does not include this service; the administrator must set it up independently. Typically, [Jaeger](https://www.jaegertracing.io/) is used as a collector.
+The structure of a request trace is described in the [Query Processor](query-tracing.md#query-processor) section of the query execution tracing article.
+
+To aggregate disparate spans into traces, they are sent to a *collector*. This service aggregates and stores received spans for subsequent trace analysis. {{ ydb-short-name }} does not include this service; the administrator must set it up independently. Any [OTLP](https://opentelemetry.io/docs/specs/otlp/)-compatible collector can be used.
 
 ## Minimal configuration
 
@@ -255,7 +257,7 @@ The limits on the number of traced requests are local to the cluster node. For e
 
 As with [logs](../../../reference/ydb-ui/logs.md), diagnosing most system issues does not require the most detailed trace. Therefore, in {{ ydb-short-name }}, each span has its own level described by an integer from 0 to 15 inclusive. Each rule in the `sampling` section must include the detail level of the generated trace (`level`); spans with a level less than or equal to `level` will be included in it.
 
-The [{{ ydb-short-name }} architecture](../../../concepts/index.md#ydb-architecture) section describes the system's division into 5 layers:
+The [{{ ydb-short-name }} architecture](../../../concepts/architecture/index.md#ydb-architecture) section describes the system's division into 5 layers:
 
 | Layer | Components |
 | ---- | --------- |

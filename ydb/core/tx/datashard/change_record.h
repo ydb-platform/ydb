@@ -9,8 +9,11 @@
 
 #include <util/generic/maybe.h>
 
+#include <memory>
+
 namespace NKikimrChangeExchange {
     class TChangeRecord;
+    class TDataChange;
 }
 
 namespace NKikimr::NDataShard {
@@ -25,6 +28,8 @@ public:
     ui64 GetStep() const override { return Step; }
     ui64 GetTxId() const override { return TxId; }
     EKind GetKind() const override { return Kind; }
+    // The serialized buffer is released after parsing, but its size is retained.
+    size_t GetBodySize() const override { return ParsedBody ? BodySize : Body.size(); }
     ui64 GetLockId() const { return LockId; }
     ui64 GetLockOffset() const { return LockOffset; }
     const TPathId& GetPathId() const { return PathId; }
@@ -35,6 +40,7 @@ public:
 
     void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
+    const NKikimrChangeExchange::TDataChange& GetDataChange() const;
     TConstArrayRef<TCell> GetKey() const;
     TString GetPartitionKey() const;
     i64 GetSeqNo() const;
@@ -58,6 +64,8 @@ private:
     TPathId TableId;
     TUserTable::TCPtr Schema;
 
+    mutable std::shared_ptr<const NKikimrChangeExchange::TDataChange> ParsedBody;
+    mutable size_t BodySize = 0;
     mutable TMaybe<TOwnedCellVec> Key;
     mutable TMaybe<TString> PartitionKey;
 
@@ -71,6 +79,18 @@ public:
         : TBase()
     {
         GetRecord()->Kind = kind;
+    }
+
+    TSelf& WithBody(const TString& body) {
+        TBase::WithBody(body);
+        ResetBodyCache();
+        return *this;
+    }
+
+    TSelf& WithBody(TString&& body) {
+        TBase::WithBody(std::move(body));
+        ResetBodyCache();
+        return *this;
     }
 
     TSelf& WithGroup(ui64 group) {
@@ -116,6 +136,13 @@ public:
     TSelf& WithSchema(TUserTable::TCPtr schema) {
         GetRecord()->Schema = schema;
         return static_cast<TSelf&>(*this);
+    }
+
+private:
+    void ResetBodyCache() {
+        GetRecord()->ParsedBody.reset();
+        GetRecord()->Key.Clear();
+        GetRecord()->PartitionKey.Clear();
     }
 
 }; // TChangeRecordBuilder

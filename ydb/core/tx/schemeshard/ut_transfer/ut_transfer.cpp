@@ -67,6 +67,23 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
+    Y_UNIT_TEST(AvailabilityPeriodUnsupported) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        CreateTable(runtime, env, txId);
+        auto scheme = DefaultScheme("Transfer");
+        scheme.insert(scheme.find("Config {") + TStringBuf("Config {").size(),
+            " AvailabilityPeriod { Unlimited {} } ");
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", scheme, {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {NLs::PathNotExist});
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+        env.TestWaitNotification(runtime, txId);
+        const auto desc = DescribePath(runtime, "/MyRoot/Transfer");
+        UNIT_ASSERT(!desc.GetPathDescription().GetReplicationDescription().GetConfig().HasAvailabilityPeriod());
+    }
+
     Y_UNIT_TEST(CreateSequential) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));

@@ -9,13 +9,11 @@ PEERDIR(
     yql/essentials/providers/common/provider
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/proto
-    yql/essentials/core/dq_integration
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_dq_settings.h)
 
 SRCS(
-    attrs.cpp
     yql_dq_common.cpp
     yql_dq_settings.cpp
 )

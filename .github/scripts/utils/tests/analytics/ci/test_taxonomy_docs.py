@@ -15,7 +15,7 @@ from github_actions import taxonomy
 
 _ANALYTICS = _SCRIPTS / "analytics"
 _GITHUB = _SCRIPTS.parent.parent
-_ACTION_YML = _GITHUB / "actions" / "test_ya" / "action.yml"
+_ACTION_YML = _GITHUB / "actions" / "build_and_test_ya" / "action.yml"
 _GH_README = _ANALYTICS / "github_actions" / "README.md"
 _EVLOG = _ANALYTICS / "github_actions" / "ya_evlog_phases.py"
 _EXPORT = _ANALYTICS / "github_actions" / "export_github_job_metrics.py"
@@ -89,12 +89,12 @@ def _span_names_from_action() -> set:
 
 
 class TaxonomyMatchesCodeTest(unittest.TestCase):
-    def test_every_span_in_test_ya_is_in_the_taxonomy(self):
+    def test_every_span_in_build_and_test_ya_is_in_the_taxonomy(self):
         known = set(taxonomy.YA_PHASE_NAMES)
         emitted = _span_names_from_action()
         self.assertTrue(
             emitted <= known,
-            f"names emitted by test_ya but missing from taxonomy.py: {sorted(emitted - known)}",
+            f"names emitted by build_and_test_ya but missing from taxonomy.py: {sorted(emitted - known)}",
         )
 
     def test_taxonomy_has_no_phase_that_nothing_emits(self):

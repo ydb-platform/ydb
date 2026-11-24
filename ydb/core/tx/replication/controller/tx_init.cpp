@@ -1,5 +1,6 @@
 #include "controller_impl.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "target_transfer.h"
 
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
@@ -63,6 +64,9 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
+            if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
+                Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
+            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
             Self->CommittedVersions[rid] = TRowVersion(
@@ -97,16 +101,13 @@ class TController::TTxInit: public TTxBase {
             const auto srcPath = rowset.GetValue<Schema::Targets::SrcPath>();
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
+            const auto srcIsImpl = rowset.GetValue<Schema::Targets::SrcIsImpl>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
             const auto workerSetComplete =
                 rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
-            );
-            const auto pendingDstPathId = TPathId(
-                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathOwnerId>(InvalidOwnerId),
-                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathLocalId>(InvalidLocalPathId)
             );
 
             auto replication = Self->Find(rid);
@@ -118,19 +119,24 @@ class TController::TTxInit: public TTxBase {
                 config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
                 break;
             case TReplication::ETargetKind::IndexTable:
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath, srcIsImpl);
                 break;
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
+                break;
+            case TReplication::ETargetKind::Topic:
+                config = std::make_shared<TTargetTopic::TTopicConfig>(srcPath, dstPath);
                 break;
             }
 
             auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
-            target->SetDstState(dstState);
+            // Resume legacy attachment through the current destination validation path.
+            target->SetDstState(dstState == TReplication::EDstState::Attaching
+                ? TReplication::EDstState::Alter
+                : dstState);
             target->SetDstPathId(dstPathId);
-            target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
@@ -220,6 +226,24 @@ class TController::TTxInit: public TTxBase {
             }
         }
 
+        return true;
+    }
+
+    bool LoadProcessedSourceOffsets(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ProcessedSourceOffsets>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
+            const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -322,7 +346,8 @@ class TController::TTxInit: public TTxBase {
             && LoadTxIds(db)
             && LoadWorkers(db)
             && LoadSchemaBarrierWorkers(db)
-            && LoadIndexBuildWorkers(db);
+            && LoadIndexBuildWorkers(db)
+            && LoadProcessedSourceOffsets(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

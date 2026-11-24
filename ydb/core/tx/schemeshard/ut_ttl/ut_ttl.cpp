@@ -68,7 +68,8 @@ void WriteTTLRow(TTestActorRuntime& runtime, ui64 tabletId, ui64 key, TInstant t
 Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, bool enableTablePgTypes, const char* unit = "UNIT_AUTO") {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes)
+            .DisablePgCompatibility(TStringBuf(ttlColumnType).StartsWith("pg") ? std::optional(false) : std::nullopt));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -148,7 +149,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, bool enableTablePgTypes, const char* unit) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes)
+            .DisablePgCompatibility(TStringBuf(ttlColumnType).StartsWith("pg") ? std::optional(false) : std::nullopt));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -1997,9 +1999,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             {{ NKikimrScheme::StatusSchemeError, "Unsupported column type" }});
 
         runtime.GetAppData().FeatureFlags.SetEnableColumnshardDyNumber(true);
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
-            createTableWithTtlColumn("DyNumber"),
-            {{ NKikimrScheme::StatusSchemeError, "Unsupported column type for TTL in column tables" }});
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+        for (const auto columnType : {"DyNumber", "Date32", "Datetime64", "Timestamp64"}) {
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                createTableWithTtlColumn(columnType),
+                {{ NKikimrScheme::StatusSchemeError,
+                    "TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled" }});
+        }
     }
 
     Y_UNIT_TEST(CreateColumnTableNegative_UnknownColumn) {

@@ -8,19 +8,19 @@ $ss = (
         i_item_id,
         Sum(ss_ext_sales_price) AS total_sales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         i_item_id IN (
             SELECT
                 i_item_id
             FROM
-                `/Root/test/ds/item`
+                `item`
             WHERE
                 i_category IN ('Children',)
         )
@@ -39,19 +39,19 @@ $cs = (
         i_item_id,
         Sum(cs_ext_sales_price) AS total_sales
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         i_item_id IN (
             SELECT
                 i_item_id
             FROM
-                `/Root/test/ds/item`
+                `item`
             WHERE
                 i_category IN ('Children',)
         )
@@ -70,19 +70,19 @@ $ws = (
         i_item_id,
         Sum(ws_ext_sales_price) AS total_sales
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         i_item_id IN (
             SELECT
                 i_item_id
             FROM
-                `/Root/test/ds/item`
+                `item`
             WHERE
                 i_category IN ('Children',)
         )

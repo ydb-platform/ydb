@@ -198,6 +198,7 @@ enum ETypeAnnotationFlags: ui32 {
     TypeHasStaticLinear = 0x10000,
     TypeUseStaticLinear = 0x20000,
     TypeHasUniversal = 0x40000,
+    TypeHasYqlNaN = 0x80000,
 };
 
 const ui64 TypeHashMagic = 0x1000000;
@@ -300,6 +301,10 @@ public:
 
     bool HasOptionalOrNull() const {
         return (GetFlags() & (TypeHasOptional | TypeHasNull)) != 0;
+    }
+
+    bool HasYqlNaN() const {
+        return (GetFlags() & TypeHasYqlNaN) != 0;
     }
 
     bool IsOptionalOrNull() const {
@@ -966,6 +971,9 @@ public:
     static ui32 GetFlags(EDataSlot slot) {
         ui32 ret = TypeHasManyValues;
         auto props = NUdf::GetDataTypeInfo(slot).Features;
+        if (props & (NUdf::FloatType | NUdf::DecimalType)) {
+            ret |= TypeHasYqlNaN;
+        }
         if (!(props & NUdf::CanHash)) {
             ret |= TypeNonHashable;
         }
@@ -2610,8 +2618,18 @@ private:
 
 using TModulesTable = THashMap<TString, TExportTable>;
 
+struct TProjectSettings;
+
 class IModuleResolver {
 public:
+    void SetProjectSettings(std::shared_ptr<const TProjectSettings> settings) {
+        ProjectSettings_ = std::move(settings);
+    }
+
+    const std::shared_ptr<const TProjectSettings>& GetProjectSettings() const {
+        return ProjectSettings_;
+    }
+
     using TPtr = std::shared_ptr<IModuleResolver>;
     virtual bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
     virtual bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
@@ -2632,6 +2650,9 @@ public:
     virtual void SetFileAliasPrefix(TString&& prefix) = 0;
     virtual TString GetFileAliasPrefix() const = 0;
     virtual ~IModuleResolver() = default;
+
+private:
+    std::shared_ptr<const TProjectSettings> ProjectSettings_;
 };
 
 struct TExprStep {
@@ -2908,6 +2929,8 @@ struct TExprContext: private TNonCopyable {
     std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
     std::unordered_map<TString, const TTypeAnnotationNode*> ParseTypeCache;
+    TNodeOnNodeOwnedMap LazyBindings;
+    TNodeOnNodeOwnedMap LazyBindingClones;
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;

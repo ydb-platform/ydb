@@ -54,47 +54,14 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumDDiskGroups();
         storagePool.DefaultGroupSizeInUnits = 1; // cmd.GetDefaultGroupSizeInUnits();
         storagePool.DDisk = true;
+        storagePool.PersistentBufferAllocationMode = cmd.GetPersistentBufferAllocationMode();
+        if (!NKikimrBlobStorage::EPersistentBufferAllocationMode_IsValid(storagePool.PersistentBufferAllocationMode)) {
+            throw TExError() << "invalid PersistentBufferAllocationMode";
+        }
         storagePool.RandomizeGroupMapping = false;
 
         for (const auto &item : cmd.GetPDiskFilter()) {
-            TStoragePoolInfo::TPDiskFilter filter;
-            filter.BoxId = boxId;
-            filter.StoragePoolId = storagePoolId;
-
-            bool hasTypeProperty = false;
-
-            for (const auto &property : item.GetProperty()) {
-                switch (property.GetPropertyCase()) {
-#define PROPERTY(NAME, PTR) \
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
-                        if (filter.NAME) { \
-                            throw TExError() << #NAME << " already set"; \
-                        } else { \
-                            filter.NAME = property.Get ## NAME(); \
-                            if (bool *p = (PTR)) { \
-                                *p = true; \
-                            } \
-                            continue; \
-                        } \
-                    }
-
-                    PROPERTY(Type, &hasTypeProperty)
-                    PROPERTY(SharedWithOs, nullptr)
-                    PROPERTY(ReadCentric, nullptr)
-                    PROPERTY(Kind, nullptr)
-
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
-                }
-
-                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
-            }
-
-            if (!hasTypeProperty) {
-                throw TExError() << "TPDiskFilter did not specify Type property";
-            }
-
-            storagePool.PDiskFilters.insert(std::move(filter));
+            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
         }
 
         //if (cmd.HasScopeId()) {
@@ -111,6 +78,11 @@ namespace NKikimr::NBsController {
             if (!cur.DDisk) {
                 throw TExError() << "can't invoke DefineDDiskPool against storage pool";
             }
+            if (cmd.HasPersistentBufferAllocationMode() &&
+                    storagePool.PersistentBufferAllocationMode != cur.PersistentBufferAllocationMode) {
+                throw TExError() << "PersistentBufferAllocationMode cannot be changed after pool creation";
+            }
+            storagePool.PersistentBufferAllocationMode = cur.PersistentBufferAllocationMode;
             //if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
             //    for (auto it = r.first; it != r.second; ++it) {
             //        GroupContentChanged.insert(it->second);

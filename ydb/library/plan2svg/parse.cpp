@@ -16,7 +16,7 @@ TString GetEstimation(const NJson::TJsonValue& node) {
         eCostNode = node.GetValueByPath("E-Cost");
     }
     if (eCostNode) {
-        auto costString = eCostNode->GetStringSafe();
+        auto costString = eCostNode->GetStringRobust();
         if (costString != "No estimate") {
             ebuilder << "Est:";
             double cost;
@@ -29,7 +29,7 @@ TString GetEstimation(const NJson::TJsonValue& node) {
             }
             if (auto* eRowsNode = node.GetValueByPath("E-Rows")) {
                 double rows;
-                if (TryFromString(eRowsNode->GetStringSafe(), rows)) {
+                if (TryFromString(eRowsNode->GetStringRobust(), rows)) {
                     if (rows >= 1e+18) {
                         ebuilder << Sprintf(" Rows: %.2e", rows);
                     } else {
@@ -39,7 +39,7 @@ TString GetEstimation(const NJson::TJsonValue& node) {
             }
             if (auto* eSizeNode = node.GetValueByPath("E-Size")) {
                 double size;
-                if (TryFromString(eSizeNode->GetStringSafe(), size)) {
+                if (TryFromString(eSizeNode->GetStringRobust(), size)) {
                     if (size >= 1e+18) {
                         ebuilder << Sprintf(" Size: %.2e", size);
                     } else {
@@ -115,6 +115,61 @@ TString ParseColumns(const NJson::TJsonValue* node) {
     }
     builder << ')';
     return builder;
+}
+
+TString FormatSortColumn(const NJson::TJsonValue& column) {
+    if (!column.IsMap()) {
+        return column.GetStringRobust();
+    }
+    return TStringBuilder() << column["Column"].GetStringSafe()
+        << (column["Ascending"].GetBooleanSafe() ? " asc" : " desc")
+        << (column["NullsFirst"].GetBooleanSafe() ? " nulls first" : " nulls last");
+}
+
+TString FormatPlanProperty(TStringBuf name, const NJson::TJsonValue& value) {
+    if (value.IsArray()) {
+        const bool sort = name == "SortBy" || name == "TopSortBy" || name == "OrderBy" || name == "SortColumns";
+        const bool aggregation = name == "Aggregation";
+        const bool columns = name == "Columns" || name == "GroupBy" || name == "PartitionBy"
+            || name == "LookupKeyPrefix" || name == "Arguments";
+        if (sort || aggregation || columns) {
+            TStringBuilder text;
+            if (aggregation) {
+                text << "{";
+            }
+            TStringBuf separator;
+            for (const auto& item : value.GetArraySafe()) {
+                text << separator;
+                if (sort) {
+                    text << FormatSortColumn(item);
+                } else if (aggregation) {
+                    text << item["Output"].GetStringSafe() << ": " << item["Function"].GetStringSafe() << "("
+                        << (item["Distinct"].GetBooleanSafe() ? "distinct " : "")
+                        << FormatPlanProperty("Arguments", item["Arguments"]) << ")";
+                } else {
+                    text << item.GetStringSafe();
+                }
+                separator = ", ";
+            }
+            if (aggregation) {
+                text << "}";
+            }
+            return text;
+        }
+    }
+    if (name == "Frame" && value.IsMap()) {
+        auto formatBound = [](const NJson::TJsonValue& bound) -> TString {
+            TStringBuilder text;
+            text << bound["Kind"].GetStringSafe();
+            if (const auto* offset = bound.GetValueByPath("Value")) {
+                text << " " << offset->GetUIntegerSafe();
+            }
+            return text;
+        };
+        return TStringBuilder() << value["Type"].GetStringSafe()
+            << "[" << formatBound(value["Begin"]) << ", " << formatBound(value["End"]) << "]";
+    }
+    return value.GetStringRobust();
 }
 
 TChannelStats LoadChannelStats(const NJson::TJsonValue& statNode,

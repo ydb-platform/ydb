@@ -1,0 +1,539 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        []
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -10,6 +10,7 @@
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -23,17 +24,6 @@
 #include <atomic>
 
 namespace NKikimr::NKqp {
-
-// Cached level table data - stores rows in a format ready for zero-copy access
-// Uses shared_ptr for safe concurrent access without copying
-struct TCachedLevelTableData : public TAtomicRefCount<TCachedLevelTableData> {
-    // Store serialized cell vectors directly - no deserialization needed
-    TOwnedCellVecBatch BatchRows;
-
-    TCachedLevelTableData() = default;
-};
-
-using TCachedLevelTableDataPtr = TIntrusivePtr<TCachedLevelTableData>;
 
 struct TLevelTableCacheKey {
     TPathId TableId;
@@ -61,11 +51,11 @@ namespace NKikimr::NKqp {
 
 // LRU cache entry wrapper
 struct TLevelTableCacheEntry {
-    TCachedLevelTableDataPtr Data;
+    TEvKqp::TCachedLevelTableDataPtr Data;
     size_t ByteSize = 0;  // approximate memory footprint, computed once at insertion
 
     TLevelTableCacheEntry() = default;
-    TLevelTableCacheEntry(TCachedLevelTableDataPtr data, size_t byteSize)
+    TLevelTableCacheEntry(TEvKqp::TCachedLevelTableDataPtr data, size_t byteSize)
         : Data(std::move(data))
         , ByteSize(byteSize)
     {}
@@ -73,18 +63,15 @@ struct TLevelTableCacheEntry {
 
 // Approximate memory footprint of cached data. Used both to drive the bytes
 // gauge and to give operators a sense of cache pressure.
-inline size_t EstimateCachedDataBytes(const TCachedLevelTableData& data) {
+inline size_t EstimateCachedDataBytes(const TEvKqp::TCachedLevelTableData& data) {
     return data.BatchRows.DataSizeEstimate();
 }
 
-class TVectorIndexLevelsCache : public TThrRefBase {
-public:
-    using TPtr = TIntrusivePtr<TVectorIndexLevelsCache>;
-
+class TVectorIndexLevelsCache : public TEvKqp::IVectorIndexLevelsCache {
 public:
 
     // Try to get cached data - returns shared pointer (zero-copy)
-    TCachedLevelTableDataPtr Get(const TPathId& tableId, const TString& serializedKeys) {
+    TEvKqp::TCachedLevelTableDataPtr Get(const TPathId& tableId, const TString& serializedKeys) override {
         TWriteGuard guard(Lock_);
 
         TLevelTableCacheKey key{tableId, serializedKeys};
@@ -98,7 +85,7 @@ public:
     }
 
     // Store data in cache
-    void Put(const TPathId& tableId, const TString& serializedKeys, TCachedLevelTableDataPtr data) {
+    void Put(const TPathId& tableId, const TString& serializedKeys, TEvKqp::TCachedLevelTableDataPtr data) override {
         const size_t bytes = data ? EstimateCachedDataBytes(*data) : 0;
 
         TWriteGuard guard(Lock_);
@@ -131,12 +118,12 @@ public:
     }
 
     // Number of cached entries. Cheap; primarily useful for tests.
-    size_t Size() const {
+    size_t Size() const override {
         TReadGuard guard(Lock_);
         return Cache_.Size();
     }
 
-    size_t MaxBytes() const { return MaxCacheBytes_.load(); }
+    size_t MaxBytes() const override { return MaxCacheBytes_.load(); }
 
     void SetMaxBytes(ui64 maxBytes) {
         MaxCacheBytes_.store(maxBytes);
@@ -155,7 +142,7 @@ public:
     ui64 InvalidationsTotal() const { return Invalidations_ ? Invalidations_->Val() : 0; }
 
     // Approximate bytes currently held in the cache. O(1).
-    size_t Bytes() const {
+    size_t Bytes() const override {
         TReadGuard guard(Lock_);
         return BytesTotal_;
     }

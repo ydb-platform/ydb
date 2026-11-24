@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fwd.h"
+#include "tree/static.h"
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -21,35 +22,54 @@ public:
         return Enabled;
     }
 
-    void SetTotalCpuLimit(ui64 cpu);
+    bool IsMemoryEnabled() const {
+        return MemoryEnabled;
+    }
+
+    // Consumes exclusive ownership, validates and publishes the tree as const.
+    // Builder references must not be used after the transfer. Runtime accounting is preserved.
+    // False means multiple databases disable effective guarantees.
+    bool UpdateConfiguration(std::unique_ptr<NHdrf::NStatic::TRoot> tree);
+    NHdrf::NStatic::TRootPtr GetStaticTree() const;
+
     ui64 GetTotalCpuLimit() const;
 
-    void AddOrUpdateDatabase(const NHdrf::TDatabaseId& databaseId, const NHdrf::TStaticAttributes& attrs);
+    // The memory of all the queries on the node never exceeds it
+    ui64 GetTotalMemoryLimit() const;
 
-    void AddOrUpdatePool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs);
+    // The memory of all the queries on the node.
+    ui64 GetTotalMemoryUsage() const;
+    // The expected memory of all the queries on the node: the initial (M) and the elastic (E) memory of their tasks.
+    ui64 GetTotalMemoryDemand() const;
 
-    NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
-    NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
+    // The pool which accounts the memory of the queries of the given pool - the memory of any query is accounted,
+    // so the database and the pool are created if needed. An empty pool means the default one.
+    NHdrf::NDynamic::TPoolPtr GetOrCreateMemoryPool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId);
+
+    NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId);
+    NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId);
     bool RemoveQuery(const NHdrf::TQueryId& queryId, bool isForceRemove = false);
 
     void UpdateFairShare();
 
-    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1].
+    // Returns per-leaf-pool CpuFairShare / TotalCpu, normalized to [0..1].
     THashMap<NHdrf::TFullPoolId, double> GetLeafPoolFairShares() const;
 
 private:
-    // TODO: both methods are workaround for serverless scenario with remote node execution,
-    //       when those nodes don't know about databases at all. Remove them later.
-    void SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const;                 // run under Mutex
     NHdrf::NDynamic::TDatabasePtr GetOrCreateDatabase(const NHdrf::TDatabaseId& databaseId); // run under Mutex
+
+    NHdrf::NDynamic::TPoolPtr CreatePool(const NHdrf::NDynamic::TPoolPtr& parent, const NHdrf::TPoolId& poolId); // run under Mutex
+    NHdrf::NDynamic::TQueryPtr EnsureReadQuery(const NHdrf::NDynamic::TPoolPtr& pool, const NHdrf::TFullPoolId& poolId); // run under Mutex
 
 private:
 
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 
     std::atomic<bool> Enabled;
+    const bool MemoryEnabled;
 
     TRWMutex Mutex;
+    TMutex UpdateMutex; // serializes snapshot accounting and publication
     struct TQueryState {
         ui64 AddQueryCount;
         NHdrf::NDynamic::TQueryPtr Query;
@@ -113,7 +133,6 @@ struct TEvAddQuery : public TEventLocal<TEvAddQuery, TEvents::EvAddQuery> {
     TString DatabaseId;
     TString PoolId;
     NHdrf::TQueryId QueryId;
-    double Weight = 1.;
 };
 
 struct TEvRemoveQuery : public TEventLocal<TEvRemoveQuery, TEvents::EvRemoveQuery> {

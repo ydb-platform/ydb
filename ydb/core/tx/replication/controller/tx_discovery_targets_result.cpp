@@ -42,9 +42,19 @@ public:
             YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
                 {"rid", rid},
                 {"state", Replication->GetState()});
+            Replication.Reset();
             return true;
         }
 
+        if (!Replication->IsExpectedTargetDiscoverer(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete target discoverer",
+                {"rid", rid},
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
+        Replication->FinishTargetDiscovery();
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {
@@ -63,6 +73,7 @@ public:
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
+                    NIceDb::TUpdate<Schema::Targets::SrcIsImpl>(target.Config->GetSrcIsImpl()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
@@ -74,7 +85,8 @@ public:
                     {"tid", tid},
                     {"kind", target.Kind},
                     {"srcPath", target.Config->GetSrcPath()},
-                    {"dstPath", target.Config->GetDstPath()});
+                    {"dstPath", target.Config->GetDstPath()},
+                    {"bootstrap", Replication->GetConfig().GetBootstrap()});
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

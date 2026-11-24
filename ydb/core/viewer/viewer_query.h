@@ -5,11 +5,14 @@
 #include "ydb/core/viewer/json_local_rpc.h"
 
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
-#include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/events/stream.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 namespace NKikimr::NViewer {
 
@@ -465,6 +468,14 @@ public:
         TBase::Cancelled();
     }
 
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NKqp::TKqpScriptExecutionEvents::EvFetchScriptResultsRequest) {
+            return ReplyWithError("KQP proxy is unavailable");
+        }
+
+        TBase::Undelivered(ev);
+    }
+
     void PassAway() override {
         if (QueryId) {
             Viewer->EndRunningQuery(QueryId, SelfId());
@@ -482,11 +493,12 @@ public:
             hFunc(NKqp::TEvKqp::TEvScriptResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            hFunc(NKqp::TEvKqpExecuterProgress, HandleReply);
+            hFunc(NKqp::TEvKqpExecuterStreamData, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
                 return TBase::StateWork(ev);
@@ -529,8 +541,7 @@ public:
                 CheckOperationStatus();
             } else if (!ExecutionId.empty()) {
                 // If we have execution_id but no operation_id, we can directly fetch results
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -538,7 +549,7 @@ public:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
             }
             return;
         }
@@ -1012,7 +1023,7 @@ private:
         ReplyWithJsonAndPassAway("Aborted", std::move(jsonResponse));
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void HandleReply(NKqp::TEvKqpExecuterProgress::TPtr& ev) {
         if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
             auto& progress(ev->Get()->Record);
@@ -1030,7 +1041,7 @@ private:
         Y_UNUSED(ev);
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void HandleReply(NKqp::TEvKqpExecuterStreamData::TPtr& ev) {
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
         if (QueryResponse.Span) {
             QueryResponse.Span.Event("StreamData", {
@@ -1057,7 +1068,7 @@ private:
             }
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        THolder<NKqp::TEvKqpExecuterStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuterStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             if (QueryResponse.Span) {
                 QueryResponse.Span.Event("LimitReached", {
@@ -1129,8 +1140,7 @@ private:
                     return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
                 }
 
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -1138,7 +1148,7 @@ private:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
             } else {
                 // Operation is ready but no result sets - reply with empty result for non-streaming
                 if (Streaming == EStreamingType::None) {
@@ -1180,8 +1190,7 @@ private:
         }
         if (TotalRows < LimitRows) {
             if (ev->Get()->HasMoreResults) {
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -1189,13 +1198,12 @@ private:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
                 return;
             } else if (FetchResultSetIndex + 1 < FetchResultSets) {
                 ++FetchResultSetIndex;
                 FetchResultRowsOffset = 0;
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -1203,7 +1211,7 @@ private:
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
                     OutputChunkMaxSize,
-                    Deadline));
+                    Deadline), IEventHandle::FlagTrackDelivery);
                 return;
             }
         }

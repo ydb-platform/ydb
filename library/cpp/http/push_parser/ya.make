@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/blockcodecs/codecs/zlib
     library/cpp/blockcodecs/codecs/zstd
     library/cpp/streams/brotli
+    library/cpp/streams/zstd
 )
 
 END()

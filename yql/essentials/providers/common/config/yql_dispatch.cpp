@@ -143,116 +143,57 @@ YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_SERIALIZER)
 
 } // namespace NPrivate
 
-bool TSettingDispatcher::IsRuntime(const TString& name) {
-    auto normalizedName = NormalizeName(name);
-    if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
-        return handler->IsRuntime();
-    }
-    return false;
-}
-
-bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, const TMaybe<TString>& value, EStage stage, const TErrorCallback& errorCallback) {
-    auto normalizedName = NormalizeName(name);
-    if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
-        if (cluster != ALL_CLUSTERS) {
-            if (!handler->IsPerCluster()) {
-                return errorCallback(TStringBuilder() << "Static setting " << name.Quote() << " cannot be set for specific cluster", true);
-            }
-            if (!ValidClusters.contains(cluster)) {
-                TStringBuilder nearClusterMsg;
-                for (auto& item : ValidClusters) {
-                    if (NLevenshtein::Distance(cluster, item) < DefaultMistypeDistance) {
-                        nearClusterMsg << ", did you mean " << item.Quote() << '?';
-                        break;
-                    }
+TMaybe<TString> TSettingHandlerBase::ValidateDispatch(const TString& cluster, const TString& name, const TMaybe<TString>& value,
+                                                      const THashSet<TString>& validClusters) const {
+    if (cluster != ALL_CLUSTERS) {
+        if (!IsPerCluster()) {
+            return TStringBuilder() << "Static setting " << name.Quote() << " cannot be set for specific cluster";
+        }
+        if (!validClusters.contains(cluster)) {
+            TStringBuilder nearClusterMsg;
+            for (const auto& item : validClusters) {
+                if (NLevenshtein::Distance(cluster, item) < DefaultMistypeDistance) {
+                    nearClusterMsg << ", did you mean " << item.Quote() << '?';
+                    break;
                 }
-                return errorCallback(TStringBuilder() << "Unknown cluster name " << cluster.Quote()
-                                                      << " for setting " << name.Quote() << nearClusterMsg, true);
             }
-        }
-        if (!value && !handler->IsRuntime()) {
-            return errorCallback(TStringBuilder() << "Static setting " << name.Quote() << " cannot be reset to default", true);
-        }
-
-        if (QContext_.CanRead() && QContext_.CaptureMode() == EQPlayerCaptureMode::Full && stage != EStage::CONFIG && handler->IgnoreInFullReplay()) {
-            YQL_CLOG(INFO, ProviderCommon) << "Ignoring setting " << name.Quote() << " in full replay mode";
-            return true;
-        }
-
-        bool validateOnly = true;
-        switch (stage) {
-            case EStage::RUNTIME:
-                validateOnly = !handler->IsRuntime();
-                break;
-            case EStage::STATIC:
-                validateOnly = handler->IsRuntime();
-                break;
-            case EStage::CONFIG:
-                validateOnly = false;
-                break;
-        }
-
-        return handler->Handle(cluster, value, validateOnly, errorCallback);
-    } else {
-        // ignore unknown names in config
-        if (stage == EStage::CONFIG && !StrictConfigValidation_) {
-            return true;
-        }
-
-        TStringBuilder nearHandlerMsg;
-        for (auto& item : Handlers_) {
-            if (NLevenshtein::Distance(normalizedName, item.first) < DefaultMistypeDistance) {
-                nearHandlerMsg << ", did you mean " << item.second->GetDisplayName().Quote() << '?';
-                break;
-            }
-        }
-        return errorCallback(TStringBuilder() << "Unknown setting name " << name.Quote() << nearHandlerMsg, true);
-    }
-}
-
-void TSettingDispatcher::FreezeDefaults() {
-    for (auto& item : Handlers_) {
-        item.second->FreezeDefault();
-    }
-}
-
-void TSettingDispatcher::Restore() {
-    for (auto& item : Handlers_) {
-        item.second->Restore(ALL_CLUSTERS);
-    }
-}
-
-void TSettingDispatcher::Enumerate(std::function<void(std::string_view)> callback) {
-    for (const auto& name : Names_) {
-        if (!Handlers_.at(NormalizeName(name))->IsDeprecated()) {
-            callback(name);
+            return TStringBuilder() << "Unknown cluster name " << cluster.Quote() << " for setting " << name.Quote() << nearClusterMsg;
         }
     }
-}
-
-ui64 TSettingDispatcher::CountSerializableStaticSettings() const {
-    ui64 count = 0;
-    for (const auto& [name, handler] : Handlers_) {
-        if (handler->HasSerializableValue()) {
-            ++count;
-        }
+    if (!value && !IsRuntime()) {
+        return TStringBuilder() << "Static setting " << name.Quote() << " cannot be reset to default";
     }
-    return count;
+    return Nothing();
 }
 
-void TSettingDispatcher::SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const {
-    for (const auto& [name, handler] : Handlers_) {
-        if (handler->HasSerializableValue()) {
-            handler->Serialize(callback);
-        }
+bool TSettingHandlerBase::Dispatch(const TString& cluster, const TString& name, const TMaybe<TString>& value,
+                                   ISettingDispatcher::EStage stage, const ISettingDispatcher::TErrorCallback& errorCallback,
+                                   const TQContext& qContext, const THashSet<TString>& validClusters, const std::function<bool(bool validateOnly)>& handleSetting) const {
+    if (auto error = ValidateDispatch(cluster, name, value, validClusters)) {
+        return errorCallback(*error, true);
     }
+    if (qContext.CanRead() && qContext.CaptureMode() == EQPlayerCaptureMode::Full &&
+        stage != ISettingDispatcher::EStage::CONFIG && IgnoreInFullReplay()) {
+        YQL_CLOG(INFO, ProviderCommon) << "Ignoring setting " << name.Quote() << " in full replay mode";
+        return true;
+    }
+
+    bool validateOnly = true;
+    switch (stage) {
+        case ISettingDispatcher::EStage::RUNTIME:
+            validateOnly = !IsRuntime();
+            break;
+        case ISettingDispatcher::EStage::STATIC:
+            validateOnly = IsRuntime();
+            break;
+        case ISettingDispatcher::EStage::CONFIG:
+            validateOnly = false;
+            break;
+    }
+    return handleSetting(validateOnly);
 }
 
-const THashSet<TString>& TSettingDispatcher::GetValidClusters() const {
-    return ValidClusters;
-}
-
-TSettingDispatcher::TErrorCallback TSettingDispatcher::GetDefaultErrorCallback() {
+ISettingDispatcher::TErrorCallback GetDefaultErrorCallback() {
     return [](const TString& msg, bool isError) -> bool {
         if (isError) {
             YQL_LOG(ERROR) << msg;
@@ -263,7 +204,7 @@ TSettingDispatcher::TErrorCallback TSettingDispatcher::GetDefaultErrorCallback()
     };
 }
 
-TSettingDispatcher::TErrorCallback TSettingDispatcher::GetErrorCallback(TPositionHandle pos, TExprContext& ctx) {
+ISettingDispatcher::TErrorCallback GetErrorCallback(TPositionHandle pos, TExprContext& ctx) {
     return [pos, &ctx](const TString& msg, bool isError) -> bool {
         if (isError) {
             ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::DEFAULT_ERROR, msg));

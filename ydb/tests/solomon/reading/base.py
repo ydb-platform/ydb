@@ -15,7 +15,14 @@ class SolomonReadingTestBase(object):
     def setup_class(cls, test_name):
         cleanup_emulator()
 
-        config = KikimrConfigGenerator(extra_feature_flags={"enable_external_data_sources": True})
+        # Runtime listing can start 1000 readers reserving 55 MiB each.
+        # Set both the initial budget and the memory controller's budget.
+        query_memory_limit = 64 * 1024**3
+        config = KikimrConfigGenerator(
+            extra_feature_flags={"enable_external_data_sources": True},
+            memory_controller_config={"query_execution_limit_bytes": query_memory_limit},
+        )
+        config.yaml_config["table_service_config"]["resource_manager"]["query_memory_limit"] = query_memory_limit
         config.yaml_config["query_service_config"] = {}
         config.yaml_config["query_service_config"]["available_external_data_sources"] = ["Solomon"]
         config.yaml_config["query_service_config"]["solomon"] = {

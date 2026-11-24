@@ -22,28 +22,13 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/utils/log/log.h>
 
-#include <util/string/subst.h>
+#include <util/generic/set.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
-
-TMaybe<TString> GetStageUdfName(const TExprNode& node) {
-    if (TCoUdf::Match(&node)) {
-        // MethodName is "Module.Func"; normalize to Module::Func like in sql query.
-        TString name(node.Head().Content());
-        SubstGlobal(name, ".", "::");
-        return name;
-    }
-
-    if (TCoScriptUdf::Match(&node)) {
-        return TStringBuilder() << node.Head().Content() << "::" << node.Child(1)->Content();
-    }
-
-    return Nothing();
-}
 
 constexpr size_t MaxStageUdfsInPlan = 20;
 
@@ -53,7 +38,7 @@ TSet<TString> CollectStageUdfs(const TExprNode::TPtr& root) {
         if (udfs.size() >= MaxStageUdfsInPlan) {
             return false;
         }
-        if (auto name = GetStageUdfName(*node)) {
+        if (auto name = NCommon::TryGetUdfName(*node)) {
             udfs.insert(std::move(*name));
         }
         return true;

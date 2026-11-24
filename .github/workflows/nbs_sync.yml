@@ -35,10 +35,22 @@ jobs:
             .github
             ydb/ci/
 
+      - name: Read source tag override
+        id: source
+        env:
+          BASE_BRANCH: ${{ matrix.branches.base }}
+        run: |
+          tag=$(jq -er --arg branch "$BASE_BRANCH" '.[$branch] // ""' .github/config/nbs_sync_tags.json)
+          if [[ -n "$tag" ]]; then
+            git check-ref-format "refs/tags/$tag"
+          fi
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/rightlib_sync
         with:
           base_branch: ${{ matrix.branches.base }}
           head_branch: ${{ matrix.branches.head }}
+          head_tag: ${{ steps.source.outputs.tag }}
           label: sync-nbs
           repository: ${{ github.repository }}
           gh_personal_access_token: ${{ env.GH_TOKEN }}

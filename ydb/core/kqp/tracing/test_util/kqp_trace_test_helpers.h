@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_trace_flow.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -28,6 +29,20 @@ inline const TTraceSnapshot::TOtelSpan* FindSpan(const TTraceSnapshot& uploader,
         }
     }
     return nullptr;
+}
+
+inline const TTraceSnapshot::TOtelSpan* FindSpanByPrefix(const TTraceSnapshot& uploader, TStringBuf prefix) {
+    const auto it = std::ranges::find_if(uploader.Spans, [&](const auto& span) {
+        return span.name().StartsWith(prefix);
+    });
+    return it == uploader.Spans.end() ? nullptr : &*it;
+}
+
+inline const TTraceSnapshot::TOtelSpan* FindParent(const TTraceSnapshot& uploader, const TTraceSnapshot::TOtelSpan& child) {
+    const auto it = std::ranges::find_if(uploader.Spans, [&](const auto& span) {
+        return span.trace_id() == child.trace_id() && span.span_id() == child.parent_span_id();
+    });
+    return it == uploader.Spans.end() ? nullptr : &*it;
 }
 
 template<class T>

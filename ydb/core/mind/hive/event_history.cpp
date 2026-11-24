@@ -64,6 +64,7 @@ TStringBuf EHiveEventReasonName(EHiveEventReason value) {
     case EHiveEventReason::SpreadNeighbours: return "spread neighbours";
     case EHiveEventReason::ExpediencyCheckDisabled: return "move expediency check disabled";
     case EHiveEventReason::ResourceStDevImproved: return "resource stdev improves";
+    case EHiveEventReason::NamedResourceImproved: return "named resource usage improves";
     case EHiveEventReason::LeaderNotRunning: return "leader not running";
     case EHiveEventReason::AllNodesDead: return "all nodes are dead";
     case EHiveEventReason::AllNodesDeadOrDown: return "all nodes are dead or down";
@@ -75,6 +76,7 @@ TStringBuf EHiveEventReasonName(EHiveEventReason value) {
     case EHiveEventReason::NodesLocationUnknown: return "nodes location unknown";
     case EHiveEventReason::TooManyStarting: return "too many tablets starting";
     case EHiveEventReason::PreferredNodeUnavailable: return "preferred node unavailable";
+    case EHiveEventReason::MAX: break;
     }
     return "Unknown";
 }
@@ -109,6 +111,7 @@ TStringBuf EHiveEventTypeName(EHiveEventType value) {
     case EHiveEventType::Unlocked: return "Unlocked";
     case EHiveEventType::StopRequested: return "StopRequested";
     case EHiveEventType::Resumed: return "Resumed";
+    case EHiveEventType::MAX: break;
     }
     return "Unknown";
 }

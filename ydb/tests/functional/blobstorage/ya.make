@@ -41,4 +41,5 @@ END()
 
 RECURSE(
     replication_rate_control
+    replication_token_priority
 )

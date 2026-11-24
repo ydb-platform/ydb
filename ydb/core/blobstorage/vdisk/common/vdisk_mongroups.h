@@ -329,6 +329,8 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ReplNodeResponseThrottledMicroseconds, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPDiskReadThrottledMicroseconds, false);
                 COUNTER_INIT(ReplIsHoldingToken, false);
+                COUNTER_INIT(ReplTokenPriority, false);
+                COUNTER_INIT(ReplTokenPreemptions, true);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -359,6 +361,8 @@ public:                                                                         
             COUNTER_DEF(ReplNodeResponseThrottledMicroseconds);
             COUNTER_DEF(ReplPDiskReadThrottledMicroseconds);
             COUNTER_DEF(ReplIsHoldingToken);
+            COUNTER_DEF(ReplTokenPriority);
+            COUNTER_DEF(ReplTokenPreemptions);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

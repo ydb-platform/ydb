@@ -33,7 +33,10 @@ struct TSectorRestorator {
             const bool isErasureEncode, const TDiskFormat &format, TLogoBlobID blobId);
 
 
-    void Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce, TOwner owner);
+    // A caller restoring many sectors can pass one hasher, so that the hash mode found for the first
+    // sector is tried first for the following ones instead of every mode being probed per sector.
+    void Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce, TOwner owner,
+            TPDiskHashCalculator *hasher = nullptr);
 
     void WriteSector(ui8 *sectorData, ui64 writeOffset);
 };

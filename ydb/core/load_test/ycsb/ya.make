@@ -19,7 +19,8 @@ PEERDIR(
     library/cpp/histogram/hdr
     library/cpp/monlib/service/pages
     ydb/core/base
-    ydb/core/kqp/common
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/load_test/common
     ydb/core/protos
     ydb/core/tx/columnshard

@@ -360,9 +360,66 @@ Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YtCreateView.MinLangVer;
     ExpectFailWithError("create view plato.foo as do begin select 1; select 2; end do",
-                        "<main>:1:35: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+                        "<main>:1:45: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
     ExpectFailWithError("create view plato.foo as do begin select 1;   $foo = 2; end do",
-                        "<main>:1:35: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+                        "<main>:1:54: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+}
+
+Y_UNIT_TEST(InvalidViewBodyPositions) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtCreateView.MinLangVer;
+
+    ExpectFailWithError("CREATE VIEW plato.v AS DO BEGIN SELECT 1;  SELECT 2; END DO;",
+                        "<main>:1:44: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+    ExpectFailWithError("CREATE VIEW plato.v AS DO BEGIN\n"
+                        "    SELECT 1;\n"
+                        "        SELECT 2;\n"
+                        "END DO;",
+                        "<main>:3:9: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+    ExpectFailWithError("CREATE VIEW plato.v AS DO BEGIN\n"
+                        "    SELECT 1;\n"
+                        "    $foo = 2;\n"
+                        "END DO;",
+                        "<main>:3:12: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+    ExpectFailWithError("CREATE VIEW plato.v AS DO BEGIN $foo = 1; END DO;",
+                        "<main>:1:33: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+}
+
+Y_UNIT_TEST(InvalidSubqueryBodyPositions) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtCreateView.MinLangVer;
+
+    ExpectFailWithError("DEFINE SUBQUERY $q() AS\n"
+                        "    SELECT 1;\n"
+                        "        SELECT 2;\n"
+                        "END DEFINE;\n"
+                        "SELECT 1;",
+                        "<main>:3:9: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+    ExpectFailWithError("DEFINE SUBQUERY $q() AS\n"
+                        "    $foo = 1;\n"
+                        "END DEFINE;\n"
+                        "SELECT 1;",
+                        "<main>:2:5: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
+}
+
+Y_UNIT_TEST(InvalidViewAndSubqueryModePositions) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtCreateView.MinLangVer;
+
+    for (const auto mode : {NSQLTranslation::ESqlMode::LIMITED_VIEW, NSQLTranslation::ESqlMode::SUBQUERY}) {
+        const TString bodyKind = mode == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery";
+        const auto multipleSelects = SqlToYqlWithMode("    SELECT 1;\n"
+                                                      "        SELECT 2;",
+                                                      mode, 10, {}, EDebugOutput::None, false, settings);
+        UNIT_ASSERT(!multipleSelects.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(multipleSelects),
+                            "<main>:2:9: Error: Strictly one select/process/reduce statement is expected at the end of " + bodyKind + "\n");
+
+        const auto noSelect = SqlToYqlWithMode("\n    $foo = 1;", mode, 10, {}, EDebugOutput::None, false, settings);
+        UNIT_ASSERT(!noSelect.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(noSelect),
+                            "<main>:2:5: Error: Strictly one select/process/reduce statement is expected at the end of " + bodyKind + "\n");
+    }
 }
 
 Y_UNIT_TEST(ErrorOnMissingCluster) {

@@ -1189,6 +1189,7 @@ public:
 
     struct TCreateAlterDataFeatureFlags {
         bool EnableTablePgTypes;
+        bool DisablePgCompatibility;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
@@ -3942,6 +3943,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<TString> CancelRequestedBy;
+
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
@@ -4420,8 +4423,16 @@ struct TIncrementalRestoreState {
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
         bool AllShardsComplete() const {
-            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
-                    !ExpectedShards.empty();
+            if (ExpectedShards.empty()) {
+                return false;
+            }
+            // Unexpected or overlapping replies cannot replace a missing expected shard.
+            for (const auto& shard : ExpectedShards) {
+                if (!CompletedShards.contains(shard) && !FailedShards.contains(shard)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         bool HasFailures() const {
@@ -4852,7 +4863,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
-    const TSubDomainInfo& subDomain, TString& errStr);
+    const TSubDomainInfo& subDomain, bool disablePgCompatibility, TString& errStr);
 
 /**
  * Check if the given detailed metrics settings (for a table) are valid.

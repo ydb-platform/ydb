@@ -435,7 +435,7 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
+            if (auto result = state.ValidateMirror3dcGroupStates(parameters); !result) {
                 *errorDescription = result.error();
                 return false;
             }
@@ -656,7 +656,18 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
             for (const auto& [base, overlay] : state.Groups.Diff()) {
-                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+                state.GroupStateUpdates.insert(overlay->first.GetRawId());
+            }
+
+            bool policySubmitted = state.DataCenterStates.Changed();
+            bool firstPolicy = policySubmitted && !HasDataCenterPolicy;
+            bool targetsChanged = policySubmitted && state.DataCenterStates.Get() != DataCenterStates;
+            if (firstPolicy || targetsChanged) {
+                state.Groups.ForEach([&](TGroupId id, const TGroupInfo& group) {
+                    if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                        state.GroupStateUpdates.insert(id.GetRawId());
+                    }
+                });
             }
 
             if (state.HostConfigs.Changed()) {
@@ -864,6 +875,7 @@ namespace NKikimr::NBsController {
             TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
+            HasDataCenterPolicy |= state.DataCenterStates.Changed();
             state.Commit();
             ValidateInternalState();
 

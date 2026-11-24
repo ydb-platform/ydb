@@ -3,6 +3,8 @@
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
+
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -202,7 +204,7 @@ bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStr
 }
 
 IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
-    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool disablePgCompatibility)
 {
     if (!rowType) {
         return IGraphTransformer::TStatus::Ok;
@@ -213,7 +215,7 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
     if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+    if (!NKikimr::NKqp::InstantAnnotateKqpTypes(probe, ctx, typeCtx, disablePgCompatibility) || !probe->GetTypeAnn()) {
         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
             << "Failed to infer the type of generated column " << columnName));
         return IGraphTransformer::TStatus::Error;
@@ -256,7 +258,8 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
         }
 
         if (const auto* columnType = table.GetColumnType(name)) {
-            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx);
+            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility());
                 status != IGraphTransformer::TStatus::Ok)
             {
                 return status;
@@ -792,7 +795,8 @@ namespace {
             }
 
             // Type the expression body
-            if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx)) {
+            if (!NKikimr::NKqp::InstantAnnotateKqpTypes(lambda, ctx, typeCtx,
+                sessionCtx.Config().FeatureFlags.GetDisablePgCompatibility())) {
                 return IGraphTransformer::TStatus::Error;
             }
 

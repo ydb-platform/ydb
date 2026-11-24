@@ -24,7 +24,7 @@
 #include <util/string/printf.h>
 #include <util/system/mutex.h>
 
-#include <atomic>
+#include <optional>
 
 namespace NKikimr::NReplication::NController {
 namespace {
@@ -130,14 +130,7 @@ class TTopicMirroringFixture {
         return flags;
     }
 
-    struct TSourceEnv: TEnv<> {
-        TSourceEnv(): TEnv<>(Flags()) {
-            UNIT_ASSERT_VALUES_EQUAL(MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
-            auto topic = MakeTopicDescription({.Name = "topic"});
-            topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
-            UNIT_ASSERT_VALUES_EQUAL(CreateTopic("/Root/src", *topic), NMsgBusProxy::MSTATUS_OK);
-        }
-    };
+    std::optional<TEnv<>> RemoteSource;
 
     struct TOffsets {
         ui64 End;
@@ -163,14 +156,30 @@ class TTopicMirroringFixture {
     TString MirrorConsumer;
 
 public:
-    TSourceEnv Source;
     TEnv<> Destination;
+    TEnv<>& Source;
     const ui64 SchemeShard = Destination.GetPathId("/Root").OwnerId;
 
+    enum class EStart {
+        Immediate,
+        Deferred,
+    };
+
+    // The simulated runtime installs a process-wide clock, so the DONE test uses one cluster.
     explicit TTopicMirroringFixture(const TString& sourceHost = "localhost", bool stopBeforeCreateResult = false,
-            TMirrorReaderFactory* mirrorReaderFactory = nullptr)
-        : Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+            TMirrorReaderFactory* mirrorReaderFactory = nullptr, const TString& sourceWriteMode = {},
+            EStart start = EStart::Immediate)
+        : RemoteSource(stopBeforeCreateResult ? std::nullopt : std::optional<TEnv<>>(std::in_place, Flags()))
+        , Destination(Flags(), true, stopBeforeCreateResult ? ERuntimeMode::Simulated : ERuntimeMode::RealThreads)
+        , Source(RemoteSource ? *RemoteSource : Destination)
     {
+        Source.RunCall([&] {
+            UNIT_ASSERT_VALUES_EQUAL(Source.MkDir("/Root", "src"), NMsgBusProxy::MSTATUS_OK);
+            auto topic = MakeTopicDescription({.Name = "topic"});
+            topic->MutablePQTabletConfig()->AddConsumers()->SetName(Consumer);
+            UNIT_ASSERT_VALUES_EQUAL(Source.CreateTopic("/Root/src", *topic), NMsgBusProxy::MSTATUS_OK);
+        });
+
         if (mirrorReaderFactory) {
             auto& runtime = Destination.GetRuntime();
             auto& appData = runtime.GetAppData();
@@ -178,20 +187,34 @@ public:
             appData.PersQueueMirrorReaderFactory = mirrorReaderFactory;
         }
 
-        std::atomic<bool> createResultBlocked = false;
-        auto observer = Destination.GetRuntime().AddObserver<TEvPrivate::TEvCreateDstResult>(
-            [&](TEvPrivate::TEvCreateDstResult::TPtr& ev) {
-                if (stopBeforeCreateResult && ev->Get()->IsSuccess()) {
-                    ev.Reset();
-                    createResultBlocked = true;
-                }
-            });
+        if (!sourceWriteMode.empty()) {
+            SetSourceWriteMode(sourceWriteMode);
+        }
+        if (start == EStart::Immediate) {
+            Start(sourceHost, stopBeforeCreateResult);
+        }
+    }
+
+    void Start(const TString& sourceHost, bool stopBeforeCreateResult = false) {
+        bool createResultBlocked = false;
+        auto observer = Destination.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
+            if (!stopBeforeCreateResult || ev->GetTypeRewrite() != TEvPrivate::EvCreateDstResult || !ev->HasEvent()) {
+                return;
+            }
+
+            // Other actors can use the same private event ID.
+            if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                ev.Reset();
+                createResultBlocked = true;
+            }
+        });
         const auto endpoint = sourceHost + Source.GetEndpoint().substr(Source.GetEndpoint().rfind(':'));
         Exec(Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/src/topic` AS `/Root/topic`
             WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
                 CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", endpoint.c_str()));
         if (stopBeforeCreateResult) {
-            Wait([&] { return createResultBlocked.load(); });
+            Wait([&] { return createResultBlocked; });
             return;
         }
         WaitMirror(true);
@@ -297,8 +320,21 @@ public:
     }
 
     NYdb::TStatus CommitSourceConsumerOffset(ui64 offset) {
-        NYdb::NTopic::TTopicClient client(Source.GetDriver());
-        return client.CommitOffset(SourceTopic, 0, Consumer, offset).GetValueSync();
+        return CommitConsumerOffset(Source, SourceTopic, offset);
+    }
+
+    NYdb::TStatus CommitDestinationConsumerOffset(ui64 offset) {
+        return CommitConsumerOffset(Destination, DestinationTopic, offset);
+    }
+
+    void CheckClientModificationsBlocked(ui64 offset) {
+        CheckWriteBlocked(Source, SourceTopic);
+        CheckWriteBlocked(Destination, DestinationTopic);
+
+        for (const auto& commit : {CommitSourceConsumerOffset(offset), CommitDestinationConsumerOffset(offset)}) {
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, commit.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(commit.GetIssues().ToString(), "Consumer offset commits are disabled");
+        }
     }
 
     ui64 GetSourceConsumerOffset() {
@@ -324,6 +360,15 @@ public:
     void ReplicateFirstMessage() {
         Write({"first"});
         WaitForOffsets(1, 0);
+    }
+
+    void SetSourceWriteMode(const TString& mode) {
+        NYdb::NTopic::TTopicClient client(Source.GetDriver());
+        const auto result = Source.RunCall([&] {
+            return client.AlterTopic("/Root/src/topic", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAlterAttributes().Add("_write_mode", mode).EndAlterAttributes()).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     void CheckBacklog(ui64 before, ui64 end) {
@@ -353,21 +398,87 @@ public:
     }
 
     void Write(const TVector<TString>& payloads) {
+        Write(Source, SourceTopic, "producer", payloads);
+    }
+
+    void WriteDestination(const TVector<TString>& payloads) {
+        Write(Destination, DestinationTopic, "destination-producer", payloads);
+    }
+
+    void ReadBack(const TVector<TString>& payloads, ui64 firstOffset) {
+        ReadBack(Destination, DestinationTopic, payloads, firstOffset, nullptr);
+    }
+
+    void ReadSourceAsConsumer(const TVector<TString>& payloads) {
+        ReadBack(Source, SourceTopic, payloads, 0, Consumer);
+    }
+
+    void ReadDestinationAsConsumer(const TVector<TString>& payloads, ui64 firstOffset) {
+        ReadBack(Destination, DestinationTopic, payloads, firstOffset, Consumer);
+    }
+
+    void WriteAndReadBack(const TString& payload, ui64 offset) {
+        Write({payload});
+        ReadBack({payload}, offset);
+    }
+
+private:
+    static NYdb::TStatus CommitConsumerOffset(TEnv<>& env, const TString& topic, ui64 offset) {
+        NYdb::NTopic::TTopicClient client(env.GetDriver());
+        return client.CommitOffset(topic, 0, Consumer, offset).GetValueSync();
+    }
+
+    void CheckWriteBlocked(TEnv<>& env, const TString& topic) {
         using namespace NYdb::NTopic;
-        TTopicClient client(Source.GetDriver());
+        TTopicClient client(env.GetDriver());
+        auto writer = client.CreateWriteSession(TWriteSessionSettings()
+            .Path(topic).ProducerId("blocked-producer").MessageGroupId("blocked-producer").Codec(ECodec::RAW)
+            .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy()));
+        bool sent = false;
+        Wait([&] {
+            auto event = writer->GetEvent();
+            if (!event) {
+                return false;
+            }
+            if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                if (!sent) {
+                    writer->Write(std::move(ready->ContinuationToken), "rejected-write");
+                    sent = true;
+                }
+            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                UNIT_ASSERT_C(!closed->IsSuccess(), closed->DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(closed->GetIssues().ToString(), "Client data writes are disabled");
+                return true;
+            } else {
+                UNIT_FAIL("Unexpected acknowledgement for a blocked write to " << topic);
+            }
+            return false;
+        }, TStringBuilder() << "client write rejection on " << topic);
+    }
+
+    static void Write(TEnv<>& env, const TString& topic, const TString& producer, const TVector<TString>& payloads) {
+        using namespace NYdb::NTopic;
+        TTopicClient client(env.GetDriver());
         auto writer = client.CreateSimpleBlockingWriteSession(TWriteSessionSettings()
-            .Path(SourceTopic).ProducerId("producer").MessageGroupId("producer").Codec(ECodec::RAW));
+            .Path(topic).ProducerId(producer).MessageGroupId(producer).Codec(ECodec::RAW));
         for (const auto& payload : payloads) {
             UNIT_ASSERT(writer->Write(payload));
         }
         UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
     }
 
-    void ReadBack(const TVector<TString>& payloads, ui64 firstOffset) {
+    void ReadBack(TEnv<>& env, const TString& topic, const TVector<TString>& payloads, ui64 firstOffset,
+            const char* consumer)
+    {
         using namespace NYdb::NTopic;
-        TTopicClient client(Destination.GetDriver());
-        auto reader = client.CreateReadSession(TReadSessionSettings().WithoutConsumer()
-            .AppendTopics(TTopicReadSettings(DestinationTopic).AppendPartitionIds(0)));
+        TTopicClient client(env.GetDriver());
+        TReadSessionSettings settings;
+        if (consumer) {
+            settings.ConsumerName(consumer);
+        } else {
+            settings.WithoutConsumer();
+        }
+        auto reader = client.CreateReadSession(settings.AppendTopics(TTopicReadSettings(topic).AppendPartitionIds(0)));
         size_t index = 0;
         Wait([&] {
             auto event = reader->GetEvent();
@@ -375,7 +486,10 @@ public:
                 return false;
             }
             if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                start->Confirm(firstOffset + index);
+                if (consumer) {
+                    UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), firstOffset);
+                }
+                start->Confirm(consumer && index == 0 ? std::nullopt : std::optional<ui64>(firstOffset + index));
             } else if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 for (const auto& message : data->GetMessages()) {
                     UNIT_ASSERT(index < payloads.size());
@@ -388,12 +502,7 @@ public:
             }
             return index == payloads.size();
         });
-        UNIT_ASSERT(Destination.RunCall([&] { return reader->Close(TDuration::Seconds(10)); }));
-    }
-
-    void WriteAndReadBack(const TString& payload, ui64 offset) {
-        Write({payload});
-        ReadBack({payload}, offset);
+        UNIT_ASSERT(env.RunCall([&] { return reader->Close(TDuration::Seconds(10)); }));
     }
 };
 
@@ -464,6 +573,23 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(TopicMirroring) {
+    Y_UNIT_TEST(DoesNotInheritSourceWriteMode) {
+        for (const auto* mode : {"unavailable", "prohibited"}) {
+            TTopicMirroringFixture test("localhost", false, nullptr, mode);
+            const auto config = test.Config();
+            UNIT_ASSERT(!config.HasWriteMode());
+            UNIT_ASSERT(config.GetWriteMode() == NKikimrPQ::TPQTabletConfig::WRITE_AVAILABLE);
+
+            NYdb::NTopic::TTopicClient client(test.Destination.GetDriver());
+            const auto description = client.DescribeTopic("/Root/topic").GetValueSync();
+            UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+            UNIT_ASSERT(!description.GetTopicDescription().GetAttributes().contains("_write_mode"));
+
+            test.SetSourceWriteMode("available");
+            test.WriteAndReadBack("after-reopening-source", 0);
+        }
+    }
+
     Y_UNIT_TEST(ConsumerCleanupRetriesUnauthorizedAndAcceptsMissing) {
         TConsumerRemovalFixture test;
         test.DenyAndWaitForRetry();
@@ -553,6 +679,49 @@ Y_UNIT_TEST_SUITE(TopicMirroring) {
         test.ReadBack(backlog, 1);
         test.WaitForOffsets(end, appOffset);
         UNIT_ASSERT_VALUES_EQUAL(test.GetSourceConsumerOffset(), appOffset);
+    }
+
+    Y_UNIT_TEST(TopicFailoverDrainsBacklogWithClientModificationsDisabled) {
+        TMirrorReaderFactory mirrorReader;
+        TTopicMirroringFixture test("[::1]", false, &mirrorReader, {}, TTopicMirroringFixture::EStart::Deferred);
+
+        const TVector<TString> consumed = {"first", "second"};
+        TVector<TString> unread;
+        constexpr size_t messageCount = 10000;
+        unread.reserve(messageCount);
+        for (size_t index = 0; index < messageCount; ++index) {
+            unread.emplace_back(TStringBuilder() << "unread-" << index);
+        }
+        const ui64 end = consumed.size() + unread.size();
+        test.Write(consumed);
+        test.ReadSourceAsConsumer(consumed);
+        const auto sourceCommit = test.CommitSourceConsumerOffset(consumed.size());
+        UNIT_ASSERT_C(sourceCommit.IsSuccess(), sourceCommit.GetIssues().ToString());
+        test.Write(unread);
+
+        mirrorReader.Pause();
+        Y_DEFER { mirrorReader.Resume(); };
+        test.Start("[::1]");
+        test.Source.GetRuntime().GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        test.Destination.GetRuntime().GetAppData().FeatureFlags.SetEnableClientModifications(false);
+
+        test.CheckClientModificationsBlocked(end);
+        test.CheckBacklog(0, end);
+        mirrorReader.Resume();
+        test.WaitForOffsets(end, consumed.size());
+        test.ReadDestinationAsConsumer(unread, consumed.size());
+
+        test.Done();
+        test.WaitMirror(false);
+        test.Exec("DROP ASYNC REPLICATION `/Root/replication`;");
+        UNIT_ASSERT_VALUES_EQUAL(test.Destination.GetDescription("/Root/replication").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+
+        test.Destination.GetRuntime().GetAppData().FeatureFlags.SetEnableClientModifications(true);
+        const auto destinationCommit = test.CommitDestinationConsumerOffset(end);
+        UNIT_ASSERT_C(destinationCommit.IsSuccess(), destinationCommit.GetIssues().ToString());
+        test.WriteDestination({"after-failover"});
+        test.ReadDestinationAsConsumer({"after-failover"}, end);
     }
 
     Y_UNIT_TEST(DrainsBurstBacklog) {

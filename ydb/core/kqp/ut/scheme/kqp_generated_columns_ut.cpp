@@ -28,6 +28,12 @@ static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStrea
     return appConfig;
 }
 
+static NKikimrConfig::TAppConfig GeneratedColumnsPgAppConfig() {
+    auto appConfig = GeneratedColumnsAppConfig();
+    appConfig.MutableFeatureFlags()->SetDisablePgCompatibility(false);
+    return appConfig;
+}
+
 static NKikimrPQ::TPQConfig GeneratedColumnsPQConfig() {
     NKikimrPQ::TPQConfig pqConfig;
     pqConfig.SetEnabled(true);
@@ -4163,7 +4169,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
                 g_utf8 Utf8 NOT NULL GENERATED ALWAYS AS (utf8_value) STORED,
                 PRIMARY KEY (k)
             );
-        )");
+        )", "", GeneratedColumnsPgAppConfig());
 
         fixture.Exec(R"(
             INSERT INTO TestTable (k, pg_value, decimal_value, string_value, utf8_value)
@@ -5333,7 +5339,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                     Date("2021-01-01"), Datetime("2021-01-01T01:02:03Z"),
                     Timestamp("2021-01-01T01:02:03.123456Z")
                 );
-            )");
+            )", GeneratedColumnsPgAppConfig());
 
             fixture.Check(R"(
                 SELECT
@@ -5995,7 +6001,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                     virtual_value PgText NOT NULL GENERATED ALWAYS AS (payload) VIRTUAL,
                     PRIMARY KEY (k)
                 );
-            )");
+            )", "", GeneratedColumnsPgAppConfig());
 
             fixture.Exec("INSERT INTO TestTable (k, payload) VALUES (1, 'one'pt);");
             fixture.Exec("UPSERT INTO TestTable (k, payload) VALUES (1, 'updated'pt);");

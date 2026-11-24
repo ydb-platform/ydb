@@ -14,6 +14,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include "health_check.h"
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/stream/null.h>
 
@@ -200,7 +201,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true) {
+    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true,
+            const TString& erasure = NHealthCheck::BLOCK_4_2) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
@@ -209,7 +211,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
-            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::BLOCK_4_2);
+            entry->mutable_info()->set_erasurespeciesv2(erasure);
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
         };
@@ -348,7 +350,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void AddGroupVSlotInControllerConfigResponseWithStaticGroup(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev,
-        const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vslots)
+        const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vslots,
+        const TString& erasure = NHealthCheck::BLOCK_4_2)
     {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
@@ -368,7 +371,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         staticGroup->set_groupid(0);
         staticGroup->set_storagepoolid(0);
         staticGroup->set_operatingstatus(groupStatus);
-        staticGroup->set_erasurespecies(NHealthCheck::BLOCK_4_2);
+        staticGroup->set_erasurespecies(erasure);
         staticGroup->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         auto group = pbConfig->add_group();
@@ -376,7 +379,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         group->set_groupid(GROUP_START_ID);
         group->set_storagepoolid(1);
         group->set_operatingstatus(groupStatus);
-        group->set_erasurespecies(NHealthCheck::BLOCK_4_2);
+        group->set_erasurespecies(erasure);
         group->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         group->clear_vslotid();
@@ -571,7 +574,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks,
                                                          bool forStaticGroup = false, double occupancy = 0, bool withPhantomOnly = true,
-                                                         bool returnHints = false) {
+                                                         bool returnHints = false, const TString& erasure = NHealthCheck::BLOCK_4_2) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -601,7 +604,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdisks);
+                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdisks, erasure);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
@@ -620,7 +623,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
-                    AddGroupsToSysViewResponse(x);
+                    AddGroupsToSysViewResponse(x, 1, true, erasure);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
@@ -1029,6 +1032,24 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return nullptr;
     }
 
+    Y_UNIT_TEST_TWIN(BlockParityFailureCounts, block82) {
+        const TGroupLayout layout = block82 ? TGroupLayout{NHealthCheck::BLOCK_8_2, 1, 12} : Block42Layout();
+        const Ydb::Monitoring::StatusFlag::Status expected[] = {
+            Ydb::Monitoring::StatusFlag::GREEN, Ydb::Monitoring::StatusFlag::YELLOW,
+            Ydb::Monitoring::StatusFlag::ORANGE, Ydb::Monitoring::StatusFlag::RED};
+        THashSet<ui32> failed;
+        for (ui32 count = 0; count <= 3; ++count) {
+            const auto result = RequestHcWithGroups(layout, {failed});
+            if (count) {
+                CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", expected[count], 1,
+                    TLocationFilter().Pool(STORAGE_POOL_NAME));
+            } else {
+                UNIT_ASSERT(!FindIssue(result, "STORAGE_GROUP", TLocationFilter().Pool(STORAGE_POOL_NAME)));
+            }
+            failed.insert(layout.VDisks() - 1 - count);
+        }
+    }
+
     Y_UNIT_TEST(Mirror3DcDataCenterOutageMergesVDisksOfAllGroups) {
         // the whole first data center is down, so every group is missing all the disks of its first fail realm
         TVector<THashSet<ui32>> failedVDisksPerGroup(3, THashSet<ui32>{0, 1, 2});
@@ -1068,10 +1089,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(vDiskIssue->location().storage().node().id() != 0);
     }
 
-    Y_UNIT_TEST(Block42DisksOfSameDataCenterAreMergedByNode) {
+    Y_UNIT_TEST_TWIN(Block42DisksOfSameDataCenterAreMergedByNode, block82) {
         // every group is missing two disks of its only fail realm, and both are on the nodes of the same data center
         TVector<THashSet<ui32>> failedVDisksPerGroup(3, THashSet<ui32>{0, 1});
-        auto result = RequestHcWithGroups(Block42Layout(), failedVDisksPerGroup);
+        auto result = RequestHcWithGroups(block82 ? TGroupLayout{NHealthCheck::BLOCK_8_2, 1, 12} : Block42Layout(), failedVDisksPerGroup);
         Ctest << result.ShortDebugString() << Endl;
 
         auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
@@ -1227,14 +1248,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         ListingTest(100, 100, true);
     }
 
-    Y_UNIT_TEST(YellowGroupIssueWhenPartialGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR});
+    Y_UNIT_TEST_TWIN(YellowGroupIssueWhenPartialGroupStatus, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, false, 0, true, false, block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
-    Y_UNIT_TEST(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::REPLICATING});
+    Y_UNIT_TEST_TWIN(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::REPLICATING}, false, 0, true, false, block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
@@ -1278,20 +1299,20 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 0, TLocationFilter().Pool("/Root:test"));
     }
 
-    Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR});
+    Y_UNIT_TEST_TWIN(OrangeGroupIssueWhenDegradedGroupStatus, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR}, false, 0, true, false, block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
-    Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, TVDisks{3, NKikimrBlobStorage::ERROR});
+    Y_UNIT_TEST_TWIN(RedGroupIssueWhenDisintegratedGroupStatus, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, TVDisks{3, NKikimrBlobStorage::ERROR}, false, 0, true, false, block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
     }
 
-    Y_UNIT_TEST(StaticGroupIssue) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, /*forStatic*/ true);
+    Y_UNIT_TEST_TWIN(StaticGroupIssue, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, true, 0, true, false, block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2);
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pool("static"));
         CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
@@ -1320,8 +1341,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    Y_UNIT_TEST(OnlyDiskIssueOnSpaceIssues) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9);
+    Y_UNIT_TEST_TWIN(OnlyDiskIssueOnSpaceIssues, block82) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9, true, false, block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2);
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
@@ -3051,9 +3072,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TDuration OperationTimeout; // zero means the server default, 20 s
     };
 
-    std::vector<TStaticWhiteboardDisk> Block42Disks(ui32 node = 0) {
+    std::vector<TStaticWhiteboardDisk> BlockDisks(ui32 node = 0, ui32 domains = 8) {
         std::vector<TStaticWhiteboardDisk> disks;
-        for (ui32 domain = 0; domain < 8; ++domain) {
+        for (ui32 domain = 0; domain < domains; ++domain) {
             disks.push_back({.Node = node, .Realm = 0, .Domain = domain});
         }
         return disks;
@@ -3413,7 +3434,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     // the single static node never answers
     TStaticWhiteboardScenario AllMissingScenario() {
         TStaticWhiteboardScenario scenario;
-        scenario.Disks = Block42Disks();
+        scenario.Disks = BlockDisks();
         scenario.VDiskReplies = {EWhiteboardReply::Missing};
         scenario.PDiskReplies = {EWhiteboardReply::Missing};
         return scenario;
@@ -3487,11 +3508,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
     }
 
-    Y_UNIT_TEST(WhiteboardTwoFailedAndOneUnknownDisk) {
-        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+    Y_UNIT_TEST_TWIN(WhiteboardTwoFailedAndOneUnknownDisk, block82) {
+        auto scenario = TwoNodeScenario(block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2,
+            BlockDisks(0, block82 ? 12 : 8));
         MakeFailed(scenario.Disks[0]);
         MakeFailed(scenario.Disks[1]);
-        MakeUnknown(scenario.Disks[7]);
+        MakeUnknown(scenario.Disks.back());
         const auto result = RequestHcWithStaticWhiteboard(scenario);
         const auto pool = TLocationFilter().Pool("static");
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
@@ -3513,12 +3535,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
     }
 
-    Y_UNIT_TEST(WhiteboardThreeFailedAndOneUnknownDiskStaysRed) {
-        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+    Y_UNIT_TEST_TWIN(WhiteboardThreeFailedAndOneUnknownDiskStaysRed, block82) {
+        auto scenario = TwoNodeScenario(block82 ? NHealthCheck::BLOCK_8_2 : NHealthCheck::BLOCK_4_2,
+            BlockDisks(0, block82 ? 12 : 8));
         MakeFailed(scenario.Disks[0]);
         MakeFailed(scenario.Disks[1]);
         MakeFailed(scenario.Disks[2]);
-        MakeUnknown(scenario.Disks[7]);
+        MakeUnknown(scenario.Disks.back());
         const auto result = RequestHcWithStaticWhiteboard(scenario);
         const auto pool = TLocationFilter().Pool("static");
         CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
@@ -3529,7 +3552,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(WhiteboardMissingVDiskReplyWithFailedPDisk) {
-        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, BlockDisks());
         scenario.PDiskReplies = {EWhiteboardReply::Received, EWhiteboardReply::Received};
         for (ui32 i = 5; i < 8; ++i) {
             MakeUnknown(scenario.Disks[i]);
@@ -3560,7 +3583,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(WhiteboardMixedRepliesMergedRecords) {
-        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, BlockDisks());
         scenario.MergeRecords = true;
         MakeFailed(scenario.Disks[0]);
         MakeFailed(scenario.Disks[1]);
@@ -3683,7 +3706,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             scenario.Bridge = true;
             scenario.GroupBridgePileId = 2;
             scenario.FreeGroupPile = freeGroupPile;
-            scenario.Disks = Block42Disks();
+            scenario.Disks = BlockDisks();
             for (auto& disk : scenario.Disks) {
                 MakeFailed(disk);
             }
@@ -3716,7 +3739,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     // guard: a node that answered and does not report the disk is evidence of failure
     Y_UNIT_TEST(WhiteboardDiskAbsentFromReplyIsGroupFailure) {
         TStaticWhiteboardScenario scenario;
-        scenario.Disks = Block42Disks();
+        scenario.Disks = BlockDisks();
         scenario.VDiskReplies = {EWhiteboardReply::Received};
         scenario.PDiskReplies = {EWhiteboardReply::Received};
         for (ui32 i = 5; i < 8; ++i) {
@@ -3734,7 +3757,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     // guard: an unreachable node is a dead-node signal and stays RED
     Y_UNIT_TEST(WhiteboardUnreachableNodeIsGroupFailure) {
         TStaticWhiteboardScenario scenario;
-        scenario.Disks = Block42Disks();
+        scenario.Disks = BlockDisks();
         scenario.VDiskReplies = {EWhiteboardReply::Unreachable};
         scenario.PDiskReplies = {EWhiteboardReply::Unreachable};
         const auto result = RequestHcWithStaticWhiteboard(scenario);
@@ -3751,7 +3774,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     // an undelivered request is a dead-node signal at once, even when its retries are not over at the deadline
     Y_UNIT_TEST(WhiteboardUndeliveredNodeIsGroupFailureBeforeRetriesEnd) {
         TStaticWhiteboardScenario scenario;
-        scenario.Disks = Block42Disks();
+        scenario.Disks = BlockDisks();
         scenario.VDiskReplies = {EWhiteboardReply::Unreachable};
         scenario.PDiskReplies = {EWhiteboardReply::Unreachable};
         // The request covers the whole domain, so the static config is requested at start and the whiteboard
@@ -3776,7 +3799,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     // guard: a retry that gets the reply wins over the undelivered request before it
     Y_UNIT_TEST(WhiteboardRetryAfterUndeliveredIsReceived) {
         TStaticWhiteboardScenario scenario;
-        scenario.Disks = Block42Disks();
+        scenario.Disks = BlockDisks();
         scenario.VDiskReplies = {EWhiteboardReply::UndeliveredOnce};
         scenario.PDiskReplies = {EWhiteboardReply::UndeliveredOnce};
         const auto result = RequestHcWithStaticWhiteboard(scenario);

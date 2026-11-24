@@ -1106,6 +1106,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NKikimrConfig::TFeatureFlags featureFlags;
         // featureFlags.SetEnablePgSyntax(true);
         featureFlags.SetEnableTablePgTypes(true);
+        featureFlags.SetDisablePgCompatibility(false);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

@@ -131,6 +131,13 @@ For the backup method, **do not run section 2 above**. First complete the [initi
 
 Use the same names: `my_replication`, `replica_table`, `source_token`, `original_table`, and the `source` and `target` profiles. After the instance enters `running`, return to [lag assessment](#replication-lag) below.
 
+Individual steps in the guide:
+
+- [Check changefeed readiness](../async-replication-initial-sync.md#wait-for-changefeeds). {#s3-changefeeds}
+- [Export the source data](../async-replication-initial-sync.md#export). {#s3-export}
+- [Import into the target](../async-replication-initial-sync.md#import). {#s3-import}
+- [Start applying changes](../async-replication-initial-sync.md#start-replication). {#s3-start-replication}
+
 ### 3.3. Assess Replication Lag {#replication-lag}
 
 ```bash

@@ -544,6 +544,10 @@ common:
     to: /concepts/query_execution/federated_query/$1
 
 ru:
+  - from: ^/best_practices/cross-cluster-migration(?:[.]html|[.]md)?/?$
+    to: /devops/migration/index
+  - from: ^/recipes/async-replication/async-replication-migration(?:[.]html|[.]md)?/?$
+    to: /devops/migration/async-replication
   - from: /getting_started/ansible(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /devops/ansible/initial-deployment(?:[.]html|[.]md)?/?$
@@ -592,6 +596,10 @@ ru:
     to: /devops/concepts/node-authorization.md
 
 en:
+  - from: ^/best_practices/cross-cluster-migration(?:[.]html|[.]md)?/?$
+    to: /devops/migration/index
+  - from: ^/recipes/async-replication/async-replication-migration(?:[.]html|[.]md)?/?$
+    to: /devops/migration/async-replication
   - from: /getting_started/ansible(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /devops/ansible/initial-deployment(?:[.]html|[.]md)?/?$

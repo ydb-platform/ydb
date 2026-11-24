@@ -161,6 +161,13 @@ WITH (
 
 В этом руководстве используйте те же имена объектов: `my_replication`, `replica_table`, `source_token`, `original_table` и профили `source` и `target`. После появления состояния `running` вернитесь к [оценке отставания](#replication-lag) ниже.
 
+Отдельные шаги руководства:
+
+- [Проверка готовности потоков](../async-replication-initial-sync.md#wait-for-changefeeds). {#s3-changefeeds}
+- [Экспорт исходных данных](../async-replication-initial-sync.md#export). {#s3-export}
+- [Импорт в приёмник](../async-replication-initial-sync.md#import). {#s3-import}
+- [Запуск применения изменений](../async-replication-initial-sync.md#start-replication). {#s3-start-replication}
+
 ### 3.3. Оценка отставания репликации {#replication-lag}
 
 После завершения выбранного способа первоначальной синхронизации получите статистику в приёмнике:

@@ -1,6 +1,6 @@
 # Choosing a Cross-Cluster Migration Method
 
-Migration includes transferring data to a new database and switching the application. Choose a method based on acceptable write downtime, data volume, and available resources. Prepare a plan and validate it in a test migration.
+Migration includes transferring data to a new database and switching the application. Choose a method based on acceptable write downtime, data volume, and available resources. Prepare a plan and validate it in a test migration. {#vvedenie}
 
 ## Migration Plan {#plan}
 
@@ -20,7 +20,7 @@ Before the transfer:
 | Backup and restore | Backup creation, restoration, and application cutover | A [backup and restore procedure](../backup-and-recovery/index.md) and new application connection settings |
 | Asynchronous replication | Final synchronization, data verification, and cutover | A [replication and migration procedure](async-replication.md), space for accumulated CDC, and new application connection settings |
 
-Backup and restore is suitable when writes can stop for the entire transfer. Replication transfers most data while the source remains in use, but requires monitoring changes and a separate completion step before writes can start on the target.
+Backup and restore is suitable when writes can stop for the entire transfer. Replication transfers most data while the source remains in use, but requires monitoring changes and a separate completion step before writes can start on the target. {#async-replication}
 
 ## Standalone Migration Using Backup and Restore {#backup-restore}
 

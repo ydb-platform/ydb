@@ -21,7 +21,6 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
             std::optional<TS3Locator> LocatorInFlight;
-            TActorId WriterActorId;
             ui64 ConnectionInstanceOnStart;
             ui32 S3SlowDownRetries = 0;
 
@@ -62,11 +61,6 @@ namespace NKikimr::NBlobDepot {
                 if (IsInFlight || LocatorInFlight) {
                     Y_ABORT_UNLESS(!success);
                     SendDiscardSpoiled(false);
-                }
-
-                if (WriterActorId) {
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, WriterActorId, Agent.SelfId(),
-                        nullptr, 0));
                 }
 
                 TBlobStorageQuery::OnDestroy(success);
@@ -299,6 +293,9 @@ namespace NKikimr::NBlobDepot {
                     [&](TEvBlobDepot::TEvCommitBlobSeqResult *ev) {
                         HandleCommitBlobSeqResult(std::move(context), ev->Record);
                     },
+                    [&](TS3PutResult& result) {
+                        OnPutS3ObjectResponse(std::move(result.Error), result.SlowDown);
+                    },
                     [&](TTabletDisconnected) {
                         EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                     },
@@ -495,7 +492,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
-                WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
+                IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
 
                 ConnectionInstanceOnStart = Agent.ConnectionInstance;
 #else
@@ -504,15 +501,21 @@ namespace NKikimr::NBlobDepot {
 #endif
             }
 
-            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
+            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) {
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
+                    {"marker", "BDEV37"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"blobId", Request.Id},
+                    {"locator", LocatorInFlight});
                 YDB_LOG_COMP(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, "OnPutS3ObjectResponse",
                     {"marker", "BDA53"},
                     {"agentId", Agent.LogId},
                     {"queryId", GetQueryId()},
                     {"error", error},
                     {"slowDown", slowDown});
-
-                WriterActorId = {};
 
                 if (WriteS3Span) {
                     if (error) {

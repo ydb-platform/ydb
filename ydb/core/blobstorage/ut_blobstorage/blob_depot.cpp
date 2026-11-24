@@ -952,6 +952,54 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             NKikimrProto::OK);
     }
 
+    Y_UNIT_TEST_TWIN(S3GetResolvesOnlyAnExplicitMissingKey, noSuchKey) {
+        using namespace NWrappers::NExternalStorage;
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .SetupHive = true,
+        });
+        const ui32 group = CreateS3VirtualGroup(env, "get-missing-key");
+        const auto edge = env.Runtime->AllocateEdgeActor(1);
+        const TLogoBlobID id(100500, 1, 1, 0, 8, 0);
+        PutToS3VirtualGroup(env, edge, group, id, "abcdefgh");
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        bool failed = false;
+        ui32 resolvesAfterFailure = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvGetObjectResponse::EventType) {
+                Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                    noSuchKey ? Aws::S3::S3Errors::NO_SUCH_KEY : Aws::S3::S3Errors::RESOURCE_NOT_FOUND,
+                    noSuchKey ? "NoSuchKey" : "", "not found", false);
+                error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
+                ev->Get<TEvGetObjectResponse>()->Result = TEvGetObjectResponse::TResult(Aws::S3::S3Error(std::move(error)));
+                failed = true;
+            } else if (failed && ev->GetTypeRewrite() == TEvBlobDepot::EvResolve) {
+                const auto& resolve = ev->Get<TEvBlobDepot::TEvResolve>()->Record;
+                if (resolve.ItemsSize() == 1 && resolve.GetItems(0).GetExactKey() == id.AsBinaryString()) {
+                    UNIT_ASSERT_EQUAL(resolve.GetDataKind(), NKikimrBlobStorage::TDataKind::SYSTEM);
+                    UNIT_ASSERT_VALUES_EQUAL(resolve.GetDeadlineUs(), deadline.MicroSeconds());
+                    UNIT_ASSERT(resolve.GetSkipBridgeAccountingForSubrequests());
+                    ++resolvesAfterFailure;
+                }
+            }
+            return true;
+        };
+        env.Runtime->WrapInActorContext(edge, [&] {
+            auto get = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, deadline, NKikimrBlobStorage::FastRead);
+            get->DataKind = NKikimrBlobStorage::TDataKind::SYSTEM;
+            get->IsProxySubrequest = true;
+            SendToBSProxy(edge, group, get.release());
+        });
+        const auto result = CaptureTEvGetResult(env, edge, false);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(failed);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(bool(resolvesAfterFailure), noSuchKey);
+        env.Runtime->FilterFunction = {};
+    }
+
     // the value written to S3 has no blob parts; its integrity is checked by reading it from S3, and the check gets its
     // answer
     Y_UNIT_TEST(CheckIntegrityOfS3Value) {

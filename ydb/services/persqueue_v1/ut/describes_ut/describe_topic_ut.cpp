@@ -2,9 +2,16 @@
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+
+#include <library/cpp/threading/future/async.h>
+#include <util/thread/pool.h>
+
+#include <chrono>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -15,7 +22,7 @@ const static TString topicName = "rt3.dc1--topic-x";
 const static TString topicPath = "/Root/PQ/" + topicName;
 
 class TDescribeTestServer {
-public: 
+public:
     NPersQueue::TTestServer Server;
     bool UseBadTopic = false;
 
@@ -49,7 +56,7 @@ public:
             request.set_include_location(true);
         if (askStats)
             request.set_include_stats(true);
-        
+
         Stub->DescribePartition(&rcontext, request, &response);
         Cerr << "Got response: " << response.DebugString() << Endl;
         if (UseBadTopic) {
@@ -62,14 +69,14 @@ public:
             UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::BAD_REQUEST);
             NYql::TIssues opIssues;
             NYql::IssuesFromMessage(response.operation().issues(), opIssues);
-            TString expectedError= TStringBuilder() << "No partition " << partId << " in topic"; 
+            TString expectedError= TStringBuilder() << "No partition " << partId << " in topic";
             UNIT_ASSERT(opIssues.ToOneLineString().Contains(expectedError));
             return true;
         }
 
         auto unpackOk = response.operation().result().UnpackTo(&result);
         UNIT_ASSERT(unpackOk);
-        
+
         if (askStats) {
             UNIT_ASSERT(result.partition().has_partition_stats());
         }
@@ -96,7 +103,7 @@ public:
             request.set_include_stats(true);
         if (askLocation)
             request.set_include_location(true);
-        
+
         Stub->DescribeTopic(&rcontext, request, &response);
         Cerr << "Got response: " << response.DebugString() << Endl;
 
@@ -185,6 +192,62 @@ private:
 
 Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
 
+    Y_UNIT_TEST(CdcInvalidChildrenReturnUnavailable) {
+        TThreadPool pool;
+        pool.Start(1);
+        auto settings = PQSettings();
+        settings.SetUseRealThreads(false);
+        NPersQueue::TTestServer server(settings, false);
+        server.StartServer(/*doClientInit=*/false);
+        auto& runtime = *server.CleverServer->GetRuntime();
+        auto channel = grpc::CreateChannel(server.Endpoint, grpc::InsecureChannelCredentials());
+        auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+        const TString streamPath = "/Root/table/stream";
+
+        for (const int childrenCount : {-1, 0, 2}) {
+            ui32 intercepted = 0;
+            auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+                [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                    for (auto& entry : ev->Get()->Request->ResultSet) {
+                        if (CanonizePath(JoinPath(entry.Path)) != streamPath) {
+                            continue;
+                        }
+                        ++intercepted;
+                        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+                        entry.Status = TNavigate::EStatus::Ok;
+                        entry.Kind = TNavigate::KindCdcStream;
+                        entry.ListNodeEntry = nullptr;
+                        if (childrenCount >= 0) {
+                            auto list = MakeIntrusive<TNavigate::TListNodeEntry>();
+                            for (int i = 0; i < childrenCount; ++i) {
+                                list->Children.emplace_back("streamImpl" + ToString(i), TPathId(1, i + 1), TNavigate::KindTopic);
+                            }
+                            entry.ListNodeEntry = list;
+                        }
+                    }
+                });
+
+            auto future = NThreading::Async([&] {
+                grpc::ClientContext context;
+                context.AddMetadata("x-ydb-database", "/Root");
+                context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+                Ydb::PersQueue::V1::DescribeTopicRequest request;
+                request.set_path(streamPath);
+                Ydb::PersQueue::V1::DescribeTopicResponse response;
+                const auto status = stub->DescribeTopic(&context, request, &response);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                return response;
+            }, pool);
+            const auto response = runtime.WaitFuture(std::move(future));
+            UNIT_ASSERT_VALUES_EQUAL(intercepted, 1);
+            UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::UNAVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().issues_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().issues(0).issue_code(),
+                static_cast<ui32>(Ydb::PersQueue::ErrorCode::ERROR));
+        }
+        pool.Stop();
+    }
+
     Y_UNIT_TEST(GetLocalDescribe) {
         TDescribeTestServer server{};
         auto* runtime = server.GetRuntime();
@@ -234,7 +297,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         server.DescribePartition(0, false, false);
         server.Server.KillTopicPqTablets(topicPath);
         bool checkRes = server.DescribePartition(1, true, false, true);
-        
+
         if (!checkRes) {
             server.Server.KillTopicPqTablets(topicPath);
             server.DescribePartition(1, true, false);

@@ -1648,6 +1648,10 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW index support is disabled (EnableHnswIndex)"));
                     return TStatus::Error;
                 }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW indexes require STORE = ROW"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalSyncHnsw;
             } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {

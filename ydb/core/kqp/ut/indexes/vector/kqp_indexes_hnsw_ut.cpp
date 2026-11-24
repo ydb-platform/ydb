@@ -471,6 +471,37 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         )").ExtractValueSync());
     }
 
+    Y_UNIT_TEST(HnswRejectsColumnStorage) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto db = kikimr.GetQueryClient();
+        const auto execute = [&](const TString& query) {
+            return db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        };
+        const auto checkRejected = [](const auto& result) {
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "HNSW indexes require STORE = ROW");
+        };
+
+        checkRejected(execute(R"(
+            CREATE TABLE `/Root/HnswColumnStorage` (
+                id Uint64 NOT NULL, emb String, PRIMARY KEY(id),
+                INDEX vidx GLOBAL USING hnsw ON (emb)
+                    WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=1, clusters=2)
+            ) WITH (STORE = COLUMN);
+        )"));
+
+        const auto created = execute(R"(
+            CREATE TABLE `/Root/HnswColumnStorage` (
+                id Uint64 NOT NULL, emb String, PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+        )");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        checkRejected(execute(R"(
+            ALTER TABLE `/Root/HnswColumnStorage` ADD INDEX vidx GLOBAL USING hnsw ON (emb)
+                WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=1, clusters=2);
+        )"));
+    }
+
     Y_UNIT_TEST(HnswFeatureFlagExistingIndex) {
         NKikimrConfig::TAppConfig config;
         config.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);

@@ -2636,6 +2636,11 @@ public:
                                         "HNSW index support is disabled (EnableHnswIndex)"));
                                     return SyncError();
                                 }
+                                if (table.Metadata->StoreType == EStoreType::Column) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "HNSW indexes require STORE = ROW"));
+                                    return SyncError();
+                                }
                                 add_index->mutable_global_hnsw_index();
                             } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {

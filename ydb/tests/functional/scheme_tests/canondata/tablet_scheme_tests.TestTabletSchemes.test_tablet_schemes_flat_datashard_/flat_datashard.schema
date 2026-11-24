@@ -2347,6 +2347,11 @@
                 "ColumnId": 4,
                 "ColumnName": "WriteResult",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "GcWriteSeqNum",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -2356,7 +2361,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2378,11 +2384,90 @@
         }
     },
     {
-        "TableId": 41,
-        "TableName": "AncestorShardsLocks",
+        "TableId": 43,
+        "TableName": "AncestorLockBranches",
         "TableKey": [
             1,
-            2
+            2,
+            3,
+            4,
+            5
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "WriteResult",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 1,
+                "ColumnName": "LockId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Owner",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "CreatedOn",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "WriterIndex",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "ShardsPath",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "WriteSeqNum",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    7,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 44,
+        "TableName": "AncestorShardsLocksV2",
+        "TableKey": [
+            1,
+            2,
+            7
         ],
         "ColumnsAdded": [
             {
@@ -2414,6 +2499,16 @@
                 "ColumnId": 6,
                 "ColumnName": "Flags",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "CreatedOn",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "CreatedOnRange",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2425,7 +2520,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2447,14 +2544,20 @@
         }
     },
     {
-        "TableId": 42,
-        "TableName": "AncestorLockWriteSeqNums",
+        "TableId": 45,
+        "TableName": "AncestorLockWriteSeqNumsV2",
         "TableKey": [
             1,
             2,
+            6,
             3
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "GcWriteSeqNum",
+                "ColumnType": "Uint64"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "LockId",
@@ -2479,17 +2582,24 @@
                 "ColumnId": 5,
                 "ColumnName": "WriteResult",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "CreatedOn",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

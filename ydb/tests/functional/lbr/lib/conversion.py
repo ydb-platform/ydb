@@ -7,8 +7,8 @@ from pathlib import Path
 import re
 import signal
 import subprocess
-import time
 import threading
+import time
 
 
 class LbrConversion:

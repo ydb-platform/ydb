@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -455,18 +456,17 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     // Restore queries and directory listings must use the same absolute paths.
     TString dbRestorePath = dbPath;
     if (!dbRestorePath.StartsWith('/')) {
-        if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
-            return result;
-        }
-
         TString databasePath(DriverConfig.GetDatabase());
         if (!databasePath.StartsWith('/')) {
+            if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
+                return result;
+            }
             databasePath = Join('/', ClusterRootPath, databasePath);
         }
         dbRestorePath = Join('/', databasePath, dbRestorePath);
     }
 
-    dbRestorePath = TPathSplitUnix(dbRestorePath).Reconstruct();
+    dbRestorePath = NormalizePath(dbRestorePath);
 
     // Find first existing path on the way from the dbRestorePath to the root of the cluster.
     TPathSplitUnix dbPathSplit(dbRestorePath);
@@ -807,6 +807,13 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         }
     }
 
+    if (!dbPath.empty() && !dbPath.StartsWith('/')) {
+        if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
+            return result;
+        }
+        dbPath = NormalizePath(Join('/', ClusterRootPath, dbPath));
+    }
+
     LOG_I("Restore database from " << fsPath.Quote() << " to " << dbPath.Quote());
 
     if (auto result = CreateDatabase(CmsClient, dbPath, TCreateDatabaseSettings(dbDesc)); !result.IsSuccess()) {
@@ -841,7 +848,7 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         return result;
     }
 
-    if (auto result = RestorePermissionsImpl(dbSchemeClient, fsPath, dbPath.StartsWith('/') ? dbPath : "."); !result.IsSuccess()) {
+    if (auto result = RestorePermissionsImpl(dbSchemeClient, fsPath, dbPath); !result.IsSuccess()) {
         return result;
     }
 

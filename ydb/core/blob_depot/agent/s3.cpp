@@ -1,6 +1,7 @@
 #include "agent_impl.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/config.h>
 #include <ydb/core/blob_depot/s3_put_timeout.h>
 #include <ydb/core/blob_depot/s3_error.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
@@ -19,9 +20,9 @@ namespace NKikimr::NBlobDepot {
             // well-known service id before any later event we send can be processed, so
             // we can use the service id immediately.
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, *S3BackendSettings));
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, BlobDepotGeneration, *S3BackendSettings));
             S3WrapperId = MakeBlobDepotS3RouterID(TabletId);
-            S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
+            S3BasePath = MakeS3BasePath(settings, name);
         }
     }
 

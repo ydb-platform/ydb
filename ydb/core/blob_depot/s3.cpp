@@ -1,4 +1,5 @@
 #include "s3.h"
+#include "config.h"
 #include "s3_router_events.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
@@ -24,14 +25,19 @@ namespace NKikimr::NBlobDepot {
             // All S3 traffic goes through the per-node router managed by NodeWarden.
             // Acquire is fire-and-forget: NodeWarden registers the router under its
             // well-known service id before any later event we send can be processed.
+            RouterGeneration = Self->Executor()->Generation();
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), *settings));
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), RouterGeneration, *settings));
             WrapperId = MakeBlobDepotS3RouterID(Self->TabletID());
-            BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
+            BasePath = MakeS3BasePath(settings->GetSettings(), Self->Config.GetName());
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();
             AsyncMode = settings->HasAsyncMode();
-            Enabled = true;
+            const TString legacyPath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern()
+                << '/' << Self->Config.GetName();
+            // Canonical LIST can reach objects a legacy scanner never saw.
+            OrphanScanEnabled = !ValidateS3BasePath(BasePath) && (Self->Config.GetS3NamespaceValidated() ||
+                (!Self->Config.GetS3NamespacePinned() && !settings->HasAsyncMode() && BasePath == legacyPath));
 
             CurrentMaxWritesInFlight = MaxWritesInFlight();
             CurrentMaxDeletesInFlight = MaxDeletesInFlight();
@@ -40,7 +46,7 @@ namespace NKikimr::NBlobDepot {
         } else {
             SyncMode = false;
             AsyncMode = false;
-            Enabled = false;
+            OrphanScanEnabled = false;
         }
     }
 
@@ -56,7 +62,7 @@ namespace NKikimr::NBlobDepot {
         }
         if (WrapperId) {
             Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID()));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID(), RouterGeneration));
             WrapperId = {};
         }
     }
@@ -71,7 +77,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::OnDataLoaded() {
-        if (Enabled) {
+        if (OrphanScanEnabled) {
             RunScannerActor();
         }
     }

@@ -355,7 +355,7 @@ namespace NKikimr::NBlobDepot {
                 return;
             }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId));
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId, BlobDepotGeneration));
             S3WrapperId = {};
         }
 
@@ -364,6 +364,7 @@ namespace NKikimr::NBlobDepot {
             if (const auto& info = ev->Get()->Info) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
+                    ReleaseS3Wrapper();
                     TabletId = *info->BlobDepotId;
                     LogId = TStringBuilder() << '{' << TabletId << '@' << VirtualGroupId << '}';
                     if (TabletId && TabletId != Max<ui64>()) {

@@ -407,7 +407,7 @@ public:
         }
 
         // none: ok, dead:1
-        // block-4-2: ok, replicating:1 starting:1, degraded:1, degraded:2, dead:3
+        // block-4-2 / block-8-2: ok, replicating:1 starting:1, degraded:1, degraded:2, dead:3
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
 
         void CalcState() {
@@ -457,7 +457,8 @@ public:
                     State = TStringBuilder() << state << ':' << MissingDisks;
                     StateInfo.SetStatus(state);
                     StateInfo.MutableCount()->MutableDisks()->SetValue(static_cast<ui32>(MissingDisks));
-                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
+                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block
+                        || ErasureSpecies == TErasureType::Erasure8Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;
@@ -2103,9 +2104,21 @@ public:
     void ProcessWhiteboardGroups() {
         if (GroupData.empty()) {
             std::unordered_map<ui32, const NKikimrWhiteboard::TBSGroupStateInfo*> latestGroupInfo;
+            std::unordered_set<ui32> ddiskGroups;
+            if (GetGroupsResponse && GetGroupsResponse->IsOk()) {
+                for (const auto& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
+                    if (entry.GetInfo().GetDDisk()) {
+                        ddiskGroups.insert(entry.GetKey().GetGroupId());
+                    }
+                }
+            }
             for (const auto& [nodeId, bsGroupStateResponse] : BSGroupStateResponse) {
                 if (bsGroupStateResponse.IsOk()) {
                     for (const NKikimrWhiteboard::TBSGroupStateInfo& info : bsGroupStateResponse->Record.GetBSGroupStateInfo()) {
+                        if (info.GetDDisk()) {
+                            ddiskGroups.insert(info.GetGroupID());
+                            continue;
+                        }
                         TString storagePoolName = info.GetStoragePoolName();
                         if (storagePoolName.empty()) {
                             continue;
@@ -2125,6 +2138,10 @@ public:
                 }
             }
             for (const auto& [groupId, info] : latestGroupInfo) {
+                // A legacy Whiteboard report can omit the DDisk flag for a group identified by the controller or another node.
+                if (ddiskGroups.contains(groupId)) {
+                    continue;
+                }
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
@@ -3014,7 +3031,7 @@ public:
         stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
         YAML::Node count(stateInfo["properties"]["Count"]);
         count["description"] =
-            "Number after the colon in State, with explicit units: Disks.Value for none/block-4-2, "
+            "Number after the colon in State, with explicit units: Disks.Value for none/block-4-2/block-8-2, "
             "FailRealms.Value for mirror-3-dc. Exactly one count kind is present. Omitted for ok.";
         count["properties"].remove("Kind"); // protobuf oneof name is not a JSON property
         for (const char* kind : {"Disks", "FailRealms"}) {
@@ -3023,7 +3040,7 @@ public:
             count["oneOf"].push_back(alternative);
         }
         count["properties"]["Disks"]["properties"]["Value"]["description"] =
-            "Number of missing or not-ready disks for none/block-4-2.";
+            "Number of missing or not-ready disks for none/block-4-2/block-8-2.";
         count["properties"]["FailRealms"]["properties"]["Value"]["description"] =
             "Number of affected fail realms for mirror-3-dc. "
             "Only disks with a known non-READY status contribute; disks without status data are excluded.";

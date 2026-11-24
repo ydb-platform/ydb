@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
-        opts.EnableTablePgTypes(true);
+        opts.EnableTablePgTypes(true).DisablePgCompatibility(false);
         opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);

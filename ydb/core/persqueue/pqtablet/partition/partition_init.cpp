@@ -1206,7 +1206,7 @@ TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
 void TInitFieldsStep::Execute(const TActorContext &ctx) {
     auto& config = Partition()->Config;
 
-    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
+    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition, Partition()->SourceIdStorage));
 
     // After DataRange (FormHead / NormalizeOffsetsForEmptyData) offsets are final.
     // Recalculate here so AnyCommits matches runtime GetStartOffset(), not the pre-normalize meta StartOffset.

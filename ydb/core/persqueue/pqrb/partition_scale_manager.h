@@ -108,6 +108,7 @@ private:
     TRequests<TPartitionSplit> BuildSplitRequest(size_t& allowedSplitsCount);
     TRequests<TPartitionMerge> BuildMergeRequest(size_t& allowedSplitsCount);
     TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
+    bool IsRejectedKeyRangeSplit(ui32 partitionId, const TMaybe<TString>& splitBoundary) const;
     std::vector<ui32> ReorderSplits() const;
     ui32 FirstFreePartitionId() const;
     bool PrescribedChildrenContinueSequence(const TPartitionSplit& split, ui32 nextPartitionId, ui32& nextAfter) const;
@@ -128,6 +129,14 @@ private:
     TInstant LastResponseTime = TInstant::Zero();
 
     TPartitionsToSplitMap PartitionsToSplit;
+
+    struct TKeyRangeSplit {
+        ui32 PartitionId = 0;
+        TString SplitBoundary;
+        int PathVersion = 0;
+    };
+    std::optional<TKeyRangeSplit> InflightKeyRangeSplit;
+    absl::flat_hash_map<ui32, TKeyRangeSplit> RejectedKeyRangeSplits;
 
     std::optional<NYdb::NTopic::TTopicDescription> MirrorTopicDescription;
     std::optional<std::vector<NMirror::TPartitionWithBounds>> RootPartitionsToCreate;

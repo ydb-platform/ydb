@@ -2624,22 +2624,113 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             return env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, expectedStatus,
                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeIndex), 60000000, "storage"));
         };
-        auto checkDenied = [&](ui32 nodeIndex) {
+        auto checkDenied = [&](ui32 nodeIndex, ui32 ringGroupId) {
             const auto response = checkRestart(nodeIndex, TStatus::DISALLOW_TEMP);
             UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), "Too many unavailable state storage rings");
+            UNIT_ASSERT_STRING_CONTAINS(response.GetStatus().GetReason(), TStringBuilder() << ". Ring group: " << ringGroupId
+                                        << ". Requested ring: " << nodeIndex - 2 * ringGroupId
+                                        << " (nodes: [" << env.GetNodeId(nodeIndex) << "])");
         };
 
         const auto firstPermission = checkRestart(0, TStatus::ALLOW);
-        checkDenied(sharedNodeIndex);
+        checkDenied(sharedNodeIndex, 0);
         env.CheckDonePermission("user", firstPermission.GetPermissions(0).GetId());
 
         checkRestart(3, TStatus::ALLOW);
-        checkDenied(sharedNodeIndex);
-        checkDenied(4);
+        checkDenied(sharedNodeIndex, 1);
+        checkDenied(4, 1);
 
         config.MutableRingGroups(1)->SetWriteOnly(true);
         info = BuildStateStorageInfo(config);
         checkRestart(sharedNodeIndex, TStatus::ALLOW);
+    }
+
+    Y_UNIT_TEST(StateStorageUnavailableRingsDiagnostics)
+    {
+        TTestEnvOpts opts(10, 0);
+        opts.NRings = 5;
+        opts.RingSize = 2;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithEnableCmsSmartAvailabilityMode());
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.UpdateNodeStartTime(2, env.GetTimeProvider()->Now() + TDuration::Minutes(1));
+        env.AdvanceCurrentTime(TDuration::Seconds(90));
+        env.RestartCms();
+
+        auto expectedReason = [&](EAvailabilityMode mode, ui32 requestedRing) -> TString {
+            TStringBuilder reason;
+            reason << "Too many unavailable state storage rings. Restarting rings: 1"
+                   << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 1";
+            if (mode == MODE_KEEP_AVAILABLE) {
+                reason << ". Disabled rings: 0";
+            }
+            reason << ". Maximum allowed number of unavailable rings for this mode: "
+                   << (mode == MODE_MAX_AVAILABILITY ? 1 : 2)
+                   << ". Ring group: 0. Requested ring: " << requestedRing
+                   << " (nodes: [" << env.GetNodeId(2 * requestedRing) << ", " << env.GetNodeId(2 * requestedRing + 1)
+                   << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0) << ", " << env.GetNodeId(1)
+                   << "], state: Restart), 1 (nodes: [" << env.GetNodeId(2) << ", " << env.GetNodeId(3)
+                   << "], state: Locked)]";
+            return reason;
+        };
+
+        for (auto mode : {MODE_MAX_AVAILABILITY, MODE_KEEP_AVAILABLE, MODE_SMART_AVAILABILITY}) {
+            const auto denied = env.CheckPermissionRequest("user", false, true, false, true, mode, TStatus::DISALLOW_TEMP,
+                                                           MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+            UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expectedReason(mode, 2));
+        }
+
+        // An unavailable requested ring remains in the diagnostic with its actual state.
+        for (ui32 ringId : {0u, 1u}) {
+            const ui32 nodeIndex = ringId == 0 ? 0 : 3;
+            const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                                           MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeIndex), 60000000, "storage"));
+            UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expectedReason(MODE_MAX_AVAILABILITY, ringId));
+        }
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        const auto denied = env.CheckPermissionRequest("user", false, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        const auto scheduled = env.CheckGetRequest("user", denied.GetRequestId());
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.RequestsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).ActionsSize(), 1);
+        const auto& issue = scheduled.GetRequests(0).GetActions(0).GetIssue();
+        UNIT_ASSERT_VALUES_EQUAL(issue.GetType(), TAction::TIssue::TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS);
+        UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), expectedReason(MODE_KEEP_AVAILABLE, 2));
+        UNIT_ASSERT_VALUES_EQUAL(issue.GetMessage(), denied.GetStatus().GetReason());
+    }
+
+    Y_UNIT_TEST(StateStorageDisabledRingsDiagnostics)
+    {
+        TTestEnvOpts opts(10, 0);
+        opts.NRings = 5;
+        opts.RingSize = 2;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts);
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        info->RingGroups = env.GetStateStorageInfo()->RingGroups;
+        auto& disabledRing = info->RingGroups[0].Rings[0];
+        disabledRing.IsDisabled = true;
+        std::swap(disabledRing.Replicas[0], disabledRing.Replicas[1]);
+        auto observer = env.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto& ev) {
+            ev->Get()->Info = info;
+        });
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+        env.RestartCms();
+
+        const auto denied = env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        const TString expected = TStringBuilder() << "Too many unavailable state storage rings. Restarting rings: 1"
+            << ". Temporarily locked rings (restart cooldown: " << TDuration::Minutes(2) << "): 0. Disabled rings: 1"
+            << ". Maximum allowed number of unavailable rings for this mode: 2. Ring group: 0. Requested ring: 2"
+            << " (nodes: [" << env.GetNodeId(4) << ", " << env.GetNodeId(5)
+            << "]). Unavailable rings: [0 (nodes: [" << env.GetNodeId(0) << ", " << env.GetNodeId(1)
+            << "], state: Disabled), 1 (nodes: [" << env.GetNodeId(2) << ", " << env.GetNodeId(3)
+            << "], state: Restart)]";
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(), expected);
     }
 
     Y_UNIT_TEST(StateStorageNodesFromOneRing)
@@ -3336,6 +3427,43 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
             MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
+    }
+
+    Y_UNIT_TEST(WalleDrainDataRequiresCmsSupport)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        ui32 createRequests = 0;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                auto *msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeCmsID()) {
+                    // Older CMS tablets do not provide version information on connection.
+                    msg->VersionInfo.clear();
+                }
+            } else if (ev->GetTypeRewrite() == TEvCms::EvWalleCreateTaskRequest) {
+                ++createRequests;
+            }
+            return prev(ev);
+        });
+
+        for (const TString uri : {"/api/walle/v11/tasks", "/api/walle/v11/tasks?dry_run=true"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, uri, MakeWalleDrainDataJson(nodeId));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("CMS does not support drain_data"), response);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 0);
+        env.CheckWalleListTasks(0);
+        env.CheckListPermissions(WALLE_CMS_USER, 0);
+        env.CheckListRequests(WALLE_CMS_USER, 0);
+
+        // Ordinary tasks do not require the support check.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDrainDataJson(nodeId, "false")), "ok", nodeId);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
     }
 
     Y_UNIT_TEST(WalleDrainDataDisabledEvictVDisks)
@@ -4078,6 +4206,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         const auto denied = env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                                        MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
         UNIT_ASSERT_STRING_CONTAINS(denied.GetStatus().GetReason(), "Too many unavailable state storage rings");
+        UNIT_ASSERT_STRING_CONTAINS(denied.GetStatus().GetReason(), TStringBuilder() << ". Ring group: 0. Requested ring: 1"
+                                    << " (nodes: [" << env.GetNodeId(2) << "])");
     }
 
     Y_UNIT_TEST(BridgeModeNodeLimit)

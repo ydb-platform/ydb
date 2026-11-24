@@ -15,6 +15,7 @@
 namespace NKikimr::NPQ {
 
 class TPartitionId;
+class TSourceIdStorage;
 
 using TUint128 = unsigned __int128;
 
@@ -46,6 +47,6 @@ public:
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };
 
-IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId);
+IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId, const TSourceIdStorage& sourceIds);
 
 }

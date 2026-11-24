@@ -947,6 +947,18 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
                 return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                     "AfterSplit must be set");
             }
+            if (body.KeyRange && it->second.KeyRange) {
+                NKikimrPQ::TPartitionKeyRange storedKeyRange;
+                it->second.KeyRange->Serialize(storedKeyRange);
+                const bool sameKeyRange = storedKeyRange.HasFromBound() == body.KeyRange->HasFromBound()
+                    && storedKeyRange.GetFromBound() == body.KeyRange->GetFromBound()
+                    && storedKeyRange.HasToBound() == body.KeyRange->HasToBound()
+                    && storedKeyRange.GetToBound() == body.KeyRange->GetToBound();
+                if (!sameKeyRange) {
+                    return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                        "Key range does not match the split registration");
+                }
+            }
             if (!body.KeyRange && it->second.KeyRange) {
                 it->second.KeyRange->Serialize(body.KeyRange.ConstructInPlace());
             }

@@ -3,7 +3,6 @@
 #include "target_topic.h"
 #include "target_transfer.h"
 
-#include <ydb/core/tx/replication/common/changefeed.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER

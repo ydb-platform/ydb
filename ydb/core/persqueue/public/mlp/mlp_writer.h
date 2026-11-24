@@ -65,6 +65,8 @@ private:
     };
     std::vector<TPendingMessage> PendingMessages;
     NDescriber::EStatus DescribeStatus = NDescriber::EStatus::UnknownError;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+    TString ErrorDescription;
 };
 
 } // namespace NKikimr::NPQ::NMLP

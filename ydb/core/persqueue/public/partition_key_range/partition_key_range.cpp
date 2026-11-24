@@ -9,6 +9,8 @@
 
 #include <library/cpp/digest/md5/md5.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -174,20 +176,19 @@ void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellV
 
 namespace {
 
-bool IsBefore(const TMaybe<TSerializedCellVec>& fromBound, const TMaybe<TSerializedCellVec>& toBound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    if (!fromBound || !toBound) {
-        return true;
+bool IsEntirelyBefore(const TPartitionKeyRange& range, const TPartitionKeyRange& other, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!range.ToBound || !other.FromBound) {
+        return false;
     }
-
     return ComparePrefixBorders(keyTypes,
-        fromBound->GetCells(), PrefixModeLeftBorderInclusive,
-        toBound->GetCells(), PrefixModeRightBorderNonInclusive) < 0;
+        other.FromBound->GetCells(), PrefixModeLeftBorderInclusive,
+        range.ToBound->GetCells(), PrefixModeRightBorderNonInclusive) >= 0;
 }
 
 } // anonymous
 
 bool Intersects(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
-    return IsBefore(lhs.FromBound, rhs.ToBound, keyTypes) && IsBefore(rhs.FromBound, lhs.ToBound, keyTypes);
+    return !IsEntirelyBefore(lhs, rhs, keyTypes) && !IsEntirelyBefore(rhs, lhs, keyTypes);
 }
 
 TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
@@ -201,76 +202,94 @@ TVector<NScheme::TTypeInfo> MakePartitionKeyTypes(const NKikimrPQ::TPQTabletConf
     return keyTypes;
 }
 
-std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKey> keys, const TPartitionKeyRange& range,
+namespace {
+
+bool IsValidBound(const TMaybe<TSerializedCellVec>& bound, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!bound) {
+        return true;
+    }
+    const auto cells = bound->GetCells();
+    if (cells.size() > keyTypes.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (NScheme::HasUnexpectedValueSize(cells[i], keyTypes[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsValidKeyRange(const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return IsValidBound(range.FromBound, keyTypes) && IsValidBound(range.ToBound, keyTypes);
+}
+
+int CompareBounds(const TSerializedCellVec& lhs, const TSerializedCellVec& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return ComparePrefixBorders(keyTypes,
+        lhs.GetCells(), PrefixModeLeftBorderInclusive,
+        rhs.GetCells(), PrefixModeLeftBorderInclusive);
+}
+
+bool IsFromBoundLess(const TPartitionKeyRange& lhs, const TPartitionKeyRange& rhs, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    if (!lhs.FromBound || !rhs.FromBound) {
+        return !lhs.FromBound && rhs.FromBound;
+    }
+    return CompareBounds(*lhs.FromBound, *rhs.FromBound, keyTypes) < 0;
+}
+
+bool IsStrictlyInside(const TSerializedCellVec& boundary, const TPartitionKeyRange& range, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+    return (!range.FromBound || CompareBounds(boundary, *range.FromBound, keyTypes) > 0)
+        && (!range.ToBound || CompareBounds(boundary, *range.ToBound, keyTypes) < 0);
+}
+
+TString MakeFullKey(const TSerializedCellVec& bound, size_t keySize) {
+    TVector<TCell> cells(bound.GetCells().begin(), bound.GetCells().end());
+    cells.resize(keySize);
+    return TSerializedCellVec::Serialize(cells);
+}
+
+} // anonymous
+
+std::optional<TString> ChooseSplitBoundary(TConstArrayRef<TWeightedKeyRange> sources, const TPartitionKeyRange& partition,
     TConstArrayRef<NScheme::TTypeInfo> keyTypes)
 {
-    struct TParsedKey {
-        TMaybe<TSerializedCellVec> Cells;
-        ui64 Weight = 0;
-    };
-
-    TVector<TParsedKey> parsed;
-    parsed.reserve(keys.size());
-    ui64 total = 0;
-    for (const auto& key : keys) {
-        TSerializedCellVec cells;
-        if (!TSerializedCellVec::TryParse(key.Key, cells) || cells.GetCells().size() != keyTypes.size()) {
-            continue;
-        }
-        bool validSizes = true;
-        for (size_t i = 0; i < keyTypes.size() && validSizes; ++i) {
-            validSizes = !NScheme::HasUnexpectedValueSize(cells.GetCells()[i], keyTypes[i]);
-        }
-        if (!validSizes) {
-            continue;
-        }
-
-        TMaybe<TSerializedCellVec> bound = std::move(cells);
-        if ((range.FromBound && IsBefore(bound, range.FromBound, keyTypes)) || !IsBefore(bound, range.ToBound, keyTypes)) {
-            continue;
-        }
-
-        total += key.Weight;
-        parsed.push_back({std::move(bound), key.Weight});
-    }
-
-    auto compare = [&](const TParsedKey& lhs, const TParsedKey& rhs) {
-        return CompareTypedCellVectors(lhs.Cells->GetCells().data(), rhs.Cells->GetCells().data(), keyTypes.data(), keyTypes.size());
-    };
-
-    Sort(parsed.begin(), parsed.end(), [&](const TParsedKey& lhs, const TParsedKey& rhs) {
-        return compare(lhs, rhs) < 0;
-    });
-
-    std::optional<size_t> boundary;
-    ui64 left = 0;
-    for (size_t i = 1; i < parsed.size(); ++i) {
-        left += parsed[i - 1].Weight;
-        if (compare(parsed[i - 1], parsed[i]) == 0) {
-            continue;
-        }
-
-        boundary = i;
-        if (2 * left >= total) {
-            break;
-        }
-    }
-
-    if (!boundary) {
+    if (!IsValidKeyRange(partition, keyTypes)) {
         return std::nullopt;
     }
 
-    const auto lower = parsed[*boundary - 1].Cells->GetCells();
-    const auto upper = parsed[*boundary].Cells->GetCells();
-    for (size_t prefixSize = 1; prefixSize < keyTypes.size(); ++prefixSize) {
-        TVector<TCell> prefix(upper.begin(), upper.begin() + prefixSize);
-        prefix.resize(keyTypes.size());
-        if (CompareTypedCellVectors(prefix.data(), lower.data(), keyTypes.data(), keyTypes.size()) > 0) {
-            return TSerializedCellVec::Serialize(prefix);
+    TVector<const TWeightedKeyRange*> partitionSources;
+    ui64 total = 0;
+    for (const auto& source : sources) {
+        if (IsValidKeyRange(source.KeyRange, keyTypes) && Intersects(source.KeyRange, partition, keyTypes)) {
+            partitionSources.push_back(&source);
+            total += source.Weight;
         }
     }
 
-    return parsed[*boundary].Cells->GetBuffer();
+    StableSort(partitionSources.begin(), partitionSources.end(), [&](const TWeightedKeyRange* lhs, const TWeightedKeyRange* rhs) {
+        return IsFromBoundLess(lhs->KeyRange, rhs->KeyRange, keyTypes);
+    });
+
+    std::optional<TString> boundary;
+    ui64 bestImbalance = Max<ui64>();
+    ui64 left = 0;
+    for (size_t i = 1; i < partitionSources.size(); ++i) {
+        left += partitionSources[i - 1]->Weight;
+        const auto& lower = partitionSources[i - 1]->KeyRange;
+        const auto& upper = partitionSources[i]->KeyRange;
+        if (!upper.FromBound || Intersects(lower, upper, keyTypes) || !IsStrictlyInside(*upper.FromBound, partition, keyTypes)) {
+            continue;
+        }
+
+        const ui64 right = total - left;
+        const ui64 imbalance = left > right ? left - right : right - left;
+        if (imbalance < bestImbalance) {
+            bestImbalance = imbalance;
+            boundary = MakeFullKey(*upper.FromBound, keyTypes.size());
+        }
+    }
+
+    return boundary;
 }
 
 } // namespace NKikimr::NPQ

@@ -1,3 +1,4 @@
+#include "cdc_stream_key_range.h"
 #include "change_exchange.h"
 #include "change_exchange_helpers.h"
 #include "datashard_impl.h"
@@ -19,6 +20,9 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
+#include <optional>
+#include <tuple>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr {
@@ -28,25 +32,71 @@ using NPQ::TPartitionKeyRange;
 
 namespace {
 
-struct TSplitDst {
-    ui64 TabletId = 0;
-    TPartitionKeyRange KeyRange;
+struct TSplitKeyRanges {
+    TPartitionKeyRange SrcKeyRange;
+    THashMap<ui64, TPartitionKeyRange> DstTabletIdToKeyRange;
 };
 
-TPartitionKeyRange ParseKeyRange(const TString& fromBound, const TString& toBound) {
-    TPartitionKeyRange keyRange;
-    TSerializedCellVec cells;
-    if (fromBound && TSerializedCellVec::TryParse(fromBound, cells) && !cells.GetCells().empty()) {
-        keyRange.FromBound = std::move(cells);
+std::optional<TSplitKeyRanges> ParseSplitKeyRanges(ui64 srcTabletId, const TVector<ui64>& dstTabletIds,
+        const NKikimrTxDataShard::TSplitMergeDescription* splitDescription)
+{
+    if (!splitDescription) {
+        return std::nullopt;
     }
-    if (toBound && TSerializedCellVec::TryParse(toBound, cells) && !cells.GetCells().empty()) {
-        keyRange.ToBound = std::move(cells);
+
+    const auto* srcRange = FindIfPtr(splitDescription->GetSourceRanges(), [&](const auto& range) {
+        return range.GetTabletID() == srcTabletId;
+    });
+    if (!srcRange) {
+        return std::nullopt;
     }
-    return keyRange;
+
+    TSplitKeyRanges keyRanges;
+    keyRanges.SrcKeyRange = MakeKeyRange(TSerializedCellVec(srcRange->GetKeyRangeBegin()), TSerializedCellVec(srcRange->GetKeyRangeEnd()));
+    for (const auto& range : splitDescription->GetDestinationRanges()) {
+        keyRanges.DstTabletIdToKeyRange.emplace(range.GetTabletID(),
+            MakeKeyRange(TSerializedCellVec(range.GetKeyRangeBegin()), TSerializedCellVec(range.GetKeyRangeEnd())));
+    }
+    for (const auto dstTabletId : dstTabletIds) {
+        if (!keyRanges.DstTabletIdToKeyRange.contains(dstTabletId)) {
+            return std::nullopt;
+        }
+    }
+
+    return keyRanges;
 }
 
-TPartitionKeyRange ParseKeyRange(const NKikimrPQ::TPartitionKeyRange& keyRange) {
-    return ParseKeyRange(keyRange.GetFromBound(), keyRange.GetToBound());
+struct TKeyRangeHeartbeatsData {
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TPartitionKeyRange SrcKeyRange;
+    THashMap<ui64, TPartitionKeyRange> DstTabletIdToKeyRange;
+};
+
+std::tuple<bool, TKeyRangeHeartbeatsData> PrepareKeyRangeHeartbeatsData(NKikimrSchemeOp::ECdcStreamHeartbeatMode heartbeatMode,
+        const TVector<NScheme::TTypeInfo>& topicKeySchema, const std::optional<TSplitKeyRanges>& splitKeyRanges)
+{
+    if (!ShouldUseKeyRangeHeartbeats(heartbeatMode, topicKeySchema)) {
+        return {false, {}};
+    }
+
+    Y_ENSURE(splitKeyRanges);
+    return {true, {topicKeySchema, splitKeyRanges->SrcKeyRange, splitKeyRanges->DstTabletIdToKeyRange}};
+}
+
+TVector<ui64> CalcPartitionDstTabletIds(const TPartitionKeyRange& partitionKeyRange, const TKeyRangeHeartbeatsData& data) {
+    if (!Intersects(partitionKeyRange, data.SrcKeyRange, data.KeyTypes)) {
+        return {};
+    }
+
+    TVector<ui64> dstTabletIds;
+    for (const auto& [dstTabletId, dstKeyRange] : data.DstTabletIdToKeyRange) {
+        if (Intersects(partitionKeyRange, dstKeyRange, data.KeyTypes)) {
+            dstTabletIds.push_back(dstTabletId);
+        }
+    }
+
+    Sort(dstTabletIds);
+    return dstTabletIds;
 }
 
 } // anonymous
@@ -124,13 +174,13 @@ public:
     }
 
     explicit TCdcPartitionWorker(const TActorId& parent, ui32 partitionId, ui64 tabletId,
-            ui64 srcTabletId, const TVector<TSplitDst>& dsts, bool withKeyRanges)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const THashMap<ui64, TPartitionKeyRange>& dstTabletIdToKeyRange)
         : Parent(parent)
         , PartitionId(partitionId)
         , TabletId(tabletId)
         , SrcTabletId(srcTabletId)
-        , Dsts(dsts)
-        , WithKeyRanges(withKeyRanges)
+        , DstTabletIds(dstTabletIds)
+        , DstTabletIdToKeyRange(dstTabletIdToKeyRange)
     {
     }
 
@@ -158,11 +208,11 @@ public:
             auto& group = *cmd.AddDeregisterGroups();
             group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(SrcTabletId)));
         }
-        for (const auto& dst : Dsts) {
+        for (const auto dstTabletId : DstTabletIds) {
             auto& group = *cmd.AddRegisterGroups();
-            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dst.TabletId)));
-            if (WithKeyRanges) {
-                dst.KeyRange.Serialize(*group.MutablePartitionKeyRange());
+            group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dstTabletId)));
+            if (const auto* keyRange = DstTabletIdToKeyRange.FindPtr(dstTabletId)) {
+                keyRange->Serialize(*group.MutablePartitionKeyRange());
             }
         }
 
@@ -185,8 +235,8 @@ private:
     const ui32 PartitionId;
     const ui64 TabletId;
     const ui64 SrcTabletId;
-    const TVector<TSplitDst> Dsts;
-    const bool WithKeyRanges;
+    const TVector<ui64> DstTabletIds;
+    const THashMap<ui64, TPartitionKeyRange> DstTabletIdToKeyRange;
 
     TActorId PipeClient;
 
@@ -335,8 +385,9 @@ class TCdcWorker
             return Ack();
         }
 
-        KeyRangeHeartbeats = entry.CdcStreamInfo
-            && entry.CdcStreamInfo->Description.GetHeartbeatMode() == NKikimrSchemeOp::ECdcStreamHeartbeatModeKeyRange;
+        if (entry.CdcStreamInfo) {
+            HeartbeatMode = entry.CdcStreamInfo->Description.GetHeartbeatMode();
+        }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -394,8 +445,8 @@ class TCdcWorker
         }
 
         THashMap<ui32, TActorId> workers;
-        const auto& keyTypes = entry.PQGroupInfo->Schema;
-        const bool withKeyRanges = KeyRangeHeartbeats && !keyTypes.empty();
+        const auto [shouldUseKeyRangeHeartbeats, keyRangeHeartbeatsData] = PrepareKeyRangeHeartbeatsData(
+            HeartbeatMode, entry.PQGroupInfo->Schema, SplitKeyRanges);
 
         for (const auto& partition : entry.PQGroupInfo->Description.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
@@ -405,17 +456,12 @@ class TCdcWorker
                 continue;
             }
 
-            TVector<TSplitDst> dsts;
-            if (withKeyRanges) {
-                const auto partitionKeyRange = ParseKeyRange(partition.GetKeyRange());
-                if (!Intersects(partitionKeyRange, SrcKeyRange, keyTypes)) {
-                    continue;
-                }
-                CopyIf(Dsts.begin(), Dsts.end(), std::back_inserter(dsts), [&](const auto& dst) {
-                    return Intersects(partitionKeyRange, dst.KeyRange, keyTypes);
-                });
-            } else {
-                dsts = Dsts;
+            TVector<ui64> dstTabletIds = DstTabletIds;
+            if (shouldUseKeyRangeHeartbeats) {
+                dstTabletIds = CalcPartitionDstTabletIds(TPartitionKeyRange::Parse(partition.GetKeyRange()), keyRangeHeartbeatsData);
+            }
+            if (dstTabletIds.empty()) {
+                continue;
             }
 
             auto it = Workers.find(partitionId);
@@ -426,7 +472,8 @@ class TCdcWorker
                 YDB_LOG_TRACE("Registering CDC partition split worker",
                     {"partitionId", partitionId});
 
-                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, dsts, withKeyRanges));
+                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, dstTabletIds,
+                    keyRangeHeartbeatsData.DstTabletIdToKeyRange));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }
@@ -523,12 +570,12 @@ public:
     }
 
     explicit TCdcWorker(const TActorId& parent, const TPathId& pathId,
-            ui64 srcTabletId, const TPartitionKeyRange& srcKeyRange, const TVector<TSplitDst>& dsts)
+            ui64 srcTabletId, const TVector<ui64>& dstTabletIds, const std::optional<TSplitKeyRanges>& splitKeyRanges)
         : Parent(parent)
         , PathId(pathId)
         , SrcTabletId(srcTabletId)
-        , SrcKeyRange(srcKeyRange)
-        , Dsts(dsts)
+        , DstTabletIds(dstTabletIds)
+        , SplitKeyRanges(splitKeyRanges)
     {
     }
 
@@ -550,10 +597,10 @@ private:
     const TActorId Parent;
     const TPathId PathId;
     const ui64 SrcTabletId;
-    const TPartitionKeyRange SrcKeyRange;
-    const TVector<TSplitDst> Dsts;
+    const TVector<ui64> DstTabletIds;
+    const std::optional<TSplitKeyRanges> SplitKeyRanges;
 
-    bool KeyRangeHeartbeats = false;
+    NKikimrSchemeOp::ECdcStreamHeartbeatMode HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
     THashMap<ui32, TActorId> Workers;
     THashMap<TActorId, ui32> Pending;
 
@@ -582,7 +629,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     TActorId RegisterWorker(const TPathId& pathId, EWorkerType type) const {
         switch (type) {
         case EWorkerType::CdcStream:
-            return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, SrcKeyRange, Dsts));
+            return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards, SplitKeyRanges));
         case EWorkerType::AsyncIndex:
             Y_ENSURE(false, "unreachable");
         }
@@ -641,30 +688,12 @@ public:
             const NKikimrTxDataShard::TSplitMergeDescription* splitDescription)
         : TActorBootstrapped()
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
+        , DstDataShards(dstDataShards)
+        , SplitKeyRanges(ParseSplitKeyRanges(self->TabletID(), dstDataShards, splitDescription))
     {
         for (const auto& [_, tableInfo] : self->GetUserTables()) {
             for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
                 Workers.emplace(streamPathId, EWorkerType::CdcStream);
-            }
-        }
-
-        THashMap<ui64, TPartitionKeyRange> dstTabletIdToKeyRange;
-        if (splitDescription) {
-            for (const auto& range : splitDescription->GetSourceRanges()) {
-                if (range.GetTabletID() == DataShard.TabletId) {
-                    SrcKeyRange = ParseKeyRange(range.GetKeyRangeBegin(), range.GetKeyRangeEnd());
-                }
-            }
-            for (const auto& range : splitDescription->GetDestinationRanges()) {
-                dstTabletIdToKeyRange.emplace(range.GetTabletID(), ParseKeyRange(range.GetKeyRangeBegin(), range.GetKeyRangeEnd()));
-            }
-        }
-
-        for (const auto dstTabletId : dstDataShards) {
-            auto& dst = Dsts.emplace_back();
-            dst.TabletId = dstTabletId;
-            if (const auto* keyRange = dstTabletIdToKeyRange.FindPtr(dstTabletId)) {
-                dst.KeyRange = *keyRange;
             }
         }
     }
@@ -698,8 +727,8 @@ public:
 
 private:
     const TDataShardId DataShard;
-    TPartitionKeyRange SrcKeyRange;
-    TVector<TSplitDst> Dsts;
+    const TVector<ui64> DstDataShards;
+    const std::optional<TSplitKeyRanges> SplitKeyRanges;
 
     THashMap<TPathId, TWorker> Workers;
     THashMap<TActorId, TPathId> Pending;

@@ -1,6 +1,7 @@
 #include "mlp_writer.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -53,6 +54,11 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     switch(topic.Status) {
         case NDescriber::EStatus::Success: {
             TopicInfo = topic.Info;
+            if (const auto error = GetWriteModeError(TopicInfo->Description.GetPQTabletConfig())) {
+                Status = error->Status;
+                ErrorDescription = error->Reason;
+                return ReplyErrorAndDie();
+            }
             return DoWrite();
         }
         default: {
@@ -288,6 +294,8 @@ void TWriterActor::ReplyIfPossible() {
     }
 
     auto response = std::make_unique<TEvWriteResponse>();
+    response->Status = Status;
+    response->ErrorDescription = ErrorDescription;
     response->DescribeStatus = DescribeStatus;
     if (TopicInfo) {
         response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();

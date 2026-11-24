@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
+#include <ydb/core/fq/libs/control_plane_storage/binding_rename.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
@@ -519,6 +520,81 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyStreamingQueryAccess) {
 
     Y_UNIT_TEST(RestrictionDoesNotAffectAnalytics) {
         CheckCreateQuery(true, {}, FederatedQuery::QueryContent::ANALYTICS, false);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TBindingRenameJournal) {
+    struct TPreparedRename {
+        FederatedQuery::Binding Binding;
+        FederatedQuery::ModifyBindingRequest Request;
+        FederatedQuery::Internal::BindingInternal Internal;
+
+        TPreparedRename() {
+            Binding.mutable_content()->set_name("old");
+            Binding.mutable_meta()->set_revision(4);
+            Request.mutable_content()->set_name("new");
+            auto& rename = *Internal.mutable_rename();
+            rename.set_operation_id("operation");
+            rename.set_source_name("old");
+            rename.set_source_revision(4);
+            rename.set_user("user");
+            *rename.mutable_destination() = Request.content();
+        }
+
+        EBindingRenameWrite Advance(EBindingRenameAction action, const TString& operation = "operation", const TString& identity = {}) {
+            return AdvanceBindingRename(*Internal.mutable_rename(), action, operation, identity, Binding);
+        }
+    };
+
+    Y_UNIT_TEST(MatchesOnlyTheSameRequestWithoutAnIdempotencyKey) {
+        TPreparedRename state;
+        FederatedQuery::Internal::BindingInternal restored;
+        UNIT_ASSERT(restored.ParseFromString(state.Internal.SerializeAsString()));
+        UNIT_ASSERT(MatchesBindingRename(restored.rename(), state.Request, "user"));
+        UNIT_ASSERT_VALUES_EQUAL(restored.rename().operation_id(), "operation");
+        UNIT_ASSERT(!MatchesBindingRename(restored.rename(), state.Request, "other"));
+        state.Request.mutable_content()->set_name("another");
+        UNIT_ASSERT(!MatchesBindingRename(state.Internal.rename(), state.Request, "user"));
+        UNIT_ASSERT(HasPendingBindingRename(state.Internal));
+    }
+
+    Y_UNIT_TEST(CommitRequiresExactOperationAndSource) {
+        TPreparedRename state;
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Commit, "other", "candidate"), TCodeLineException);
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Commit, "operation", "candidate"), TCodeLineException);
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::RecordSource, "operation", "source") == EBindingRenameWrite::Journal);
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::RecordSource, "operation", "source") == EBindingRenameWrite::None);
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::RecordSource, "operation", "replacement"), TCodeLineException);
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Commit), TCodeLineException);
+        state.Binding.mutable_meta()->set_revision(5);
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Commit, "operation", "candidate"), TCodeLineException);
+        state.Binding.mutable_meta()->set_revision(4);
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Commit, "operation", "candidate") == EBindingRenameWrite::Binding);
+        state.Binding.mutable_content()->set_name("new");
+        state.Binding.mutable_meta()->set_revision(5);
+        UNIT_ASSERT(MatchesBindingRename(state.Internal.rename(), state.Request, "user"));
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Commit, "operation", "candidate") == EBindingRenameWrite::None);
+        UNIT_ASSERT_VALUES_EQUAL(state.Internal.rename().candidate_identity(), "candidate");
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Commit, "operation", "other"), TCodeLineException);
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Abort) == EBindingRenameWrite::None);
+        UNIT_ASSERT(state.Internal.rename().state() == TBindingRename::COMMITTED);
+        UNIT_ASSERT(HasPendingBindingRename(state.Internal));
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Finish) == EBindingRenameWrite::Forget);
+        state.Internal.clear_rename();
+        UNIT_ASSERT(!HasPendingBindingRename(state.Internal));
+    }
+
+    Y_UNIT_TEST(AbortFencesCommitAndKeepsDeletionBlockedUntilCleanup) {
+        TPreparedRename state;
+        UNIT_ASSERT(HasPendingBindingRename(state.Internal));
+        UNIT_ASSERT_EXCEPTION(state.Advance(EBindingRenameAction::Finish), TCodeLineException);
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Abort) == EBindingRenameWrite::Journal);
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Commit, "operation", "candidate") == EBindingRenameWrite::None);
+        UNIT_ASSERT(state.Internal.rename().state() == TBindingRename::ABORTED);
+        UNIT_ASSERT(HasPendingBindingRename(state.Internal));
+        UNIT_ASSERT(state.Advance(EBindingRenameAction::Finish) == EBindingRenameWrite::Forget);
+        state.Internal.clear_rename();
+        UNIT_ASSERT(!HasPendingBindingRename(state.Internal));
     }
 }
 

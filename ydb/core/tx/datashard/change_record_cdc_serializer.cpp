@@ -79,9 +79,6 @@ public:
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            if (Opts.ChoosePartitionByKey) {
-                cmd.SetChoosePartitionKey(record.GetDataChange().GetKey().GetData());
-            }
             return SerializeDataChange(cmd, record);
         case TChangeRecord::EKind::CdcSchemaChange:
             return SerializeSchemaChange(cmd, record);
@@ -488,6 +485,9 @@ protected:
         }
 
         for (const auto& [tag, column] : schema->Columns) {
+            if (column.IsBuildInProgress) {
+                continue;
+            }
             table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
             if (const auto family = schema->Families.find(column.Family); family != schema->Families.end()) {
                 table["columns"][column.Name]["family"] = family->second.GetName();

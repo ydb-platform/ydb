@@ -1749,6 +1749,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
 
     PQ_ENSURE(IsSupportive());
 
+    StopCompaction = true;
     ev->Get()->OriginalPartition = ev->Sender;
     AddPendingEvent(ev);
 }
@@ -4327,7 +4328,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     if (autopartitioningChanged) {
-        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition));
+        AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition, SourceIdStorage));
     } else {
         AutopartitioningManager->UpdateConfig(Config);
     }

@@ -49,10 +49,11 @@ public:
         }
 
         const auto& params = request.GetParams();
-        ui32 timeout = 30'000;
+        ui32 timeout = MaxTimeoutMs;
         if (params.contains("timeout")) {
-            if (!TryFromString(params.Get("timeout"), timeout) || timeout == 0) {
-                ReplyBadParameter("timeout", ctx);
+            if (!TryFromString(params.Get("timeout"), timeout) || timeout == 0 || timeout > MaxTimeoutMs) {
+                Reply("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\n"
+                    "Invalid field 'timeout': expected milliseconds in [1, 30000]", ctx);
                 return;
             }
         }
@@ -113,7 +114,7 @@ public:
                     event->Record.SetGroupByDegrade(IsTrue(params.Get("group_by_degrade")));
                 }
                 event->Record.SetGroupsOnly(IsTrue(params.Get("groups_only")));
-                NTabletPipe::SendData(ctx, Pipe, event.Release());
+                PendingRequest.Reset(event.Release());
                 break;
             }
             case EMode::TabletGet: {
@@ -124,7 +125,7 @@ public:
                 auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
                 event->Record.SetTabletId(TabletId);
                 event->Record.SetIncludeHealth(IsTrue(params.Get("include_health")));
-                NTabletPipe::SendData(ctx, Pipe, event.Release());
+                PendingRequest.Reset(event.Release());
                 break;
             }
             case EMode::DiskList: {
@@ -189,12 +190,12 @@ public:
                 if (params.contains("only_problems")) {
                     event->Record.SetOnlyProblems(IsTrue(params.Get("only_problems")));
                 }
-                NTabletPipe::SendData(ctx, Pipe, event.Release());
+                PendingRequest.Reset(event.Release());
                 break;
             }
         }
 
-        Become(&TThis::StateWork, ctx, TDuration::MilliSeconds(Min(timeout, 30'000u)), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork, ctx, TDuration::MilliSeconds(timeout), new TEvents::TEvWakeup());
     }
 
 private:
@@ -293,9 +294,20 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->ClientId == Pipe && ev->Get()->Status != NKikimrProto::OK) {
-            Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS is unavailable", ctx);
+        const auto* msg = ev->Get();
+        if (msg->ClientId != Pipe) {
+            return;
         }
+        if (msg->Status != NKikimrProto::OK) {
+            Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS is unavailable", ctx);
+            return;
+        }
+        NKikimrCms::TVersionInfo versionInfo;
+        if (!versionInfo.ParseFromString(msg->VersionInfo) || !versionInfo.GetSupportDDiskDiagnostics()) {
+            Reply("HTTP/1.1 503 Service Unavailable\r\n\r\nCMS does not support DDisk diagnostics", ctx);
+            return;
+        }
+        NTabletPipe::SendData(ctx, Pipe, PendingRequest.Release());
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
@@ -314,7 +326,10 @@ private:
         PassAway();
     }
 
+    static constexpr ui32 MaxTimeoutMs = 30'000;
+
     NMon::TEvHttpInfo::TPtr RequestEvent;
+    THolder<IEventBase> PendingRequest;
     TActorId Pipe;
     ui64 TabletId = 0;
     EMode Mode = EMode::TabletList;

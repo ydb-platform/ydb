@@ -158,6 +158,18 @@ TString SendWalleHttpRequest(TCmsTestEnv &env, HTTP_METHOD method, const TString
     return response->Answer;
 }
 
+TString SendDDiskHttpRequest(TCmsTestEnv& env, const TString& uri) {
+    TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET, uri, {}, "");
+    const auto edge = env.AllocateEdgeActor();
+    NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+        TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+    env.Register(new TJsonProxyDDisk(event));
+    TAutoPtr<IEventHandle> handle;
+    const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+    UNIT_ASSERT(response);
+    return response->Answer;
+}
+
 void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
     UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
     const auto bodyOffset = response.find("\r\n\r\n");
@@ -488,6 +500,135 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 0);
     }
 
+    Y_UNIT_TEST(DDiskHttpRequiresCmsSupport)
+    {
+        TCmsTestEnv env(8);
+        NKikimrCms::TVersionInfo legacyVersion;
+        legacyVersion.SetSupportWalleDrainData(true);
+        TString version;
+        ui32 requests = 0;
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+                auto* msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeCmsID()) {
+                    msg->VersionInfo = version;
+                }
+            } else if (ev->GetTypeRewrite() == TEvCms::EvDDiskTabletListRequest
+                    || ev->GetTypeRewrite() == TEvCms::EvDDiskInfoGetRequest
+                    || ev->GetTypeRewrite() == TEvCms::EvDDiskDiskListRequest) {
+                ++requests;
+            }
+            return prev(ev);
+        });
+        for (const TString& unsupported : {TString(), legacyVersion.SerializeAsString(), TString("\xff")}) {
+            version = unsupported;
+            for (const TString uri : {
+                    "/api/json/ddisk/tablets?groups_only=1",
+                    "/api/json/ddisk/tablet?tablet_id=1001&include_health=1",
+                    "/api/json/ddisk/disks?inventory=1&tablet_id=1001&node_id=1&pdisk_id=1&group_by=state&limit=0"}) {
+                const auto response = SendDDiskHttpRequest(env, uri);
+                UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 503"), response);
+                UNIT_ASSERT_C(response.Contains("CMS does not support DDisk diagnostics"), response);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+        env.SetObserverFunc(prev);
+        const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets");
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
+    }
+
+    Y_UNIT_TEST(DDiskHttpTimeoutRange)
+    {
+        TCmsTestEnv env(8);
+        for (const TString timeout : {"0", "30001", "invalid"}) {
+            const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?timeout=" + timeout);
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+            UNIT_ASSERT_C(response.Contains("timeout"), response);
+            UNIT_ASSERT_C(response.Contains("30000"), response);
+        }
+        const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?timeout=1");
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200") || response.StartsWith("HTTP/1.1 408"), response);
+    }
+
+    Y_UNIT_TEST(DDiskComponentHealthConsistency)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+        const auto pdisk = env.PDiskId(0, 0);
+        constexpr ui64 tabletId = 3201;
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& info = TFakeNodeWhiteboardService::Info.at(pdisk.NodeId);
+            info.PDiskStateInfo.at(pdisk.DiskId).SetState(TPDiskState::Normal);
+            for (ui32 slot = 100; slot <= 102; ++slot) {
+                auto& sample = info.DDiskStateInfo.emplace_back();
+                sample.SetPDiskId(pdisk.DiskId);
+                sample.SetDDiskSlotId(slot);
+                sample.SetDDiskStatus(slot == 102 ? TDDiskStateInfo::Broken : TDDiskStateInfo::Ready);
+                sample.SetPersistentBufferStatus(slot == 102 ? TDDiskStateInfo::Ready : TDDiskStateInfo::Broken);
+                if (slot != 102) {
+                    sample.SetPersistentBufferStatusReason("buffer failure");
+                }
+            }
+        }
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
+                if (record.GetTabletId() == tabletId) {
+                    record.ClearGroups();
+                    auto* group = record.AddGroups();
+                    group->SetDirectBlockGroupId(1);
+                    for (ui32 slot = 100; slot <= 102; ++slot) {
+                        auto* id = slot == 101 ? group->AddPersistentBufferDDiskId() : group->AddDDiskId();
+                        id->SetNodeId(pdisk.NodeId);
+                        id->SetPDiskId(pdisk.DiskId);
+                        id->SetDDiskSlotId(slot);
+                    }
+                    group->AddDDiskId(); // Unallocated slots do not fail.
+                }
+            }
+            return prev(ev);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+        env.WaitForDDiskInfo(tabletId, 1);
+        NKikimrCms::TDDiskTabletListRequest tabletsRequest;
+        tabletsRequest.SetOnlyProblems(true);
+        const auto tablets = env.RequestDDiskTabletList(tabletsRequest);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetUnavailableDDiskCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetUnavailablePersistentBufferCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetDegrade(), 1);
+        const auto detail = env.RequestDDiskInfo(tabletId, true);
+        UNIT_ASSERT_VALUES_EQUAL(detail.SlotsSize(), 3);
+        for (const auto& slot : detail.GetSlots()) {
+            if (slot.GetDDiskSlotId() == 101) {
+                UNIT_ASSERT(slot.GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetPersistentBufferStatusReason(), "buffer failure");
+            }
+        }
+        NKikimrCms::TDDiskDiskListRequest disksRequest;
+        disksRequest.SetTabletId(tabletId);
+        disksRequest.SetOnlyProblems(true);
+        disksRequest.SetLimit(0);
+        const auto disks = env.RequestDDiskDiskList(disksRequest);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetTotalCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetUnfilteredCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetDiskId().GetDDiskSlotId(), 101);
+        UNIT_ASSERT(disks.GetDisks(0).GetAvailable());
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetState(), "Normal");
+        UNIT_ASSERT(disks.GetDisks(0).GetPersistentBufferStatus() == TDDiskStateInfo::Broken);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(0).GetPersistentBufferStatusReason(), "buffer failure");
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetDisks(1).GetDiskId().GetDDiskSlotId(), 102);
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            TFakeNodeWhiteboardService::Info.at(pdisk.NodeId).DDiskStateInfo.clear();
+        }
+        // Missing component reports retain the existing unknown-is-available policy.
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskTabletList(tabletsRequest).GetTotalCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.RequestDDiskDiskList(disksRequest).GetTotalCount(), 0);
+    }
+
     Y_UNIT_TEST(DDiskTabletListDegrade)
     {
         for (bool swapRoles : {false, true}) {
@@ -569,19 +710,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             // Exercise the HTTP parameter mapping through the actual proxy and CMS.
             auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds,
                     bool checkProjection = false) {
-                TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET,
-                    "/api/json/ddisk/tablets?" + params, {}, "");
-                const auto edge = env.AllocateEdgeActor();
-                NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
-                    TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
-                env.Register(new TJsonProxyDDisk(event));
-                TAutoPtr<IEventHandle> handle;
-                const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
-                UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
+                const auto response = SendDDiskHttpRequest(env, "/api/json/ddisk/tablets?" + params);
+                UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
                 NJson::TJsonValue json;
-                const size_t bodyOffset = response->Answer.find("\r\n\r\n");
+                const size_t bodyOffset = response.find("\r\n\r\n");
                 UNIT_ASSERT(bodyOffset != TString::npos);
-                UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response->Answer).SubStr(bodyOffset + 4), &json, true));
+                UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
                 UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
                 const auto& tablets = json["Tablets"].GetArray();
                 UNIT_ASSERT_VALUES_EQUAL(tablets.size(), expectedIds.size());

@@ -569,6 +569,8 @@ message TResetMarkerResponse {
 
 message TVersionInfo {
     optional bool SupportWalleDrainData = 1;
+    // Component health, configured slot inventory, and DDisk list filters/grouping.
+    optional bool SupportDDiskDiagnostics = 2;
 }
 
 message TGetConfigRequest {

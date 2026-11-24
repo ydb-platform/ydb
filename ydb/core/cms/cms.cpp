@@ -2701,8 +2701,9 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         const auto knownUnavailable = [](std::optional<TDDiskComponentStatus> status) {
             return status && status != TDDiskSample::Ready;
         };
-        const bool unavailableRole = knownUnavailable(usage.DDiskStatus) || knownUnavailable(usage.PersistentBufferStatus);
-        if (onlyProblems && usage.Available && !(inventory && unavailableRole)) {
+        const bool unavailableRole = ((inventory || usage.DDisk.Count) && knownUnavailable(usage.DDiskStatus))
+            || ((inventory || usage.PersistentBuffer.Count) && knownUnavailable(usage.PersistentBufferStatus));
+        if (onlyProblems && usage.Available && !unavailableRole) {
             continue;
         }
         usage.State = GetDDiskStateName(id);

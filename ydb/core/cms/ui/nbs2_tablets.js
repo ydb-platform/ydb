@@ -7,7 +7,7 @@
 //   - the tablet/disk list itself is paginated, filtered and sorted on the
 //     CMS backend (cms/api/json/ddisk/tablets and cms/api/json/ddisk/disks);
 //   - "Only problems" filtering is also evaluated on the CMS backend (using
-//     the latest PDisk availability known to CMS), so it works correctly
+//     the latest component health known to CMS), so it works correctly
 //     across the whole cluster and not just within the current page;
 //   - per-tablet DDisk layout snapshots (cms/api/json/ddisk/tablet) are only
 //     fetched for tablets that are actually shown on the current page, and
@@ -29,20 +29,9 @@ const Nbs2Tablets = {
     // (fetched lazily when a row is expanded).
     snapshots: {},
 
-    // Cache of known DDisk/PDisk availability, keyed by "nodeId:pdiskId"
-    // (availability is a property of the underlying PDisk, so it does not
-    // depend on the DDisk slot id). Populated from any /ddisk/disks response,
-    // either from the "ddisks" view itself or from the per-tablet lookup done
-    // when a tablet row is expanded, so that both views show consistent,
-    // up-to-date highlighting.
-    diskAvailability: {},
-
-    // Cache of the full underlying PDisk state name (e.g. "Normal", "Missing",
-    // "Timeout", "NodeDisconnected", one of the Initial*/*Error states, or
-    // "Unknown"), keyed the same way as diskAvailability. Populated from the
-    // same /ddisk/disks responses and used to show a more detailed status in
-    // hints and in the State column than the plain available/unavailable flag.
-    diskState: {},
+    // Health is specific to a slot and role, even when slots share a PDisk.
+    // This page cache is used by the disk list; each tablet uses its own Slots.
+    diskHealth: {},
 
     requestToken: 0,
 
@@ -116,6 +105,7 @@ const Nbs2Tablets = {
         }
         $('#nbs2-tablets-error').text('Loading...');
         this.snapshots = {};
+        this.diskHealth = {};
         if (this.isDDisksView()) {
             this.loadDisksPage();
         } else {
@@ -182,7 +172,7 @@ const Nbs2Tablets = {
                 }
                 this.disksPage = this.field(data, 'Disks', 'disks') || [];
                 this.totalCount = Number(this.field(data, 'TotalCount', 'totalCount')) || 0;
-                this.disksPage.forEach((disk) => this.recordDiskAvailability(disk));
+                this.disksPage.forEach((disk) => this.recordDiskHealth(disk));
                 $('#nbs2-tablets-error').empty();
                 this.render();
             })
@@ -192,36 +182,36 @@ const Nbs2Tablets = {
             });
     },
 
-    // Remembers the availability and full state name of the disk referenced
-    // by a TDiskUsage-like object (as returned by cms/api/json/ddisk/disks),
-    // keyed by the underlying PDisk (neither depends on the DDisk slot id).
-    recordDiskAvailability: function(diskUsage) {
-        const diskIdObj = this.field(diskUsage, 'DiskId', 'diskId');
-        if (!diskIdObj) return;
-        const key = this.diskId(diskIdObj);
-        const available = this.field(diskUsage, 'Available', 'available');
-        if (available !== undefined) {
-            this.diskAvailability[key] = available !== false;
-        }
-        const state = this.field(diskUsage, 'State', 'state');
-        if (state !== undefined) {
-            this.diskState[key] = state;
-        }
+    recordDiskHealth: function(disk, health = this.diskHealth) {
+        const id = this.field(disk, 'DiskId', 'diskId') || disk;
+        health[this.ddiskKey(id)] = {
+            available: this.field(disk, 'Available', 'available'),
+            state: this.field(disk, 'State', 'state'),
+            DDisk: {
+                status: this.field(disk, 'DDiskStatus', 'dDiskStatus', 'ddiskStatus'),
+                reason: this.field(disk, 'DDiskStatusReason', 'dDiskStatusReason', 'ddiskStatusReason'),
+            },
+            PersistentBuffer: {
+                status: this.field(disk, 'PersistentBufferStatus', 'persistentBufferStatus'),
+                reason: this.field(disk, 'PersistentBufferStatusReason', 'persistentBufferStatusReason'),
+            },
+        };
     },
 
-    // Returns true only if the disk is known (from a previously loaded
-    // /ddisk/disks response) to be unavailable; unknown disks are treated as
-    // available, consistently with the backend's IsDDiskAvailable default.
-    isDiskUnavailable: function(id) {
-        const available = this.diskAvailability[this.diskId(id)];
-        return available === false;
+    isDiskUnavailable: function(id, role, health = this.diskHealth) {
+        const disk = health[this.ddiskKey(id)];
+        if (!disk || this.diskId(id) === '0:0') return false;
+        const status = disk[role].status;
+        // Unknown component health does not imply a failure.
+        return disk.available === false || (status !== undefined && status !== 'Ready' && status !== 1);
     },
 
-    // Returns the full underlying PDisk state name (e.g. "Normal", "Missing",
-    // "Timeout", "NodeDisconnected", one of the Initial*/*Error states) for a
-    // disk, if known from a previously loaded /ddisk/disks response.
-    diskStateName: function(id) {
-        return this.diskState[this.diskId(id)] || 'Unknown';
+    diskStateName: function(id, role, health = this.diskHealth) {
+        const disk = health[this.ddiskKey(id)];
+        if (!disk) return 'Unknown';
+        const component = disk[role];
+        const state = component.status || disk.state || 'Unknown';
+        return state + (component.reason ? ': ' + component.reason : '');
     },
 
     field: function(object, ...names) {
@@ -234,9 +224,9 @@ const Nbs2Tablets = {
 
     checkStatus: function(data) {
         const status = this.field(data, 'Status', 'status');
-        const code = this.field(status, 'Code', 'code');
+        const code = typeof status === 'string' ? status : this.field(status, 'Code', 'code');
         if (code && code !== 'OK') {
-            throw new Error(this.field(status, 'Reason', 'reason') || code);
+            throw new Error(this.field(status, 'Reason', 'reason') || this.field(data, 'ErrorReason', 'errorReason') || code);
         }
     },
 
@@ -246,25 +236,21 @@ const Nbs2Tablets = {
 
     loadSnapshot: function(tabletId, row) {
         row.after('<tr id="nbs2-tablet-loading-' + tabletId + '"><td colspan="5">Loading snapshot...</td></tr>');
-        // Fetch the disks used by this tablet together with the snapshot, so
-        // that the expanded DDisk/Persistent buffer layout can correctly
-        // highlight the disks that are actually unavailable (the snapshot
-        // itself only contains disk ids, not their availability).
-        const availability = $.getJSON('cms/api/json/ddisk/disks', {
-            filter_tablet_id: String(tabletId),
-            limit: 0,
-        }).done((data) => {
-            (this.field(data, 'Disks', 'disks') || []).forEach((disk) => this.recordDiskAvailability(disk));
-        });
-
-        $.when($.getJSON('cms/api/json/ddisk/tablet?tablet_id=' + encodeURIComponent(tabletId)), availability)
-            .done((snapshotResult) => {
-                this.snapshots[tabletId] = snapshotResult[0];
-                $('#nbs2-tablet-loading-' + tabletId).remove();
-                this.render();
-                $('#nbs2-tablet-details-' + tabletId).show();
-            })
-            .fail((xhr) => $('#nbs2-tablet-loading-' + tabletId).html('<td colspan="5" class="text-danger">Failed to load snapshot: ' + xhr.statusText + '</td>'));
+        $.getJSON('cms/api/json/ddisk/tablet', {
+            tablet_id: String(tabletId),
+            include_health: 1,
+        }).done((snapshot) => {
+            try {
+                this.checkStatus(snapshot);
+            } catch (error) {
+                $('#nbs2-tablet-loading-' + tabletId).text('Failed to load snapshot: ' + error.message);
+                return;
+            }
+            this.snapshots[tabletId] = snapshot;
+            $('#nbs2-tablet-loading-' + tabletId).remove();
+            this.render();
+            $('#nbs2-tablet-details-' + tabletId).show();
+        }).fail((xhr) => $('#nbs2-tablet-loading-' + tabletId).text('Failed to load snapshot: ' + xhr.statusText));
     },
 
     diskId: function(id) {
@@ -275,12 +261,12 @@ const Nbs2Tablets = {
         return this.diskId(id) + ':' + (this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0);
     },
 
-    formatDisk: function(id, role, unavailable) {
+    formatDisk: function(id, role, unavailable, health = this.diskHealth) {
         const nodeId = this.field(id, 'NodeId', 'nodeId') || 0;
         const pdiskId = this.field(id, 'PDiskId', 'pdiskId') || 0;
         const slotId = this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0;
         const label = nodeId + ':' + pdiskId + ':' + slotId;
-        const hint = 'Node: ' + (nodeId || '-') + '\nState: ' + this.diskStateName(id);
+        const hint = 'Node: ' + (nodeId || '-') + '\nState: ' + this.diskStateName(id, role, health);
         const url = role === 'PersistentBuffer'
             ? this.persistentBufferUrl(nodeId, pdiskId, slotId)
             : this.ddiskUrl(nodeId, pdiskId, slotId);
@@ -373,24 +359,26 @@ const Nbs2Tablets = {
             // than the deduplicated count shown in the "Tablets" column.
             const ddiskTabletIds = Array.from(new Set((this.field(disk, 'DDiskTabletIds', 'dDiskTabletIds', 'ddiskTabletIds') || []).map(String)));
             const persistentBufferTabletIds = Array.from(new Set((this.field(disk, 'PersistentBufferTabletIds', 'persistentBufferTabletIds') || []).map(String)));
-            const available = this.field(disk, 'Available', 'available');
-            const unavailable = available === false;
+            const ddiskUnavailable = this.isDiskUnavailable(diskIdObj, 'DDisk');
+            const bufferUnavailable = this.isDiskUnavailable(diskIdObj, 'PersistentBuffer');
+            const unavailable = (ddiskTabletIds.length && ddiskUnavailable)
+                || (persistentBufferTabletIds.length && bufferUnavailable);
+            const linkRole = persistentBufferTabletIds.length && bufferUnavailable && !ddiskUnavailable
+                ? 'PersistentBuffer' : (ddiskTabletIds.length ? 'DDisk' : 'PersistentBuffer');
             const key = this.ddiskKey(diskIdObj);
-            // Show the full underlying PDisk state (e.g. "Normal", "Missing",
-            // "Timeout", "NodeDisconnected", one of the Initial*/*Error states)
-            // rather than just the coarse available/unavailable flag, falling
-            // back to that flag if the backend didn't report a state name.
-            const stateName = this.field(disk, 'State', 'state');
-            const status = stateName || (unavailable ? 'Unavailable' : 'Available');
+            const problems = [];
+            if (ddiskTabletIds.length && ddiskUnavailable) problems.push('DDisk: ' + this.diskStateName(diskIdObj, 'DDisk'));
+            if (persistentBufferTabletIds.length && bufferUnavailable) problems.push('Persistent Buffer: ' + this.diskStateName(diskIdObj, 'PersistentBuffer'));
+            const status = problems.join('; ') || this.field(disk, 'State', 'state') || 'Unknown';
             const detailsId = key.replace(/:/g, '-');
             const roles = [];
             const tabletIds = new Set(ddiskTabletIds.concat(persistentBufferTabletIds));
-            if (ddiskTabletIds.length) roles.push('<div><b>DDisk:</b> ' + this.formatDisk(diskIdObj, 'DDisk', unavailable) + ' (' + ddiskTabletIds.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
-            if (persistentBufferTabletIds.length) roles.push('<div><b>Persistent Buffer:</b> ' + this.formatDisk(diskIdObj, 'PersistentBuffer', unavailable) + ' (' + persistentBufferTabletIds.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
+            if (ddiskTabletIds.length) roles.push('<div><b>DDisk:</b> ' + this.formatDisk(diskIdObj, 'DDisk', ddiskUnavailable) + ' (' + ddiskTabletIds.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
+            if (persistentBufferTabletIds.length) roles.push('<div><b>Persistent Buffer:</b> ' + this.formatDisk(diskIdObj, 'PersistentBuffer', bufferUnavailable) + ' (' + persistentBufferTabletIds.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
             body.append('<tr class="nbs2-ddisk-row" data-ddisk-key="' + this.escapeHtml(key) + '">' +
-                '<td>' + this.formatDisk(diskIdObj, ddiskTabletIds.length ? 'DDisk' : 'PersistentBuffer', unavailable) + '</td><td>' + (this.field(diskIdObj, 'NodeId', 'nodeId') || '-') +
+                '<td>' + this.formatDisk(diskIdObj, linkRole, unavailable) + '</td><td>' + (this.field(diskIdObj, 'NodeId', 'nodeId') || '-') +
                 '</td><td>' + (this.field(diskIdObj, 'PDiskId', 'pdiskId') || '-') + '</td><td class="' +
-                (unavailable ? 'nbs2-count-unavailable' : '') + '">' + status +
+                (unavailable ? 'nbs2-count-unavailable' : '') + '">' + this.escapeHtml(status) +
                 '</td><td>' + tabletIds.size + '</td><td>' +
                 this.formatOccupancy(this.field(disk, 'DDiskOccupancy', 'dDiskOccupancy', 'ddiskOccupancy')) + '</td><td>' +
                 this.formatOccupancy(this.field(disk, 'PersistentBufferOccupancy', 'persistentBufferOccupancy')) + '</td></tr>' +
@@ -399,25 +387,26 @@ const Nbs2Tablets = {
         });
     },
 
-    groupDegrade: function(group) {
-        const countUnavailable = (disks) => disks.filter((disk) =>
-            this.diskId(disk) !== '0:0' && this.isDiskUnavailable(disk)).length;
+    groupDegrade: function(group, health = this.diskHealth) {
+        const countUnavailable = (disks, role) => disks.filter((disk) => this.isDiskUnavailable(disk, role, health)).length;
         const ddisks = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
         const buffers = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
-        return Math.max(countUnavailable(ddisks), countUnavailable(buffers));
+        return Math.max(countUnavailable(ddisks, 'DDisk'), countUnavailable(buffers, 'PersistentBuffer'));
     },
 
     renderDetails: function(body, id) {
         const snapshot = this.snapshots[id];
+        const health = {};
+        (this.field(snapshot, 'Slots', 'slots') || []).forEach((slot) => this.recordDiskHealth(slot, health));
         const groups = (this.field(snapshot, 'Groups', 'groups') || []).map((group) => ({
-            group, degrade: this.groupDegrade(group),
+            group, degrade: this.groupDegrade(group, health),
         })).sort((a, b) => b.degrade - a.degrade);
         let html = '<tr id="nbs2-tablet-details-' + id + '"><td colspan="5"><table class="table table-sm mb-0"><thead><tr><th>DBG</th><th>Degrade</th><th>DDisk layout</th><th>Persistent buffer</th></tr></thead><tbody>';
         groups.forEach(({group, degrade}) => {
             const groupId = this.field(group, 'DirectBlockGroupId', 'directBlockGroupId');
             const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
             const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
-            html += '<tr><td>' + (groupId || 0) + '</td><td>' + degrade + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk, 'DDisk', this.isDiskUnavailable(disk))).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk, 'PersistentBuffer', this.isDiskUnavailable(disk))).join(' ') + '</td></tr>';
+            html += '<tr><td>' + (groupId || 0) + '</td><td>' + degrade + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk, 'DDisk', this.isDiskUnavailable(disk, 'DDisk', health), health)).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk, 'PersistentBuffer', this.isDiskUnavailable(disk, 'PersistentBuffer', health), health)).join(' ') + '</td></tr>';
         });
         body.append(html + '</tbody></table></td></tr>').find('#nbs2-tablet-details-' + id).hide();
     },

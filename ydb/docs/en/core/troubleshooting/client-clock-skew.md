@@ -112,7 +112,7 @@ The command lists the NTP servers the client is connected to and their status. T
 
 **The primary fix is to synchronize the system clocks.**
 
-Configure time synchronization on client hosts with `chrony` or `ntpd` and multiple NTP sources from your environment. For configuration examples, see [{#T}](performance/system/system-clock-drift.md#ntp-examples).
+Configure time synchronization on client hosts with `chrony` or `ntpd` and multiple NTP sources from your environment.
 
 {% include [example_clock_skew_internal](_includes/example_clock_skew_internal.md) %}
 

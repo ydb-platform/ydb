@@ -213,7 +213,8 @@ protected:
             canSplit = canSplit || KeysManager.MoreThanOneKey(now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         }
         if (HasKeySchema()) {
-            canSplit = ChooseKeyRangeSplitBoundary().has_value();
+            canSplit = usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()
+                && ChooseKeyRangeSplitBoundary().has_value();
         }
 
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT

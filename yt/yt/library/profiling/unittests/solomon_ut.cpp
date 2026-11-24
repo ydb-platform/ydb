@@ -1008,8 +1008,12 @@ TEST_P(TRenameTest, RenameTag)
     auto c0 = r.Counter("/bytes_read");
     c0.Increment();
 
+    // A sensor without dynamic tags must survive the rename untouched.
+    auto plain = TProfiler(impl, "/d").Counter("/plain");
+    plain.Increment();
+
     auto result = CollectSensors(impl);
-    ASSERT_EQ(result.Counters.size(), 4u);
+    ASSERT_EQ(result.Counters.size(), 5u);
 
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{}"));
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store}"));
@@ -1023,10 +1027,12 @@ TEST_P(TRenameTest, RenameTag)
     }
 
     c0.Increment();
+    plain.Increment();
 
     result = CollectSensors(impl);
-    ASSERT_EQ(result.Counters.size(), 4u);
+    ASSERT_EQ(result.Counters.size(), 5u);
 
+    ASSERT_EQ(result.Counters.at("yt.d.plain{}"), 2);
     ASSERT_EQ(result.Counters.at("yt.d.bytes_read{}"), 1);
     ASSERT_EQ(result.Counters.at("yt.d.bytes_read{location_type=store}"), 1);
     ASSERT_EQ(result.Counters.at("yt.d.bytes_read{location_type=store;medium=default}"), 1);

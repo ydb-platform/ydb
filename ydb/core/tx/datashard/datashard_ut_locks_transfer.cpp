@@ -201,7 +201,7 @@ struct TSnapshotReceiptRedo {
 
     const ui64 Source;
     bool Received = false;
-    std::optional<ui64> State;
+    std::optional<NDataShard::TShardState> State = std::nullopt;
 
     bool NeedIn(ui32 table) const {
         return table == TSchema::SplitDstReceivedSnapshots::TableId || table == TSchema::Sys::TableId;
@@ -214,7 +214,7 @@ struct TSnapshotReceiptRedo {
         } else if (key == TSchema::Sys_State) {
             for (const auto& op : ops) {
                 if (op.Tag == TSchema::Sys::Uint64::ColumnId) {
-                    State = op.AsCell().AsValue<ui64>();
+                    State = static_cast<NDataShard::TShardState>(op.AsCell().AsValue<ui64>());
                 }
             }
         }
@@ -278,11 +278,11 @@ Y_UNIT_TEST_TWIN(RestartAfterLastSnapshotCommit, WithLocks) {
     UNIT_ASSERT_VALUES_EQUAL(open->Get()->OpenTxs.contains(tx.LockTxId), WithLocks);
     auto* tablet = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, destination)));
     UNIT_ASSERT(tablet);
-    UNIT_ASSERT_VALUES_EQUAL(tablet->GetState(), TShardState::SplitDstReceivingSnapshot);
+    UNIT_ASSERT_VALUES_EQUAL(tablet->GetState(), ui32(TShardState::SplitDstReceivingSnapshot));
     UNIT_ASSERT_VALUES_EQUAL(tablet->SysLocksTable().GetLocks().size(), WithLocks ? 1u : 0u);
 
     TSnapshotReceiptRedo receipt{sources[1]};
-    auto commits = runtime.AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+    auto commits = runtime.AddObserver<TEvTablet::TEvCommit>([&](TEvTablet::TEvCommit::TPtr& ev) {
         const auto& commit = *ev->Get();
         if (commit.TabletID != destination || receipt.Received) {
             return;
@@ -315,7 +315,7 @@ Y_UNIT_TEST_TWIN(RestartAfterLastSnapshotCommit, WithLocks) {
         return acknowledgements == 2 && !finalize.empty();
     }, TDuration::Seconds(30));
     UNIT_ASSERT(receipt.Received);
-    UNIT_ASSERT_VALUES_EQUAL(tablet->GetState(), TShardState::SplitDstReceivingSnapshot);
+    UNIT_ASSERT_VALUES_EQUAL(tablet->GetState(), ui32(TShardState::SplitDstReceivingSnapshot));
     if (WithLocks) {
         UNIT_ASSERT(!receipt.State || *receipt.State == TShardState::SplitDstReceivingSnapshot);
     } else {

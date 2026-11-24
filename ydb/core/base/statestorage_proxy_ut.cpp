@@ -2,6 +2,7 @@
 #include "tablet.h"
 #include "tabletid.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -803,6 +804,190 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupProxyMutation) {
             UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::OK);
         }
+    }
+}
+
+namespace {
+
+class TDeleteFixture {
+    static constexpr ui64 TabletId = 72075186224037888ull;
+
+    TTestActorRuntimeBase Runtime;
+    NKikimrConfig::TStateStorageConfig Config;
+
+public:
+    explicit TDeleteFixture(ui32 nodeCount)
+        : Runtime(nodeCount)
+    {
+        Runtime.Initialize();
+        for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            Runtime.GetLogSettings(nodeIndex)->Append(NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        }
+        Runtime.SetDispatchTimeout(TDuration::Seconds(5));
+    }
+
+    NKikimrConfig::TStateStorageConfig::TRing& AddGroup(ui32 firstNodeIndex, ui32 ringCount, ui32 nToSelect,
+            ui32 ringSize = 1) {
+        auto* group = Config.AddRingGroups();
+        group->SetNToSelect(nToSelect);
+        group->SetRingGroupActorIdOffset((Config.RingGroupsSize() - 1) * 100);
+        for (ui32 ringIndex = 0; ringIndex < ringCount; ++ringIndex) {
+            auto* ring = group->AddRing();
+            for (ui32 nodeIndex = 0; nodeIndex < ringSize; ++nodeIndex) {
+                ring->AddNode(Runtime.GetNodeId(firstNodeIndex++));
+            }
+        }
+        return *group;
+    }
+
+    void CheckDelete(NKikimrProto::EReplyStatus expectedStatus, ui32 expectedReplies,
+            ui32 unavailableGroup = 0, ui32 unavailableSelectedCount = 0) {
+        auto info = BuildStateStorageInfo(Config);
+        TStateStorageInfo::TSelection selection;
+        info->SelectReplicas(TabletId, &selection, unavailableGroup);
+        UNIT_ASSERT(unavailableSelectedCount <= selection.Sz);
+        THashSet<TActorId> unavailable;
+        for (ui32 index = 0; index < unavailableSelectedCount; ++index) {
+            unavailable.insert(selection.SelectedReplicas[index]);
+        }
+
+        THashSet<TActorId> disconnected;
+        ui32 replicaIndex = 0;
+        for (const auto& group : info->RingGroups) {
+            for (const auto& ring : group.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    if (group.State == ERingGroupState::DISCONNECTED) {
+                        disconnected.insert(replica);
+                    }
+                    if (!unavailable.contains(replica)) {
+                        const ui32 nodeIndex = replica.NodeId() - Runtime.GetNodeId();
+                        const TActorId actor = Runtime.Register(CreateStateStorageReplica(info, replicaIndex), nodeIndex);
+                        Runtime.RegisterService(replica, actor, nodeIndex);
+                    }
+                    ++replicaIndex;
+                }
+            }
+        }
+
+        auto requests = Runtime.AddObserver<TEvStateStorage::TEvReplicaDelete>([&](auto& ev) {
+            UNIT_ASSERT_C(!disconnected.contains(ev->Recipient), ev->Recipient);
+        });
+        THashSet<TActorId> replies;
+        auto responses = Runtime.AddObserver<TEvStateStorage::TEvReplicaInfo>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetTabletID(), TabletId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 0);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetCookie(), 0);
+            UNIT_ASSERT(!ev->Sender.IsService());
+            UNIT_ASSERT_C(replies.insert(ev->Sender).second, ev->Sender);
+        });
+        const TActorId proxy = Runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
+        const TActorId edge = Runtime.AllocateEdgeActor();
+        Runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvDelete(TabletId)));
+        auto result = Runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->TabletID, TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expectedStatus);
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), expectedReplies);
+    }
+};
+
+void CheckDeleteConfigMismatch(bool newerGeneration) {
+    constexpr ui64 tabletId = 100;
+    constexpr ui64 generation = 7;
+    constexpr ui64 guid = 42;
+    TTestActorRuntimeBase runtime{1};
+    runtime.Initialize();
+    runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+    runtime.SetDispatchTimeout(TDuration::Seconds(5));
+    const TActorId edge = runtime.AllocateEdgeActor();
+
+    auto info = MakeIntrusive<TStateStorageInfo>();
+    info->ClusterStateGeneration = generation;
+    info->ClusterStateGuid = guid;
+    info->RingGroups.resize(1);
+    auto& group = info->RingGroups.front();
+    group.State = ERingGroupState::PRIMARY;
+    group.NToSelect = 3;
+    group.Rings.resize(3);
+    for (auto& ring : group.Rings) {
+        ring.Replicas.push_back(runtime.AllocateEdgeActor());
+    }
+
+    const TActorId proxy = runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
+    runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvDelete(tabletId)));
+    auto reply = [&](ui32 index, ui64 replyGeneration, ui64 replyGuid) {
+        const TActorId replica = group.Rings[index].Replicas.front();
+        auto request = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaDelete>(replica);
+        UNIT_ASSERT(request);
+        runtime.SendAsync(new IEventHandle(request->Sender, replica,
+            new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::OK, replyGeneration, replyGuid),
+            0, request->Cookie));
+    };
+
+    reply(0, generation, guid);
+    if (newerGeneration) {
+        reply(1, generation + 1, guid);
+    } else {
+        reply(1, generation, guid);
+        // The two matching replies already form a quorum when the mismatching reply arrives.
+        reply(2, generation, guid + 1);
+    }
+    auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvDeleteResult>(edge, TDuration::Seconds(1));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->TabletID, tabletId);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TStateStorageProxyDelete) {
+    Y_UNIT_TEST(DeleteNeedsMajorityOfEachRingGroup) {
+        TDeleteFixture f(6);
+        f.AddGroup(0, 3, 3);
+        f.AddGroup(3, 3, 3);
+        // Four replicas answer, including only one from the second group.
+        f.CheckDelete(NKikimrProto::ERROR, 4, 1, 2);
+    }
+
+    Y_UNIT_TEST(DeleteAcceptsCookieLessRepliesFromCoLocatedReplicas) {
+        TDeleteFixture f(3);
+        f.AddGroup(0, 3, 3);
+        f.AddGroup(0, 3, 3);
+        f.CheckDelete(NKikimrProto::OK, 6);
+    }
+
+    Y_UNIT_TEST(DeleteRequiresBothQuorumsOnSharedNodes) {
+        TDeleteFixture f(3);
+        f.AddGroup(0, 3, 3);
+        f.AddGroup(0, 3, 3);
+        f.CheckDelete(NKikimrProto::ERROR, 4, 1, 2);
+    }
+
+    Y_UNIT_TEST(DeleteQuorumCountsSelectedReplicasOnly) {
+        TDeleteFixture f(8);
+        f.AddGroup(0, 4, 3, 2);
+        // One selected replica and all five unselected replicas answer.
+        f.CheckDelete(NKikimrProto::ERROR, 6, 0, 2);
+    }
+
+    Y_UNIT_TEST(DeleteSkipsDisconnectedRingGroup) {
+        TDeleteFixture f(2);
+        f.AddGroup(0, 1, 1);
+        f.AddGroup(1, 1, 1).SetPileState(NKikimrConfig::TStateStorageConfig::DISCONNECTED);
+        f.CheckDelete(NKikimrProto::OK, 1);
+    }
+
+    Y_UNIT_TEST(DeleteFailsOnNewerGeneration) {
+        CheckDeleteConfigMismatch(true);
+    }
+
+    Y_UNIT_TEST(DeleteFailsOnDifferentGuidAfterQuorum) {
+        CheckDeleteConfigMismatch(false);
     }
 }
 

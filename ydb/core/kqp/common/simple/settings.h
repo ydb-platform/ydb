@@ -9,6 +9,7 @@
 #include <util/string/builder.h>
 
 #include <tuple>
+#include <type_traits>
 
 namespace NKikimr::NKqp {
 
@@ -51,6 +52,8 @@ struct TKqpQuerySettings {
     // Appends bytes that are equal exactly when operator== is true.
     void AppendCacheKey(TString& out) const {
         std::apply([&out](const auto&... field) {
+            // Raw bytes are only unambiguous for types without padding or several representations of a value.
+            static_assert((std::has_unique_object_representations_v<std::decay_t<decltype(field)>> && ...));
             (out.append(reinterpret_cast<const char*>(&field), sizeof(field)), ...);
         }, Fields());
     }

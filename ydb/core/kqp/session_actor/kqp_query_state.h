@@ -642,7 +642,15 @@ public:
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
 
-    TMaybe<TKqpQueryId> BuildQueryId(TStringBuf encodedGUCSettings, TKqpTransactionContext* txCtx) const;
+    // A physical graph and a prepared query are served without a key.
+    bool NeedQueryId() const;
+    TMaybe<TKqpQueryId> BuildQueryId(const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx) const;
+
+    struct TCacheLookup {
+        TMaybe<TString> Uid;
+        bool KeepInCache = false;
+    };
+    TCacheLookup GetCacheLookup(const TMaybe<TKqpQueryId>& query) const;
 
     bool TryGetFromCache(
         TKqpQueryCache& cache,
@@ -656,10 +664,10 @@ public:
         const TGUCSettings::TPtr& gUCSettingsPtr, TMaybe<TKqpQueryId> query, TKqpTransactionContext* txCtx = nullptr);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
-    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TStringBuf encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
 
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TStringBuf encodedGUCSettings);
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TStringBuf encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, const TKqpEncodedGUC& encodedGUCSettings, TKqpTransactionContext* txCtx = nullptr);
 
     bool ProcessingLastStatementPart();
     bool PrepareNextStatementPart();

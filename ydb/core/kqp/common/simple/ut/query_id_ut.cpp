@@ -108,16 +108,16 @@ Y_UNIT_TEST_SUITE(KqpQueryId) {
         CheckEqual(rebuilt, MakeId("SELECT 1", types, "user", gucs[1]));
         UNIT_ASSERT(rebuilt.DecodeGUCSettings() == gucs[1]);
         CheckEqual(rebuilt, TKqpQueryId("db", "/Root", "id", "user", "SELECT 1", DefaultSettings, types,
-            TKqpQueryId::EncodeGUCSettings(gucs[1])));
+            TKqpEncodedGUC::Encode(gucs[1])));
 
         // Cached GUC bytes follow the settings: equal settings reuse them, a change re-encodes.
         TKqpEncodedGUCSettings encoded;
         auto guc = gucs[1];
-        const TString before(encoded.Get(guc));
+        const TString before(encoded.Get(guc).Bytes());
         guc.Set("name0", "other");
-        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc), TKqpQueryId::EncodeGUCSettings(gucs[3]));
+        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc).Bytes(), TKqpEncodedGUC::Encode(gucs[3]).Bytes());
         guc.Set("name0", "value");
-        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc), before);
+        UNIT_ASSERT_VALUES_EQUAL(encoded.Get(guc).Bytes(), before);
     }
 
     // Comparing serialized types must agree with comparing the messages.

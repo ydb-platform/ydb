@@ -911,7 +911,10 @@ public:
 
         auto txCtx = GetTxContextForCompilation();
 
-        auto query = QueryState->BuildQueryId(GetEncodedGUCSettings(), txCtx);
+        TMaybe<TKqpQueryId> query;
+        if (QueryState->NeedQueryId()) {
+            query = QueryState->BuildQueryId(GetEncodedGUCSettings(), txCtx);
+        }
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, query, Counters, SelfId(), QuickPathWarmupAttribution()) && !QueryState->CompileResult->NeedToSplit) {
@@ -2664,7 +2667,7 @@ public:
     void HandleNoop(T&) {
     }
 
-    TStringBuf GetEncodedGUCSettings() {
+    const TKqpEncodedGUC& GetEncodedGUCSettings() {
         return EncodedGUCSettings.Get(*GUCSettings);
     }
 

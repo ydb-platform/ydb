@@ -40,16 +40,17 @@ void AppendParameterTypes(TString& key, const TKqpQueryId::TParameterTypes& type
 // TGUCSettings::SerializeToString() writes its hash maps in iteration order,
 // so equal settings may give different strings. Sorted keys make the bytes
 // depend on the contents only.
-TString TKqpQueryId::EncodeGUCSettings(const TGUCSettings& gUCSettings) {
+TKqpEncodedGUC TKqpEncodedGUC::Encode(const TGUCSettings& gUCSettings) {
     NJson::TJsonValue json;
     gUCSettings.ExportToJson(json);
-    return NJson::WriteJson(json, /* formatOutput */ false, /* sortkeys */ true);
+    return TKqpEncodedGUC(NJson::WriteJson(json, /* formatOutput */ false, /* sortkeys */ true));
 }
 
 TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf databaseId, TStringBuf userSid,
     const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<const TParameterTypes> queryParameterTypes,
-    TStringBuf encodedGUCSettings)
+    const TKqpEncodedGUC& encodedGUCSettings)
     : Text_(text)
+    , TextHash_(THash<TString>()(text))
     , Settings_(settings)
     , QueryParameterTypes_(std::move(queryParameterTypes))
 {
@@ -67,6 +68,25 @@ TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf dat
             Y_ENSURE(false, "Unsupported request type");
     }
 
+    BuildKey(cluster, database, databaseId, userSid, encodedGUCSettings.Bytes());
+}
+
+TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
+    const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<const TParameterTypes> queryParameterTypes,
+    const TGUCSettings& gUCSettings)
+    : TKqpQueryId(cluster, database, databaseId, userSid, text, settings, std::move(queryParameterTypes),
+        TKqpEncodedGUC::Encode(gUCSettings))
+{}
+
+TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId,
+    const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<const TParameterTypes> queryParameterTypes,
+    const TGUCSettings& gUCSettings)
+    : TKqpQueryId(cluster, database, databaseId, "", text, settings, std::move(queryParameterTypes), gUCSettings)
+{}
+
+void TKqpQueryId::BuildKey(TStringBuf cluster, TStringBuf database, TStringBuf databaseId, TStringBuf userSid,
+    TStringBuf encodedGUCSettings)
+{
     const size_t headerSize = FieldCount * sizeof(ui32);
     // A rough estimate to avoid reallocations, not part of the format.
     const size_t sizeEstimate = headerSize + cluster.size() + database.size() + databaseId.size() + userSid.size()
@@ -103,28 +123,15 @@ TKqpQueryId::TKqpQueryId(TStringBuf cluster, TStringBuf database, TStringBuf dat
     }
 
     Key_ = std::move(key);
-    Hash_ = CombineHashes(THash<TString>()(Key_), THash<TString>()(Text_));
+    Hash_ = CombineHashes(THash<TString>()(Key_), TextHash_);
 }
 
-TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
-    const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<const TParameterTypes> queryParameterTypes,
-    const TGUCSettings& gUCSettings)
-    : TKqpQueryId(cluster, database, databaseId, userSid, text, settings, std::move(queryParameterTypes),
-        EncodeGUCSettings(gUCSettings))
-{}
-
-TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId,
-    const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<const TParameterTypes> queryParameterTypes,
-    const TGUCSettings& gUCSettings)
-    : TKqpQueryId(cluster, database, databaseId, "", text, settings, std::move(queryParameterTypes), gUCSettings)
-{}
-
-TStringBuf TKqpEncodedGUCSettings::Get(const TGUCSettings& gUCSettings) {
+const TKqpEncodedGUC& TKqpEncodedGUCSettings::Get(const TGUCSettings& gUCSettings) {
     if (!Source_ || !(*Source_ == gUCSettings)) {
         Source_ = gUCSettings;
-        Encoded_ = TKqpQueryId::EncodeGUCSettings(gUCSettings);
+        Encoded_ = TKqpEncodedGUC::Encode(gUCSettings);
     }
-    return Encoded_;
+    return *Encoded_;
 }
 
 TStringBuf TKqpQueryId::Field(EField field) const {
@@ -136,18 +143,13 @@ TStringBuf TKqpQueryId::Field(EField field) const {
 
 void TKqpQueryId::SetUserSid(TStringBuf userSid) {
     if (userSid != UserSid()) {
-        const bool disablePgCompatibility = DisablePgCompatibility_;
-        *this = TKqpQueryId(Cluster(), Database(), DatabaseId(), userSid, Text_, Settings_, QueryParameterTypes_,
-            Field(FieldGUCSettings));
-        DisablePgCompatibility_ = disablePgCompatibility;
+        BuildKey(Cluster(), Database(), DatabaseId(), userSid, Field(FieldGUCSettings));
     }
 }
 
 void TKqpQueryId::SetQueryParameterTypes(std::shared_ptr<const TParameterTypes> queryParameterTypes) {
-    const bool disablePgCompatibility = DisablePgCompatibility_;
-    *this = TKqpQueryId(Cluster(), Database(), DatabaseId(), UserSid(), Text_, Settings_, std::move(queryParameterTypes),
-        Field(FieldGUCSettings));
-    DisablePgCompatibility_ = disablePgCompatibility;
+    QueryParameterTypes_ = std::move(queryParameterTypes);
+    BuildKey(Cluster(), Database(), DatabaseId(), UserSid(), Field(FieldGUCSettings));
 }
 
 TGUCSettings TKqpQueryId::DecodeGUCSettings() const {

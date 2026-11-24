@@ -420,6 +420,10 @@ TString TTargetWithStream::BuildStreamConsumerName() const {
     return ReplicationConsumerName;
 }
 
+TString TTargetWithStream::GetStreamPath() const {
+    return BuildStreamPath();
+}
+
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
     // nop
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "column_shard_log_writer.h"
+#include "otel_log_writer.h"
 
 #include <ydb/library/services/services.pb.h>
 
@@ -126,5 +127,19 @@ using TDataShardTliEventLogWriter = TColumnShardLogWriter<TDataShardTliEventLog>
 using TSessionTliEventLogWriter = TColumnShardLogWriter<TSessionTliEventLog>;
 
 } // namespace NToColumnShard
+
+namespace NToSimpleOtel {
+
+using TDataShardTliEventLogWriter = TSimpleOtelLogWriter<TDataShardTliEventLog>;
+using TSessionTliEventLogWriter = TSimpleOtelLogWriter<TSessionTliEventLog>;
+
+} // namespace NToSimpleOtel
+
+namespace NToFullOtel {
+
+using TDataShardTliEventLogWriter = TFullOtelLogWriter<TDataShardTliEventLog>;
+using TSessionTliEventLogWriter = TFullOtelLogWriter<TSessionTliEventLog>;
+
+} // namespace NToFullOtel
 
 } // namespace NKikimr::NKqp::NEventLog

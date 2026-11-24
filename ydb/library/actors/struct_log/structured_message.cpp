@@ -90,7 +90,6 @@ void TStructuredMessage::Clear() {
     AttachedValues.clear();
 }
 
-
 TStructuredMessage::TAttachedValue::TAttachedValue(
         std::vector<TKeyName>&& name,
         TNativeTypeCode typeCode,

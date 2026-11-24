@@ -114,6 +114,10 @@ public:
     virtual TWriteResult Write(const NActors::NStructuredLog::TLogMessage&) = 0;
     virtual bool WriteDummyValue() = 0;
     virtual std::shared_ptr<arrow::Array> MakeArray() = 0;
+
+    virtual const std::vector<TKeyName>* GetStructuredKeyName() const {
+        return nullptr;
+    }
 };
 
 template <typename T>
@@ -281,6 +285,10 @@ public:
         KeyName({columnName}) {
     }
 
+    const std::vector<TKeyName>* GetStructuredKeyName() const override {
+        return &KeyName;
+    }
+
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
         TStringValueExtractor extractor;
         auto value = extractor.ExtractValue(message.StructuredMessage, KeyName);
@@ -310,6 +318,10 @@ public:
     TDBLogMessageTypedValueColumn(const TString& columnName, const TBase::TDatabaseSettings& settings = {}) :
        TBase(columnName, settings),
         KeyName({columnName}) {
+    }
+
+    const std::vector<TKeyName>* GetStructuredKeyName() const override {
+        return &KeyName;
     }
 
     TBase::TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {

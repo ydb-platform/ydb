@@ -1,6 +1,7 @@
 #pragma once
 
 #include "column_shard_log_writer.h"
+#include "otel_log_writer.h"
 
 #include <ydb/library/services/services.pb.h>
 
@@ -269,5 +270,35 @@ using TWebLoginEventLogWriter = TColumnShardLogWriter<TWebLoginEventLog>;
 using TConsoleEventLogWriter = TColumnShardLogWriter<TConsoleEventLog>;
 
 } // namespace NToColumnShard
+
+namespace NToSimpleOtel {
+
+using TSchemeShardEventLogWriter = TSimpleOtelLogWriter<TSchemeShardEventLog>;
+using TGrpcProxyEventLogWriter = TSimpleOtelLogWriter<TGrpcProxyEventLog>;
+using TGrpcConnEventLogWriter = TSimpleOtelLogWriter<TGrpcConnEventLog>;
+using TGrpcLoginEventLogWriter = TSimpleOtelLogWriter<TGrpcLoginEventLog>;
+using TMonitoringEventLogWriter = TSimpleOtelLogWriter<TMonitoringEventLog>;
+using TAuditServiceEventLogWriter = TSimpleOtelLogWriter<TAuditServiceEventLog>;
+using TBscEventLogWriter = TSimpleOtelLogWriter<TBscEventLog>;
+using TDistconfEventLogWriter = TSimpleOtelLogWriter<TDistconfEventLog>;
+using TWebLoginEventLogWriter = TSimpleOtelLogWriter<TWebLoginEventLog>;
+using TConsoleEventLogWriter = TSimpleOtelLogWriter<TConsoleEventLog>;
+
+} // namespace NToSimpleOtel
+
+namespace NToFullOtel {
+
+using TSchemeShardEventLogWriter = TFullOtelLogWriter<TSchemeShardEventLog>;
+using TGrpcProxyEventLogWriter = TFullOtelLogWriter<TGrpcProxyEventLog>;
+using TGrpcConnEventLogWriter = TFullOtelLogWriter<TGrpcConnEventLog>;
+using TGrpcLoginEventLogWriter = TFullOtelLogWriter<TGrpcLoginEventLog>;
+using TMonitoringEventLogWriter = TFullOtelLogWriter<TMonitoringEventLog>;
+using TAuditServiceEventLogWriter = TFullOtelLogWriter<TAuditServiceEventLog>;
+using TBscEventLogWriter = TFullOtelLogWriter<TBscEventLog>;
+using TDistconfEventLogWriter = TFullOtelLogWriter<TDistconfEventLog>;
+using TWebLoginEventLogWriter = TFullOtelLogWriter<TWebLoginEventLog>;
+using TConsoleEventLogWriter = TFullOtelLogWriter<TConsoleEventLog>;
+
+} // namespace NToFullOtel
 
 } // namespace NKikimr::NKqp::NEventLog::NAudit

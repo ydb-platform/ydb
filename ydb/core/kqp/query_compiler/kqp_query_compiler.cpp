@@ -3090,8 +3090,9 @@ private:
             vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
             vectorResolveProto.SetHnswAllowEmptyRouting(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
                 && indexDesc->KeyColumns.size() == 1);
-            vectorResolveProto.SetValidateDirectHnswLeaves(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
-                && indexDesc->KeyColumns.size() > 1 && vectorResolve.WithData().Value() == "true");
+            // Deleting an old posting must work even if its embedding is invalid.
+            vectorResolveProto.SetValidateDirectLeaves(indexDesc->KeyColumns.size() > 1
+                && vectorResolve.WithData() == "true");
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

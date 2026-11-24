@@ -179,36 +179,6 @@ private:
             RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (EmptyIndex) {
-            if (Settings.GetHnswAllowEmptyRouting()) {
-                Y_ENSURE(!IsPrefixed && RootClusters,
-                    "Invalid empty HNSW routing state: levelTable=" << Settings.GetLevelTable().GetTablePath()
-                    << ", inputIndex=" << InputIndex << ", taskId=" << TaskId
-                    << ", vectorColumnIndex=" << Settings.GetVectorColumnIndex()
-                    << ", inputRows=" << PendingRows.size() << ", prefixed=" << IsPrefixed
-                    << ", rootClusters=" << bool(RootClusters));
-                // Full-range HNSW reads do not require a centroid hierarchy.
-                // Use one stable leaf until REBUILD creates a new hierarchy and
-                // posting table together; updates and deletes resolve to the same leaf.
-                PrevClusters.clear();
-                PrevClusters.resize(PendingRows.size());
-                size_t invalidEmbeddings = 0;
-                for (size_t i = 0; i < PendingRows.size(); ++i) {
-                    const auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
-                    if ((embedding.IsString() || embedding.IsEmbedded())
-                            && RootClusters->IsExpectedFormat(embedding.AsStringRef())) {
-                        PrevClusters[i].emplace_back(NTableIndex::NKMeans::SetPostingParentFlag(1), 0.0);
-                    } else if (embedding.IsString() || embedding.IsEmbedded()) {
-                        ++invalidEmbeddings;
-                    }
-                }
-                if (invalidEmbeddings) {
-                    YDB_LOG_WARN("Skipping invalid embeddings while maintaining HNSW index",
-                        {"logPrefix", LogPrefix}, {"count", invalidEmbeddings});
-                }
-            }
-            LevelsFinished = true;
-        }
         while (!LevelsFinished) {
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
@@ -221,7 +191,7 @@ private:
                             if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
                                 LevelClusters[rootClusterId].push_back(i);
                             } else {
-                                if (Settings.GetValidateDirectHnswLeaves()) {
+                                if (Settings.GetValidateDirectLeaves()) {
                                     if (!DirectLeafValidator) {
                                         TString error;
                                         DirectLeafValidator = NKMeans::CreateClusters(
@@ -463,29 +433,17 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (!FetchedClusters.size()) {
-            if (!ReadingChildClustersOf) {
-                // Index is empty. Retain the format validator for HNSW's
-                // implicit leaf without changing KMeans empty-index behavior.
-                EmptyIndex = true;
-                if (Settings.GetHnswAllowEmptyRouting()) {
-                    RootClusters = std::move(clusters);
-                }
-            } else {
-                // The cluster has no children in the level table, i.e. its subtree is empty.
-                // It's possible when the cluster didn't get any rows during the index build,
-                // for example when two clusters of the same level got equal centroids.
-                // Just skip such clusters instead of failing the query - the row is either
-                // resolved into other (overlapping) clusters or isn't added to the index at all,
-                // which is the same as what the read path does for such clusters.
+        if (FetchedClusters.empty()) {
+            if (!ReadingChildClustersOf && Settings.GetHnswAllowEmptyRouting()) {
+                // Older inline HNSW indexes can lack the initial centroid. Use
+                // the same root leaf as newly created indexes for their postings.
+                FetchedClusters.emplace(NTableIndex::NKMeans::SetPostingParentFlag(1), clusters->GetEmptyRow());
+            } else if (ReadingChildClustersOf) {
+                // A subtree can be empty when its centroid received no rows during the build.
                 YDB_LOG_NOTICE("Cluster has no child clusters, skipping it",
-                    {"logPrefix", this->LogPrefix},
+                    {"logPrefix", LogPrefix},
                     {"parent", ReadingChildClustersOf});
-                CurClusters = std::move(clusters);
-                CurClusterIds.clear();
             }
-            ContinueResolveClusters();
-            return;
         }
         TVector<ui64> clusterIds;
         TVector<TString> clusterRows;
@@ -493,7 +451,7 @@ private:
             clusterIds.push_back(pp.first);
             clusterRows.push_back(std::move(pp.second));
         }
-        if (!clusters->SetClusters(std::move(clusterRows))) {
+        if (!clusterRows.empty() && !clusters->SetClusters(std::move(clusterRows))) {
             // Clusters are invalid for some reason
             RuntimeError("Child clusters of "+std::to_string(ReadingChildClustersOf)+" are invalid", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
@@ -512,11 +470,6 @@ private:
 
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
-
-        if (EmptyIndex && !Settings.GetHnswAllowEmptyRouting()) {
-            PendingRows.clear();
-            return 0;
-        }
 
         i64 totalSize = 0;
 
@@ -660,7 +613,6 @@ private:
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> DirectLeafValidator;
     TVector<NTableIndex::NKMeans::TClusterId> RootClusterIds;
-    bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;
     TVector<NTableIndex::NKMeans::TClusterId> CurClusterIds;
     std::vector<std::pair<ui32, double>> TmpClusters;

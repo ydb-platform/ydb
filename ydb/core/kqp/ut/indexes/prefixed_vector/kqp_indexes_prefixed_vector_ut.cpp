@@ -1546,7 +1546,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-        const int flags = 0;
+        const int flags = F_NULLABLE;
         auto db = kikimr.GetTableClient();
         auto session = DoOnlyCreateTableForPrefixedVectorIndex(db, flags);
 
@@ -1591,7 +1591,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 "( 5, \"user_a\", \"\x03\x30\x02\", \"14\"),"
                 "( 6, \"user_a\", \"\x13\x31\x02\", \"15\"),"
                 "( 7, \"user_a\", \"\x23\x32\x02\", \"16\"),"
-                "( 8, \"user_a\", \"\x53\x33\x02\", \"17\");"
+                "( 8, \"user_a\", \"\x53\x33\x02\", \"17\"),"
+                "( 9, \"user_a\", \"\x02\", \"18\"),"
+                "(10, \"user_a\", NULL, \"19\");"
             ));
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
@@ -1605,21 +1607,18 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        // Check that rows 2 5 6 7 8 can be found in user_a
-        // 5 has invalid embedding, but it's inserted into an empty prefix so it's not checked for validity
+        // The invalid insert and update leave only the valid direct-leaf postings.
         {
             const TString query1(Q_(R"(
-                SELECT COUNT(*), COUNT(DISTINCT pk),
-                    SUM(CASE WHEN pk in (2, 5, 6, 7, 8) THEN 1 ELSE 0 END),
-                    COUNT(DISTINCT __ydb_parent),
-                    SUM(CASE WHEN __ydb_parent >= 0x8000000000000000 THEN 1 ELSE 0 END)
+                SELECT pk
                 FROM `/Root/TestTable/index/indexImplPostingTable`
-                WHERE pk < 10;
+                WHERE pk <= 10
+                ORDER BY pk;
             )"));
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[4u;4u;[4];1u;[4]]]");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[6]];[[7]];[[8]]]");
         }
     }
 

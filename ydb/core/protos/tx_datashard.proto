@@ -390,7 +390,7 @@ message TKqpVectorResolveSettings {
     optional string PoolId = 21;
     // Preserve inserts into an inline unprefixed HNSW index with an empty level table.
     optional bool HnswAllowEmptyRouting = 22 [default = false];
-    optional bool ValidateDirectHnswLeaves = 23 [default = false];
+    optional bool ValidateDirectLeaves = 23 [default = false];
 }
 
 // Settings of the input-transform actor reading top-K rows from a vector KMeans tree index.

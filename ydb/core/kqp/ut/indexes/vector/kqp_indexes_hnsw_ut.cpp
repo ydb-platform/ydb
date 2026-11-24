@@ -945,6 +945,59 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(found.GetResultSet(1)), "[[1u]]");
     }
 
+    Y_UNIT_TEST(HnswLegacyInlineIndexRoutesWithoutCentroid) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableAccessToIndexImplTables(true);
+        flags.SetEnableHnswIndex(true);
+        TKikimrRunner kikimr{TKikimrSettings().SetFeatureFlags(flags).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] {
+            return kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        });
+
+        // Reproduce the SchemeShard request emitted before inline centroid seeding.
+        bool seedOmitted = false;
+        const auto observer = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+                return;
+            }
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            if (schemeTx.ParseFromString(record.GetTxBody()) && schemeTx.HasInitialHnswCentroid()) {
+                schemeTx.ClearInitialHnswCentroid();
+                record.SetTxBody(schemeTx.SerializeAsString());
+                seedOmitted = true;
+            }
+        });
+        const auto created = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE LegacyHnsw (
+                    id Uint64 NOT NULL, emb String, PRIMARY KEY(id),
+                    INDEX idx GLOBAL USING hnsw ON (emb)
+                        WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=4)
+                );
+            )").ExtractValueSync();
+        });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        UNIT_ASSERT(seedOmitted);
+
+        const auto result = kikimr.RunCall([&] {
+            return ExecuteDataQuery(session, R"(
+                SELECT COUNT(*) FROM `/Root/LegacyHnsw/idx/indexImplLevelTable`;
+                UPSERT INTO LegacyHnsw (id, emb) VALUES
+                    (1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                    (2u, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector")),
+                    (3u, ""),
+                    (4u, NULL);
+                DELETE FROM LegacyHnsw WHERE id = 1u;
+                SELECT __ydb_parent, id FROM `/Root/LegacyHnsw/idx/indexImplPostingTable`;
+            )");
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[0u]]");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(1)), "[[9223372036854775809u;2u]]");
+    }
+
     Y_UNIT_TEST_TWIN(HnswInlineIndexMaintainsEmbeddings, Covered) {
         NKikimrConfig::TAppConfig config;
         config.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);

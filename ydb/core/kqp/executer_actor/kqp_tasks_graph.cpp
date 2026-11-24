@@ -1142,7 +1142,7 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     settings->SetOverlapClusters(vectorResolve.GetOverlapClusters());
     settings->SetOverlapRatio(vectorResolve.GetOverlapRatio());
     settings->SetHnswAllowEmptyRouting(vectorResolve.GetHnswAllowEmptyRouting());
-    settings->SetValidateDirectHnswLeaves(vectorResolve.GetValidateDirectHnswLeaves());
+    settings->SetValidateDirectLeaves(vectorResolve.GetValidateDirectLeaves());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 1);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas.back().TableConstInfo;

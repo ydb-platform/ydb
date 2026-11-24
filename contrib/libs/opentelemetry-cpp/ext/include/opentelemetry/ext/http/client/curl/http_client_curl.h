@@ -186,10 +186,25 @@ public:
 
   std::shared_ptr<opentelemetry::ext::http::client::Request> CreateRequest() noexcept override
   {
+    if (send_started_.load(std::memory_order_acquire))
+    {
+      // The request that has been sent stays where it is. libcurl does not copy the body or the
+      // header list, so the transfer reads them for as long as it runs.
+      return http_request_;
+    }
+
     http_request_.reset(new Request());
     return http_request_;
   }
 
+  /**
+   * Send the request this session carries.
+   *
+   * A session carries one request. A second call reports CreateFailed to its own handler and
+   * sends nothing: the easy handle of the first request holds this session and the operation
+   * that owns it, and replacing that operation takes away what libcurl and the client are still
+   * reading.
+   */
   void SendRequest(
       std::shared_ptr<opentelemetry::ext::http::client::EventHandler> callback) noexcept override;
 
@@ -235,6 +250,9 @@ private:
   uint64_t session_id_ = 0UL;
   HttpClient &http_client_;
   std::atomic<bool> is_session_active_{false};
+
+  // Raised by the first SendRequest and never lowered. A session carries one request.
+  std::atomic<bool> send_started_{false};
 };
 
 class HttpClientSync : public opentelemetry::ext::http::client::HttpClientSync

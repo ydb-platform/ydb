@@ -83,6 +83,7 @@ namespace NKikimr {
             switch (state) {                                               //  DQ     CQ     AC     ACWP
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:       return {true,  true,  true,  true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1: return {false, false, true,  true };
+                case NKikimrBridge::TClusterState::HOT_STANDBY:        return {false, false, true,  true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2: return {true,  true,  true,  true };
                 case NKikimrBridge::TClusterState::DISCONNECTED:       return {false, false, false, true };
                 case NKikimrBridge::TClusterState::SUSPENDED:          return {false, true,  true,  true };

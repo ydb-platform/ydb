@@ -24,7 +24,7 @@ namespace {
 
 void TOverloadSubscribers::AddOverloadSubscriber(
     const TColumnShardInfo& columnShardInfo, const TPipeServerInfo& pipeServerInfo, const TOverloadSubscriberInfo& overloadSubscriberInfo) {
-    AFL_VERIFY(pipeServerInfo.PipeServerId == overloadSubscriberInfo.PipeServerId);
+    YDB_LOG_VERIFY(pipeServerInfo.PipeServerId == overloadSubscriberInfo.PipeServerId);
 
     auto& columnShardSubscriber = ColumnShardsOverloadSubscribers[columnShardInfo.ColumnShardId];
     auto subscriptionInfoIt = columnShardSubscriber.find(pipeServerInfo.PipeServerId);
@@ -38,8 +38,8 @@ void TOverloadSubscribers::AddOverloadSubscriber(
                                  .first;
     } else {
         auto& subscriptionInfo = subscriptionInfoIt->second;
-        AFL_VERIFY(subscriptionInfo.InterconnectSessionId == pipeServerInfo.InterconnectSessionId);
-        AFL_VERIFY(subscriptionInfo.ColumnShardTabletId == columnShardInfo.TabletId);
+        YDB_LOG_VERIFY(subscriptionInfo.InterconnectSessionId == pipeServerInfo.InterconnectSessionId);
+        YDB_LOG_VERIFY(subscriptionInfo.ColumnShardTabletId == columnShardInfo.TabletId);
     }
     auto& subscriptionInfo = subscriptionInfoIt->second;
     if (auto& seqNo = subscriptionInfo.OverloadSubscribers[overloadSubscriberInfo.OverloadSubscriberId]; seqNo < overloadSubscriberInfo.SeqNo) {
@@ -105,7 +105,7 @@ void TOverloadSubscribers::NotifyColumnShardSubscribers(const TColumnShardInfo& 
     const auto& infoByPipeServerId = infoByPipeServerIdIt->second;
     for (const auto& [_, subscriptionInfo] : infoByPipeServerId) {
         for (const auto& [target, seqNo] : subscriptionInfo.OverloadSubscribers) {
-            AFL_VERIFY(columnShardInfo.TabletId == subscriptionInfo.ColumnShardTabletId);
+            YDB_LOG_VERIFY(columnShardInfo.TabletId == subscriptionInfo.ColumnShardTabletId);
             SendViaSession(subscriptionInfo.InterconnectSessionId, target, columnShardInfo.ColumnShardId,
                 new TEvColumnShard::TEvOverloadReady(subscriptionInfo.ColumnShardTabletId, seqNo));
             Counters.OnOverloadReady();

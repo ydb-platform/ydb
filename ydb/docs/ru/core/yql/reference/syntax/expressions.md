@@ -39,7 +39,7 @@ SELECT "fo" || "o";
 
 ### LIKE / ILIKE с полнотекстовым индексом {#like-ilike-with-fulltext-index}
 
-Для [полнотекстовых индексов](../../../dev/fulltext-indexes.md) с N-граммами (параметры `use_filter_ngram` / `use_filter_edge_ngram`) поддерживается `LIKE`/`ILIKE` по индексируемой текстовой колонке.
+Для [полнотекстовых индексов](../../../dev/fulltext-indexes.md) с N-граммами (`use_filter_ngram` / `use_filter_edge_ngram`) поддерживается `LIKE`/`ILIKE` по индексируемой текстовой колонке. Шаблон можно передать параметром или вычислить выражением. Поддерживается `ESCAPE`. Для поиска по `ILIKE` через индекс требуется `use_filter_lowercase=true`.
 
 ```yql
 SELECT id, title
@@ -47,6 +47,8 @@ FROM articles VIEW ft_idx
 WHERE body ILIKE "%обуч%ние%"
 LIMIT 20;
 ```
+
+Если шаблон слишком короткий для N-граммного индекса, поиск может выполняться по основной таблице. Подробнее см. [Поиск по коротким шаблонам](select/fulltext_index.md#scan-fallback).
 
 ### Примеры
 

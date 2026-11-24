@@ -47,4 +47,8 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+
+    // KV bytes in pools of this kind are stored externally and excluded from database disk quotas.
+    // Set to the kind used for object storage in this cluster, or to "" to count every kind.
+    optional string KeyValueExternalStoragePoolKind = 12 [default = "virtual"];
 }

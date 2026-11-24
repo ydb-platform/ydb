@@ -31,8 +31,8 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
         UNIT_ASSERT_VALUES_EQUAL(t.StatePollInterval, TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(t.ReadTimeout, TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(t.RoundInterval, TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckOperationTimeout, TDuration::Seconds(4));
-        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckClientTimeout, TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckOperationTimeout, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(t.SelfCheckClientTimeout, TDuration::Seconds(4));
         UNIT_ASSERT_VALUES_EQUAL(t.EvidenceTtl, TDuration::Seconds(8));
         UNIT_ASSERT_VALUES_EQUAL(t.Confirm, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(t.BscWarmup, TDuration::Seconds(30));
@@ -136,7 +136,8 @@ Y_UNIT_TEST_SUITE(TSkipperConfiguration) {
         Reject(Minimal("timing: {read_timeout_seconds: 7}\n"), "state_poll_interval_seconds + read_timeout_seconds < evidence_ttl_seconds");
         Reject(Minimal("timing: {state_poll_interval_seconds: 7}\n"), "state_poll_interval_seconds + read_timeout_seconds < evidence_ttl_seconds");
         Reject(Minimal("timing: {selfcheck_operation_timeout_seconds: 5}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
-        Reject(Minimal("timing: {evidence_ttl_seconds: 7}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
+        Reject(Minimal("timing: {evidence_ttl_seconds: 5}\n"), "selfcheck_operation_timeout_seconds + 2 + round_interval_seconds < evidence_ttl_seconds");
+        UNIT_ASSERT_NO_EXCEPTION(ParseConfig(Minimal("timing: {evidence_ttl_seconds: 6}\n")));
         Reject(Minimal("timing: {bsc_warmup_seconds: 19}\n"), "bsc_warmup_seconds >= 20");
         UNIT_ASSERT_NO_EXCEPTION(ParseConfig(Minimal(
             "timing: {read_timeout_seconds: 6, selfcheck_operation_timeout_seconds: 4, "

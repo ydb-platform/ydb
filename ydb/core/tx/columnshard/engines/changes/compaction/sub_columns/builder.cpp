@@ -50,7 +50,7 @@ TColumnPortionResult TMergedBuilder::Finish(const TColumnMergeContext& cmContext
     std::vector<TColumnPortionResult> portions;
     IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TSubColumnsArray, NArrow::NAccessor::NSubColumns::TConstructor> pColumn(
         NArrow::NAccessor::NSubColumns::TConstructor(), cmContext.GetColumnId());
-    AFL_VERIFY(Result.size());
+    YDB_LOG_VERIFY(Result.size());
     for (auto&& p : Result) {
         pColumn.AddChunk(p, cmContext);
     }
@@ -58,7 +58,7 @@ TColumnPortionResult TMergedBuilder::Finish(const TColumnMergeContext& cmContext
 }
 
 void TMergedBuilder::FlushData() {
-    AFL_VERIFY(RecordIndex);
+    YDB_LOG_VERIFY(RecordIndex);
     auto portionOthersData = OthersBuilder->Finish(Remapper.BuildRemapInfo(OthersBuilder->GetStatsByKeyIndex(), Settings, RecordIndex));
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrays;
     TDictStats::TBuilder statsBuilder;
@@ -99,7 +99,7 @@ void TMergedBuilder::Initialize() {
             // Dictionary is never planned here by construction: GetAccessorType() defers it to
             // MaybeDictionaryEncode after materialization, so the plan only yields Array/Sparsed.
             case NArrow::NAccessor::IChunkedArray::EType::Dictionary:
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
         }
     }
     OthersBuilder = TOthersData::MakeMergedBuilder();

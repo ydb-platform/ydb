@@ -39,8 +39,8 @@ public:
     }
 
     void AskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
-        AFL_VERIFY(request);
-        AFL_VERIFY(request->HasSubscriber());
+        YDB_LOG_VERIFY(request);
+        YDB_LOG_VERIFY(request->HasSubscriber());
         return DoAskData(request);
     }
 };
@@ -117,7 +117,7 @@ public:
     TActorAccessorsManager(const NActors::TActorId& tabletActorId)
         : TBase(tabletActorId)
     {
-        AFL_VERIFY(!!tabletActorId);
+        YDB_LOG_VERIFY(!!tabletActorId);
     }
 };
 

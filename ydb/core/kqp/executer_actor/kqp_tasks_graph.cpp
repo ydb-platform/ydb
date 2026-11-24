@@ -7,9 +7,8 @@
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
 #include <ydb/core/kqp/common/control.h>
-#include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/mkql/type_info.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/tx/program/program.h>
@@ -27,10 +26,6 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
-#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
-
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <algorithm>
@@ -1906,7 +1901,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             if (lockTxId && GetMeta().LockMode && !isTableImmutable) {
-                AFL_ENSURE(input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
+                YDB_LOG_ENSURE(input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
                     || GetMeta().LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
                         && GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
@@ -3558,7 +3553,7 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
         internalSinksOrder.begin(),
         internalSinksOrder.end(),
         std::make_pair(task.StageId.TxId, settings.GetPriority()));
-    AFL_ENSURE(sinkPosition != internalSinksOrder.end()
+    YDB_LOG_ENSURE(sinkPosition != internalSinksOrder.end()
             && sinkPosition->first == task.StageId.TxId
             && sinkPosition->second == settings.GetPriority());
 
@@ -3600,7 +3595,7 @@ void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTra
     auto& output = task.Outputs[transform.GetOutputIndex()];
     output.Type = TTaskOutputType::Map;
 
-    AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+    YDB_LOG_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
 
     NKikimrKqp::TKqpTableSinkSettings settings;
     if (!stageInfo.Meta.ResolvedSinkSettings) {
@@ -3770,7 +3765,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     CountScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } break;
                 case TStageInfoMeta::UNKNOWN_TASKS: {
-                    AFL_ENSURE(false);
+                    YDB_LOG_ENSURE(false);
                 } break;
             }
         }
@@ -3828,7 +3823,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), CollectProfileStats(GetMeta().StatsMode) ? stats : nullptr);
                 } break;
                 case TStageInfoMeta::UNKNOWN_TASKS: {
-                    AFL_ENSURE(false);
+                    YDB_LOG_ENSURE(false);
                 } break;
             }
 
@@ -3979,7 +3974,7 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             const auto& stageInfo = GetStageInfo(MakeStageId(txIdx, stageIdx));
 
             auto addSink = [&stageInfo, &order, txIdx](const NKqpProto::TKqpInternalSink& intSink) {
-                AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                YDB_LOG_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                 if (!stageInfo.Meta.ResolvedSinkSettings) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
@@ -3990,7 +3985,7 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             };
 
             if (stage.SinksSize() > 0) {
-                AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                YDB_LOG_ENSURE(stage.OutputTransformsSize() == 0);
 
                 for (const auto& sink : stage.GetSinks()) {
                     if (!sink.HasInternalSink()) {
@@ -4002,8 +3997,8 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
                 }
             }
             if (stage.OutputTransformsSize() > 0) {
-                AFL_ENSURE(stage.OutputTransformsSize() == 1);
-                AFL_ENSURE(stage.SinksSize() == 0);
+                YDB_LOG_ENSURE(stage.OutputTransformsSize() == 1);
+                YDB_LOG_ENSURE(stage.SinksSize() == 0);
 
                 const auto& transform = stage.GetOutputTransforms(0);
 

@@ -18,6 +18,7 @@ namespace NBoot {
             TString Opaque;
             TVector<TString> Deltas;
             NTable::TEpoch Epoch = NTable::TEpoch::Max();
+            ui32 Level = 255;
             bool Load = true;
 
             template<class TLookup>
@@ -124,14 +125,14 @@ namespace NBoot {
         {
             InitTable(snap.GetTable());
 
-            if (snap.HasCompactionLevel()) {
-                Level = snap.GetCompactionLevel();
-            }
+            Level = snap.HasCompactionLevel() ? snap.GetCompactionLevel() : 255;
 
             if (snap.DbPartMetaInfoBodySize() > 0) {
                 /* Legacy mode, may hold only one page collection per entity */
 
-                AddLegacyLargeGlobId(Bundles.emplace_back(), snap.GetDbPartMetaInfoBody());
+                auto& bundle = Bundles.emplace_back();
+                bundle.Level = Level;
+                AddLegacyLargeGlobId(bundle, snap.GetDbPartMetaInfoBody());
             }
 
             if (snap.BundlesSize() > 0) {
@@ -139,6 +140,7 @@ namespace NBoot {
 
                 for (auto &bundle: snap.GetBundles()) {
                     auto &one = Bundles.emplace_back();
+                    one.Level = bundle.HasCompactionLevel() ? bundle.GetCompactionLevel() : Level;
 
                     one.LargeGlobIds.reserve(bundle.PageCollectionsSize());
 
@@ -163,6 +165,18 @@ namespace NBoot {
                     if (bundle.HasEpoch())
                         one.Epoch = NTable::TEpoch(bundle.GetEpoch());
                 }
+            }
+        }
+
+        // Apply the same placement metadata for snapshot and turn-log replay.
+        void ApplyPartLevels(THashMap<TLogoBlobID, ui32>& levels) const
+        {
+            for (const auto& label : Leaving) {
+                levels.erase(label);
+            }
+            for (const auto& bundle : Bundles) {
+                Y_ENSURE(!bundle.LargeGlobIds.empty(), "Part bundle has no page collections");
+                levels[bundle.LargeGlobIds.front().Lead] = bundle.Level;
             }
         }
 

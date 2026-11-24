@@ -219,6 +219,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamState, stream, value) {
     stream << NKikimrSchemeOp::ECdcStreamState_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamHeartbeatMode, stream, value) {
+    stream << NKikimrSchemeOp::ECdcStreamHeartbeatMode_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode, stream, value) {
     stream << NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(value);
 }

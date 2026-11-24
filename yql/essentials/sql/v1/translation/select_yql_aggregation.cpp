@@ -116,10 +116,15 @@ private:
 bool IsSupported(EAggregationType type) {
     return type == NORMAL ||
            type == COUNT ||
+           type == LIST ||
            type == PERCENTILE;
 }
 
 TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args) {
+    if (args.Mode == EAggregateMode::OverWindowDistinct) {
+        return std::unexpected(ESQLError::UnsupportedYqlSelect);
+    }
+
     if (!IsSupported(args.Type)) {
         return std::unexpected(ESQLError::UnsupportedYqlSelect);
     }

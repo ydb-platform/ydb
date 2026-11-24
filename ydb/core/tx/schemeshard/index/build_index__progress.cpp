@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/index/common.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/service/service.h>
+#include <ydb/core/statistics/service_id.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -478,7 +478,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     NKikimrSchemeOp::TModifyScheme indexBuildProto;
     buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
     const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
-    const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+        Y_ENSURE(!indexColumns.KeyColumns.empty());
+        indexDataColumns.insert(indexColumns.KeyColumns.back());
+    }
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         InheritDetailedMetricsSettings(tableInfo, implTableDesc);
@@ -600,7 +605,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     if (buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1 && buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
         // When OverlapClusters is active, first build table for each level contains 2 additional columns: __ydb_distance and __ydb_foreign,
         // and its primary key has different order - original table's primary key comes first and the cluster ID comes next
-        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels) {
+        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels
+                && buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
             indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
         }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
@@ -1024,9 +1030,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    if (buildInfo.IsBuildVectorIndex() && buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        if (auto* desc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&buildInfo.SpecializedIndexDescription)) {
-            *indexBuild.MutableVectorIndexKmeansTreeDescription() = *desc;
+    if (buildInfo.IsBuildVectorIndex()) {
+        if (const auto* settings = buildInfo.TryGetVectorSettings()) {
+            *indexBuild.MutableVectorIndexKmeansTreeDescription()->MutableSettings() = *settings;
         }
     }
 
@@ -1214,8 +1220,7 @@ private:
             path->PathId.ToProto(ev->Record.MutablePathId());
         }
 
-        const auto& vectorSettings = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        const auto& vectorSettings = buildInfo.GetKMeansVectorSettings();
         // Only send settings when vector_type and vector_dimension are known,
         // otherwise the datashard will sample without format validation
         TString unused;
@@ -1285,8 +1290,7 @@ private:
             path.Rise();
         }
 
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        *ev->Record.MutableSettings() = buildInfo.GetKMeansVectorSettings();
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
         ev->Record.SetParent(buildInfo.KMeans.Parent);
         ev->Record.SetChild(buildInfo.KMeans.Child);
@@ -1302,9 +1306,8 @@ private:
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        *ev->Record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        ev->Record.SetIndexType(buildInfo.IndexType);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1341,8 +1344,7 @@ private:
             path.Rise();
         }
 
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        *ev->Record.MutableSettings() = buildInfo.GetKMeansVectorSettings();
         ev->Record.SetParent(buildInfo.KMeans.Parent);
 
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
@@ -1374,8 +1376,7 @@ private:
             path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
             path.Rise();
         }
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        *ev->Record.MutableSettings() = buildInfo.GetKMeansVectorSettings();
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
@@ -1406,9 +1407,8 @@ private:
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        *ev->Record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        ev->Record.SetIndexType(buildInfo.IndexType);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1458,8 +1458,7 @@ private:
         auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
         path->PathId.ToProto(ev->Record.MutablePathId());
         path.Rise();
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        *ev->Record.MutableSettings() = buildInfo.GetKMeansVectorSettings();
         ev->Record.SetK(buildInfo.KMeans.K);
         if (buildInfo.KMeans.Adaptive) {
             ev->Record.SetAdaptive(true);
@@ -1482,9 +1481,8 @@ private:
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        *ev->Record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        ev->Record.SetIndexType(buildInfo.IndexType);
         const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
         for (ui32 keyPos: tableInfo.KeyColumnIds) {
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
@@ -2447,12 +2445,11 @@ private:
         }
         TStringBuf embedding = embeddingCopy;
         if (!embedding.empty()) {
-            auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                buildInfo.SpecializedIndexDescription);
+            auto& settings = buildInfo.MutableVectorSettings();
             TString error;
-            if (NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
+            if (NKikimr::NKMeans::AutoSelectVectorSettings(*settings.mutable_settings(), embedding)) {
                 buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
-                    desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
+                    buildInfo.GetKMeansVectorSettings(), buildInfo.KMeans.Rounds, error);
             }
         }
         if (!buildInfo.Clusters) {
@@ -2781,14 +2778,13 @@ private:
                 }
                 embedding = embeddingCopy;
                 if (!embedding.empty()) {
-                    auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                        buildInfo.SpecializedIndexDescription);
+                    auto& settings = buildInfo.MutableVectorSettings();
                     TString error;
-                    if (!NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
+                    if (!NKikimr::NKMeans::AutoSelectVectorSettings(*settings.mutable_settings(), embedding)) {
                         error = "Failed to autodetect vector index settings, please set up vector_dimensions and vector_type manually";
                     } else {
                         buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
-                            desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
+                            buildInfo.GetKMeansVectorSettings(), buildInfo.KMeans.Rounds, error);
                     }
                 }
 

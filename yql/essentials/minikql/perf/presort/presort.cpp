@@ -8,7 +8,7 @@
 #include <library/cpp/presort/presort.h>
 
 #include <util/random/random.h>
-#include <util/datetime/cputimer.h>
+#include <benchmark/benchmark.h>
 #include <util/string/builder.h>
 
 using namespace NKikimr;
@@ -166,143 +166,130 @@ NUdf::TUnboxedValue RandomValue() {
 template <>
 NUdf::TUnboxedValue RandomValue<char*>() {
     auto length = RandomNumber<ui64>(64);
-    return MakeStringNotFilled(length);
+    TString data(length, '\0');
+    for (auto& byte : data) {
+        byte = static_cast<char>(RandomNumber<ui8>());
+    }
+    return MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
+enum class EImplementation {
+    Legacy,
+    Modern,
+};
+enum class EOperation {
+    Decode,
+    Encode,
+};
+
+constexpr size_t ColumnCount = 1000;
+
 template <typename T, NUdf::EDataSlot Slot, bool Desc>
-std::pair<ui64, ui64> MeasureOld() {
-    constexpr size_t count = 1000;
-    constexpr size_t rowCount = 100000;
+struct TModernFixture {
+    TScopedAlloc Alloc{__LOCATION__};
+    TMemoryUsageInfo MemInfo{"Memory"};
+    TVector<NUdf::TUnboxedValue> Values;
+    TPresortEncoder Encoder;
+    TPresortDecoder Decoder;
+    TStringBuf Buffer;
 
-    TScopedAlloc alloc(__LOCATION__);
-    TMemoryUsageInfo memInfo("Memory");
-
-    TVector<NUdf::TUnboxedValue> values;
-    TVector<TSettings> settings;
-
-    for (ui32 i = 0; i < count; ++i) {
-        values.push_back(RandomValue<T>());
-        settings.push_back({i, false, NUdf::TDataType<T>::Slot});
+    TModernFixture() {
+        for (size_t i = 0; i < ColumnCount; ++i) {
+            Values.push_back(RandomValue<T>());
+            Encoder.AddType(Slot, /*isOptional=*/false, Desc);
+            Decoder.AddType(Slot, /*isOptional=*/false, Desc);
+        }
     }
 
-    TSimpleTimer timer;
-
-    TStringStream stream;
-    for (size_t n = 0; n < rowCount; ++n) {
-        stream.clear();
-        TPresortOps<Desc> ops{settings, values.begin()};
-        ops.Encode(stream);
+    void Encode() {
+        Encoder.Start();
+        for (const auto& value : Values) {
+            Encoder.Encode(value);
+        }
+        Buffer = Encoder.Finish();
     }
-    auto encodeTime = timer.Get().MicroSeconds();
 
-    auto rowSize = stream.Str().size();
-    Cerr << "row size " << rowSize << ", row count " << rowCount << Endl;
-    Cerr << "encoding " << rowSize * rowCount * 1000000 / encodeTime << " bytes per sec ("
-         << encodeTime << " us)" << Endl;
+    void Observe() {
+        benchmark::DoNotOptimize(Buffer);
+    }
 
-    timer.Reset();
-    for (size_t n = 0; n < rowCount; ++n) {
-        TPresortOps<Desc> ops{settings, values.begin()};
-        const auto& str = stream.Str();
+    void Decode() {
+        Decoder.Start(Buffer);
+        for (size_t i = 0; i < ColumnCount; ++i) {
+            Decoder.Decode();
+        }
+        Decoder.Finish();
+    }
+};
+
+template <typename T, bool Desc>
+struct TLegacyFixture {
+    TScopedAlloc Alloc{__LOCATION__};
+    TMemoryUsageInfo MemInfo{"Memory"};
+    TVector<NUdf::TUnboxedValue> Values;
+    TVector<TSettings> Settings;
+    TStringStream Stream;
+
+    TLegacyFixture() {
+        for (ui32 i = 0; i < ColumnCount; ++i) {
+            Values.push_back(RandomValue<T>());
+            Settings.push_back({i, false, NUdf::TDataType<T>::Slot});
+        }
+    }
+
+    void Encode() {
+        Stream.clear();
+        TPresortOps<Desc> ops{Settings, Values.begin()};
+        ops.Encode(Stream);
+    }
+
+    void Observe() {
+        benchmark::DoNotOptimize(Stream.Str());
+    }
+
+    void Decode() {
+        TPresortOps<Desc> ops{Settings, Values.begin()};
+        const auto& str = Stream.Str();
         NPresort::Decode(ops, TStringBuf(str.data(), str.size()));
     }
-    auto decodeTime = timer.Get().MicroSeconds();
+};
 
-    Cerr << "decoding " << rowSize * rowCount * 1000000 / decodeTime << " bytes per sec ("
-         << decodeTime << " us)" << Endl;
-    Cerr << Endl;
-
-    return std::make_pair(encodeTime, decodeTime);
-}
-
-template <typename T, NUdf::EDataSlot Slot, bool Desc>
-std::pair<ui64, ui64> MeasureNew() {
-    constexpr size_t count = 1000;
-    constexpr size_t rowCount = 100000;
-
-    TScopedAlloc alloc(__LOCATION__);
-    TMemoryUsageInfo memInfo("Memory");
-
-    TVector<NUdf::TUnboxedValuePod> values;
-    TPresortEncoder encoder;
-    TPresortDecoder decoder;
-
-    for (size_t i = 0; i < count; ++i) {
-        values.push_back(RandomValue<T>());
-        encoder.AddType(Slot, /*isOptional=*/false, Desc);
-        decoder.AddType(Slot, /*isOptional=*/false, Desc);
+template <typename T, NUdf::EDataSlot Slot, bool Desc, EImplementation Implementation, EOperation Operation>
+void PresortBenchmark(benchmark::State& state) {
+    using TFixture = std::conditional_t<Implementation == EImplementation::Modern, TModernFixture<T, Slot, Desc>, TLegacyFixture<T, Desc>>;
+    TFixture fixture;
+    if constexpr (Operation == EOperation::Decode) {
+        fixture.Encode();
     }
-
-    TSimpleTimer timer;
-    TStringBuf buffer;
-
-    for (size_t n = 0; n < rowCount; ++n) {
-        encoder.Start();
-        for (size_t i = 0; i < count; ++i) {
-            encoder.Encode(values[i]);
+    for (auto _ : state) {
+        if constexpr (Operation == EOperation::Encode) {
+            fixture.Encode();
+        } else {
+            fixture.Decode();
         }
-        buffer = encoder.Finish();
+        fixture.Observe();
     }
-    auto encodeTime = timer.Get().MicroSeconds();
-
-    auto rowSize = buffer.size();
-
-    Cerr << "row size " << rowSize << ", row count " << rowCount << Endl;
-    Cerr << "encoding " << rowSize * rowCount * 1000000 / encodeTime << " bytes per sec ("
-         << encodeTime << " us)" << Endl;
-
-    timer.Reset();
-    for (size_t n = 0; n < rowCount; ++n) {
-        decoder.Start(buffer);
-        for (size_t i = 0; i < count; ++i) {
-            decoder.Decode();
-        }
-        encoder.Finish();
-    }
-    auto decodeTime = timer.Get().MicroSeconds();
-
-    Cerr << "decoding " << rowSize * rowCount * 1000000 / decodeTime << " bytes per sec ("
-         << decodeTime << " us)" << Endl;
-    Cerr << Endl;
-
-    return std::make_pair(encodeTime, decodeTime);
 }
 
-template <typename T, NUdf::EDataSlot Slot, bool Desc>
-void Compare() {
-    auto newTimes = MeasureNew<T, Slot, Desc>();
-    auto oldTimes = MeasureOld<T, Slot, Desc>();
+#define REGISTER_PRESORT_BENCHMARKS(Type, Slot)                                                           \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, false, EImplementation::Modern, EOperation::Encode); \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, false, EImplementation::Modern, EOperation::Decode); \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, false, EImplementation::Legacy, EOperation::Encode); \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, false, EImplementation::Legacy, EOperation::Decode); \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, true, EImplementation::Modern, EOperation::Encode);  \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, true, EImplementation::Modern, EOperation::Decode);  \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, true, EImplementation::Legacy, EOperation::Encode);  \
+    BENCHMARK_TEMPLATE(PresortBenchmark, Type, Slot, true, EImplementation::Legacy, EOperation::Decode)
 
-    Cerr << "encoding speedup " << (double)oldTimes.first / (double)newTimes.first << Endl;
-    Cerr << "decoding speedup " << (double)oldTimes.second / (double)newTimes.second << Endl;
-    Cerr << "--------" << Endl << Endl;
-}
+REGISTER_PRESORT_BENCHMARKS(bool, NUdf::EDataSlot::Bool);
+REGISTER_PRESORT_BENCHMARKS(ui8, NUdf::EDataSlot::Uint8);
+REGISTER_PRESORT_BENCHMARKS(ui16, NUdf::EDataSlot::Uint16);
+REGISTER_PRESORT_BENCHMARKS(ui32, NUdf::EDataSlot::Uint32);
+REGISTER_PRESORT_BENCHMARKS(ui64, NUdf::EDataSlot::Uint64);
+REGISTER_PRESORT_BENCHMARKS(float, NUdf::EDataSlot::Float);
+REGISTER_PRESORT_BENCHMARKS(double, NUdf::EDataSlot::Double);
+REGISTER_PRESORT_BENCHMARKS(char*, NUdf::EDataSlot::String);
 
-template <typename T, NUdf::EDataSlot Slot>
-void CompareType(const char* type) {
-    Cerr << type << Endl;
-    Compare<T, Slot, false>();
-
-    Cerr << type << " desc" << Endl;
-    Compare<T, Slot, true>();
-}
+#undef REGISTER_PRESORT_BENCHMARKS
 
 } // namespace
-
-int main(int, char**) {
-    try {
-        CompareType<bool, NUdf::EDataSlot::Bool>("bool");
-        CompareType<ui8, NUdf::EDataSlot::Uint8>("ui8");
-        CompareType<ui16, NUdf::EDataSlot::Uint16>("ui16");
-        CompareType<ui32, NUdf::EDataSlot::Uint32>("ui32");
-        CompareType<ui64, NUdf::EDataSlot::Uint64>("ui64");
-        CompareType<float, NUdf::EDataSlot::Float>("float");
-        CompareType<double, NUdf::EDataSlot::Double>("double");
-        CompareType<char*, NUdf::EDataSlot::String>("string");
-
-        return 0;
-    } catch (...) {
-        Cerr << "Error: " << CurrentExceptionMessage() << Endl;
-        return 1;
-    }
-}

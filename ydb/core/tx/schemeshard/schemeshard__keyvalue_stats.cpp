@@ -16,10 +16,6 @@ struct TSchemeShard::TTxStoreKeyValueUsage : NTabletFlatExecutor::TTransactionBa
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& report = Event->Get()->Record;
-        if (!report.has_total_bytes()) {
-            return true;
-        }
-
         const auto* idx = Self->TabletIdToShardIdx.FindPtr(TTabletId(report.tablet_id()));
         const auto* shard = idx ? Self->ShardInfos.FindPtr(*idx) : nullptr;
         if (!shard || shard->TabletType != ETabletType::KeyValue) {
@@ -45,8 +41,21 @@ struct TSchemeShard::TTxStoreKeyValueUsage : NTabletFlatExecutor::TTransactionBa
         NKikimrSubDomains::TKeyValuePartitionUsage next;
         next.set_generation(report.generation());
         next.set_round(report.round());
-        next.set_total_bytes(report.total_bytes());
-        *next.mutable_bytes_by_pool_kind() = report.bytes_by_pool_kind();
+        const auto& pools = domain->EffectiveStoragePools();
+        for (const auto& [channel, bytes] : report.bytes_by_channel()) {
+            const auto* kind = channel < shard->BindedChannels.size()
+                ? GetPoolKind(shard->BindedChannels[channel], pools) : nullptr;
+            if (kind && !kind->empty()) {
+                if (*kind == Self->KeyValueExternalStoragePoolKind) {
+                    continue;
+                }
+
+                (*next.mutable_bytes_by_pool_kind())[*kind] += bytes;
+            }
+
+            next.set_total_bytes(next.total_bytes() + bytes);
+        }
+
         domain->UpdateKeyValueUsage(next, previous);
         previous.Swap(&next);
         NIceDb::TNiceDb db(txc.DB);

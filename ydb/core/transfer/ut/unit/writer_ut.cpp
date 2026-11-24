@@ -152,6 +152,9 @@ struct TCompileRequest {
     TActorId Sender;
     ui64 Cookie = 0;
     bool Pending = false;
+    bool Aborted = false;
+    TActorId AbortSender;
+    ui64 AbortCookie = 0;
 };
 
 class TFakeCompileActor: public TActorBootstrapped<TFakeCompileActor> {
@@ -175,10 +178,18 @@ public:
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
-        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileAbort);
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileAbort, Handle);
     )
 
 private:
+    void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
+        if (Held) {
+            Held->Aborted = true;
+            Held->AbortSender = ev->Sender;
+            Held->AbortCookie = ev->Cookie;
+        }
+    }
+
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
         if (Mode == ECompileMode::Fail) {
             NYql::TIssues issues;
@@ -791,8 +802,27 @@ Y_UNIT_TEST(DataHeldDuringSchemeLookup) {
 Y_UNIT_TEST(PoisonDuringCompile) {
     TWriterEnv env({}, ECompileMode::Hold);
     auto writer = env.StartWriter();
+    UNIT_ASSERT(env.HeldCompile->Pending);
+    UNIT_ASSERT(!env.HeldCompile->Aborted);
+
     env.Runtime.Send(new IEventHandle(writer, env.Edge, new TEvents::TEvPoison()));
     env.Pump();
+
+    UNIT_ASSERT(env.HeldCompile->Aborted);
+    UNIT_ASSERT_VALUES_EQUAL(env.HeldCompile->AbortSender, writer);
+    UNIT_ASSERT_VALUES_EQUAL(env.HeldCompile->AbortCookie, env.HeldCompile->Cookie);
+}
+
+Y_UNIT_TEST(PoisonAfterCompileDoesNotAbort) {
+    TWriterEnv env({}, ECompileMode::Hold);
+    auto writer = env.StartWriter();
+    env.ReplyHeldCompile(true);
+    env.Handshake(writer);
+
+    env.Runtime.Send(new IEventHandle(writer, env.Edge, new TEvents::TEvPoison()));
+    env.Pump();
+
+    UNIT_ASSERT(!env.HeldCompile->Aborted);
 }
 
 Y_UNIT_TEST(WriteCompletedEmptyIssuesDoesNotLeave) {

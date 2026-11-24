@@ -10,9 +10,9 @@
 namespace NKikimr::NOlap {
 
 TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
-    AFL_VERIFY(columnInfo.GetId() == ColumnId);
+    YDB_LOG_VERIFY(columnInfo.GetId() == ColumnId);
     if (columnInfo.HasSerializer()) {
-        AFL_VERIFY(Serializer.DeserializeFromProto(columnInfo.GetSerializer()));
+        YDB_LOG_VERIFY(Serializer.DeserializeFromProto(columnInfo.GetSerializer()));
     } else if (columnInfo.HasCompression()) {
         Serializer.DeserializeFromProto(columnInfo.GetCompression()).Validate();
     }
@@ -21,16 +21,17 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
         DefaultValue.DeserializeFromProto(columnInfo.GetDefaultValue()).Validate();
     }
     if (columnInfo.HasDataAccessorConstructor()) {
-        AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
+        YDB_LOG_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }
     IsNullable = columnInfo.HasNotNull() ? !columnInfo.GetNotNull() : true;
-    AFL_VERIFY(Serializer);
+    YDB_LOG_VERIFY(Serializer);
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
     return TConclusionStatus::Success();
 }
 
 void TSimpleColumnInfo::SetDefaultSerializer(const NArrow::NSerialization::TSerializerContainer& serializer) {
-    AFL_VERIFY(!OwnSerializer)("column_id", ColumnId);
+    YDB_LOG_VERIFY(!OwnSerializer,
+        {"columnId", ColumnId});
     Serializer = serializer;
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
 }
@@ -54,7 +55,7 @@ TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<
 
 std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInfo::ActualizeColumnData(
     const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const {
-    AFL_VERIFY(Loader);
+    YDB_LOG_VERIFY(Loader);
     const auto checkNeedActualize = [&]() {
         if (!Serializer.IsEqualTo(sourceColumnFeatures.Serializer)) {
             YDB_LOG_DEBUG("",

@@ -31,6 +31,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/persqueue/topic_parser
 )
 
 END()

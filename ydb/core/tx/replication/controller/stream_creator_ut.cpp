@@ -9,8 +9,11 @@
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -60,8 +63,20 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
         check(std::make_shared<TTargetTable::TTableConfig>("Root//Table/", "/Root/Replica"),
             "/Root/Table/Stream");
-        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root//Table/Index/", "/Root/Replica"),
+        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+            "/Root//Table/Index/indexImplTable/", "/Root/Replica/Index/indexImplTable", true),
             "/Root/Table/Index/indexImplTable/Stream");
+
+        // An index built after the replication was created refers to the source index, while its
+        // stream lives on the source impl table taken from the destination path.
+        const auto indexBuildConfig = std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+            "/Root//Table/Index/", "/Root/Replica/Index/indexImplTable", false);
+        const auto indexBuildTargetId = replication.AddTarget(indexBuildConfig->GetKind(), indexBuildConfig);
+        auto* indexBuildTarget = replication.FindTarget(indexBuildTargetId);
+        indexBuildTarget->SetStreamName("Stream");
+        indexBuildTarget->SetIndexBuild(true);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuildTarget->GetStreamPath(), "/Root/Table/Index/indexImplTable/Stream");
+
         check(std::make_shared<TTargetTransfer::TTransferConfig>("/Root//Topic/", "/Root/Replica", config),
             "/Root/Topic");
     }
@@ -162,7 +177,11 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
         UNIT_ASSERT(topic);
         UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
-        const auto& consumers = topic->Get()->Result.GetTopicDescription().GetConsumers();
+        const auto& topicDescription = topic->Get()->Result.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitionWriteSpeedBytesPerSecond(), 10_MB);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitionWriteBurstBytes(), 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetRetentionPeriod(), TDuration::Seconds(1));
+        const auto& consumers = topicDescription.GetConsumers();
         UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "replicationConsumer");
     }
@@ -181,6 +200,48 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(MissingSourceDnsNameDuringRetentionUpdateRetries) {
         MissingSourceDnsName(EBootstrapStage::Retention);
+    }
+
+    Y_UNIT_TEST_TWIN(WriteSpeedWithConfiguredLimits, Allowed) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        auto& pqConfig = runtime.GetAppData().PQConfig;
+        pqConfig.AddValidWriteSpeedLimitsKbPerSec(1024);
+        if constexpr (Allowed) {
+            pqConfig.AddValidWriteSpeedLimitsKbPerSec(10240);
+        }
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        const auto creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+        runtime.EnableScheduleForActor(creator);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender()));
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status.GetStatus(),
+            Allowed ? NYdb::EStatus::SUCCESS : NYdb::EStatus::BAD_REQUEST,
+            result->Get()->Status.GetIssues().ToString());
+        if constexpr (!Allowed) {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), "write_speed");
+        }
+
+        env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeTopicRequest("/Root/Table/Stream", {}));
+        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
+        UNIT_ASSERT(topic);
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        const auto& description = topic->Get()->Result.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionWriteSpeedBytesPerSecond(), Allowed ? 10_MB : 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionWriteBurstBytes(), 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), Allowed ? TDuration::Seconds(1) : TDuration::Hours(1));
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
     }
 
     void SessionAcquisitionFailure(Ydb::StatusIds::StatusCode failure) {
@@ -675,7 +736,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 config = std::make_shared<TTargetTransfer::TTransferConfig>("/Root/Topic", "/Root/Replica",
                     NKikimrReplication::TReplicationConfig{});
             } else {
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica");
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica", false);
             }
             if (streamPath.empty()) {
                 streamPath = transfer ? "/Root/Topic" : "/Root/Table/Index/indexImplTable/Stream";
@@ -957,6 +1018,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_[0].AvailabilityPeriod_, TDuration::Zero());
             UNIT_ASSERT(!settings.SetRetentionPeriod_);
+            UNIT_ASSERT(!settings.SetPartitionWriteSpeedBytesPerSecond_);
             setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie,
                 existing ? NYdb::EStatus::ALREADY_EXISTS : NYdb::EStatus::SUCCESS);
             setup.Finish();

@@ -367,7 +367,8 @@ void TVDiskInfo::MigrateOldInfo(const TLockableItem &old)
 TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
                                                                    TDuration retryTime,
                                                                    TDuration duration,
-                                                                   const TString &requestId) const
+                                                                   const TString &requestId,
+                                                                   TDuration restartCooldown) const
 {
     if (IsDisabled) {
         return Disabled;
@@ -386,7 +387,7 @@ TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
             }
         }
 
-        if (now <= node->StartTime + Timeout) {
+        if (now <= node->StartTime + restartCooldown) {
             hasTimeout = true;
         }
     }
@@ -1014,7 +1015,7 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    const ui64 rGroupSize = IsBridgeMode ? info->RingGroups.size() : 1;
+    const ui64 rGroupSize = info->RingGroups.size();
     StateStorageRings.resize(rGroupSize);
 
     for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
@@ -1040,8 +1041,7 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                     continue;
                 }
                 ringInfo->AddNode(Nodes[nodeId]);
-                StateStorageReplicas.insert(nodeId);
-                StateStorageNodeToRingId[nodeId] = ringId;
+                StateStorageNodeToRings[nodeId][rGroupId] = ringId;
             }
 
             StateStorageRings[rGroupId].push_back(ringInfo);

@@ -1,13 +1,11 @@
 #include <ydb/apps/bridge_skipper/config/config.h>
 #include <ydb/apps/bridge_skipper/http/http.h>
+#include <ydb/apps/bridge_skipper/runtime/diagnostics.h>
 #include <ydb/apps/bridge_skipper/runtime/events.h>
 #include <ydb/apps/bridge_skipper/runtime/skipper.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
-#include <library/cpp/logger/backend.h>
-#include <library/cpp/logger/record.h>
-#include <library/cpp/json/json_reader.h>
 #include <util/generic/guid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/create_message.h>
@@ -24,7 +22,6 @@
 #include <chrono>
 #include <csignal>
 #include <thread>
-#include <limits>
 
 namespace NBridgeSkipper {
 
@@ -66,48 +63,6 @@ int StartupFailed(TStringBuf category, TStringBuf message) {
     return 1;
 }
 
-class TCaptureBackend final : public TLogBackend {
-public:
-    TCaptureBackend(std::shared_ptr<TDiagnosticStore> store, const TLoadedCredentials& credentials)
-        : Store(std::move(store))
-        , Redactor(credentials)
-        , Stderr(NActors::CreateStderrBackend()) {
-    }
-
-    void WriteData(const TLogRecord& record) override {
-        // SDK issue strings have already been redacted at decode. Redact again
-        // before retaining diagnostics, then tee exactly those bytes to stderr.
-        const auto text = Redactor.Redact(TStringBuf(record.Data, record.Len), std::numeric_limits<size_t>::max());
-        NJson::TJsonValue json;
-        TString level = "info";
-        if (NJson::ReadJsonTree(text, &json) && json["priority"].IsString()) {
-            level = json["priority"].GetString();
-            level.to_lower();
-            if (level == "warning") {
-                level = "warn";
-            }
-            if (level == "crit" || level == "alert" || level == "emerg") {
-                level = "fatal";
-            }
-        }
-        TInstant eventAt = TInstant::Now();
-        if (json["microseconds"].IsUInteger()) {
-            eventAt = TInstant::MicroSeconds(json["microseconds"].GetUInteger());
-        }
-        Store->Log(level, TString(text.substr(0, 4096)), eventAt);
-        Stderr->WriteData(TLogRecord(record.Priority, text.data(), text.size(), record.MetaFlags));
-    }
-
-    void ReopenLog() override {
-        Stderr->ReopenLog();
-    }
-
-private:
-    std::shared_ptr<TDiagnosticStore> Store;
-    TRedactor Redactor;
-    TAutoPtr<TLogBackend> Stderr;
-};
-
 int Run(
     const TConfig& config,
     const TLoadedCredentials& credentials,
@@ -119,6 +74,7 @@ int Run(
     auto admission = std::make_shared<TCommandAdmission>();
     const auto bootId = CreateGuidAsString();
     auto diagnostics = std::make_shared<TDiagnosticStore>(bootId, config.Logging.Level);
+    auto tokens = std::make_shared<TTokenSource>(config.Auth.TokenFile, credentials.Token);
     auto seed = std::make_shared<TSkipperSnapshot>();
     seed->ClusterId = config.ClusterId;
     seed->Mode = stateFile->GetState().Mode;
@@ -160,7 +116,7 @@ int Run(
     setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 0));
     setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::HTSwap, 0));
     setup->LocalServices.emplace_back(loggerId, TActorSetupCmd(
-        new TLoggerActor(logging, new TCaptureBackend(diagnostics, credentials), MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        new TLoggerActor(logging, CreateCaptureBackend(diagnostics, tokens, NActors::CreateStderrBackend()), MakeIntrusive<NMonitoring::TDynamicCounters>()),
         TMailboxType::HTSwap, 0));
     auto system = MakeHolder<TActorSystem>(setup, nullptr, logging);
     std::shared_ptr<IYdbClients> clients;
@@ -202,7 +158,7 @@ int Run(
         // The system object outlives Stop(true) and the client's destruction.
         clients = CreateYdbClients(config, credentials, [actorSystem = system.Get()] {
             return actorSystem->Monotonic();
-        });
+        }, LoadToken, tokens);
         // A failed bind must exit before the controller makes any YDB call.
         const auto proxy = system->Register(NHttp::CreateHttpProxy(), TMailboxType::HTSwap, 0);
         const auto http = system->Register(CreateHttpActor(snapshots, proxy, config.Http, admission), TMailboxType::HTSwap, 0);

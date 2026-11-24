@@ -56,7 +56,6 @@ namespace NKikimr {
         , CompIndexFresh(VDiskMemCounters->GetCounter("MemTotal:CompIndexFresh"))
         , CompData(VDiskMemCounters->GetCounter("MemTotal:CompData"))
         , CompIndex(VDiskMemCounters->GetCounter("MemTotal:CompIndex"))
-        , IteratorsCache(VDiskMemCounters->GetCounter("MemTotal:IteratorsCache"))
         , Replication(VDiskMemCounters->GetCounter("MemTotal:Replication"))
         , SyncLogCache(VDiskMemCounters->GetCounter("MemTotal:SyncLogCache"))
         , ActorSystem(as)

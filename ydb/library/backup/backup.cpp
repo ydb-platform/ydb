@@ -42,11 +42,14 @@
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <algorithm>
+
 #include <util/datetime/base.h>
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
 #include <util/folder/pathsplit.h>
 #include <util/generic/ptr.h>
+#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -405,7 +408,47 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
             << READ_TABLE_RETRIES << " retries");
 }
 
+bool IsUnknownOlapSortedReadPragma(TStringBuf issues) {
+    TString lower(issues);
+    lower.to_lower();
+    return lower.Contains("optenableolapsortedread") && lower.Contains("unknown setting");
+}
+
 namespace {
+
+// Asks the server once whether column-table reads can use OptEnableOlapSortedRead.
+// The answer is cached for the whole folder dump: one probe covers every column table.
+bool EnableOlapSortedRead(const TDriver& driver, TMaybe<bool>& cached) {
+    if (cached.Defined()) {
+        return *cached;
+    }
+
+    NQuery::TQueryClient client(driver);
+    const TString query = TString(OlapSortedReadPragmaSql) + "SELECT 1;";
+    const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx();
+    const auto result = client.ExecuteQuery(
+        query,
+        tx,
+        NQuery::TExecuteQuerySettings().Syntax(NQuery::ESyntax::YqlV1)
+    ).GetValueSync();
+    if (result.IsSuccess()) {
+        LOG_I("Server supports PRAGMA kikimr.OptEnableOlapSortedRead; column tables will be read in primary key order");
+        cached = true;
+        return true;
+    }
+
+    const auto issues = result.GetIssues().ToOneLineString();
+    if (IsUnknownOlapSortedReadPragma(TStringBuf(issues.data(), issues.size()))) {
+        LOG_W("Server does not support PRAGMA kikimr.OptEnableOlapSortedRead; "
+            "column table dump will order rows in memory and may fail on large tables");
+        cached = false;
+        return false;
+    }
+
+    VerifyStatus(result, "Check PRAGMA kikimr.OptEnableOlapSortedRead support");
+    cached = false;
+    return false;
+}
 
 // Column names come from DescribeTable, i.e. from the real schema, not from user input.
 // SchemeShard's IsValidColumnName restricts them to [A-Za-z0-9_-], so they can never contain
@@ -419,11 +462,67 @@ TString BuildQuotedIdentifierList(const std::vector<std::string>& names) {
     return JoinSeq(", ", quoted);
 }
 
+// Which cells of the saved key tuple are NULL.
+std::vector<bool> NullCellsOf(const TValue& key) {
+    std::vector<bool> result;
+    TValueParser parser(key);
+    parser.OpenTuple();
+    while (parser.TryNextElement()) {
+        bool isNull = false;
+        if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
+            parser.OpenOptional();
+            isNull = parser.IsNull();
+            parser.CloseOptional();
+        }
+        result.push_back(isNull);
+    }
+    parser.CloseTuple();
+    return result;
+}
+
+// Builds the "key > $pk" condition for resuming a read after a saved key with NULL cells, where $pk is the saved
+// key tuple. NULL is the smallest value, the same as in ORDER BY. A plain tuple comparison "(k0, k1) > $pk" evaluates
+// to NULL as soon as a compared cell on either side is NULL, and WHERE drops such rows: a retry that resumed after
+// such a key would silently skip the rest of the table. So the comparison is expanded by hand, and since the saved
+// cells are known here, each one gets a plain comparison or a NULL test (KQP turns both into key ranges):
+//   gt(k, p) = k > $pk.i      or, for a NULL cell,  k IS NOT NULL
+//   eq(k, p) = k = $pk.i      or, for a NULL cell,  k IS NULL
+//   key > $pk = gt(k0, p0) OR (eq(k0, p0) AND gt(k1, p1)) OR (eq(k0, p0) AND eq(k1, p1) AND gt(k2, p2)) ...
+// A NULL cell of the row makes "k > p" and "k = p" NULL, which WHERE treats as false: correct, since NULL is neither
+// greater than nor equal to a non-NULL saved cell.
+TString BuildResumeCondition(const std::vector<std::string>& pkColumns, const std::vector<bool>& savedCellIsNull) {
+    Y_ENSURE(pkColumns.size() == savedCellIsNull.size());
+    TVector<TString> alternatives;
+    TVector<TString> equalPrefix;
+    for (size_t i = 0; i < pkColumns.size(); ++i) {
+        const TString column = TStringBuilder() << '`' << pkColumns[i] << '`';
+        const TString saved = TStringBuilder() << "$pk." << i;
+        TVector<TString> conditions = equalPrefix;
+        if (savedCellIsNull[i]) {
+            conditions.push_back(TStringBuilder() << column << " IS NOT NULL");
+            equalPrefix.push_back(TStringBuilder() << column << " IS NULL");
+        } else {
+            conditions.push_back(TStringBuilder() << column << " > " << saved);
+            equalPrefix.push_back(TStringBuilder() << column << " = " << saved);
+        }
+        alternatives.push_back(TStringBuilder() << '(' << JoinSeq(" AND ", conditions) << ')');
+    }
+    return JoinSeq(" OR ", alternatives);
+}
+
+} // anonymous namespace
+
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
-        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK)
+        const TString& fullTablePath, TMaybe<TValue> lastWrittenPK, bool enableOlapSortedRead)
 {
     TParamsBuilder paramsBuilder;
     TStringStream query;
+
+    // Sorted OLAP reads merge per-shard streams in PK order instead of buffering a full sort.
+    const bool orderByPk = !desc.GetPrimaryKeyColumns().empty();
+    if (enableOlapSortedRead && orderByPk) {
+        query << OlapSortedReadPragmaSql;
+    }
 
     if (lastWrittenPK) {
         query << "DECLARE $pk AS " << FormatType(lastWrittenPK->GetType()) << ";\n";
@@ -440,7 +539,19 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << "SELECT " << BuildQuotedIdentifierList(columnNames)
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
-        query << " WHERE (" << quotedPkList << ") > $pk";
+        const auto& pkColumns = desc.GetPrimaryKeyColumns();
+        const auto nullCells = NullCellsOf(*lastWrittenPK);
+        Y_ENSURE(nullCells.size() == pkColumns.size());
+        const bool hasNullCell = std::find(nullCells.begin(), nullCells.end(), true) != nullCells.end();
+        if (pkColumns.size() > 1 && !hasNullCell) {
+            // the usual case: a tuple comparison, which KQP turns into a key range
+            query << " WHERE (" << quotedPkList << ") > $pk";
+        } else {
+            // A saved key with NULL cells needs the comparison expanded per column, see BuildResumeCondition.
+            // A single-column key is expanded as well: in YQL "(a) > $pk" is the scalar a compared with a tuple,
+            // which does not compile.
+            query << " WHERE " << BuildResumeCondition(pkColumns, nullCells);
+        }
     }
     // lastWrittenPK is only a valid resume point if every attempt, including the first,
     // returns rows in PK order - otherwise a retry can both skip and duplicate rows.
@@ -451,10 +562,13 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     return {query.Str(), paramsBuilder.Build()};
 }
 
+namespace {
+
 TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
-        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter)
+        const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter,
+        bool enableOlapSortedRead)
 {
-    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK);
+    const auto [query, params] = BuildSelectQueryAndParams(desc, fullTablePath, lastWrittenPK, enableOlapSortedRead);
     LOG_D("Execute query for column table " << fullTablePath.Quote() << ": " << query.Quote());
 
     const auto tx = NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx();
@@ -464,6 +578,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
 
     auto iter = client.StreamExecuteQuery(query, tx, params, settings).GetValueSync();
     VerifyStatus(iter, TStringBuilder() << "ExecuteQuery for column table " << fullTablePath.Quote() << " failed");
+    Y_DEFER {
+        iter.Cancel();
+    };
 
     // Deferred until the first result set arrives, so that a table with no (more) rows
     // to read never creates an IncompleteData file, mirroring TryReadTable's behavior.
@@ -474,8 +591,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
     TMaybe<TValue> lastReadPK;
     bool hasRows = false;
 
+    auto nextPart = iter.ReadNext();
     while (true) {
-        auto part = iter.ReadNext().GetValueSync();
+        auto part = nextPart.GetValueSync();
         if (!part.IsSuccess()) {
             if (part.EOS()) {
                 break;
@@ -495,6 +613,10 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
             }
             return lastWrittenPK;
         }
+
+        // Overlap receiving the next part with serializing this one, as in TryReadTable.
+        // Keep only one read in flight and handle its status after writing the current part.
+        nextPart = iter.ReadNext();
 
         if (!part.HasResultSet()) {
             continue;
@@ -532,8 +654,9 @@ TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::T
 } // anonymous namespace
 
 void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, const TString& fullTablePath,
-        const TFsPath& folderPath) {
-    LOG_D("Read column table via ExecuteQuery " << fullTablePath.Quote());
+        const TFsPath& folderPath, bool enableOlapSortedRead) {
+    LOG_D("Read column table via ExecuteQuery " << fullTablePath.Quote()
+        << (enableOlapSortedRead ? " with OptEnableOlapSortedRead" : ""));
 
     NQuery::TQueryClient client(driver);
     TMaybe<TValue> lastWrittenPK;
@@ -541,7 +664,8 @@ void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, cons
     i64 retries = READ_TABLE_RETRIES;
     ui32 fileCounter = 0;
     do {
-        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter);
+        lastWrittenPK = TryExecuteQueryRead(client, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter,
+            enableOlapSortedRead);
         if (lastWrittenPK && retries) {
             LOG_D("Retry ExecuteQuery read from key: " << TString{FormatValueYson(*lastWrittenPK)}.Quote());
         }
@@ -551,14 +675,18 @@ void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, cons
             << READ_TABLE_RETRIES << " retries");
 }
 
-NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTablePath) {
+NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTablePath, bool forDump = false,
+        bool fullDescription = true) {
     LOG_D("Describe table " << fullTablePath.Quote());
 
     TMaybe<NTable::TTableDescription> desc;
 
     NTable::TTableClient client(driver);
-    TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
-        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true).WithSetVal(true);
+    TStatus status = client.RetryOperationSync([fullTablePath, &desc, forDump, fullDescription](NTable::TSession session) {
+        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(fullDescription).WithSetVal(fullDescription);
+        if (forDump) {
+            settings.RequestType("dump");
+        }
         auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);
@@ -772,15 +900,18 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
-        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool isColumnTable) {
+        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool isColumnTable,
+        TMaybe<bool>& olapSortedRead, TMaybe<NTable::TTableDescription> originalTableDesc = {}) {
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
     const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
-    const auto originalTableDesc = DescribeTable(driver, originalTablePath);
-    if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
-        (replicaAttribute != originalTableDesc.GetAttributes().end() && replicaAttribute->second == "true")
-        || IsOmittedFromBackup(originalTableDesc.GetAttributes())
+    if (!originalTableDesc) {
+        originalTableDesc = DescribeTable(driver, originalTablePath, /* forDump */ schemaOnly);
+    }
+    if (auto replicaAttribute = originalTableDesc->GetAttributes().find(ATTR_ASYNC_REPLICA);
+        (replicaAttribute != originalTableDesc->GetAttributes().end() && replicaAttribute->second == "true")
+        || IsOmittedFromBackup(originalTableDesc->GetAttributes())
     ) {
         LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table or is marked with " << ATTR_OMIT_BACKUP);
         // remove the backup folder
@@ -796,23 +927,23 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     const auto copyTablePath = JoinDatabasePath(backupPrefix, path);
     TMaybe<NTable::TTableDescription> copyTableDesc;
     if (!schemaOnly) {
-        copyTableDesc = DescribeTable(driver, copyTablePath);
+        copyTableDesc = DescribeTable(driver, copyTablePath, /* forDump */ true);
     }
 
     const auto& fullPath = schemaOnly ? originalTablePath : copyTablePath;
-    const auto& desc = schemaOnly ? originalTableDesc : *copyTableDesc;
+    const auto& desc = schemaOnly ? *originalTableDesc : *copyTableDesc;
 
     LOG_I("Backup " << (isColumnTable ? "column table " : "table ") << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
 
-    BackupChangefeeds(driver, originalTablePath, folderPath, originalTableDesc);
+    BackupChangefeeds(driver, originalTablePath, folderPath, *originalTableDesc);
     BackupPermissions(driver, originalTablePath, folderPath);
 
     if (!schemaOnly) {
         if (isColumnTable) {
-            ReadColumnTable(driver, desc, fullPath, folderPath);
+            ReadColumnTable(driver, desc, fullPath, folderPath, EnableOlapSortedRead(driver, olapSortedRead));
         } else {
             ReadTable(driver, desc, fullPath, folderPath, ordered);
         }
@@ -1134,6 +1265,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     THashSet<TString> columnTablePaths;
     // Column tables that could not be copied — fall back to pre-ColumnTable dump behavior (skip them).
     THashSet<TString> skippedColumnTables;
+    // Probed on the first column-table read and reused for the rest of this dump.
+    TMaybe<bool> olapSortedRead;
 
     auto skipColumnTable = [&](const TString& path, const TString& reason) {
         LOG_W("Skipping column table " << path.Quote() << ": " << reason
@@ -1141,7 +1274,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
         skippedColumnTables.insert(path);
     };
 
-    // Copy all tables to temporal folder and backup other scheme objects along the way.
+    // Validate all tables before starting copies, and back up other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
@@ -1154,6 +1287,10 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            TMaybe<NTable::TTableDescription> tableDesc;
+            if (dbIt.IsTable() && (schemaOnly || !avoidCopy)) {
+                tableDesc = DescribeTable(driver, dbIt.GetFullPath(), /* forDump */ true, /* fullDescription */ schemaOnly);
+            }
             seenItems.insert(dbIt.GetFullPath());
 
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
@@ -1161,7 +1298,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             if (schemaOnly) {
                 if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
-                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
+                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable(),
+                            olapSortedRead, std::move(tableDesc));
                     childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
@@ -1170,12 +1308,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     if (dbIt.IsColumnTable()) {
                         columnTablePaths.insert(dbIt.GetFullPath());
                     }
-                    if (useConsistentCopyTable) {
-                        tablesToCopy.emplace_back(dbIt.GetFullPath(), tmpTablePath);
-                    } else {
-                        auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
-                        copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
-                    }
+                    tablesToCopy.emplace_back(dbIt.GetFullPath(), tmpTablePath);
                 } else if (dbIt.IsDir() && !dbIt.IsInternalDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
@@ -1232,6 +1365,14 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
         }
         folderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
         return;
+    }
+
+    if (!useConsistentCopyTable && !avoidCopy) {
+        for (const auto& item : tablesToCopy) {
+            const TString src{item.SourcePath()};
+            auto status = CopyTableAsyncStart(driver, src, TString{item.DestinationPath()});
+            copiedTablesStatuses.emplace(src, std::move(status));
+        }
     }
 
     if (useConsistentCopyTable && !avoidCopy && tablesToCopy) {
@@ -1291,7 +1432,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     }
                 }
                 BackupTable(driver, dbIt.GetTraverseRoot(), avoidCopy ? dbIt.GetTraverseRoot() : backupPrefix, dbIt.GetRelPath(),
-                        childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
+                        childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable(),
+                        olapSortedRead);
                 if (tableWasCopied) {
                     DropTable(driver, tmpTablePath);
                 }

@@ -23,7 +23,7 @@ def post_install(self):
         c_ares.ADDINCL.remove(self.arcdir)
 
         c_ares.PEERDIR.add("contrib/libs/libc_compat")
-        c_ares.SRCS.add("src/lib/atomic.cpp")
+        c_ares.SRCS.add("src/lib/atomic.c")
         c_ares.before(
             "SRCS",
             Switch({"NOT EXPORT_CMAKE": "CHECK_CONFIG_H(src/lib/ares_setup.h)"}),
@@ -43,10 +43,6 @@ def post_install(self):
 
         c_ares.CFLAGS.append(GLOBAL("-DCARES_STATICLIB"))
 
-        # atomic.cpp depends on util (IGNIETFERRO-1491)
-        c_ares.NO_RUNTIME = False
-        c_ares.NO_UTIL = False
-
 
 c_ares = CMakeNinjaNixProject(
     owners=["g:cpp-contrib"],
@@ -61,7 +57,7 @@ c_ares = CMakeNinjaNixProject(
     ],
     # Keep arcadia files.
     keep_paths=[
-        "src/lib/atomic.cpp",
+        "src/lib/atomic.c",
         "src/lib/atomic.h",
     ],
     addincl_global={

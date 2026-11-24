@@ -1,10 +1,77 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "yql_library_compiler.h"
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
+
+Y_UNIT_TEST(ProjectSettingsAreInheritedByChildResolver) {
+    auto settings = std::make_shared<TProjectSettings>();
+    settings->AddPragma("yson.Strict", "false");
+    TModuleResolver resolver(NSQLTranslation::TTranslators(nullptr, nullptr, nullptr), TModulesTable{}, 0, {}, {});
+    resolver.SetProjectSettings(settings);
+
+    auto child = resolver.CreateMutableChild();
+    UNIT_ASSERT(child->GetProjectSettings() == settings);
+    UNIT_ASSERT(child->CreateMutableChild()->GetProjectSettings() == settings);
+    child->SetProjectSettings({});
+    UNIT_ASSERT(!child->GetProjectSettings());
+    UNIT_ASSERT(resolver.GetProjectSettings() == settings);
+}
+
+Y_UNIT_TEST(ChildResolverWithoutProjectSettings) {
+    TModuleResolver resolver(NSQLTranslation::TTranslators(nullptr, nullptr, nullptr), TModulesTable{}, 0, {}, {});
+    UNIT_ASSERT(!resolver.CreateMutableChild()->GetProjectSettings());
+}
+
+NSQLTranslation::TTranslators MakeSqlTranslators() {
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/true, /*isAmbiguityDebugging=*/false);
+    return NSQLTranslation::TTranslators(nullptr, NSQLTranslationV1::MakeTranslator(lexers, parsers), nullptr);
+}
+
+Y_UNIT_TEST(SqlLibraryUsesOnlyScopedProjectSettings) {
+    const auto translators = MakeSqlTranslators();
+    TProjectSettings settings;
+    settings.AddPragma("Unicode_Literals", TVector<TString>{});
+    settings.AddPragma("ErrorMsg", "must not affect library compilation");
+    settings.AddPragma("yson.Strict", "invalid");
+    settings.AddPragma("config.flags", TVector<TString>{"LLVM_OFF"});
+    TExprContext ctx;
+    TLibraryCohesion library;
+    UNIT_ASSERT_C(CompileLibrary(translators, "/lib/scoped.sql", "$value = 'text'; EXPORT $value;", ctx, library, /*optimize=*/true, settings),
+                  ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(library.Exports.Symbols().at("$value")->IsCallable("Utf8"));
+}
+
+Y_UNIT_TEST(DynamicSqlLibraryUsesOnlyScopedProjectSettings) {
+    const auto translators = MakeSqlTranslators();
+    for (bool useProjectSettings : {false, true}) {
+        TModuleResolver resolver(translators, TModulesTable{}, 0, {}, {});
+        if (useProjectSettings) {
+            auto settings = std::make_shared<TProjectSettings>();
+            settings->AddPragma("RelativePathPrefix", "folder");
+            settings->AddPragma("Unicode_Literals", TVector<TString>{});
+            settings->AddPragma("ErrorMsg", "must not affect dynamic libraries");
+            resolver.SetProjectSettings(settings);
+        }
+        TExprContext ctx;
+        TString moduleName;
+        const bool added = resolver.AddFromMemory("/lib/dynamic.sql", "$value = 'text'; EXPORT $value;", ctx, 1, 0, {}, moduleName);
+        UNIT_ASSERT_C(added, ctx.IssueManager.GetIssues().ToString());
+        UNIT_ASSERT_C(resolver.Link(ctx), ctx.IssueManager.GetIssues().ToString());
+        const auto* module = resolver.GetModule(moduleName);
+        UNIT_ASSERT(module);
+        UNIT_ASSERT(module->Symbols().at("$value")->IsCallable(useProjectSettings ? "Utf8" : "String"));
+    }
+}
 
 const char* alias = "/lib/ut.yqls";
 

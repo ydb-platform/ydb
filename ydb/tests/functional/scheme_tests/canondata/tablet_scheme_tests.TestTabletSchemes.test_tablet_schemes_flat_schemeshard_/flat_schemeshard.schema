@@ -3345,6 +3345,11 @@
                 "ColumnId": 21,
                 "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "CancelRequestedBy",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -3371,7 +3376,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6576,6 +6582,11 @@
                 "ColumnId": 14,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CanRestoreRateLimiterMetering",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6595,7 +6606,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6738,6 +6750,11 @@
                 "ColumnId": 23,
                 "ColumnName": "ReplicationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "Kesus",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6766,7 +6783,8 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7393,6 +7411,11 @@
                 "ColumnId": 14,
                 "ColumnName": "CompressionLevel",
                 "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7412,7 +7435,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7510,6 +7534,11 @@
                 "ColumnId": 14,
                 "ColumnName": "CompressionLevel",
                 "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7529,7 +7558,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10691,6 +10721,50 @@
                     2,
                     3,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 141,
+        "TableName": "DatabaseFreezes",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
                 ],
                 "RoomID": 0,
                 "Codec": 0,

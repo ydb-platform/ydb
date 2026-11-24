@@ -7,7 +7,6 @@
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <util/generic/is_in.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
@@ -81,11 +80,6 @@ bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogP
     return false;
 }
 
-
-void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
-    Parts.emplace_back(name, value);
-}
-
 bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const {
     // modifying methods are always audited
     const TString method(request->Method);
@@ -114,25 +108,14 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     }
 
     const auto& request = ev->Get()->Request;
-    const TString method(request->Method);
-    const TString url(request->URL.Before('?'));
-    const auto params = request->URL.After('?');
-    const auto cgiParams = TCgiParameters(params);
-
-    if (!(Auditable = AuditableRequest(ev->Get()->Request))) {
+    if (!(Auditable = AuditableRequest(request))) {
         return;
     }
 
-    TString remoteAddress = ExtractRemoteAddress(request.Get());
-
-    AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
-    AddAuditLogPart("remote_address", remoteAddress ? remoteAddress : EMPTY_VALUE);
-    AddAuditLogPart("operation", DEFAULT_OPERATION);
-    AddAuditLogPart("method", method);
-    AddAuditLogPart("url", url);
-    if (!params.Empty()) {
-        AddAuditLogPart("params", ToString(params));
-    }
+    RemoteAddress = ExtractRemoteAddress(request.Get());
+    Method = TString(request->Method);
+    Url = TString(request->URL.Before('?'));
+    Params = ToString(request->URL.After('?'));
     if (!request->Body.Empty()) {
         TStringBuilder auditBody;
         TStringBuf body = request->Body;
@@ -142,7 +125,7 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
             auditBody << body;
         }
 
-        AddAuditLogPart("body", auditBody);
+        Body = auditBody;
     }
 }
 
@@ -150,21 +133,17 @@ void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
     if (!Auditable) {
         return;
     }
-    // TODO: refactor so that all the parts are logged
-    static const THashSet<TString> ALLOWED_PARTS = {
-        "subject",
-        "sanitized_token",
-        // "start_time",
-        // "end_time",
-        // "database",
-        // "remote_address",
-        "cloud_id",
-        "folder_id",
-        "resource_id",
-    };
-    for (const auto& [k, v] : parts) {
-        if (IsIn(ALLOWED_PARTS, k)) {
-            Parts.emplace_back(k, v);
+    for (const auto& [name, value] : parts) {
+        if (name == "subject") {
+            Subject = value;
+        } else if (name == "sanitized_token") {
+            SanitizedToken = value;
+        } else if (name == "cloud_id") {
+            CloudId = value;
+        } else if (name == "folder_id") {
+            FolderId = value;
+        } else if (name == "resource_id") {
+            ResourceId = value;
         }
     }
 }
@@ -179,10 +158,18 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
     }
 
     AUDIT_LOG(
-        for (const auto& [name, value] : Parts) {
-            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
-        }
-
+        AUDIT_PART("component", MONITORING_COMPONENT_NAME);
+        AUDIT_PART("remote_address", (!RemoteAddress.empty() ? RemoteAddress : EMPTY_VALUE));
+        AUDIT_PART("operation", DEFAULT_OPERATION);
+        AUDIT_PART("method", (!Method.empty() ? Method : EMPTY_VALUE));
+        AUDIT_PART("url", (!Url.empty() ? Url : EMPTY_VALUE));
+        AUDIT_PART("params", Params);
+        AUDIT_PART("body", Body);
+        AUDIT_PART("cloud_id", CloudId);
+        AUDIT_PART("folder_id", FolderId);
+        AUDIT_PART("resource_id", ResourceId);
+        AUDIT_PART("subject", (!Subject.empty() ? Subject : EMPTY_VALUE));
+        AUDIT_PART("sanitized_token", (!SanitizedToken.empty() ? SanitizedToken : EMPTY_VALUE));
         AUDIT_PART("status", ToString(status));
         AUDIT_PART("reason", reason, !reason.empty());
     );

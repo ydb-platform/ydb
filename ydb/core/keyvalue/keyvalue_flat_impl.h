@@ -22,14 +22,12 @@
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
-#include <optional>
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -431,16 +429,7 @@ protected:
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void UpdateQuotaPath(TPathId pathId);
     void ReportStorageUsage();
-    void SendStorageUsageReport();
-    void Handle(TEvNodeWardenGroupInfo::TPtr& ev);
     TPathId QuotaPathId;
-    struct TPendingStorageUsage {
-        THashMap<ui32, ui64> BytesByGroup;
-        NKikimrKeyValue::StorageUsageReport Report;
-    };
-
-    std::optional<TPendingStorageUsage> PendingStorageUsage;
-    ui64 StorageUsageRound = 0;
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -901,7 +890,6 @@ public:
             return;
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            hFunc(TEvNodeWardenGroupInfo, Handle);
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);
             hFunc(TEvKeyValue::TEvExecuteTransaction, Handle);

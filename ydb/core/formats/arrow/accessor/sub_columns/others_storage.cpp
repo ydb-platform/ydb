@@ -15,17 +15,17 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TOthersData::TBuilderWithStats::TBuilderWithStats() {
     Builders = NArrow::MakeBuilders(GetSchema());
-    AFL_VERIFY(Builders.size() == 3);
-    AFL_VERIFY(Builders[0]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[2]->type()->id() == arrow::binary()->id());
+    YDB_LOG_VERIFY(Builders.size() == 3);
+    YDB_LOG_VERIFY(Builders[0]->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(Builders[2]->type()->id() == arrow::binary()->id());
     RecordIndex = static_cast<arrow::UInt32Builder*>(Builders[0].get());
     KeyIndex = static_cast<arrow::UInt32Builder*>(Builders[1].get());
     Values = static_cast<arrow::BinaryBuilder*>(Builders[2].get());
 }
 
 void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 keyIndex, const std::string_view* value) {
-    AFL_VERIFY(Builders.size());
+    YDB_LOG_VERIFY(Builders.size());
     if (StatsByKeyIndex.size() <= keyIndex) {
         StatsByKeyIndex.resize((keyIndex + 1) * 2);
     }
@@ -36,7 +36,7 @@ void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 
         LastRecordIndex = recordIndex;
         LastKeyIndex = keyIndex;
     } else {
-        AFL_VERIFY(*LastRecordIndex < recordIndex || (*LastRecordIndex == recordIndex/* && *LastKeyIndex < keyIndex*/));
+        YDB_LOG_VERIFY(*LastRecordIndex < recordIndex || (*LastRecordIndex == recordIndex/* && *LastKeyIndex < keyIndex*/));
     }
     TStatusValidator::Validate(RecordIndex->Append(recordIndex));
     RTKeyIndexes.emplace_back(keyIndex);
@@ -49,34 +49,38 @@ void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 
 }
 
 TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishContext) {
-    AFL_VERIFY(Builders.size());
+    YDB_LOG_VERIFY(Builders.size());
     auto arrRecordIndex = NArrow::FinishBuilder(std::move(Builders[0]));
     auto arrValues = NArrow::FinishBuilder(std::move(Builders[2]));
-    AFL_VERIFY(arrRecordIndex->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(arrRecordIndex->type()->id() == arrow::uint32()->id());
     auto arrRecordIndexValue = std::static_pointer_cast<arrow::UInt32Array>(arrRecordIndex);
     std::optional<TDictStats> resultStats = finishContext.GetActualStats();
     if (finishContext.GetRemap()) {
         for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
-            AFL_VERIFY(RTKeyIndexes[idx] < finishContext.GetRemap()->size());
+            YDB_LOG_VERIFY(RTKeyIndexes[idx] < finishContext.GetRemap()->size());
             const ui32 newIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx]];
-            AFL_VERIFY(newIndex < finishContext.GetActualStats().GetColumnsCount());
+            YDB_LOG_VERIFY(newIndex < finishContext.GetActualStats().GetColumnsCount());
             TStatusValidator::Validate(KeyIndex->Append(newIndex));
             if (idx) {
                 const ui32 predKeyIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx - 1]];
-                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
-                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex))(
-                                                                   "r1", arrRecordIndexValue->Value(idx - 1))(
-                                                                   "r2", arrRecordIndexValue->Value(idx))("k1", predKeyIndex)("k2", newIndex);
+                YDB_LOG_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex),
+                    {"r1", arrRecordIndexValue->Value(idx - 1)},
+                    {"r2", arrRecordIndexValue->Value(idx)},
+                    {"k1", predKeyIndex},
+                    {"k2", newIndex});
             }
         }
     } else {
         for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
             TStatusValidator::Validate(KeyIndex->Append(RTKeyIndexes[idx]));
             if (idx) {
-                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
-                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && RTKeyIndexes[idx - 1] < RTKeyIndexes[idx]))("r1",
-                                                                   arrRecordIndexValue->Value(idx - 1))("r2", arrRecordIndexValue->Value(idx))(
-                                                                   "k1", RTKeyIndexes[idx - 1])("k2", RTKeyIndexes[idx]);
+                YDB_LOG_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && RTKeyIndexes[idx - 1] < RTKeyIndexes[idx]),
+                    {"r1", arrRecordIndexValue->Value(idx - 1)},
+                    {"r2", arrRecordIndexValue->Value(idx)},
+                    {"k1", RTKeyIndexes[idx - 1]},
+                    {"k2", RTKeyIndexes[idx]});
             }
         }
     }
@@ -148,18 +152,24 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
     for (auto it = filter.GetFilter().begin(); itOthersData.IsValid() && it != filter.GetFilter().end(); ++it) {
         for (; itOthersData.IsValid(); itOthersData.Next()) {
             if (itOthersData.GetRecordIndex() < filterIntervalStart) {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             } else if (itOthersData.GetRecordIndex() < filterIntervalStart + *it) {
                 if (currentAcceptance) {
-                    AFL_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex())("shift", shiftSkippedCount)(
-                                                      "record_index", itOthersData.GetRecordIndex());
+                    YDB_LOG_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex(),
+                        {"shift", shiftSkippedCount},
+                        {"recordIndex", itOthersData.GetRecordIndex()});
                     const ui32 filteredRecordIndex = itOthersData.GetRecordIndex() - shiftSkippedCount;
                     if (predRecordIndex) {
-                        AFL_VERIFY(*predRecordIndex <= filteredRecordIndex)("pred", predRecordIndex)("index", filteredRecordIndex);
+                        YDB_LOG_VERIFY(*predRecordIndex <= filteredRecordIndex,
+                            {"pred", predRecordIndex},
+                            {"index", filteredRecordIndex});
                     }
                     predRecordIndex = filteredRecordIndex;
-                    AFL_VERIFY(filteredRecordIndex < resultRecordsCount)("new_record_index", filteredRecordIndex)("count", resultRecordsCount)(
-                        "shift", shiftSkippedCount)("record_index", itOthersData.GetRecordIndex());
+                    YDB_LOG_VERIFY(filteredRecordIndex < resultRecordsCount,
+                        {"newRecordIndex", filteredRecordIndex},
+                        {"count", resultRecordsCount},
+                        {"shift", shiftSkippedCount},
+                        {"recordIndex", itOthersData.GetRecordIndex()});
                     NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, filteredRecordIndex);
                     NArrow::Append<arrow::BinaryType>(*valuesBuilder, arrow::util::string_view(itOthersData.GetRawValue().data(), itOthersData.GetRawValue().size()));
                     originalKeys.emplace_back(itOthersData.GetKeyIndex());
@@ -192,7 +202,7 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
 }
 
 TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
-    AFL_VERIFY(Records->GetColumnsCount() == 3);
+    YDB_LOG_VERIFY(Records->GetColumnsCount() == 3);
     if (!count || !Records || !Records->num_rows()) {
         return TOthersData::BuildEmpty();
     }
@@ -221,9 +231,9 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
         itOthersData.MoveToPosition(*startPosition);
         for (; itOthersData.IsValid() && itOthersData.GetRecordIndex() < offset + count; itOthersData.Next()) {
             NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, itOthersData.GetRecordIndex() - offset);
-            AFL_VERIFY(itOthersData.GetKeyIndex() < keyIndexDecoder.size());
+            YDB_LOG_VERIFY(itOthersData.GetKeyIndex() < keyIndexDecoder.size());
             const ui32 newKeyIndex = keyIndexDecoder[itOthersData.GetKeyIndex()];
-            AFL_VERIFY(newKeyIndex < sliceStats.GetColumnsCount());
+            YDB_LOG_VERIFY(newKeyIndex < sliceStats.GetColumnsCount());
             NArrow::Append<arrow::UInt32Type>(*keyIndexBuilder, keyIndexDecoder[itOthersData.GetKeyIndex()]);
         }
         auto recordIndexes = NArrow::FinishBuilder(std::move(recordIndexBuilder));
@@ -267,7 +277,7 @@ std::shared_ptr<TJsonPathAccessor> TOthersData::GetPathAccessor(TDictStats::TRes
 }
 
 NArrow::NAccessor::TJsonValueView TOthersData::TIterator::GetValue() const {
-    AFL_VERIFY(IsValid());
+    YDB_LOG_VERIFY(IsValid());
     auto view = Values->GetView(CurrentIndex);
     return NArrow::NAccessor::TJsonValueView::OfBinaryJson(TStringBuf(view.data(), view.size()));
 }

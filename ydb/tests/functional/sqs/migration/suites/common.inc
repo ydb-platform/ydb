@@ -1,3 +1,6 @@
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 TEST_SRCS(
     ydb/tests/functional/sqs/common/test_account_actions.py
     ydb/tests/functional/sqs/common/test_acl.py
@@ -17,11 +20,8 @@ DATA(
 )
 
 IF (SANITIZER_TYPE)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32 cpu:4)
 ELSE()
-    SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
 ENDIF()
 

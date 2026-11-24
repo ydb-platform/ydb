@@ -116,24 +116,34 @@ TExprNode::TPtr ExpandResultType(
     TExprNode::TPtr defVal = traits->ChildPtr(defValIndex);
     const bool isDefault = !defVal->IsCallable("Null");
 
-    TExprNode::TPtr finish;
-    if (!isDefault) {
+    // clang-format off
+    TExprNode::TPtr finish = ctxExpr.Builder(traits->Pos())
+        .Apply(traits->Child(defValIndex - 1))
+            .With(0, std::move(init))
+        .Seal()
+        .Build();
+    // clang-format on
+
+    if (defVal->IsLambda()) {
         // clang-format off
-        finish = ctxExpr.Builder(traits->Pos())
-            .Apply(traits->Child(defValIndex - 1))
-                .With(0, std::move(init))
+        auto finishType = ctxExpr.Builder(traits->Pos())
+            .Callable("TypeOf")
+                .Add(0, finish)
             .Seal()
             .Build();
         // clang-format on
-    } else if (defVal->IsLambda()) {
-        ctxExpr.AddError(TIssue(
-            traits->Pos(ctxExpr),
-            TStringBuilder()
-                << "An aggregation with a lambda DefVal "
-                << "is not yet supported"));
-        return nullptr;
-    } else {
-        finish = std::move(defVal);
+        defVal = ExpandTraitsDefaultLambda(*defVal, std::move(finishType), ctxExpr);
+    }
+
+    if (isDefault) {
+        // clang-format off
+        finish = ctxExpr.Builder(traits->Pos())
+            .Callable("Coalesce")
+                .Add(0, std::move(finish))
+                .Add(1, std::move(defVal))
+            .Seal()
+            .Build();
+        // clang-format on
     }
 
     // clang-format off

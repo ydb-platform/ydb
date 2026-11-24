@@ -21,7 +21,7 @@ public:
         : TBase(self)
         , WriteController(writeController)
     {
-        AFL_VERIFY(WriteController);
+        YDB_LOG_VERIFY(WriteController);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override;

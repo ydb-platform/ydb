@@ -36,7 +36,7 @@ public:
     }
 
     ui64 GetIntervalChunkMemory() const {
-        AFL_VERIFY(IntervalChunkMemory);
+        YDB_LOG_VERIFY(IntervalChunkMemory);
         return *IntervalChunkMemory;
     }
 
@@ -127,7 +127,7 @@ public:
         std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger)
         : TBase(mergingContext, readContext)
     {
-        AFL_VERIFY(merger);
+        YDB_LOG_VERIFY(merger);
         Merger = std::move(merger);
     }
 };

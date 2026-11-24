@@ -98,6 +98,9 @@ private:
     TConclusionStatus ParseFromDSRequest(
         const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDiff& olapColumn) const {
         olapColumn.SetName(dsColumn.GetName());
+        if (dsColumn.HasDefaultFromLiteral() || dsColumn.HasEmptyDefault()) {
+            return TConclusionStatus::Fail("Default values are not supported in column tables");
+        }
         if (dsColumn.HasDefaultFromSequence()) {
             return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }

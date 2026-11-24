@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     yql/essentials/utils
+    yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues
     yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
 )
@@ -24,4 +25,6 @@ RECURSE(
     check
 )
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -8,6 +8,23 @@ const std::string CustomRuntimeDataWatermarkKey("watermark");
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TStringBuf GetWatermarkComparisonOperatorTextForm(EWatermarkComparisonOperator op)
+{
+    switch (op) {
+        case EWatermarkComparisonOperator::Less:
+            return "<";
+
+        case EWatermarkComparisonOperator::LessEqual:
+            return "<=";
+
+        case EWatermarkComparisonOperator::Greater:
+            return ">";
+
+        case EWatermarkComparisonOperator::GreaterEqual:
+            return ">=";
+    }
+}
+
 void TWatermarkRuntimeDataConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("column_name", &TThis::ColumnName);

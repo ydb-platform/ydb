@@ -16,6 +16,7 @@ SRCS(
     make.cpp
     peel.cpp
     hash.cpp
+    convert.cpp
 )
 
 END()

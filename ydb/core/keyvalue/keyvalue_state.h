@@ -328,7 +328,7 @@ protected:
     bool IsCollectEventSent;
     bool InitWithoutCollect;
     std::array<ui64, 256> ChannelDataUsage;
-    THashMap<ui32, ui64> GroupDataUsage;
+    ui64 StorageUsageRound = 0;
     std::bitset<256> UsedChannels;
     THolder<TChannelBalancer::TWeightManager> WeightManager;
 
@@ -402,7 +402,7 @@ public:
     void PersistState(ISimpleDb& db);
     bool DiskQuotaExceeded = false;
 
-    THashMap<ui32, ui64> GetStorageUsageByGroup() const;
+    void FillStorageUsageReport(NKikimrKeyValue::StorageUsageReport& report);
     void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);
     void ClearTabletCounters();
     TAutoPtr<TTabletCountersBase> TakeTabletCounters();

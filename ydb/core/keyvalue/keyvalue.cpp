@@ -80,76 +80,11 @@ void TKeyValueFlat::UpdateQuotaPath(TPathId pathId) {
 }
 
 void TKeyValueFlat::ReportStorageUsage() {
-    PendingStorageUsage.reset();
-    if (!QuotaPathId || !AppData()->FeatureFlags.GetEnableKeyValueStorageUsageReports()) {
-        return;
-    }
-
-    auto& pending = PendingStorageUsage.emplace();
-    pending.BytesByGroup = State.GetStorageUsageByGroup();
-    pending.Report.set_tablet_id(TabletID());
-    pending.Report.set_generation(Executor()->Generation());
-    pending.Report.set_round(++StorageUsageRound);
-    pending.Report.set_total_bytes(0);
-    for (const auto& [groupId, bytes] : pending.BytesByGroup) {
-        auto query = MakeHolder<TEvNodeWardenQueryGroupInfo>(groupId);
-        query->Record.SetResolve(true);
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), query.Release(), 0, StorageUsageRound);
-    }
-
-    if (pending.BytesByGroup.empty()) {
-        SendStorageUsageReport();
-    }
-}
-
-void TKeyValueFlat::Handle(TEvNodeWardenGroupInfo::TPtr& ev) {
-    if (!PendingStorageUsage || ev->Cookie != PendingStorageUsage->Report.round()) {
-        return;
-    }
-
-    const auto& response = ev->Get()->Record;
-    if (!response.HasGroup() || !response.GetGroup().HasGroupID()) {
-        return;
-    }
-
-    const auto& group = response.GetGroup();
-    auto& pending = *PendingStorageUsage;
-    const auto it = pending.BytesByGroup.find(group.GetGroupID());
-    if (it == pending.BytesByGroup.end()) {
-        return;
-    }
-
-    const auto type = TGroupID(group.GetGroupID()).ConfigurationType();
-    if ((type == EGroupConfigurationType::Virtual || group.HasBlobDepotId()) && !group.HasIsExternalStorage()) {
-        return;
-    }
-
-    if (!group.GetIsExternalStorage()) {
-        if (type != EGroupConfigurationType::Static && !group.HasStoragePoolKind()) {
-            return;
-        }
-
-        pending.Report.set_total_bytes(pending.Report.total_bytes() + it->second);
-        if (const auto& kind = group.GetStoragePoolKind(); !kind.empty()) {
-            (*pending.Report.mutable_bytes_by_pool_kind())[kind] += it->second;
-        }
-    }
-
-    pending.BytesByGroup.erase(it);
-    if (pending.BytesByGroup.empty()) {
-        SendStorageUsageReport();
-    }
-}
-
-void TKeyValueFlat::SendStorageUsageReport() {
-    // Keep the last complete usage in SchemeShard while any historical group is unresolved.
-    if (AppData()->FeatureFlags.GetEnableKeyValueStorageUsageReports()) {
+    if (QuotaPathId && AppData()->FeatureFlags.GetEnableKeyValueStorageUsageReports()) {
         auto report = MakeHolder<TEvKeyValue::TEvStorageUsageReport>();
-        report->Record.Swap(&PendingStorageUsage->Report);
+        State.FillStorageUsageReport(report->Record);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(report.Release(), QuotaPathId.OwnerId, false));
     }
-
-    PendingStorageUsage.reset();
 }
 
 bool TKeyValueFlat::TTxRequest::CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) {
@@ -158,7 +93,6 @@ bool TKeyValueFlat::TTxRequest::CheckConsistency(NTabletFlatExecutor::TTransacti
         Self->State.GetStateBytes().ToString().c_str(), Self->State.RecountStateBytes().ToString().c_str());
     // Load feeds the tablet counters and resource metrics, so the scratch state needs its own
     TKeyValueState state;
-    state.SetTabletInfo(Self->Info());
     state.SetupTabletCounters(MakeTabletCounters());
     NMetrics::TResourceMetrics scratchMetrics(Self->TabletID(), 0, TActorId());
     state.SetupResourceMetrics(&scratchMetrics);

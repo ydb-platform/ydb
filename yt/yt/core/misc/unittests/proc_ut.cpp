@@ -12,7 +12,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TProcTest, TestParseMemoryMappings)
+TEST(TProcTest, ParseMemoryMappings)
 {
     const std::string rawSMaps =
         "7fbb7b24d000-7fbb7b251000 rw-s 00000000 00:00 0 \n"
@@ -92,7 +92,7 @@ TEST(TProcTest, TestParseMemoryMappings)
     EXPECT_EQ(smaps[1].VMFlags, EVMFlag::None);
 }
 
-TEST(TProcTest, TestGetSelfMemoryMappings)
+TEST(TProcTest, GetSelfMemoryMappings)
 {
     auto pid = GetProcessId();
     auto memoryMappings = GetProcessMemoryMappings(pid);

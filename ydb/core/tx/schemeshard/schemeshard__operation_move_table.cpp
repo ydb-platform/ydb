@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/mind/hive/hive.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -132,6 +133,14 @@ public:
                 auto remap = move->AddReMapIndexes();
                 srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
                 dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
+            }
+            if (srcPath->Name == NTableIndex::NKMeans::PostingTable
+                    && srcPath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalHnsw)) {
+                // Posting-table HNSW metadata identifies its owning index,
+                // rather than a child index of the implementation table.
+                auto* remap = move->AddReMapIndexes();
+                srcPath.Parent()->PathId.ToProto(remap->MutableSrcPathId());
+                dstPath.Parent()->PathId.ToProto(remap->MutableDstPathId());
             }
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         } else if (srcPath->IsColumnTable()) {

@@ -2,12 +2,14 @@
 #include "tablet_counters_protobuf.h"
 #include "private/aggregated_tablet_counters.h"
 
+#include <ydb/core/protos/counters_blob_depot.pb.h>
 #include <ydb/core/protos/counters_bs_controller.pb.h>
 #include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_coordinator.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_hive.pb.h>
+#include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
 #include <ydb/core/protos/counters_tx_proxy.pb.h>
@@ -182,6 +184,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersParsedOpts) {
         CheckDeprecatedTxTypesHaveNoNames<NFlatTxCoordinator::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NDataShard::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NHive::ETxTypes_descriptor>();
+        CheckDeprecatedTxTypesHaveNoNames<NReplication::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NSchemeShard::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NStat::ETxTypes_descriptor>();
         CheckDeprecatedTxTypesHaveNoNames<NTxProxy::ETxTypes_descriptor>();
@@ -226,6 +229,18 @@ Y_UNIT_TEST_SUITE(TTabletCountersPublish) {
         UNIT_ASSERT(!executorGroup->FindCounter("TxWastedBytes"));
         UNIT_ASSERT(executorGroup->FindCounter("TxCachedBytes"));
 
+        auto blobDepotGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TProtobufTabletCounters<NKikimrBlobDepot::ESimpleCounters_descriptor, NKikimrBlobDepot::ECumulativeCounters_descriptor,
+            NKikimrBlobDepot::EPercentileCounters_descriptor, NKikimrBlobDepot::ETxTypes_descriptor> blobDepotCounters;
+        NPrivate::TAggregatedTabletCounters blobDepot(blobDepotGroup);
+        blobDepot.Initialize(&blobDepotCounters);
+        UNIT_ASSERT(!blobDepotGroup->FindCounter("SUM(BlobDepot/S3/Get/ReadsInFlight)"));
+        UNIT_ASSERT(blobDepotGroup->FindCounter("SUM(BlobDepot/S3/Put/WritesInFlight)"));
+        UNIT_ASSERT(!blobDepotGroup->FindCounter("BlobDepot/S3/Gets/Ok"));
+        UNIT_ASSERT(blobDepotGroup->FindCounter("BlobDepot/S3/Puts/Ok"));
+        UNIT_ASSERT(!blobDepotGroup->FindHistogram("BlobDepot/S3/Router/Balancer/LatencyMs"));
+        UNIT_ASSERT(blobDepotGroup->FindHistogram("BlobDepot/SelectGroups"));
+
         auto appGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TProtobufTabletCounters<NDataShard::ESimpleCounters_descriptor, NDataShard::ECumulativeCounters_descriptor,
             NDataShard::EPercentileCounters_descriptor, NDataShard::ETxTypes_descriptor> appCounters;
@@ -237,6 +252,14 @@ Y_UNIT_TEST_SUITE(TTabletCountersPublish) {
         UNIT_ASSERT(appGroup->FindCounter("DataShard/ScannedRows"));
         UNIT_ASSERT(!appGroup->FindHistogram("DataShard/TxProgressExecLatency"));
         UNIT_ASSERT(appGroup->FindHistogram("DataShard/ProposeQueueLatency"));
+
+        auto replicationGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TProtobufTabletCounters<NReplication::ESimpleCounters_descriptor, NReplication::ECumulativeCounters_descriptor,
+            NReplication::EPercentileCounters_descriptor, NReplication::ETxTypes_descriptor> replicationCounters;
+        NPrivate::TAggregatedTabletCounters replication(replicationGroup);
+        replication.Initialize(&replicationCounters);
+        UNIT_ASSERT(!replicationGroup->FindCounter("ReplicationController/TxPrepareAttachDst/RwCompleted"));
+        UNIT_ASSERT(replicationGroup->FindCounter("ReplicationController/TxIndexBuild/RwCompleted"));
     }
 }
 

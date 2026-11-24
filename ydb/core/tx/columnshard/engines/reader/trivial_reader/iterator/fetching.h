@@ -84,7 +84,7 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns)
     {
-        AFL_VERIFY(Columns.GetColumnsCount());
+        YDB_LOG_VERIFY(Columns.GetColumnsCount());
     }
 };
 
@@ -162,7 +162,7 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns)
     {
-        AFL_VERIFY(Columns.GetColumnsCount());
+        YDB_LOG_VERIFY(Columns.GetColumnsCount());
     }
 };
 
@@ -200,7 +200,7 @@ public:
         , Limit(limit)
         , Reverse(reverse)
     {
-        AFL_VERIFY(Limit);
+        YDB_LOG_VERIFY(Limit);
     }
 };
 

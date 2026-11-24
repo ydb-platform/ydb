@@ -37,6 +37,8 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadOnly)                             (616))
     ((RestartAfterRecovery)                 (617))
     ((ExpectedMutationHandlerException)     (618))
+    ((CausalTimeNotFound)                   (619))
+    ((CausalTimeNotReached)                 (620))
 );
 
 DEFINE_ENUM(EPeerKind,

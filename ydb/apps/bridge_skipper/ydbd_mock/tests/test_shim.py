@@ -41,6 +41,27 @@ class ShimTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("grpc://127.0.0.1:22100", out)
 
+    def test_ipv6_explicit_endpoints_and_labels_keep_the_scheme(self):
+        with open(os.path.join(self.run_dir, "endpoint_map.json"), "w") as sink:
+            json.dump({"mock-v6-1": "[::1]:22100"}, sink)
+        for scheme in ("grpc", "grpcs"):
+            for authority in ("[::1]:22100", "[0:0:0:0:0:0:0:1]:22100", "::1:22100", "mock-v6-1:2135"):
+                with self.subTest(scheme=scheme, authority=authority):
+                    code, out, err = self.shim("-e", scheme + "://" + authority, "monitoring", "healthcheck")
+                    self.assertEqual(code, 0, err)
+                    self.assertIn(scheme + "://[::1]:22100", out)
+
+    def test_foreign_or_malformed_ipv6_endpoints_are_refused(self):
+        with open(os.path.join(self.run_dir, "endpoint_map.json"), "w") as sink:
+            json.dump({"mock-v6-1": "[::1]:22100"}, sink)
+        for authority in ("[::2]:22100", "[::1]:22101", "[example.com]:22100", "[::1]suffix:22100",
+                          "[::1]", "[::1]:0", "[::1]:65536", "[::1]:bad", "[::1]:²",
+                          "[::1]:22100/path", "[::1]:22100?query", "[::1]:22100#fragment"):
+            with self.subTest(authority=authority):
+                code, out, _ = self.shim("-e", "grpc://" + authority, "monitoring", "healthcheck")
+                self.assertEqual(code, 3)
+                self.assertNotIn("fake-ydb", out)
+
     def test_the_bridge_update_command_is_not_the_cli_updater(self):
         code, out, err = self.shim(*self.EP, "admin", "cluster", "bridge", "update", "--set", "pile2=DISCONNECTED")
         self.assertEqual(code, 0, err)

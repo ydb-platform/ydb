@@ -12,7 +12,7 @@
 #include <util/system/env.h>
 
 const bool SUPPRESS_REBOOTS = false;
-const bool ENABLE_REBOOT_DISPATCH_LOG = true;
+const bool ENABLE_REBOOT_DISPATCH_LOG = GetEnv("ENABLE_REBOOT_DISPATCH_LOG") == "1";
 const bool TRACE_DELAY_TIMING = true;
 const bool SUPPRESS_DELAYS = false;
 const bool VARIATE_RANDOM_SEED = false;
@@ -504,6 +504,8 @@ namespace NKikimr {
         {
             TTabletTracer tabletTracer(activeZone, tabletIds);
             TTabletScheduledFilter scheduledFilter(tabletTracer);
+            Cout << "===> BEGIN dispatch: " << INITIAL_TEST_DISPATCH_NAME << Endl;
+
             try {
                 testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntimeBase& runtime) {
                     runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -552,8 +554,7 @@ namespace NKikimr {
                 }
 
                 TString dispatchName = Sprintf("Reboot tablet %" PRIu64 " (#%" PRIu32 ") run %" PRIu32 "" , tabletId, tabletEventCountBeforeReboot, runCount);
-                if (ENABLE_REBOOT_DISPATCH_LOG)
-                    Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
+                Cout << "===> BEGIN dispatch: " << dispatchName << Endl;
 
                 try {
                     ++runCount;
@@ -604,6 +605,7 @@ namespace NKikimr {
         if (selectedReboot == Max<ui32>()) {
             TTabletTracer tabletTracer(activeZone, tabletIds);
             TTabletScheduledFilter scheduledFilter(tabletTracer);
+            Cout << "===> BEGIN dispatch: " << INITIAL_TEST_DISPATCH_NAME << Endl;
 
             testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntime& runtime) {
                 runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -641,8 +643,7 @@ namespace NKikimr {
             }
 
             TString dispatchName = Sprintf("Pipe reset at event #%" PRIu32, eventCountBeforeReboot);
-            if (ENABLE_REBOOT_DISPATCH_LOG)
-                Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
+            Cout << "===> BEGIN dispatch: " << dispatchName << Endl;
 
             try {
                 activeZone = false;

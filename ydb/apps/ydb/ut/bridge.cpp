@@ -851,6 +851,8 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     }
 
     Y_UNIT_TEST_F(OrdinaryPileListShowsBridgeConfiguration, TBridgeCliFixture) {
+        EnvHomeFile("ydb/bin/config.json", R"({"check_version": false})");
+
         auto& status = PrepareUnbridgedStatus();
         status.add_bridge_config_node_ids(3);
         status.add_bridge_config_node_ids(5);

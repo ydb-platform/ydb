@@ -5,7 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/core/kqp/common/simple/current_query_stats.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/session_updater.h>

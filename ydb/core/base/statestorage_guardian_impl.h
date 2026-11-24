@@ -41,6 +41,10 @@ public:
         return Merged;
     }
 
+    const TVector<TActorId>& GetReported(ui32 replicaIdx) const {
+        return Reported[replicaIdx];
+    }
+
     // update reported list for replica, returns true if smth changed
     // reported must be sorted
     bool Merge(ui32 replicaIdx, TVector<TActorId> &reported) {

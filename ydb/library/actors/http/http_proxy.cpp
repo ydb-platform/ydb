@@ -242,24 +242,8 @@ protected:
 
         std::shared_ptr<NMonitoring::IMetricFactory> registry = Registry.lock();
         if (registry) {
-            registry->Rate(NMonitoring::MakeLabels(
-                {
-                    {"sensor", "count"},
-                    {"direction", sensors.Direction},
-                    {"peer", sensors.Host},
-                    {"url", url},
-                    {"status", sensors.Status}
-                }))->Inc();
-            registry->HistogramRate(NMonitoring::MakeLabels(
-                {
-                    {"sensor", "time_us"},
-                    {"direction", sensors.Direction},
-                    {"peer", sensors.Host},
-                    {"url", url},
-                    {"status", sensors.Status}
-                }),
-                NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MicroSeconds());
-            registry->HistogramRate(NMonitoring::MakeLabels(
+            // memOnly: monitoring stores only the aggregates over hosts, not the per-host series.
+            registry->HistogramRateWithOpts(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_ms"},
                     {"direction", sensors.Direction},
@@ -267,7 +251,7 @@ protected:
                     {"url", url},
                     {"status", sensors.Status}
                 }),
-                NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());
+                NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}), {.MemOnly = true})->Record(sensors.Time.MillisecondsFloat());
         }
     }
 

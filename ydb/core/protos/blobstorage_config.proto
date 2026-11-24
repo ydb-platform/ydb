@@ -742,14 +742,10 @@ message TDeleteSpecificGroups {
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Persistent cluster-wide states of physical DataCenters for dynamic mirror-3-dc groups.
+// Desired physical DC states. In self-managed clusters distconf owns the snapshot.
 message TDefineDataCenterStates {
-    message TDataCenter {
-        optional string Name = 1;
-        optional TDataCenterState.EState State = 2;
-    }
-    // Replaces the entire list. Unlisted DataCenters are INCLUDED.
-    repeated TDataCenter DataCenter = 1;
+    // Replaces the entire list. Unlisted datacenters are INCLUDED.
+    repeated TDataCenterStates.TDataCenter DataCenter = 1;
 }
 
 // Clear the states and publish a new generation of every dynamic mirror-3-dc group (test use only).
@@ -968,6 +964,7 @@ message TBaseConfig {
         // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
         repeated TFailRealmInfo FailRealms = 14;
         optional TGroupState.EState Mirror3dcState = 15;
+        optional bool DDisk = 16;
     }
     message TNode {
         uint32 NodeId = 1;
@@ -998,6 +995,8 @@ message TBaseConfig {
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
     TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
+    // Present when the controller supplies typed DDisk pool groups.
+    optional bool HasDDiskPools = 8;
 }
 
 message TMoveCommand {
@@ -1119,4 +1118,5 @@ message TConfigResponse {
     repeated uint32 GroupsGetDisintegrated = 6;
     repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
     bool RollbackSuccess = 8;
+    TDataCenterStates AppliedDataCenterStates = 9;
 }

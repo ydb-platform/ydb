@@ -8,6 +8,7 @@
     named_tests = true - make different named sourceSets for each test with depends between tests
     named_test_artifacts = true - publish own jar and configuration for each named test sourceSet, instead of one jar with all test sourceSets of module (requires named_tests)
     zip64 = true - allow archives with more than 65535 entries, hard limit of ZIP format, for all jars of project
+    non_transitive_classpath = true - resolve compile/runtime classpath configurations without transitive dependencies: dependencies already list the full closure computed by ya
 -#}
 
 {%- macro PatchRootCommon(path, out_root) -%}

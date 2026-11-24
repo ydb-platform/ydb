@@ -432,11 +432,11 @@ bool ISource::SetSamplingOptions(TContext& ctx,
     return false;
 }
 
-bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) {
-    Y_UNUSED(pos);
+bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints, const TMap<TString, TPosition>& hintPositions) {
     Y_UNUSED(contextHints);
+    Y_UNUSED(hintPositions);
     if (hints) {
-        ctx.Error() << "Hint '" << hints.begin()->first << "' requires a table";
+        ctx.Error(pos) << "Hint '" << hints.begin()->first << "' requires a table";
         return false;
     }
     return true;

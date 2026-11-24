@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#include <ydb/core/base/appdata.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -46,20 +48,30 @@ public:
             {"rid", rid},
             {"pathId", pathId});
 
-        const auto initialState = InitialReplicationState(record.GetConfig());
+        auto& config = *record.MutableConfig();
+        const auto& flags = AppData(ctx)->FeatureFlags;
+        const bool replicateChangefeeds = config.HasSpecific()
+            && config.GetInitialScan()
+            && config.GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::kRow
+            && flags.GetEnableCdcReplication()
+            && flags.GetEnableTopicReplication()
+            && flags.GetEnableAsyncReplicationTableOwnership();
+        config.SetReplicateChangefeeds(replicateChangefeeds);
+
+        const auto initialState = InitialReplicationState(config);
 
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::Replications::PathLocalId>(pathId.LocalPathId),
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::Config>(config.SerializeAsString()),
             NIceDb::TUpdate<Schema::Replications::Database>(record.GetDatabase()),
             NIceDb::TUpdate<Schema::Replications::State>(initialState),
             NIceDb::TUpdate<Schema::Replications::DesiredState>(initialState)
         );
         if (record.HasLocation()) {
-            record.MutableConfig()->MutableLocation()->CopyFrom(record.GetLocation());
+            config.MutableLocation()->CopyFrom(record.GetLocation());
         }
-        Replication = Self->Add(rid, pathId, std::move(*record.MutableConfig()), std::move(record.GetDatabase()));
+        Replication = Self->Add(rid, pathId, std::move(config), std::move(record.GetDatabase()));
         if (initialState == TReplication::EState::Paused) {
             Replication->SetState(initialState);
             Replication->SetDesiredState(initialState);

@@ -60,16 +60,28 @@ class TLiveCdcMirror {
     }
 
     void CheckOffsets(ui64 end, ui64 start = 0) {
-        WaitForReplication(Destination, [&] {
-            const auto offsets = GetTopicOffsets(Destination, DestinationFeed, Consumer);
-            return offsets && offsets->Start == start && offsets->End == end && offsets->Committed == 1;
+        WaitForTopicOffsets(Destination, DestinationFeed, Consumer, [&](const TTopicOffsets& offsets) {
+            return offsets.Start == start && offsets.End == end && offsets.Committed == 1;
         }, "destination data and consumer offsets");
     }
 
+    void ReplicateInitialRow(const TString& expectedPath) {
+        Scheme(Destination, Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+            WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
+                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", Source.GetEndpoint().c_str()));
+        WaitForReplication(Destination, [&] {
+            return Destination.GetDescription(expectedPath).GetSchemeStatus() == NKikimrScheme::StatusSuccess;
+        }, expectedPath);
+        WaitForReplication(Destination, [&] {
+            return Execute(Destination, "SELECT key FROM `/Root/replica` WHERE key = 1u AND value = 10u;")
+                .GetResultSet(0).RowsCount() == 1;
+        }, "initially scanned table row");
+    }
+
 public:
-    TLiveCdcMirror()
+    explicit TLiveCdcMirror(const TFeatureFlags& destinationFlags)
         : Source(TopicReplicationFlags())
-        , Destination(TopicReplicationFlags())
+        , Destination(destinationFlags)
     {
         auto& runtime = Destination.GetRuntime();
         runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)), runtime.Register(CreateReplicationService()));
@@ -80,26 +92,23 @@ public:
         consumers.BeginAddConsumer(Consumer);
         const auto added = client.AlterTopic(SourceFeed, consumers).GetValueSync();
         UNIT_ASSERT_C(added.IsSuccess(), added.GetIssues().ToString());
+        Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (1u, 10u);");
+    }
+
+    void CheckTableReplicationWithoutChangefeed() {
+        ReplicateInitialRow("/Root/replica");
+        UNIT_ASSERT_VALUES_EQUAL(Destination.GetDescription(DestinationFeed).GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
     }
 
     void InitialScanAndMirror() {
-        Execute(Source, "UPSERT INTO `/Root/source` (key, value) VALUES (1u, 10u);");
         const auto first = ReadTopic(Source, SourceFeed, 1).front();
         UNIT_ASSERT_VALUES_EQUAL(first.Data, R"({"update":{"value":10},"key":[1]})");
         NYdb::NTopic::TTopicClient client(Source.GetDriver());
         const auto commit = client.CommitOffset(SourceFeed, 0, Consumer, 1).GetValueSync();
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
-        Scheme(Destination, Sprintf(R"(CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
-            WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin",
-                CONSISTENCY_LEVEL = "ROW", INITIAL_SCAN = TRUE);)", Source.GetEndpoint().c_str()));
-        WaitForReplication(Destination, [&] {
-            return Destination.GetDescription(DestinationFeed).GetSchemeStatus() == NKikimrScheme::StatusSuccess;
-        }, "automatic destination CDC creation");
-        WaitForReplication(Destination, [&] {
-            return Execute(Destination, "SELECT key FROM `/Root/replica` WHERE key = 1u AND value = 10u;")
-                .GetResultSet(0).RowsCount() == 1;
-        }, "initially scanned table row");
+        ReplicateInitialRow(DestinationFeed);
         const auto mirrored = ReadTopic(Destination, DestinationFeed, 1).front();
         UNIT_ASSERT_VALUES_EQUAL(mirrored.Data, first.Data);
         UNIT_ASSERT_VALUES_EQUAL(mirrored.Offset, first.Offset);
@@ -138,9 +147,8 @@ public:
         NYdb::NTopic::TTopicClient client(Source.GetDriver());
         const auto commit = client.CommitOffset(SourceFeed, 0, Consumer, 2).GetValueSync();
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
-        WaitForReplication(Source, [&] {
-            const auto offsets = GetTopicOffsets(Source, SourceFeed, Consumer);
-            return offsets && offsets->End == 3 && offsets->Committed == 2;
+        WaitForTopicOffsets(Source, SourceFeed, Consumer, [&](const TTopicOffsets& offsets) {
+            return offsets.End == 3 && offsets.Committed == 2;
         }, "source history and consumer commit ahead of standby");
         CheckOffsets(2);
 
@@ -199,8 +207,15 @@ Y_UNIT_TEST_SUITE(CdcLiveMirroring) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Success, !ConflictingId);
     }
 
+    Y_UNIT_TEST(InitialScanSkipsChangefeedsByDefault) {
+        TLiveCdcMirror test{TopicReplicationFlags()};
+        test.CheckTableReplicationWithoutChangefeed();
+    }
+
     Y_UNIT_TEST(InitialScanMirrorsCdcHistoryAndConsumerOffset) {
-        TLiveCdcMirror test;
+        auto flags = TopicReplicationFlags();
+        flags.FeatureFlags.SetEnableCdcReplication(true);
+        TLiveCdcMirror test(flags);
         test.InitialScanAndMirror();
         test.ForceDoneTrimsHistory();
     }

@@ -278,10 +278,9 @@ public:
         const auto commit = CommitSourceConsumerOffset(offset);
         UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
 
-        WaitForReplication(Destination, [&] {
-            const auto stats = GetTopicOffsets(Destination, DestinationTopic, Consumer);
-            return stats && stats->Committed == offset;
-        });
+        WaitForTopicOffsets(Destination, DestinationTopic, Consumer, [&](const TTopicOffsets& offsets) {
+            return offsets.Committed == offset;
+        }, "destination consumer commit");
     }
 
     void ReplicateFirstMessage() {
@@ -307,17 +306,16 @@ public:
     }
 
     void WaitForOffsets(ui64 end, ui64 appOffset) {
-        TString description;
-        WaitForReplication(Destination, [&] {
-            const auto destination = GetOffsets(Destination, DestinationTopic, Consumer);
+        TString description = "destination partition offsets";
+        WaitForTopicOffsets(Destination, DestinationTopic, Consumer, [&](const TTopicOffsets& destination) {
             description = TStringBuilder() << "destination partition 0 to reach end offset " << end
                 << " and application offset " << appOffset << " (observed " << destination.End
                 << " and " << destination.Committed << ')';
             return destination.End == end && destination.Committed == appOffset;
         }, description);
 
-        WaitForReplication(Destination, [&] {
-            const auto source = GetOffsets(Source, SourceTopic, MirrorConsumer);
+        description = "source mirror consumer offsets";
+        WaitForTopicOffsets(Source, SourceTopic, MirrorConsumer, [&](const TTopicOffsets& source) {
             description = TStringBuilder() << "source mirror consumer " << MirrorConsumer
                 << " to commit partition 0 through offset " << end << " (observed " << source.Committed << ')';
             return source.End == end && source.Committed == end;

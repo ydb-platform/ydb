@@ -4,6 +4,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/datetime/base.h>
@@ -32,24 +33,36 @@ TFeatureFlags TopicReplicationFlags() {
     return flags;
 }
 
-void WaitForReplication(TEnv<true>& env, const std::function<bool()>& ready, const TString& description) {
-    const auto deadline = TInstant::Now() + TDuration::Seconds(60);
-    while (!ready()) {
-        UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for " << description);
+namespace {
+
+void WaitForReplicationUntil(TEnv<true>& env, const auto& ready, const TString& description) {
+    const auto deadline = NYdb::TDeadline::AfterDuration(TDuration::Seconds(60));
+    while (NYdb::TDeadline::Now() < deadline) {
+        if (ready(deadline)) {
+            return;
+        }
         if (env.GetRuntime().IsRealThreads()) {
             Sleep(TDuration::MilliSeconds(10));
         } else {
             env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(10));
         }
     }
+    UNIT_FAIL("Timed out waiting for " << description);
 }
 
-std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer) {
+std::optional<TTopicOffsets> DescribeTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
+        NYdb::TDeadline deadline) {
     NYdb::NTopic::TTopicClient client(env.GetDriver());
-    const auto result = env.RunCall([&] {
-        return client.DescribeConsumer(topic, consumer,
-            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
-    });
+    NYdb::NTopic::TDescribeConsumerSettings settings;
+    settings.IncludeStats(true);
+    const bool polling = deadline != NYdb::TDeadline::Max();
+    if (polling) {
+        settings.Deadline(deadline).ClientTimeout(TDuration::Seconds(5));
+    }
+    const auto result = env.RunCall([&] { return client.DescribeConsumer(topic, consumer, settings).GetValueSync(); });
+    if (polling && !result.IsSuccess() && NYdb::NTopic::GetRetryErrorClass(result.GetStatus()) != ERetryErrorClass::NoRetry) {
+        return std::nullopt;
+    }
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     const auto& partitions = result.GetConsumerDescription().GetPartitions();
     UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -61,6 +74,24 @@ std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& top
         return std::nullopt;
     }
     return TTopicOffsets{stats->GetStartOffset(), stats->GetEndOffset(), consumerStats->GetCommittedOffset()};
+}
+
+} // namespace
+
+void WaitForReplication(TEnv<true>& env, const std::function<bool()>& ready, const TString& description) {
+    WaitForReplicationUntil(env, [&](NYdb::TDeadline) { return ready(); }, description);
+}
+
+std::optional<TTopicOffsets> GetTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer) {
+    return DescribeTopicOffsets(env, topic, consumer, NYdb::TDeadline::Max());
+}
+
+void WaitForTopicOffsets(TEnv<true>& env, const TString& topic, const TString& consumer,
+        const std::function<bool(const TTopicOffsets&)>& ready, const TString& description) {
+    WaitForReplicationUntil(env, [&](NYdb::TDeadline deadline) {
+        const auto offsets = DescribeTopicOffsets(env, topic, consumer, deadline);
+        return offsets && ready(*offsets);
+    }, description);
 }
 
 TVector<TTopicRecord> ReadTopic(TEnv<true>& env, const TString& topic, size_t count, ui64 firstOffset) {

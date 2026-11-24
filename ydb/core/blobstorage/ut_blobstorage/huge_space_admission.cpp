@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
@@ -123,9 +124,9 @@ struct THugeAdmissionEnv {
         Env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, result.release(), 0, ev->Cookie), nodeId);
     }
 
-    TActorId SendPut(TDataKind::E kind = TDataKind::USER, bool unavoidable = false, ui32 size = 1_MB) {
+    TActorId SendPut(TDataKind::E kind = TDataKind::USER, bool unavoidable = false, ui32 size = 1_MB, char fill = 'x') {
         const TActorId edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        const TString data(size, 'x');
+        const TString data(size, fill);
         const TLogoBlobID id(1000, 1, NextStep++, 0, data.size(), 0, 1);
         Env.Runtime->Send(new IEventHandle(Queue, edge, new TEvBlobStorage::TEvVPut(id, TRope(data),
             Info->GetVDiskId(0), unavoidable, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog,
@@ -154,6 +155,122 @@ struct THugeAdmissionEnv {
 } // namespace
 
 Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
+    Y_UNIT_TEST(ReuseChunkWhileSectorPreparationIsOff) {
+        THugeAdmissionEnv env;
+        const TString control = "VDiskControls.EnableVDiskSectorPreparation";
+        env.Env.SetIcbControl(1, control, 1);
+
+        // Let Fresh reserve its index space. Hold only the huge data reservation so the next
+        // free chunk can first go through a complete allocation and release on this VDisk.
+        env.HoldHugeReserve = true;
+        const TActorId firstPut = env.SendPut();
+        env.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(env.HeldReserve);
+        const TActorId hugeAllocator = env.HeldReserve->Sender;
+
+        const TInstant deadline = env.Env.Runtime->GetClock() + TDuration::Minutes(1);
+        const TActorId edge = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Env.Runtime->Send(new IEventHandle(env.Skeleton, edge, new TEvGetSkeletonState), 1);
+        const TAutoPtr<TEventHandle<TEvGetSkeletonStateResult>> state =
+            env.Env.WaitForEdgeActorEvent<TEvGetSkeletonStateResult>(edge, false, deadline);
+        UNIT_ASSERT(state);
+        const TActorId keeper = state->Get()->ChunkKeeperActorId;
+        UNIT_ASSERT(keeper);
+
+        TChunkIdx chunk = 0;
+        ui64 oldNonce = 0;
+        ui64 newNonce = 0;
+        std::vector<bool> preparedWrites;
+        bool sawRawRead = false;
+        // Observe both reservations and verify the new nonce on subsequent I/O.
+        auto fixtureFilter = std::move(env.Env.Runtime->FilterFunction);
+        env.Env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvChunkReserveResult:
+                    if (ev->Recipient == keeper || ev->Recipient == hugeAllocator) {
+                        const NPDisk::TEvChunkReserveResult* msg = ev->Get<NPDisk::TEvChunkReserveResult>();
+                        UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+                        UNIT_ASSERT_VALUES_EQUAL(msg->ChunkIds.size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(msg->ChunkNonces.size(), 1);
+                        if (ev->Recipient == keeper) {
+                            chunk = msg->ChunkIds.front();
+                            oldNonce = msg->ChunkNonces.front();
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(msg->ChunkIds.front(), chunk);
+                            newNonce = msg->ChunkNonces.front();
+                        }
+                    }
+                    break;
+                case TEvBlobStorage::EvChunkWrite: {
+                    const NPDisk::TEvChunkWrite* msg = ev->Get<NPDisk::TEvChunkWrite>();
+                    if (chunk && msg->ChunkIdx == chunk) {
+                        preparedWrites.push_back(msg->PreformattedSectors);
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvChunkReadResult: {
+                    const NPDisk::TEvChunkReadResult* msg = ev->Get<NPDisk::TEvChunkReadResult>();
+                    if (chunk && msg->ChunkIdx == chunk && msg->RawSectors) {
+                        UNIT_ASSERT_VALUES_EQUAL(msg->ChunkNonce, newNonce);
+                        sawRawRead = true;
+                    }
+                    break;
+                }
+            }
+            return fixtureFilter(nodeId, ev);
+        };
+
+        constexpr TEvChunkKeeperAllocate::TSubsystem subsystem = NKikimrVDiskData::TChunkKeeperEntryPoint::Test1;
+        env.Env.Runtime->Send(new IEventHandle(keeper, edge, new TEvChunkKeeperAllocate(subsystem)), 1);
+        const TAutoPtr<TEventHandle<TEvChunkKeeperAllocateResult>> allocation =
+            env.Env.WaitForEdgeActorEvent<TEvChunkKeeperAllocateResult>(edge, false, deadline);
+        UNIT_ASSERT(allocation);
+        UNIT_ASSERT_VALUES_EQUAL(allocation->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(allocation->Get()->ChunkIdx);
+        UNIT_ASSERT_VALUES_EQUAL(*allocation->Get()->ChunkIdx, chunk);
+        UNIT_ASSERT(oldNonce);
+
+        env.Env.SetIcbControl(1, control, 0);
+        env.Env.Runtime->Send(new IEventHandle(keeper, edge, new TEvChunkKeeperFree(chunk, subsystem)), 1);
+        const TAutoPtr<TEventHandle<TEvChunkKeeperFreeResult>> freed =
+            env.Env.WaitForEdgeActorEvent<TEvChunkKeeperFreeResult>(edge, false, deadline);
+        UNIT_ASSERT(freed);
+        UNIT_ASSERT_VALUES_EQUAL(freed->Get()->Status, NKikimrProto::OK);
+        env.HoldHugeReserve = false;
+        env.Env.Runtime->Send(env.HeldReserve.release(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ExpectPut(firstPut, NKikimrProto::OK).ChunkIdx, chunk);
+        UNIT_ASSERT(newNonce && newNonce != oldNonce);
+        UNIT_ASSERT_VALUES_EQUAL(preparedWrites.size(), 1);
+        UNIT_ASSERT(!preparedWrites.front());
+
+        env.Env.SetIcbControl(1, control, 1);
+        const TActorId secondPut = env.SendPut(TDataKind::USER, false, 1_MB, 'y');
+        UNIT_ASSERT_VALUES_EQUAL(env.ExpectPut(secondPut, NKikimrProto::OK).ChunkIdx, chunk);
+        UNIT_ASSERT_VALUES_EQUAL(preparedWrites.size(), 2);
+        UNIT_ASSERT(preparedWrites.back());
+
+        const TVDiskID vdisk = env.Info->GetVDiskId(0);
+        env.Env.WithQueueId(vdisk, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queue) {
+            for (ui32 step : {1u, 2u}) {
+                const TLogoBlobID id(1000, 1, step, 0, 1_MB, 0, 1);
+                sawRawRead = false;
+                env.Env.Runtime->Send(new IEventHandle(queue, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
+                    vdisk, TInstant::Max(), NKikimrBlobStorage::FastRead, TEvBlobStorage::TEvVGet::EFlags::None,
+                    Nothing(), {{id, 0u, 1_MB}}).release()), 1);
+                const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVGetResult>> read =
+                    env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false, deadline);
+                UNIT_ASSERT(read);
+                UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.ResultSize(), 1);
+                const NKikimrBlobStorage::TQueryResult& result = read->Get()->Record.GetResult(0);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT(read->Get()->GetBlobData(result).ConvertToString() == TString(1_MB, step == 1 ? 'x' : 'y'));
+                UNIT_ASSERT(sawRawRead);
+            }
+        });
+        env.Env.Runtime->FilterFunction = std::move(fixtureFilter);
+    }
+
     Y_UNIT_TEST(RewriteUsesMaintenanceReserveForFreshAndHugeData) {
         for (const bool lockChunk : {false, true}) {
             THugeAdmissionEnv env;

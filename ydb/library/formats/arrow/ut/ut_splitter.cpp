@@ -8,23 +8,23 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(SplitterTest) {
     Y_UNIT_TEST(SimpleNoFrac) {
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 1)) == "1,1,1,1,1,1,1,1,1,1");
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 5)) == "5,5");
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 2)) == "2,2,2,2,2");
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 10)) == "10");
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 100)) == "10");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 1)) == "1,1,1,1,1,1,1,1,1,1");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 5)) == "5,5");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 2)) == "2,2,2,2,2");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 10)) == "10");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 100)) == "10");
     }
     Y_UNIT_TEST(Simple) {
         Cerr << JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 3)) << Endl;
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 3)) == "3,3,4");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(10, 3)) == "3,3,4");
     }
     Y_UNIT_TEST(SimpleBig) {
         Cerr << JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(100000, 30000)) << Endl;
-        AFL_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(100000, 30000)) == "33333,33333,33334");
+        YDB_LOG_VERIFY(JoinSeq(",", NArrow::NSplitter::TSimilarPacker::SplitWithExpected(100000, 30000)) == "33333,33333,33334");
         const auto result = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(143237, 10000);
         Cerr << JoinSeq(",", result) << Endl;
         for (auto&& i : result) {
-            AFL_VERIFY(10231 <= i && i <= 10232);
+            YDB_LOG_VERIFY(10231 <= i && i <= 10232);
         }
     }
     Y_UNIT_TEST(Generic) {
@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(SplitterTest) {
                     }
                     sum += c;
                 }
-                AFL_VERIFY(sum == i);
-                AFL_VERIFY(max - min <= 1);
+                YDB_LOG_VERIFY(sum == i);
+                YDB_LOG_VERIFY(max - min <= 1);
             }
         }
     }

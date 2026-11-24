@@ -883,6 +883,8 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
     ui32 restartRings = 0;
     ui32 lockedRings = 0;
     ui32 disabledRings = 0;
+    const TStateStorageRingInfo* currentRingInfo = nullptr;
+    TVector<std::pair<const TStateStorageRingInfo*, TStateStorageRingInfo::RingState>> unavailableRings;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId,
                                           State->Config.StateStorageRestartCooldown);
@@ -895,11 +897,16 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
             state = TStateStorageRingInfo::Restart;
         }
 
+        if (state != TStateStorageRingInfo::Ok) {
+            unavailableRings.emplace_back(ringInfo.Get(), state);
+        }
+
         if (ringInfo->RingId == currentRing) {
             if (state == TStateStorageRingInfo::Disabled) {
                 return true;
             }
             currentRingState = state;
+            currentRingInfo = ringInfo.Get();
             continue;
         }
         switch (state) {
@@ -929,6 +936,35 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
     const bool maxAvailabilityOk = restartRings + lockedRings <= maxAvailabilityLimit;
     const bool keepAvailableOk = restartRings + lockedRings + disabledRings <= keepAvailableLimit;
 
+    const auto ringDetails = [&]() -> TString {
+        const auto appendRing = [](TStringBuilder& out, const TStateStorageRingInfo& ring, TStringBuf state = {}) {
+            TVector<ui32> nodes;
+            nodes.reserve(ring.Replicas.size());
+            for (const auto& node : ring.Replicas) {
+                nodes.push_back(node->NodeId);
+            }
+            std::sort(nodes.begin(), nodes.end());
+            out << ring.RingId << " (nodes: [" << JoinSeq(", ", nodes) << "]";
+            if (!state.empty()) {
+                out << ", state: " << state;
+            }
+            out << ")";
+        };
+
+        TStringBuilder details;
+        details << ". Ring group: " << ringGroupId << ". Requested ring: ";
+        appendRing(details, *currentRingInfo);
+        details << ". Unavailable rings: [";
+        for (size_t i = 0; i < unavailableRings.size(); ++i) {
+            if (i) {
+                details << ", ";
+            }
+            const auto& [ring, state] = unavailableRings[i];
+            appendRing(details, *ring, TStateStorageRingInfo::RingStateToString(state));
+        }
+        return details << "]";
+    };
+
     switch (opts.AvailabilityMode) {
         case MODE_MAX_AVAILABILITY:
             if (!maxAvailabilityOk) {
@@ -939,7 +975,8 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
                     << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
-                    << ". Maximum allowed number of unavailable rings for this mode: " << maxAvailabilityLimit,
+                    << ". Maximum allowed number of unavailable rings for this mode: " << maxAvailabilityLimit
+                    << ringDetails(),
                     TReason::EType::TooManyUnavailableStateStorageRings
                 );
                 error.Deadline = defaultDeadline;
@@ -956,7 +993,8 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
                     << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Disabled rings: " << disabledRings
-                    << ". Maximum allowed number of unavailable rings for this mode: " << keepAvailableLimit,
+                    << ". Maximum allowed number of unavailable rings for this mode: " << keepAvailableLimit
+                    << ringDetails(),
                     TReason::EType::TooManyUnavailableStateStorageRings
                 );
                 error.Deadline = defaultDeadline;
@@ -985,7 +1023,8 @@ bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
                 << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
                 << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                 << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
-                << ". Maximum allowed number of unavailable rings for this mode: " << limit,
+                << ". Maximum allowed number of unavailable rings for this mode: " << limit
+                << ringDetails(),
                 TReason::EType::TooManyUnavailableStateStorageRings
             );
             error.Deadline = defaultDeadline;
@@ -1392,7 +1431,8 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->Permissions) {
         const auto &permission = entry.second;
         if (permission.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(permission.RequestId)) {
+            && !State->WalleRequests.contains(permission.RequestId))
+        {
             permissionsToRemove.push_back(permission.PermissionId);
             requestsWithPermissions.insert(permission.RequestId);
         }
@@ -1402,7 +1442,8 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->ScheduledRequests) {
         const auto &request = entry.second;
         if (request.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(request.RequestId)) {
+            && !State->WalleRequests.contains(request.RequestId))
+        {
             if (request.Request.GetEvictVDisks() && requestsWithPermissions.contains(request.RequestId)) {
                 // TTxRemovePermissions also removes this eviction request and its host markers.
                 continue;

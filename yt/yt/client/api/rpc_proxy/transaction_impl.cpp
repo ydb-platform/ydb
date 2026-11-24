@@ -419,6 +419,10 @@ void TTransaction::ModifyRows(
 {
     ValidateTabletTransactionId(GetId());
 
+    if (options.ReplicationStreamId) {
+        THROW_ERROR_EXCEPTION("Replication fences are not supported in RPC client");
+    }
+
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
         Visit(modification,

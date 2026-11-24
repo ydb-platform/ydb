@@ -248,7 +248,7 @@ namespace NKikimr {
         TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TBSProxyContextPtr& bspctx,
             const TActorId& monActor, const TActorId& proxyActor, bool useActorSystemTimeInBSQueue);
         void Poison();
-        bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
+        bool GoodToGo(const TBlobStorageGroupInfo& info, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
             bool extraBlockChecksSupport, bool checksumming, std::shared_ptr<const TCostModel> costModel,
             const TBlobStorageGroupInfo::TTopology& topology);

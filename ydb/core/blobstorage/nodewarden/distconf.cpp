@@ -73,6 +73,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        StopStaticGroupRepairs();
         CancelStateStorageSelfHealRefresh();
         CancelConfigRefill();
         CancelBindingLiveness();
@@ -193,6 +194,7 @@ namespace NKikimr::NStorage {
             // A generation-zero root can learn its first managed configuration
             // from quorum recovery after BecomeRoot has already run.
             StartStateStorageSelfHealRefresh();
+            RefreshStaticGroupRepairs();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -560,6 +562,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
+            hFunc(NGroupSyncer::TEvGroupState::TEvPropose, Handle);
             hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);

@@ -936,7 +936,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         const bool isCoordinator = coordinatorHostIndex == *hostIndex;
         coordinatorFound = coordinatorFound || isCoordinator;
 
-        // Undelivery did not reach this disk, so it is not a host error.
+        // Undelivery does not prove a failure of other hosts.
         const bool undeliveredOtherDisk =
             !isCoordinator && HasError(error) &&
             error.GetMessage().Contains(UndeliveryErrorMessage);

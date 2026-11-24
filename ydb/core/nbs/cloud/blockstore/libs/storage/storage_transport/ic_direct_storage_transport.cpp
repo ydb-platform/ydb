@@ -211,7 +211,7 @@ public:
         }
 
         if (ev->GetTypeRewrite() == TEvents::TEvUndelivered::EventType) {
-            // No disk was written: the request missed the coordinator.
+            // Undelivery completes every pending indirect target.
             TVector<NKikimrBlobStorage::NDDisk::TDDiskId> remaining(
                 WaitingReplies.begin(),
                 WaitingReplies.end());

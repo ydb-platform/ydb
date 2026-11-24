@@ -685,7 +685,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
         auto& requestInfo = *r;
         auto& request = *requestInfo.Request;
 
-        // No disk was written: the request missed the coordinator.
+        // Undelivery completes the indirect request for every target.
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             UndeliveryErrorMessage,

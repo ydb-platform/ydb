@@ -214,9 +214,9 @@
     ],
     "test.test[blocks-coalesce_pg_types-default.txt-Peephole]": [
         {
-            "checksum": "b13866be9b49bf34530fe439d229a539",
+            "checksum": "789e8a9720d6e5a1bfcfec45c7f90fe0",
             "size": 722,
-            "uri": "https://{canondata_backend}/1773845/ff77bd3ec2ca89593f1bdbdfd92fdb974609ee70/resource.tar.gz#test.test_blocks-coalesce_pg_types-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1880306/bca20e90737c44f68be91708d29bcc943be0d554/resource.tar.gz#test.test_blocks-coalesce_pg_types-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-coalesce_pg_types-default.txt-Results]": [
@@ -235,9 +235,9 @@
     ],
     "test.test[blocks-guess_tuple_optional-default.txt-Peephole]": [
         {
-            "checksum": "caa828e834e5c7ebfb1f9c981d65153a",
+            "checksum": "3b9ae0d95c51a13d02a2f64f12c7b018",
             "size": 798,
-            "uri": "https://{canondata_backend}/1773845/ff77bd3ec2ca89593f1bdbdfd92fdb974609ee70/resource.tar.gz#test.test_blocks-guess_tuple_optional-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1880306/bca20e90737c44f68be91708d29bcc943be0d554/resource.tar.gz#test.test_blocks-guess_tuple_optional-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-guess_tuple_optional-default.txt-Results]": [
@@ -256,9 +256,9 @@
     ],
     "test.test[blocks-sort-default.txt-Peephole]": [
         {
-            "checksum": "c2f4de66ed094d5904374bfc1e06e1b2",
+            "checksum": "c327f6e6bb5dc6c86a159de47680e19a",
             "size": 879,
-            "uri": "https://{canondata_backend}/1773845/ff77bd3ec2ca89593f1bdbdfd92fdb974609ee70/resource.tar.gz#test.test_blocks-sort-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1880306/bca20e90737c44f68be91708d29bcc943be0d554/resource.tar.gz#test.test_blocks-sort-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-sort-default.txt-Results]": [

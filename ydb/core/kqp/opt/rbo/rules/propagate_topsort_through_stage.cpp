@@ -282,17 +282,13 @@ std::optional<TSortedRowRead> MatchSortedRowRead(const TIntrusivePtr<TOpSort>& s
         return std::nullopt;
     }
 
-    const auto& sortElements = sort->GetSortElements().Items();
-    if (sortElements.empty()) {
+    // As in the old optimizer, a descending sort is a read in the reverse key order.
+    const auto direction = GetKeyReadDirection(sort->GetSortElements());
+    if (!direction) {
         return std::nullopt;
     }
-    // A reverse read returns NULLs last, so only the key order with NULLs first in both directions matches it.
-    const bool ascending = sortElements.front().second.Ascending;
-    for (const auto& [column, order] : sortElements) {
-        if (order.Ascending != ascending || order.NullsFirst != ascending) {
-            return std::nullopt;
-        }
-    }
+    const bool ascending = *direction;
+    const auto& sortElements = sort->GetSortElements().Items();
 
     // Follow the sort keys through the filters and maps of the stage down to the read columns.
     TVector<TInfoUnitId> keys;

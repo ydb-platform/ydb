@@ -39,6 +39,9 @@ TProjectSettings CreateProgramSettings(const TProjectSettings& settings, const T
 }
 
 void AssertProjectPragmasEqual(const TProjectSettings& actual, const TProjectSettings& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.DefaultCluster, expected.DefaultCluster);
+    UNIT_ASSERT_VALUES_EQUAL(actual.LangVer, expected.LangVer);
+    UNIT_ASSERT(actual.Attributes == expected.Attributes);
     UNIT_ASSERT_VALUES_EQUAL(actual.Pragmas.size(), expected.Pragmas.size());
     for (size_t index = 0; index < expected.Pragmas.size(); ++index) {
         UNIT_ASSERT_VALUES_EQUAL(actual.Pragmas[index].Name, expected.Pragmas[index].Name);
@@ -78,6 +81,9 @@ Y_UNIT_TEST(RestoreSettingsBeforeCompilingLibraries) {
 Y_UNIT_TEST(CaptureAndReplay) {
     for (const auto mode : {EQPlayerCaptureMode::MetaOnly, EQPlayerCaptureMode::Full}) {
         TProjectSettings settings;
+        settings.DefaultCluster = "project_cluster";
+        settings.LangVer = MinLangVersion;
+        settings.Attributes = NYT::TNode()("project_attr", "value");
         settings.AddPragma("config.flags", TVector<TString>{"NodesAllocationLimit", "0"});
         settings.AddPragma("config.flags", TVector<TString>{"DisableStrictTableProps"});
         settings.AddPragma("Empty", TVector<TString>{});

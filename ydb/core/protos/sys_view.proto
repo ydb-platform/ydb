@@ -247,6 +247,7 @@ message TVSlotInfo {
     optional uint32 ThrottlingRate = 19;
     optional bool PhantomOnly = 20;
     optional bool DDisk = 21;
+    optional string StoragePoolName = 22; // Filled for DDisk entries on request.
 }
 
 message TVSlotEntry {
@@ -260,6 +261,7 @@ message TEvGetVSlotsRequest {
 
     optional TVSlotKey To = 3;
     optional bool InclusiveTo = 4;
+    optional bool IncludeDDiskPoolNames = 5;
 }
 
 message TEvGetVSlotsResponse {
@@ -373,10 +375,13 @@ message TEvGetStoragePoolsRequest {
 
     optional TStoragePoolKey To = 3;
     optional bool InclusiveTo = 4;
+    optional bool NbsDiscoveryOnly = 5;
 }
 
 message TEvGetStoragePoolsResponse {
     repeated TStoragePoolEntry Entries = 1;
+    // Set by the controller for a discovery-only request. Absent on older controllers.
+    optional bool HasDDiskPools = 2;
 }
 
 message TStorageStatsEntry {

@@ -208,9 +208,7 @@ namespace NKikimr::NBlobDepot {
         ++ConnectionInstance;
 
         while (!TabletRequestInFlight.empty()) {
-            auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
-            auto& requestInFlight = node.value();
-            requestInFlight.Sender->OnRequestComplete(requestInFlight, TTabletDisconnected{}, nullptr);
+            OnRequestComplete(TabletRequestInFlight.begin()->Id, TTabletDisconnected{}, TabletRequestInFlight);
         }
 
         for (auto& [_, kind] : ChannelKinds) {

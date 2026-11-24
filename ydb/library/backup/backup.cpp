@@ -893,6 +893,8 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
         // Unnecessary fields
         protoTopicDescription.clear_self();
         protoTopicDescription.clear_topic_stats();
+        // Older restore clients parse this text protobuf using the original schema.
+        protoTopicDescription.clear_partition_total_read_speed_bytes_per_second_is_explicit();
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, NDump::NFiles::Changefeed());
         WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::TopicDescription());

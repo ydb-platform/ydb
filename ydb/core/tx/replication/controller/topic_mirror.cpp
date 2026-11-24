@@ -81,7 +81,7 @@ Ydb::Topic::CreateTopicRequest BuildTopicMirrorRequest(const NYdb::NTopic::TTopi
         const TString& consumer)
 {
     Ydb::Topic::CreateTopicRequest request;
-    description.SerializeTo(request);
+    description.SerializeToWithLegacyReadQuota(request);
 
     request.mutable_attributes()->erase("_ydb_replication_consumer");
     // Source write restrictions must not block writes by the destination mirrorer.

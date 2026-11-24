@@ -871,6 +871,14 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
 
 
 class TestTopicBackupRestore(BaseTestBackupInFiles):
+    @classmethod
+    def get_cluster_configurator(cls):
+        configurator = super().get_cluster_configurator()
+        quoting = configurator.yaml_config["pqconfig"]["quoting_config"]
+        quoting["partition_read_quota_is_twice_write_quota"] = True
+        quoting["max_parallel_consumers_per_partition"] = 2
+        return configurator
+
     def test_topic_backup_restore(self):
         source = "/Root/folder"
         restored = "/Root/restored_topic"
@@ -888,6 +896,10 @@ class TestTopicBackupRestore(BaseTestBackupInFiles):
         ])
         src_desc = self.driver.topic_client.describe_topic(src_topic, include_stats=False)
         assert {consumer.name for consumer in src_desc.consumers} == {"consumer_a", shared_consumer}
+        src_proto = self.execute_ydb_cli_command([
+            "scheme", "describe", src_topic, "--format", "proto-json-base64",
+        ])
+        assert int(json.loads(src_proto.stdout)["partition_total_read_speed_bytes_per_second"]) > 0
 
         # Orders publish changes to a feed with a streaming consumer and a shared worker.
         # The shared worker sends poison messages to a persistent topic outside the backup.
@@ -915,9 +927,13 @@ class TestTopicBackupRestore(BaseTestBackupInFiles):
         self.execute_ydb_cli_command(["tools", "dump", "--path", source, "--output", backup_dir])
         assert sorted(os.listdir(backup_dir)) == [topic_name, "orders"]
         assert sorted(os.listdir(os.path.join(backup_dir, topic_name))) == ["create_topic.pb", "permissions.pb"]
+        with open(os.path.join(backup_dir, topic_name, "create_topic.pb"), encoding="utf-8") as topic_backup:
+            assert "partition_total_read_speed_bytes_per_second:" not in topic_backup.read()
         assert sorted(os.listdir(os.path.join(backup_dir, "orders", "updates"))) == [
             "changefeed_description.pb", "topic_description.pb",
         ]
+        with open(os.path.join(backup_dir, "orders", "updates", "topic_description.pb"), encoding="utf-8") as feed_topic_backup:
+            assert "partition_total_read_speed_bytes_per_second_is_explicit:" not in feed_topic_backup.read()
 
         self.execute_ydb_cli_command(["tools", "restore", "--path", restored, "--input", backup_dir])
         assert set(self.scheme_listdir("/Root")) == {"folder", "restored_topic", "orders_quarantine"}

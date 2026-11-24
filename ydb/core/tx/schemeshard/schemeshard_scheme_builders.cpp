@@ -4,7 +4,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
@@ -73,20 +72,14 @@ bool BuildTopicScheme(
         return false;
     }
 
-    const auto& topic = pathDesc.GetPersQueueGroup();
     Ydb::Topic::DescribeTopicResult descTopicResult;
     Ydb::StatusIds::StatusCode status;
-    if (!FillTopicDescription(descTopicResult, topic, pathDesc.GetSelf(), Nothing(), status, error)) {
+    if (!FillTopicDescription(descTopicResult, pathDesc.GetPersQueueGroup(), pathDesc.GetSelf(), Nothing(), status, error)) {
         return false;
     }
 
     Ydb::Topic::CreateTopicRequest request;
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
-
-    // Describe reports the effective byte read quota. An inherited quota must remain unset on restore.
-    if (!topic.GetPQTabletConfig().GetPartitionConfig().HasReadSpeedInBytesPerSecond()) {
-        request.clear_partition_total_read_speed_bytes_per_second();
-    }
 
     return NYdb::NBackup::PrintProto(request, scheme);
 }

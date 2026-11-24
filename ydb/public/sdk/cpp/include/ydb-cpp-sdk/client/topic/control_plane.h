@@ -375,8 +375,11 @@ public:
     std::optional<EMetricsLevel> GetMetricsLevel() const;
 
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
-private:
+    // Also copy ambiguous read quotas from servers that do not report whether the quota is explicit.
+    void SerializeToWithLegacyReadQuota(Ydb::Topic::CreateTopicRequest& request) const;
 
+private:
+    void SerializeCreateRequest(Ydb::Topic::CreateTopicRequest& request, bool copyLegacyReadQuota) const;
     const Ydb::Topic::DescribeTopicResult& GetProto() const;
 
     const Ydb::Topic::DescribeTopicResult Proto_;

@@ -246,7 +246,9 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
 
     // Total read speed for a single partition (across all consumers).
     // An explicitly stored config value takes precedence over the computed value above.
-    if (partConfig.HasReadSpeedInBytesPerSecond()) {
+    const bool hasExplicitTotalReadSpeed = partConfig.HasReadSpeedInBytesPerSecond();
+    out.set_partition_total_read_speed_bytes_per_second_is_explicit(hasExplicitTotalReadSpeed);
+    if (hasExplicitTotalReadSpeed) {
         out.set_partition_total_read_speed_bytes_per_second(partConfig.GetReadSpeedInBytesPerSecond());
     }
     if (partConfig.HasReadSpeedInMessagesPerSecond()) {

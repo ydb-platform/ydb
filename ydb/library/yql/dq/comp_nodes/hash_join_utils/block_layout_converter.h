@@ -23,6 +23,7 @@ public:
     virtual void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
     // Can not be called multiple times due to immutability of arrow arrays
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
+    virtual void GatherUnpack(const TSingleTuple* rows, ui32 count, const ui64* variableBytes, TVector<arrow::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
     virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;

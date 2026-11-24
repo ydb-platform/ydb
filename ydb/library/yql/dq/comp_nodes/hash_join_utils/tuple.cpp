@@ -869,6 +869,100 @@ void TTupleLayout::CalculateColumnSizes(
     }
 }
 
+void TTupleLayout::ColumnSizes(
+    ui32 count, const ui64* variableBytes,
+    std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const {
+    bytes.assign(Columns.size(), 0);
+    for (const auto& column: OrigColumns) {
+        if (column.SizeType == EColumnSizeType::Fixed) {
+            bytes[column.OriginalColumnIndex] = column.DataSize * count;
+        }
+    }
+    for (ui32 i = 0; i < VariableColumns.size(); ++i) {
+        bytes[VariableColumns[i].OriginalColumnIndex] = variableBytes[i];
+    }
+}
+
+void TTupleLayout::GatherUnpack(ui8** columns, ui8** isValidBitmask, const TSingleTuple* rows, ui32 count) const {
+    std::vector<std::pair<ui32, ui8*>> bitmaps;
+    std::vector<std::pair<ui32, ui8*>> fixed[4];
+    for (ui32 j = 0; j < Columns.size(); ++j) {
+        ui8* bitmap = isValidBitmask[Columns[j].OriginalIndex];
+        if (bitmap) {
+            std::memset(bitmap, 0, (count + 7) / 8);
+            bitmaps.emplace_back(j, bitmap);
+        }
+    }
+    for (const auto& col: Columns) {
+        if (col.SizeType != EColumnSizeType::Fixed) {
+            continue;
+        }
+        ui8* dst = columns[col.OriginalIndex];
+        switch (col.DataSize) {
+        case 1: fixed[0].emplace_back(col.Offset, dst); break;
+        case 2: fixed[1].emplace_back(col.Offset, dst); break;
+        case 4: fixed[2].emplace_back(col.Offset, dst); break;
+        case 8: fixed[3].emplace_back(col.Offset, dst); break;
+        default:
+            for (ui32 i = 0; i < count; ++i) {
+                std::memcpy(dst + i * col.DataSize, rows[i].PackedData + col.Offset, col.DataSize);
+            }
+        }
+    }
+    constexpr ui32 prefetchDistance = 16;
+    for (ui32 i = 0; i < count; ++i) {
+        if (i + prefetchDistance < count) {
+            const ui8* next = rows[i + prefetchDistance].PackedData;
+            for (ui32 line = 0; line < TotalRowSize; line += 64) {
+                __builtin_prefetch(next + line);
+            }
+            __builtin_prefetch(next + TotalRowSize - 1);
+        }
+        const ui8* row = rows[i].PackedData;
+        for (auto [j, bitmap] : bitmaps) {
+            bitmap[i / 8] |= ((row[BitmaskOffset + j / 8] >> (j % 8)) & 1) << (i % 8);
+        }
+        for (auto [offset, dst] : fixed[3]) {
+            reinterpret_cast<ui64*>(dst)[i] = ReadUnaligned<ui64>(row + offset);
+        }
+        for (auto [offset, dst] : fixed[2]) {
+            reinterpret_cast<ui32*>(dst)[i] = ReadUnaligned<ui32>(row + offset);
+        }
+        for (auto [offset, dst] : fixed[1]) {
+            reinterpret_cast<ui16*>(dst)[i] = ReadUnaligned<ui16>(row + offset);
+        }
+        for (auto [offset, dst] : fixed[0]) {
+            dst[i] = row[offset];
+        }
+    }
+    for (const auto& col: VariableColumns) {
+        ui8* offsets = columns[col.OriginalIndex];
+        ui8* data = columns[col.OriginalIndex + 1];
+        const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+        ui32 dataOffset = ReadUnaligned<ui32>(offsets);
+        for (ui32 i = 0; i < count; ++i) {
+            const ui8* row = rows[i].PackedData;
+            ui32 size = ReadUnaligned<ui8>(row + col.Offset);
+            if (size < 255) {
+                std::memcpy(data + dataOffset, row + col.Offset + 1, size);
+            } else {
+                const auto overflowOffset = ReadUnaligned<ui32>(row + col.Offset + 1);
+                const auto overflowSize = ReadUnaligned<ui32>(row + col.Offset + 1 + sizeof(ui32));
+                std::memcpy(data + dataOffset, row + col.Offset + 1 + 2 * sizeof(ui32), prefixSize);
+                std::memcpy(data + dataOffset + prefixSize, rows[i].OverflowBegin + overflowOffset, overflowSize);
+                size = prefixSize + overflowSize;
+            }
+            dataOffset += size;
+            WriteUnaligned<ui32>(offsets + sizeof(ui32) * (i + 1), dataOffset);
+        }
+    }
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            std::memcpy(columns[orig.OriginalIndex] + i * orig.Size, rows[i].PackedData + orig.PayloadOffset, orig.Size);
+        }
+    }
+}
+
 void TTupleLayout::TupleDeepCopy(
     const ui8* inTuple, const ui8* inOverflow,
     ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const

@@ -287,6 +287,11 @@ struct TTupleLayout {
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
 
+    void ColumnSizes(
+        ui32 count, const ui64* variableBytes, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const;
+
+    void GatherUnpack(ui8** columns, ui8** isValidBitmask, const TSingleTuple* rows, ui32 count) const;
+
 
     void TupleDeepCopy(
         const ui8* inTuple, const ui8* inOverflow,

@@ -896,6 +896,55 @@ Y_UNIT_TEST_SUITE(KqpHnswIndexes) {
         TestHnswFallback(1, 1);
     }
 
+    Y_UNIT_TEST_TWIN(HnswEmptyIndexCreatesSingleCluster, Inline) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableAccessToIndexImplTables(true);
+        flags.SetEnableHnswIndex(true);
+        TKikimrRunner kikimr{TKikimrSettings().SetFeatureFlags(flags)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto scheme = [&](const TString& sql) {
+            const auto result = session.ExecuteSchemeQuery(sql).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        if (Inline) {
+            scheme(R"(
+                CREATE TABLE EmptyHnsw (
+                    id Uint64 NOT NULL, emb String, PRIMARY KEY(id),
+                    INDEX idx GLOBAL USING hnsw ON (emb)
+                        WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=4)
+                );
+            )");
+        } else {
+            scheme("CREATE TABLE EmptyHnsw (id Uint64 NOT NULL, emb String, PRIMARY KEY(id));");
+            scheme(R"(
+                ALTER TABLE EmptyHnsw ADD INDEX idx GLOBAL USING hnsw ON (emb)
+                    WITH (distance=euclidean, vector_type=float, vector_dimension=2, levels=1, clusters=4);
+            )");
+        }
+
+        const auto empty = ExecuteDataQuery(session, R"(
+            SELECT __ydb_parent, __ydb_id FROM `/Root/EmptyHnsw/idx/indexImplLevelTable`;
+            SELECT COUNT(*) FROM `/Root/EmptyHnsw/idx/indexImplPostingTable`;
+        )");
+        UNIT_ASSERT_C(empty.IsSuccess(), empty.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(empty.GetResultSet(0)), "[[0u;9223372036854775809u]]");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(empty.GetResultSet(1)), "[[0u]]");
+
+        const auto inserted = ExecuteDataQuery(session, R"(
+            UPSERT INTO EmptyHnsw (id, emb) VALUES
+                (1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )");
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        const auto found = ExecuteDataQuery(session, R"(
+            SELECT __ydb_parent, id FROM `/Root/EmptyHnsw/idx/indexImplPostingTable`;
+            SELECT id FROM EmptyHnsw VIEW idx
+                ORDER BY Knn::EuclideanDistance(emb, Knn::ToBinaryStringFloat([1.0f, 0.0f])) LIMIT 1;
+        )");
+        UNIT_ASSERT_C(found.IsSuccess(), found.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(found.GetResultSet(0)), "[[9223372036854775809u;1u]]");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(found.GetResultSet(1)), "[[1u]]");
+    }
+
     Y_UNIT_TEST_TWIN(HnswInlineIndexMaintainsEmbeddings, Covered) {
         NKikimrConfig::TAppConfig config;
         config.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);

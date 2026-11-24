@@ -726,6 +726,9 @@ message TFlatSchemeTransaction {
     optional TTruncateTable TruncateTable = 25;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 26;
+
+    // Seed the sole leaf of an inline, unprefixed HNSW index during table creation.
+    optional bytes InitialHnswCentroid = 27;
 }
 
 message TDistributedEraseTransaction {

@@ -321,9 +321,11 @@ class TestAsyncReplicationSerial(TestAsyncReplicationBase):
 class TestAsyncReplicationFulltextRowId(TestAsyncReplicationBase):
     @classmethod
     def get_extra_feature_flags(cls):
-        return super().get_extra_feature_flags() + ["enable_index_materialization",
-            "enable_compact_fulltext_index", "enable_fulltext_index_prefix", "enable_fulltext_index_row_id",
-            "enable_add_unique_index", "enable_online_add_unique_index"]
+        extra_flags = [
+            "enable_index_materialization", "enable_compact_fulltext_index", "enable_fulltext_index_prefix", "enable_fulltext_index_row_id",
+            "enable_add_unique_index", "enable_online_add_unique_index"
+        ]
+        return super().get_extra_feature_flags() + extra_flags
 
     @classmethod
     def get_extra_grpc_services(cls):

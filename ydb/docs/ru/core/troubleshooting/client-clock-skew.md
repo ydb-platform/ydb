@@ -112,7 +112,7 @@ ntpq -p
 
 **Основное решение — синхронизировать часы.**
 
-Настройте на клиентских хостах синхронизацию времени с помощью `chrony` или `ntpd` и нескольких NTP-источников из вашей среды. Примеры конфигурации см. в статье [{#T}](performance/system/system-clock-drift.md#ntp-examples).
+Настройте на клиентских хостах синхронизацию времени с помощью `chrony` или `ntpd` и нескольких NTP-источников из вашей среды.
 
 {% include [example_clock_skew_internal](_includes/example_clock_skew_internal.md) %}
 

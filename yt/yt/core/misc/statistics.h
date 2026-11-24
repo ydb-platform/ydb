@@ -128,6 +128,12 @@ void Serialize(const TStatistics& statistics, NYson::IYsonConsumer* consumer);
 
 void CreateBuildingYsonConsumer(std::unique_ptr<NYson::IBuildingYsonConsumer<TStatistics>>* buildingConsumer, NYson::EYsonType ysonType);
 
+//! Serialize consistent single-sample summaries as int64 leaves, preserving full summaries for reserved leaf names.
+NYson::TYsonString SerializeCompactStatistics(const TStatistics& statistics);
+
+//! Parse statistics containing int64 leaves and full summary maps.
+TStatistics ParseCompactStatistics(NYson::TYsonStringBuf yson);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStatisticsConsumer
@@ -179,7 +185,10 @@ template <class TValue>
 void SerializeStatisticPathsMap(
     const std::map<NStatisticPath::TStatisticPath, TValue>& map,
     NYson::IYsonConsumer* consumer,
-    const std::function<void(const TValue&, NYson::IYsonConsumer*)>& valueSerializer);
+    const std::function<void(
+        const NStatisticPath::TStatisticPath&,
+        const TValue&,
+        NYson::IYsonConsumer*)>& valueSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 

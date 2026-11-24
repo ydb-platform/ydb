@@ -522,7 +522,7 @@ message TFailRealmCount {
 
 message TStorageGroupStateCount {
     oneof Kind {
-        TDiskCount Disks = 1; // missing or not-ready disks for none/block-4-2
+        TDiskCount Disks = 1; // missing or not-ready disks for none/block-4-2/block-8-2
         TFailRealmCount FailRealms = 2; // affected fail realms for mirror-3-dc
     }
 }

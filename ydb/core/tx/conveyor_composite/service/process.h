@@ -87,8 +87,8 @@ public:
     void SetBaseWeight(const TDuration d) {
         BaseWeight = d;
         CPUUsage->Clear();
-        AFL_VERIFY(InProgressTasksCount.Val() == 0);
-        AFL_VERIFY(Tasks.size() == 0);
+        YDB_LOG_VERIFY(InProgressTasksCount.Val() == 0);
+        YDB_LOG_VERIFY(Tasks.size() == 0);
     }
 
     TDuration GetWeightedUsage() const {

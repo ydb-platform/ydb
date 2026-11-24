@@ -508,7 +508,7 @@ namespace NKikimr {
             --InFlightReads;
 
             // apply read result to batcher
-            ReadBatcher.Apply(msg);
+            ReadBatcher.Apply(msg, PDiskCtx.get());
             return ProcessReadBatcher(now);
         }
 
@@ -787,7 +787,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                         1, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, StripeSstLocation.Size,
                         PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
-                        false, StripeChunk, Arena, HullCtx->VCfg->BlobHeaderMode, StripeSstLocation.Offset);
+                        false, StripeChunk, Arena, HullCtx->VCfg->BlobHeaderMode, StripeSstLocation.Offset, PDiskCtx.get());
                     WriterHasPendingOperations = false;
                 } else {
                     // ensure we have enough reserved chunks to do operation; or else request for allocation and wait
@@ -799,7 +799,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                         ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
                         PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
-                        false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode);
+                        false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode, 0, PDiskCtx.get());
 
                     WriterHasPendingOperations = false;
                 }
@@ -926,6 +926,8 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
             while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
+                // opened here, in the batch pool, rather than in the PDisk completion thread
+                readMsg->RawSectors = UseRawSectorReads(*PDiskCtx);
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));

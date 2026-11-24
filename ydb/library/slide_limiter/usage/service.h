@@ -23,7 +23,7 @@ public:
         return TLimiterPolicy::Name;
     }
     static bool AskResource(const std::shared_ptr<IResourceRequest>& request) {
-        AFL_VERIFY(!!request);
+        YDB_LOG_VERIFY(!!request);
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         if (TSelf::IsEnabled()) {

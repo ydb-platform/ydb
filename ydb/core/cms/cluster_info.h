@@ -577,6 +577,9 @@ public:
             case Locked:
                 return "Locked";
                 break;
+            case Disabled:
+                return "Disabled";
+                break;
             case Restart:
                 return "Restart";
                 break;

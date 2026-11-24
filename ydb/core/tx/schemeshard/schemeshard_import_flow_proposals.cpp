@@ -170,7 +170,13 @@ bool FillRowTableIndexesForRestore(
             desc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
         }
     }
-    return buildIndexes || FillIndexDescription(out, globalIndexes, enableCompactFulltext, status, error);
+    if (buildIndexes) {
+        return true;
+    }
+    // Full-text indexes derive their document ID from the primary key and its column type.
+    globalIndexes.mutable_primary_key()->CopyFrom(scheme.primary_key());
+    globalIndexes.mutable_columns()->CopyFrom(scheme.columns());
+    return FillIndexDescription(out, globalIndexes, enableCompactFulltext, status, error);
 }
 
 // Returns true if the materialized impl tables of `indexDesc` from the backup can be restored into

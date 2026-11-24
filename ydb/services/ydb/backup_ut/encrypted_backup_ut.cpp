@@ -856,6 +856,43 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         UNIT_ASSERT_C(changeFeed2Describe.IsSuccess(), changeFeed2Describe.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(FulltextWithLocalBloomUsesPrimaryKeyAfterRestore) {
+        auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableIndexMaterialization(true);
+        flags.SetEnableExportFiltering(true);
+
+        const auto query = [&](const TString& sql) {
+            auto result = YdbQueryClient().ExecuteQuery(sql, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        query(R"(
+            CREATE TABLE `/Root/Source/Articles` (
+                id Uint64 NOT NULL, body String, PRIMARY KEY (id),
+                INDEX by_body GLOBAL USING fulltext_plain ON (body) WITH (tokenizer=standard)
+            );
+        )");
+        query("ALTER TABLE `/Root/Source/Articles` ADD INDEX by_id LOCAL USING bloom_filter ON (id);");
+        query("UPSERT INTO `/Root/Source/Articles` (id, body) VALUES (42, 'red bicycle'), (99, 'green apple');");
+
+        auto exportSettings = MakeExportSettings("/Root/Source", "backup");
+        exportSettings.IncludeIndexData(true).SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        WaitOpSuccess(YdbExportClient().ExportToS3(exportSettings).GetValueSync());
+
+        auto importSettings = MakeImportSettings("backup", "/Root/Restored");
+        importSettings.IndexPopulationMode(NImport::EIndexPopulationMode::Import).SymmetricKey("Cool random key!");
+        WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
+
+        const auto result = query(R"(
+            SELECT id FROM `/Root/Restored/Articles` VIEW by_body
+            WHERE FulltextMatch(body, "bicycle");
+        )");
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 1);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("id").GetUint64(), 42);
+    }
+
     Y_UNIT_TEST_TWIN(UniqueWithAnonymousBloom, Legacy) {
         auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
         flags.SetEnableIndexMaterialization(true);

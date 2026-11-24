@@ -7,6 +7,8 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/summary.h>
 
+#include <yt/yt/core/misc/bitmap.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/monlib/metrics/metric_consumer.h>
@@ -87,16 +89,25 @@ class TCube
 public:
     TCube(int windowSize, i64 nextIteration);
 
-    struct TProjection
+    //! Must be created via #NewWithExtraSpace with #GetExtraSpaceSize(windowSize) bytes of extra space.
+    class alignas(T) TProjection
         : public TRefCounted
+        , public TWithExtraSpace<TProjection>
     {
-        explicit TProjection(TTagIdList tagIds);
+    public:
+        TProjection(TTagIdList tagIds, int windowSize);
+        ~TProjection();
+
+        static size_t GetExtraSpaceSize(int windowSize);
 
         const TTagIdList TagIds;
+        const int WindowSize;
 
         T Rollup{};
-        std::vector<T> Values;
-        std::vector<bool> HasValue;
+        TMutableRange<T> Values();
+        TRange<T> Values() const;
+        TMutableBitmap HasValue();
+        TBitmap HasValue() const;
 
         bool IsZero(int index) const;
         bool IsLingering(i64 iteration) const;
@@ -132,20 +143,16 @@ public:
     {
         using is_transparent = void;
 
-        size_t operator()(const auto& value) const
-        {
-            return THash<TTagIdList>()(GetTagIds(value));
-        }
+        template <class TValue>
+        size_t operator()(const TValue& value) const;
     };
 
     struct TProjectionTagIdsEqual
     {
         using is_transparent = void;
 
-        bool operator()(const auto& lhs, const auto& rhs) const
-        {
-            return GetTagIds(lhs) == GetTagIds(rhs);
-        }
+        template <class TLhs, class TRhs>
+        bool operator()(const TLhs& lhs, const TRhs& rhs) const;
     };
 
     using TProjectionHashSet = absl::flat_hash_set<TProjectionPtr, TProjectionTagIdsHash, TProjectionTagIdsEqual>;
@@ -184,18 +191,11 @@ private:
 
     TProjectionHashSet Projections_;
 
-    static const TTagIdList& GetTagIds(const TTagIdList& tagIds)
-    {
-        return tagIds;
-    }
-
-    static const TTagIdList& GetTagIds(const TProjectionPtr& projection)
-    {
-        return projection->TagIds;
-    }
+    static const TTagIdList& GetTagIds(const TTagIdList& tagIds);
+    static const TTagIdList& GetTagIds(const TProjectionPtr& projection);
 
     TProjectionPtr DoAdd(TTagIdList tagIds);
-    void DoUpdate(TProjection& projection, const T& value);
+    void DoUpdate(TProjection* projection, const T& value);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -212,3 +212,7 @@ using TRateHistogramCube = TCube<TRateHistogramSnapshot>;
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NProfiling
+
+#define CUBE_INL_H_
+#include "cube-inl.h"
+#undef CUBE_INL_H_

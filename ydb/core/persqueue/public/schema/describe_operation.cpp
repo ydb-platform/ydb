@@ -206,6 +206,8 @@ private:
                         return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
                     case NDescriber::EStatus::NotTopic:
                         return Ydb::PersQueue::ErrorCode::VALIDATION_ERROR;
+                    case NDescriber::EStatus::Unavailable:
+                        return Ydb::PersQueue::ErrorCode::ERROR;
                     case NDescriber::EStatus::BadRequest:
                         return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                     default:

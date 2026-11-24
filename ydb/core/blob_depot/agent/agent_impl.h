@@ -49,6 +49,7 @@ namespace NKikimr::NBlobDepot {
     struct TS3PutResult {
         std::optional<TString> Error;
         bool SlowDown = false;
+        bool MayArriveLate = false;
     };
 
     struct TKeyResolved {
@@ -328,7 +329,7 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvProcessPendingEvent, HandleProcessPendingEvent);
                 fFunc(TEvPrivate::EvPendingEventQueueWatchdog, HandlePendingEventQueueWatchdog);
 
-                cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
+                fFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
 
                 cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
 
@@ -418,6 +419,7 @@ namespace NKikimr::NBlobDepot {
         void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay = nullptr);
         void DropTabletRequest(ui64 id);
+        void TakeOverS3Preparation(ui64 requestId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -493,7 +495,7 @@ namespace NKikimr::NBlobDepot {
             mutable TString QueryIdString;
             const TMonotonic StartTime;
             const TInstant Deadline;
-            const TMonotonic DeadlineMonotonic;
+            TMonotonic DeadlineMonotonic;
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
@@ -538,6 +540,7 @@ namespace NKikimr::NBlobDepot {
             using TFinishCallback = std::function<void(NKikimrProto::EReplyStatus, TString, const char*)>;
             void IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId);
 
+            void LimitS3Deadline(TInstant callerDeadline);
             void IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator);
 
         protected: // reading logic
@@ -619,6 +622,7 @@ namespace NKikimr::NBlobDepot {
         // A query cancellation can unlink pending reads during agent destruction.
         std::list<ui64> PendingS3Reads;
         std::multimap<TMonotonic, TQuery*> QueryWatchdogMap;
+        TWakeupTimer QueryWatchdogTimer;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> DeletePendingQueries;
         bool ProcessPendingEventInFlight = false;
@@ -635,7 +639,8 @@ namespace NKikimr::NBlobDepot {
         void SchedulePendingEventQueueWatchdog();
         void HandlePendingEventQueueWatchdog(const TAutoPtr<IEventHandle>& ev);
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
-        void HandleQueryWatchdog();
+        void ScheduleQueryWatchdog();
+        void HandleQueryWatchdog(const TAutoPtr<IEventHandle>& ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -731,7 +736,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        struct TS3Read : TRequestContext {
+        struct TS3Read : TRequestContext, std::enable_shared_from_this<TS3Read> {
             ui64 RequestId;
             TMonotonic Deadline;
             std::optional<std::list<ui64>::iterator> Queued;
@@ -740,6 +745,7 @@ namespace NKikimr::NBlobDepot {
             ui32 Len;
             TQuery::TFinishCallback Finish;
             ui64 ReadId;
+            TActorId ReplyActorId;
             ui32 SlowDownRetries = 0;
             NWilson::TSpan Span;
 
@@ -772,7 +778,7 @@ namespace NKikimr::NBlobDepot {
         void HandleS3ReadResult(ui64 id, IEventHandle& result);
         void HandleS3WriteResult(ui64 id, IEventHandle& result);
         void IssueOrEnqueueS3Read(TS3Read& read);
-        void DispatchS3Read(const TS3Read& read);
+        void DispatchS3Read(TS3Read& read);
         void NotifyS3GetSlowDown();
         void OnS3GetCompleted(bool success);
         void RunPendingS3ReadsIfPossible();

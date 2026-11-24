@@ -1,5 +1,8 @@
 #pragma once
 
+#include "config.h"
+#include "s3_route.h"
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
@@ -7,13 +10,41 @@
 
 namespace NKikimr::NBlobDepot {
 
-    struct TS3PutContext : NWrappers::NExternalStorage::IRequestContext {
-        enum class ESource { Agent, Cooling };
+    struct TS3RequestDeadline : NWrappers::NExternalStorage::IRequestContext {
         const TMonotonic Deadline;
+
+        explicit TS3RequestDeadline(TMonotonic deadline)
+            : Deadline(deadline)
+        {}
+    };
+
+    struct TS3GetContext : TS3RequestDeadline {
+        using TS3RequestDeadline::TS3RequestDeadline;
+    };
+
+    struct TS3DeleteContext : TS3RequestDeadline {
+        const std::shared_ptr<const TString> Route;
+
+        TS3DeleteContext(TMonotonic deadline, std::shared_ptr<const TString> route)
+            : TS3RequestDeadline(deadline)
+            , Route(std::move(route))
+        {}
+
+        static TString MakeRouteKey(const NKikimrBlobDepot::TS3BackendSettings& backend) {
+            auto route = GetS3Route(backend);
+            // Point and batch operations use the same canonical key prefix in this bucket.
+            route.MutableSettings()->SetBucket(backend.GetSettings().GetBucket());
+            route.MutableSettings()->SetObjectKeyPattern(MakeS3BasePath(backend.GetSettings(), {}));
+            return route.SerializeAsString();
+        }
+    };
+
+    struct TS3PutContext : TS3RequestDeadline {
+        enum class ESource { Agent, Cooling };
         const ESource Source;
 
         TS3PutContext(TMonotonic deadline, ESource source)
-            : Deadline(deadline)
+            : TS3RequestDeadline(deadline)
             , Source(source)
         {}
     };

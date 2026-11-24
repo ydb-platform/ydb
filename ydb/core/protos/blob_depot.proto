@@ -202,6 +202,7 @@ message TEvCommitBlobSeq {
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
         optional bool IssueKeepFlag = 8;
         optional bool IgnoreBlock = 9;
+        optional bool S3PutMayArriveLate = 10; // an earlier physical attempt can finish after this successful PUT
     }
 
     repeated TItem Items = 1;
@@ -220,6 +221,8 @@ message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
     repeated TS3Locator S3Locators = 2;
     optional bool S3SlowDown = 3; // set when at least one S3Locator is being discarded due to S3 SlowDown response
+    // A dispatched PUT can still reach S3 after the tablet releases its logical write slot.
+    optional bool S3PutMayArriveLate = 4;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

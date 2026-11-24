@@ -222,12 +222,30 @@ namespace NKikimr::NBlobDepot {
         IsConnected = false;
     }
 
+    void TBlobDepotAgent::TakeOverS3Preparation(ui64 requestId) {
+        if (ExtractRequest(requestId, TabletRequestInFlight)) {
+            // The tablet may have allocated a locator before the query timed out.
+            RegisterRequest(requestId, this, nullptr, {}, true);
+        }
+    }
+
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
         std::visit([&](auto&& response) {
             using T = std::decay_t<decltype(response)>;
             if constexpr (std::is_same_v<T, TEvBlobDepot::TEvRegisterAgentResult*>
                     || std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>) {
                 Handle(std::move(context), response->Record);
+            } else if constexpr (std::is_same_v<T, TEvBlobDepot::TEvPrepareWriteS3Result*>) {
+                auto discard = std::make_unique<TEvBlobDepot::TEvDiscardSpoiledBlobSeq>();
+                for (const auto& item : response->Record.GetItems()) {
+                    if (item.HasS3Locator()) {
+                        discard->Record.AddS3Locators()->CopyFrom(item.GetS3Locator());
+                    }
+                }
+                if (discard->Record.S3LocatorsSize()) {
+                    discard->Record.SetS3PutMayArriveLate(false);
+                    Issue(std::move(discard), nullptr, nullptr);
+                }
             } else if constexpr (!std::is_same_v<T, TTabletDisconnected>) {
                 Y_FAIL_S("unexpected response received Type# " << TypeName<T>());
             }
@@ -258,7 +276,9 @@ namespace NKikimr::NBlobDepot {
             {"requestId", id},
             {"msg", ev->ToString()});
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id, std::move(traceId));
-        RegisterRequest(id, sender, std::move(context), {}, true);
+        if (sender) {
+            RegisterRequest(id, sender, std::move(context), {}, true);
+        }
         return id;
     }
 

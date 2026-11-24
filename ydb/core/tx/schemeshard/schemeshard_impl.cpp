@@ -5399,6 +5399,13 @@ void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NK
         .Key(op.GetTxId())
         .Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
+    PersistedIncrementalRestoreOps[op.GetTxId()] = TPathId(
+        op.GetBackupCollectionPathId().GetOwnerId(), op.GetBackupCollectionPathId().GetLocalId());
+}
+
+void TSchemeShard::PersistRemoveLongIncrementalRestoreOp(NIceDb::TNiceDb& db, ui64 operationId) {
+    db.Table<Schema::IncrementalRestoreOperations>().Key(operationId).Delete();
+    PersistedIncrementalRestoreOps.erase(operationId);
 }
 
 TTabletId TSchemeShard::GetGlobalHive() const {
@@ -8508,6 +8515,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
+            descr->SetIsBuildInProgress(colInfo.IsBuildInProgress);
             if (colInfo.DefaultKind == ETableColumnDefaultKind::FromSequence) {
                 descr->SetDefaultFromSequence(colInfo.DefaultValue);
             }

@@ -101,7 +101,7 @@ TDataQueryResult QueryChecksum(TSession& session, TStringBuf table,
 
 Y_UNIT_TEST_SUITE(Digest) {
     Y_UNIT_TEST(AlgorithmsPartitionsAndRanges) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         for (auto algorithm : {NDigest::EAlgorithm::CityHash64, NDigest::EAlgorithm::CityHash128, NDigest::EAlgorithm::Sha256}) {
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(GroupedDigestsKeepIndependentStates) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         // Independent StablePickle(AsStruct(x AS x)) fixtures for x = 1, 11, 21.
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(EmptyInputStillValidatesAlgorithm) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         const auto result = session.ExecuteDataQuery(
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(SnapshotRemainsStableAcrossWrites) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         const TString query = TStringBuilder() << DigestFactorySql()
@@ -188,8 +188,55 @@ Y_UNIT_TEST_SUITE(Digest) {
         const auto latest = QueryDigest(session, "digest_a", "Sha256");
         UNIT_ASSERT(ReadDigest(latest.GetResultSet(0)).Hash != ReadDigest(first.GetResultSet(0)).Hash);
     }
-    Y_UNIT_TEST(CommandAlgorithmsPartitionsAndEmptyTables) {
+
+    Y_UNIT_TEST(ChecksumFeatureFlagCheckedAtExecution) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        PrepareTables(session);
+        auto client = kikimr.GetQueryClient();
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        NKikimrConfig::TFeatureFlags flags = appData.FeatureFlags;
+
+        const TString aggregate = TStringBuilder() << DigestFactorySql() << "SELECT "
+            << DigestExpression("TableRow()", "CityHash64") << " FROM digest_a;";
+        for (const auto& query : {ChecksumStatement("digest_a"), aggregate}) {
+            const auto queryResult = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::PRECONDITION_FAILED, queryResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(queryResult.GetIssues().ToString(), "CHECKSUM TABLE is disabled");
+
+            const auto prepare = session.PrepareDataQuery(query).GetValueSync();
+            UNIT_ASSERT_C(prepare.IsSuccess(), prepare.GetIssues().ToString());
+            auto prepared = prepare.GetQuery();
+
+            flags.SetEnableChecksumTable(true);
+            appData.UpdateRuntimeFlags(flags);
+            const auto enabled = prepared.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(enabled.IsSuccess(), enabled.GetIssues().ToString());
+
+            auto enabledScan = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            CompareYson(FormatResultSetYson(enabled.GetResultSet(0)), StreamResultToYson(enabledScan));
+
+            flags.SetEnableChecksumTable(false);
+            appData.UpdateRuntimeFlags(flags);
+            const auto disabled = prepared.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(disabled.GetStatus(), EStatus::PRECONDITION_FAILED, disabled.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(disabled.GetIssues().ToString(), "CHECKSUM TABLE is disabled");
+
+            auto disabledScan = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            StreamResultToYson(disabledScan, false, EStatus::PRECONDITION_FAILED, "CHECKSUM TABLE is disabled");
+        }
+
+        auto scan = tableClient.StreamExecuteScanQuery("SELECT COUNT(*) FROM digest_a;").GetValueSync();
+        CompareYson("[[3u]]", StreamResultToYson(scan));
+
+        const auto scalar = session.ExecuteDataQuery("SELECT Digest::CityHash(StablePickle(TableRow())) FROM digest_a;",
+            TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(scalar.IsSuccess(), scalar.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CommandAlgorithmsPartitionsAndEmptyTables) {
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
@@ -213,7 +260,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CanonicalizationIsTypeDirectedInPhysicalPlan) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         const auto schema = session.ExecuteSchemeQuery(R"(
@@ -255,7 +302,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandResolvesTablePaths) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
@@ -306,7 +353,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandValidatesAlgorithmOnEmptyInput) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
@@ -324,7 +371,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandQueryService) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
@@ -361,7 +408,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandResultRowsLimitDoesNotLimitInput) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         auto client = kikimr.GetQueryClient();
@@ -386,7 +433,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandIgnoresSystemColumns) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
@@ -408,7 +455,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandIgnoresExtraSystemColumnPrefixes) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
         const auto schema = session.ExecuteSchemeQuery(R"(
@@ -435,7 +482,7 @@ Y_UNIT_TEST_SUITE(Digest) {
     }
 
     Y_UNIT_TEST(CommandSnapshotRemainsStableAcrossWrites) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(ChecksumTableSettings());
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         PrepareTables(session);
@@ -470,7 +517,7 @@ Y_UNIT_TEST_SUITE(Digest) {
 
     Y_UNIT_TEST(CommandRequiresTableReadPermission) {
         TKikimrRunner kikimr(
-            TKikimrSettings().SetWithSampleTables(false).SetAuthToken(
+            ChecksumTableSettings().SetAuthToken(
                 "root@builtin"));
         auto session =
             kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

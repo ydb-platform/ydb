@@ -347,21 +347,7 @@ WHERE ApplicationName = 'my_analytics_app'
   AND WmPoolId = 'heavy_queries'
 ```
 
-<<<<<<< HEAD
-## Кэш компиляции запросов {#compile-cache-queries}
-=======
-### Завершение сессии {#terminate-session}
-
-Чтобы завершить выбранную сессию вместе с выполняющимся запросом, скопируйте её `SessionId` и отправьте отдельный запрос [`KILL SESSION`](../yql/reference/syntax/kill-session.md):
-
-```yql
-KILL SESSION `ydb://session/3?node_id=52910&id=MWFmNGYwYTAtYzJkN2RhOWEtZmFkMDhlMTUtZjU0ZDE0OTA%3D`;
-```
-
-Замените ID в примере значением из результата выборки. Необходимые права и результат операции описаны в [справочнике команды](../yql/reference/syntax/kill-session.md#permissions).
-
 ## Кеш компиляции запросов {#compile-cache-queries}
->>>>>>> 2069edc0c81 (add docs for compile cache warmup (#54803))
 
 Следующее системное представление содержит информацию о запросах, хранящихся в кеше компиляции на всех узлах кластера:
 

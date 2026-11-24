@@ -10,6 +10,7 @@ IF (SANITIZER_TYPE == "thread")
 ENDIF()
 
 PEERDIR(
+    library/cpp/monlib/consumers
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/testlib/default

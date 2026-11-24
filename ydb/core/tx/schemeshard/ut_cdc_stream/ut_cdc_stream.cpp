@@ -480,6 +480,49 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
+    Y_UNIT_TEST(TopicAutoPartitioningMinGreaterThanMax) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+            TopicPartitions: 64
+            TopicAutoPartitioning: true
+            MaxPartitionCount: 10
+        )", {{NKikimrScheme::StatusInvalidParameter, "Invalid min and max partition count"}});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+            TopicPartitions: 10
+            TopicAutoPartitioning: true
+            MaxPartitionCount: 10
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathExist});
+    }
+
     Y_UNIT_TEST(Attributes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
@@ -690,6 +733,54 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT(!params.ReplicationAutoPartitioning);
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
         UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(CdcStreamTopicUnsetMaxDefaults) {
+        // An unset max defaults to max(min, 50) in DoCreatePqPart: a min above 50
+        // is always covered (min=64 -> max=64), a small one keeps the historical
+        // ceiling of 50 (min=10 -> max=50). Without the default, min > max used
+        // to hit "Invalid min and max partition count specified: 64 > 50", which
+        // was silently accepted and left the stream without a topic.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        ui64 txId = 100;
+
+        for (const TString name : {"Table64", "Table10"}) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", name.data()));
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "%s"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+                TopicPartitions: %u
+                TopicAutoPartitioning: true
+            )", name.data(), name == "Table64" ? 64 : 10));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        {
+            const auto topicDescribe = DescribePrivatePath(runtime, "/MyRoot/Table64/Stream/streamImpl");
+            TestDescribeResult(topicDescribe, {NLs::PathExist});
+            const auto& strategy = topicDescribe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMinPartitionCount(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMaxPartitionCount(), 64);
+        }
+        {
+            const auto topicDescribe = DescribePrivatePath(runtime, "/MyRoot/Table10/Stream/streamImpl");
+            TestDescribeResult(topicDescribe, {NLs::PathExist});
+            const auto& strategy = topicDescribe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMinPartitionCount(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetMaxPartitionCount(), 50);
+        }
     }
 
     Y_UNIT_TEST(DocApi) {
@@ -1875,6 +1966,90 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Format: ECdcStreamFormatProto
             }
         )", {NKikimrScheme::StatusPreconditionFailed});
+    }
+
+    Y_UNIT_TEST(ClientModificationsAsyncReplicationFeed) {
+        // A fenced database still has to let the replication engine build and remove its own
+        // changefeeds: the controller does that over the public API with the replication's own
+        // credentials, which are least-privilege, not administrator. A refusal is not retryable,
+        // so it would not wait for the fence to lift -- it would leave the replication in Error.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin"};
+        const auto replication = NACLib::TUserToken("replication@builtin", {}).SerializeAsString();
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // An ordinary changefeed of a non-administrator stays refused.
+        auto* request = CreateCdcStreamRequest(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Plain"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+            }
+        )");
+        request->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed,
+            "Client schema modifications are disabled for non-administrators"}});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Plain"), {NLs::PathNotExist});
+
+        // The replication's own feed, marked as such, is the engine's work and goes through.
+        request = CreateCdcStreamRequest(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+              UserAttributes { Key: "__async_replication" Value: "{}" }
+            }
+        )");
+        request->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathExist});
+
+        // Addressing an alter by PathId must not borrow the exemption from the working dir:
+        // TAlterPQ::Propose lets the PathId decide the target, so an ordinary topic would be
+        // altered under a marked feed's name.
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig: { PartitionConfig { LifetimeSeconds: 10 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const ui64 foreignTopic = DescribePath(runtime, "/MyRoot/Topic").GetPathId();
+
+        auto* borrowed = AlterPQGroupRequest(++txId, "/MyRoot/Table/Stream", Sprintf(R"(
+            PathId: %lu
+            PQTabletConfig: { PartitionConfig { LifetimeSeconds: 20 } }
+        )", foreignTopic));
+        borrowed->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, borrowed);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed,
+            "Client schema modifications are disabled for non-administrators"}});
+
+        // And so does removing it, which the controller does when the replication is dropped.
+        auto* drop = DropCdcStreamRequest(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        drop->Record.SetUserToken(replication);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, drop);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
     }
 
 } // TCdcStreamTests

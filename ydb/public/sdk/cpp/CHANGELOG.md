@@ -1,6 +1,14 @@
 * Fixed node-startup config fetches omitting their seed-node marker when no requestor hosts are supplied.
+  
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+* Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+## v3.26.0
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
+
+* Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
 
 * Driver now supports async credentials initialisation: the first request is delayed until they are ready.
 

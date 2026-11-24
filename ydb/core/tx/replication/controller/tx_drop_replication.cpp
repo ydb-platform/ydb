@@ -98,8 +98,12 @@ public:
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade()) {
-                target->SetDstState(TReplication::EDstState::Removing);
+            if (record.GetCascade() || target->GetKind() == TReplication::ETargetKind::Topic) {
+                if (!record.GetCascade() && target->GetKind() == TReplication::ETargetKind::Topic) {
+                    target->SetDstState(TReplication::EDstState::Alter);
+                } else {
+                    target->SetDstState(TReplication::EDstState::Removing);
+                }
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
                 );

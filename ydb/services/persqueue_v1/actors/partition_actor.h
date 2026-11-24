@@ -106,6 +106,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
@@ -134,6 +135,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
@@ -212,6 +214,7 @@ private:
 
     ui64 WTime;
     bool InitDone;
+    std::deque<THolder<TEvPersQueue::TEvReplicationData>> PendingReplicationData;
     bool StartReading;
     bool AllPrepareInited;
     bool FirstInit;

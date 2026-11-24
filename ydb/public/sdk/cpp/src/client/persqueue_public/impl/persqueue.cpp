@@ -165,6 +165,10 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             FederationAccount_ = pair.second;
         } else if (pair.first == "_advanced_monitoring") {
             AdvancedMonitoringSettings_ = pair.second;
+        } else if (pair.first == "_ydb_replication_consumer") {
+            ReplicationConsumer_ = pair.second;
+        } else if (pair.first == "_ydb_mirror_consumer_offsets") {
+            MirrorConsumerOffsets_ = !pair.second.empty() && FromString<bool>(pair.second);
         }
     }
     for (const auto& readRule : settings.read_rules()) {

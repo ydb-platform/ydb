@@ -506,7 +506,9 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan.End();
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
+    CompleteReplicationDataWrite(ctx);
     HandleWriteResponse(ctx);
+    NotifyMirrorerPersistDone();
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
 
@@ -620,6 +622,12 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    if (!AppData(ctx)->FeatureFlags.GetEnablePQWriteQuotaAccountingFix()) {
+        // Legacy behavior (pre-LOGBROKER-10680): zero the consumed sizes of the in-flight
+        // quota request, undercounting the consumed write quota in kesus.
+        BlobQuotaSize = 0;
+        MessagesQuotaSize = 0;
+    }
     WriteNewSizeFromSupportivePartitions = 0;
     WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
@@ -780,7 +788,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             return;
         }
 
-        ui32 sz = msg.Data.size() + msg.SourceId.size() + TClientBlob::OVERHEAD;
+        ui32 sz = msg.GetPayloadSize() + TClientBlob::OVERHEAD;
 
         if (sz > MAX_BLOB_PART_SIZE) {
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -1272,10 +1280,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 poffset = p.Offset.GetOrElse(curOffset);
+    ui64 defaultOffset = Max(curOffset, BlobEncoder.MirroredOffset);
     if (AppData(ctx)->PQConfig.HasMinOffset()) {
-        poffset = p.Offset.GetOrElse(std::max(curOffset, AppData(ctx)->PQConfig.GetMinOffset()));
+        defaultOffset = Max(defaultOffset, AppData(ctx)->PQConfig.GetMinOffset());
     }
+    const ui64 poffset = p.Offset.GetOrElse(defaultOffset);
 
     YDB_LOG_TRACE("Topic partition process write",
         {"logPrefix", NPQ_LOG_PREFIX},
@@ -1426,6 +1435,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
         curOffset = poffset;
+        p.Offset = poffset;
     }
 
     std::optional<ui64> deduplicationResult;
@@ -1499,12 +1509,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         return false;
     }
-    WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();
-    WriteNewSizeUncompressedFull += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+    const size_t writeSize = p.Msg.GetPayloadSize();
+    const size_t uncompressedWriteSize = p.Msg.GetUncompressedPayloadSize();
+    WriteNewSizeFull += writeSize;
+    WriteNewSizeUncompressedFull += uncompressedWriteSize;
     if (!p.Internal) {
-        WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-        WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
+        WriteNewSize += writeSize;
+        WriteNewSizeUncompressed += uncompressedWriteSize;
+        WriteNewSizeInternal += p.Msg.External ? 0 : writeSize;
     }
     if (p.Msg.PartNo == 0 && !p.Internal) {
         ++WriteNewMessages;
@@ -1716,7 +1728,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
             const auto& msg = w.GetWrite().Msg;
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.GetPayloadSize());
             Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
                                  "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
                                  TabletId, Partition.OriginalPartitionId, Partition.InternalPartitionId,

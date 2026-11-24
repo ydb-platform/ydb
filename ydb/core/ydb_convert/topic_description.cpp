@@ -12,6 +12,29 @@
 
 namespace NKikimr {
 
+bool ResolveConsumerServiceType(
+    const NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQConfig& pqConfig,
+    bool checkServiceType,
+    TString& outServiceType,
+    TString& error)
+{
+    if (consumer.HasServiceType()) {
+        outServiceType = consumer.GetServiceType();
+        return true;
+    }
+    if (!checkServiceType) {
+        outServiceType = "";
+        return true;
+    }
+    if (pqConfig.GetDisallowDefaultClientServiceType()) {
+        error = "service type must be set for all read rules";
+        return false;
+    }
+    outServiceType = pqConfig.GetDefaultClientServiceType().GetName();
+    return true;
+}
+
 bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
     Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
@@ -27,24 +50,22 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
     }
 
     out.set_important(in.GetImportant());
+    out.set_replicate_offsets(in.GetReplicateOffsets());
     if (in.has_availabilityperiodms()) {
         out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
         out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);
     }
-    TString serviceType = "";
-    if (in.HasServiceType()) {
-        serviceType = in.GetServiceType();
-    } else if (checkServiceType) {
-        if (pqConfig.GetDisallowDefaultClientServiceType()) {
-            error = "service type must be set for all read rules";
-            status = Ydb::StatusIds::INTERNAL_ERROR;
-            return false;
-        }
-        serviceType = pqConfig.GetDefaultClientServiceType().GetName();
+    TString serviceType;
+    if (!ResolveConsumerServiceType(in, pqConfig, checkServiceType, serviceType, error)) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        return false;
     }
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
     switch (in.GetType()) {
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+            break;
+        }
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
             out.mutable_streaming_consumer_type();
             break;
@@ -220,8 +241,12 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {
+        auto& publicConsumer = *out.add_consumers();
+        if (!FillConsumer(publicConsumer, consumer, status, error)) {
             return false;
+        }
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            (*out.mutable_attributes())["_ydb_replication_consumer"] = publicConsumer.name();
         }
     }
     return true;

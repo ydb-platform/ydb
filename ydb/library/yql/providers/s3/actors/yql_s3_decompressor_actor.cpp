@@ -1,3 +1,5 @@
+#include "yql_s3_decompressor_actor.h"
+
 #include <queue>
 
 #include <ydb/library/actors/core/actor.h>

@@ -12,10 +12,17 @@
 #include <yql/essentials/minikql/mkql_opt_literal.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
+
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 #include <util/string/printf.h>
 #include <util/string/vector.h>
+#include <util/digest/numeric.h>
+#include <util/digest/sequence.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/mapfindptr.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -236,6 +243,41 @@ ui64 ExtractAcquireLocksTxId(TCallable& callable) {
     return lockTxIdData.AsValue().Get<ui64>();
 }
 
+struct TShardProgramSignature {
+    ui32 ReadCount = 0; // prefix of Ids
+    TVector<ui32> Ids; // reads followed by writes
+
+    bool operator==(const TShardProgramSignature&) const = default;
+};
+
+
+struct TShardProgramSignatureHash {
+    size_t operator()(const TShardProgramSignature& signature) const {
+        size_t hash = signature.ReadCount;
+        hash = CombineHashes(hash, TRangeHash<>()(signature.Ids));
+        return hash;
+    }
+};
+
+using TIdsByShard = absl::flat_hash_map<ui64, TVector<ui32>>;
+
+TArrayRef<const ui32> IdsForShard(const TIdsByShard& idsByShard Y_LIFETIME_BOUND, ui64 shardId) {
+    if (const auto* ids = MapFindPtr(idsByShard, shardId)) {
+        return *ids;
+    }
+    return {};
+}
+
+TShardProgramSignature MakeShardProgramSignature(TArrayRef<const ui32> readIds, TArrayRef<const ui32> writeIds) {
+    TVector<ui32> ids(Reserve(readIds.size() + writeIds.size()));
+    ids.insert(ids.end(), readIds.begin(), readIds.end());
+    ids.insert(ids.end(), writeIds.begin(), writeIds.end());
+    return {
+        .ReadCount = static_cast<ui32>(readIds.size()),
+        .Ids = std::move(ids),
+    };
+}
+
 class TEngineFlat : public IEngineFlat {
 public:
     TEngineFlat(const TEngineFlatSettings& settings)
@@ -246,6 +288,7 @@ public:
         , NeedDiagnostics(false)
         , Status(EStatus::Unknown)
         , AreAffectedShardsPrepared(false)
+        , ShareShardedMkqlProgram(false)
         , AreShardProgramsExtracted(false)
         , IsResultBuilt(false)
         , IsProgramValidated(false)
@@ -459,15 +502,51 @@ public:
                 }
             }
 
-            for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
-                PrepareShardProgram(AffectedShards[shardIndex].ShardId, proxyShards, SpecializedParts[shardIndex],
-                    readsets);
-            }
+            ShareShardedMkqlProgram = HasAppData() && AppData()->FeatureFlags.GetShareShardedMkqlProgram() && FindIfPtr(DbKeys, [](const THolder<TKeyDesc>& key) { return key->GetPartitions().size() > 1; });
+            if (ShareShardedMkqlProgram) {
+                TIdsByShard readIdsByShard;
+                TIdsByShard writeIdsByShard;
+                CollectShardCallableIds(readIdsByShard, writeIdsByShard);
+                absl::flat_hash_map<TShardProgramSignature, ui32, TShardProgramSignatureHash> representativeBySignature;
+                TProgramRepresentative representative(AffectedShards.size());
+                TVector<TVector<ui32>> selectIdsByRepresentative(AffectedShards.size());
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    const ui64 shardId = AffectedShards[shardIndex].ShardId;
+                    TShardProgramSignature signature = MakeShardProgramSignature(IdsForShard(readIdsByShard, shardId), IdsForShard(writeIdsByShard, shardId));
+                    const auto [it, uniqueSignature] = representativeBySignature.try_emplace(std::move(signature), shardIndex);
+                    const ui32 representativeShardIndex = it->second;
+                    representative.Of[shardIndex] = representativeShardIndex;
+                    if (uniqueSignature) {
+                        PrepareShardProgram(shardId, proxyShards, SpecializedParts[shardIndex], readsets);
+                        continue;
+                    }
+                    // Shards with the same reads and writes share one program. Readset pairs and ShardsToWrite still name every shard.
+                    if (!representative.Shared[representativeShardIndex]) {
+                        representative.Shared[representativeShardIndex] = true;
+                        CollectSelectIds(SpecializedParts[representativeShardIndex].Write, selectIdsByRepresentative[representativeShardIndex]);
+                    }
+                    RecordSiblingReadsets(shardId, selectIdsByRepresentative[representativeShardIndex], readsets);
+                }
 
-            BuildAllReads();
+                BuildAllReads();
 
-            for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
-                FinalizeShardProgram(SpecializedParts[shardIndex]);
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    if (representative.Of[shardIndex] == shardIndex) {
+                        FinalizeShardProgram(SpecializedParts[shardIndex]);
+                    }
+                }
+                ProgramRepresentative = std::move(representative);
+            } else {
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    PrepareShardProgram(AffectedShards[shardIndex].ShardId, proxyShards, SpecializedParts[shardIndex],
+                        readsets);
+                }
+
+                BuildAllReads();
+
+                for (ui32 shardIndex = 0; shardIndex < AffectedShards.size(); ++shardIndex) {
+                    FinalizeShardProgram(SpecializedParts[shardIndex]);
+                }
             }
 
             ProgramExplorer.Clear();
@@ -523,7 +602,26 @@ public:
         Y_ABORT_UNLESS(index < AffectedShards.size(), "Bad index");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         data = AffectedShards[index];
-        data.Program = SerializeRuntimeNode(SpecializedParts[index].Program, Env);
+        if (ShareShardedMkqlProgram) {
+            const ui32 representative = ProgramRepresentative.Of[index];
+            TString* cacheSlot = nullptr;
+            bool cached = false;
+            if (ProgramRepresentative.Shared[representative]) {
+                auto [it, inserted] = SerializedPrograms.try_emplace(representative);
+                cacheSlot = &it->second;
+                cached = !inserted;
+            }
+            if (cached) {
+                data.Program = *cacheSlot;
+            } else {
+                data.Program = SerializeRuntimeNode(SpecializedParts[representative].Program, Env);
+                if (cacheSlot) {
+                    *cacheSlot = data.Program;
+                }
+            }
+        } else {
+            data.Program = SerializeRuntimeNode(SpecializedParts[index].Program, Env);
+        }
         return EResult::Ok;
     }
 
@@ -533,6 +631,8 @@ public:
         TGuard<TScopedAlloc> allocGuard(Alloc);
         TVector<THolder<TKeyDesc>>().swap(DbKeys);
         TVector<TProgramParts>().swap(SpecializedParts);
+        ProgramRepresentative = {};
+        SerializedPrograms = {};
         AreShardProgramsExtracted = true;
     }
 
@@ -1496,6 +1596,62 @@ private:
         }
     }
 
+    void CollectShardCallableIds(TIdsByShard& readIdsByShard, TIdsByShard& writeIdsByShard) const {
+        for (const auto& callable : ProxyCallables) {
+            if (!callable.second.Key) {
+                continue;
+            }
+            const auto name = callable.second.Node->GetType()->GetNameStr();
+            TIdsByShard* idsByShard = nullptr;
+            if (name == Strings.SelectRow || name == Strings.SelectRange) {
+                idsByShard = &readIdsByShard;
+            } else if (name == Strings.EraseRow || name == Strings.UpdateRow) {
+                idsByShard = &writeIdsByShard;
+            }
+            if (!idsByShard) {
+                continue;
+            }
+            for (const auto& partition : callable.second.Key->GetPartitions()) {
+                (*idsByShard)[partition.ShardId].push_back(callable.first);
+            }
+        }
+        for (auto& ids : readIdsByShard) {
+            SortUnique(ids.second);
+        }
+        for (auto& ids : writeIdsByShard) {
+            SortUnique(ids.second);
+        }
+    }
+
+    void RecordSiblingReadsets(ui64 shard, TArrayRef<const ui32> selectIds, THashSet<std::pair<ui64, ui64>>& readsets) {
+        for (ui32 selectId : selectIds) {
+            auto ctxIt = ProxyCallables.find(selectId);
+            Y_ABORT_UNLESS(ctxIt != ProxyCallables.end());
+            ctxIt->second.ShardsToWrite.insert(shard);
+            for (const auto& partition : ctxIt->second.Key->GetPartitions()) {
+                if (partition.ShardId != shard) {
+                    readsets.insert(std::make_pair(partition.ShardId, shard));
+                }
+            }
+        }
+    }
+
+    void CollectSelectIds(const TRuntimeNode& write, TVector<ui32>& selectIds) {
+        TExploringNodeVisitor writeExplorer;
+        writeExplorer.Walk(write.GetNode(), Env);
+        for (auto& node : writeExplorer.GetNodes()) {
+            if (!node->GetType()->IsCallable()) {
+                continue;
+            }
+            auto callable = static_cast<TCallable*>(node);
+            auto name = callable->GetType()->GetNameStr();
+            if (name == Strings.SelectRow || name == Strings.SelectRange) {
+                selectIds.push_back(callable->GetUniqueId());
+            }
+        }
+        SortUnique(selectIds);
+    }
+
     void ExtractShardsToWrite(ui64 shard, TExploringNodeVisitor& writeExplorer) {
         for (auto& node : writeExplorer.GetNodes()) {
             if (!node->GetType()->IsCallable()) {
@@ -2096,6 +2252,16 @@ private:
     TRuntimeNode ProxyProgram;
     TExploringNodeVisitor ProxyProgramExplorer;
     TVector<TProgramParts> SpecializedParts;
+    class TProgramRepresentative {
+    public:
+        explicit TProgramRepresentative(size_t size) : Of(size), Shared(size, false) {}
+        TProgramRepresentative() = default;
+
+        TVector<ui32> Of;
+        TVector<bool> Shared; // representative shard index has a sibling, so its serialization is cached
+    };
+    TProgramRepresentative ProgramRepresentative;
+    mutable absl::flat_hash_map<ui32, TString> SerializedPrograms;
     TMap<ui64, TRuntimeNode> ProgramPerOrigin;
     TMap<ui64, ui64> ProgramSizes;
     TVector<THolder<TKeyDesc>> DbKeys;
@@ -2106,6 +2272,7 @@ private:
     THashMap<ui32, TCallable*> ProxyRepliesReads;
     TRuntimeNode ShardsToWrite;
     bool AreAffectedShardsPrepared;
+    bool ShareShardedMkqlProgram;
     bool AreShardProgramsExtracted;
     TSet<ui64> FinalizedShards;
     bool IsResultBuilt;

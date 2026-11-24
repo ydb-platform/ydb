@@ -42,6 +42,7 @@ struct TEvPrivate {
         EvProcessTabletMetrics,
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
+        EvCheckNamedResourceEstimates,
         EvEnd
     };
 
@@ -162,6 +163,14 @@ struct TEvPrivate {
         bool Success;
 
         TEvMoveDataComplete(const TString& poolName, bool success) : PoolName(poolName), Success(success) {}
+    };
+
+    struct TEvCheckNamedResourceEstimates : TEventLocal<TEvCheckNamedResourceEstimates, EvCheckNamedResourceEstimates> {
+        TFullTabletId TabletId;
+
+        explicit TEvCheckNamedResourceEstimates(TFullTabletId tabletId)
+            : TabletId(tabletId)
+        {}
     };
 };
 

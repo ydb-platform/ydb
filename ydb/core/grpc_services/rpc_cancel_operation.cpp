@@ -59,8 +59,13 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
     IEventBase* MakeRequest() override {
         switch (OperationId.GetKind()) {
-        case TOperationId::EXPORT:
-            return new TEvExport::TEvCancelExportRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::EXPORT: {
+            auto ev = MakeHolder<TEvExport::TEvCancelExportRequest>(TxId, GetDatabaseName(), RawOperationId);
+            if (UserToken) {
+                ev->Record.SetUserSID(UserToken->GetUserSID());
+            }
+            return ev.Release();
+        }
         case TOperationId::IMPORT:
             return new TEvImport::TEvCancelImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:

@@ -12,13 +12,9 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/library/testlib/helpers.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
->>>>>>> 0f969652a8e (Fix alter pg + reboot (#56172))
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;

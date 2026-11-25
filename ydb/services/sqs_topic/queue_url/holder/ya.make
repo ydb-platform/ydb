@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/string_utils/url
     ydb/core/base
+    ydb/services/sqs_topic/queue_url
 )
 
 END()

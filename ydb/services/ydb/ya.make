@@ -18,24 +18,16 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode
-    library/cpp/uri
     ydb/core/base
-    ydb/core/client
-    ydb/core/formats
     ydb/core/grpc_services
     ydb/core/grpc_services/base
-    ydb/core/security
+    ydb/core/grpc_services/counters
     ydb/core/grpc_streaming
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/core/udf_api
-    ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/grpc/server
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos
-    yql/essentials/public/types
-    contrib/libs/openssl
 )
 
 END()

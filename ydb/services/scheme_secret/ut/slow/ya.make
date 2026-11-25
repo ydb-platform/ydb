@@ -7,9 +7,9 @@ TAG(
 )
 
 PEERDIR(
-    ydb/services/scheme_secret
-    ydb/services/scheme_secret/ut/common
+    ydb/core/kqp/common/events
     ydb/core/kqp/ut/common
+    ydb/services/scheme_secret/ut/common
     yql/essentials/sql/pg_dummy
 )
 

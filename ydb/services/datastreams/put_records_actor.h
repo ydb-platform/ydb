@@ -3,6 +3,7 @@
 #include "datastreams_proxy.h"
 #include "events.h"
 
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>

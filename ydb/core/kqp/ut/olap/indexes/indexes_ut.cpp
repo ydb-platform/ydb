@@ -2335,7 +2335,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        YDB_LOG_VERIFY(updatesCount + 6 ==
+        YDB_LOG_VERIFY(updatesCount + 3 ==
             (ui64)csController->GetActualizationRefreshSchemeCount().Val(),
             {"updates", updatesCount},
             {"count", csController->GetActualizationRefreshSchemeCount().Val()});

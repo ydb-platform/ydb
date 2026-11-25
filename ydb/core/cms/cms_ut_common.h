@@ -89,6 +89,7 @@ struct TTestEnvOpts {
     ui32 PileCount;
     ui32 NodesWithoutPDisksCount;
     TNodeTenantsMap Tenants;
+    TErasureType::EErasureSpecies BlockErasure = TErasureType::Erasure4Plus2Block;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
     bool EnableSentinel;
@@ -208,7 +209,7 @@ public:
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
 
     NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult RequestDDiskInfoList();
-    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult RequestDDiskInfo(ui64 tabletId);
+    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult RequestDDiskInfo(ui64 tabletId, bool includeHealth = false);
     NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
     WaitForDDiskInfo(ui64 tabletId, ui64 revision, TDuration timeout = TDuration::Seconds(30));
     NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult RequestBSControllerDDiskInfoList();

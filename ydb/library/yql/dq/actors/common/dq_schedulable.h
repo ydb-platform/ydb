@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorid.h>
-#include <library/cpp/time_provider/monotonic.h>
 
+#include <library/cpp/time_provider/monotonic.h>
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
@@ -65,7 +65,7 @@ struct IDqSchedulableWorkFactory {
 
 using IDqSchedulableWorkFactoryPtr = std::shared_ptr<IDqSchedulableWorkFactory>;
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq
 
 template <>
 struct THash<NYql::NDq::TWorkScope> {

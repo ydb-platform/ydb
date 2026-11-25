@@ -11,4 +11,9 @@ PEERDIR(
     yql/essentials/providers/common/schema/parser
 )
 
+PEERDIR_FROM_POLICY(
+    ALLOW
+    statbox/qb3/specs/skiff/helpers
+)
+
 END()

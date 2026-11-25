@@ -1,3 +1,5 @@
+* `ydb tools dump` now prefetches the next result part while writing the current part of a column-oriented table to CSV.
+* On servers that support `PRAGMA kikimr.OptEnableOlapSortedRead`, `ydb tools dump` uses it to reduce server memory used to sort large column-oriented tables during a dump.
 * Added support for exporting table data in Apache Parquet format with the `ydb export s3` command. Added the `--file-format` option to select the data file format and `--parquet-row-group-size` to set the number of rows per Parquet row group.
 * `ydb operation get` displays returned operation data even when the operation status indicates failure, while retaining a nonzero exit code. When metadata is unavailable, pretty output shows only common operation fields.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.

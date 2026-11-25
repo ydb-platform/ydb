@@ -1265,6 +1265,8 @@ message TQueryPhysicalGraph {
     optional TPreparedQuery PreparedQuery = 1;
     repeated TTask Tasks = 2;
     optional bool ZeroCheckpointSaved = 3;
+    // True only for a plan compiled with PostgreSQL compatibility disabled.
+    optional bool CompiledWithPgCompatibilityDisabled = 4;
 }
 
 /// KQP workload manager Events

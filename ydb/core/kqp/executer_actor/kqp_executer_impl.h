@@ -61,6 +61,7 @@
 
 #include <library/cpp/html/pcdata/pcdata.h>
 
+#include <util/generic/is_in.h>
 
 LWTRACE_USING(KQP_PROVIDER);
 
@@ -244,6 +245,7 @@ protected:
         }
 
         TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
+        const bool checksumEnabled = AppData()->FeatureFlags.GetEnableChecksumTable();
 
         // Prune partitions here outside of TasksGraph - in all possible cases.
         for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
@@ -267,6 +269,11 @@ protected:
             }
 
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+            if (!checksumEnabled && IsIn(stage.GetWasmUdfModules(), "DigestAggregate")) {
+                ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssue("CHECKSUM TABLE is disabled"));
+                return ERROR;
+            }
 
             // Scan tasks from source
             if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {

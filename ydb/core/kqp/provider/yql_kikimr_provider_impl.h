@@ -376,6 +376,8 @@ bool IsKikimrSystemColumn(const TStringBuf columnName);
 
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
 
+bool ValidateExternalTablePgCompatibility(const TKikimrTableMetadata& metadata, bool disablePgCompatibility, TExprContext& ctx, TPositionHandle pos);
+
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 
 // Single source of truth for the SHOW CREATE setting names attached to

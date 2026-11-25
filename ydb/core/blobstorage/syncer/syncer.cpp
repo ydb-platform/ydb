@@ -1,5 +1,6 @@
 #include "syncer.h"
 #include "syncer_impl.h"
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 
@@ -21,6 +22,8 @@ namespace NKikimr::NGroupSyncer {
     }
 
     void TSyncerActor::Bootstrap() {
+        PayloadBytesWritten = GetServiceCounters(AppData()->Counters, "bridge|nodewarden")
+            ->GetSubgroup("mode", Reconcile ? "reconcile" : "sync")->GetCounter("SyncPayloadBytesWritten", true);
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '}';
 
         const auto& state = Info->Group->GetBridgeGroupState();
@@ -575,6 +578,7 @@ namespace NKikimr::NGroupSyncer {
         const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
         if (success) {
+            *PayloadBytesWritten += msg.Id.BlobSize();
             SyncerDataStats->BytesDone += msg.Id.BlobSize();
             ++SyncerDataStats->BlobsDone;
             CountCopied(msg.Id);

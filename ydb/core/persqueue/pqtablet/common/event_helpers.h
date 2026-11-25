@@ -24,7 +24,8 @@ void ReplyPersQueueError(
     NPersQueue::NErrorCode::EErrorCode errorCode,
     const TString& error,
     bool logDebug = false,
-    bool isInternal = false
+    bool isInternal = false,
+    bool closeSession = false
 );
 
 inline

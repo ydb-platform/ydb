@@ -98,7 +98,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TS3Manager::OnKeyWritten(const TData::TKey& key, const TValueChain& valueChain) {
-        if (AsyncMode) {
+        if (AsyncMode && WrapperId) {
             ActiveUploaders.insert(Self->Register(new TUploaderActor(WrapperId, BasePath, Bucket, Self->Info(), key,
                 valueChain)));
         }

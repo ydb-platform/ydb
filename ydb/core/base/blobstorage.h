@@ -38,6 +38,8 @@ namespace NWilson {
 
 namespace NKikimr {
 
+struct TBridgeProxyPoolCounters;
+
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
 static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
@@ -653,6 +655,7 @@ struct TEvBlobStorage {
         EvNodeWardenRegisterBridgeProxy,
         EvNodeWardenStandbySeal,
         EvNodeWardenStandbySealed,
+        EvNodeWardenBlobDepotS3RouterReady,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -692,7 +695,10 @@ struct TEvBlobStorage {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)");
 
-    struct TExecutionRelay {};
+    struct TExecutionRelay {
+        // A reply observer owns the terminal sample while the forwarded request can still be routed by a bridge.
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
+    };
     static constexpr struct TCloneEventPolicy {} CloneEventPolicy{};
 
     struct TEvPutResult;
@@ -712,11 +718,16 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         std::optional<ui32> ForceGroupGeneration;
+        // Capture time and pool on first receipt by the logical bridge. Restarts keep both on the original event.
+        TMonotonic BridgeProxyStartTime;
+        std::shared_ptr<const TBridgeProxyPoolCounters> BridgeProxyPoolCounters;
 
         // Admission hint deciding whether the write this request performs -- the put itself, or the
         // restore a MustRestoreFirst read triggers -- is still accepted when the group is low on
         // space. It is never stored along with the blob.
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
+        // I/O generated on behalf of another proxy request must not start a new logical bridge sample.
+        bool IsProxySubrequest = false;
 
         TEvRequestCommon() = default;
 
@@ -727,6 +738,7 @@ struct TEvBlobStorage {
         // A clone keeps the admission hint, but starts its own restart counter and execution relay.
         TEvRequestCommon(TCloneEventPolicy, const TEvRequestCommon& origin)
             : DataKind(origin.DataKind)
+            , IsProxySubrequest(origin.IsProxySubrequest)
         {}
 
         static TString GetRequestName(ui32 eventType) {
@@ -738,7 +750,7 @@ struct TEvBlobStorage {
             case EvBlock:
                 return "Block";
             case EvCollectGarbage:
-                return "CollectGarbase";
+                return "CollectGarbage";
             case EvDiscover:
                 return "Discover";
             case EvPatch:
@@ -1038,6 +1050,14 @@ struct TEvBlobStorage {
             }
         };
 
+        static ui64 CountRequestBytes(TConstArrayRef<TQuery> queries) {
+            ui64 bytes = 0;
+            for (const auto& query : queries) {
+                bytes += query.Size ? query.Size : Max<i32>(0, query.Id.BlobSize() - query.Shift);
+            }
+            return bytes;
+        }
+
         // todo: replace with queue-like thing
         const ui32 QuerySize;
         TArrayHolder<TQuery> Queries;
@@ -1293,8 +1313,8 @@ struct TEvBlobStorage {
             return Print(false);
         }
 
-        ui32 PayloadSizeBytes() const {
-            ui32 size = 0;
+        ui64 PayloadSizeBytes() const {
+            ui64 size = 0;
             for (ui32 i = 0; i < ResponseSz; ++i) {
                 size += Responses[i].Buffer.size();
             }

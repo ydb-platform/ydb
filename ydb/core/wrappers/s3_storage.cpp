@@ -10,6 +10,8 @@
 
 #include <util/string/cast.h>
 
+#include <algorithm>
+
 #ifndef KIKIMR_DISABLE_S3_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -181,21 +183,72 @@ protected:
 
 template <typename TEvRequest, typename TEvResponse>
 class TOutputStreamContext: public TGenericContext<TEvRequest, TEvResponse> {
-    class TOutputStreamBuf: public PreallocatedStreamBuf {
-        TOutputStreamBuf(char* data, size_t size)
-            : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size)
-        {
+    using TBase = TGenericContext<TEvRequest, TEvResponse>;
+
+    class TOutputStreamBuf: public std::streambuf {
+    public:
+        explicit TOutputStreamBuf(TString& buffer) {
+            char* begin = buffer.Detach();
+            setp(begin, begin + buffer.size());
+            setg(begin, begin, begin);
         }
 
-    public:
-        explicit TOutputStreamBuf(TString& buffer)
-            : TOutputStreamBuf(buffer.Detach(), buffer.size())
-        {
+    private:
+        // S3 uses the same response stream for the requested range and for an XML error document.
+        // Only allocate extra storage when the server actually sends more than the requested range.
+        static constexpr size_t MaxErrorBodySize = 64 * 1024;
+        std::unique_ptr<char[]> ErrorBody;
+
+        int_type overflow(int_type ch) override {
+            if (traits_type::eq_int_type(ch, traits_type::eof())) {
+                return traits_type::not_eof(ch);
+            }
+            const size_t written = pptr() - pbase();
+            if (written >= MaxErrorBodySize) {
+                return traits_type::eof();
+            }
+            const auto read = gptr() - eback();
+            ErrorBody = std::make_unique<char[]>(MaxErrorBodySize);
+            char* begin = ErrorBody.get();
+            std::copy_n(pbase(), written, begin);
+            setp(begin, begin + MaxErrorBodySize);
+            pbump(static_cast<int>(written));
+            setg(begin, begin + read, begin + written);
+            return sputc(traits_type::to_char_type(ch));
+        }
+
+        int_type underflow() override {
+            setg(eback(), gptr(), pptr());
+            return gptr() == egptr() ? traits_type::eof() : traits_type::to_int_type(*gptr());
+        }
+
+        pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode mode) override {
+            if (mode == std::ios_base::out && dir == std::ios_base::cur && off == 0) {
+                return pptr() - pbase();
+            }
+            if (mode == std::ios_base::in) {
+                if (dir == std::ios_base::cur) {
+                    off += gptr() - eback();
+                } else if (dir == std::ios_base::end) {
+                    off += pptr() - pbase();
+                }
+                return seekpos(off, mode);
+            }
+            return pos_type(off_type(-1));
+        }
+
+        pos_type seekpos(pos_type pos, std::ios_base::openmode mode) override {
+            const off_type offset = pos;
+            if (mode != std::ios_base::in || offset < 0 || offset > pptr() - pbase()) {
+                return pos_type(off_type(-1));
+            }
+            setg(pbase(), pbase() + offset, pptr());
+            return pos;
         }
     };
 
 public:
-    using TGenericContext<TEvRequest, TEvResponse>::TGenericContext;
+    using TBase::TBase;
 
     const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->Request;
@@ -213,6 +266,19 @@ public:
         );
 
         return request;
+    }
+
+    void Reply(const typename TEvRequest::TRequest& request, const typename TEvResponse::TOutcome& outcome) const {
+        if (outcome.IsSuccess()) {
+            const auto written = static_cast<std::streamoff>(outcome.GetResult().GetBody().tellp());
+            if (written != static_cast<std::streamoff>(Buffer.size())) {
+                const TString reason = TStringBuilder() << "Invalid S3 range response length. Expected " << Buffer.size()
+                    << " bytes, stream position " << written;
+                auto error = AWSError<S3Errors>(S3Errors::NETWORK_CONNECTION, "InvalidRangeResponse", reason.c_str(), true);
+                return TBase::Reply(request, typename TEvResponse::TOutcome(S3Error(std::move(error))));
+            }
+        }
+        TBase::Reply(request, outcome);
     }
 
 protected:

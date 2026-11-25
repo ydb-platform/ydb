@@ -23,7 +23,8 @@ void ReplyPersQueueError(
     NPersQueue::NErrorCode::EErrorCode errorCode,
     const TString& error,
     bool logDebug,
-    bool isInternal
+    bool isInternal,
+    bool closeSession
 ) {
     if (errorCode == NPersQueue::NErrorCode::BAD_REQUEST) {
         counters.Cumulative()[COUNTER_PQ_BAD_REQUEST].Increment(1);
@@ -43,7 +44,7 @@ void ReplyPersQueueError(
     } else {
         YDB_LOG_WARN_CTX(ctx, logStr);
     }
-    ctx.Send(dstActor, new TEvPQ::TEvError(errorCode, error, responseCookie, isInternal));
+    ctx.Send(dstActor, new TEvPQ::TEvError(errorCode, error, responseCookie, isInternal, closeSession));
 }
 
 }// NPQ

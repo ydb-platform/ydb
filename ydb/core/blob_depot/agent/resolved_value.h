@@ -31,6 +31,7 @@ namespace NKikimr::NBlobDepot {
 
         TResolvedValue& operator =(const TResolvedValue&) = default;
         TResolvedValue& operator =(TResolvedValue&&) = default;
+        friend bool operator ==(const TResolvedValue&, const TResolvedValue&) = default;
 
         bool Supersedes(const TResolvedValue& old) const;
         void Output(IOutputStream& s) const;

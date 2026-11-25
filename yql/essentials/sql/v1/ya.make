@@ -25,6 +25,7 @@ PEERDIR(
 SRCS(
     aggregation.cpp
     builtin.cpp
+    checksum.cpp
     context.cpp
     join.cpp
     insert.cpp
@@ -41,6 +42,7 @@ SRCS(
     source.cpp
     sql.cpp
     sql_call_expr.cpp
+    sql_checksum.cpp
     sql_expression.cpp
     sql_group_by.cpp
     sql_match_recognize.cpp

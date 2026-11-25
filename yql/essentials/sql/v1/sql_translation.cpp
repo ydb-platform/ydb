@@ -2190,6 +2190,26 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
     return true;
 }
 
+bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix) {
+    switch (from.Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2: {
+            // STRING_VALUE
+            const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
+            auto unescaped = StringContent(ctx, ctx.Pos(), stringValue);
+            if (!unescaped) {
+                ctx.Error() << errorPrefix << " value cannot be unescaped";
+                return false;
+            }
+            to = TDeferredAtom(ctx.Pos(), unescaped->Content);
+            break;
+        }
+        default:
+            ctx.Error() << errorPrefix << " value should be a string literal";
+            return false;
+    }
+    return true;
+}
+
 namespace {
 bool StoreId(const TRule_table_setting_value& from, TMaybe<TIdentifier>& to, TTranslation& ctx) {
     switch (from.Alt_case()) {
@@ -2213,26 +2233,6 @@ bool StoreString(const TRule_table_setting_value& from, TNodePtr& to, TContext& 
             break;
         }
         default:
-            return false;
-    }
-    return true;
-}
-
-bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
-    switch (from.Alt_case()) {
-        case TRule_table_setting_value::kAltTableSettingValue2: {
-            // STRING_VALUE
-            const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
-            auto unescaped = StringContent(ctx, ctx.Pos(), stringValue);
-            if (!unescaped) {
-                ctx.Error() << errorPrefix << " value cannot be unescaped";
-                return false;
-            }
-            to = TDeferredAtom(ctx.Pos(), unescaped->Content);
-            break;
-        }
-        default:
-            ctx.Error() << errorPrefix << " value should be a string literal";
             return false;
     }
     return true;

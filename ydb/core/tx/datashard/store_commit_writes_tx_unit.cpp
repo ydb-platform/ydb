@@ -22,7 +22,7 @@ public:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
+        Pipeline.ProposeTx(*tx, txc, ctx);
         tx->ClearTxBody();
         tx->ClearCommitWritesTx();
 
